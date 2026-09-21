@@ -1,0 +1,8 @@
+2026-09-21 10:34:01.102 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 10:34:01.427 | INFO     | voice.core:_hops:266 - handoff concierge -> intake (test)
+2026-09-21 10:34:01.435 | INFO     | voice.core:_hops:266 - handoff concierge -> intake (test)
+2026-09-21 10:34:01.443 | INFO     | voice.core:_hops:266 - handoff concierge -> intake (test)
+2026-09-21 10:34:01.446 | INFO     | voice.core:_hops:266 - handoff intake -> concierge (test)
+2026-09-21 10:34:01.450 | INFO     | voice.core:_hops:266 - handoff concierge -> intake (test)
+2026-09-21 10:34:01.450 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 3-run hop budget
+ok

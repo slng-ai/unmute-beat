@@ -1,0 +1,25 @@
+{
+  "check": "V13",
+  "scenario": "S14",
+  "status": "inconclusive",
+  "phase": "01",
+  "date_utc": "2026-09-21T08:33:47Z",
+  "source_revision_or_snapshot_digest": "d4356803dd92cbf46746e25920acd3e77e4e3bf7",
+  "generated_artifact_digest": null,
+  "dependency_lock_digest": "f530db2878108a9bf2b3f5c60256607c89f95e249f3af2529b5ae8033561a13f",
+  "runtime_target_transport": "none: offline, scripted models, no audio and no transport",
+  "provider_model_settings": "pydantic-ai FunctionModel; ALLOW_MODEL_REQUESTS=False, so a real provider request raises rather than being made",
+  "command_or_scenario_recipe": "PYTHONDONTWRITEBYTECODE=1 GOOGLE_API_KEY=offline-test-placeholder .venv/bin/python -B -c 'import sys, runpy; import pydantic_ai.models as models; models.ALLOW_MODEL_REQUESTS = False; runpy.run_module(sys.argv[1], run_name=\"__main__\")' tests.test_salon",
+  "expected": "Templates render, invalid refs fail, saved projection and heard speech are checked",
+  "actual": "Partly established. Prompts compile against the call context at import and an unknown placeholder raises there; the branched-prompt assertions still pass; delivered-history reconciliation is explicit and moved into the core with the runtime supplying the heard prefix. Not established: reset/return context policy and saved-value injection do not exist in this harness yet, so there is nothing here to test them against.",
+  "trace_ids": [],
+  "raw_artifacts": [
+    "bench/baseline/test_salon.txt"
+  ],
+  "sample_count": 0,
+  "exclusions": [],
+  "limitations": [
+    "Offline and scripted. No real provider accepted these schemas, no audio was synthesised or recognised, and no carrier was involved. Nothing here transfers to a live call.",
+    "Reset children, task return and explicit saved-value projection are Phase 04 semantics. Calling this passed would claim coverage of three things that are not implemented."
+  ]
+}

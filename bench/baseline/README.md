@@ -16,6 +16,19 @@ Phase 01 change. All four ended `ok`. That is the prior result, not a V1 gate:
 those four checks do not cover any of the defects Phase 01 exists to fix, which
 is why six more modules now run beside them.
 
+`after/` holds the same four plus the six new ones at the end of Phase 01. The
+pair is the point. `test_voice.txt` carries the line `handoff budget of 3
+spent, making intake answer` and `after/test_voice.txt` does not, because the
+extra model run that warning announced is gone -- which is the one behaviour
+change in this phase that a reader should be able to see rather than take on
+trust.
+
+`evidence/` is one JSON record per verification check, in the shape
+`10_VERIFICATION_MATRIX.md` specifies, with honest `passed` / `inconclusive` /
+`not-run` statuses and the limitations spelled out. Six passed offline. Nothing
+in this directory was produced by a real provider, a real voice or a real
+carrier, and none of it transfers to a live call.
+
 ## Rerunning the offline suite
 
 No network, no model. `ALLOW_MODEL_REQUESTS = False` is set before the scenario

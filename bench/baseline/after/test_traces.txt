@@ -1,0 +1,3 @@
+2026-09-21 10:34:02.908 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 10:34:03.192 | INFO     | voice.core:_hops:266 - handoff concierge -> intake (test)
+ok

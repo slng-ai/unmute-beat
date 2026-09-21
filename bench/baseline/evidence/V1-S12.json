@@ -1,0 +1,25 @@
+{
+  "check": "V1",
+  "scenario": "S12",
+  "status": "inconclusive",
+  "phase": "01",
+  "date_utc": "2026-09-21T08:33:47Z",
+  "source_revision_or_snapshot_digest": "d4356803dd92cbf46746e25920acd3e77e4e3bf7",
+  "generated_artifact_digest": null,
+  "dependency_lock_digest": "f530db2878108a9bf2b3f5c60256607c89f95e249f3af2529b5ae8033561a13f",
+  "runtime_target_transport": "none: offline, scripted models, no audio and no transport",
+  "provider_model_settings": "pydantic-ai FunctionModel; ALLOW_MODEL_REQUESTS=False, so a real provider request raises rather than being made",
+  "command_or_scenario_recipe": "PYTHONDONTWRITEBYTECODE=1 GOOGLE_API_KEY=offline-test-placeholder .venv/bin/python -B -c 'import sys, runpy; import pydantic_ai.models as models; models.ALLOW_MODEL_REQUESTS = False; runpy.run_module(sys.argv[1], run_name=\"__main__\")' tests.test_core",
+  "expected": "Same application outcomes on both runtimes",
+  "actual": "Half of it. The core is extracted and runtime-neutral (enforced by reading its imports), and four scenarios produce identical words, statuses, request counts, handoffs and final state run directly against the core and through the Pipecat processor. Call isolation holds. But there is only one adapter: the claim is about two, and the second is Phase 02.",
+  "trace_ids": [],
+  "raw_artifacts": [
+    "bench/baseline/test_core.txt"
+  ],
+  "sample_count": 4,
+  "exclusions": [],
+  "limitations": [
+    "Offline and scripted. No real provider accepted these schemas, no audio was synthesised or recognised, and no carrier was involved. Nothing here transfers to a live call.",
+    "One runtime. Nothing here shows the core survives contact with LiveKit, which is the whole point of V1."
+  ]
+}

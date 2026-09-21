@@ -1,0 +1,26 @@
+{
+  "check": "V4",
+  "scenario": "S04/S05",
+  "status": "passed",
+  "phase": "01",
+  "date_utc": "2026-09-21T08:33:47Z",
+  "source_revision_or_snapshot_digest": "d4356803dd92cbf46746e25920acd3e77e4e3bf7",
+  "generated_artifact_digest": null,
+  "dependency_lock_digest": "f530db2878108a9bf2b3f5c60256607c89f95e249f3af2529b5ae8033561a13f",
+  "runtime_target_transport": "none: offline, scripted models, no audio and no transport",
+  "provider_model_settings": "pydantic-ai FunctionModel; ALLOW_MODEL_REQUESTS=False, so a real provider request raises rather than being made",
+  "command_or_scenario_recipe": "PYTHONDONTWRITEBYTECODE=1 GOOGLE_API_KEY=offline-test-placeholder .venv/bin/python -B -c 'import sys, runpy; import pydantic_ai.models as models; models.ALLOW_MODEL_REQUESTS = False; runpy.run_module(sys.argv[1], run_name=\"__main__\")' tests.test_flow",
+  "expected": "Actual offered schemas plus direct stale/illegal execution refusal; success-only movement; deterministic conflict refusal",
+  "actual": "12 checks passed. Offered destinations are read off the wire per model request and narrow mid-run when a tool changes the state. A destination whose guard closed is refused at execution. A move requires a tool that returned, not one that was called. Two actions in one reply: the winner is chosen from the complete response in emission order before anything executes, and the loser is refused before its service runs -- five repeats give one outcome.",
+  "trace_ids": [],
+  "raw_artifacts": [
+    "bench/baseline/test_flow.txt"
+  ],
+  "sample_count": 12,
+  "exclusions": [],
+  "limitations": [
+    "Offline and scripted. No real provider accepted these schemas, no audio was synthesised or recognised, and no carrier was involved. Nothing here transfers to a live call.",
+    "before_tool_execute does not fire for output tools in pydantic-ai 2.46.0, verified by probe. Output tools enforce the claim themselves on entry. That is a property of this SDK version and must be rechecked on upgrade.",
+    "The conflict policy is a POC experiment, not demonstrated provider compliance."
+  ]
+}

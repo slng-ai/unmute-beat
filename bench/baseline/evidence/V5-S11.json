@@ -1,0 +1,25 @@
+{
+  "check": "V5",
+  "scenario": "S11",
+  "status": "passed",
+  "phase": "01",
+  "date_utc": "2026-09-21T08:33:47Z",
+  "source_revision_or_snapshot_digest": "d4356803dd92cbf46746e25920acd3e77e4e3bf7",
+  "generated_artifact_digest": null,
+  "dependency_lock_digest": "f530db2878108a9bf2b3f5c60256607c89f95e249f3af2529b5ae8033561a13f",
+  "runtime_target_transport": "none: offline, scripted models, no audio and no transport",
+  "provider_model_settings": "pydantic-ai FunctionModel; ALLOW_MODEL_REQUESTS=False, so a real provider request raises rather than being made",
+  "command_or_scenario_recipe": "PYTHONDONTWRITEBYTECODE=1 GOOGLE_API_KEY=offline-test-placeholder .venv/bin/python -B -c 'import sys, runpy; import pydantic_ai.models as models; models.ALLOW_MODEL_REQUESTS = False; runpy.run_module(sys.argv[1], run_name=\"__main__\")' tests.test_diary",
+  "expected": "The service oracle refuses fabricated, expired, stale-day and unavailable slots without writing",
+  "actual": "24 checks passed. hair-color is bookable (it was not: rsplit misparsed every colour slot); a fabricated 03:07 is absent from the offer registry and refused; an overlapping 45-minute cut is refused against a 120-minute colour under a stated one-chair rule; the same operation token books once.",
+  "trace_ids": [],
+  "raw_artifacts": [
+    "bench/baseline/test_diary.txt"
+  ],
+  "sample_count": 24,
+  "exclusions": [],
+  "limitations": [
+    "Offline and scripted. No real provider accepted these schemas, no audio was synthesised or recognised, and no carrier was involved. Nothing here transfers to a live call.",
+    "One service resource is a declared fixture assumption, not a salon. Per-stylist capacity is unimplemented and marked with its upgrade path in the code."
+  ]
+}

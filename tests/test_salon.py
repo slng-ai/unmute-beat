@@ -544,8 +544,8 @@ async def save_finishes():
     assert diary.bookings_for(PHONE, diary.now().date()), 'the diary really has it'
 
 
-async def a_handed_over_agent_is_asked_the_question():
-    """The step taking over reads the caller's words, not a spent errand.
+async def a_handed_over_agent_reads_the_question_without_it_being_asked_twice():
+    """The step taking over reads the caller's words, and they appear once.
 
     Without them its last message is `hand_over`, answered with "Final result
     processed." and nothing to reply to. Replaying the exact 19-message request
@@ -554,9 +554,13 @@ async def a_handed_over_agent_is_asked_the_question():
     and pydantic-ai's "Please return text or include your response in a tool
     call" retry on top -- 0.64 s of the 3.94 s that turn took. One of the three
     that did answer answered about the *booking* the caller had just finished,
-    because that was the last errand in front of it. With the question put back,
-    0 of 8. The caller's words are in the history two messages up either way, so
-    this is about which message is last, not about what the model can see.
+    because that was the last errand in front of it.
+
+    The fix used to be re-sending the caller's turn as a second user message.
+    That worked and it put the same utterance into the conversation twice,
+    which C3 forbids: a projection is not a repetition. Every prompt renders
+    `{{heard}}` instead, so the words reach the receiving step through its own
+    instructions and the conversation holds one of them.
     """
     diary.reset()
     call = open_call(PHONE)
@@ -565,19 +569,30 @@ async def a_handed_over_agent_is_asked_the_question():
     seen: dict = {}
 
     async def remember(messages, info: AgentInfo):
-        seen['last'] = messages[-1]
+        seen['messages'] = list(messages)
         async for chunk in says('Oh, that is not okay.')(messages, info):
             yield chunk
 
+    said = 'my last haircut was completely uneven'
     with scripted(
         concierge=outputs('hand_over', to='complaints', because='an uneven haircut'),
         complaints=remember,
     ):
-        await probe._turn('my last haircut was completely uneven')
+        await probe._turn(said)
 
     assert call.state.agent == 'complaints', call.state.agent
-    asked = [p for p in seen['last'].parts if isinstance(p, UserPromptPart)]
-    assert any('uneven' in p.content for p in asked), seen['last'].parts
+    messages = seen['messages']
+    # Once, in the whole conversation the receiving step is sent.
+    asked = [
+        part
+        for message in messages
+        for part in message.parts
+        if isinstance(part, UserPromptPart) and said in str(part.content)
+    ]
+    assert len(asked) == 1, [str(p.content) for p in asked]
+    # And in front of it, in its own instructions, however far back that is.
+    instructions = next((m.instructions for m in reversed(messages) if getattr(m, 'instructions', None)), '')
+    assert said in instructions, instructions[-400:]
 
 
 # --- one fact, said once -----------------------------------------------------
@@ -1384,7 +1399,7 @@ async def main():
     await correcting_the_number_withdraws_the_old_identity_offers()
     await an_offer_belongs_to_the_caller_it_was_made_to()
     await giving_up_on_the_number_gives_up_the_errand()
-    await a_handed_over_agent_is_asked_the_question()
+    await a_handed_over_agent_reads_the_question_without_it_being_asked_twice()
     await the_note_is_said_once()
     await a_tool_result_is_never_a_script()
     await refusal_retries()

@@ -63,6 +63,7 @@ from voice.harness import (
     filler_hook,
     one_action_per_reply,
     request_clock,
+    schema_tool,
     speak_by,
 )
 from voice.harness import lent as _lent
@@ -594,7 +595,7 @@ def prompt(name: str) -> TemplateStr[SalonCall]:
 
 
 async def record_complaint(
-    ctx: RunContext[SalonCall], summary: str, requested_resolution: str
+    ctx: RunContext[SalonCall], summary: str, requested_resolution: str, phone: str = ''
 ) -> ComplaintRecord:
     """Write the caller's complaint down, once they have agreed to your summary of it.
 
@@ -603,8 +604,13 @@ async def record_complaint(
     Args:
         summary: Short, factual summary of what went wrong, in their own terms.
         requested_resolution: What they want the salon to do, or an empty string.
+        phone: Supplied by the salon. Not a field the model fills in.
     """
     claim_or_refuse(ctx, ACTIONS)
+    # Whoever the salon says this caller is. `complaint_tool` injects it and
+    # refuses a model that tries to send one; the default is for the direct
+    # calls the tests make, which are not the model.
+    phone = phone or ctx.deps.state.customer_phone
     if ctx.deps.state.unresolved:
         # The same bar a booking meets. A write nobody has settled blocks
         # every other one, whichever book it would be written in.
@@ -631,9 +637,7 @@ async def record_complaint(
     # retried leaves one entry in the book rather than two. Same derivation
     # as a booking's: the call, the writes it has already had accepted, and
     # what this one is about.
-    token = operation_token(
-        ctx.deps.id, ctx.deps.state.writes, ctx.deps.state.customer_phone, summary, requested_resolution
-    )
+    token = operation_token(ctx.deps.id, ctx.deps.state.writes, phone, summary, requested_resolution)
     # Through the same boundary a booking goes through. The token alone was
     # never the guard: a lost response propagated straight out of here, so
     # the complaint that had in fact been written was written again under a
@@ -644,9 +648,7 @@ async def record_complaint(
         ctx,
         pending,
         ComplaintRecord,
-        lambda: diary.record_complaint(
-            ctx.deps.state.customer_phone, summary, requested_resolution, operation_token=token
-        ),
+        lambda: diary.record_complaint(phone, summary, requested_resolution, operation_token=token),
         'complaint book',
     )
     # Validated, then *read*. A well-formed `{'recorded': False}` is the
@@ -666,6 +668,47 @@ async def record_complaint(
     # live call took one from the book and never told the caller.
     await ctx.deps.speak_now(acknowledgement(recorded.reference, requested_resolution))
     return recorded
+
+
+# `record_complaint`, offered to the model from a JSON schema rather than from
+# its annotations. One tool, deliberately: it is the proof that the
+# schema-authored path validates what an ordinary typed tool validates, and
+# that an injected field is injected rather than defaulted. Everything else
+# here stays a typed callable, because there is no reason for it not to be.
+#
+# `phone` is not in the schema the model is sent and cannot be set from there.
+# A verification the model supplies the identity for is not a verification.
+COMPLAINT_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'summary': {
+            'type': 'string',
+            'description': 'Short, factual summary of what went wrong, in their own terms.',
+        },
+        'requested_resolution': {
+            'type': 'string',
+            'description': 'What they want the salon to do, or an empty string.',
+        },
+        'phone': {'type': 'string', 'description': 'Supplied by the salon.'},
+    },
+    'required': ['summary', 'requested_resolution', 'phone'],
+}
+
+
+def _caller_number(call: SalonCall) -> str:
+    """Whoever the salon has established this caller to be. Never the model's word for it."""
+    return call.state.customer_phone
+
+
+def complaint_tool() -> Tool:
+    """`record_complaint` built from `COMPLAINT_SCHEMA`, with the identity injected."""
+    return schema_tool(
+        'record_complaint',
+        record_complaint.__doc__ or '',
+        COMPLAINT_SCHEMA,
+        record_complaint,
+        injected={'phone': _caller_number},
+    )
 
 
 async def read_diary(
@@ -1278,7 +1321,13 @@ def build(
             # Its own tools, plus the entry tools of the steps it can reach.
             # `only_reachable` hides the borrowed ones while their edge is shut.
             tools=[
-                *(Tool(fn, sequential=fn.__name__ in ACTIONS) for fn in tools),
+                # Already a `Tool` when it was authored from a schema; a bare
+                # function otherwise, wrapped here so every action is
+                # `sequential` and two of them can never overlap.
+                *(
+                    fn if isinstance(fn, Tool) else Tool(fn, sequential=fn.__name__ in ACTIONS)
+                    for fn in tools
+                ),
                 *(Tool(fn, sequential=fn.__name__ in ACTIONS) for exit in exits for fn in exit.via),
             ],
             capabilities=[
@@ -1387,7 +1436,7 @@ AGENTS: dict[str, Node] = {
     ),
     'complaints': build(
         'complaints',
-        tools=[record_complaint],
+        tools=[complaint_tool()],
         finishers=[hang_up],
         asks=[ask_complaint],
         guarded=True,

@@ -12,12 +12,12 @@ import random
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Literal, NamedTuple, Protocol, runtime_checkable
+from typing import Any, Literal, NamedTuple, Protocol, runtime_checkable
 from uuid import uuid4
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-from pydantic_ai import Agent, ModelRetry
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, TypeAdapter, create_model
+from pydantic_ai import Agent, ModelRetry, Tool
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.messages import ModelMessage, ToolCallPart
 from pydantic_ai.usage import RunUsage, UsageLimits
@@ -302,6 +302,9 @@ class CallContext(BaseModel):
     # Why this call ended, set by whoever established it. Empty while it has
     # not: an absent reason is not "the caller rang off".
     _ended: str = PrivateAttr(default='')
+    # Every turn before this one, as the caller experienced it. See
+    # `transcript`, which adds the turn still running.
+    _record: list[dict[str, str]] = PrivateAttr(default_factory=list)
 
     @property
     def id(self) -> str:
@@ -399,6 +402,26 @@ class CallContext(BaseModel):
     def wrote_this_turn(self) -> bool:
         """Whether this turn has already changed the business. Base: it has no business."""
         return False
+
+    def transcript(self) -> list[dict[str, str]]:
+        """What was actually said on this call, in order, as a record rather than a protocol.
+
+        Two different things, and merging them is how a trace ends up
+        claiming a turn was silent. `messages` is the model and tool protocol
+        that executed -- tool calls, their results, retries, the sentences
+        the model produced whether or not they were delivered. This is the
+        conversation the *caller* had: their own utterances, and every
+        segment that went out to them, fixed lines and model speech alike,
+        cut down to what they heard where the runtime could tell us.
+        """
+        return [*self._record, *self._this_turn()]
+
+    def _this_turn(self) -> list[dict[str, str]]:
+        """The current turn's half of the transcript, which the ledger still holds."""
+        caller = [{'said': 'caller', 'text': self.heard}] if self.heard.strip() else []
+        return caller + [
+            {'said': segment.kind, 'text': segment.text} for segment in self.spoken if segment.text.strip()
+        ]
 
     def claims_completion(self, clause: str) -> bool:
         """Whether this clause, on its own, tells the caller the business has changed.
@@ -525,6 +548,11 @@ class CallContext(BaseModel):
         action three hops later still has to be able to ask what the caller
         actually asked for rather than take the model's word for it.
         """
+        # Last turn's half of the transcript, before the ledger is emptied
+        # to make room for this one's. The ledger is per turn because that is
+        # what a turn's own speech is; the record is per call because that is
+        # what somebody reading the call back wants.
+        self._record.extend(self._this_turn())
         self.heard = heard
         self._turn += 1
         self._requests.clear()
@@ -732,6 +760,13 @@ class Node:
     # `CallContext.claims_completion`. Costs one clause of streaming latency,
     # on these steps only, and only until something is actually written.
     guarded: bool = False
+    # What conversation this step is sent. `messages` is the delivered
+    # conversation so far, which is what an agency whose steps are one
+    # continuous call wants. `reset` sends none of it: the step gets its own
+    # instructions and the named values projected into them, and nothing the
+    # caller said to anybody else. Contract C3's two modes, and the only two
+    # this harness implements -- anything finer is a policy nobody has needed.
+    history: Literal['messages', 'reset'] = 'messages'
 
 
 def route(state: VoiceState, nodes: dict[str, Node], to: str) -> tuple[str, str | None]:
@@ -823,3 +858,115 @@ def pick(key: str, lines: tuple[str, ...]) -> str:
     choice = random.choice([line for line in lines if line != _LAST.get(key)] or list(lines))
     _LAST[key] = choice
     return choice
+
+
+# --- a tool whose arguments came from a schema, not from annotations ---------
+
+
+class UnsupportedSchemaError(Exception):
+    """A schema this harness will not build a tool from, said at build time.
+
+    Refused rather than approximated. A converter that silently drops a
+    keyword it does not implement -- a nested object, a `oneOf`, a pattern --
+    produces a tool that validates less than its schema says it does, and
+    nothing downstream can tell.
+    """
+
+
+# What a schema-authored tool may say about one argument. Deliberately small:
+# these are the shapes this agency's tools actually use, and anything else is
+# an error rather than a guess.
+_SCHEMA_TYPES: dict[str, type] = {'string': str, 'boolean': bool, 'integer': int, 'number': float}
+
+
+def schema_tool(
+    name: str,
+    description: str,
+    schema: dict,
+    handler: Callable[..., Awaitable[object]],
+    # Keyed by field name; each one is handed the call and returns the value
+    # the handler gets. `Any` because the call is the agency's own
+    # `CallContext` subclass and this module cannot name it.
+    injected: dict[str, Callable[[Any], object]] | None = None,
+) -> Tool:
+    """A tool whose arguments are described by a JSON schema rather than by annotations.
+
+    `Tool.from_schema` in pydantic-ai 2.46.0 does **no** argument validation
+    unless an `args_validator` is supplied: the handler is called with
+    whatever the model sent. This builds that validator from the schema, so
+    the guarantee an ordinary typed tool gets for free is the same one here.
+
+    Four things happen before the handler is reached, in this order, and the
+    handler is not called if any of them fails:
+
+    1. The model's arguments are validated against the schema's own fields.
+    2. A field the *application* supplies is refused if the model sent one.
+       An injected value is not a default the model may improve on; a phone
+       number the model can overwrite is not an injected phone number.
+    3. The application's current values are injected.
+    4. The whole effective argument set -- the model's and the application's
+       together -- is validated again, because an injected value can be
+       wrong too and the handler is entitled to one validated call.
+
+    Unsupported constructs raise at build time, so a schema this cannot
+    honour never becomes a tool the model is offered.
+    """
+    injected = injected or {}
+    if schema.get('type') != 'object':
+        raise UnsupportedSchemaError(f'{name}: only an object schema describes arguments')
+    for keyword in ('oneOf', 'anyOf', 'allOf', 'not', '$ref', 'patternProperties', 'additionalProperties'):
+        if keyword in schema:
+            raise UnsupportedSchemaError(f'{name}: {keyword} is not supported')
+    properties = schema.get('properties') or {}
+    required = set(schema.get('required') or ())
+    fields: dict[str, tuple[Any, Any]] = {}
+    for field_name, described in properties.items():
+        kind = described.get('type')
+        if kind not in _SCHEMA_TYPES:
+            raise UnsupportedSchemaError(f'{name}.{field_name}: {kind!r} is not a supported type')
+        if set(described) - {'type', 'description', 'enum', 'title'}:
+            raise UnsupportedSchemaError(f'{name}.{field_name}: only type, enum and description are read')
+        annotation: object = _SCHEMA_TYPES[kind]
+        if choices := described.get('enum'):
+            annotation = Literal[tuple(choices)]  # ty: ignore[invalid-type-form]
+        fields[field_name] = (
+            annotation if field_name in required else annotation | None,
+            Field(description=described.get('description', '')) if field_name in required else None,
+        )
+    effective = create_model(f'{name}_arguments', **fields)  # ty: ignore[no-matching-overload]
+    # What the *model* is offered: the same fields, minus the ones the
+    # application fills in. A field it cannot see is a field it cannot send.
+    offered = {key: value for key, value in properties.items() if key not in injected}
+    model_schema = dict(schema, properties=offered, required=sorted(required - set(injected)))
+
+    from_model = TypeAdapter(
+        create_model(  # ty: ignore[no-matching-overload]
+            f'{name}_from_model',
+            **{key: value for key, value in fields.items() if key not in injected},
+        )
+    )
+
+    def validate(ctx, **arguments) -> dict:
+        """Step 1 and step 2: what the model sent, and what it may not send."""
+        if overridden := set(arguments) & set(injected):
+            raise ModelRetry(
+                f'{name} was not called: {", ".join(sorted(overridden))} '
+                'is supplied by the salon and cannot be set from here.'
+            )
+        return from_model.validate_python(arguments).model_dump()
+
+    async def call_it(ctx, **arguments) -> object:
+        """Step 3 and step 4: inject, validate the whole set, then invoke."""
+        arguments |= {key: supply(ctx.deps) for key, supply in injected.items()}
+        return await handler(ctx, **effective(**arguments).model_dump())
+
+    return Tool.from_schema(
+        call_it,
+        name=name,
+        description=description,
+        json_schema=model_schema,
+        takes_ctx=True,
+        # Without this, `from_schema` calls the handler with whatever came
+        # back. Probed against 2.46.0: the schema alone validates nothing.
+        args_validator=validate,
+    )

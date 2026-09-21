@@ -19,7 +19,6 @@ Asserts, no pytest, no fixtures, same as the rest.
 """
 
 import asyncio
-import pathlib
 from datetime import date, datetime, time
 
 from pydantic import BaseModel, ValidationError
@@ -424,12 +423,17 @@ def correcting_the_number_withdraws_the_old_authorisation():
 
 
 def no_tool_but_the_verifier_takes_a_phone_number():
-    """State-supplied identity is injected, never re-offered to the model.
+    """State-supplied identity is injected, never offered to the model.
 
-    Every tool that touches a customer record reads `customer_phone` off the
-    state. If one took it as an argument the model could hand it a different
-    number and act on somebody else's record -- which is the same defect as a
-    forged status, arriving through the schema instead.
+    Every tool that touches a customer record gets `customer_phone` from the
+    application. If the model could send one it could act on somebody else's
+    record -- which is a forged identity arriving through the schema instead
+    of through a status.
+
+    Read off the **offered** schema, not the Python signature: a
+    schema-authored tool takes the injected value as an ordinary parameter
+    and simply does not put it in front of the model, and a check on the
+    signature would call that a defect.
 
     `confirm_customer` is the exception by design: establishing the number is
     its whole job, and what it produces is checked by the lookup.
@@ -439,32 +443,100 @@ def no_tool_but_the_verifier_takes_a_phone_number():
     from salon import agents
 
     allowed = {'confirm_customer'}
-    for name in agents.ACTIONS:
+    for name in agents.ACTIONS - allowed:
         tool = getattr(agents, name, None)
-        if tool is None or name in allowed:
+        if tool is None:
             continue
         taken = set(inspect.signature(tool).parameters)
-        assert not (taken & {'phone', 'customer_phone', 'number'}), (
-            f'{name} takes a phone from the model: {sorted(taken)}'
-        )
+        assert not (taken & {'customer_phone', 'number'}), f'{name}: {sorted(taken)}'
+
+    # And what each step actually offers, which is the thing the model reads.
+    for step, node in agents.AGENTS.items():
+        for tool in node.agent._function_toolset.tools.values():
+            offered = set(tool.function_schema.json_schema.get('properties') or {})
+            assert not (offered & {'phone', 'customer_phone', 'number'}), f'{step}.{tool.name}: {offered}'
 
 
-def no_tool_is_defined_from_a_raw_schema():
-    """`Tool.from_schema` skips argument validation in pydantic-ai 2.46.0.
+async def a_schema_authored_tool_validates_what_a_typed_one_does():
+    """S20. `Tool.from_schema` in 2.46.0 validates nothing on its own.
 
-    A tool built that way accepts whatever the model sends unless an explicit
-    `args_validator` is supplied. Every tool here is an ordinary typed
-    callable, so pydantic-ai derives the validator from the annotations and
-    there is nothing to opt into -- this check is what keeps that true, and
-    the reason to read the linked note before the first one arrives.
+    Without an `args_validator` the handler is called with whatever the model
+    sent -- the schema is advertising, not enforcement. `schema_tool` builds
+    the validator from the schema, refuses a model that tries to fill in a
+    field the application supplies, injects the current value, and validates
+    the whole effective set before the handler is reached.
 
-    See 01_POC_FOUNDATION.md section 2 for what a schema-authored tool would
-    have to do instead.
+    The counter is the assertion. Every refusal below has to leave it at
+    zero: a tool that validates *after* it has acted has not validated.
     """
-    source = (pathlib.Path(__file__).parent.parent / 'salon' / 'agents.py').read_text()
-    assert 'from_schema' not in source, (
-        'a schema-authored tool needs an explicit args_validator; see the phase note'
+    from pydantic_ai import ModelRetry, RunContext
+
+    from salon.state import SalonCall, SalonState
+    from voice.harness import UnsupportedSchemaError, schema_tool
+
+    calls: list[dict] = []
+
+    async def handler(ctx, **arguments):
+        calls.append(arguments)
+        return 'done'
+
+    schema = {
+        'type': 'object',
+        'properties': {
+            'note': {'type': 'string', 'description': 'what happened'},
+            'urgent': {'type': 'boolean', 'description': 'whether it is urgent'},
+            'phone': {'type': 'string', 'description': 'supplied by the salon'},
+        },
+        'required': ['note', 'urgent', 'phone'],
+    }
+    tool = schema_tool(
+        'log_it', 'Log it.', schema, handler, injected={'phone': lambda call: call.state.customer_phone}
     )
+    call = SalonCall(state=SalonState(agent='complaints', customer_phone=PHONE, verified_phone=PHONE))
+    ctx = RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
+    validate, invoke = tool.args_validator, tool.function
+
+    # The injected field is not in front of the model at all.
+    assert set(tool.function_schema.json_schema['properties']) == {'note', 'urgent'}
+
+    # A missing field, and a field of the wrong type. Neither reaches it.
+    for wrong in ({'note': 'a mess'}, {'note': 'a mess', 'urgent': 'very'}):
+        try:
+            validate(ctx, **wrong)
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError(f'invalid arguments were accepted: {wrong}')
+    assert calls == [], calls
+
+    # The model filling in what the application supplies.
+    try:
+        validate(ctx, note='a mess', urgent=True, phone='+34934567890')
+    except ModelRetry as refused:
+        assert 'supplied by the salon' in str(refused), refused
+    else:
+        raise AssertionError('the model overrode an injected field')
+    assert calls == [], calls
+
+    # And a legal call, with the salon's own value in it and not the model's.
+    good = validate(ctx, note='a mess', urgent=True)
+    assert await invoke(ctx, **good) == 'done'
+    assert calls == [{'note': 'a mess', 'urgent': True, 'phone': PHONE}], calls
+
+    # A schema this cannot honour is refused when the tool is built, not when
+    # it is called: a converter that quietly drops a keyword produces a tool
+    # that validates less than its schema claims and nobody can tell.
+    for bad in (
+        {'type': 'object', 'properties': {'x': {'type': 'object'}}},
+        {'type': 'object', 'properties': {'x': {'type': 'string', 'pattern': '^a'}}},
+        {'type': 'object', 'oneOf': [{'required': ['x']}], 'properties': {}},
+        {'type': 'array', 'items': {'type': 'string'}},
+    ):
+        try:
+            schema_tool('nope', '', bad, handler)
+        except UnsupportedSchemaError:
+            continue
+        raise AssertionError(f'an unsupported schema became a tool: {bad}')
 
 
 def the_business_state_carries_no_history_or_handles():
@@ -634,7 +706,7 @@ async def main():
     a_forged_verification_status_does_not_verify_anybody()
     correcting_the_number_withdraws_the_old_authorisation()
     no_tool_but_the_verifier_takes_a_phone_number()
-    no_tool_is_defined_from_a_raw_schema()
+    await a_schema_authored_tool_validates_what_a_typed_one_does()
     the_business_state_carries_no_history_or_handles()
     every_business_model_opted_in()
     print('ok')

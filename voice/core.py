@@ -345,17 +345,21 @@ async def _hops(
         # decision, and a caller moved into `verify` with no record of where
         # they were going has lost their errand.
         call.commit(agent=going_to, pending=waiting)
-        # `prompt` is deliberately kept: the agent taking over is asked the
-        # caller's own question again. It used to be cleared, on the reasoning
-        # that the turn is already in the history -- and it is, two messages
-        # up. But the *last* message the receiving run then reads is somebody
-        # else's spent tool call, `hand_over` answered with "Final result
-        # processed." and nothing to reply to. Measured on the call of
-        # 2026-09-20: Gemini returned a candidate with no parts at all,
-        # pydantic-ai sent back "Please return text or include your response
-        # in a tool call", and the reply came on the retry -- 0.64s of the
-        # 3.94s that turn cost, spent producing nothing. Reading the question
-        # twice is cheaper than reading a finished errand.
+        # The caller's turn is asked once and appears once. It used to be
+        # re-sent to every agent that took over, because the *last* message a
+        # receiving run reads is otherwise somebody else's spent tool call --
+        # `hand_over` answered with "Final result processed." and nothing to
+        # reply to. Measured on the call of 2026-09-20: Gemini returned a
+        # candidate with no parts at all, pydantic-ai sent back "Please return
+        # text or include your response in a tool call", and the answer came
+        # on the retry, 0.64s of the 3.94s that turn cost.
+        #
+        # What replaces it is a projection rather than a repetition: every
+        # prompt renders `{{heard}}`, so the agent taking over reads the
+        # caller's exact words in its own instructions. One `UserPromptPart`
+        # per turn, whichever steps the turn passes through, which is what
+        # C3 asks for -- and the receiving run still has something to answer.
+        prompt = None
         if barge.hit:
             # Barged in during the hop. Starting the next agent now would
             # answer a question the caller has moved on from.
@@ -422,9 +426,17 @@ async def _speak(
     yield RunStarted(step)
     try:
         async with agent.run_stream_events(
-            prompt,
+            # A `reset` step is asked the caller's own question outright,
+            # because it is being sent no conversation to find it in -- and a
+            # run with neither has nothing to answer at all. On an ordinary
+            # step this is the caller's turn on the first hop and `None`
+            # afterwards, because by then it is in the history.
+            call.heard if node.history == 'reset' else prompt,
             deps=call,
-            message_history=list(call.messages),
+            # C3's two history modes. A `reset` step is sent none of the
+            # conversation: what it needs is projected into its instructions,
+            # and what it does not need it cannot leak.
+            message_history=[] if node.history == 'reset' else list(call.messages),
             output_type=output_type,
             # The turn's own tally, not this run's: a turn that hands the
             # caller between four agents spends one allowance between them.

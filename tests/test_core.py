@@ -17,6 +17,7 @@ import contextlib
 import json
 import pathlib
 from contextlib import ExitStack
+from dataclasses import replace
 
 from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
@@ -719,6 +720,73 @@ async def a_late_commit_cannot_move_a_caller_who_moved_on():
     _turn_generation.set(None)
 
 
+async def a_reset_step_is_sent_none_of_the_conversation():
+    """C3's two history modes, and the difference between them.
+
+    `messages` is the delivered conversation so far. `reset` is a step that
+    gets its own instructions and the values projected into them, and nothing
+    the caller said to anybody else -- so what it does not need, it cannot
+    leak. Both are declared on the step, not decided per request.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    seen: dict = {}
+
+    async def remember(messages, info: AgentInfo):
+        seen.setdefault('sent', []).append(list(messages))
+        async for chunk in says('Right.')(messages, info):
+            yield chunk
+
+    # An ordinary step: the conversation so far arrives with it.
+    probe_it = Probe(call)
+    with scripted(concierge=remember):
+        await probe_it._turn('hello there')
+        await probe_it._turn('and my last cut was uneven')
+    assert len(seen['sent'][1]) > len(seen['sent'][0]), 'the second turn saw the first'
+
+    # The same step, declared `reset`.
+    seen['sent'] = []
+    quiet = replace(AGENTS['concierge'], history='reset')
+    table = AGENTS | {'concierge': quiet}
+    reset_probe = Probe(call)
+    reset_probe._agents = table
+    with scripted(concierge=remember):
+        await reset_probe._turn('and about that colour')
+    only = seen['sent'][0]
+    assert len(only) == 1, [type(m).__name__ for m in only]
+    # Its own question, and nothing anybody said to anybody else.
+    assert 'and about that colour' in str(only[0].parts[0].content), only[0].parts
+    assert 'uneven' not in str(only), 'the earlier turns leaked into a reset step'
+    # What it is told instead is projected into its own instructions.
+    assert 'and about that colour' in (only[0].instructions or '')
+
+
+async def the_transcript_is_the_call_and_not_the_protocol():
+    """Two different records, and merging them is how a turn reads as silent.
+
+    `messages` is the model and tool protocol that executed. The transcript is
+    the conversation the caller had: their own words and every segment that
+    went out, fixed lines included -- and those never enter the model's
+    history at all, so a record built from it reports a turn that said three
+    things as a turn that said one.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    probe_it = Probe(call)
+    with scripted(concierge=says('Hello, how can I help?')):
+        await probe_it._turn('hi there')
+    with scripted(concierge=says('Of course.')):
+        await probe_it._turn('can I book something')
+
+    said = call.transcript()
+    assert [line['said'] for line in said] == ['caller', 'model', 'caller', 'model'], said
+    assert said[0]['text'] == 'hi there' and said[1]['text'] == 'Hello, how can I help?'
+    assert said[2]['text'] == 'can I book something', said
+    # The ledger itself is still this turn's alone.
+    assert len(call.spoken) == 1, call.spoken
+
+
 async def main():
     await the_same_scenarios_both_ways()
     await the_processor_still_speaks_pipecat()
@@ -729,6 +797,8 @@ async def main():
     await a_barge_in_is_reported_as_one()
     await a_turn_that_never_finished_says_so()
     await a_late_commit_cannot_move_a_caller_who_moved_on()
+    await a_reset_step_is_sent_none_of_the_conversation()
+    await the_transcript_is_the_call_and_not_the_protocol()
     await a_barge_in_after_a_tool_still_moves_nobody()
     await an_interrupted_fixed_line_leaves_an_earlier_answer_alone()
     await time_to_first_token_is_timed_per_request()

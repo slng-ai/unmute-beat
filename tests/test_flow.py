@@ -32,6 +32,9 @@ from voice.harness import moved_by
 from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34600111222'
+# The same number, named for what it means where a state is built by hand:
+# a verification status with no identity attached is cleared on construction.
+VERIFIED = PHONE
 
 
 class Probe(PydanticAgentProcessor):
@@ -123,7 +126,10 @@ async def _offered(node, state) -> dict[str, list]:
 
 async def a_shut_guard_is_not_offered():
     unverified = await _offered(AGENTS['concierge'], SalonState())
-    verified = await _offered(AGENTS['concierge'], SalonState(customer_verified='existing'))
+    verified = await _offered(
+        AGENTS['concierge'],
+        SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
+    )
     assert unverified['requests'][0]['to'] == ['booking', 'complaints'], unverified
     assert verified['requests'][0]['to'] == ['booking', 'complaints', 'verify'], verified
     # The borrowed tool moves with its edge.
@@ -152,7 +158,7 @@ async def a_stale_destination_is_refused_at_execution():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')  # `verify` is open as an exit
+    call.commit(customer_verified='existing', verified_phone=PHONE)  # `verify` is open as an exit
     probe = Probe(call)
 
     def hands_to_verify(messages, info: AgentInfo):
@@ -204,7 +210,7 @@ async def the_schema_is_rebuilt_between_requests_in_one_run():
         seen.append({'tools': sorted(t.name for t in info.function_tools), 'to': (to or {}).get('enum')})
         if len(seen) == 1:
             # Something in this run changes the state the guards read.
-            call.commit(customer_verified='existing')
+            call.commit(customer_verified='existing', verified_phone=PHONE)
             yield {
                 0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': 'opening hours'}))
             }
@@ -238,7 +244,7 @@ async def a_second_action_is_refused_before_it_runs():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     async def read_and_leave(messages, info: AgentInfo):
@@ -276,7 +282,7 @@ async def an_ordinary_tool_is_refused_when_it_is_the_second():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
     before = call.state.booking_day
 
@@ -312,7 +318,7 @@ async def the_winner_is_the_same_every_time():
     for _ in range(5):
         diary.reset()
         call = open_call(PHONE)
-        call.commit(customer_verified='existing')
+        call.commit(customer_verified='existing', verified_phone=PHONE)
         probe = Probe(call)
 
         async def both(messages, info: AgentInfo):
@@ -407,7 +413,7 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     async def talk_then_call(messages, info: AgentInfo):
@@ -437,10 +443,10 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
 def every_tool_that_writes_is_an_action():
     """A tool that commits state must be in `ACTIONS`, or the policy skips it.
 
-    `get_a_manager` was not, for exactly the reason this check exists: it
-    reads like a lookup and it is not one -- it writes `transfer`. Nothing
-    caught that, because the conflict tests only ever exercised the tools
-    somebody remembered to list.
+    The since-deleted `get_a_manager` was not, for exactly the reason this
+    check exists: it read like a lookup and was not one -- it wrote a state
+    field. Nothing caught that, because the conflict tests only ever
+    exercised the tools somebody had remembered to list.
 
     Source inspection rather than a registry, because the registry is the
     thing being checked. A tool added tomorrow is covered without anybody
@@ -475,7 +481,7 @@ def a_refused_tool_does_not_move_the_caller():
     `read_diary` that refused an unidentified caller still moved them into
     `booking`.
     """
-    known = SalonState(customer_verified='existing')
+    known = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'booking'
     # Nothing succeeded, so nobody moved.
     assert moved_by(known, AGENTS['concierge'], AGENTS, set()) == 'concierge'
@@ -499,7 +505,7 @@ async def a_cancelled_tool_is_not_a_move():
     """Barge-in during a borrowed tool leaves the caller where they were."""
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     async def read_then_cancel(messages, info: AgentInfo):

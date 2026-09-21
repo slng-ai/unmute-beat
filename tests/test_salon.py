@@ -16,11 +16,20 @@ from pipecat.frames.frames import (
     LLMTextFrame,
     TTSSpeakFrame,
 )
+from pydantic import BaseModel
 from pydantic_ai import ModelResponse, RunContext, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import diary, knowledge
-from salon.agents import AGENTS, FILLER, NOTED, get_a_manager, prompt
+from salon.agents import (
+    AGENTS,
+    FILLER,
+    NOTED,
+    look_up_refund_policy,
+    look_up_salon_info,
+    prompt,
+    read_diary,
+)
 from salon.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
 from voice.harness import TurnBudget
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
@@ -110,7 +119,7 @@ assert prefetch_number('+8656696123') == '+8656696123'
 
 unverified = prompt('concierge').render(SalonCall(state=SalonState(customer_phone=PHONE)))
 verified = prompt('concierge').render(
-    SalonCall(state=SalonState(customer_phone=PHONE, customer_verified='existing'))
+    SalonCall(state=SalonState(customer_phone=PHONE, customer_verified='existing', verified_phone=PHONE))
 )
 assert 'Nobody has been identified' in unverified
 assert 'Nobody has been identified' not in verified
@@ -129,7 +138,14 @@ appointment = Appointment(
     action='book',
 )
 with_booking = prompt('concierge').render(
-    SalonCall(state=SalonState(customer_verified='existing', appointment=appointment))
+    SalonCall(
+        state=SalonState(
+            customer_phone=PHONE,
+            customer_verified='existing',
+            verified_phone=PHONE,
+            appointment=appointment,
+        )
+    )
 )
 assert 'Monday at 9:00 AM' in with_booking
 assert 'Their booking' not in verified, 'no appointment, no section about one'
@@ -286,7 +302,7 @@ async def the_diary_is_the_edge():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     day = diary.spoken_day(diary.now().date() + timedelta(days=2), diary.now().date())
@@ -385,7 +401,7 @@ async def side_question_does_not_move():
     """A turn that only speaks takes no edge, so there is nothing to suspend or resume."""
     diary.reset()
     call = open_call(PHONE)
-    call.commit(agent='booking', customer_verified='existing')
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     with scripted(booking=says('Parking is free for the first hour round the back.')):
@@ -400,7 +416,7 @@ async def one_kind_b_per_turn():
     """Model-chosen edges are budgeted, never chained until the caller gives up."""
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(
@@ -425,7 +441,7 @@ async def correction_refuses_stale_slot():
     """The caller changes the day. The offer made for the old one dies with it."""
     diary.reset()
     call = open_call(PHONE)
-    call.commit(agent='booking', customer_verified='existing')
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=2))
 
     first, second = open_days(2)
@@ -466,7 +482,7 @@ async def correction_refuses_stale_slot():
 async def save_finishes():
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     call.commit(agent='booking')
     probe = Probe(call)
 
@@ -514,7 +530,7 @@ async def a_handed_over_agent_is_asked_the_question():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
     seen: dict = {}
 
@@ -548,7 +564,7 @@ async def the_note_is_said_once():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     call.commit(agent='complaints')
     probe = Probe(call)
 
@@ -572,21 +588,41 @@ async def the_note_is_said_once():
 async def a_tool_result_is_never_a_script():
     """Nothing a tool returns is a sentence the caller could be read verbatim.
 
-    `get_a_manager` used to answer a failed transfer with
+    The now-deleted `get_a_manager` used to answer a failed transfer with
     `say: "Tell the caller a direct transfer needs an inbound phone call, and
     offer what you can do here."`, and on the call of 2026-09-20 the model said
     that to the caller word for word, "Tell the caller" included. A tool result
-    is content; an instruction in it reads as content too. Instructions go in
-    the docstring, which is the one place the model cannot repeat.
+    is content; an instruction inside it reads as content too. Instructions go
+    in the docstring, which is the one place the model cannot repeat.
+
+    The tool that taught this is gone, so the check now runs over the ones that
+    are left -- which is what it should always have done.
     """
+    diary.reset()
     call = open_call(PHONE)
-    result = await get_a_manager(RunContext(deps=call, model=None, usage=None))  # type: ignore[arg-type]
-    assert not result['transferred']
-    assert 'say' not in result, result
-    for key, value in result.items():
-        assert not str(value).lower().startswith(('tell ', 'say ', 'ask ', 'offer ')), (
-            f'{key} is addressed to the model, and the model will read it out: {value!r}'
-        )
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    ctx = RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
+
+    results = [
+        await look_up_salon_info(ctx, 'opening hours'),
+        await look_up_refund_policy(ctx, 'redo window'),
+        await read_diary(ctx, 'tomorrow', 'haircut'),
+    ]
+
+    def leaves(value, path='') -> list[tuple[str, str]]:
+        if isinstance(value, BaseModel):
+            value = value.model_dump()
+        if isinstance(value, dict):
+            return [pair for k, v in value.items() for pair in leaves(v, f'{path}.{k}')]
+        if isinstance(value, list):
+            return [pair for i, v in enumerate(value) for pair in leaves(v, f'{path}[{i}]')]
+        return [(path, str(value))]
+
+    for result in results:
+        for path, value in leaves(result):
+            assert not value.lower().startswith(('tell ', 'say ', 'ask ', 'offer ', 'you should')), (
+                f'{path} is addressed to the model, and the model will read it out: {value!r}'
+            )
 
 
 # --- a refusal keeps the step open, with the reason ---------------------------
@@ -595,7 +631,7 @@ async def a_tool_result_is_never_a_script():
 async def refusal_retries():
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     call.commit(agent='booking')
     probe = Probe(call)
     seen = []

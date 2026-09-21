@@ -20,6 +20,10 @@ from voice.harness import moved_by, route
 # --- the shape of the graph --------------------------------------------------
 
 STEPS = set(AGENTS)
+# A number a lookup really ran against. A verification status with no
+# identity attached is cleared by `SalonState`'s own invariant, so a test
+# that wants a verified caller has to say who.
+VERIFIED = '+34600111222'
 # Every tool any step holds, borrowed ones included. Read off the agents rather
 # than listed here, so a tool that stops existing fails the lending check.
 _ALL_TOOLS = {t.name for node in AGENTS.values() for t in node.agent._function_toolset.tools.values()}
@@ -99,7 +103,7 @@ def prerequisite_interposed():
 
 
 def no_interpose_when_met():
-    state = SalonState(customer_verified='existing')
+    state = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert route(state, AGENTS, 'booking') == ('booking', None), 'a met prerequisite leaves nothing waiting'
     # A step with no prerequisites at all is never interposed either way.
     assert route(state, AGENTS, 'complaints') == ('complaints', None)
@@ -137,7 +141,13 @@ def sent_to_a_satisfier_comes_back():
     call = SalonCall(state=SalonState(agent='complaints'))
     going_to, waiting = route(call.state, AGENTS, 'verify')
     assert (going_to, waiting) == ('verify', 'complaints')
-    call.commit(agent=going_to, pending=waiting, customer_verified='existing')
+    call.commit(
+        agent=going_to,
+        pending=waiting,
+        customer_phone=VERIFIED,
+        customer_verified='existing',
+        verified_phone=VERIFIED,
+    )
     assert call.resume('concierge') == 'complaints'
 
 
@@ -160,7 +170,15 @@ def round_trip():
     call = SalonCall()
     going_to, waiting = route(call.state, AGENTS, 'booking')
     assert going_to == 'verify'
-    call.commit(agent=going_to, pending=waiting, customer_verified='existing')  # what confirm_customer does
+    # What `confirm_customer` does, identity included: a status without the
+    # number it was established for is cleared by the state's own invariant.
+    call.commit(
+        agent=going_to,
+        pending=waiting,
+        customer_phone=VERIFIED,
+        customer_verified='existing',
+        verified_phone=VERIFIED,
+    )
     # Two lines, and they have to be: `resume` commits, which replaces the
     # state object, so reading `call.state` in the same expression would hand
     # `route` the state from before the pending slot was cleared. Written as
@@ -221,7 +239,10 @@ async def offered_exits(node, state) -> tuple[str, ...]:
 
 
 async def no_illegal_edge_offered():
-    for state in (SalonState(), SalonState(customer_verified='existing')):
+    for state in (
+        SalonState(),
+        SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
+    ):
         for name, node in AGENTS.items():
             # `dict.fromkeys`, matching `build`: two exits can name one step --
             # one a `hand_over` the model may choose, one lending that step's
@@ -232,7 +253,10 @@ async def no_illegal_edge_offered():
             assert name not in got, f'{name} was offered a hop to itself'
 
     # Named, so the two guards are asserted and not merely computed twice.
-    fresh, known = SalonState(), SalonState(customer_verified='existing')
+    fresh, known = (
+        SalonState(),
+        SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
+    )
     assert 'verify' not in await offered_exits(AGENTS['concierge'], fresh), (
         'before anyone is identified the graph interposes verify; offering it as well '
         'is a route the model can only get wrong'
@@ -256,7 +280,7 @@ def a_borrowed_tool_is_the_move():
     request that moved them, so the routing round trip -- 0.85s of silence,
     three times in one live call -- does not happen.
     """
-    known = SalonState(customer_verified='existing')
+    known = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'booking'
     # A tool nobody lends moves nobody.
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'look_up_salon_info'}) == 'concierge'
@@ -274,7 +298,8 @@ async def a_shut_edge_lends_nothing():
     assert moved_by(fresh, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'concierge'
     assert 'read_diary' not in await _reachable_tools(AGENTS['concierge'], fresh)
     assert 'read_diary' in await _reachable_tools(
-        AGENTS['concierge'], SalonState(customer_verified='existing')
+        AGENTS['concierge'],
+        SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
     )
     # The step that owns it always has it, guard or no guard.
     assert 'read_diary' in await _reachable_tools(AGENTS['booking'], fresh)
@@ -302,7 +327,10 @@ async def a_finisher_keeps_its_name():
     the model what the tool does. Caught only because guarding verify's exit
     dropped it to a single output.
     """
-    for state in (SalonState(), SalonState(customer_verified='existing')):
+    for state in (
+        SalonState(),
+        SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
+    ):
         for name, node in AGENTS.items():
             offered = set()
 

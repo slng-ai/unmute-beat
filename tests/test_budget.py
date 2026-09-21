@@ -96,7 +96,7 @@ async def exhaustion_makes_no_further_request():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
@@ -116,7 +116,7 @@ async def the_fallback_does_no_business_work():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     before = call.state
     probe = Probe(call, budget=TurnBudget(step_runs=2))
 
@@ -136,7 +136,7 @@ async def the_budget_is_not_refilled_by_exhausting_it():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=2))
 
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
@@ -163,7 +163,7 @@ async def model_requests_are_counted_across_agents():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4))
 
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
@@ -185,7 +185,7 @@ async def the_request_limit_stops_a_turn_that_never_hops():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=3))
     asked = []
 
@@ -207,7 +207,7 @@ async def the_request_limit_stops_a_turn_that_never_hops():
 async def the_tool_limit_is_its_own_number():
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=20, tool_calls=2))
     ran = []
 
@@ -233,7 +233,7 @@ async def a_slow_tool_hits_the_turn_deadline():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(seconds=0.25))
 
     async def stall(messages, info: AgentInfo):

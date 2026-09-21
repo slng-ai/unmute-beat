@@ -123,9 +123,6 @@ ACTIONS = frozenset(
         'hang_up',
         'record_complaint',
         'read_diary',
-        # Writes `transfer`, so it belongs with the rest. Missed on the first
-        # pass because it reads like a lookup and is not one.
-        'get_a_manager',
     }
 )
 
@@ -256,51 +253,6 @@ async def look_up_refund_policy(ctx: RunContext[SalonCall], query: str) -> dict:
         query: What to look up, in the caller's own words.
     """
     return knowledge.look_up('refunds', query)
-
-
-async def get_a_manager(ctx: RunContext[SalonCall]) -> dict:
-    """Call this the moment the caller asks for a manager, a supervisor, an owner, a person or a
-    human, or when they are clearly and strongly frustrated.
-
-    Call it on that turn, before anything else and before saying a word. Do not
-    ask what it is about first, do not offer to help instead, and do not
-    identify them: someone who has asked for a person should not be interviewed
-    to get one. Asking "what can I help with?" after they asked for a manager is
-    the single worst turn this agency can take.
-
-    Only when *they* ask for one. A caller turning down an offer of a manager is
-    not asking for a manager: "no thanks" closes the subject, it does not open
-    it. On the call of 2026-09-20 this ran on "No, thanks", which is the whole
-    reason the line below was ever read out.
-
-    Moving an appointment is not asking for a person. "Move it", "change it to
-    Saturday", "can you transfer that booking" are ordinary booking work: read
-    the diary, or hand them to the booking agent. On the call of 2026-09-21
-    this ran on "Can you actually move the appointment to Saturday, same
-    time?", and the caller was told "I can't transfer you because you're on a
-    web session" about a transfer nobody had asked for -- in the middle of a
-    booking change that then worked. The word "transfer" is about the caller,
-    never about their appointment.
-
-    When the result says `transferred: False` there is no phone leg to redirect.
-    Tell them in your own words that a transfer needs them to be on a phone
-    call, and offer what you can do here instead.
-    """
-    claim_or_refuse(ctx, ACTIONS)
-    if ctx.deps.state.transfer:
-        return {'already': ctx.deps.state.transfer}
-    # ponytail: this harness runs on WebRTC, which has no call leg for a carrier
-    # to redirect, so there is nothing to dial and saying so is the honest
-    # answer. A telephony transport adds the one HTTPS request here; the
-    # conversational contract above does not change.
-    ctx.deps.commit(transfer='unavailable')
-    # Facts about the line, and not one sentence that could be read out as it
-    # stands. This used to carry `say:` holding "Tell the caller a direct
-    # transfer needs an inbound phone call, and offer what you can do here." and
-    # on 2026-09-20 a caller heard exactly that, imperative and all. What to do
-    # about a failed transfer belongs in the docstring above, where the model
-    # cannot mistake an instruction for something to repeat.
-    return {'transferred': False, 'reason': 'no phone leg: this caller is on a web session'}
 
 
 async def record_complaint(
@@ -450,6 +402,10 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: Phone) -> Handoff:
         customer_phone=phone,
         phone_confirmed=True,
         customer_verified=found.customer_status,
+        # The number the lookup was actually performed against. Committed with
+        # the status, never after it: the two are one fact, and a status with
+        # no identity attached is cleared by the state's own invariant.
+        verified_phone=phone,
     )
     # Straight on to what they actually rang about -- which the graph already
     # knows, because the step that needed them identified pushed itself on the
@@ -706,7 +662,7 @@ def unverified(state: SalonState) -> bool:
 AGENTS: dict[str, Node] = {
     'concierge': build(
         'concierge',
-        tools=[look_up_salon_info, get_a_manager],
+        tools=[look_up_salon_info],
         finishers=[hang_up],
         # `booking` twice, and the pair is the whole point. Unguarded, it is a
         # `hand_over` the model may choose whoever is calling: the caller wanting
@@ -762,7 +718,7 @@ AGENTS: dict[str, Node] = {
     ),
     'complaints': build(
         'complaints',
-        tools=[look_up_refund_policy, record_complaint, get_a_manager],
+        tools=[look_up_refund_policy, record_complaint],
         finishers=[hang_up],
         # `record_complaint` needs an owner, so this step sends them to be
         # identified -- and only while there is anybody to identify.

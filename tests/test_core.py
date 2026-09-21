@@ -135,7 +135,7 @@ def _fresh(verified: bool):
     diary.reset()
     call = open_call(PHONE)
     if verified:
-        call.commit(customer_verified='existing')
+        call.commit(customer_verified='existing', verified_phone=PHONE)
     return call
 
 

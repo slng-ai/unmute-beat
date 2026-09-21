@@ -19,6 +19,7 @@ Asserts, no pytest, no fixtures, same as the rest.
 """
 
 import asyncio
+import pathlib
 
 from pydantic import BaseModel, ValidationError
 
@@ -137,7 +138,9 @@ def a_failed_batch_commits_nothing():
     assert call.state.customer_verified == ''
 
     # The same batch with a legal status commits both.
-    call.commit(customer_phone=PHONE, phone_confirmed=True, customer_verified='existing')
+    call.commit(
+        customer_phone=PHONE, phone_confirmed=True, customer_verified='existing', verified_phone=PHONE
+    )
     assert (call.state.customer_phone, call.state.customer_verified) == (PHONE, 'existing')
 
 
@@ -150,7 +153,7 @@ def a_commit_replaces_the_state_object():
     """
     call = open_call()
     first = call.state
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     assert call.state is not first, 'a commit builds a new candidate'
     assert first.customer_verified == '', 'and the old one is untouched, not mutated'
 
@@ -221,7 +224,7 @@ def a_malformed_service_response_writes_nothing():
     `Appointment` before anything is committed, and the commit never runs.
     """
     call = open_call(PHONE)
-    call.commit(customer_verified='existing')
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     before = call.state
 
     malformed = {
@@ -351,7 +354,9 @@ def agreeing_to_a_wrong_number_is_not_identity():
     person, and nothing in the code pretends otherwise.
     """
     call = open_call()
-    call.commit(customer_phone=OTHER, phone_confirmed=True, customer_verified='existing')
+    call.commit(
+        customer_phone=OTHER, phone_confirmed=True, customer_verified='existing', verified_phone=OTHER
+    )
     assert call.state.customer_phone == OTHER
     assert call.state.phone_confirmed, 'they said yes'
     assert call.state.customer_verified == 'existing', 'and a record was found'
@@ -369,6 +374,96 @@ def the_prefetched_number_is_not_confirmed():
 
 
 # --- the context holds nothing a candidate could not be rebuilt from ---------
+
+
+def a_forged_verification_status_does_not_verify_anybody():
+    """A correctly typed `existing` is not evidence that a lookup happened.
+
+    Verification is a fact the customer service established, not a value
+    anything upstream may assert. The status and the number it was established
+    for are one fact, so a status arriving without its identity is not a
+    weaker claim -- it is no claim, and the state drops it on construction.
+
+    This is what stops a finisher, a replayed message or a hand-edited state
+    from satisfying `booking`'s prerequisite without the lookup ever running.
+    """
+    forged = SalonState(customer_phone=PHONE, customer_verified='existing')
+    assert forged.customer_verified == '', forged
+    assert not present(forged.customer_verified), 'so the booking prerequisite is unmet'
+
+    # The same status, with the identity the lookup actually used, stands.
+    real = SalonState(customer_phone=PHONE, customer_verified='existing', verified_phone=PHONE)
+    assert real.customer_verified == 'existing'
+
+
+def correcting_the_number_withdraws_the_old_authorisation():
+    """Verified as one number, then they give a different one.
+
+    Until the new number is looked up they are a different person, so the
+    authority earned by the old one goes with it -- along with the readback
+    they confirmed, which was a readback of something else. Their previous
+    business record is not touched; only the authority to act on this call.
+    """
+    call = open_call()
+    call.commit(
+        customer_phone=PHONE, phone_confirmed=True, customer_verified='existing', verified_phone=PHONE
+    )
+    assert call.state.customer_verified == 'existing'
+
+    call.commit(customer_phone=OTHER)
+    assert call.state.customer_phone == OTHER
+    assert call.state.customer_verified == '', 'the old lookup does not carry over'
+    assert not call.state.phone_confirmed, 'nor does the old readback'
+    assert call.state.verified_phone == ''
+
+    # And an old successful result cannot be replayed to get it back: the
+    # status still has to arrive with the number now on the call.
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    assert call.state.customer_verified == '', 'a stale identity is still stale'
+
+
+def no_tool_but_the_verifier_takes_a_phone_number():
+    """State-supplied identity is injected, never re-offered to the model.
+
+    Every tool that touches a customer record reads `customer_phone` off the
+    state. If one took it as an argument the model could hand it a different
+    number and act on somebody else's record -- which is the same defect as a
+    forged status, arriving through the schema instead.
+
+    `confirm_customer` is the exception by design: establishing the number is
+    its whole job, and what it produces is checked by the lookup.
+    """
+    import inspect
+
+    from salon import agents
+
+    allowed = {'confirm_customer'}
+    for name in agents.ACTIONS | {'look_up_salon_info', 'look_up_refund_policy'}:
+        tool = getattr(agents, name, None)
+        if tool is None or name in allowed:
+            continue
+        taken = set(inspect.signature(tool).parameters)
+        assert not (taken & {'phone', 'customer_phone', 'number'}), (
+            f'{name} takes a phone from the model: {sorted(taken)}'
+        )
+
+
+def no_tool_is_defined_from_a_raw_schema():
+    """`Tool.from_schema` skips argument validation in pydantic-ai 2.46.0.
+
+    A tool built that way accepts whatever the model sends unless an explicit
+    `args_validator` is supplied. Every tool here is an ordinary typed
+    callable, so pydantic-ai derives the validator from the annotations and
+    there is nothing to opt into -- this check is what keeps that true, and
+    the reason to read the linked note before the first one arrives.
+
+    See 01_POC_FOUNDATION.md section 2 for what a schema-authored tool would
+    have to do instead.
+    """
+    source = (pathlib.Path(__file__).parent.parent / 'salon' / 'agents.py').read_text()
+    assert 'from_schema' not in source, (
+        'a schema-authored tool needs an explicit args_validator; see the phase note'
+    )
 
 
 def the_business_state_carries_no_history_or_handles():
@@ -424,6 +519,10 @@ async def main():
     a_withheld_caller_id_is_absence()
     agreeing_to_a_wrong_number_is_not_identity()
     the_prefetched_number_is_not_confirmed()
+    a_forged_verification_status_does_not_verify_anybody()
+    correcting_the_number_withdraws_the_old_authorisation()
+    no_tool_but_the_verifier_takes_a_phone_number()
+    no_tool_is_defined_from_a_raw_schema()
     the_business_state_carries_no_history_or_handles()
     every_business_model_opted_in()
     print('ok')

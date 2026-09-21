@@ -13,7 +13,7 @@ import re
 from typing import Annotated, Literal
 
 import phonenumbers
-from pydantic import AfterValidator, BaseModel, Field, TypeAdapter
+from pydantic import AfterValidator, BaseModel, Field, TypeAdapter, model_validator
 from pydantic_extra_types.phone_numbers import PhoneNumberValidator
 
 from voice import harness
@@ -131,7 +131,45 @@ class SalonState(harness.VoiceState):
     phone_confirmed: bool = False
     # '' until verification has run. Every prompt branches on this, and every
     # tool that touches a customer record refuses without it.
+    #
+    # Written only by `confirm_customer`, from what the customer lookup came
+    # back with. It is a fact the service established, not a value the model
+    # may assert: a correctly typed 'existing' is not evidence that a lookup
+    # happened, and the invariant below is what makes the difference
+    # enforceable rather than a convention.
     customer_verified: Verification = ''
+    # The number that lookup was performed against. Verification belongs to an
+    # identity, so this is what ties the two together -- without it, a caller
+    # who corrects their number keeps the authorisation earned by the old one.
+    verified_phone: Phone = ''
+
+    @model_validator(mode='after')
+    def _verification_belongs_to_one_identity(self) -> SalonState:
+        """Drop verification that does not belong to the number now on the call.
+
+        Two things this makes unrepresentable rather than merely discouraged:
+
+        * A status nobody earned. `SalonState(customer_verified='existing')`
+          with no matching `verified_phone` is not a verified caller, however
+          well-typed the status is, so the booking prerequisite stays unmet.
+        * Authorisation surviving a correction. A caller verified as one
+          number who then gives a different one is a different person until
+          the new number is looked up. Their old business record is untouched
+          -- only the authority to act on this call goes.
+
+        Runs on every commit, because `commit` rebuilds the whole model. That
+        is the point: there is no write path that can skip it.
+        """
+        if self.customer_phone != self.verified_phone:
+            # Through `__dict__`, because a plain assignment here recurses:
+            # `validate_assignment` re-runs the model validators on every set,
+            # and this is one of them. Checked, not assumed -- the plain form
+            # raises `RecursionError` on construction.
+            self.__dict__['customer_verified'] = ''
+            self.__dict__['verified_phone'] = ''
+            self.__dict__['phone_confirmed'] = False
+        return self
+
     # The day the diary was last read for, written by `read_diary` and never by
     # the model. A slot is only bookable on this day, so a caller who changes
     # their mind about the day cannot be put back onto the old one: the offer
@@ -139,7 +177,6 @@ class SalonState(harness.VoiceState):
     # asked about, because no prompt sentence can hold an invariant.
     booking_day: Date = ''
     appointment: Appointment | None = None
-    transfer: str = ''
 
 
 # Keypad spellings of the words a carrier substitutes for a withheld number.

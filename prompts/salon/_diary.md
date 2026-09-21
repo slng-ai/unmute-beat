@@ -2,8 +2,15 @@
 
 Give the diary the caller's own words for the day: "tomorrow", "next Friday",
 "the 25th". It works the day out, so never work one out yourself and never send
-a day the caller did not name. If they named no day, ask which day first, in one
-short question, and read the diary once you have it.
+a day the caller did not name -- it refuses one, because "Friday" and "next
+Friday" are a week apart and adding the modifier yourself books the wrong week.
+If they named no day, ask which day first, in one short question, and read the
+diary once you have it.
+
+Give it their words for the **time** too, in `at`: "three", "half past two",
+"the afternoon". It only shows a dozen free times, and which dozen depends on
+this -- leave it out and a caller asking for the afternoon is read the morning
+and told that is what is free.
 
 The diary comes back with what the caller already holds as well as what is free,
 so one look answers both. It never returns a time that has already gone past,

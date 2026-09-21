@@ -81,15 +81,26 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         when = datetime.fromisoformat(pinned)
         diary.set_clock(when if when.tzinfo else when.replace(tzinfo=diary.TZ))
         logger.info('salon clock pinned to {}', diary.now().isoformat())
-        # And an empty salon. This handler runs once per call, so a pinned
-        # run starts every call from the same fixture, which is what makes
-        # two of them comparable. Unpinned it never runs, and the diary goes
-        # on outliving each call the way a real salon's does.
-        #
-        # Without it, the second call of a session inherited the first one's
-        # booking: on 2026-09-21 that turned an ordinary booking into a
-        # refusal the model worked around with `additional=True`, and left a
-        # previous caller's complaint in the record the run was scored on.
+
+    # Emptying the salon is its own decision, named in its own variable.
+    #
+    # `fresh` is what a scored benchmark run wants: every call starts from the
+    # same fixture, so two of them are comparable. `continue` is what a real
+    # salon does and what a deliberate two-call scenario needs -- N1 books,
+    # N3 rings back and the appointment is still there.
+    #
+    # It used to hang off `SALON_CLOCK`, which conflated two things: a pinned
+    # clock makes two calls *comparable* and emptying the diary makes the
+    # second one *destroy* the first. On 2026-09-21 a run without the reset
+    # had the second call inherit the first's booking, and the fix wired the
+    # reset to the clock -- which then meant a pinned call could delete an
+    # in-flight call's records. Both modes are legitimate; neither is a side
+    # effect of what time it is.
+    fixture = os.getenv('SALON_FIXTURE', 'continue')
+    if fixture not in ('fresh', 'continue'):
+        raise SystemExit(f"SALON_FIXTURE is 'fresh' or 'continue', not {fixture!r}")
+    if fixture == 'fresh':
+        logger.info('starting this call from an empty salon')
         diary.reset()
 
     slng_key = os.environ['SLNG_API_KEY']

@@ -16,14 +16,20 @@ number, so one short question is the whole turn.
 
 {{#if state.customer_phone}}
 The number the call came in on is {{state.customer_phone}}. **That is the number.**
-Read it back, exactly as it is written there, one unbroken run: the plus sign,
-then the digits, with nothing between them. Never ask a caller for a number you
-were already handed.
+Read it back with `ask_number`, which says the digits and stops. Never ask a
+caller for a number you were already handed.
 {{else}}
 No number came in with this call, so ask for one, once, in one short question.
 Never invent a country code. If they give digits with no country code, ask which
-country they are calling from.
+country they are calling from. Once you have digits, read them back with
+`ask_number`.
 {{/if}}
+
+`ask_number` is the only way to the look-up. It says the number back itself, so
+you never recite one, and the caller's answer to *that question* is the only
+thing that counts as agreement to it. A yes to anything else -- which country
+they are ringing from, which service they want -- is an answer to that question
+and not to this one.
 
 **Digits the caller speaks replace whatever you were about to read back, always.**
 They are correcting you, whatever else the sentence says. A turn that agrees and
@@ -31,11 +37,7 @@ then recites a number is giving you a new one: read those digits back instead.
 
 ## Then
 
-Agreement is a yes however it arrives: "yes", "that's right", "sounds about
-right". A request to change the number is not agreement, and your own question
-is not agreement either.
-
-Only once they have agreed, look the number up. That look-up finishes this step
+Only once they have agreed to the readback, look the number up. That look-up finishes this step
 by itself, saves what it found and gives the caller straight back to whatever
 they rang about, so do not say anything after it, do not confirm it out loud,
 and do not wait for another turn. There is no turn in which you both speak and

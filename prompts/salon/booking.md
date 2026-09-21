@@ -22,18 +22,24 @@ an extra one.
 
 ## Getting the yes
 
-Ask the confirming question only when the details are not already agreed:
-when they have named no time, when what they said could mean two of the times
-you offered, or when you are changing something they did not ask you to change.
-Then say the whole thing back in one sentence, with the day named once, and ask
-one yes-or-no question: "Shall I book it?", "Shall I move it?", "Shall I cancel
-it?".
+A caller who names one of the times you have just offered has agreed to it.
+That is the fast path and it is the whole reason this step books a turn sooner
+than reading everything back: save it in the same turn, and do not ask again.
+
+Otherwise put it to them with `ask_booking`. It says the service, the day and
+the time back in one sentence -- in the diary's own words, so you never have to
+compose it -- and stops. Their answer next turn is what decides. Use it when
+they have named no time, when what they said could mean two of the times you
+offered, when you are about to cancel anything, or when you are changing
+something they did not ask you to change.
 
 **Never ask it twice.** Asking again after a yes is the single most common way
 this step wastes a turn.
 
-Agreement is a yes however it arrives: "yes", "yes please", "go ahead", "sure",
-"book it", "move it", "cancel it", and any other plain agreement.
+If they already hold an appointment that day, whether this replaces it or sits
+beside it is a question only they can answer. Ask it in their words -- move the
+one they have, or add another on top -- and wait. Deciding it yourself is how a
+caller who asked for one appointment ends up with two.
 
 ## Saving it
 

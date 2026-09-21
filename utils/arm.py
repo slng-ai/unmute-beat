@@ -49,6 +49,10 @@ def settings() -> dict:
         'speak_by': agents.SPEAK_BY,
         'timezone': str(diary.TZ),
         'salon_clock': diary.now().isoformat(),
+        # Whether this call started from an empty salon or inherited the last
+        # one's. Two calls are only comparable when they agree on it, and a
+        # continuation scenario is only meaningful when they do not.
+        'fixture': os.getenv('SALON_FIXTURE', 'continue'),
         'started': datetime.now(UTC).isoformat(),
         'seed_customers': sorted(diary._customers),
         # The rule that decides how many turns a booking takes, and one of the

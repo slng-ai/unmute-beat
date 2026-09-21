@@ -54,7 +54,6 @@ from salon.state import (
     agrees,
     ends,
     move_or_add,
-    times_named,
 )
 from voice.harness import (
     STRICT,
@@ -405,7 +404,7 @@ async def _settle(ctx: RunContext[SalonCall]) -> str:
                 'logged and that someone will call them back.'
             )
         ctx.deps.commit(writes=ctx.deps.state.writes + 1, unresolved=None)
-        await ctx.deps.speak_now(_pick('noted', NOTED))
+        await ctx.deps.speak_now(acknowledgement(record.reference, pending.wanted))
         return f'complaint recorded: {record.reference}'
     try:
         written = Saved.model_validate(outcome)
@@ -483,11 +482,25 @@ SAVED: dict[str, tuple[str, ...]] = {
 # the filler say "Let me get that written down." and the following request say
 # "I have noted that down for you." -- one fact, twice, a round trip apart. Said
 # here it is said once, and the model's turn is free to be the next step.
-NOTED: tuple[str, ...] = (
-    "Okay, that's written down.",
-    "Right, I've got that on the record.",
-    "That's noted for you.",
-)
+NOTED = "That's on record, reference {reference}. {next_step}"
+# The two next steps the policy actually states, and nothing else. A live call
+# promised a manager would ring back within two working days -- which is two
+# commitments welded together, neither of them what `knowledge/refunds.md`
+# says. Said here rather than by the model, for the same reason a booking
+# confirmation is: there is one right sentence and a round trip spent asking
+# for it is a round trip that can get it wrong.
+REPLY_SOON = 'The salon will get back to you within two working days.'
+MANAGER_CALLS = 'That one goes to the manager, who will call you back.'
+# What sends a complaint to the manager. Straight out of the policy document:
+# a half or a full refund. Anything else gets the ordinary reply.
+_WANTS_MONEY = re.compile(r'\b(?:refund|money back|reimburse|compensat\w*|my money)\b', re.IGNORECASE)
+
+
+def acknowledgement(reference: str, requested_resolution: str) -> str:
+    """The one thing said when a complaint is written down: its reference, then the policy step."""
+    step = MANAGER_CALLS if _WANTS_MONEY.search(requested_resolution) else REPLY_SOON
+    return NOTED.format(reference=reference, next_step=step)
+
 
 PROMPTS = Path(__file__).resolve().parent.parent / 'prompts' / 'salon'
 
@@ -619,7 +632,7 @@ async def record_complaint(
     # the complaint that had in fact been written was written again under a
     # paraphrase -- a new token, a new entry, one accepted write and two
     # records in the book.
-    pending = Unresolved(token=token, action='complaint')
+    pending = Unresolved(token=token, action='complaint', wanted=requested_resolution)
     recorded = _answered(
         ctx,
         pending,
@@ -642,24 +655,33 @@ async def record_complaint(
     ctx.deps.commit(writes=ctx.deps.state.writes + 1)
     # Before the next request, not after it, so this covers the wait the filler
     # used to cover -- and says the one thing worth saying rather than
-    # announcing that something is about to happen.
-    await ctx.deps.speak_now(_pick('noted', NOTED))
+    # announcing that something is about to happen. The reference is in it: a
+    # live call took one from the book and never told the caller.
+    await ctx.deps.speak_now(acknowledgement(recorded.reference, requested_resolution))
     return recorded
 
 
 async def read_diary(
-    ctx: RunContext[SalonCall], when: str, service: Literal['any', 'haircut', 'hair-color', 'blowout']
+    ctx: RunContext[SalonCall],
+    when: str,
+    service: Literal['any', 'haircut', 'hair-color', 'blowout'],
+    at: str = '',
 ) -> Slots:
     """Read the diary: what this caller already holds, and what is free on the day they named.
 
-    One call answers both, so you never need a second. It works the day out from
-    the caller's own words, never returns a time that has already gone past, and
-    never writes anything.
+    One call answers both, so you never need a second. It works the day and the
+    time out from the caller's own words, never returns a time that has already
+    gone past, and never writes anything.
 
     Args:
         when: The day in the caller's own words -- "tomorrow", "next Friday",
             "the 25th" -- or an empty string if they have not named one.
         service: Narrow the free times to one service, or `any` to see them all.
+        at: The time or part of day they asked for, in their own words --
+            "three", "half past two", "the afternoon" -- or empty if they said
+            none. It decides which free times you are shown, so leaving it out
+            when they named one is how a caller asking for the afternoon gets
+            read the morning.
     """
     claim_or_refuse(ctx, ACTIONS)
     if not _present(ctx.deps.state.customer_verified):
@@ -688,7 +710,17 @@ async def read_diary(
         # one conversation was never put in front of another, even from the
         # same phone. Asking again also withdraws whatever the last search
         # offered -- see `diary.find_slots`.
-        diary.find_slots(ctx.deps.state.customer_phone, when, service, diary.now(), offered_to=ctx.deps.id)
+        diary.find_slots(
+            ctx.deps.state.customer_phone,
+            when,
+            service,
+            diary.now(),
+            offered_to=ctx.deps.id,
+            # Their words, resolved here rather than by the model. Applied
+            # before the twelve-slot cap, so a preference is the answer and
+            # not a filter over one.
+            prefer=diary.resolve_time(at or ctx.deps.heard),
+        )
     )
     # The day this look confirmed. `save_booking` refuses a slot from any other
     # one, so a caller who changes their mind about the day cannot be booked
@@ -933,7 +965,7 @@ def _authorised(ctx: RunContext[SalonCall], action: str, slot_id: str, booking_i
     # haircut and a colour both free at three is two appointments and a
     # question, not a booking.
     offered = diary.offer_of(call.id, slot_id, phone)
-    named = times_named(call.heard)
+    named = diary.times_named(call.heard)
     on_the_table = diary.offered_to(call.id, phone)
     at_that_time = [slot for slot in on_the_table if slot['time'] in named]
     picked = bool(offered) and offered['time'] in named and len(at_that_time) == 1

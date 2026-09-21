@@ -375,7 +375,124 @@ def bookings_for(phone: str, today: Date) -> list[dict]:
     ]
 
 
-def find_slots(phone: str, when: str, service: str, at_time: datetime, offered_to: str = '') -> dict:
+# The earliest and latest an appointment here can start, from `HOURS`. What
+# makes an unqualified hour unambiguous: "three" is 15:00 because nothing is
+# open at three in the morning.
+_EARLIEST = f'{min(h[0] for h in HOURS.values() if h):02d}:00'
+_LATEST = f'{max(h[1] for h in HOURS.values() if h):02d}:00'
+
+# How many free times one answer offers. Twelve is what a person can be read
+# without losing track, and it is also why `prefer` has to be applied before
+# it: whichever dozen survive the cut are the whole of what the caller hears.
+SHOW_AT_MOST = 12
+
+_DAYPARTS = {
+    'morning': (time(0, 0), time(11, 59)),
+    'afternoon': (time(12, 0), time(16, 59)),
+    'evening': (time(17, 0), time(23, 59)),
+}
+
+
+_HOURS = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6,
+    'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12,
+}  # fmt: skip
+_HOUR_WORD = '|'.join(_HOURS)
+_EXACT = re.compile(r'\b([01]?\d|2[0-3]):([0-5]\d)\b')
+_OCLOCK_WORD = r"o\s?'?\s?clock"
+_TWELVE = re.compile(rf'\b(1[0-2]|[1-9])\s*(?:{_OCLOCK_WORD}\s*)?([ap])\.?m\.?\b', re.IGNORECASE)
+_HALF = re.compile(rf'\bhalf past\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
+_OCLOCK = re.compile(rf'\b(1[0-2]|[1-9]|{_HOUR_WORD})\s*{_OCLOCK_WORD}\b', re.IGNORECASE)
+# A bare number is only a time when the caller put it after "at" or "around":
+# "Friday the 25th" is a number and not a time. "for" is deliberately not in
+# here -- "for 2 people" would name 14:00, and this set is intersected with
+# what the diary is actually offering, so a wrong reading books something.
+_BARE = re.compile(rf'\b(?:at|around|about)\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
+
+
+def times_named(heard: str) -> set[str]:
+    """Every `HH:MM` this utterance could be naming.
+
+    Both readings of an unqualified hour, because "three" is 15:00 in a salon
+    and 03:00 in a clock, and it is the diary's offers that decide which of
+    them the caller can have meant. Intersected with what is actually on the
+    table, an utterance naming exactly one of them is an unambiguous choice.
+
+    ponytail: English, digits and the twelve hour words. A caller saying
+    "quarter past" is not understood and gets asked, which is the right
+    failure.
+    """
+    found: set[str] = set()
+    for hour, minute in _EXACT.findall(heard):
+        found.add(f'{int(hour):02d}:{minute}')
+    for hour, half in _TWELVE.findall(heard):
+        h = int(hour) % 12 + (12 if half.lower() == 'p' else 0)
+        found.add(f'{h:02d}:00')
+    for pattern, minute in ((_HALF, '30'), (_OCLOCK, '00'), (_BARE, '00')):
+        for word in pattern.findall(heard):
+            hour = _HOURS.get(str(word).lower()) or (int(word) if str(word).isdigit() else None)
+            if hour is None:
+                continue
+            found.add(f'{hour % 12:02d}:{minute}')
+            found.add(f'{hour % 12 + 12:02d}:{minute}')
+    return found
+
+
+def resolve_time(words: str) -> str:
+    """The time or part of day a caller named, as `HH:MM` or a daypart, or ''.
+
+    Code, like `resolve_day`, and for the same reason. It reads the salon's
+    own hours: an unqualified "three" is 15:00 here because the salon is shut
+    at three in the morning, and "nine" is 09:00 because it is shut at nine at
+    night. Ambiguity that survives that is returned as nothing, and the diary
+    answers the whole day.
+    """
+    text = words.strip().casefold()
+    if not text:
+        return ''
+    for part in _DAYPARTS:
+        if part in text:
+            return part
+    # A looser reading than `times_named`, which will not take a bare number
+    # without "at" in front of it. That caution is for authorising a booking,
+    # where a wrong reading books something; here the worst a wrong reading
+    # does is order a list of free times badly.
+    found = times_named(text) | times_named(f'at {text}')
+    named = sorted(t for t in found if _EARLIEST <= t <= _LATEST)
+    return named[0] if len(named) == 1 else ''
+
+
+def _preferred(slots: list[dict], prefer: str) -> list[dict]:
+    """The caller's preference first, before the list is cut down to what fits.
+
+    A daypart filters: asking for the afternoon and being read the morning is
+    not an answer. An exact time ranks, nearest first, because the time they
+    asked for may be taken and the two either side of it are the useful
+    reply -- filtering there would turn "three is gone" into "nothing is
+    free". A preference nothing matches is ignored rather than obeyed into an
+    empty answer.
+    """
+    if not prefer:
+        return slots
+    if window := _DAYPARTS.get(prefer):
+        opens, closes = window
+        return [slot for slot in slots if opens <= time.fromisoformat(slot['time']) <= closes] or slots
+    try:
+        wanted = time.fromisoformat(prefer)
+    except ValueError:
+        return slots
+
+    def distance(slot: dict) -> tuple[int, str]:
+        at = time.fromisoformat(slot['time'])
+        minutes = abs((at.hour * 60 + at.minute) - (wanted.hour * 60 + wanted.minute))
+        return minutes, slot['time']
+
+    return sorted(slots, key=distance)
+
+
+def find_slots(
+    phone: str, when: str, service: str, at_time: datetime, offered_to: str = '', prefer: str = ''
+) -> dict:
     """Free times on the day the caller named, and everything they already hold.
 
     One call answers both questions, so the agent never needs a second one.
@@ -457,7 +574,14 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime, offered_t
     # service `SERVICES` happened to list first, so asking for `any` returned
     # haircuts and nothing else -- the diary saying the salon does one thing.
     slots.sort(key=lambda slot: (slot['time'], slot['service']))
-    shown = slots[:12]
+    # And the caller's preference before the cap, not after it. `slots[:12]`
+    # on a day whose morning is free returns 09:00 to 14:30, so a caller
+    # asking for three o'clock was told there was nothing at three on a day
+    # with an empty afternoon: the twelve places had gone to times nobody
+    # asked about. Reproduced on all four live calls of 2026-09-21.
+    # Chronological again after the cut: the preference decides *which* dozen,
+    # and a dozen times are read out in the order of a day.
+    shown = sorted(_preferred(slots, prefer)[:SHOW_AT_MOST], key=lambda s: (s['time'], s['service']))
     # Recorded after the cap, not before it: an offer is a thing this caller
     # was told about.
     for slot in shown:

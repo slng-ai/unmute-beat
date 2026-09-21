@@ -26,7 +26,8 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import agents, diary
 from salon.agents import AGENTS
-from salon.state import agrees, ends, move_or_add, open_call, times_named
+from salon.diary import times_named
+from salon.state import agrees, ends, move_or_add, open_call
 from voice.processor import PydanticAgentProcessor
 
 # --- the scripted model ------------------------------------------------------
@@ -494,6 +495,56 @@ async def recounting_what_is_really_booked_still_streams():
     assert probe.spoken() == honest, probe.spoken()
 
 
+async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
+    """Trace F1/F2: an existing appointment, a complaint, and "make that one free".
+
+    The earlier call answered it by inventing a cancellation and a free redo.
+    Neither had happened. What is supported is recording the request, which is
+    what the complaint book does, and saying plainly that it is pending -- the
+    appointment they hold is untouched by any of it.
+    """
+    call = _salon()
+    _heard(call)
+    call.turn_started('a haircut on Friday at nine please')
+    friday = _slot(call, 'friday', 'haircut', '09:00')
+    await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
+    held = diary.bookings_for(PHONE, CLOCK.date())
+    assert len(held) == 1
+
+    call.commit(agent='complaints')
+    call.turn_started('the last cut was completely uneven, I want it redone free')
+    summary = 'the last haircut was uneven'
+    question = await agents.ask_complaint(_context(call), summary)
+    assert summary in question.spoken and question.spoken.endswith('?'), question.spoken
+    question.put(call)
+
+    call.turn_started("yes, that's right")
+    record = await agents.record_complaint(_context(call), summary, 'a free redo')
+    assert record.recorded and record.reference
+
+    # One acknowledgement, carrying the reference, and the policy's own step.
+    spoken = [seg.text for seg in call.spoken if seg.kind == 'fixed']
+    assert len(spoken) == 1, spoken
+    assert record.reference in spoken[0], spoken[0]
+    assert agents.REPLY_SOON in spoken[0], spoken[0]
+    assert agents.MANAGER_CALLS not in spoken[0], 'a redo is not a refund tier'
+
+    # And the appointment they hold is exactly where it was.
+    after = diary.bookings_for(PHONE, CLOCK.date())
+    assert after == held, after
+    assert len(diary.complaints()) == 1, diary.complaints()
+
+    # A refund request does get the manager, because the policy says so.
+    call.turn_started('actually I want my money back')
+    refund = 'the last haircut was uneven and they want a refund'
+    (await agents.ask_complaint(_context(call), refund)).put(call)
+    call.turn_started('yes')
+    await agents.record_complaint(_context(call), refund, 'a full refund')
+    latest = [seg.text for seg in call.spoken if seg.kind == 'fixed'][-1]
+    assert agents.MANAGER_CALLS in latest, latest
+    assert diary.bookings_for(PHONE, CLOCK.date()) == held, 'still untouched'
+
+
 async def main():
     the_matchers_refuse_rather_than_guess()
     await n1_a_move_question_cannot_hang_up()
@@ -505,6 +556,7 @@ async def main():
     await n4_a_yes_about_spain_verifies_nobody()
     await n4_a_correction_is_not_an_agreement()
     await earlier_b_a_cancellation_nobody_made_is_not_spoken()
+    await a_redo_request_keeps_the_booking_and_is_told_the_truth()
     await recounting_what_is_really_booked_still_streams()
     print('ok')
 

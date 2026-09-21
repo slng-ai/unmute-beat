@@ -169,6 +169,10 @@ class Unresolved(BaseModel):
     # The slot this caller was offered, exactly as `diary.offer_of` returned
     # it, so the recovered result meets the check the first answer met.
     offered: dict[str, str] = {}
+    # What a complaint asked the salon to do, kept because it decides what the
+    # caller is told happens next -- and a recovered write has to say the same
+    # sentence the first attempt would have.
+    wanted: str = ''
 
 
 # --- what the caller actually said -------------------------------------------
@@ -222,21 +226,6 @@ _ADD_ONE = re.compile(
     r'keep (?:the|that|it|both))\b',
     re.IGNORECASE,
 )
-_HOURS = {
-    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6,
-    'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12,
-}  # fmt: skip
-_HOUR_WORD = '|'.join(_HOURS)
-_EXACT = re.compile(r'\b([01]?\d|2[0-3]):([0-5]\d)\b')
-_OCLOCK_WORD = r"o\s?'?\s?clock"
-_TWELVE = re.compile(rf'\b(1[0-2]|[1-9])\s*(?:{_OCLOCK_WORD}\s*)?([ap])\.?m\.?\b', re.IGNORECASE)
-_HALF = re.compile(rf'\bhalf past\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
-_OCLOCK = re.compile(rf'\b(1[0-2]|[1-9]|{_HOUR_WORD})\s*{_OCLOCK_WORD}\b', re.IGNORECASE)
-# A bare number is only a time when the caller put it after "at" or "around":
-# "Friday the 25th" is a number and not a time. "for" is deliberately not in
-# here -- "for 2 people" would name 14:00, and this set is intersected with
-# what the diary is actually offering, so a wrong reading books something.
-_BARE = re.compile(rf'\b(?:at|around|about)\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
 
 
 def agrees(heard: str) -> bool:
@@ -268,34 +257,6 @@ def move_or_add(heard: str) -> Literal['move', 'add', '']:
     if moving == adding:
         return ''
     return 'move' if moving else 'add'
-
-
-def times_named(heard: str) -> set[str]:
-    """Every `HH:MM` this utterance could be naming.
-
-    Both readings of an unqualified hour, because "three" is 15:00 in a salon
-    and 03:00 in a clock, and it is the diary's offers that decide which of
-    them the caller can have meant. Intersected with what is actually on the
-    table, an utterance naming exactly one of them is an unambiguous choice.
-
-    ponytail: English, digits and the twelve hour words. A caller saying
-    "quarter past" is not understood and gets asked, which is the right
-    failure.
-    """
-    found: set[str] = set()
-    for hour, minute in _EXACT.findall(heard):
-        found.add(f'{int(hour):02d}:{minute}')
-    for hour, half in _TWELVE.findall(heard):
-        h = int(hour) % 12 + (12 if half.lower() == 'p' else 0)
-        found.add(f'{h:02d}:00')
-    for pattern, minute in ((_HALF, '30'), (_OCLOCK, '00'), (_BARE, '00')):
-        for word in pattern.findall(heard):
-            hour = _HOURS.get(str(word).lower()) or (int(word) if str(word).isdigit() else None)
-            if hour is None:
-                continue
-            found.add(f'{hour % 12:02d}:{minute}')
-            found.add(f'{hour % 12 + 12:02d}:{minute}')
-    return found
 
 
 # How many days back the caller's own words are kept. Four is two corrections

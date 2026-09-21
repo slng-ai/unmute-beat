@@ -21,7 +21,7 @@ from pydantic_ai import ModelResponse, ModelRetry, RunContext, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import agents, diary
-from salon.agents import AGENTS, FILLER, NOTED, prompt, read_diary, record_complaint
+from salon.agents import AGENTS, FILLER, MANAGER_CALLS, REPLY_SOON, prompt, read_diary, record_complaint
 from salon.state import Appointment, Asked, SalonCall, SalonState, open_call, prefetch_number
 from voice.harness import TurnBudget
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
@@ -612,7 +612,14 @@ async def the_note_is_said_once():
     assert 'record_complaint' not in FILLER, (
         'a filler here announces what NOTED then states; that pair is the defect'
     )
-    assert len(probe.fixed()) == 1 and probe.fixed()[0] in NOTED, probe.fixed()
+    # One line, and it carries the reference the book handed back plus the step
+    # the policy actually promises. A live call took a reference and never told
+    # the caller it, then promised a manager callback the policy does not give
+    # for a redo.
+    assert len(probe.fixed()) == 1, probe.fixed()
+    said = probe.fixed()[0]
+    assert diary.complaints()[0]['reference'] in said, said
+    assert REPLY_SOON in said and MANAGER_CALLS not in said, said
     # And the model's own turn is free to be something new.
     assert 'redo in the diary' in probe.spoken(), probe.spoken()
 

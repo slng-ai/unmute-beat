@@ -232,6 +232,38 @@ def one_call_does_not_wipe_another():
     assert second.state.customer_verified == '', 'a new call knows nothing about the last one'
 
 
+def two_calls_from_one_phone_are_two_conversations():
+    """And a fresh fixture is a decision somebody makes, not a side effect of the clock.
+
+    `bot.py` used to empty the diary whenever `SALON_CLOCK` was set, which
+    fixed one problem -- the second call of a benchmark run inheriting the
+    first's booking -- by creating another: a pinned call could delete the
+    records of a call still in progress. Pinning the clock makes two calls
+    *comparable*; emptying the salon makes the second one destroy the first.
+    Two different decisions, and `SALON_FIXTURE` is the second one.
+    """
+    diary.reset()
+    first = open_call(ALICE)
+    offered = diary.find_slots(ALICE, 'tomorrow', 'haircut', AT, offered_to=first.id)['slots'][0]
+    diary.save_booking(ALICE, 'book', offered['slot_id'], '', False, AT, offered_to=first.id)
+
+    # The same number rings again: a continuation, which is what a real salon
+    # sees and what the N1-to-N3 sequence is.
+    second = open_call(ALICE)
+    assert len(diary.bookings_for(ALICE, TODAY)) == 1, "the first call's booking is still there"
+    assert second.id != first.id
+    # What the first conversation was shown is not what the second was shown.
+    assert diary.offer_of(second.id, offered['slot_id'], ALICE) == {}
+    assert diary.offer_of(first.id, offered['slot_id'], ALICE) != {}
+    # Nor its pending question, nor its authority.
+    assert second._asked is None and second.state.customer_verified == ''
+
+    # And pinning the clock, on its own, changes nothing about the records.
+    diary.set_clock(AT)
+    assert len(diary.bookings_for(ALICE, TODAY)) == 1, 'a clock is not a reset'
+    diary.set_clock(None)
+
+
 # --- the date policy, which is a policy and not understanding ----------------
 
 
@@ -405,11 +437,74 @@ def an_offer_is_made_to_one_caller():
     assert diary.save_booking(ALICE, 'book', mine['slot_id'], '', False, AT)['status'] == 'booked'
 
 
+def a_preference_is_answered_before_the_list_is_cut_down():
+    """F3: the twelve places went to times nobody asked about.
+
+    Reproduced on all four live calls of 2026-09-21. On a day with nothing
+    booked, `slots[:12]` is 09:00 to 14:30 -- so a caller asking for three in
+    the afternoon was read the morning and told those were the free times.
+    Nothing was wrong with the diary's answer; it was answering a question
+    about the whole day.
+    """
+    diary.reset()
+    plain = diary.find_slots(ALICE, 'tomorrow', 'haircut', AT)['slots']
+    assert len(plain) == 12 and plain[-1]['time'] <= '14:30', [s['time'] for s in plain]
+    assert not [s for s in plain if s['time'] == '15:00'], 'the reproduction: three is not offered'
+
+    # The same day, the same diary, the caller's own preference.
+    wanted = diary.find_slots(ALICE, 'tomorrow', 'haircut', AT, prefer='15:00')['slots']
+    at_three = [s for s in wanted if s['time'] == '15:00']
+    assert at_three, [s['time'] for s in wanted]
+    # And the alternatives are the ones either side of it, not the far end of
+    # the morning: an exact time ranks rather than filters, because the time
+    # they asked for may be taken and the near ones are the useful reply.
+    times = [s['time'] for s in wanted]
+    assert {'14:30', '15:00', '15:30'} <= set(times), times
+    assert '09:00' not in times, 'the far end of the morning gave up its place'
+    # Read out in the order of a day, whatever order they were chosen in.
+    assert [s['time'] for s in wanted] == sorted(s['time'] for s in wanted)
+
+    # A daypart filters instead: being read the morning is not an answer to
+    # "the afternoon".
+    afternoon = diary.find_slots(ALICE, 'tomorrow', 'haircut', AT, prefer='afternoon')['slots']
+    assert afternoon and all('12:00' <= s['time'] <= '16:59' for s in afternoon), afternoon
+
+    # Only the slots actually shown are offered, preference or not.
+    assert diary.offer_of(ALICE, at_three[0]['slot_id'], ALICE)['time'] == '15:00'
+    assert diary.offer_of(ALICE, plain[0]['slot_id'], ALICE) == {}, 'the earlier search was withdrawn'
+
+
+def a_preference_nothing_matches_is_not_obeyed_into_silence():
+    """A daypart the salon cannot serve answers the day rather than nothing."""
+    diary.reset()
+    # Saturday closes at four, so there is no evening.
+    saturday = diary.find_slots(ALICE, 'saturday', 'haircut', AT, prefer='evening')
+    assert saturday['status'] == 'ok' and saturday['slots'], saturday
+    # Unreadable preferences are ignored, not guessed at.
+    assert diary.find_slots(ALICE, 'tomorrow', 'haircut', AT, prefer='whenever')['slots']
+
+
+def the_caller_s_own_words_choose_the_time():
+    """`resolve_time` reads them, against the salon's own opening hours."""
+    assert diary.resolve_time('three') == '15:00', 'nothing is open at three in the morning'
+    assert diary.resolve_time('nine') == '09:00'
+    assert diary.resolve_time('half past two') == '14:30'
+    assert diary.resolve_time('3 pm') == '15:00'
+    assert diary.resolve_time('the afternoon') == 'afternoon'
+    assert diary.resolve_time('whenever suits') == ''
+    assert diary.resolve_time('') == ''
+    # A date is not a time.
+    assert diary.resolve_time('Friday the 25th') == ''
+
+
 async def main():
     a_hair_colour_slot_can_be_booked()
     every_offered_slot_can_be_taken()
     a_fabricated_slot_is_refused()
     only_the_slots_it_returned_were_offered()
+    a_preference_is_answered_before_the_list_is_cut_down()
+    a_preference_nothing_matches_is_not_obeyed_into_silence()
+    the_caller_s_own_words_choose_the_time()
     an_offer_is_made_to_one_caller()
     an_expired_offer_is_refused()
     a_slot_that_has_gone_past_is_refused()
@@ -421,6 +516,7 @@ async def main():
     an_unknown_outcome_stays_unknown()
     a_refused_write_records_no_outcome()
     one_call_does_not_wipe_another()
+    two_calls_from_one_phone_are_two_conversations()
     the_supported_phrases_resolve()
     anything_outside_the_policy_is_asked_about()
     a_modifier_the_policy_cannot_do_is_asked_about()

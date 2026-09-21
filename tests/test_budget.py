@@ -20,10 +20,10 @@ import json
 from contextlib import ExitStack
 
 from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
-from pydantic_ai import ModelRequest, RetryPromptPart
+from pydantic_ai import ModelRequest, ModelRetry, RetryPromptPart, RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from salon import diary
+from salon import agents, diary
 from salon.agents import AGENTS
 from salon.state import open_call
 from voice.harness import TurnBudget
@@ -299,7 +299,120 @@ async def repair_retries_are_bounded():
     assert probe.fixed(), 'the caller hears something rather than silence'
 
 
+async def an_uncertain_write_is_reconciled_not_repeated():
+    """The service commits, then fails to answer. One booking, not two.
+
+    A failure that is not a refusal is not evidence that nothing happened.
+    Treating it as "nothing happened" and retrying is how a caller ends up
+    with two appointments; treating it as a failure is how a booking that
+    really exists gets denied. The operation token lets the tool ask.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    slot = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())['slots'][0]
+
+    real = diary.save_booking
+    attempts = []
+
+    def commits_then_loses_the_response(*args, **kwargs):
+        attempts.append(1)
+        real(*args, **kwargs)  # the write lands
+        raise TimeoutError('the diary did not answer')  # and the answer does not
+
+    diary.save_booking = commits_then_loses_the_response
+    try:
+        saved = await agents.save_booking(
+            RunContext(deps=call, model=None, usage=None),  # type: ignore[arg-type]
+            'book',
+            slot['slot_id'],
+            '',
+            True,
+            False,
+        )
+    finally:
+        diary.save_booking = real
+
+    assert attempts == [1], attempts
+    assert 'booked' in saved, saved
+    assert len(diary.bookings_for(PHONE, diary.now().date())) == 1, 'exactly one booking'
+    assert call.state.appointment is not None, 'and the caller was told about it'
+
+
+async def a_write_that_never_landed_is_reported_unresolved():
+    """The other half: no outcome recorded, so nothing is claimed either way."""
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    slot = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())['slots'][0]
+
+    real = diary.save_booking
+    diary.save_booking = lambda *a, **k: (_ for _ in ()).throw(TimeoutError('no answer'))
+    try:
+        await agents.save_booking(
+            RunContext(deps=call, model=None, usage=None),  # type: ignore[arg-type]
+            'book',
+            slot['slot_id'],
+            '',
+            True,
+            False,
+        )
+    except ModelRetry as retry:
+        assert 'not clear whether that saved' in str(retry), retry
+    else:
+        raise AssertionError('an unknown outcome must not be reported as either one')
+    finally:
+        diary.save_booking = real
+
+    assert diary.bookings_for(PHONE, diary.now().date()) == []
+    assert call.state.appointment is None, 'nothing was claimed'
+
+
+async def a_superseded_turn_cannot_move_the_caller():
+    """A newer caller turn started while this one was still unwinding.
+
+    Where the caller *is* belongs to the turn they are actually in. A late
+    result is about a question they have moved on from, so the move is
+    fenced -- while whatever the tool actually did stands, to be reconciled
+    by its own operation token rather than pretended away.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    probe = Probe(call)
+
+    read = []
+
+    async def reads_diary_then_is_superseded(messages, info: AgentInfo):
+        if read:
+            # The run answers, so the turn ends on a move rather than on an
+            # exhausted budget -- which is the path the fence sits in.
+            yield 'Nine or eleven tomorrow.'
+            return
+        read.append(1)
+        # The caller says something new while the tool is running: a newer
+        # turn is accepted, and this one is now stale.
+        call.begin_turn()
+        yield {
+            0: DeltaToolCall(
+                name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+            )
+        }
+
+    with scripted(concierge=reads_diary_then_is_superseded):
+        await probe._turn('anything tomorrow?')
+
+    assert read, 'the tool ran'
+    assert call.state.agent == 'concierge', f'a superseded turn moved the caller to {call.state.agent}'
+    # The tool still ran and its effect stands: the diary was read for that
+    # day, and pretending otherwise would lose real work.
+    assert call.state.booking_day, 'the work the tool did is not pretended away'
+
+
 async def main():
+    await an_uncertain_write_is_reconciled_not_repeated()
+    await a_write_that_never_landed_is_reported_unresolved()
+    await a_superseded_turn_cannot_move_the_caller()
     await exhaustion_makes_no_further_request()
     await the_fallback_does_no_business_work()
     await the_budget_is_not_refilled_by_exhausting_it()

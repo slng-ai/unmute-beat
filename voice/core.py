@@ -159,6 +159,9 @@ async def run_turn(
     cannot each start again with a full allowance.
     """
     barge = barge if barge is not None else Barge()
+    # This turn's identity. Read back before any move is committed, so a turn
+    # that was superseded while it was unwinding cannot still move the caller.
+    generation = call.begin_turn()
     usage, limits = budget.account()
     handoffs: list[str] = []
     # A new silence to cover, so one fixed line is allowed again.
@@ -169,7 +172,9 @@ async def run_turn(
     failure = ''
     try:
         async with asyncio.timeout(budget.seconds):
-            async for event in _hops(call, agents, prompt, budget, usage, limits, handoffs, barge):
+            async for event in _hops(
+                call, agents, prompt, budget, usage, limits, handoffs, barge, generation
+            ):
                 if isinstance(event, _Exhausted):
                     spent = event.why
                 elif isinstance(event, _Failed):
@@ -234,6 +239,7 @@ async def _hops(
     limits,
     handoffs: list[str],
     barge: Barge,
+    generation: int,
 ) -> AsyncIterator[object]:
     """Run agents until one answers, yielding what each one says."""
     for _ in range(budget.step_runs):
@@ -258,6 +264,14 @@ async def _hops(
             # the words.
             landed = _moved_by(call.state, node, agents, succeeded)
             if landed != call.state.agent:
+                if not call.is_current(generation):
+                    # A newer caller turn has been accepted since this one
+                    # started, so this result is about a question they have
+                    # moved on from. The tool's own effect stands and is
+                    # reconciled by its operation token; where the caller
+                    # *is* is no longer this turn's to say.
+                    logger.info('fenced a move to {} from turn {}', landed, generation)
+                    return
                 logger.info('moved {} -> {} (via {})', call.state.agent, landed, ', '.join(sorted(succeeded)))
                 handoffs.append(landed)
                 call.commit(agent=landed)
@@ -265,6 +279,11 @@ async def _hops(
         # Where they were sent, then where the graph actually puts them:
         # `booking` before anyone is identified means `verify` first, with
         # `booking` recorded to resume into.
+        if not call.is_current(generation):
+            # The same fence on an explicit handoff. A superseded turn does
+            # not get to choose who takes the caller next.
+            logger.info('fenced a handoff from turn {}', generation)
+            return
         going_to, waiting = _route(call.state, agents, output.to)
         logger.info('handoff {} -> {} ({})', call.state.agent, going_to, output.because or '-')
         handoffs.append(going_to)

@@ -1,9 +1,9 @@
-2026-09-21 10:35:58.546 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-2026-09-21 10:35:59.160 | INFO     | voice.core:_hops:257 - moved concierge -> booking (via read_diary)
-2026-09-21 10:35:59.184 | INFO     | voice.core:_hops:257 - moved concierge -> booking (via read_diary)
-2026-09-21 10:35:59.194 | INFO     | voice.core:_hops:257 - moved concierge -> booking (via read_diary)
-2026-09-21 10:35:59.206 | INFO     | voice.core:_hops:257 - moved concierge -> booking (via read_diary)
-2026-09-21 10:35:59.217 | INFO     | voice.core:_hops:257 - moved concierge -> booking (via read_diary)
-2026-09-21 10:35:59.227 | INFO     | voice.core:_hops:257 - moved concierge -> booking (via read_diary)
-2026-09-21 10:35:59.234 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (a refund)
+2026-09-21 11:02:59.649 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 11:02:59.980 | INFO     | voice.core:_hops:275 - moved concierge -> booking (via read_diary)
+2026-09-21 11:02:59.994 | INFO     | voice.core:_hops:275 - moved concierge -> booking (via read_diary)
+2026-09-21 11:03:00.000 | INFO     | voice.core:_hops:275 - moved concierge -> booking (via read_diary)
+2026-09-21 11:03:00.007 | INFO     | voice.core:_hops:275 - moved concierge -> booking (via read_diary)
+2026-09-21 11:03:00.014 | INFO     | voice.core:_hops:275 - moved concierge -> booking (via read_diary)
+2026-09-21 11:03:00.021 | INFO     | voice.core:_hops:275 - moved concierge -> booking (via read_diary)
+2026-09-21 11:03:00.025 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (a refund)
 ok

@@ -130,11 +130,30 @@ class CallContext(BaseModel):
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
     _covered: bool = PrivateAttr(default=False)
+    # Which accepted caller turn is current. Bumped once per turn, and read
+    # back before a move is committed: a turn that was cancelled and then
+    # finished its unwinding must not still be able to move the caller, and
+    # a late result is not evidence about where the caller is now.
+    _generation: int = PrivateAttr(default=0)
     # The one tool call in the current model response that is allowed to change
     # the flow or write to the business. Set by `one_action_per_reply` from the
     # whole response before any tool runs; read by every action that could be
     # the second one. `None` means this response proposed no such action.
     _claim: str | None = PrivateAttr(default=None)
+
+    def begin_turn(self) -> int:
+        """Open a new accepted caller turn, and say which one it is.
+
+        The number only has to be different from the last one; nothing reads
+        it as a count. What it is for is the comparison: work started under
+        an older turn can tell that it is stale without knowing why.
+        """
+        self._generation += 1
+        return self._generation
+
+    def is_current(self, generation: int) -> bool:
+        """Whether work from that turn may still change where the caller is."""
+        return generation == self._generation
 
     def commit(self, **updates) -> None:
         """Replace the whole state with one validated candidate, or change nothing.

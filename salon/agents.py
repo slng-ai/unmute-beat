@@ -20,6 +20,7 @@ What this does differently from the same agency built on a node graph:
 
 from __future__ import annotations
 
+import hashlib
 import os
 from copy import deepcopy
 from dataclasses import replace
@@ -111,6 +112,17 @@ class ComplaintRecord(BaseModel):
     model_config = STRICT
     recorded: bool
     reference: Id
+
+
+def operation_token(*parts: object) -> str:
+    """One stable name for a business action, across every attempt at it.
+
+    Derived rather than generated, so a retry of the same action derives the
+    same token without anything having to remember it between attempts. What
+    it identifies is the action -- this caller, moving this booking to this
+    slot -- and not the request that carried it.
+    """
+    return hashlib.sha256('|'.join(str(part) for part in parts).encode()).hexdigest()[:16]
 
 
 # Actions that change where the caller is, or write to the salon. At most one
@@ -453,14 +465,42 @@ async def save_booking(
             'for. The caller changed the day, so that offer is gone. Read the diary for the day '
             'they actually want and offer what it returns.'
         )
+    # One token per business action, not per attempt. Derived from what the
+    # action *is*, so a retry after a lost response derives the same one and
+    # the diary returns the outcome it already recorded rather than booking a
+    # second time. Nothing has to carry it between turns.
+    #
+    # ponytail: a hash of the arguments is the token. It is wrong only if the
+    # caller genuinely wants the identical action twice in one call, which
+    # `additional` already distinguishes. A real service would hand one out.
+    token = operation_token(ctx.deps.state.customer_phone, action, slot_id, booking_id, additional)
     try:
         saved = diary.save_booking(
-            ctx.deps.state.customer_phone, action, slot_id, booking_id, additional, diary.now()
+            ctx.deps.state.customer_phone,
+            action,
+            slot_id,
+            booking_id,
+            additional,
+            diary.now(),
+            operation_token=token,
         )
     except diary.RefusedError as refused:
         # The diary's own words, which name what is actually possible instead of
         # leaving the model to guess a new slot.
         raise ModelRetry(str(refused)) from None
+    except Exception:
+        # Not a refusal: the service did not say no, it failed to answer. The
+        # write may well have committed, so treating this as "nothing
+        # happened" is how a caller ends up with two appointments. Ask what
+        # the token actually did.
+        recovered = diary.outcome_of(token)
+        if recovered is None:
+            # Genuinely unknown, and said so rather than guessed either way.
+            raise ModelRetry(
+                'The diary did not answer and it is not clear whether that saved. Tell the caller '
+                'you will check and not to book again, and do not call this a second time.'
+            ) from None
+        saved = recovered
     # Validated before a single field is read, so a malformed response cannot
     # reach the state through an annotation nobody checks.
     written = Saved.model_validate(saved)

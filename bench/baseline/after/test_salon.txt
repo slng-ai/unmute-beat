@@ -1,13 +1,13 @@
-2026-09-21 10:35:56.264 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-2026-09-21 10:35:56.627 | INFO     | voice.core:_hops:266 - handoff concierge -> verify (wants a haircut)
-2026-09-21 10:35:56.633 | INFO     | voice.core:_hops:266 - handoff verify -> booking (the caller is identified)
-2026-09-21 10:35:56.648 | INFO     | voice.core:_hops:257 - moved concierge -> booking (via read_diary)
-2026-09-21 10:35:56.652 | INFO     | voice.core:_hops:266 - handoff concierge -> verify (wants to book)
-2026-09-21 10:35:56.662 | INFO     | voice.core:_hops:266 - handoff concierge -> verify (wants a haircut)
-2026-09-21 10:35:56.672 | INFO     | voice.core:_hops:266 - handoff verify -> booking (the caller is identified)
-2026-09-21 10:35:56.687 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (loop)
-2026-09-21 10:35:56.692 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (loop)
-2026-09-21 10:35:56.696 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (loop)
-2026-09-21 10:35:56.696 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 3-run hop budget
-2026-09-21 10:35:56.718 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (an uneven haircut)
+2026-09-21 11:02:57.256 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 11:02:57.615 | INFO     | voice.core:_hops:288 - handoff concierge -> verify (wants a haircut)
+2026-09-21 11:02:57.620 | INFO     | voice.core:_hops:288 - handoff verify -> booking (the caller is identified)
+2026-09-21 11:02:57.633 | INFO     | voice.core:_hops:275 - moved concierge -> booking (via read_diary)
+2026-09-21 11:02:57.638 | INFO     | voice.core:_hops:288 - handoff concierge -> verify (wants to book)
+2026-09-21 11:02:57.646 | INFO     | voice.core:_hops:288 - handoff concierge -> verify (wants a haircut)
+2026-09-21 11:02:57.655 | INFO     | voice.core:_hops:288 - handoff verify -> booking (the caller is identified)
+2026-09-21 11:02:57.667 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (loop)
+2026-09-21 11:02:57.671 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (loop)
+2026-09-21 11:02:57.675 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (loop)
+2026-09-21 11:02:57.675 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 3-run hop budget
+2026-09-21 11:02:57.695 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (an uneven haircut)
 ok

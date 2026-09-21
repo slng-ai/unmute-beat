@@ -1,23 +1,28 @@
-2026-09-21 10:34:06.317 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-2026-09-21 10:34:06.641 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.01s
-2026-09-21 10:34:06.651 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
-2026-09-21 10:34:06.656 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.01s
-2026-09-21 10:34:06.660 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
-2026-09-21 10:34:06.669 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.00s
-2026-09-21 10:34:06.677 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
-2026-09-21 10:34:06.681 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
-2026-09-21 10:34:06.681 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
-2026-09-21 10:34:06.682 | DEBUG    | voice.core:take_turn:458 - turn exhausted in 0.01s
-2026-09-21 10:34:06.686 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
-2026-09-21 10:34:06.690 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
-2026-09-21 10:34:06.691 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
-2026-09-21 10:34:06.699 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
-2026-09-21 10:34:06.703 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
-2026-09-21 10:34:06.703 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
-2026-09-21 10:34:06.716 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.00s
-2026-09-21 10:34:06.720 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
-2026-09-21 10:34:06.724 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
-2026-09-21 10:34:06.724 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
-2026-09-21 10:34:06.724 | DEBUG    | voice.core:take_turn:458 - turn exhausted in 0.01s
-2026-09-21 10:34:06.728 | DEBUG    | voice.core:take_turn:458 - turn interrupted in 0.00s
+2026-09-21 10:36:00.924 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 10:36:01.261 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.01s
+2026-09-21 10:36:01.271 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
+2026-09-21 10:36:01.275 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.01s
+2026-09-21 10:36:01.280 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
+2026-09-21 10:36:01.289 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.00s
+2026-09-21 10:36:01.297 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
+2026-09-21 10:36:01.301 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
+2026-09-21 10:36:01.301 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
+2026-09-21 10:36:01.301 | DEBUG    | voice.core:take_turn:458 - turn exhausted in 0.01s
+2026-09-21 10:36:01.305 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
+2026-09-21 10:36:01.309 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
+2026-09-21 10:36:01.310 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
+2026-09-21 10:36:01.318 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
+2026-09-21 10:36:01.322 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
+2026-09-21 10:36:01.322 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
+2026-09-21 10:36:01.336 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
+2026-09-21 10:36:01.340 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
+2026-09-21 10:36:01.340 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
+2026-09-21 10:36:01.347 | WARNING  | voice.core:run_turn:191 - turn exhausted: The next request would exceed the request_limit of 2. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+2026-09-21 10:36:01.599 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 0.25s turn deadline
+2026-09-21 10:36:01.608 | DEBUG    | voice.core:take_turn:458 - turn answered in 0.01s
+2026-09-21 10:36:01.615 | INFO     | voice.core:_hops:266 - handoff concierge -> complaints (test)
+2026-09-21 10:36:01.622 | INFO     | voice.core:_hops:266 - handoff complaints -> concierge (test)
+2026-09-21 10:36:01.622 | WARNING  | voice.core:run_turn:191 - turn exhausted: the 2-run hop budget
+2026-09-21 10:36:01.622 | DEBUG    | voice.core:take_turn:458 - turn exhausted in 0.01s
+2026-09-21 10:36:01.627 | DEBUG    | voice.core:take_turn:458 - turn interrupted in 0.00s
 ok

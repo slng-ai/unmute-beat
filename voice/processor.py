@@ -192,6 +192,13 @@ class PydanticAgentProcessor(FrameProcessor):
             turn_started = time.perf_counter()
             run_started = turn_started
             spoke = False
+            # Whether a response frame is open. The core can leave a run
+            # without closing it -- a turn that blows its request limit or
+            # hits the deadline unwinds through an exception, and the event
+            # that would have said RunEnded is never yielded. Pairing the
+            # frames is this side's job anyway: the contract they belong to
+            # is Pipecat's, and an unclosed response wedges the aggregators.
+            open_response = False
             self._barge = core.Barge()
             self._interrupted = False
             try:
@@ -201,6 +208,7 @@ class PydanticAgentProcessor(FrameProcessor):
                     match event:
                         case core.RunStarted():
                             run_started = time.perf_counter()
+                            open_response = True
                             await self.push_frame(LLMFullResponseStartFrame())
                             await self.start_ttfb_metrics()
                             await self.start_processing_metrics()
@@ -222,6 +230,7 @@ class PydanticAgentProcessor(FrameProcessor):
                                 )
                             await self.push_frame(LLMTextFrame(text))
                         case core.RunEnded():
+                            open_response = False
                             await self.stop_processing_metrics()
                             await self.push_frame(LLMFullResponseEndFrame())
                         case core.FixedSpeech(text=text, reason=reason):
@@ -243,6 +252,10 @@ class PydanticAgentProcessor(FrameProcessor):
                                 span.set_attribute('detail', done.detail)
                             self._finished = done
             finally:
+                if open_response:
+                    # The core left a run open on its way out. Close it, so
+                    # every start has an end whatever happened in between.
+                    await self.push_frame(LLMFullResponseEndFrame())
                 # A turn that ends without speech leaves TTFB armed, and the next
                 # turn reports its own first word as seconds late. Idempotent:
                 # a turn that did speak stopped it already.

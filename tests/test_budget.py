@@ -19,7 +19,7 @@ import asyncio
 import json
 from contextlib import ExitStack
 
-from pydantic_ai import ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart
+from pydantic_ai import ModelRequest, RetryPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame

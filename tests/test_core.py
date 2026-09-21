@@ -214,6 +214,51 @@ async def speech_before_a_tool_survives_the_seam():
     assert 'We close at six.' in ''.join(text), text
 
 
+async def every_response_frame_is_closed():
+    """Start and end always pair, on every way a turn can end.
+
+    The core unwinds through an exception when a turn blows its request
+    limit or hits the deadline, so the event that would have said the run
+    ended is never yielded. An unclosed response wedges the aggregators, and
+    pairing the frames belongs to the side that owns the frame contract.
+    """
+    cases = {
+        'answered': (TurnBudget(), {'concierge': says('We are open until six.')}, 'when do you close?'),
+        'exhausted by hops': (TurnBudget(step_runs=2),
+                              {'concierge': hands_to('complaints'), 'complaints': hands_to('concierge')},
+                              'hello?'),
+        'exhausted by requests': (TurnBudget(step_runs=4, model_requests=2),
+                                  {'concierge': _never_settles()}, 'tell me everything'),
+        'deadline': (TurnBudget(seconds=0.25), {'concierge': _stalls()}, 'hello?'),
+    }
+    for name, (budget, scripts, said) in cases.items():
+        call = _fresh(True)
+        probe = Probe(call, budget=budget)
+        with scripted(**scripts):
+            await probe._turn(said)
+        starts = sum(isinstance(f, LLMFullResponseStartFrame) for f in probe.frames)
+        ends = sum(isinstance(f, LLMFullResponseEndFrame) for f in probe.frames)
+        assert starts == ends, f'{name}: {starts} starts, {ends} ends -- {probe.kinds()}'
+        assert starts >= 1, name
+
+
+def _never_settles():
+    calls = []
+
+    async def stream(messages, info: AgentInfo):
+        calls.append(1)
+        yield {0: DeltaToolCall(name='look_up_salon_info',
+                                json_args=json.dumps({'query': f'q{len(calls)}'}))}
+    return stream
+
+
+def _stalls():
+    async def stream(messages, info: AgentInfo):
+        await asyncio.sleep(5)
+        yield 'too late'
+    return stream
+
+
 async def the_turn_says_how_it_ended():
     """Never implied. Four statuses, and an absent complaint is not success."""
     call = _fresh(True)
@@ -270,6 +315,7 @@ async def main():
     await the_processor_still_speaks_pipecat()
     await a_fixed_line_is_still_a_tts_frame()
     await speech_before_a_tool_survives_the_seam()
+    await every_response_frame_is_closed()
     await the_turn_says_how_it_ended()
     await a_barge_in_is_reported_as_one()
     the_core_imports_no_runtime()

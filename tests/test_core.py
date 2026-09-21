@@ -24,6 +24,7 @@ from pipecat.frames.frames import (
     TTSSpeakFrame,
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.toolsets import FunctionToolset
 
 from salon import diary
 from salon.agents import AGENTS
@@ -54,10 +55,34 @@ class Probe(PydanticAgentProcessor):
         return [type(f).__name__ for f in self.frames]
 
 
+async def probe(question: str) -> str:
+    """A tool that does nothing, for tests that need a tool call to be about something else.
+
+    Every test here that wanted "the model calls a harmless tool" used to reach
+    for `look_up_salon_info`. That tool is gone -- the salon's documents are in
+    the prompts now -- and borrowing a real tool for its harmlessness was always
+    the wrong dependency: the test breaks when the agency changes its mind about
+    a tool, not when the thing under test breaks.
+
+    Injected through `agent.override(toolsets=...)`, so it is offered exactly
+    like a real tool and the agent's own `prepare_tools` capabilities narrow it
+    the same way.
+    """
+    return f'nothing useful about {question}'
+
+
 def scripted(**by_agent):
     stack = ExitStack()
     for name, fn in by_agent.items():
-        stack.enter_context(AGENTS[name].agent.override(model=FunctionModel(stream_function=fn)))
+        stack.enter_context(
+            AGENTS[name].agent.override(
+                model=FunctionModel(stream_function=fn),
+                # `probe` alongside the agent's real tools, never instead of
+                # them: `override(toolsets=...)` adds to what the agent was
+                # built with.
+                toolsets=[FunctionToolset([probe])],
+            )
+        )
     return stack
 
 
@@ -204,11 +229,11 @@ async def speech_before_a_tool_survives_the_seam():
     probe = Probe(call)
 
     async def talk_then_call(messages, info: AgentInfo):
-        if 'look_up_salon_info' in str(messages):
+        if 'probe' in str(messages):
             yield 'We close at six.'
             return
         yield 'Let me see. '
-        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': 'opening hours'}))}
+        yield {0: DeltaToolCall(name='probe', json_args=json.dumps({'question': 'opening hours'}))}
 
     with scripted(concierge=talk_then_call):
         await probe._turn('when do you close?')
@@ -256,7 +281,7 @@ def _never_settles():
 
     async def stream(messages, info: AgentInfo):
         calls.append(1)
-        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': f'q{len(calls)}'}))}
+        yield {0: DeltaToolCall(name='probe', json_args=json.dumps({'question': f'q{len(calls)}'}))}
 
     return stream
 

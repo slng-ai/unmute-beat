@@ -283,7 +283,7 @@ def a_borrowed_tool_is_the_move():
     known = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'booking'
     # A tool nobody lends moves nobody.
-    assert moved_by(known, AGENTS['concierge'], AGENTS, {'look_up_salon_info'}) == 'concierge'
+    assert moved_by(known, AGENTS['concierge'], AGENTS, {'probe'}) == 'concierge'
     assert moved_by(known, AGENTS['concierge'], AGENTS, set()) == 'concierge'
 
 

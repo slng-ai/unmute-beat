@@ -283,6 +283,31 @@ def one_action_per_reply(actions: frozenset[str]) -> Hooks:
     return hooks
 
 
+def speak_by(request: int) -> Hooks:
+    """From this request on, a run has no ordinary tools left: it answers with what it has.
+
+    The turn budget is the last resort and its failure mode is an apology: on the call of
+    2026-09-21 a run made eight requests, seven of them the same knowledge lookup reworded,
+    and the caller heard "I'm going round in circles" five seconds later. Everything needed
+    to answer had come back on the first one.
+
+    So this is the bound in front of the budget. Two tool-bearing requests is the longest
+    chain any step here legitimately needs -- read the diary, then correct a refusal -- so
+    from the third the model is offered speech and nothing else. Its **output** tools stay:
+    a run that has read the diary can still hand over or save, because those finish the run
+    rather than extending it. Only the ones that buy another request go.
+
+    `ctx.run_step` counts model requests from 1 within one run, checked against 2.46.0.
+    """
+    hooks = Hooks()
+
+    @hooks.on.prepare_tools
+    async def only_speech(ctx, defs):
+        return [] if ctx.run_step >= request else defs
+
+    return hooks
+
+
 def filler_hook(lines_by_tool: dict[str, tuple[str, ...]]) -> Hooks:
     """Speak into the gap a tool leaves, before it runs.
 
@@ -317,7 +342,7 @@ class Exit(NamedTuple):
     call, three times in twelve turns.
 
     Only a tool whose call genuinely means the caller has moved belongs here.
-    `read_diary` does. `look_up_salon_info` never moves anybody.
+    `read_diary` does. `record_complaint` never moves anybody.
     """
 
     to: str

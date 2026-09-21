@@ -53,6 +53,26 @@ already spent) and the Pipecat `turn` span (which spans them, and is reported
 as a labelled proxy). Worth keeping aligned in wording as well as in substance
 when Phase 03 compares the two configurations.
 
+## 4. `turn.user_bot_latency_seconds` contains the endpointing wait
+
+Measured on trace `5dc6e0eeb2dcd9f86faef13ee7490346`. The gap between the
+final STT observation ending and the `agents` span opening is **0.00s on
+seven of nine caller turns and 1.4-1.5s on the other two**. Both of those two
+are trailing utterances -- a sentence that drifts off rather than lands -- and
+1.5s is exactly `SMART_TURN_STOP_SECS`. `LocalSmartTurnAnalyzerV3` judged them
+INCOMPLETE and the fallback timer ran out. The same pattern, at the same
+value, appears in the earlier trace `a0dd15b94dc9cb9a4c14795f324e2229`.
+
+So a reader that attributes `user_bot_latency_seconds` to the agency is wrong
+by up to the fallback on those turns, and right on the others -- which is the
+worst shape for a bug, because the average looks plausible. The agency's own
+time is the `agents` span; the difference is turn-taking and belongs to
+whoever is tuning the analyser.
+
+Concretely: on that call the slowest turn (4.23s user-to-bot) was 1.48s of
+endpointing, 0.84s of handoff, 0.84s of a knowledge lookup, 0.67s to the first
+token and ~0.4s of TTS. Only the middle two were ever the agency's to fix.
+
 ## Not a defect
 
 `check_v4` in that script is a genuinely good idea this repository does not

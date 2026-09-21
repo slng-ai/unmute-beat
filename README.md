@@ -220,10 +220,9 @@ voice/processor.py   the Pipecat node: translates those events into frames
 voice/{state,agents}.py   the two-agent demo
 salon/state.py       shapes, SalonState, SalonCall, caller-ID prefetch
 salon/diary.py       customers, slots, bookings, complaints (in memory)
-salon/knowledge.py   section retrieval over knowledge/*.md
 salon/agents.py      the four agents, their tools, the AGENTS table
-prompts/salon/       one prompt per agent, plus the voice rules they share
-knowledge/           the salon's own documents
+prompts/salon/       one prompt per agent, plus the voice rules and documents they share
+knowledge/           the salon's own documents, substituted into the prompts at import
 bot.py               pipeline wiring
 talk.py              the no-audio transcript loop
 tests/               assert scripts, no pytest, no network

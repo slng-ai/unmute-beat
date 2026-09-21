@@ -22,6 +22,7 @@ from contextlib import ExitStack
 from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
 from pydantic_ai import ModelRequest, ModelRetry, RetryPromptPart, RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.toolsets import FunctionToolset
 
 from salon import agents, diary
 from salon.agents import AGENTS
@@ -50,10 +51,34 @@ class Probe(PydanticAgentProcessor):
         return sum(isinstance(f, LLMFullResponseStartFrame) for f in self.frames)
 
 
+async def probe(question: str) -> str:
+    """A tool that does nothing, for tests that need a tool call to be about something else.
+
+    Every test here that wanted "the model calls a harmless tool" used to reach
+    for `look_up_salon_info`. That tool is gone -- the salon's documents are in
+    the prompts now -- and borrowing a real tool for its harmlessness was always
+    the wrong dependency: the test breaks when the agency changes its mind about
+    a tool, not when the thing under test breaks.
+
+    Injected through `agent.override(toolsets=...)`, so it is offered exactly
+    like a real tool and the agent's own `prepare_tools` capabilities narrow it
+    the same way.
+    """
+    return f'nothing useful about {question}'
+
+
 def scripted(**by_agent):
     stack = ExitStack()
     for name, fn in by_agent.items():
-        stack.enter_context(AGENTS[name].agent.override(model=FunctionModel(stream_function=fn)))
+        stack.enter_context(
+            AGENTS[name].agent.override(
+                model=FunctionModel(stream_function=fn),
+                # `probe` alongside the agent's real tools, never instead of
+                # them: `override(toolsets=...)` adds to what the agent was
+                # built with.
+                toolsets=[FunctionToolset([probe])],
+            )
+        )
     return stack
 
 
@@ -182,20 +207,23 @@ async def the_request_limit_stops_a_turn_that_never_hops():
     The hop budget does not see this: every request is inside one run. The
     shared request limit is what bounds it, and it is a separate number for
     exactly that reason.
+
+    A tool name nobody defined, because `speak_by` now takes the ordinary
+    tools away at the third request and a model asking for a real one would
+    be stopped by that instead. An unknown name is not a contrived case: it
+    is what a provider hallucinating a tool looks like, it is answered with a
+    retry prompt rather than a tool, and the request limit is the only thing
+    that ends it.
     """
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=3))
+    probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=3, repair_retries=99))
     asked = []
 
     async def never_settles(messages, info: AgentInfo):
         asked.append(1)
-        yield {
-            0: DeltaToolCall(
-                name='look_up_salon_info', json_args=json.dumps({'query': f'question {len(asked)}'})
-            )
-        }
+        yield {0: DeltaToolCall(name='no_such_tool', json_args=json.dumps({'q': len(asked)}))}
 
     with scripted(concierge=never_settles):
         await probe._turn('tell me everything')
@@ -205,6 +233,12 @@ async def the_request_limit_stops_a_turn_that_never_hops():
 
 
 async def the_tool_limit_is_its_own_number():
+    """Two tools per reply, so the allowance goes before the request cap can matter.
+
+    `speak_by` bounds requests, not calls: one reply may ask for several
+    tools and a run that does it twice has spent four. Which is the whole
+    reason `tool_calls` is a separate number.
+    """
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
@@ -213,12 +247,15 @@ async def the_tool_limit_is_its_own_number():
 
     async def keep_looking(messages, info: AgentInfo):
         ran.append(1)
-        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': f'q{len(ran)}'}))}
+        yield {
+            0: DeltaToolCall(name='probe', json_args=json.dumps({'question': f'a{len(ran)}'})),
+            1: DeltaToolCall(name='probe', json_args=json.dumps({'question': f'b{len(ran)}'})),
+        }
 
     with scripted(concierge=keep_looking):
         await probe._turn('tell me everything')
 
-    assert len(ran) <= 3, ran
+    assert len(ran) <= 2, ran
     assert EXHAUSTED in probe.fixed(), probe.fixed()
 
 

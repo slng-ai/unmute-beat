@@ -20,10 +20,9 @@ measurements behind the design. Read it before changing how a turn works.
 | `voice/{state,agents}.py` | the two-agent demo agency (`CallState`, `Call`) |
 | `salon/state.py` | `SalonState`, `SalonCall`, the validated shapes, caller-ID prefetch |
 | `salon/diary.py` | customers, slots, offers, bookings, complaints — in memory, and the oracle that says no |
-| `salon/knowledge.py` | section retrieval over `knowledge/*.md` |
 | `salon/agents.py` | the four agents, their tools, the validated service boundary, the `AGENTS` table |
 | `utils/observability.py` | Langfuse/OTel wiring; call `setup()` once, before any agent is built |
-| `prompts/<agency>/` | one Handlebars prompt per agent, plus the shared voice rules |
+| `prompts/<agency>/` | one Handlebars prompt per agent, plus the shared voice rules and the salon's own documents, substituted in at import |
 | `bench/` | latency and behaviour measurement against the real model |
 | `bench/baseline/` | the pre-Phase-01 snapshot, digests and evidence ledger — don't edit |
 | `tests/` | assert scripts — no pytest, no network |

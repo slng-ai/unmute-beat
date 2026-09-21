@@ -57,6 +57,9 @@ not been run here and should not be relied on without running it.
 | `before_tool_execute` | **Does not fire for output tools.** A `ToolOutput` ran with the hook never called. This is why output tools call `claim_or_refuse` themselves. Recheck on any upgrade. | probe |
 | `sequential=True` | Available on both `Tool` and `ToolOutput`. | signature inspection |
 | `parallel_tool_calls=False` | Not relied on, and not probed. The conflict policy does not assume it. | not run |
+| `ctx.run_step` inside `prepare_tools` | Counts **model requests within one run**, from 1. So the hook can bound how long a run may keep calling tools, which no usage limit does without ending the turn. | probe, then `tests/test_flow.py::a_run_speaks_by_its_third_request` |
+| Two `Hooks` capabilities with `prepare_tools` | Compose, in list order: each receives what the previous returned. Neither replaces the other. | probe |
+| `agent.override(toolsets=...)` | **Adds** to the tools the agent was built with rather than replacing them, and the agent's own `prepare_tools` capabilities still narrow the injected ones. This is how tests inject a stand-in tool. | probe, then used by `tests/test_{flow,core,budget}.py` |
 
 ## Request and history controls
 

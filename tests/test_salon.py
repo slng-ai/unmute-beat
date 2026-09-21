@@ -20,16 +20,8 @@ from pydantic import BaseModel
 from pydantic_ai import ModelResponse, RunContext, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from salon import diary, knowledge
-from salon.agents import (
-    AGENTS,
-    FILLER,
-    NOTED,
-    look_up_refund_policy,
-    look_up_salon_info,
-    prompt,
-    read_diary,
-)
+from salon import diary
+from salon.agents import AGENTS, FILLER, NOTED, prompt, read_diary, record_complaint
 from salon.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
 from voice.harness import TurnBudget
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
@@ -102,10 +94,17 @@ assert diary.bookings_for(PHONE, TODAY) == []
 
 # --- the documents -----------------------------------------------------------
 
-assert knowledge.look_up('services', 'are you open on sunday')['results'][0]['heading'] == 'Opening hours'
-assert 'refund' in knowledge.look_up('refunds', 'can I have my money back')['results'][0]['text'].casefold()
-# Nothing plausible beats the closest wrong thing: the agent is told to say so.
-assert knowledge.look_up('services', 'do you sell concert tickets')['results'] == []
+# They are prompt text now rather than something a tool retrieves, so what can
+# go wrong is different: a substitution that does not fire leaves the marker
+# sitting in the prompt and the agent answering from nothing at all. Both
+# prompts are checked for a fact only their own document carries.
+_concierge, _complaints = str(prompt('concierge')), str(prompt('complaints'))
+assert 'metered street parking' in _concierge and 'nine in the morning' in _concierge
+assert 'twenty percent' in _complaints and 'fourteen days' in _complaints
+assert '<!--' not in _concierge and '<!--' not in _complaints
+# The refund tiers belong to the agent that handles refunds, and nowhere else:
+# the front desk quoting a tier is the thing the separate step exists to avoid.
+assert 'twenty percent' not in _concierge
 
 # --- the carrier's caller ID -------------------------------------------------
 
@@ -604,9 +603,8 @@ async def a_tool_result_is_never_a_script():
     ctx = RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
 
     results = [
-        await look_up_salon_info(ctx, 'opening hours'),
-        await look_up_refund_policy(ctx, 'redo window'),
         await read_diary(ctx, 'tomorrow', 'haircut'),
+        await record_complaint(ctx, 'the cut was uneven', 'a redo'),
     ]
 
     def leaves(value, path='') -> list[tuple[str, str]]:

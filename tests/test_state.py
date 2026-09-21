@@ -438,7 +438,7 @@ def no_tool_but_the_verifier_takes_a_phone_number():
     from salon import agents
 
     allowed = {'confirm_customer'}
-    for name in agents.ACTIONS | {'look_up_salon_info', 'look_up_refund_policy'}:
+    for name in agents.ACTIONS:
         tool = getattr(agents, name, None)
         if tool is None or name in allowed:
             continue

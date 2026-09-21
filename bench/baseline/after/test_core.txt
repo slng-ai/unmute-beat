@@ -1,28 +1,38 @@
-2026-09-21 11:03:01.620 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-2026-09-21 11:03:01.952 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.01s
-2026-09-21 11:03:01.963 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
-2026-09-21 11:03:01.967 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.01s
-2026-09-21 11:03:01.971 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
-2026-09-21 11:03:01.979 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.00s
-2026-09-21 11:03:01.988 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
-2026-09-21 11:03:01.992 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
-2026-09-21 11:03:01.992 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
-2026-09-21 11:03:01.992 | DEBUG    | voice.core:take_turn:481 - turn exhausted in 0.01s
-2026-09-21 11:03:01.996 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
-2026-09-21 11:03:02.001 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
-2026-09-21 11:03:02.001 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
-2026-09-21 11:03:02.009 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
-2026-09-21 11:03:02.013 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
-2026-09-21 11:03:02.013 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
-2026-09-21 11:03:02.029 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
-2026-09-21 11:03:02.033 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
-2026-09-21 11:03:02.033 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
-2026-09-21 11:03:02.040 | WARNING  | voice.core:run_turn:200 - turn exhausted: The next request would exceed the request_limit of 2. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
-2026-09-21 11:03:02.292 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 0.25s turn deadline
-2026-09-21 11:03:02.299 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.01s
-2026-09-21 11:03:02.304 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
-2026-09-21 11:03:02.310 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
-2026-09-21 11:03:02.310 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
-2026-09-21 11:03:02.310 | DEBUG    | voice.core:take_turn:481 - turn exhausted in 0.01s
-2026-09-21 11:03:02.314 | DEBUG    | voice.core:take_turn:481 - turn interrupted in 0.00s
+2026-09-21 11:33:59.595 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+                 pydantic-ai v2.46.0 • Python 3.14.5
+
+      / \        agent: concierge • model: function:function::stream
+     /   \         output: str | ToolOutput(output=<function hand_… • tools: 2 • capabilities: 4
+   /___.___\
+  /    |    \    observability: off — see every model and tool call live, with cost
+/      |      \    set it up free with Logfire and a GitHub login: https://pydantic.dev/ai-setup.md
+`---.._|_..---'    or use any OpenTelemetry backend: https://pydantic.dev/docs/ai/logfire/#otel
+
+                 goes away once observability is on — or PYDANTIC_AI_NO_BANNER=1
+2026-09-21 11:33:59.892 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.01s
+2026-09-21 11:33:59.902 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
+2026-09-21 11:33:59.907 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.01s
+2026-09-21 11:33:59.912 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
+2026-09-21 11:33:59.920 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.00s
+2026-09-21 11:33:59.929 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
+2026-09-21 11:33:59.933 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
+2026-09-21 11:33:59.934 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
+2026-09-21 11:33:59.934 | DEBUG    | voice.core:take_turn:481 - turn exhausted in 0.01s
+2026-09-21 11:33:59.938 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
+2026-09-21 11:33:59.942 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
+2026-09-21 11:33:59.942 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
+2026-09-21 11:33:59.951 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
+2026-09-21 11:33:59.955 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
+2026-09-21 11:33:59.955 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
+2026-09-21 11:33:59.971 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
+2026-09-21 11:33:59.975 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
+2026-09-21 11:33:59.975 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
+2026-09-21 11:33:59.983 | WARNING  | voice.core:run_turn:200 - turn exhausted: The next request would exceed the request_limit of 2. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+2026-09-21 11:34:00.235 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 0.25s turn deadline
+2026-09-21 11:34:00.245 | DEBUG    | voice.core:take_turn:481 - turn answered in 0.01s
+2026-09-21 11:34:00.254 | INFO     | voice.core:_hops:288 - handoff concierge -> complaints (test)
+2026-09-21 11:34:00.260 | INFO     | voice.core:_hops:288 - handoff complaints -> concierge (test)
+2026-09-21 11:34:00.261 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 2-run hop budget
+2026-09-21 11:34:00.261 | DEBUG    | voice.core:take_turn:481 - turn exhausted in 0.01s
+2026-09-21 11:34:00.266 | DEBUG    | voice.core:take_turn:481 - turn interrupted in 0.00s
 ok

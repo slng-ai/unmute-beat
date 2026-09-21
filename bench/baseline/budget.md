@@ -16,6 +16,24 @@ threaded through every agent run in that turn.
 | `seconds` | 20.0 | `asyncio.timeout` around the whole turn | An upper bound on silence, not a target. A caller has usually gone by then; this is the point at which saying something is better than continuing. |
 | `repair_retries` | 2 | `retries=` on each run | Two chances to correct a refused tool call. One is not enough for a phone number read back wrong; more than two is a model that is not going to get there. |
 
+## The bound in front of the budget
+
+| Setting | Value | Mechanism | Why this number |
+|---|---|---|---|
+| `SPEAK_BY` | 3 | `voice.harness.speak_by`, a `prepare_tools` hook keyed on `ctx.run_step` | From the third model request in a run, no ordinary tools are offered: the model answers with what it holds. Two tool-bearing requests is the longest legitimate chain a step needs -- read the diary, then correct what it refused. Output tools are untouched, so a run can still hand over or finish. |
+
+This is not a fifth budget, it is the thing that keeps the budgets from being
+reached. Every number above ends a turn by apologising, which is the correct
+last resort and a bad first one. On the call of 2026-09-21 a run made eight
+requests -- one `read_diary` that returned everything needed, then seven
+rewordings of the same knowledge lookup -- and the caller waited 5.3 seconds
+to be told the agent was going round in circles. The request limit worked
+exactly as designed and the caller still lost the turn.
+
+`ctx.run_step` counts model requests within one run from 1, checked against
+2.46.0 and pinned by `tests/test_flow.py::a_run_speaks_by_its_third_request`.
+The trace itself is replayed in `the_loop_from_the_call_of_2026_09_21`.
+
 ## What is counted separately
 
 **Semantic repair** is a tool refusing and the model correcting itself
@@ -60,3 +78,10 @@ fallback does no business work, a new turn gets a fresh allowance, requests
 are counted across agents, the request limit stops a turn that never hops, the
 tool limit is its own number, a slow tool hits the turn deadline, a permitted
 repair succeeds, and repair retries are bounded.
+
+Two of those changed shape when `SPEAK_BY` arrived, because a run can no
+longer keep asking for a tool it has been offered. The request-limit check now
+scripts an **unknown** tool name -- what a provider hallucinating a tool looks
+like, answered with a retry prompt rather than a tool -- and the tool-limit
+check emits two calls per reply, which is the case `tool_calls` exists for and
+the one `SPEAK_BY` does not cover.

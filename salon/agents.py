@@ -34,7 +34,7 @@ from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.tools import ToolDefinition
 
-from salon import diary, knowledge
+from salon import diary
 from salon.state import (
     AgentName,
     Appointment,
@@ -47,7 +47,15 @@ from salon.state import (
     Service,
     Time,
 )
-from voice.harness import STRICT, Exit, Node, claim_or_refuse, filler_hook, one_action_per_reply
+from voice.harness import (
+    STRICT,
+    Exit,
+    Node,
+    claim_or_refuse,
+    filler_hook,
+    one_action_per_reply,
+    speak_by,
+)
 from voice.harness import lent as _lent
 from voice.harness import pick as _pick
 from voice.harness import present as _present
@@ -138,6 +146,11 @@ ACTIONS = frozenset(
     }
 )
 
+# The request at which a run runs out of ordinary tools and has to answer with what
+# it holds. Three, because the longest legitimate chain is two tool-bearing requests:
+# read the diary, then correct what it refused. See `voice.harness.speak_by`.
+SPEAK_BY = 3
+
 # What the caller hears the moment the diary is written, said by this code. The
 # `{spoken}` phrase is the diary's own, computed once, so two turns cannot
 # describe one appointment two different ways. Alternatives because a caller who
@@ -212,8 +225,14 @@ if os.getenv('BENCH_PINNED'):
 
 GREETING = "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
 
+KNOWLEDGE = Path(__file__).resolve().parent.parent / 'knowledge'
+
 _VOICE = (PROMPTS / '_voice.md').read_text()
 _DIARY = (PROMPTS / '_diary.md').read_text()
+# The salon's own documents, read once at import and substituted into the two
+# prompts that answer from them. They were a retrieval tool until the call of
+# 2026-09-21; see `prompt` below.
+_DOCS = {name: (KNOWLEDGE / f'{name}.md').read_text() for name in ('services', 'refunds')}
 
 
 def prompt(name: str) -> TemplateStr[SalonCall]:
@@ -229,42 +248,24 @@ def prompt(name: str) -> TemplateStr[SalonCall]:
     -- and the rules for using it are hard-won enough that two copies would
     drift. A plain substitution rather than a Handlebars partial, because it is
     one line and needs nothing registered.
+
+    `<!--services-->` and `<!--refunds-->` are the salon's documents themselves.
+    They used to be a retrieval tool, and on the call of 2026-09-21 a caller
+    moving an appointment cost seven consecutive lookups: the first one asked
+    for the "cancellation policy" and word overlap returned nothing, so the
+    model kept rewording the question until the turn's whole request budget was
+    gone and it apologised. Seven hundred words is small enough to simply be in
+    the prompt, and a document that is already in front of the model cannot be
+    searched for badly -- it also takes a silent model request out of every
+    turn that answers a question about the salon.
     """
     text = (PROMPTS / f'{name}.md').read_text().replace('<!--diary-->', _DIARY)
+    for topic, document in _DOCS.items():
+        text = text.replace(f'<!--{topic}-->', document)
     return TemplateStr(f'{text}\n\n{_VOICE}', deps_type=SalonCall)
 
 
 # --- what the front desk can do ---------------------------------------------
-
-
-async def look_up_salon_info(ctx: RunContext[SalonCall], query: str) -> dict:
-    """Look up anything about the salon: services and prices, how long things take, opening hours,
-    the stylists, booking, deposits, cancellation and lateness, payment, parking and access.
-
-    Use it whenever the caller asks how the salon works, and quote what comes
-    back rather than estimating. Results are ordered best first and each carries
-    a score between 0 and 1 for how much of the question it covers. If nothing
-    returned actually answers what was asked, say you do not have that
-    information rather than offering the closest thing.
-
-    Args:
-        query: What to look up, in the caller's own words.
-    """
-    return knowledge.look_up('services', query)
-
-
-async def look_up_refund_policy(ctx: RunContext[SalonCall], query: str) -> dict:
-    """Look up the salon's refund and complaints policy: the redo window, the three refund tiers,
-    colour corrections, retail returns, and how a complaint is handled.
-
-    Use it before stating any refund, redo, timescale or goodwill offer, so you
-    quote the policy instead of guessing it. Same ordering and score as the
-    salon lookup, and the same rule if nothing fits.
-
-    Args:
-        query: What to look up, in the caller's own words.
-    """
-    return knowledge.look_up('refunds', query)
 
 
 async def record_complaint(
@@ -666,6 +667,8 @@ def build(
                 filler_hook(FILLER),
                 one_action_per_reply(ACTIONS),
                 Hooks(prepare_tools=only_reachable, prepare_output_tools=narrow),
+                # Last, so what it empties is the set the guards already narrowed.
+                speak_by(SPEAK_BY),
             ],
             model_settings=SETTINGS,
         ),
@@ -702,7 +705,6 @@ def unverified(state: SalonState) -> bool:
 AGENTS: dict[str, Node] = {
     'concierge': build(
         'concierge',
-        tools=[look_up_salon_info],
         finishers=[hang_up],
         # `booking` twice, and the pair is the whole point. Unguarded, it is a
         # `hand_over` the model may choose whoever is calling: the caller wanting
@@ -758,7 +760,7 @@ AGENTS: dict[str, Node] = {
     ),
     'complaints': build(
         'complaints',
-        tools=[look_up_refund_policy, record_complaint],
+        tools=[record_complaint],
         finishers=[hang_up],
         # `record_complaint` needs an owner, so this step sends them to be
         # identified -- and only while there is anybody to identify.

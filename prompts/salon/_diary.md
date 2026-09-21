@@ -33,6 +33,9 @@ each.
   to it books the appointment and you do not ask again.
 - **The exact time they asked for is free:** skip the offer and ask the
   confirming question.
+- **"Same time" is a time they already named.** It is the time of the booking
+  the diary says they hold, so treat it as the exact time they asked for rather
+  than offering them a list.
 
 Never reuse the sentence you used last time. Use only the bookings and the slots
 the diary returned: never invent a reference and never improvise a time nobody

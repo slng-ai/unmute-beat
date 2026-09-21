@@ -24,12 +24,13 @@ from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSp
 from pydantic_ai import ModelResponse, RetryPromptPart, ToolCallPart
 from pydantic_ai.messages import ModelRequest
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.toolsets import FunctionToolset
 
 from salon import diary
 from salon.agents import AGENTS
 from salon.state import SalonCall, SalonState, open_call
 from voice.harness import moved_by
-from voice.processor import PydanticAgentProcessor
+from voice.processor import EXHAUSTED, PydanticAgentProcessor
 
 PHONE = '+34600111222'
 # The same number, named for what it means where a state is built by hand:
@@ -55,10 +56,34 @@ class Probe(PydanticAgentProcessor):
         return sum(isinstance(f, LLMFullResponseStartFrame) for f in self.frames)
 
 
+async def probe(question: str) -> str:
+    """A tool that does nothing, for tests that need a tool call to be about something else.
+
+    Every test here that wanted "the model calls a harmless tool" used to reach
+    for `look_up_salon_info`. That tool is gone -- the salon's documents are in
+    the prompts now -- and borrowing a real tool for its harmlessness was always
+    the wrong dependency: the test breaks when the agency changes its mind about
+    a tool, not when the thing under test breaks.
+
+    Injected through `agent.override(toolsets=...)`, so it is offered exactly
+    like a real tool and the agent's own `prepare_tools` capabilities narrow it
+    the same way.
+    """
+    return f'nothing useful about {question}'
+
+
 def scripted(**by_agent):
     stack = ExitStack()
     for name, fn in by_agent.items():
-        stack.enter_context(AGENTS[name].agent.override(model=FunctionModel(stream_function=fn)))
+        stack.enter_context(
+            AGENTS[name].agent.override(
+                model=FunctionModel(stream_function=fn),
+                # `probe` alongside the agent's real tools, never instead of
+                # them: `override(toolsets=...)` adds to what the agent was
+                # built with.
+                toolsets=[FunctionToolset([probe])],
+            )
+        )
     return stack
 
 
@@ -211,9 +236,7 @@ async def the_schema_is_rebuilt_between_requests_in_one_run():
         if len(seen) == 1:
             # Something in this run changes the state the guards read.
             call.commit(customer_verified='existing', verified_phone=PHONE)
-            yield {
-                0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': 'opening hours'}))
-            }
+            yield {0: DeltaToolCall(name='probe', json_args=json.dumps({'question': 'opening hours'}))}
         else:
             yield 'We are open until six.'
 
@@ -418,7 +441,7 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
 
     async def talk_then_call(messages, info: AgentInfo):
         already = any(
-            isinstance(p, ToolCallPart) and p.tool_name == 'look_up_salon_info'
+            isinstance(p, ToolCallPart) and p.tool_name == 'probe'
             for m in messages
             if isinstance(m, ModelResponse)
             for p in m.parts
@@ -427,14 +450,99 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
             yield 'We close at six.'
             return
         yield 'Let me see. '
-        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': 'opening hours'}))}
+        yield {0: DeltaToolCall(name='probe', json_args=json.dumps({'question': 'opening hours'}))}
 
     with scripted(concierge=talk_then_call):
         await probe._turn('when do you close?')
 
-    assert 'look_up_salon_info' in _calls(call), _calls(call)
+    assert 'probe' in _calls(call), _calls(call)
     assert probe.spoken().startswith('Let me see.'), probe.spoken()
     assert 'We close at six.' in probe.spoken(), probe.spoken()
+
+
+# --- a run answers before it runs out of budget -----------------------------
+
+
+async def a_run_speaks_by_its_third_request():
+    """The bound in front of the turn budget: the third request has no tools left.
+
+    Two tool-bearing requests is the longest legitimate chain a step here
+    needs. From the third the model is offered speech only, so a run that
+    would otherwise keep calling tools has to say something instead -- which
+    is what the caller is waiting for.
+
+    Its **output** tools are untouched: a run that has read the diary can
+    still hand over or save. Only what buys another request goes.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    probe_run = Probe(call)
+    offered = []
+
+    async def keep_asking(messages, info: AgentInfo):
+        offered.append(
+            {
+                'tools': sorted(t.name for t in info.function_tools),
+                'outputs': sorted(t.name for t in info.output_tools),
+            }
+        )
+        if any(t.name == 'probe' for t in info.function_tools):
+            yield {0: DeltaToolCall(name='probe', json_args=json.dumps({'question': f'q{len(offered)}'}))}
+        else:
+            yield 'We are open until six.'
+
+    with scripted(concierge=keep_asking):
+        await probe_run._turn('tell me everything')
+
+    assert len(offered) == 3, offered
+    assert offered[0]['tools'] and offered[1]['tools'], offered
+    assert offered[2]['tools'] == [], offered[2]
+    # The run can still finish itself; it just cannot keep going.
+    assert 'hand_over' in offered[2]['outputs'], offered[2]
+    assert probe_run.spoken() == 'We are open until six.', probe_run.spoken()
+    assert EXHAUSTED not in probe_run.fixed(), probe_run.fixed()
+
+
+async def the_loop_from_the_call_of_2026_09_21():
+    """The trace, replayed. A caller moving a booking, and a model that keeps looking things up.
+
+    On that call the model read the diary -- which returned everything it
+    needed -- and then asked the knowledge base seven consecutive questions,
+    rewording after the first came back empty. The turn's whole request budget
+    went, and the caller heard "I'm going round in circles" 5.3 seconds later.
+
+    What this pins is not the deleted tool: it is that *any* tool loop now
+    ends in an answer. The diary read still moves the caller, and what it
+    returned still reaches their ears.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    probe_run = Probe(call)
+    requests = []
+
+    async def read_then_fish(messages, info: AgentInfo):
+        requests.append(1)
+        if len(requests) == 1:
+            yield {
+                0: DeltaToolCall(
+                    name='read_diary', json_args=json.dumps({'when': 'Saturday', 'service': 'haircut'})
+                )
+            }
+        elif any(t.name == 'probe' for t in info.function_tools):
+            yield {0: DeltaToolCall(name='probe', json_args=json.dumps({'question': 'cancellation policy'}))}
+        else:
+            yield 'I can do 9:00 AM on Saturday. Does that work?'
+
+    with scripted(concierge=read_then_fish):
+        await probe_run._turn("let's move it to Saturday, same time")
+
+    assert len(requests) == 3, requests
+    # The diary read is the free edge, and it still moved them.
+    assert call.state.agent == 'booking', call.state.agent
+    assert '9:00 AM' in probe_run.spoken(), probe_run.spoken()
+    assert EXHAUSTED not in probe_run.fixed(), probe_run.fixed()
 
 
 # --- a tool that did not succeed is not a move -------------------------------
@@ -486,7 +594,7 @@ def a_refused_tool_does_not_move_the_caller():
     # Nothing succeeded, so nobody moved.
     assert moved_by(known, AGENTS['concierge'], AGENTS, set()) == 'concierge'
     # A tool that is not an edge is not a move however well it went.
-    assert moved_by(known, AGENTS['concierge'], AGENTS, {'look_up_salon_info'}) == 'concierge'
+    assert moved_by(known, AGENTS['concierge'], AGENTS, {'probe'}) == 'concierge'
 
 
 def a_borrowed_tool_cannot_skip_a_prerequisite():
@@ -541,6 +649,8 @@ async def main():
     await a_split_destination_name_never_moves_anybody()
     await a_name_that_prefixes_another_is_not_acted_on_early()
     await text_before_a_tool_streams_and_the_tool_still_runs()
+    await a_run_speaks_by_its_third_request()
+    await the_loop_from_the_call_of_2026_09_21()
     every_tool_that_writes_is_an_action()
     a_refused_tool_does_not_move_the_caller()
     a_borrowed_tool_cannot_skip_a_prerequisite()

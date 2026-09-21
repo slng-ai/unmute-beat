@@ -80,12 +80,31 @@ Three repetitions per scenario, rows flushed per turn to
 `bench/raw/focused-<timestamp>.jsonl`. `bench.turns --session-id <id>` reads
 the timing half of the same run from Langfuse.
 
+## One live call, unscored
+
+Trace `db4a8f687ac508bf0eb371b294a362f6`, 2026-09-21 14:58, 128s, 12 caller
+turns, run by hand and not by `bench.scenarios`. It is not an acceptance run
+and scores nothing -- one call answers no rate. It found three defects, two
+of them in the runtime seam this work changed:
+
+| Found | Status | What holds it |
+|---|---|---|
+| an utterance cut off by the caller's next one reached no model and no history | `passed` offline | `tests.test_voice::a_cancelled_turn_carries_what_the_caller_said` |
+| a barge-in recorded as `ended=transport` on every later span | `passed` offline | `a_barge_is_not_a_disconnect` |
+| the complaint readback put the caller's request to complain back to them | `passed` offline | `tests.test_consent::asking_to_complain_is_not_a_complaint` |
+| an apology spoken after the receipt it belonged before | `prompt` | `prompts/salon/complaints.md`; nothing in the harness delivered those out of order and no check asserts a model's ordering |
+
+The guards this branch exists for held on that call: two refused hang-ups, a
+move that asked before it wrote, and the move it made was the one it asked
+about. That is one call's worth of evidence and is recorded as such.
+
 ## Negative controls
 
 Every fix above was reverted, one at a time, and the named check run. Eleven
-of them; the messages they printed are in the tables of
-`bench/review-20260921.md`. One found nothing -- the complaint-summary guard
-had no check holding it -- and that row now has one.
+of them, and three more for the live call's findings; the messages they
+printed are in the tables of `bench/review-20260921.md`. One found nothing --
+the complaint-summary guard had no check holding it -- and that row now has
+one.
 
 ## What this adds up to
 
@@ -94,6 +113,7 @@ responsiveness parity unproven.**
 
 Every supplied correctness failure has a passing regression that asserts the
 emitted speech or the business operation, and the measurement reconciles the
-four live calls exactly. Nothing here was measured against a real provider,
-a real voice or a second runtime, and no row above should be read as though
-it was.
+four live calls exactly. One call has since been placed against a real
+provider and a real voice; it found three more defects, which are fixed and
+held above, and it measured nothing. No row here should be read as though a
+provider, a voice or a second runtime had been measured.

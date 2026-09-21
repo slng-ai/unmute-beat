@@ -89,7 +89,7 @@ all clean. Paste the real output; don't round up.
 - No pytest. Tests are assert scripts run as modules, and stay that way.
 - No new dependency without asking. Stdlib first.
 
-## Four things that bite
+## Six things that bite
 
 1. **Prompts are compiled against state.** `prompts/<agency>/*.md` are
    Handlebars templates typed against the agency's `CallContext`, so a
@@ -113,11 +113,19 @@ all clean. Paste the real output; don't round up.
    model speech goes out a clause at a time so a claim about a change nothing
    made is never said. Five model-authored arguments used to carry this and
    the live calls of 2026-09-21 forged all five.
+6. **A cancelled turn still heard something.** Pipecat interrupts by
+   cancelling the task running `process_frame`, so a barged turn unwinds on a
+   bare `CancelledError` and the `InterruptionFrame` reaches our own branch
+   too late: the core's graceful path never runs, and the utterance is in no
+   history at all. `PydanticAgentProcessor` takes Pipecat's own
+   `_start_interruption` hook, and carries a prompt no model read into the
+   next turn rather than losing what the caller said.
 
 ## Known debt
 
 The consent matchers in `salon/state.py` — `agrees`, `ends`, `move_or_add`,
-and `times_named` in `salon/diary.py` — are closed word lists over the
+`times_named` in `salon/diary.py` and `_describes_nothing` in
+`salon/agents.py` — are closed word lists over the
 caller's accepted utterance, not language understanding. Every one of them
 fails towards *asking*, so a miss costs one clarifying turn and cannot cost a
 booking nobody wanted. Upgrade path, if the live runs show too many

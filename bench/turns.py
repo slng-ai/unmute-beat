@@ -225,11 +225,25 @@ def caller_turns(spans: list[dict]) -> tuple[list[str], list[dict], str]:
                 f'alongside {len(ours)} that have one: this is both arms at once '
                 f'({", ".join(traces)}). Read one trace, or one arm, at a time.'
             )
-        return [str(s['id']) for s in ours], greetings, 'poc'
+
+    if not pipecat:
+        # No runtime turns at all, so this is a text-only run -- `talk.py`, a
+        # scenario script. Our own spans are the unit and the arm says so,
+        # because a turn nobody spoke is not the same unit as a turn somebody
+        # waited through and the two must not be pooled.
+        return [str(s['id']) for s in ours], [], 'text' if ours else 'unknown'
 
     skip = {str(g['id']) for g in greetings}
     answered = [s for s in pipecat if str(s['id']) not in skip]
-    return [str(s['id']) for s in answered], greetings, 'native' if answered else 'unknown'
+    # Pipecat's turn, on **both** arms. Our own `agents` span is one *attempt*
+    # at a turn, and a caller who speaks twice before the agency answers runs
+    # it twice inside one turn: on the live calls of 2026-09-21, N2 had eight
+    # attempts inside seven turns and N4 had eleven inside nine. Counting
+    # attempts as turns inflated the denominator, which made requests per turn
+    # read 1.41 against the native arm's 2.29 when the comparable number was
+    # 1.85. A superseded attempt is still work the caller paid for, so it is
+    # counted -- as an attempt, under the turn it belongs to.
+    return [str(s['id']) for s in answered], greetings, 'poc' if ours else 'native'
 
 
 def turn_of(span: dict, by_id: dict[str, dict], turn_ids: set[str]) -> str | None:
@@ -333,6 +347,52 @@ def _ttft(span: dict) -> float | None:
     return float(native) if isinstance(native, (int, float)) and native >= 0 else None
 
 
+# What Langfuse calls the same number, several times over. `usageDetails` holds
+# the provider's own breakdown *and* Langfuse's own fields *and* aliases of
+# parts of both, and its `total` adds them up. N4's request 56b92da4bdbe2af8:
+#
+#     cached_content_tokens 3480   text_prompt_tokens  3907
+#     text_cache_tokens     3480   text_candidates_tokens 19
+#     input                  427   input_cached_tokens 3480
+#     output                  19   total              14812
+#
+# The call really cost 3,907 in and 19 out. `input` is 427 because Langfuse
+# subtracts the cache from it, and `total` is 14,812 because it adds every
+# alias. Reading either as the cost overstates it by nearly four times.
+_PROMPT = ('text_prompt_tokens', 'prompt_tokens', 'promptTokens')
+_INPUT = ('input', 'input_tokens')
+_OUTPUT = ('output', 'text_candidates_tokens', 'completion_tokens', 'completionTokens', 'output_tokens')
+_CACHED = ('input_cached_tokens', 'cached_content_tokens', 'cache_read_input_tokens', 'cached_tokens')
+
+
+def _usage(span: dict) -> dict[str, int]:
+    """One request's canonical input, output and cached tokens, with nothing counted twice.
+
+    Input is the whole prompt, cache included, because that is what was sent.
+    Where the provider states it -- Google's `text_prompt_tokens` -- that is
+    used; otherwise it is Langfuse's `input` plus the cache it took out of it.
+    Cached is reported beside them and **never added**: it is a subset of the
+    input, not a third pile.
+    """
+    details = span.get('usageDetails') or span.get('usage') or {}
+    if not isinstance(details, dict):
+        return {}
+
+    def first(names: tuple[str, ...]) -> int:
+        for key in names:
+            value = details.get(key)
+            if isinstance(value, (int, float)):
+                return int(value)
+        return 0
+
+    cached = first(_CACHED)
+    # The provider's own figure when there is one; Langfuse's, plus back the
+    # cache it subtracted, when there is not. On the request above the two
+    # agree at 3,907, which is what makes either of them readable as the cost.
+    prompt = first(_PROMPT) or (first(_INPUT) + cached)
+    return {'input': prompt, 'output': first(_OUTPUT), 'cached': cached}
+
+
 def _failed(span: dict) -> bool:
     """Whether this observation records a refusal or an error.
 
@@ -353,6 +413,11 @@ class Report:
     arm: str  # 'poc', 'native', or 'unknown': which shape of trace this was
     turns: list[str]  # every caller turn, zero-model included
     requests_per_turn: dict[str, int]
+    # How many times the agency ran inside each caller turn. One, ordinarily;
+    # more when the caller spoke again before it answered and the turn in
+    # flight was superseded. Cancelled work is work the caller paid for, so it
+    # is counted -- as an attempt, never as another turn.
+    attempts_per_turn: dict[str, int]
     tools_per_turn: dict[str, Counter]
     repair_turns: list[str]
     refusals: int  # observations carrying a refusal or an error
@@ -368,6 +433,17 @@ class Report:
     turn_first_word: list[float]
     turn_lifetime: list[float]  # the whole turn span: user speech to bot finished
     user_bot_latency: list[float]  # what Pipecat measured the caller waiting
+    # Canonical token counts, summed over this window. `cached` is a **subset**
+    # of `input` and is never added to it: on N4 request 56b92da4bdbe2af8 the
+    # aliases sum to 14,812 against a real 3,907 in and 19 out.
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+
+    @property
+    def superseded_attempts(self) -> int:
+        """Attempts beyond the first in a turn: work a newer turn overtook."""
+        return sum(max(0, n - 1) for n in self.attempts_per_turn.values())
 
     @property
     def zero_model_turns(self) -> int:
@@ -395,7 +471,9 @@ def analyse(spans: list[dict]) -> Report:
     turn_ids = set(turns)
 
     requests_per_turn: dict[str, int] = dict.fromkeys(turns, 0)
+    attempts_per_turn: dict[str, int] = dict.fromkeys(turns, 0)
     tools_per_turn: dict[str, Counter] = defaultdict(Counter)
+    tokens = Counter()
     failed_in_turn: set[str] = set()
     request_latency: list[float] = []
     stamped: list[float] = []  # our own per-request clock, off the `agents` span
@@ -445,6 +523,8 @@ def analyse(spans: list[dict]) -> Report:
                 unresolved_spans += 1
                 continue
             requests_per_turn[turn] = requests_per_turn.get(turn, 0) + 1
+            for field, count in _usage(span).items():
+                tokens[field] += count
             if isinstance(latency := span.get('latency'), (int, float)):
                 request_latency.append(float(latency))
             if (ttft := _ttft(span)) is not None:
@@ -455,6 +535,10 @@ def analyse(spans: list[dict]) -> Report:
                 continue
             tools_per_turn[turn][name] += 1
         elif kind == 'SPAN' and name in TURN_SPANS:
+            # One run of the agency. On the POC arm the turn around it is
+            # Pipecat's, so this is an attempt at that turn and not a turn.
+            if turn is not None:
+                attempts_per_turn[turn] = attempts_per_turn.get(turn, 0) + 1
             if isinstance(first := _attribute(span, 'turn_first_word'), (int, float)):
                 turn_first_word.append(float(first))
             # Per provider request, stamped at the model boundary by
@@ -488,6 +572,7 @@ def analyse(spans: list[dict]) -> Report:
         arm=arm,
         turns=turns,
         requests_per_turn=requests_per_turn,
+        attempts_per_turn=attempts_per_turn,
         tools_per_turn=dict(tools_per_turn),
         repair_turns=sorted(failed_in_turn),
         refusals=refusals,
@@ -506,6 +591,9 @@ def analyse(spans: list[dict]) -> Report:
         turn_first_word=turn_first_word,
         turn_lifetime=turn_lifetime,
         user_bot_latency=user_bot_latency,
+        input_tokens=tokens['input'],
+        output_tokens=tokens['output'],
+        cached_tokens=tokens['cached'],
     )
 
 
@@ -546,6 +634,17 @@ def report(spans: list[dict], subject: str) -> Report:
             f'  model requests per turn     mean {mean:.2f}   '
             f'p50 {percentile([float(c) for c in counts], 0.5):.0f}   '
             f'p90 {percentile([float(c) for c in counts], 0.9):.0f}   ({spread})'
+        )
+    if found.superseded_attempts:
+        print(
+            f'  agency runs                 {sum(found.attempts_per_turn.values())} attempts in '
+            f'{len(found.turns)} turns   ({found.superseded_attempts} superseded by a newer turn, '
+            'still counted)'
+        )
+    if found.input_tokens or found.output_tokens:
+        print(
+            f'  tokens                      {found.input_tokens:,} in, {found.output_tokens:,} out   '
+            f'({found.cached_tokens:,} of the input cached -- a subset, never added on top)'
         )
     if found.speech_spans:
         print(

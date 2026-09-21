@@ -36,6 +36,17 @@ TURNS = set(caller_turns(SPANS)[0])
 # against the arm it has to measure.
 NATIVE = json.loads((pathlib.Path(__file__).parent / 'fixtures' / 'trace_native.json').read_text())['data']
 
+# The four live POC calls of 2026-09-21 12:57-13:04, N1 to N4 in
+# `TRACE_FOLLOWUP_2026-09-21.md`, fetched read-only and trimmed the same way.
+# What the reader has to reconcile, rather than a fixture written to agree
+# with it: the report counted these by hand off the raw export.
+LIVE = {
+    label: json.loads((pathlib.Path(__file__).parent / 'fixtures' / f'trace_{label}.json').read_text())[
+        'data'
+    ]
+    for label in ('n1', 'n2', 'n3', 'n4')
+}
+
 
 # --- turn identity -----------------------------------------------------------
 
@@ -48,10 +59,12 @@ def a_request_belongs_to_its_nearest_turn():
     on and the call had ended, so the bug was invisible in exactly the runs
     that mattered.
     """
-    assert turn_of(BY_ID['req-1a'], BY_ID, TURNS) == 'turn-1'
-    assert turn_of(BY_ID['req-2a'], BY_ID, TURNS) == 'turn-2'
-    assert turn_of(BY_ID['tool-1a'], BY_ID, TURNS) == 'turn-1'
-    assert turn_of(BY_ID['tool-2a'], BY_ID, TURNS) == 'turn-2'
+    assert turn_of(BY_ID['req-1a'], BY_ID, TURNS) == 'pipecat-turn-1'
+    assert turn_of(BY_ID['req-2a'], BY_ID, TURNS) == 'pipecat-turn-2'
+    assert turn_of(BY_ID['tool-1a'], BY_ID, TURNS) == 'pipecat-turn-1'
+    assert turn_of(BY_ID['tool-2a'], BY_ID, TURNS) == 'pipecat-turn-2'
+    # Both attempts at one turn resolve to that turn, not to two turns.
+    assert turn_of(BY_ID['req-2b'], BY_ID, TURNS) == 'pipecat-turn-2'
 
 
 def a_missing_parent_stays_unresolved():
@@ -70,21 +83,37 @@ def the_call_root_is_not_a_turn():
 
 
 def a_turn_is_its_own_turn():
-    assert turn_of(BY_ID['turn-1'], BY_ID, TURNS) == 'turn-1'
+    assert turn_of(BY_ID['pipecat-turn-1'], BY_ID, TURNS) == 'pipecat-turn-1'
 
 
-def the_pipecat_turn_around_ours_is_not_a_second_turn():
-    """Both arms call something a turn, and only one of them may be counted.
+def the_caller_turn_is_the_runtime_turn_on_both_arms():
+    """An `agents` span is an *attempt* at a turn, and attempts are not turns.
 
-    A POC call nests an `agents` span inside Pipecat's `turn` span. Reading
-    both names as caller turns doubles every denominator: three turns become
-    six, and the requests per turn halve without anything changing.
+    A POC call nests one per agency run inside Pipecat's `turn` span, and a
+    caller who speaks again before the agency answers runs it twice inside
+    one turn. Counting those as turns inflated the denominator: on the live
+    calls of 2026-09-21, N2 read as eight turns where the caller took seven
+    and N4 as eleven where they took nine, and requests per turn came out at
+    1.41 against the native arm's 2.29 when the comparable figure was 1.85.
+
+    Reading both names as turns is the other half of the same mistake, and
+    doubles the denominator outright.
     """
     turns, greetings, arm = caller_turns(SPANS)
     assert arm == 'poc'
-    assert turns == ['turn-1', 'turn-2', 'turn-3'], turns
-    assert turn_of(BY_ID['req-1a'], BY_ID, TURNS) == 'turn-1', 'ours, not the pipecat one around it'
+    assert turns == ['pipecat-turn-1', 'pipecat-turn-2', 'pipecat-turn-3'], turns
     assert [g['id'] for g in greetings] == ['pipecat-turn-greeting'], greetings
+
+    found = analyse(SPANS)
+    assert found.attempts_per_turn == {
+        'pipecat-turn-1': 1,
+        'pipecat-turn-2': 2,
+        'pipecat-turn-3': 1,
+    }, found.attempts_per_turn
+    assert found.superseded_attempts == 1
+    # The superseded attempt's request is still counted: it is work the
+    # caller waited through, and dropping it flatters the request count.
+    assert found.requests_per_turn['pipecat-turn-2'] == 2, found.requests_per_turn
 
 
 # --- what gets counted -------------------------------------------------------
@@ -92,9 +121,13 @@ def the_pipecat_turn_around_ours_is_not_a_second_turn():
 
 def the_counts_are_exact():
     found = analyse(SPANS)
-    assert found.turns == ['turn-1', 'turn-2', 'turn-3'], found.turns
-    assert found.requests_per_turn == {'turn-1': 2, 'turn-2': 1, 'turn-3': 0}, found.requests_per_turn
-    assert found.counts == [2, 1, 0], found.counts
+    assert found.turns == ['pipecat-turn-1', 'pipecat-turn-2', 'pipecat-turn-3'], found.turns
+    assert found.requests_per_turn == {
+        'pipecat-turn-1': 2,
+        'pipecat-turn-2': 2,
+        'pipecat-turn-3': 0,
+    }, found.requests_per_turn
+    assert found.counts == [2, 2, 0], found.counts
     assert found.zero_model_turns == 1
     assert found.greeting_spans == 2, 'the named greeting span, and the turn nobody waited through'
     assert found.speech_spans == 4, 'two stt, two tts'
@@ -109,7 +142,7 @@ def speech_is_not_a_model_request():
     them inflated every request-per-turn figure by however much was said.
     """
     found = analyse(SPANS)
-    assert sum(found.requests_per_turn.values()) == 3, found.requests_per_turn
+    assert sum(found.requests_per_turn.values()) == 4, found.requests_per_turn
     # Four speech observations exist and none of them landed in a turn's count.
     assert found.speech_spans == 4
 
@@ -123,9 +156,9 @@ def a_zero_model_turn_is_still_a_caller_turn():
     """
     found = analyse(SPANS)
     assert len(found.turns) == 3
-    assert sum(found.counts) / len(found.counts) == 1.0
+    assert sum(found.counts) / len(found.counts) == 4 / 3
     kept = [c for c in found.counts if c]
-    assert sum(kept) / len(kept) == 1.5, 'what dropping it would have said'
+    assert sum(kept) / len(kept) == 2.0, 'what dropping it would have said'
 
 
 def the_greeting_is_labelled_not_counted():
@@ -146,8 +179,63 @@ def a_repair_is_a_refusal_and_not_a_repeated_tool():
     first turn a repair and the whole rate a number about nothing.
     """
     found = analyse(SPANS)
-    assert found.tools_per_turn['turn-1']['read_diary'] == 2
-    assert found.repair_turns == ['turn-2'], found.repair_turns
+    assert found.tools_per_turn['pipecat-turn-1']['read_diary'] == 2
+    assert found.repair_turns == ['pipecat-turn-2'], found.repair_turns
+
+
+def the_live_calls_count_the_turns_the_caller_took():
+    """N1-N4: 30 caller turns and 53 model requests, counted off their own traces.
+
+    The reader used to say 33, because it called each `agents` span a turn --
+    N2 read as 8 where the caller took 7, N4 as 11 where they took 9. Those
+    extra two are superseded attempts: the caller spoke again before the
+    agency answered, so it ran twice inside one turn. Work the caller waited
+    through, and not another turn they took.
+    """
+    expected = {'n1': (5, 9, 5), 'n2': (7, 12, 8), 'n3': (9, 15, 9), 'n4': (9, 17, 11)}
+    total_turns = total_requests = 0
+    for label, (turns, requests, attempts) in expected.items():
+        found = analyse(LIVE[label])
+        assert found.arm == 'poc', (label, found.arm)
+        assert len(found.turns) == turns, (label, len(found.turns))
+        assert sum(found.requests_per_turn.values()) == requests, (label, found.requests_per_turn)
+        assert sum(found.attempts_per_turn.values()) == attempts, (label, found.attempts_per_turn)
+        assert found.unresolved_requests == 0, (label, found.unresolved_requests)
+        total_turns += turns
+        total_requests += requests
+    assert (total_turns, total_requests) == (30, 53)
+    # Three of the four are one attempt per turn; the two extra are in N2 and N4.
+    assert sum(analyse(LIVE[n]).superseded_attempts for n in LIVE) == 3
+
+
+def the_aliases_in_a_usage_record_are_not_added_up():
+    """N4 request 56b92da4bdbe2af8 reports its own cost eight ways.
+
+        cached_content_tokens 3480   text_prompt_tokens  3907
+        text_cache_tokens     3480   text_candidates_tokens 19
+        input                  427   input_cached_tokens 3480
+        output                  19   total              14812
+
+    It cost 3,907 in and 19 out. `input` is 427 because Langfuse takes the
+    cache out of it, and `total` is 14,812 because it adds every alias back
+    in -- nearly four times the real figure. Cached is a subset of the input
+    and is reported beside it, never on top of it.
+    """
+    from bench.turns import _usage
+
+    one = next(s for s in LIVE['n4'] if s['id'] == '56b92da4bdbe2af8')
+    assert _usage(one) == {'input': 3907, 'output': 19, 'cached': 3480}
+    assert _usage(one)['input'] + _usage(one)['output'] == 3926
+    assert (one['usageDetails'] or {}).get('total') == 14812, 'the number not to read'
+
+    # And a record with no provider figure falls back to input plus the cache
+    # that was taken out of it, which is the same answer.
+    assert _usage({'usageDetails': {'input': 427, 'output': 19, 'input_cached_tokens': 3480}}) == {
+        'input': 3907,
+        'output': 19,
+        'cached': 3480,
+    }
+    assert _usage({}) == {'input': 0, 'output': 0, 'cached': 0}, 'no record is no tokens, not a guess'
 
 
 # --- quantiles ---------------------------------------------------------------
@@ -209,13 +297,15 @@ def the_two_latencies_are_kept_apart():
     silence.
     """
     found = analyse(SPANS)
-    assert found.turn_first_word == [1.2, 0.8], found.turn_first_word
-    # Per provider request, stamped at the model boundary. `turn-1` made two
-    # and only the second one spoke, so one run-long number cannot describe
-    # both.
-    assert sorted(found.request_ttft) == [0.3, 0.35, 0.4], found.request_ttft
+    # One per *attempt*, because that is where it is stamped: the second
+    # attempt at turn 2 has its own first word and its own requests.
+    assert found.turn_first_word == [1.2, 0.8, 0.8], found.turn_first_word
+    # Per provider request, stamped at the model boundary. The first turn made
+    # two and only the second one spoke, so one run-long number cannot
+    # describe both.
+    assert sorted(found.request_ttft) == [0.3, 0.3, 0.35, 0.4], found.request_ttft
     assert found.ttft_source.startswith('agents span'), found.ttft_source
-    assert found.first_output == {'tool': 1, 'text': 2}, found.first_output
+    assert found.first_output == {'tool': 1, 'text': 3}, found.first_output
 
 
 def a_turn_span_lifetime_is_not_a_response_latency():
@@ -234,7 +324,7 @@ def a_turn_span_lifetime_is_not_a_response_latency():
 
 def round_trips_exclude_speech():
     found = analyse(SPANS)
-    assert sorted(found.request_latency) == [0.6, 0.9, 1.2], found.request_latency
+    assert sorted(found.request_latency) == [0.6, 0.9, 1.2, 1.2], found.request_latency
 
 
 # --- the native arm ----------------------------------------------------------
@@ -397,10 +487,12 @@ async def main():
     the_old_convention_really_was_different()
     no_data_is_missing_and_not_zero()
     there_is_no_estimated_turn_latency()
-    the_pipecat_turn_around_ours_is_not_a_second_turn()
+    the_caller_turn_is_the_runtime_turn_on_both_arms()
     the_two_latencies_are_kept_apart()
     a_turn_span_lifetime_is_not_a_response_latency()
     round_trips_exclude_speech()
+    the_live_calls_count_the_turns_the_caller_took()
+    the_aliases_in_a_usage_record_are_not_added_up()
     the_native_reference_reads_as_five_turns_and_ten_requests()
     the_native_caller_gap_comes_from_pipecats_own_number()
     time_to_first_token_is_recorded_in_seconds()

@@ -38,7 +38,7 @@ import subprocess
 import sys
 import time
 from collections import Counter as Tally
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from importlib.metadata import version
 
 from dotenv import load_dotenv
@@ -123,6 +123,7 @@ SCENARIOS: dict[str, tuple[str, ...]] = {
         'yes, that is my number',
         'yes please, write it down',
         "that's right, go ahead",
+        "no, that's everything",
     ),
     'manager': ('I want to speak to a manager',),
     'knowledge': (
@@ -151,52 +152,109 @@ NOT_COMPARABLE = frozenset({'manager', 'knowledge'})
 NATIVE_REFERENCE = (2, 3, 1, 2, 2)
 
 
-def _held(service: str = '', weekday: str = '') -> str:
-    """'' when this caller holds exactly the one booking described, else why not."""
-    held = diary.bookings_for(PHONE, diary.now().date())
-    if len(held) != 1:
-        return f'{len(held)} bookings held, expected exactly 1'
-    only = held[0]
-    if service and only['service'] != service:
-        return f'booked {only["service"]}, expected {service}'
-    if weekday and (day := date.fromisoformat(only['date']).strftime('%A')) != weekday:
-        return f'booked on {day}, expected {weekday}'
-    return ''
+# The salon's clock for a benchmark run: Monday 21 September 2026, 10:00 in
+# Madrid. Pinned, because "Monday" and "tomorrow" resolve against it and an
+# expected date cannot be written down against a clock that moves. Every date
+# below is what these utterances mean at this instant.
+CLOCK = datetime(2026, 9, 21, 10, 0, tzinfo=diary.TZ)
 
-
-def _nothing_written() -> str:
-    """'' when the call wrote nothing at all, which is the right answer to some of these."""
-    held = diary.bookings_for(PHONE, diary.now().date())
-    if held or diary.complaints():
-        return f'{len(held)} bookings and {len(diary.complaints())} complaints, expected none'
-    return ''
-
-
-def _one_complaint() -> str:
-    logged = diary.complaints()
-    if len(logged) != 1:
-        return f'{len(logged)} complaints recorded, expected exactly 1'
-    return '' if logged[0]['phone'] == PHONE else 'the complaint is under the wrong number'
-
-
-# The judge, per scenario, and it reads the salon rather than the transcript.
-# A row that says the turn answered says the agency spoke; only this says it
-# did the thing. Every one of them returns '' for a pass.
-CHECKS = {
-    # A Friday haircut, without naming the time: three o'clock is not on this
-    # diary's grid, so pinning the check to it would score an offer the salon
-    # cannot make. The time that was booked is in the row's spoken
-    # confirmation, which is where the divergence belongs.
-    'reference': lambda: _held('haircut', 'Friday'),
-    'book': lambda: _held('haircut'),
-    'book_then_change_day': lambda: _held('haircut', 'Wednesday'),
-    'change_after_booking': lambda: _held('haircut', 'Saturday'),
-    'question_then_book': lambda: _held('blowout'),
-    'complaint': _one_complaint,
-    'manager': _nothing_written,
-    'knowledge': _nothing_written,
+# What the salon must hold when each scenario is over. Not "a booking
+# exists": the booking the caller asked for, on the day they named, at the
+# time they chose, written on the turn they agreed to it.
+#
+# The check this replaces counted bookings and looked at the service, so one
+# haircut on Friday at 10:30 passed a scenario that asked for Monday at 9:00
+# -- the wrong appointment, for the right customer, scored as a pass. That is
+# the failure a benchmark is least able to notice and most likely to reward
+# with a good latency number, because doing the wrong thing is quicker.
+#
+# `wrote_on_turn` is the consent assertion. In `book`, turn 3 is the caller
+# saying yes; a write that lands on turn 2 is a booking made on a choice of
+# time, before anybody agreed to it.
+EXPECTED: dict[str, dict] = {
+    'reference': {
+        'service': 'haircut',
+        'date': '2026-09-25',
+        # No time pinned. The caller asks for three o'clock and this diary's
+        # twelve offered slots stop at 14:30, so whatever they are given is
+        # the fixture mismatch showing through rather than a result to fix.
+        'writes': 1,
+        'wrote_on_turn': 3,
+    },
+    # Turn 2 is "the nine o clock one please", and this agency books on it:
+    # `prompts/salon/booking.md` says to ask the confirming question *only*
+    # when the details are not already agreed, and an unambiguous choice of
+    # an offered time is agreement. The native arm reads the booking back and
+    # waits for a separate yes.
+    #
+    # Both are defensible and they are not the same policy, which is why the
+    # turn count of a booking is **not** comparable between the two arms
+    # until one of them changes. Written down here rather than discovered in
+    # a latency table: a policy that books a turn earlier finishes the call
+    # a turn sooner, and that is a different product, not a faster one.
+    'book': {'service': 'haircut', 'date': '2026-09-28', 'time': '09:00', 'writes': 1, 'wrote_on_turn': 2},
+    'book_then_change_day': {
+        'service': 'haircut',
+        'date': '2026-09-23',
+        'time': '09:00',
+        'writes': 1,
+        'wrote_on_turn': 3,  # "the first one", after a day correction
+    },
+    'change_after_booking': {
+        'service': 'haircut',
+        'date': '2026-09-26',
+        'time': '09:00',
+        'writes': 2,  # the booking, and then the move
+        'wrote_on_turn': 2,
+    },
+    'question_then_book': {
+        'service': 'blowout',
+        'date': '2026-09-22',
+        'time': '09:00',
+        'writes': 1,
+        'wrote_on_turn': 3,  # "whatever's earliest", which is a choice
+    },
+    # No turn pinned. The identity detour can come before or after the
+    # caller agrees to the summary, so which turn the write lands on is the
+    # model's sequencing rather than the contract. What the contract is about
+    # -- one complaint, under this number, and nothing booked -- is covered
+    # by the fields above it.
+    'complaint': {'complaints': 1, 'writes': 1},
+    'manager': {},
+    'knowledge': {},
 }
-assert set(CHECKS) == set(SCENARIOS), 'every scenario is judged, or the run cannot be scored'
+assert set(EXPECTED) == set(SCENARIOS), 'every scenario states its outcome, or it cannot be scored'
+
+
+def judge(name: str, call, timeline: list[dict]) -> str:
+    """'' when the salon holds exactly what this scenario should have produced.
+
+    Reads the diary and the call state, never the transcript: what the agent
+    said it did is the thing under test.
+    """
+    want = EXPECTED[name]
+    held = diary.bookings_for(PHONE, CLOCK.date())
+    logged = [c for c in diary.complaints() if c['phone'] == PHONE]
+
+    wanted_bookings = 1 if want.get('service') else 0
+    if len(held) != wanted_bookings:
+        return f'{len(held)} bookings, expected {wanted_bookings}'
+    if len(logged) != want.get('complaints', 0):
+        return f'{len(logged)} complaints, expected {want.get("complaints", 0)}'
+    for field in ('service', 'date', 'time'):
+        if held and field in want and held[0][field] != want[field]:
+            return f'{field} is {held[0][field]}, expected {want[field]}'
+    if call.state.writes != want.get('writes', 0):
+        return f'{call.state.writes} accepted writes, expected {want.get("writes", 0)}'
+    if call.state.unresolved:
+        return 'the call ended with a write whose outcome was never established'
+
+    # When the first write landed, which is the only thing here that tells a
+    # booking made on a caller's yes from one made on their naming a time.
+    wrote = next((row['turn'] for row in timeline if row.get('wrote')), None)
+    if (expected := want.get('wrote_on_turn')) is not None and wrote != expected:
+        return f'the first write landed on turn {wrote}, expected turn {expected}'
+    return ''
 
 
 class Counter(PydanticAgentProcessor):
@@ -214,12 +272,10 @@ class Counter(PydanticAgentProcessor):
     def reset(self):
         self.spoke = False
         self.fixed = 0
-        self.first_text = None
 
     async def push_frame(self, frame, direction=None):
         if isinstance(frame, LLMTextFrame):
             self.spoke = True
-            self.first_text = self.first_text or time.perf_counter()
         elif isinstance(frame, TTSSpeakFrame):
             self.fixed += 1
 
@@ -234,12 +290,15 @@ class Counter(PydanticAgentProcessor):
         return self._finished.requests if self._finished else 0
 
 
-def _earliest(clock: float, counter: Counter, call) -> float | None:
-    """When the caller first heard anything at all, model speech or a fixed line."""
-    heard = [s.at for s in call.spoken]
-    if counter.first_text:
-        heard.append(counter.first_text)
-    return round(min(heard) - clock, 3) if heard else None
+def _out(clock: float, call, kind: str = '') -> float | None:
+    """When text of this kind was first handed to TTS, relative to the turn's start.
+
+    Handed to TTS, not heard: playout is a boundary this process cannot see,
+    and the row's name says so. `kind` empty means the first of any kind --
+    a filler going out quickly is not an answer going out quickly.
+    """
+    out = [s.at for s in call.spoken if not kind or s.kind == kind]
+    return round(min(out) - clock, 3) if out else None
 
 
 async def run_scenario(name: str, said: tuple[str, ...], repeat: int, write) -> list[dict]:
@@ -253,6 +312,7 @@ async def run_scenario(name: str, said: tuple[str, ...], repeat: int, write) -> 
     from salon.agents import AGENTS
 
     diary.reset()
+    diary.set_clock(CLOCK)
     call = open_call(PHONE)
     counter = Counter(call, AGENTS)
     rows = []
@@ -260,6 +320,7 @@ async def run_scenario(name: str, said: tuple[str, ...], repeat: int, write) -> 
         counter.reset()
         started = time.monotonic()
         clock = time.perf_counter()
+        written_before = call.state.writes
         row: dict[str, object] = {
             'scenario': name,
             'turn': index,
@@ -311,14 +372,22 @@ async def run_scenario(name: str, said: tuple[str, ...], repeat: int, write) -> 
                 # Two numbers, not one. A turn that says "let me check"
                 # quickly and answers slowly beats a turn that just answers,
                 # on any benchmark that records only the first of these.
-                'first_speech': _earliest(clock, counter, call),
-                'first_model_word': round(counter.first_text - clock, 3) if counter.first_text else None,
+                'first_text_out': _out(clock, call),
+                'first_model_text_out': _out(clock, call, 'model'),
                 # What the caller was actually sent, in order. The fixed half
                 # is nowhere in the model's history, so a transcript rebuilt
                 # from history is missing every confirmation.
+                # Both halves, in order. The model's own answer was missing
+                # entirely, so a turn where it spoke read back as a turn that
+                # said nothing -- and nothing in the row could show whether
+                # consent had been asked for.
                 'said_back': [[s.kind, s.text] for s in call.spoken],
                 'step': call.state.agent,
                 'hops': len(done.handoffs) + 1 if done else None,
+                # Whether this turn is the one that wrote. The row that says
+                # a booking exists cannot say the caller had agreed to it;
+                # the turn it landed on can.
+                'wrote': call.state.writes > written_before,
             }
         )
         write(rows[-1])
@@ -334,7 +403,7 @@ async def run_scenario(name: str, said: tuple[str, ...], repeat: int, write) -> 
         'turn': None,
         'call': call.id,
         'at': datetime.now(UTC).isoformat(),
-        'business': CHECKS[name]() or 'ok',
+        'business': judge(name, call, rows) or 'ok',
         'comparable': name not in NOT_COMPARABLE,
     }
     rows.append(outcome)
@@ -406,8 +475,14 @@ def settings() -> dict:
         'budget': str(TurnBudget()),  # what the processor is built with
         'speak_by': agents.SPEAK_BY,
         'timezone': str(diary.TZ),
-        'clock': datetime.now(UTC).isoformat(),
+        'started': datetime.now(UTC).isoformat(),
         'seed_customers': sorted(diary._customers),
+        'clock': CLOCK.isoformat(),
+        # The rule that decides how many turns a booking takes, and one of
+        # the things two arms must match before their turn counts mean the
+        # same. This one books on an unambiguous choice of an offered time;
+        # the native arm reads the booking back and waits for a separate yes.
+        'confirmation_policy': 'books on an unambiguous selection; no separate readback turn',
         # Not recorded here because this process cannot see them, and each one
         # is a dimension the two arms have to match on before a difference
         # between them means anything.
@@ -437,13 +512,26 @@ async def main() -> None:
     print(f'  {len(rows) + 1} rows -> {raw}', file=sys.stderr)
 
     turns = [r for r in rows if r.get('turn') is not None]
+    scored = [r for r in rows if r.get('turn') is None and 'business' in r]
+    failed_business = [r for r in scored if r['business'] != 'ok']
     # Answered, and nothing else. An exhausted turn apologised, an interrupted
     # one was talked over, a crashed one never spoke: each of those is a
     # result and none of them is a turn that worked.
-    good = [r for r in turns if r.get('status') == 'answered']
+    replied = [r for r in turns if r.get('status') == 'answered']
     other = [r for r in turns if r.get('status') != 'answered']
-    scored = [r for r in rows if r.get('turn') is None and 'business' in r]
-    failed_business = [r for r in scored if r['business'] != 'ok']
+    # Which calls may be pooled into a headline: a scenario both arms can be
+    # driven with, on a run where the salon ended up holding the right thing.
+    # Turns from a call that booked the wrong appointment are not evidence
+    # about latency -- doing the wrong thing is quicker -- and `manager` and
+    # `knowledge` are not evidence about this comparison at all. Everything
+    # is still reported, and every row is still on disk; what is partitioned
+    # is the number a decision would be taken on.
+    comparable = {
+        (r['scenario'], r['run'])
+        for r in scored
+        if r['business'] == 'ok' and r['scenario'] not in NOT_COMPARABLE
+    }
+    good = [r for r in replied if (r['scenario'], r['run']) in comparable]
     runs = [float(r['runs']) for r in good]
     seconds = [r['seconds'] for r in good]
     silent = [r for r in good if not r['spoke']]
@@ -451,7 +539,7 @@ async def main() -> None:
     print(
         f'\n=== configuration {label}: {repeats} x {len(SCENARIOS)} scenarios, {len(turns)} caller turns ==='
     )
-    print(f'  turns that answered         {len(good)}/{len(turns)}')
+    print(f'  turns that answered         {len(replied)}/{len(turns)}')
     if other:
         by_status = Tally(r.get('status') for r in other)
         print(f'  turns that did not          {dict(by_status)}   <- not successes, and not dropped')
@@ -460,10 +548,15 @@ async def main() -> None:
                 f'    {row["scenario"]} turn {row["turn"]}: {row.get("status")} {row.get("detail", "")[:80]}'
             )
     print(
-        f'  scenarios that did the job  {len(scored) - len(failed_business)}/{len(scored)}   <- read off the diary, not the transcript'
+        f'  scenarios that did the job  {len(scored) - len(failed_business)}/{len(scored)}   '
+        '<- the exact expected booking, off the diary, not the transcript'
     )
     for row in failed_business:
         print(f'    {row["scenario"]} run {row["run"]}: {row["business"]}')
+    print(
+        f'  turns in the headline       {len(good)}/{len(turns)}   '
+        '<- comparable scenarios, on the runs that did the job'
+    )
     if not runs:
         print('  nothing answered, so there is nothing to average')
         return
@@ -483,10 +576,20 @@ async def main() -> None:
     if first:
         kinds = Tally(k for r in good for k in r.get('request_first_output', []))
         print(f'  request time to first output {spread(first)}   {dict(kinds)}')
+    out = [r['first_text_out'] for r in good if r.get('first_text_out') is not None]
+    answer = [r['first_model_text_out'] for r in good if r.get('first_model_text_out') is not None]
+    if out:
+        print(f'  first text out              {spread(out)}   <- any of it, filler included')
+    if answer:
+        print(f'  first model text out        {spread(answer)}   <- the answer, not the filler')
+    print('                              both are text handed to TTS, not audio the caller heard')
 
     print('\n  by turn, mean requests (the ledger is about the second turn of a booking):')
     for name in SCENARIOS:
-        per = [r for r in good if r['scenario'] == name]
+        # Every answered turn here, headline or not: the table is describing
+        # what each scenario cost, and a scenario left out of the aggregate
+        # still has to be readable.
+        per = [r for r in replied if r['scenario'] == name]
         by_turn: dict[int, list[float]] = {}
         for row in per:
             by_turn.setdefault(row['turn'], []).append(float(row['runs']))

@@ -100,11 +100,16 @@ class Spoken:
 
     kind: Literal['fixed', 'model']
     text: str
-    # When it went out, on the same clock as `Request.started`. A benchmark
-    # that reports only time to the model's first word cannot tell a turn
-    # that answered quickly from one that said "let me check" quickly and
-    # answered slowly, and those are different products.
+    # When this segment *started* going out, on the same clock as
+    # `Request.started`. Text handed to TTS, which is not audio the caller
+    # heard: the runtime's own playout is a separate boundary and nothing
+    # here measures it. A benchmark that reports only time to the model's
+    # first word still cannot tell a turn that answered quickly from one that
+    # said "let me check" quickly and answered slowly, which is why every
+    # segment is timed and not just the model's.
     at: float = field(default_factory=time.perf_counter)
+    # Cut down to what the caller actually heard, once the runtime says so.
+    interrupted: bool = False
 
 
 @dataclass
@@ -247,6 +252,35 @@ class CallContext(BaseModel):
         """This turn's delivered speech segments, in the order they went out."""
         return self._spoken
 
+    def note_said(self, kind: Literal['fixed', 'model'], text: str, at: float | None = None) -> None:
+        """One more segment the caller was sent, in the order it went out.
+
+        Every route to the caller comes through here, which is the point: the
+        ledger held only the fixed lines routed through `say`, so a turn where
+        the model answered read back as a turn that said nothing at all, and
+        the core's own stumble and exhausted lines were nowhere in it. A
+        transcript missing the model's half cannot show whether consent was
+        asked for.
+        """
+        if text:
+            # `at` is when it *started* going out, which for a streamed answer
+            # is its first token and not the moment the run finished
+            # assembling it. Default only for a line that is written and sent
+            # in one go.
+            self._spoken.append(Spoken(kind, text, at=time.perf_counter() if at is None else at))
+
+    def note_heard(self, delivered: str) -> None:
+        """Cut this turn's last model segment down to what was actually heard.
+
+        Generated text is not heard text. The runtime is the only thing that
+        knows where speech stopped, so it says, and the ledger stops claiming
+        the rest of the sentence.
+        """
+        for segment in reversed(self._spoken):
+            if segment.kind == 'model':
+                segment.text, segment.interrupted = delivered, True
+                return
+
     def note_first_output(self, kind: Literal['text', 'tool']) -> None:
         """The newest provider request has produced its first part.
 
@@ -305,7 +339,7 @@ class CallContext(BaseModel):
         if self._covered or self._say is None:
             return
         self._covered = True
-        self._spoken.append(Spoken('fixed', text))
+        self.note_said('fixed', text)
         await self._say(text)
 
     def resume(self, fallback: str) -> str:
@@ -342,7 +376,7 @@ class CallContext(BaseModel):
     async def speak_now(self, text: str) -> None:
         """Say this whatever else was said. For a goodbye or an error, never a filler."""
         if self._say is not None:
-            self._spoken.append(Spoken('fixed', text))
+            self.note_said('fixed', text)
             await self._say(text)
 
     async def end_call(self) -> None:

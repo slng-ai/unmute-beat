@@ -16,10 +16,11 @@ Asserts, no pytest, no fixtures, same as the rest.
 """
 
 import asyncio
+import copy
 import json
 import pathlib
 
-from bench.turns import _ttft, analyse, caller_turns, percentile, seconds_between, turn_of
+from bench.turns import MixedArmsError, _ttft, analyse, caller_turns, percentile, seconds_between, turn_of
 
 FIXTURE = pathlib.Path(__file__).parent / 'fixtures' / 'trace_s15.json'
 SPANS = json.loads(FIXTURE.read_text())['data']
@@ -286,6 +287,67 @@ def time_to_first_token_is_recorded_in_seconds():
     assert all(_ttft(s) is not None for s in llm), 'metrics.ttfb is there and was not being read'
 
 
+def a_turn_with_no_latency_recorded_is_still_a_turn():
+    """A missing measurement is not a greeting.
+
+    The greeting was identified by the attribute it lacks, so a caller turn
+    whose instrumentation did not fire was reclassified as one -- taking its
+    two model requests out of the denominator with it and leaving them
+    unresolved. Five turns and ten requests became four and eight. An
+    interrupted or silent turn is exactly the turn a latency comparison most
+    needs to keep.
+    """
+    hurt = copy.deepcopy(NATIVE)
+    spans = sorted([s for s in hurt if s['name'] == 'turn'], key=lambda s: s['startTime'])
+    del spans[1]['metadata']['attributes.turn.user_bot_latency_seconds']
+
+    found = analyse(hurt)
+    assert len(found.turns) == 5, found.turns
+    assert sum(found.requests_per_turn.values()) == 10, found.requests_per_turn
+    assert found.unresolved_requests == 0
+    assert found.greeting_spans == 1, 'and the real greeting is still the greeting'
+    assert len(found.user_bot_latency) == 4, 'the measurement is missing, and only the measurement'
+
+
+def the_greeting_is_identified_by_what_it_holds():
+    """Not by position alone either: a first turn that did work is a caller turn."""
+    busy = copy.deepcopy(NATIVE)
+    first = min((s for s in busy if s['name'] == 'turn'), key=lambda s: s['startTime'])
+    busy.append(
+        {
+            'id': 'llm-in-the-greeting',
+            'traceId': first['traceId'],
+            'parentObservationId': first['id'],
+            'type': 'GENERATION',
+            'name': 'llm',
+            'startTime': first['startTime'],
+            'metadata': {},
+        }
+    )
+    found = analyse(busy)
+    assert found.greeting_spans == 0, 'a turn that ran a model is a turn somebody waited through'
+    assert len(found.turns) == 6, found.turns
+
+
+def two_arms_in_one_window_are_refused():
+    """`--all` over a window that caught both is two populations, not one.
+
+    It used to pick `poc` for the whole set and return that fixture's three
+    turns, losing all five native ones and counting their ten requests as
+    unresolved. A pooled number over two architectures is not a measurement
+    of either.
+    """
+    try:
+        analyse(NATIVE + SPANS)
+    except MixedArmsError as mixed:
+        assert 'both arms at once' in str(mixed), mixed
+    else:
+        raise AssertionError('a mixture of arms must be refused, not silently resolved')
+    # Each on its own still reads.
+    assert analyse(NATIVE).arm == 'native'
+    assert analyse(SPANS).arm == 'poc'
+
+
 def a_span_attribute_is_found_under_either_spelling():
     """An exporter prefixes what it writes; the SDK does not."""
     found = analyse(NATIVE)
@@ -314,6 +376,9 @@ async def main():
     the_native_reference_reads_as_five_turns_and_ten_requests()
     the_native_caller_gap_comes_from_pipecats_own_number()
     time_to_first_token_is_recorded_in_seconds()
+    a_turn_with_no_latency_recorded_is_still_a_turn()
+    the_greeting_is_identified_by_what_it_holds()
+    two_arms_in_one_window_are_refused()
     a_span_attribute_is_found_under_either_spelling()
     print('ok')
 

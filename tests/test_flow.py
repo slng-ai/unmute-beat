@@ -578,7 +578,30 @@ def every_tool_that_writes_is_an_action():
                 writes.add(node.name)
 
     assert writes, 'found no tools that commit, so this check is not checking anything'
-    missing = writes - agents.ACTIONS
+
+    # A private helper is not a tool. The model cannot call `_settle`, and the
+    # claim for what it writes is made by the action that calls it -- so it is
+    # exempt, but only while every one of its callers is itself an action.
+    # Otherwise a leading underscore becomes the way to write to state
+    # without a claim.
+    called_by: dict[str, set[str]] = {}
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            name = getattr(getattr(inner, 'func', None), 'id', None)
+            if isinstance(inner, ast.Call) and name and name.startswith('_'):
+                called_by.setdefault(name, set()).add(node.name)
+
+    helpers = {name for name in writes if name.startswith('_')}
+    for helper in helpers:
+        callers = called_by.get(helper, set())
+        assert callers and callers <= agents.ACTIONS, (
+            f'{helper} writes to state and is reachable from {sorted(callers) or "nowhere"}, '
+            'which is not an action that can claim the write'
+        )
+
+    missing = (writes - helpers) - agents.ACTIONS
     assert not missing, f'these write to state and are not in ACTIONS: {sorted(missing)}'
 
 

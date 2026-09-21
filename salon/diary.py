@@ -117,8 +117,25 @@ def reset(customers: set[str] | None = None) -> None:
     _counter.update(booking=0, complaint=0)
 
 
+_clock: datetime | None = None
+
+
+def set_clock(at: datetime | None) -> None:
+    """Pin the salon's clock, or hand it back to the wall.
+
+    For a benchmark and for a fixture, and nowhere else. A scenario run
+    against the live clock resolves "Monday" to a different date every week
+    and "tomorrow" to a different day every night, so the expected outcome
+    cannot be written down -- which is why the benchmark's only check was
+    that *a* booking existed. A run nobody can state the right answer for
+    cannot be scored, only watched.
+    """
+    global _clock
+    _clock = at
+
+
 def now() -> datetime:
-    return datetime.now(TZ)
+    return _clock or datetime.now(TZ)
 
 
 # --- saying things out loud --------------------------------------------------
@@ -310,7 +327,7 @@ def bookings_for(phone: str, today: Date) -> list[dict]:
     ]
 
 
-def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
+def find_slots(phone: str, when: str, service: str, at_time: datetime, offered_to: str = '') -> dict:
     """Free times on the day the caller named, and everything they already hold.
 
     One call answers both questions, so the agent never needs a second one.
@@ -319,7 +336,26 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
     eligible slot and then returning the first twelve meant an id could be
     accepted at write time that this caller was never shown: "issued
     somewhere in the process" standing in for "currently offered to you".
+
+    Asking again **replaces** what was offered: this search is the question
+    now on the table, and the last one is over. Without that, reading Friday
+    for a haircut and then Friday for a colour left both batches standing, so
+    the caller could be booked for the service they had just corrected --
+    same date, so no date check could see it. An offer belongs to one
+    question, not to a day.
+
+    `offered_to` is who the offer belongs to, and it is the *call* rather than
+    the number: two calls from one phone are two conversations, and a slot put
+    in front of one of them was never put in front of the other. It defaults
+    to the number so a direct caller -- a test, a fixture -- gets its own
+    namespace without inventing an identity.
     """
+    who = offered_to or phone
+    # Whatever was on the table is off it, whichever way this search goes: a
+    # day with nothing free, a day the salon is shut and a day nobody could
+    # work out are all the previous offer being withdrawn.
+    for key in [k for k in _offers if k[0] == who]:
+        del _offers[key]
     today = at_time.date()
     held = bookings_for(phone, today)
     day = resolve_day(when, today)
@@ -356,7 +392,7 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
             # never be offered under one set of checks and written under another.
             if not _eligible(day, at, name, at_time):
                 slot_id = _slot_id(day, at, name)
-                candidates[slot_id] = Offer(day=day, at=at, service=name, issued_on=today, phone=phone)
+                candidates[slot_id] = Offer(day=day, at=at, service=name, issued_on=today, phone=who)
                 slots.append(
                     {
                         'slot_id': slot_id,
@@ -376,7 +412,7 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
     # Recorded after the cap, not before it: an offer is a thing this caller
     # was told about.
     for slot in shown:
-        _offers[phone, slot['slot_id']] = candidates[slot['slot_id']]
+        _offers[who, slot['slot_id']] = candidates[slot['slot_id']]
 
     return {
         'status': 'ok' if slots else 'full',
@@ -395,15 +431,22 @@ class RefusedError(Exception):
     """The diary would not take it, and the caller needs to hear why."""
 
 
-def offered_day(phone: str, slot_id: str) -> str:
-    """The day a slot sits on, as this diary recorded when it offered it to this caller.
+def offer_of(offered_to: str, slot_id: str) -> dict:
+    """What this caller was offered under that id: the day, the time and the service.
 
-    '' when this diary never offered that id to that number. Exists so the
-    caller-facing stale-day rule can ask instead of reading the day out of the
-    string, which is the parsing this module just stopped doing.
+    Empty when this diary never offered it to them. Exists so the
+    caller-facing rules can *ask* what a slot means instead of reading it out
+    of the string, which is the parsing this module stopped doing -- and so a
+    result can be checked against the slot it claims to be about.
     """
-    offer = _offers.get((phone, slot_id))
-    return offer.day.isoformat() if offer else ''
+    offer = _offers.get((offered_to, slot_id))
+    if offer is None:
+        return {}
+    return {
+        'date': offer.day.isoformat(),
+        'time': offer.at.strftime('%H:%M'),
+        'service': offer.service,
+    }
 
 
 def outcome_of(operation_token: str) -> dict | None:
@@ -425,6 +468,7 @@ def save_booking(
     additional: bool,
     at_time: datetime,
     operation_token: str = '',
+    offered_to: str = '',
 ) -> dict:
     """Book, move or cancel. Raises RefusedError with something sayable.
 
@@ -436,6 +480,7 @@ def save_booking(
     if operation_token and (already := _operations.get(operation_token)) is not None:
         return already
 
+    who = offered_to or phone
     today = at_time.date()
     held = {b['booking_id'] for b in bookings_for(phone, today)}
 
@@ -461,11 +506,11 @@ def save_booking(
     # This caller's own offers, never the salon's. A slot id is the same
     # string whoever it was shown to, so a single dictionary keyed by the id
     # made every offer bookable by everybody for as long as the process lived.
-    offer = _offers.get((phone, slot_id))
+    offer = _offers.get((who, slot_id))
     if offer is None:
         raise RefusedError(
-            'That is not a slot this diary returned to this caller. Read the diary again and use '
-            'one of its slots.'
+            'That is not a slot this diary is currently offering this caller. Read the diary again '
+            'and use one of the slots it returns now.'
         )
     if offer.issued_on != today:
         raise RefusedError(
@@ -513,7 +558,16 @@ def find_or_create_customer(phone: str) -> dict:
     return {'customer_status': 'existing' if existing else 'created', 'customer_phone': phone}
 
 
-def record_complaint(phone: str, summary: str, requested_resolution: str) -> dict:
+def record_complaint(phone: str, summary: str, requested_resolution: str, operation_token: str = '') -> dict:
+    """Write a complaint down. Twice with one token writes it once.
+
+    The same identity a booking write has, and for the same reason: a caller
+    whose response went missing is retried, and a complaint book with the
+    same grievance in it twice is a caller who gets phoned about it twice.
+    """
+    if operation_token and (already := _operations.get(operation_token)) is not None:
+        return already
+
     _counter['complaint'] += 1
     reference = f'CX{_counter["complaint"]:04d}'
     _complaints.append(
@@ -524,7 +578,7 @@ def record_complaint(phone: str, summary: str, requested_resolution: str) -> dic
             'requested_resolution': requested_resolution,
         }
     )
-    return {'recorded': True, 'reference': reference}
+    return _record(operation_token, {'recorded': True, 'reference': reference})
 
 
 def complaints() -> list[dict]:

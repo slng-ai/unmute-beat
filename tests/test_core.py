@@ -459,6 +459,70 @@ async def a_new_turn_starts_a_new_clock():
     assert len(call.requests) == 1, call.requests
 
 
+async def the_ledger_holds_both_halves_of_what_was_said():
+    """A turn where the model answered read back as a turn that said nothing.
+
+    Only fixed lines routed through `say` were recorded, so `call.spoken` was
+    empty on an ordinary answer and the declared `kind='model'` was never
+    written by anything. A transcript with the model's half missing cannot
+    show what was offered, whether consent was asked for, or whether the
+    answer was any use -- which is most of what a benchmark row is for.
+    """
+    call = _fresh(True)
+    with scripted(concierge=says('We close at six.')):
+        heard, finished = await take_turn(call, AGENTS, 'when do you close?')
+
+    assert finished.status == 'answered'
+    assert [(s.kind, s.text) for s in call.spoken] == [('model', 'We close at six.')], call.spoken
+    assert 'We close at six.' in heard
+
+
+async def the_cores_own_fixed_lines_are_in_the_ledger_too():
+    """The stumble and the exhausted line reach the caller and bypassed the ledger.
+
+    They are yielded as events rather than spoken through the call, so the
+    one turn whose transcript matters most -- the one that went wrong -- had
+    no transcript at all.
+    """
+    call = _fresh(True)
+    with scripted(concierge=calls('probe', question='anything')):
+        _, finished = await take_turn(call, AGENTS, 'and parking?', TurnBudget(step_runs=4, model_requests=2))
+    assert finished.status == 'exhausted'
+    assert [s.kind for s in call.spoken] == ['fixed'], call.spoken
+    assert EXHAUSTED in call.spoken[0].text
+
+
+async def the_ledger_is_cut_down_to_what_was_heard():
+    """Generated text is not heard text, and the ledger stops claiming the rest."""
+    call = _fresh(True)
+    with scripted(concierge=says('We have nine, ten thirty and two.')):
+        await take_turn(call, AGENTS, 'anything tomorrow?')
+
+    core.note_spoken(call, 'We have nine,', interrupted=True)
+    delivered = [s for s in call.spoken if s.kind == 'model'][-1]
+    assert delivered.text == 'We have nine,' and delivered.interrupted, delivered
+
+
+async def a_segment_is_timed_from_when_it_started_going_out():
+    """Not from when the run finished assembling it.
+
+    A streamed answer is sent as it arrives, so its clock is its first token.
+    Timed at the end instead, every model segment would look later than the
+    filler that was covering it, and "first text out" would name the wrong
+    one.
+    """
+    call = _fresh(True)
+    probe = Probe(call)  # a runtime, so the filler has a line to go out on
+    script = then(calls('read_diary', when='tomorrow', service='haircut'), says('Nine is free.'))
+    with scripted(concierge=script):
+        await probe._turn('anything tomorrow?')
+
+    kinds = [s.kind for s in call.spoken]
+    assert kinds == ['fixed', 'model'], call.spoken
+    filler, answer = call.spoken
+    assert filler.at < answer.at, 'the filler covered the gap, so it went out first'
+
+
 def the_core_imports_no_runtime():
     """The property the second adapter depends on, enforced rather than promised.
 
@@ -492,6 +556,10 @@ async def main():
     await an_interrupted_fixed_line_leaves_an_earlier_answer_alone()
     await time_to_first_token_is_timed_per_request()
     await a_new_turn_starts_a_new_clock()
+    await the_ledger_holds_both_halves_of_what_was_said()
+    await the_cores_own_fixed_lines_are_in_the_ledger_too()
+    await the_ledger_is_cut_down_to_what_was_heard()
+    await a_segment_is_timed_from_when_it_started_going_out()
     the_core_imports_no_runtime()
     the_processor_no_longer_runs_the_turn()
     print('ok')

@@ -348,7 +348,7 @@ async def an_uncertain_write_is_reconciled_not_repeated():
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())
+    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now(), offered_to=call.id)
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])  # what `read_diary` would have written
 
@@ -363,13 +363,14 @@ async def an_uncertain_write_is_reconciled_not_repeated():
         additional: bool,
         at_time: datetime,
         operation_token: str = '',
+        offered_to: str = '',
     ) -> dict:
         # The signature of the thing it stands in for, spelled out rather
         # than `*args`: a stand-in that does not typecheck as the real one is
         # not standing in for it, and the type checker was reporting exactly
         # that.
         attempts.append(1)
-        real(phone, action, slot_id, booking_id, additional, at_time, operation_token)  # the write lands
+        real(phone, action, slot_id, booking_id, additional, at_time, operation_token, offered_to)
         raise TimeoutError('the diary did not answer')  # and the answer does not
 
     # A module-level `def` is its own type to ty, so no other function is assignable to it
@@ -398,7 +399,7 @@ async def a_write_that_never_landed_is_reported_unresolved():
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())
+    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now(), offered_to=call.id)
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])  # what `read_diary` would have written
 
@@ -410,6 +411,7 @@ async def a_write_that_never_landed_is_reported_unresolved():
         additional: bool,
         at_time: datetime,
         operation_token: str = '',
+        offered_to: str = '',
     ) -> dict:
         raise TimeoutError('no answer')
 

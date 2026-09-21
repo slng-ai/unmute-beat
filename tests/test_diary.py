@@ -93,7 +93,7 @@ def a_fabricated_slot_is_refused():
         'have-a-slot',
         '',
     ):
-        assert 'not a slot this diary returned to this caller' in _refused(
+        assert 'not a slot this diary is currently offering this caller' in _refused(
             diary.save_booking, ALICE, 'book', invented, '', False, AT
         ), invented
     assert diary.bookings_for(ALICE, TODAY) == [], 'and nothing was written'
@@ -386,19 +386,19 @@ def only_the_slots_it_returned_were_offered():
     shown = diary.find_slots(ALICE, 'tomorrow', 'any', AT)['slots']
     assert len(shown) == 12, len(shown)
     assert late['slot_id'] not in {slot['slot_id'] for slot in shown}, 'the fixture needs an unshown slot'
-    assert 'not a slot this diary returned' in _refused(
+    assert 'not a slot this diary is currently offering' in _refused(
         diary.save_booking, ALICE, 'book', late['slot_id'], '', False, AT
     )
-    assert diary.offered_day(ALICE, late['slot_id']) == '', 'and it is not on record as offered'
+    assert diary.offer_of(ALICE, late['slot_id']) == {}, 'and it is not on record as offered'
 
 
 def an_offer_is_made_to_one_caller():
     """Two callers, one slot id, and the offer is not the salon's to share."""
     diary.reset()
     mine = _slot(ALICE, 'tomorrow', 'haircut')
-    assert diary.offered_day(ALICE, mine['slot_id']) == TOMORROW.isoformat()
-    assert diary.offered_day(BOB, mine['slot_id']) == '', 'BOB was never offered it'
-    assert 'not a slot this diary returned to this caller' in _refused(
+    assert diary.offer_of(ALICE, mine['slot_id'])['date'] == TOMORROW.isoformat()
+    assert diary.offer_of(BOB, mine['slot_id']) == {}, 'BOB was never offered it'
+    assert 'not a slot this diary is currently offering this caller' in _refused(
         diary.save_booking, BOB, 'book', mine['slot_id'], '', False, AT
     )
     # And ALICE, who was offered it, still has it.

@@ -191,6 +191,7 @@ async def run_turn(
 
     if failure:
         # An error the caller can hear beats silence on an open line.
+        call.note_said('fixed', STUMBLE)
         yield FixedSpeech(STUMBLE, reason='error')
     elif spent and not barge.hit:
         # The turn ran out. One fixed line: no further provider request, no
@@ -199,6 +200,7 @@ async def run_turn(
         # that had just been declared spent -- so the budget bounded nothing,
         # and the run it bought still held every ordinary tool.
         logger.warning('turn exhausted: {}', spent)
+        call.note_said('fixed', EXHAUSTED)
         yield FixedSpeech(EXHAUSTED, reason='exhausted')
 
     status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
@@ -366,6 +368,11 @@ async def _speak(
     succeeded: set[str] = set()
     output = None
     spoke = False
+    # What this run says out loud, kept so the turn's delivered speech can be
+    # read back whole. The history holds it too, but not in order with the
+    # fixed lines around it and not at all once a handoff resets it.
+    said: list[str] = []
+    began = 0.0
 
     yield RunStarted(step)
     try:
@@ -399,8 +406,10 @@ async def _speak(
                         case ToolCallPart():
                             call.note_first_output('tool')
                 if text := _speech(event):
+                    said.append(text)
                     if not spoke:
                         spoke = True
+                        began = time.perf_counter()
                         # This turn has model speech of its own, so there is
                         # something in the history for `note_spoken` to cut
                         # down if the caller talks over it.
@@ -437,6 +446,8 @@ async def _speak(
         return
     finally:
         barge.detach()
+        if said:
+            call.note_said('model', ''.join(said), at=began)
 
     yield RunEnded(step)
     yield _Outcome(output, succeeded)
@@ -458,6 +469,7 @@ def note_spoken(call: CallContext, content: str, interrupted: bool) -> None:
     """
     if not interrupted:
         return
+    call.note_heard(content)
     if not call._spoke:
         # Everything the caller heard this turn was a fixed line -- a
         # confirmation, a filler, a goodbye -- and none of those are in the

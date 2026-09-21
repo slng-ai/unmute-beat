@@ -130,6 +130,24 @@ USER_BOT_LATENCY = 'turn.user_bot_latency_seconds'
 SPEECH_SPANS = frozenset({'stt', 'tts'})
 
 
+class MixedArmsError(Exception):
+    """One set of observations holding both arms' traces, which cannot be pooled."""
+
+
+def _home(span: dict, by_id: dict[str, dict], homes: set[str]) -> str | None:
+    """The nearest ancestor of `span` whose id is in `homes`, or None."""
+    current, seen = span, set()
+    while current is not None:
+        if str(current.get('id')) in homes:
+            return str(current.get('id'))
+        parent = current.get('parentObservationId')
+        if not parent or str(parent) in seen:
+            return None
+        seen.add(str(parent))
+        current = by_id.get(str(parent))
+    return None
+
+
 def caller_turns(spans: list[dict]) -> tuple[list[str], list[dict], str]:
     """Which observations are this trace's caller turns, the greetings, and whose arm it is.
 
@@ -141,21 +159,64 @@ def caller_turns(spans: list[dict]) -> tuple[list[str], list[dict], str]:
       `turn` span. Its `agents` spans are the turns; the `turn` spans around
       them carry the latency attribute and nothing else.
     * The native arm has no `agents` span, so Pipecat's `turn` spans are the
-      turns -- except the greeting, which is a turn in Pipecat's numbering and
-      not a turn anybody waited through.
+      turns -- except the greeting, which is a turn in Pipecat's numbering
+      and not a turn anybody waited through.
 
-    Adding both names to one set and walking to the nearest ancestor reads a
-    POC call as twice as many turns as it had. Reading only `agents` reads a
-    native call as **zero** turns and every one of its model requests as
-    unresolved, which is what it did against the reference trace.
+    The greeting is identified by **what it contains**, not by what it is
+    missing. It is the first turn of the call, it has no model request or
+    tool call of its own, and Pipecat recorded no user-bot latency for it
+    because nobody was waiting. Keyed on that last fact alone, a caller turn
+    whose latency instrumentation did not fire -- an interrupted turn, a
+    silent one -- was reclassified as a greeting and taken out of the
+    denominator along with its requests, which is a missing measurement
+    turned into a missing turn.
+
+    Raises `MixedArmsError` when the set holds both a POC trace and a native one.
+    A mixed window is what `--all` produces across a session that ran both,
+    and picking one arm silently reported the other's five turns as zero.
     """
     ordered = sorted(spans, key=lambda s: str(s.get('startTime') or ''))
+    by_id = {str(s['id']): s for s in ordered if s.get('id')}
     pipecat = [s for s in ordered if s.get('type') == 'SPAN' and (s.get('name') or '') == PIPECAT_TURN]
-    greetings = [s for s in pipecat if _attribute(s, USER_BOT_LATENCY) is None]
     ours = [s for s in ordered if s.get('type') == 'SPAN' and (s.get('name') or '') in TURN_SPANS]
+
+    # What happened inside each Pipecat turn: work of its own, and whether one
+    # of our own turn spans sits under it.
+    homes = {str(s['id']) for s in pipecat}
+    worked: set[str] = set()
+    hosted: set[str] = set()
+    for span in ordered:
+        name = span.get('name') or ''
+        if name in SPEECH_SPANS or name == PIPECAT_TURN:
+            continue
+        kind = span.get('type')
+        if kind not in ('GENERATION', 'TOOL') and not (kind == 'SPAN' and name in TURN_SPANS):
+            continue
+        if (home := _home(span, by_id, homes)) is None:
+            continue
+        worked.add(home)
+        if kind == 'SPAN':
+            hosted.add(home)
+
+    greetings = [
+        turn
+        for index, turn in enumerate(pipecat)
+        if index == 0 and str(turn['id']) not in worked and _attribute(turn, USER_BOT_LATENCY) is None
+    ]
+
     if ours:
+        stranded = [t for t in pipecat if str(t['id']) in worked and str(t['id']) not in hosted]
+        if stranded:
+            traces = sorted({str(t.get('traceId')) for t in stranded})
+            raise MixedArmsError(
+                f'{len(stranded)} Pipecat turns carry model work with no `agents` span inside them, '
+                f'alongside {len(ours)} that have one: this is both arms at once '
+                f'({", ".join(traces)}). Read one trace, or one arm, at a time.'
+            )
         return [str(s['id']) for s in ours], greetings, 'poc'
-    answered = [s for s in pipecat if _attribute(s, USER_BOT_LATENCY) is not None]
+
+    skip = {str(g['id']) for g in greetings}
+    answered = [s for s in pipecat if str(s['id']) not in skip]
     return [str(s['id']) for s in answered], greetings, 'native' if answered else 'unknown'
 
 
@@ -572,8 +633,23 @@ def main() -> int:
         return 1
 
     if args.all:
-        calls = {s.get('sessionId') for s in everything if s.get('sessionId')}
-        report(everything, f'{len(calls)} calls in the last {args.hours}h, pooled')
+        # Pooled per arm, never across them. A window that caught both a
+        # native call and a POC one is two populations, and one report over
+        # the pair used to pick whichever arm it saw first and count the
+        # other's turns as nothing. Partitioned by trace, because the arm is
+        # a property of the call and not of the window.
+        by_trace: dict[str, list[dict]] = defaultdict(list)
+        for span in everything:
+            by_trace[str(span.get('traceId'))].append(span)
+        arms: dict[str, list[dict]] = defaultdict(list)
+        for trace, spans in by_trace.items():
+            try:
+                arms[caller_turns(spans)[2]].extend(spans)
+            except MixedArmsError as mixed:
+                print(f'  trace {trace}: {mixed}', file=sys.stderr)
+        for arm, spans in sorted(arms.items()):
+            calls = {s.get('sessionId') for s in spans if s.get('sessionId')}
+            report(spans, f'{arm}: {len(calls)} calls in the last {args.hours}h, pooled')
         return 0
 
     sessions: dict[str, dict] = defaultdict(lambda: {'spans': 0, 'first': None})

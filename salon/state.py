@@ -222,6 +222,12 @@ class SalonState(harness.VoiceState):
     # no longer existed. A retry of one intent happens with this unchanged and
     # still reconciles; a new intent follows an accepted write and cannot.
     writes: int = 0
+    # The operation token of a write this call started and never learned the
+    # outcome of. While it is set, no other write may run: an unanswered
+    # write is not a write that did not happen, and the only thing that used
+    # to stand between it and a second appointment was a sentence of retry
+    # text asking the model not to try again.
+    unresolved: str = ''
 
 
 # Keypad spellings of the words a carrier substitutes for a withheld number.

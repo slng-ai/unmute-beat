@@ -189,7 +189,6 @@ class PydanticAgentProcessor(FrameProcessor):
             # last one and the silence the caller sat through was invisible.
             turn_started = time.perf_counter()
             spoke = False
-            first_word = None
             # Whether a response frame is open. The core can leave a run
             # without closing it -- a turn that blows its request limit or
             # hits the deadline unwinds through an exception, and the event
@@ -210,7 +209,6 @@ class PydanticAgentProcessor(FrameProcessor):
                         case core.TextDelta(text=text):
                             if not spoke:
                                 spoke = True
-                                first_word = time.perf_counter()
                                 await self.stop_ttfb_metrics()
                                 # Pydantic AI's OTel instrumentation emits no
                                 # first-token event, so Langfuse shows every
@@ -244,18 +242,25 @@ class PydanticAgentProcessor(FrameProcessor):
                             timed = [r for r in self._call.requests if r.ttft is not None]
                             span.set_attribute('request_ttft', [r.ttft for r in timed])
                             span.set_attribute('request_first_output', [r.kind for r in timed])
-                            span.set_attribute('fixed_lines', len(self._call.spoken))
-                            # The first thing of *any* kind the caller heard,
-                            # beside the first thing the model said. A filler
-                            # arriving quickly is not an answer arriving
+                            spoken = self._call.spoken
+                            span.set_attribute('fixed_lines', sum(s.kind == 'fixed' for s in spoken))
+                            # The first text of *any* kind handed to TTS,
+                            # beside the first the model produced. A filler
+                            # going out quickly is not an answer going out
                             # quickly, and a benchmark with only one of these
-                            # numbers can be won by saying "let me check"
-                            # sooner and answering later.
-                            heard = [s.at for s in self._call.spoken]
-                            if first_word is not None:
-                                heard.append(first_word)
-                            if heard:
-                                span.set_attribute('turn_first_speech', round(min(heard) - turn_started, 3))
+                            # can be won by saying "let me check" sooner and
+                            # answering later.
+                            #
+                            # Text handed to TTS, and named that way: audio
+                            # the caller heard is a boundary nothing in this
+                            # process can see, and a name that implied
+                            # otherwise would be read as the latency the
+                            # whole decision turns on.
+                            if spoken:
+                                span.set_attribute(
+                                    'turn_first_text_out',
+                                    round(min(s.at for s in spoken) - turn_started, 3),
+                                )
                             span.set_attribute('agent', done.agent)
                             span.set_attribute('status', done.status)
                             span.set_attribute('hops', len(done.handoffs) + 1)

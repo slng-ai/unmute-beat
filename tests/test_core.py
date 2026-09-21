@@ -17,14 +17,13 @@ import json
 import pathlib
 from contextlib import ExitStack
 
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
 from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMTextFrame,
     TTSSpeakFrame,
 )
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import diary
 from salon.agents import AGENTS
@@ -46,9 +45,7 @@ class Probe(PydanticAgentProcessor):
 
     def heard(self) -> str:
         """Everything that reached the caller, model speech and fixed lines alike."""
-        return ''.join(
-            f.text for f in self.frames if isinstance(f, (LLMTextFrame, TTSSpeakFrame))
-        )
+        return ''.join(f.text for f in self.frames if isinstance(f, (LLMTextFrame, TTSSpeakFrame)))
 
     def runs(self) -> int:
         return sum(isinstance(f, LLMFullResponseStartFrame) for f in self.frames)
@@ -67,7 +64,8 @@ def scripted(**by_agent):
 def says(text, chunk=8):
     async def stream(messages, info: AgentInfo):
         for start in range(0, len(text), chunk):
-            yield text[start:start + chunk]
+            yield text[start : start + chunk]
+
     return stream
 
 
@@ -76,19 +74,23 @@ def hands_to(name, because='test'):
         if not any(t.name == 'hand_over' for t in info.output_tools):
             yield 'Sorry, what was that?'
             return
-        yield {0: DeltaToolCall(name='hand_over',
-                                json_args=json.dumps({'to': name, 'because': because}))}
+        yield {0: DeltaToolCall(name='hand_over', json_args=json.dumps({'to': name, 'because': because}))}
+
     return stream
 
 
 def reads_then_answers(text):
     async def stream(messages, info: AgentInfo):
         if any(t.name == 'read_diary' for t in info.function_tools) and 'read' not in str(messages):
-            yield {0: DeltaToolCall(name='read_diary',
-                                    json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'}))}
+            yield {
+                0: DeltaToolCall(
+                    name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+                )
+            }
             return
         for start in range(0, len(text), 8):
-            yield text[start:start + 8]
+            yield text[start : start + 8]
+
     return stream
 
 
@@ -104,22 +106,25 @@ SCENARIOS = {
     },
     'handoff then answer': {
         'verified': True,
-        'scripts': lambda: {'concierge': hands_to('complaints'),
-                            'complaints': says('Tell me what happened.')},
+        'scripts': lambda: {
+            'concierge': hands_to('complaints'),
+            'complaints': says('Tell me what happened.'),
+        },
         'said': 'I want to complain',
         'budget': TurnBudget(),
     },
     'borrowed tool moves the caller': {
         'verified': True,
-        'scripts': lambda: {'concierge': reads_then_answers('Nine or eleven tomorrow.'),
-                            'booking': says('Nine or eleven tomorrow.')},
+        'scripts': lambda: {
+            'concierge': reads_then_answers('Nine or eleven tomorrow.'),
+            'booking': says('Nine or eleven tomorrow.'),
+        },
         'said': 'anything tomorrow?',
         'budget': TurnBudget(),
     },
     'budget runs out': {
         'verified': True,
-        'scripts': lambda: {'concierge': hands_to('complaints'),
-                            'complaints': hands_to('concierge')},
+        'scripts': lambda: {'concierge': hands_to('complaints'), 'complaints': hands_to('concierge')},
         'said': 'hello?',
         'budget': TurnBudget(step_runs=2),
     },
@@ -203,8 +208,7 @@ async def speech_before_a_tool_survives_the_seam():
             yield 'We close at six.'
             return
         yield 'Let me see. '
-        yield {0: DeltaToolCall(name='look_up_salon_info',
-                                json_args=json.dumps({'query': 'opening hours'}))}
+        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': 'opening hours'}))}
 
     with scripted(concierge=talk_then_call):
         await probe._turn('when do you close?')
@@ -224,11 +228,16 @@ async def every_response_frame_is_closed():
     """
     cases = {
         'answered': (TurnBudget(), {'concierge': says('We are open until six.')}, 'when do you close?'),
-        'exhausted by hops': (TurnBudget(step_runs=2),
-                              {'concierge': hands_to('complaints'), 'complaints': hands_to('concierge')},
-                              'hello?'),
-        'exhausted by requests': (TurnBudget(step_runs=4, model_requests=2),
-                                  {'concierge': _never_settles()}, 'tell me everything'),
+        'exhausted by hops': (
+            TurnBudget(step_runs=2),
+            {'concierge': hands_to('complaints'), 'complaints': hands_to('concierge')},
+            'hello?',
+        ),
+        'exhausted by requests': (
+            TurnBudget(step_runs=4, model_requests=2),
+            {'concierge': _never_settles()},
+            'tell me everything',
+        ),
         'deadline': (TurnBudget(seconds=0.25), {'concierge': _stalls()}, 'hello?'),
     }
     for name, (budget, scripts, said) in cases.items():
@@ -247,8 +256,8 @@ def _never_settles():
 
     async def stream(messages, info: AgentInfo):
         calls.append(1)
-        yield {0: DeltaToolCall(name='look_up_salon_info',
-                                json_args=json.dumps({'query': f'q{len(calls)}'}))}
+        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': f'q{len(calls)}'}))}
+
     return stream
 
 
@@ -256,6 +265,7 @@ def _stalls():
     async def stream(messages, info: AgentInfo):
         await asyncio.sleep(5)
         yield 'too late'
+
     return stream
 
 
@@ -279,8 +289,11 @@ async def a_barge_in_is_reported_as_one():
 
     async def interrupted(messages, info: AgentInfo):
         barge.fire()
-        yield {0: DeltaToolCall(name='read_diary',
-                                json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'}))}
+        yield {
+            0: DeltaToolCall(
+                name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+            )
+        }
 
     with scripted(concierge=interrupted):
         _, finished = await take_turn(call, AGENTS, 'anything tomorrow?', barge=barge)

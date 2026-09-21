@@ -136,7 +136,9 @@ class Barge:
     def fire(self) -> None:
         self.hit = True
         if self._events is not None:
-            self._events.cancel()
+            # `_events` is annotated `object` on purpose, so this file imports
+            # no runtime's event type.
+            self._events.cancel()  # ty: ignore[unresolved-attribute]
 
 
 # --- one turn ----------------------------------------------------------------
@@ -173,7 +175,9 @@ async def run_turn(
                 elif isinstance(event, _Failed):
                     failure = event.why
                 else:
-                    yield event
+                    # The two sentinels are filtered out above, which ty tracks
+                    # as a negated intersection rather than as the public union.
+                    yield event  # ty: ignore[invalid-yield]
     except TimeoutError:
         spent = f'the {budget.seconds:g}s turn deadline'
     except UsageLimitExceeded as over:
@@ -254,8 +258,7 @@ async def _hops(
             # the words.
             landed = _moved_by(call.state, node, agents, succeeded)
             if landed != call.state.agent:
-                logger.info('moved {} -> {} (via {})',
-                            call.state.agent, landed, ', '.join(sorted(succeeded)))
+                logger.info('moved {} -> {} (via {})', call.state.agent, landed, ', '.join(sorted(succeeded)))
                 handoffs.append(landed)
                 call.commit(agent=landed)
             return
@@ -373,7 +376,7 @@ async def _speak(
                 elif isinstance(event, AgentRunResultEvent):
                     call.messages = event.result.all_messages()
                     output = event.result.output
-    except (UsageLimitExceeded, TimeoutError):
+    except UsageLimitExceeded, TimeoutError:
         # The turn's budget, not this run's problem. Straight up to
         # `run_turn`, which owns the allowance -- swallowed here it would
         # become one more agent run apologising, which is the unbudgeted extra
@@ -435,8 +438,11 @@ def note_spoken(call: CallContext, content: str, interrupted: bool) -> None:
 
 
 async def take_turn(
-    call: CallContext, agents: dict[str, Node], prompt: str | None,
-    budget: TurnBudget | None = None, barge: Barge | None = None,
+    call: CallContext,
+    agents: dict[str, Node],
+    prompt: str | None,
+    budget: TurnBudget | None = None,
+    barge: Barge | None = None,
 ) -> tuple[str, TurnFinished]:
     """Everything one turn said, and how it ended. For tests and benchmarks.
 
@@ -448,9 +454,7 @@ async def take_turn(
     done: TurnFinished | None = None
     started = time.perf_counter()
     async for event in run_turn(call, agents, prompt, budget or TurnBudget(), barge):
-        if isinstance(event, TextDelta):
-            said.append(event.text)
-        elif isinstance(event, FixedSpeech):
+        if isinstance(event, TextDelta | FixedSpeech):
             said.append(event.text)
         elif isinstance(event, TurnFinished):
             done = event

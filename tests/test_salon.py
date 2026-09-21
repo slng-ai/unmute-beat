@@ -72,15 +72,16 @@ assert diary.find_slots(PHONE, 'monday', 'haircut', AT)['bookings']
 
 for why, call in {
     'a second booking without asking for one': lambda: diary.save_booking(
-        PHONE, 'book', monday['slots'][1]['slot_id'], '', False, AT),
+        PHONE, 'book', monday['slots'][1]['slot_id'], '', False, AT
+    ),
     'a slot the diary never returned': lambda: diary.save_booking(
-        PHONE, 'book', 'made-up-slot', '', True, AT),
-    'a booking reference nobody holds': lambda: diary.save_booking(
-        PHONE, 'cancel', '', 'BK9999', False, AT),
+        PHONE, 'book', 'made-up-slot', '', True, AT
+    ),
+    'a booking reference nobody holds': lambda: diary.save_booking(PHONE, 'cancel', '', 'BK9999', False, AT),
 }.items():
     try:
         call()
-    except diary.Refused as refused:
+    except diary.RefusedError as refused:
         assert str(refused), why
     else:
         raise AssertionError(f'the diary must refuse {why}')
@@ -108,7 +109,9 @@ assert prefetch_number('+8656696123') == '+8656696123'
 # --- the prompt is branched before the model reads it ------------------------
 
 unverified = prompt('concierge').render(SalonCall(state=SalonState(customer_phone=PHONE)))
-verified = prompt('concierge').render(SalonCall(state=SalonState(customer_phone=PHONE, customer_verified='existing')))
+verified = prompt('concierge').render(
+    SalonCall(state=SalonState(customer_phone=PHONE, customer_verified='existing'))
+)
 assert 'Nobody has been identified' in unverified
 assert 'Nobody has been identified' not in verified
 assert 'has been identified, for the rest of the call' in verified
@@ -117,9 +120,17 @@ assert PHONE not in unverified and PHONE not in verified
 # Only the verification step renders one.
 assert PHONE in prompt('verify').render(SalonCall(state=SalonState(customer_phone=PHONE)))
 
-appointment = Appointment(booking_id='BK0001', service='haircut', date='2026-09-21',
-                          time='09:00', spoken='Monday at 9:00 AM', action='book')
-with_booking = prompt('concierge').render(SalonCall(state=SalonState(customer_verified='existing', appointment=appointment)))
+appointment = Appointment(
+    booking_id='BK0001',
+    service='haircut',
+    date='2026-09-21',
+    time='09:00',
+    spoken='Monday at 9:00 AM',
+    action='book',
+)
+with_booking = prompt('concierge').render(
+    SalonCall(state=SalonState(customer_verified='existing', appointment=appointment))
+)
 assert 'Monday at 9:00 AM' in with_booking
 assert 'Their booking' not in verified, 'no appointment, no section about one'
 
@@ -238,13 +249,16 @@ async def verify_then_book():
     with scripted(
         # It asks for `booking`, which is all the model knows: what the caller
         # wants. That verification comes first is the graph's business.
-        concierge=then(outputs('hand_over', to='booking', because='wants a haircut'),
-                       says("You're all set. Anything else?")),
+        concierge=then(
+            outputs('hand_over', to='booking', because='wants a haircut'),
+            says("You're all set. Anything else?"),
+        ),
         # The readback already happened; this is the turn after their yes. No
         # `then:` -- the step that was interposed pushed where to come back to.
         verify=outputs('confirm_customer', phone=PHONE),
-        booking=then(tool_call('read_diary', when=day, service='haircut'),
-                     says('I can do that. Shall I book it?')),
+        booking=then(
+            tool_call('read_diary', when=day, service='haircut'), says('I can do that. Shall I book it?')
+        ),
     ):
         await probe._turn('can I get a haircut, and my number is right')
 
@@ -277,8 +291,9 @@ async def the_diary_is_the_edge():
 
     day = diary.spoken_day(diary.now().date() + timedelta(days=2), diary.now().date())
     with scripted(
-        concierge=then(tool_call('read_diary', when=day, service='haircut'),
-                       says('I can do that. Which suits you?')),
+        concierge=then(
+            tool_call('read_diary', when=day, service='haircut'), says('I can do that. Which suits you?')
+        ),
     ):
         await probe._turn('can you move my appointment to Saturday?')
 
@@ -341,7 +356,7 @@ async def interpose_costs_one_run():
     assert call.state.agent == 'verify', call.state.agent
     assert call.state.pending == 'booking', call.state.pending
     assert probe.fixed() == [probe.fixed()[0]] and probe.fixed()[0] in AGENTS['verify'].enter, (
-        'the line covering the hop is the interposed step\'s, not the destination\'s'
+        "the line covering the hop is the interposed step's, not the destination's"
     )
 
 
@@ -389,10 +404,8 @@ async def one_kind_b_per_turn():
     probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(
-        concierge=outputs_or_says('hand_over', 'Sorry, what was that?',
-                                  to='complaints', because='loop'),
-        complaints=outputs_or_says('hand_over', 'Sorry, what was that?',
-                                   to='concierge', because='loop'),
+        concierge=outputs_or_says('hand_over', 'Sorry, what was that?', to='complaints', because='loop'),
+        complaints=outputs_or_says('hand_over', 'Sorry, what was that?', to='concierge', because='loop'),
     ):
         await probe._turn('hello?')
 
@@ -423,8 +436,14 @@ async def correction_refuses_stale_slot():
             tool_call('read_diary', when=first.isoformat(), service='haircut'),
             tool_call('read_diary', when=second.isoformat(), service='haircut'),
             # The slot from the first day, after the caller moved to the second.
-            outputs('save_booking', action='book', slot_id=stale['slot_id'],
-                    booking_id='', confirmed=True, additional=False),
+            outputs(
+                'save_booking',
+                action='book',
+                slot_id=stale['slot_id'],
+                booking_id='',
+                confirmed=True,
+                additional=False,
+            ),
             says('That one has gone, I am afraid. Shall I look at the other day?'),
         ),
     ):
@@ -457,8 +476,9 @@ async def save_finishes():
     slot_id = slot['slots'][0]['slot_id']
 
     with scripted(
-        booking=outputs('save_booking', action='book', slot_id=slot_id, booking_id='',
-                        confirmed=True, additional=False),
+        booking=outputs(
+            'save_booking', action='book', slot_id=slot_id, booking_id='', confirmed=True, additional=False
+        ),
     ):
         await probe._turn('yes, book it')
 
@@ -534,8 +554,7 @@ async def the_note_is_said_once():
 
     with scripted(
         complaints=then(
-            tool_call('record_complaint', summary='an uneven haircut',
-                      requested_resolution='a redo'),
+            tool_call('record_complaint', summary='an uneven haircut', requested_resolution='a redo'),
             says('Would you like me to put that redo in the diary?'),
         ),
     ):
@@ -584,10 +603,20 @@ async def refusal_retries():
     async def unconfirmed_then_ask(messages, info: AgentInfo):
         if not seen:
             seen.append('tried')
-            yield {0: DeltaToolCall(name=_output_tool(info, 'save_booking'),
-                                    json_args=json.dumps({'action': 'book', 'slot_id': 'x',
-                                                          'booking_id': '', 'confirmed': False,
-                                                          'additional': False}))}
+            yield {
+                0: DeltaToolCall(
+                    name=_output_tool(info, 'save_booking'),
+                    json_args=json.dumps(
+                        {
+                            'action': 'book',
+                            'slot_id': 'x',
+                            'booking_id': '',
+                            'confirmed': False,
+                            'additional': False,
+                        }
+                    ),
+                )
+            }
         else:
             for chunk in ('Shall I ', 'book it?'):
                 yield chunk
@@ -617,8 +646,9 @@ async def hangs_up():
     # to cross the pipeline -- a probe queued behind this very coroutine. The
     # call hung until the browser gave up.
     assert 'Take care, bye!' in probe.fixed()
-    goodbye = next(i for i, f in enumerate(probe.frames)
-                   if isinstance(f, TTSSpeakFrame) and f.text == 'Take care, bye!')
+    goodbye = next(
+        i for i, f in enumerate(probe.frames) if isinstance(f, TTSSpeakFrame) and f.text == 'Take care, bye!'
+    )
     ends = [i for i, f in enumerate(probe.frames) if isinstance(f, EndWorkerFrame)]
     assert ends, [type(f).__name__ for f in probe.frames]
     assert goodbye < ends[0], [type(f).__name__ for f in probe.frames]

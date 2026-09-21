@@ -21,12 +21,11 @@ What this does differently from the same agency built on a node graph:
 from __future__ import annotations
 
 import os
+from copy import deepcopy
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-
-from copy import deepcopy
-from dataclasses import replace
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr, Tool, ToolOutput
@@ -51,7 +50,6 @@ from voice.harness import STRICT, Exit, Node, claim_or_refuse, filler_hook, one_
 from voice.harness import lent as _lent
 from voice.harness import pick as _pick
 from voice.harness import present as _present
-
 
 # --- the service boundary ----------------------------------------------------
 
@@ -117,10 +115,16 @@ class ComplaintRecord(BaseModel):
 
 # Actions that change where the caller is, or write to the salon. At most one
 # of these runs per model response; see `one_action_per_reply`.
-ACTIONS = frozenset({
-    'hand_over', 'confirm_customer', 'save_booking', 'hang_up',
-    'record_complaint', 'read_diary',
-})
+ACTIONS = frozenset(
+    {
+        'hand_over',
+        'confirm_customer',
+        'save_booking',
+        'hang_up',
+        'record_complaint',
+        'read_diary',
+    }
+)
 
 # What the caller hears the moment the diary is written, said by this code. The
 # `{spoken}` phrase is the diary's own, computed once, so two turns cannot
@@ -130,17 +134,17 @@ SAVED: dict[str, tuple[str, ...]] = {
     'booked': (
         "You're all set for {spoken}. Anything else I can help with?",
         "Lovely, that's your {service} booked for {spoken}. What else can I do?",
-        "Done, {spoken}. Anything else?",
+        'Done, {spoken}. Anything else?',
     ),
     'moved': (
         "That's moved to {spoken}. Anything else I can help with?",
         "Right, you're down for {spoken} now. What else can I do?",
-        "Moved to {spoken}. Anything else?",
+        'Moved to {spoken}. Anything else?',
     ),
     'cancelled': (
         "That's cancelled for you. Anything else I can help with?",
         "Right, that's cancelled. What else can I do?",
-        "Cancelled. Anything else?",
+        'Cancelled. Anything else?',
     ),
 }
 
@@ -286,7 +290,9 @@ async def get_a_manager(ctx: RunContext[SalonCall]) -> dict:
     return {'transferred': False, 'reason': 'no phone leg: this caller is on a web session'}
 
 
-async def record_complaint(ctx: RunContext[SalonCall], summary: str, requested_resolution: str) -> dict:
+async def record_complaint(
+    ctx: RunContext[SalonCall], summary: str, requested_resolution: str
+) -> ComplaintRecord:
     """Write the caller's complaint down, once they have agreed to your summary of it.
 
     Recording what they asked for is not approving it.
@@ -297,7 +303,9 @@ async def record_complaint(ctx: RunContext[SalonCall], summary: str, requested_r
     """
     claim_or_refuse(ctx, ACTIONS)
     if not _present(ctx.deps.state.customer_verified):
-        raise ModelRetry('A complaint record needs an owner and nobody is identified yet. Hand to the verify agent first.')
+        raise ModelRetry(
+            'A complaint record needs an owner and nobody is identified yet. Hand to the verify agent first.'
+        )
     recorded = ComplaintRecord.model_validate(
         diary.record_complaint(ctx.deps.state.customer_phone, summary, requested_resolution)
     )
@@ -310,7 +318,7 @@ async def record_complaint(ctx: RunContext[SalonCall], summary: str, requested_r
 
 async def read_diary(
     ctx: RunContext[SalonCall], when: str, service: Literal['any', 'haircut', 'hair-color', 'blowout']
-) -> dict:
+) -> Slots:
     """Read the diary: what this caller already holds, and what is free on the day they named.
 
     One call answers both, so you never need a second. It works the day out from
@@ -324,10 +332,10 @@ async def read_diary(
     """
     claim_or_refuse(ctx, ACTIONS)
     if not _present(ctx.deps.state.customer_verified):
-        raise ModelRetry('The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.')
-    found = Slots.model_validate(
-        diary.find_slots(ctx.deps.state.customer_phone, when, service, diary.now())
-    )
+        raise ModelRetry(
+            'The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.'
+        )
+    found = Slots.model_validate(diary.find_slots(ctx.deps.state.customer_phone, when, service, diary.now()))
     # The day this look confirmed. `save_booking` refuses a slot from any other
     # one, so a caller who changes their mind about the day cannot be booked
     # onto the day they changed away from. The model is not asked whether the
@@ -361,7 +369,6 @@ def hand_over_for(exits: tuple[Exit, ...]):
     sent, and pydantic-ai hands back its own retry if a provider ignores the
     enum anyway.
     """
-
     names = tuple(dict.fromkeys(exit.to for exit in exits))
 
     async def hand_over(ctx, to, because) -> Handoff:
@@ -394,7 +401,10 @@ def hand_over_for(exits: tuple[Exit, ...]):
     # `from __future__ import annotations` every annotation is a string, and
     # pydantic-ai resolves `Literal[exits]` in a scope where `exits` is gone.
     hand_over.__annotations__ = {
-        'ctx': RunContext[SalonCall], 'to': Literal[names], 'because': str, 'return': Handoff,
+        'ctx': RunContext[SalonCall],
+        'to': Literal[names],  # ty: ignore[invalid-type-form]
+        'because': str,
+        'return': Handoff,
     }
     return hand_over
 
@@ -457,7 +467,9 @@ async def save_booking(
     """
     claim_or_refuse(ctx, ACTIONS)
     if not confirmed:
-        raise ModelRetry('Nothing was saved. Say the service, the day and the time back in one sentence, ask one yes-or-no question, and call this again on their yes.')
+        raise ModelRetry(
+            'Nothing was saved. Say the service, the day and the time back in one sentence, ask one yes-or-no question, and call this again on their yes.'
+        )
     if not _present(ctx.deps.state.customer_verified):
         raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
     # A slot from a day the diary is no longer being read for. The caller named
@@ -473,8 +485,10 @@ async def save_booking(
             'they actually want and offer what it returns.'
         )
     try:
-        saved = diary.save_booking(ctx.deps.state.customer_phone, action, slot_id, booking_id, additional, diary.now())
-    except diary.Refused as refused:
+        saved = diary.save_booking(
+            ctx.deps.state.customer_phone, action, slot_id, booking_id, additional, diary.now()
+        )
+    except diary.RefusedError as refused:
         # The diary's own words, which name what is actually possible instead of
         # leaving the model to guess a new slot.
         raise ModelRetry(str(refused)) from None
@@ -482,8 +496,12 @@ async def save_booking(
     # reach the state through an annotation nobody checks.
     written = Saved.model_validate(saved)
     appointment = Appointment(
-        booking_id=written.booking_id, service=written.service, date=written.date,
-        time=written.time, spoken=written.spoken, action=action,
+        booking_id=written.booking_id,
+        service=written.service,
+        date=written.date,
+        time=written.time,
+        spoken=written.spoken,
+        action=action,
     )
     # Said here rather than handed to a model to say. The diary already computed
     # the one right phrasing, so a second request only risks getting it wrong:
@@ -500,9 +518,12 @@ async def save_booking(
     # that reads fine and breaks under a later edit.
     going_back_to = ctx.deps.resume('concierge')
     ctx.deps.commit(appointment=appointment, agent=going_back_to)
-    await ctx.deps.speak_now(_pick(f'saved:{written.status}', SAVED[written.status]).format(
-        spoken=written.spoken, service=written.service.replace('hair-color', 'hair colour'),
-    ))
+    await ctx.deps.speak_now(
+        _pick(f'saved:{written.status}', SAVED[written.status]).format(
+            spoken=written.spoken,
+            service=written.service.replace('hair-color', 'hair colour'),
+        )
+    )
     return f'{written.status}: {written.spoken}'
 
 
@@ -512,15 +533,21 @@ async def save_booking(
 # Spoken while a tool runs, by us rather than by the model. One line per
 # silence, so a handoff line already spoken suppresses these.
 FILLER: dict[str, tuple[str, ...]] = {
-    'read_diary': ("Let me see what's free.", "One moment, checking the diary."),
+    'read_diary': ("Let me see what's free.", 'One moment, checking the diary.'),
     # No line for `record_complaint`: it speaks `NOTED` itself when it returns,
     # which covers the same gap and is the only sentence the caller needs.
 }
 
 
 def build(
-    name: AgentName, tools=(), finishers=(), exits: tuple[Exit, ...] = (), enter: tuple[str, ...] = (),
-    requires: tuple[str, ...] = (), satisfied_by: str = '', model=MODEL,
+    name: AgentName,
+    tools=(),
+    finishers=(),
+    exits: tuple[Exit, ...] = (),
+    enter: tuple[str, ...] = (),
+    requires: tuple[str, ...] = (),
+    satisfied_by: str = '',
+    model=MODEL,
 ) -> Node:
     """One step: its agent, its legal exits, and what has to hold before it runs."""
     # `dict.fromkeys`, not `set`: two exits can name one step -- `booking` is
@@ -604,7 +631,7 @@ def build(
         return kept
 
     return Node(
-        Agent[SalonCall, object](
+        Agent[SalonCall, object](  # ty: ignore[no-matching-overload]
             model,
             name=name,  # labels this agent's span in Langfuse
             deps_type=SalonCall,
@@ -624,8 +651,7 @@ def build(
             # `only_reachable` hides the borrowed ones while their edge is shut.
             tools=[
                 *(Tool(fn, sequential=fn.__name__ in ACTIONS) for fn in tools),
-                *(Tool(fn, sequential=fn.__name__ in ACTIONS)
-                  for exit in exits for fn in exit.via),
+                *(Tool(fn, sequential=fn.__name__ in ACTIONS) for exit in exits for fn in exit.via),
             ],
             capabilities=[
                 filler_hook(FILLER),
@@ -666,7 +692,9 @@ def unverified(state: SalonState) -> bool:
 # `await worker.run(..., deps=ctx.deps, usage=ctx.usage)` from inside a tool.
 AGENTS: dict[str, Node] = {
     'concierge': build(
-        'concierge', tools=[look_up_salon_info, get_a_manager], finishers=[hang_up],
+        'concierge',
+        tools=[look_up_salon_info, get_a_manager],
+        finishers=[hang_up],
         # `booking` twice, and the pair is the whole point. Unguarded, it is a
         # `hand_over` the model may choose whoever is calling: the caller wanting
         # to book is what the front desk knows, and whether anyone has to be
@@ -687,7 +715,8 @@ AGENTS: dict[str, Node] = {
         ),
     ),
     'verify': build(
-        'verify', finishers=[confirm_customer],
+        'verify',
+        finishers=[confirm_customer],
         # Guarded, because an incomplete number is a reason to ask again and not
         # a reason to leave. Unguarded, a live call on 2026-09-20 went
         # `verify -> concierge ("The caller gave an incomplete phone number and
@@ -698,19 +727,29 @@ AGENTS: dict[str, Node] = {
         # With no exit, this step still has `str`: it asks again, which is what
         # it was always meant to do.
         exits=(Exit('concierge', verified),),
-        enter=("Let me confirm who I'm speaking to.", "One second, let me check who I've got.",
-               "Right, let me make sure I have you."),
+        enter=(
+            "Let me confirm who I'm speaking to.",
+            "One second, let me check who I've got.",
+            'Right, let me make sure I have you.',
+        ),
     ),
     'booking': build(
-        'booking', tools=[read_diary], finishers=[save_booking],
+        'booking',
+        tools=[read_diary],
+        finishers=[save_booking],
         exits=(Exit('concierge'), Exit('complaints')),
         # The ordering rule, as a fact instead of a sentence in a prompt.
-        requires=('customer_verified',), satisfied_by='verify',
-        enter=("Let me have a look at the diary.", "One second, I'll check the diary.",
-               "Right, let me see what's free."),
+        requires=('customer_verified',),
+        satisfied_by='verify',
+        enter=(
+            'Let me have a look at the diary.',
+            "One second, I'll check the diary.",
+            "Right, let me see what's free.",
+        ),
     ),
     'complaints': build(
-        'complaints', tools=[look_up_refund_policy, record_complaint, get_a_manager],
+        'complaints',
+        tools=[look_up_refund_policy, record_complaint, get_a_manager],
         finishers=[hang_up],
         # `record_complaint` needs an owner, so this step sends them to be
         # identified -- and only while there is anybody to identify.

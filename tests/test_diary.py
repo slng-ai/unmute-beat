@@ -26,7 +26,7 @@ ALICE, BOB = '+34600111222', '+34934567890'
 def _refused(fn, *args, **kwargs) -> str:
     try:
         fn(*args, **kwargs)
-    except diary.Refused as refused:
+    except diary.RefusedError as refused:
         return str(refused)
     raise AssertionError('the diary accepted something it must refuse')
 
@@ -87,9 +87,9 @@ def a_fabricated_slot_is_refused():
     """
     diary.reset()
     for invented in (
-        f'{TOMORROW.isoformat()}T0307|haircut',   # outside opening hours
-        f'{TOMORROW.isoformat()}T0915|haircut',   # off the half-hour grid
-        f'{TOMORROW.isoformat()}T0900|nails',     # not a service
+        f'{TOMORROW.isoformat()}T0307|haircut',  # outside opening hours
+        f'{TOMORROW.isoformat()}T0915|haircut',  # off the half-hour grid
+        f'{TOMORROW.isoformat()}T0900|nails',  # not a service
         'have-a-slot',
         '',
     ):
@@ -253,14 +253,19 @@ def anything_outside_the_policy_is_asked_about():
 
 
 def a_modifier_the_policy_cannot_do_is_asked_about():
-    """"A week on Tuesday" is not next Tuesday, and must not be answered as it.
+    """ "A week on Tuesday" is not next Tuesday, and must not be answered as it.
 
     A weekday match on its own found "Tuesday" here and returned the next one:
     seven days early, a real date, and silent. The phrases this policy does
     not implement are named and refused, so the agent asks.
     """
-    for shifted in ('a week on Tuesday', 'the Tuesday after next', 'in two weeks on Friday',
-                    'the following Monday', 'in 3 weeks'):
+    for shifted in (
+        'a week on Tuesday',
+        'the Tuesday after next',
+        'in two weeks on Friday',
+        'the following Monday',
+        'in 3 weeks',
+    ):
         assert diary.resolve_day(shifted, TODAY) is None, shifted
     # The plain forms it does implement still work.
     assert diary.resolve_day('tuesday', TODAY) == date(2026, 9, 22)
@@ -268,7 +273,7 @@ def a_modifier_the_policy_cannot_do_is_asked_about():
 
 
 def a_weekday_must_be_a_whole_word():
-    """"satur" inside another word used to resolve a real Saturday.
+    """ "satur" inside another word used to resolve a real Saturday.
 
     The worst kind of wrong answer: it returns a day, so nothing downstream
     has any reason to doubt it and the caller is offered times for a day they
@@ -321,8 +326,10 @@ def the_clocks_changing_does_not_move_the_salon():
     monday = diary.find_slots(ALICE, 'today', 'haircut', after_autumn)
     assert monday['status'] == 'ok' and monday['date'] == '2026-10-26', monday
     # 29 March 2026 is the spring change, also a Sunday.
-    assert diary.find_slots(ALICE, 'today', 'haircut',
-                            datetime(2026, 3, 29, 10, 0, tzinfo=diary.TZ))['status'] == 'closed'
+    assert (
+        diary.find_slots(ALICE, 'today', 'haircut', datetime(2026, 3, 29, 10, 0, tzinfo=diary.TZ))['status']
+        == 'closed'
+    )
     # An hour's worth of booking still lands on the wall-clock time it names.
     spring_monday = datetime(2026, 3, 30, 10, 0, tzinfo=diary.TZ)
     offered = _slot(ALICE, 'today', 'haircut', at=spring_monday, time_of_day='11:00')

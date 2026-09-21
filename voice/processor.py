@@ -58,9 +58,7 @@ def _last_user_text(context: LLMContext) -> str | None:
         if isinstance(content, str):
             return content.strip() or None
         if isinstance(content, list):
-            text = ' '.join(
-                part.get('text', '') for part in content if isinstance(part, dict)
-            ).strip()
+            text = ' '.join(part.get('text', '') for part in content if isinstance(part, dict)).strip()
             return text or None
     return None
 
@@ -202,9 +200,7 @@ class PydanticAgentProcessor(FrameProcessor):
             self._barge = core.Barge()
             self._interrupted = False
             try:
-                async for event in core.run_turn(
-                    self._call, self._agents, prompt, self._budget, self._barge
-                ):
+                async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
                     match event:
                         case core.RunStarted():
                             run_started = time.perf_counter()

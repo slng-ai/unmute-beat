@@ -38,10 +38,16 @@ from salon.state import SalonCall, SalonState  # noqa: E402
 TURNS = (
     ('concierge', 'I need to book a haircut for Monday', {}),
     ('concierge', 'what time do you close on Saturday?', {}),
-    ('booking', 'can I get a haircut on Monday morning?',
-     {'customer_verified': 'existing', 'customer_phone': '+34600111222'}),
-    ('complaints', 'my colour came out completely wrong, can I get a refund?',
-     {'customer_verified': 'existing', 'customer_phone': '+34600111222'}),
+    (
+        'booking',
+        'can I get a haircut on Monday morning?',
+        {'customer_verified': 'existing', 'customer_phone': '+34600111222'},
+    ),
+    (
+        'complaints',
+        'my colour came out completely wrong, can I get a refund?',
+        {'customer_verified': 'existing', 'customer_phone': '+34600111222'},
+    ),
 )
 
 
@@ -53,9 +59,7 @@ async def one(step: str, said: str, facts: dict, model: str | None):
     if override:
         override.__enter__()
     try:
-        result = await node.agent.run(
-            said, deps=call, output_type=node.outputs(call.state)
-        )
+        result = await node.agent.run(said, deps=call, output_type=node.outputs(call.state))
     finally:
         if override:
             override.__exit__(None, None, None)
@@ -104,7 +108,8 @@ async def main() -> None:
     calls = covered + tally['call, silent']
     print(
         f'\nR1: the model covered its own gap on {covered}/{calls} tool turns.'
-        if calls else '\nR1: no tool turn happened; nothing to say.'
+        if calls
+        else '\nR1: no tool turn happened; nothing to say.'
     )
     if calls and not covered:
         print('So the `enter:` and filler lines are load-bearing, not belt-and-braces.')

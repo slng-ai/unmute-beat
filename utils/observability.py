@@ -37,9 +37,7 @@ def _langfuse_words(span) -> dict | None:
     if side := _SIDE.get(attributes.get('gen_ai.operation.name')):
         words['langfuse.observation.type'] = 'generation'
         words['langfuse.observation.model.name'] = attributes.get('gen_ai.request.model', '')
-        words[f'langfuse.observation.{side}'] = (
-            attributes.get('transcript') or attributes.get('text') or ''
-        )
+        words[f'langfuse.observation.{side}'] = attributes.get('transcript') or attributes.get('text') or ''
     return words
 
 

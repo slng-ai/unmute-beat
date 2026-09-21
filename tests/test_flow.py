@@ -20,11 +20,10 @@ import asyncio
 import json
 from contextlib import ExitStack
 
+from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
 from pydantic_ai import ModelResponse, RetryPromptPart, ToolCallPart
 from pydantic_ai.messages import ModelRequest
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
-from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
 
 from salon import diary
 from salon.agents import AGENTS
@@ -93,13 +92,21 @@ async def _offered(node, state) -> dict[str, list]:
     seen: dict[str, list] = {'requests': []}
 
     async def probe(messages, info: AgentInfo):
-        to = next((t.parameters_json_schema.get('properties', {}).get('to')
-                   for t in info.output_tools if t.name == 'hand_over'), None)
-        seen['requests'].append({
-            'tools': sorted(t.name for t in info.function_tools),
-            'outputs': sorted(t.name for t in info.output_tools),
-            'to': (to or {}).get('enum'),
-        })
+        to = next(
+            (
+                t.parameters_json_schema.get('properties', {}).get('to')
+                for t in info.output_tools
+                if t.name == 'hand_over'
+            ),
+            None,
+        )
+        seen['requests'].append(
+            {
+                'tools': sorted(t.name for t in info.function_tools),
+                'outputs': sorted(t.name for t in info.output_tools),
+                'to': (to or {}).get('enum'),
+            }
+        )
         yield 'ok'
 
     with node.agent.override(model=FunctionModel(stream_function=probe)):
@@ -150,15 +157,21 @@ async def a_stale_destination_is_refused_at_execution():
 
     def hands_to_verify(messages, info: AgentInfo):
         async def stream(messages, info):
-            if any(isinstance(p, RetryPromptPart) for m in messages
-                   if isinstance(m, ModelRequest) for p in m.parts):
+            if any(
+                isinstance(p, RetryPromptPart)
+                for m in messages
+                if isinstance(m, ModelRequest)
+                for p in m.parts
+            ):
                 yield 'Sorry, what was that?'
                 return
             # Close the edge behind the model's back, exactly as a tool
             # running earlier in the same reply would have.
             call.commit(customer_verified='')
-            yield {0: DeltaToolCall(name='hand_over',
-                                    json_args=json.dumps({'to': 'verify', 'because': 'stale'}))}
+            yield {
+                0: DeltaToolCall(name='hand_over', json_args=json.dumps({'to': 'verify', 'because': 'stale'}))
+            }
+
         return stream(messages, info)
 
     with scripted(concierge=hands_to_verify):
@@ -180,15 +193,21 @@ async def the_schema_is_rebuilt_between_requests_in_one_run():
     seen: list[dict] = []
 
     async def identify_then_answer(messages, info: AgentInfo):
-        to = next((t.parameters_json_schema.get('properties', {}).get('to')
-                   for t in info.output_tools if t.name == 'hand_over'), None)
-        seen.append({'tools': sorted(t.name for t in info.function_tools),
-                     'to': (to or {}).get('enum')})
+        to = next(
+            (
+                t.parameters_json_schema.get('properties', {}).get('to')
+                for t in info.output_tools
+                if t.name == 'hand_over'
+            ),
+            None,
+        )
+        seen.append({'tools': sorted(t.name for t in info.function_tools), 'to': (to or {}).get('enum')})
         if len(seen) == 1:
             # Something in this run changes the state the guards read.
             call.commit(customer_verified='existing')
-            yield {0: DeltaToolCall(name='look_up_salon_info',
-                                    json_args=json.dumps({'query': 'opening hours'}))}
+            yield {
+                0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': 'opening hours'}))
+            }
         else:
             yield 'We are open until six.'
 
@@ -223,15 +242,18 @@ async def a_second_action_is_refused_before_it_runs():
     probe = Probe(call)
 
     async def read_and_leave(messages, info: AgentInfo):
-        if any(isinstance(p, RetryPromptPart) for m in messages
-               if isinstance(m, ModelRequest) for p in m.parts):
+        if any(
+            isinstance(p, RetryPromptPart) for m in messages if isinstance(m, ModelRequest) for p in m.parts
+        ):
             yield 'Sorry, one thing at a time.'
             return
         yield {
-            0: DeltaToolCall(name='read_diary',
-                             json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})),
-            1: DeltaToolCall(name='hand_over',
-                             json_args=json.dumps({'to': 'complaints', 'because': 'also this'})),
+            0: DeltaToolCall(
+                name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+            ),
+            1: DeltaToolCall(
+                name='hand_over', json_args=json.dumps({'to': 'complaints', 'because': 'also this'})
+            ),
         }
 
     with scripted(concierge=read_and_leave, booking=_says('Anything else?')):
@@ -259,15 +281,18 @@ async def an_ordinary_tool_is_refused_when_it_is_the_second():
     before = call.state.booking_day
 
     async def leave_and_read(messages, info: AgentInfo):
-        if any(isinstance(p, RetryPromptPart) for m in messages
-               if isinstance(m, ModelRequest) for p in m.parts):
+        if any(
+            isinstance(p, RetryPromptPart) for m in messages if isinstance(m, ModelRequest) for p in m.parts
+        ):
             yield 'Sorry, one thing at a time.'
             return
         yield {
-            0: DeltaToolCall(name='hand_over',
-                             json_args=json.dumps({'to': 'complaints', 'because': 'first'})),
-            1: DeltaToolCall(name='read_diary',
-                             json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})),
+            0: DeltaToolCall(
+                name='hand_over', json_args=json.dumps({'to': 'complaints', 'because': 'first'})
+            ),
+            1: DeltaToolCall(
+                name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+            ),
         }
 
     with scripted(concierge=leave_and_read, complaints=_says('Tell me what happened.')):
@@ -291,15 +316,21 @@ async def the_winner_is_the_same_every_time():
         probe = Probe(call)
 
         async def both(messages, info: AgentInfo):
-            if any(isinstance(p, RetryPromptPart) for m in messages
-                   if isinstance(m, ModelRequest) for p in m.parts):
+            if any(
+                isinstance(p, RetryPromptPart)
+                for m in messages
+                if isinstance(m, ModelRequest)
+                for p in m.parts
+            ):
                 yield 'ok'
                 return
             yield {
-                0: DeltaToolCall(name='read_diary',
-                                 json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})),
-                1: DeltaToolCall(name='hand_over',
-                                 json_args=json.dumps({'to': 'complaints', 'because': 'x'})),
+                0: DeltaToolCall(
+                    name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+                ),
+                1: DeltaToolCall(
+                    name='hand_over', json_args=json.dumps({'to': 'complaints', 'because': 'x'})
+                ),
             }
 
         with scripted(concierge=both, booking=_says('Anything else?')):
@@ -382,14 +413,15 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
     async def talk_then_call(messages, info: AgentInfo):
         already = any(
             isinstance(p, ToolCallPart) and p.tool_name == 'look_up_salon_info'
-            for m in messages if isinstance(m, ModelResponse) for p in m.parts
+            for m in messages
+            if isinstance(m, ModelResponse)
+            for p in m.parts
         )
         if already:
             yield 'We close at six.'
             return
         yield 'Let me see. '
-        yield {0: DeltaToolCall(name='look_up_salon_info',
-                                json_args=json.dumps({'query': 'opening hours'}))}
+        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': 'opening hours'}))}
 
     with scripted(concierge=talk_then_call):
         await probe._turn('when do you close?')
@@ -439,8 +471,11 @@ async def a_cancelled_tool_is_not_a_move():
 
     async def read_then_cancel(messages, info: AgentInfo):
         probe.interrupt()  # the caller speaks over the tool
-        yield {0: DeltaToolCall(name='read_diary',
-                                json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'}))}
+        yield {
+            0: DeltaToolCall(
+                name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+            )
+        }
 
     with scripted(concierge=read_then_cancel):
         await probe._turn('anything tomorrow?')
@@ -451,7 +486,8 @@ async def a_cancelled_tool_is_not_a_move():
 def _says(text, chunk=8):
     async def stream(messages, info: AgentInfo):
         for start in range(0, len(text), chunk):
-            yield text[start:start + chunk]
+            yield text[start : start + chunk]
+
     return stream
 
 

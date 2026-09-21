@@ -94,9 +94,7 @@ SCENARIOS: dict[str, tuple[str, ...]] = {
         'yes, that is my number',
         'yes please, write it down',
     ),
-    'manager': (
-        'I want to speak to a manager',
-    ),
+    'manager': ('I want to speak to a manager',),
     'knowledge': (
         'how much is a hair colour?',
         'and do you have parking?',
@@ -148,29 +146,39 @@ async def run_scenario(name: str, said: tuple[str, ...], repeat: int = 0) -> lis
     for index, turn in enumerate(said):
         counter.reset()
         started = time.monotonic()
-        row = {'scenario': name, 'turn': index, 'run': repeat,
-               'said': turn, 'at': datetime.now(UTC).isoformat()}
+        row = {
+            'scenario': name,
+            'turn': index,
+            'run': repeat,
+            'said': turn,
+            'at': datetime.now(UTC).isoformat(),
+        }
         try:
             await counter._turn(turn)
         except Exception as error:
             # Kept, not dropped. A turn that failed is a result, and a
             # benchmark that reports only the turns that worked is reporting
             # the wrong population.
-            rows.append(row | {'error': f'{type(error).__name__}: {error}'[:200],
-                               'seconds': time.monotonic() - started})
+            rows.append(
+                row
+                | {'error': f'{type(error).__name__}: {error}'[:200], 'seconds': time.monotonic() - started}
+            )
             break
-        rows.append(row | {
-            # The turn's own usage, reset by the processor at the top of each
-            # turn, so this is that turn's requests and not a running total.
-            'runs': counter.requests(),
-            'seconds': time.monotonic() - started,
-            # Anything at all reaching the caller, model speech or a fixed line.
-            # A goodbye goes out as a fixed line, so counting only model text
-            # reported every hang-up turn as silence.
-            'spoke': counter.spoke or counter.fixed > 0,
-            'fixed_lines': counter.fixed,
-            'step': call.state.agent,
-        })
+        rows.append(
+            row
+            | {
+                # The turn's own usage, reset by the processor at the top of each
+                # turn, so this is that turn's requests and not a running total.
+                'runs': counter.requests(),
+                'seconds': time.monotonic() - started,
+                # Anything at all reaching the caller, model speech or a fixed line.
+                # A goodbye goes out as a fixed line, so counting only model text
+                # reported every hang-up turn as silence.
+                'spoke': counter.spoke or counter.fixed > 0,
+                'fixed_lines': counter.fixed,
+                'step': call.state.agent,
+            }
+        )
         if counter.ended:
             break
     return rows
@@ -215,12 +223,12 @@ async def main() -> None:
     seconds = [r['seconds'] for r in good]
     silent = [r for r in good if not r['spoke']]
 
-    print(f'\n=== configuration {label}: {repeats} x {len(SCENARIOS)} scenarios, '
-          f'{len(good)} caller turns ===')
+    print(
+        f'\n=== configuration {label}: {repeats} x {len(SCENARIOS)} scenarios, {len(good)} caller turns ==='
+    )
     print(f'  model requests per turn     mean {statistics.fmean(runs):.2f}   {spread(runs)}')
     print(f'  seconds per turn            mean {statistics.fmean(seconds):.2f}   {spread(seconds)}')
-    print(f'  turns that said nothing     {len(silent)}/{len(good)}'
-          '   <- a caller sitting in silence')
+    print(f'  turns that said nothing     {len(silent)}/{len(good)}   <- a caller sitting in silence')
     if errors:
         print(f'  turns that failed           {len(errors)}')
         for row in errors[:5]:

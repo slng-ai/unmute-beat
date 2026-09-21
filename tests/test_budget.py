@@ -19,10 +19,9 @@ import asyncio
 import json
 from contextlib import ExitStack
 
+from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
 from pydantic_ai import ModelRequest, RetryPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
-from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
 
 from salon import diary
 from salon.agents import AGENTS
@@ -61,7 +60,8 @@ def scripted(**by_agent):
 def says(text, chunk=8):
     async def stream(messages, info: AgentInfo):
         for start in range(0, len(text), chunk):
-            yield text[start:start + chunk]
+            yield text[start : start + chunk]
+
     return stream
 
 
@@ -70,8 +70,8 @@ def hands_to(name, because='loop'):
         if not any(t.name == 'hand_over' for t in info.output_tools):
             yield 'Sorry, what was that?'
             return
-        yield {0: DeltaToolCall(name='hand_over',
-                                json_args=json.dumps({'to': name, 'because': because}))}
+        yield {0: DeltaToolCall(name='hand_over', json_args=json.dumps({'to': name, 'because': because}))}
+
     return stream
 
 
@@ -144,8 +144,7 @@ async def the_budget_is_not_refilled_by_exhausting_it():
     first = probe.runs()
 
     probe.frames.clear()
-    with scripted(concierge=says('We are open until six.'),
-                  complaints=says('We are open until six.')):
+    with scripted(concierge=says('We are open until six.'), complaints=says('We are open until six.')):
         await probe._turn('when do you close?')
 
     assert first == 2, first
@@ -192,8 +191,11 @@ async def the_request_limit_stops_a_turn_that_never_hops():
 
     async def never_settles(messages, info: AgentInfo):
         asked.append(1)
-        yield {0: DeltaToolCall(name='look_up_salon_info',
-                                json_args=json.dumps({'query': f'question {len(asked)}'}))}
+        yield {
+            0: DeltaToolCall(
+                name='look_up_salon_info', json_args=json.dumps({'query': f'question {len(asked)}'})
+            )
+        }
 
     with scripted(concierge=never_settles):
         await probe._turn('tell me everything')
@@ -211,8 +213,7 @@ async def the_tool_limit_is_its_own_number():
 
     async def keep_looking(messages, info: AgentInfo):
         ran.append(1)
-        yield {0: DeltaToolCall(name='look_up_salon_info',
-                                json_args=json.dumps({'query': f'q{len(ran)}'}))}
+        yield {0: DeltaToolCall(name='look_up_salon_info', json_args=json.dumps({'query': f'q{len(ran)}'}))}
 
     with scripted(concierge=keep_looking):
         await probe._turn('tell me everything')
@@ -288,8 +289,7 @@ async def repair_retries_are_bounded():
 
     async def always_wrong(messages, info: AgentInfo):
         attempts.append(1)
-        yield {0: DeltaToolCall(name='confirm_customer',
-                                json_args=json.dumps({'phone': '+348340464'}))}
+        yield {0: DeltaToolCall(name='confirm_customer', json_args=json.dumps({'phone': '+348340464'}))}
 
     with scripted(verify=always_wrong):
         await probe._turn('my number is eight three four oh four six four')

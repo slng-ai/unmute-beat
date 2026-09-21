@@ -38,7 +38,7 @@ def prompt(name: str) -> TemplateStr[Call]:
 # never to, because a generated "let me check" costs the round trip it is meant
 # to cover. This line goes to TTS the moment the call is validated.
 FILLER: dict[str, tuple[str, ...]] = {
-    'confirm_phone': ("Let me get that written down.", "One second, saving that."),
+    'confirm_phone': ('Let me get that written down.', 'One second, saving that.'),
 }
 
 # --- tools -------------------------------------------------------------------
@@ -79,7 +79,7 @@ async def hand_over(ctx: RunContext[Call], to: AgentName, because: str) -> Hando
     return Handoff(to=to, because=because)
 
 
-def build(name: AgentName, tools: list = []) -> Agent[Call, str | Handoff]:
+def build(name: AgentName, tools: list | None = None) -> Agent[Call, str | Handoff]:
     return Agent[Call, str | Handoff](
         MODEL,
         name=name,  # labels this agent's span in Langfuse
@@ -90,7 +90,7 @@ def build(name: AgentName, tools: list = []) -> Agent[Call, str | Handoff]:
         # time-to-first-word would become time-to-last-token.
         output_type=[str, hand_over],  # type: ignore[arg-type]
         instructions=prompt(name),
-        tools=tools,
+        tools=tools or [],
         capabilities=[filler_hook(FILLER)],
         model_settings={'service_tier': 'priority'},
     )
@@ -105,6 +105,6 @@ AGENTS: dict[str, Node] = {
     'concierge': Node(build('concierge')),
     'intake': Node(
         build('intake', [confirm_phone]),
-        enter=("Of course, let me take that down.", "Sure, go ahead."),
+        enter=('Of course, let me take that down.', 'Sure, go ahead.'),
     ),
 }

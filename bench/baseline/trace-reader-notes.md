@@ -29,7 +29,7 @@ convention in its output — but not neither.
 ## 2. `print_usage` counts STT and TTS as generations
 
 ```python
-if span.get("type") != "GENERATION" or not details:
+if span.get('type') != 'GENERATION' or not details:
     continue
 ```
 

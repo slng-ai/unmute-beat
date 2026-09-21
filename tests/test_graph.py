@@ -48,6 +48,7 @@ async def _reachable_tools(node, state) -> set[str]:
                 pass
     return seen
 
+
 for name, node in AGENTS.items():
     for exit in node.exits:
         assert exit.to in STEPS, f'{name} exits to {exit.to!r}, which is not a step'
@@ -89,7 +90,9 @@ def prerequisite_interposed():
     state = SalonState()
     # `route` decides and writes nothing: the step to enter and what is left
     # waiting come back together, so its caller commits them as one.
-    assert route(state, AGENTS, 'booking') == ('verify', 'booking'), 'nobody is identified, so verify runs first'
+    assert route(state, AGENTS, 'booking') == ('verify', 'booking'), (
+        'nobody is identified, so verify runs first'
+    )
     assert state.pending is None, 'and route itself changed nothing'
     # And the model was never asked: the front desk said "booking" and the
     # graph, not a request, worked out that verification comes first.
@@ -170,6 +173,7 @@ def round_trip():
 
 def no_model_request_on_kind_a():
     """The invariant. A graph move that costs a round trip is not a graph move."""
+
     async def explode(messages, info: AgentInfo):
         raise AssertionError('route ran a model; a deterministic hop must cost nothing')
         yield  # unreachable, and here only to make this an async generator
@@ -269,7 +273,9 @@ async def a_shut_edge_lends_nothing():
     fresh = SalonState()
     assert moved_by(fresh, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'concierge'
     assert 'read_diary' not in await _reachable_tools(AGENTS['concierge'], fresh)
-    assert 'read_diary' in await _reachable_tools(AGENTS['concierge'], SalonState(customer_verified='existing'))
+    assert 'read_diary' in await _reachable_tools(
+        AGENTS['concierge'], SalonState(customer_verified='existing')
+    )
     # The step that owns it always has it, guard or no guard.
     assert 'read_diary' in await _reachable_tools(AGENTS['booking'], fresh)
 

@@ -38,16 +38,13 @@ from dataclasses import dataclass
 
 _CA = '/etc/ssl/cert.pem'
 SSL_CONTEXT = (
-    ssl.create_default_context(cafile=_CA)
-    if pathlib.Path(_CA).exists()
-    else ssl.create_default_context()
+    ssl.create_default_context(cafile=_CA) if pathlib.Path(_CA).exists() else ssl.create_default_context()
 )
 
 # `completionStartTime` is the whole point of number 2 and does not come back
 # without `time`; `trace_context` is what carries `parentObservationId`, which
 # is the whole point of number 1.
 FIELDS = 'core,basic,time,io,model,usage,metrics,trace_context'
-
 
 
 def load_env_file(path: pathlib.Path) -> None:
@@ -67,7 +64,9 @@ def api_get(host: str, auth: str, path: str, params: dict[str, str]) -> dict:
         with urllib.request.urlopen(request, timeout=60, context=SSL_CONTEXT) as res:
             return json.loads(res.read())
     except urllib.error.HTTPError as error:
-        raise SystemExit(f'Langfuse returned {error.code} for {path}: {error.read().decode()[:500]}') from error
+        raise SystemExit(
+            f'Langfuse returned {error.code} for {path}: {error.read().decode()[:500]}'
+        ) from error
 
 
 def fetch(host: str, auth: str, params: dict[str, str]) -> list[dict]:
@@ -88,9 +87,7 @@ def fetch(host: str, auth: str, params: dict[str, str]) -> list[dict]:
 
 def session_filter(session_id: str) -> str:
     """The v2 API has no sessionId parameter, only the generic column filter."""
-    return json.dumps(
-        [{'type': 'string', 'column': 'sessionId', 'operator': '=', 'value': session_id}]
-    )
+    return json.dumps([{'type': 'string', 'column': 'sessionId', 'operator': '=', 'value': session_id}])
 
 
 # --- turns -------------------------------------------------------------------
@@ -203,11 +200,11 @@ def _failed(span: dict) -> bool:
 class Report:
     """What one set of observations says, before any of it is printed."""
 
-    turns: list[str]                       # every caller turn, zero-model included
+    turns: list[str]  # every caller turn, zero-model included
     requests_per_turn: dict[str, int]
     tools_per_turn: dict[str, Counter]
     repair_turns: list[str]
-    repair_evidence: bool                  # whether the trace can answer it at all
+    repair_evidence: bool  # whether the trace can answer it at all
     greeting_spans: int
     unresolved_spans: int
     unresolved_requests: int
@@ -240,11 +237,8 @@ def analyse(spans: list[dict]) -> Report:
     """
     by_id = {str(s['id']): s for s in spans if s.get('id')}
 
-    turns = [
-        str(s['id']) for s in spans
-        if s.get('type') == 'SPAN' and (s.get('name') or '') in TURN_SPANS
-    ]
-    requests_per_turn: dict[str, int] = {turn: 0 for turn in turns}
+    turns = [str(s['id']) for s in spans if s.get('type') == 'SPAN' and (s.get('name') or '') in TURN_SPANS]
+    requests_per_turn: dict[str, int] = dict.fromkeys(turns, 0)
     tools_per_turn: dict[str, Counter] = defaultdict(Counter)
     failed_in_turn: set[str] = set()
     request_latency: list[float] = []
@@ -339,40 +333,55 @@ def report(spans: list[dict], subject: str) -> Report:
     counts = found.counts
 
     print(f'\n=== {subject} ===')
-    print(f'  caller turns                {len(found.turns)} '
-          f'({found.zero_model_turns} of them asked no model)')
+    print(
+        f'  caller turns                {len(found.turns)} ({found.zero_model_turns} of them asked no model)'
+    )
     if found.greeting_spans:
-        print(f'  greeting / prefetch         {found.greeting_spans}  '
-              '(not caller turns, not in any denominator)')
+        print(
+            f'  greeting / prefetch         {found.greeting_spans}  '
+            '(not caller turns, not in any denominator)'
+        )
     if counts:
         spread = ', '.join(f'{n}x{c}' for c, n in sorted(Counter(counts).items()))
         mean = sum(counts) / len(counts)
-        print(f'  model requests per turn     mean {mean:.2f}   '
-              f'p50 {percentile([float(c) for c in counts], 0.5):.0f}   '
-              f'p90 {percentile([float(c) for c in counts], 0.9):.0f}   ({spread})')
+        print(
+            f'  model requests per turn     mean {mean:.2f}   '
+            f'p50 {percentile([float(c) for c in counts], 0.5):.0f}   '
+            f'p90 {percentile([float(c) for c in counts], 0.9):.0f}   ({spread})'
+        )
     if found.speech_spans:
-        print(f'  stt / tts observations      {found.speech_spans}  '
-              '(generation-typed, and not model requests)')
+        print(
+            f'  stt / tts observations      {found.speech_spans}  (generation-typed, and not model requests)'
+        )
     if found.unresolved_spans:
-        print(f'  unresolved parentage        {found.unresolved_spans} observations, '
-              f'{found.unresolved_requests} of them model requests -- '
-              'left unassigned, not guessed')
+        print(
+            f'  unresolved parentage        {found.unresolved_spans} observations, '
+            f'{found.unresolved_requests} of them model requests -- '
+            'left unassigned, not guessed'
+        )
     print(f'  model round trip            {_pair(found.request_latency)}')
     print(f'  request time to first token {_pair(found.request_ttft)}')
-    print(f'  first word of the turn      {_pair(found.turn_first_word)}   '
-          '<- from the finished transcript, not from end of caller audio')
+    print(
+        f'  first word of the turn      {_pair(found.turn_first_word)}   '
+        '<- from the finished transcript, not from end of caller audio'
+    )
     if found.pipecat_turn_latency:
-        print(f'  pipecat turn span           {_pair(found.pipecat_turn_latency)}   '
-              '<- labelled proxy: spans endpointing, ends at response start')
+        print(
+            f'  pipecat turn span           {_pair(found.pipecat_turn_latency)}   '
+            '<- labelled proxy: spans endpointing, ends at response start'
+        )
     if found.turns:
         share = 100 * len(found.repair_turns) / len(found.turns)
-        print(f'  repair turns                {len(found.repair_turns)}/{len(found.turns)} '
-              f'({share:.0f}%) -- turns containing a refusal or error')
+        print(
+            f'  repair turns                {len(found.repair_turns)}/{len(found.turns)} '
+            f'({share:.0f}%) -- turns containing a refusal or error'
+        )
         if not found.repair_evidence:
-            print('                              no refusal evidence in this trace; '
-                  'this is "none seen", not "none happened"')
-    print('  quantile convention         nearest rank, ceil(p*n)-1; '
-          '"no data" is missing, not zero')
+            print(
+                '                              no refusal evidence in this trace; '
+                'this is "none seen", not "none happened"'
+            )
+    print('  quantile convention         nearest rank, ceil(p*n)-1; "no data" is missing, not zero')
     if len(found.turns) < 10:
         print('\n  A rate needs a denominator. This is one call; the repair rate wants 30-50.')
     return found
@@ -384,9 +393,11 @@ def main() -> int:
     parser.add_argument('--trace-id', help='read this call by its trace instead')
     parser.add_argument('--hours', type=float, default=2.0, help='how far back to look')
     parser.add_argument('--sessions', action='store_true', help='list recent calls and stop')
-    parser.add_argument('--all', action='store_true',
-                        help='pool every call in the window into one report, which is '
-                             'what a repair rate actually needs')
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='pool every call in the window into one report, which is what a repair rate actually needs',
+    )
     parser.add_argument('--env', type=pathlib.Path, help='read credentials from this .env')
     args = parser.parse_args()
 
@@ -399,8 +410,11 @@ def main() -> int:
     host = (os.environ.get('LANGFUSE_BASE_URL') or os.environ.get('LANGFUSE_HOST') or '').rstrip('/')
     public, secret = os.environ.get('LANGFUSE_PUBLIC_KEY'), os.environ.get('LANGFUSE_SECRET_KEY')
     if not (host and public and secret):
-        print('set LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY, '
-              'or pass --env pointing at a .env that has them', file=sys.stderr)
+        print(
+            'set LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY, '
+            'or pass --env pointing at a .env that has them',
+            file=sys.stderr,
+        )
         return 1
     auth = base64.b64encode(f'{public}:{secret}'.encode()).decode()
 

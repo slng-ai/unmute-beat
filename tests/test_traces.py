@@ -94,11 +94,11 @@ async def one_trace_per_call():
     probe._tracing = context
 
     with (
-        AGENTS['concierge'].agent.override(
-            model=FunctionModel(stream_function=hands_to('intake'))
-        ),
+        AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=hands_to('intake'))),
         AGENTS['intake'].agent.override(
-            model=FunctionModel(stream_function=says('Is that plus three four, six zero zero, one one one, two two two?'))
+            model=FunctionModel(
+                stream_function=says('Is that plus three four, six zero zero, one one one, two two two?')
+            )
         ),
     ):
         await probe._turn('my number is plus three four six zero zero one one one two two two')

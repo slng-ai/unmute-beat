@@ -94,11 +94,7 @@ async def main():
         started = time.monotonic()
         await transcript._turn(said)
         transcript.flush()
-        summary = ' '.join(
-            f'{name}={value!r}'
-            for name, value in call.state.model_dump().items()
-            if value
-        )
+        summary = ' '.join(f'{name}={value!r}' for name, value in call.state.model_dump().items() if value)
         print(f'  -> {summary}  ({time.monotonic() - started:.1f}s)')
         if transcript.ended:
             print('  -> the agent ended the call')

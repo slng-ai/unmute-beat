@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date as Date
+from datetime import date as Date  # noqa: N812
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -49,7 +49,13 @@ SERVICES: dict[str, tuple[int, int]] = {  # minutes, euros
 
 # Monday..Sunday. None is closed.
 HOURS: dict[int, tuple[int, int] | None] = {
-    0: (9, 18), 1: (9, 18), 2: (9, 18), 3: (9, 18), 4: (9, 18), 5: (9, 16), 6: None,
+    0: (9, 18),
+    1: (9, 18),
+    2: (9, 18),
+    3: (9, 18),
+    4: (9, 18),
+    5: (9, 16),
+    6: None,
 }
 GRID_MINUTES = 30
 
@@ -110,7 +116,7 @@ def now() -> datetime:
 
 
 def spoken_time(at: time) -> str:
-    """"9:00 AM", never "09:00": the voice reads the written shape."""
+    """ "9:00 AM", never "09:00": the voice reads the written shape."""
     return f'{(at.hour - 1) % 12 + 1}:{at.minute:02d} {"AM" if at.hour < 12 else "PM"}'
 
 
@@ -247,7 +253,7 @@ def _eligible(day: Date, at: time, service: str, at_time: datetime, ignore: str 
     if hours is None:
         return 'The salon is closed that day.'
     opens, closes = hours
-    minutes, _price = SERVICES[service]
+    _minutes, _price = SERVICES[service]
     start, end = _interval(day, at, service)
     if at < time(opens) or end > datetime.combine(day, time(closes), tzinfo=TZ):
         return 'The salon is not open then, or that service would not finish before closing.'
@@ -306,16 +312,23 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
     held = bookings_for(phone, today)
     day = resolve_day(when, today)
     if day is None:
-        return {'status': 'need_day', 'bookings': held,
-                'note': 'No day was named, or not in words the diary understands. '
-                        'Ask the caller which day, and offer a weekday or a date.'}
+        return {
+            'status': 'need_day',
+            'bookings': held,
+            'note': 'No day was named, or not in words the diary understands. '
+            'Ask the caller which day, and offer a weekday or a date.',
+        }
     if day < today:
         return {'status': 'past', 'bookings': held, 'day': spoken_day(day, today)}
 
     hours = HOURS[day.weekday()]
     if hours is None:
-        return {'status': 'closed', 'bookings': held, 'day': spoken_day(day, today),
-                'note': 'The salon is closed on Sunday.'}
+        return {
+            'status': 'closed',
+            'bookings': held,
+            'day': spoken_day(day, today),
+            'note': 'The salon is closed on Sunday.',
+        }
 
     wanted = [service] if service in SERVICES else list(SERVICES)
     opens, closes = hours
@@ -331,12 +344,14 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
             if not _eligible(day, at, name, at_time):
                 slot_id = _slot_id(day, at, name)
                 _offers[slot_id] = Offer(day=day, at=at, service=name, issued_on=today)
-                slots.append({
-                    'slot_id': slot_id,
-                    'service': name,
-                    'time': at.strftime('%H:%M'),
-                    'spoken': spoken(day, at, today),
-                })
+                slots.append(
+                    {
+                        'slot_id': slot_id,
+                        'service': name,
+                        'time': at.strftime('%H:%M'),
+                        'spoken': spoken(day, at, today),
+                    }
+                )
             start += timedelta(minutes=GRID_MINUTES)
 
     # Soonest first, across services, and only then capped. Built service by
@@ -358,7 +373,7 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
 # --- writing to it -----------------------------------------------------------
 
 
-class Refused(Exception):
+class RefusedError(Exception):
     """The diary would not take it, and the caller needs to hear why."""
 
 
@@ -385,10 +400,15 @@ def outcome_of(operation_token: str) -> dict | None:
 
 
 def save_booking(
-    phone: str, action: str, slot_id: str, booking_id: str, additional: bool,
-    at_time: datetime, operation_token: str = '',
+    phone: str,
+    action: str,
+    slot_id: str,
+    booking_id: str,
+    additional: bool,
+    at_time: datetime,
+    operation_token: str = '',
 ) -> dict:
-    """Book, move or cancel. Raises Refused with something sayable.
+    """Book, move or cancel. Raises RefusedError with something sayable.
 
     `operation_token` names the business action rather than the attempt. Sent
     twice with the same token -- a retry after a timeout, a reconciliation
@@ -401,38 +421,45 @@ def save_booking(
     today = at_time.date()
     held = {b['booking_id'] for b in bookings_for(phone, today)}
 
-    if action in ('move', 'cancel'):
-        if booking_id not in held:
-            raise Refused(
-                'There is no booking under this number with that reference. '
-                f'They hold: {bookings_for(phone, today) or "nothing"}.'
-            )
+    if action in ('move', 'cancel') and booking_id not in held:
+        raise RefusedError(
+            'There is no booking under this number with that reference. '
+            f'They hold: {bookings_for(phone, today) or "nothing"}.'
+        )
     if action == 'cancel':
         gone = _bookings.pop(booking_id)
-        result = {'status': 'cancelled', 'booking_id': booking_id, 'service': gone.service,
-                  'date': gone.day.isoformat(), 'time': gone.at.strftime('%H:%M'),
-                  'spoken': spoken(gone.day, gone.at, today)}
+        result = {
+            'status': 'cancelled',
+            'booking_id': booking_id,
+            'service': gone.service,
+            'date': gone.day.isoformat(),
+            'time': gone.at.strftime('%H:%M'),
+            'spoken': spoken(gone.day, gone.at, today),
+        }
         return _record(operation_token, result)
 
     # Looked up, never parsed. A slot this diary did not offer is not a slot,
     # whatever it looks like: a fabricated 03:07 is absent here and stops.
     offer = _offers.get(slot_id)
     if offer is None:
-        raise Refused('That is not a slot this diary returned. Read the diary again and use one of its slots.')
+        raise RefusedError(
+            'That is not a slot this diary returned. Read the diary again and use one of its slots.'
+        )
     if offer.issued_on != today:
-        raise Refused(
+        raise RefusedError(
             'That slot was offered on an earlier day and the offer has expired. '
             'Read the diary again and offer what it returns now.'
         )
     # Checked again at the moment of writing, against the clock and the diary
     # as they are now. Being in `_offers` says it was free when it was offered.
-    if why := _eligible(offer.day, offer.at, offer.service, at_time,
-                        ignore=booking_id if action == 'move' else ''):
-        raise Refused(why)
+    if why := _eligible(
+        offer.day, offer.at, offer.service, at_time, ignore=booking_id if action == 'move' else ''
+    ):
+        raise RefusedError(why)
 
     if action == 'book':
         if held and not additional:
-            raise Refused(
+            raise RefusedError(
                 f'This caller already holds {bookings_for(phone, today)}. Moving that one is almost '
                 'always what they mean; only pass additional when they asked for a second appointment.'
             )
@@ -440,9 +467,14 @@ def save_booking(
         booking_id = f'BK{_counter["booking"]:04d}'
 
     _bookings[booking_id] = Booking(booking_id, phone, offer.service, offer.day, offer.at)
-    result = {'status': 'booked' if action == 'book' else 'moved', 'booking_id': booking_id,
-              'service': offer.service, 'date': offer.day.isoformat(),
-              'time': offer.at.strftime('%H:%M'), 'spoken': spoken(offer.day, offer.at, today)}
+    result = {
+        'status': 'booked' if action == 'book' else 'moved',
+        'booking_id': booking_id,
+        'service': offer.service,
+        'date': offer.day.isoformat(),
+        'time': offer.at.strftime('%H:%M'),
+        'spoken': spoken(offer.day, offer.at, today),
+    }
     return _record(operation_token, result)
 
 
@@ -462,8 +494,14 @@ def find_or_create_customer(phone: str) -> dict:
 def record_complaint(phone: str, summary: str, requested_resolution: str) -> dict:
     _counter['complaint'] += 1
     reference = f'CX{_counter["complaint"]:04d}'
-    _complaints.append({'reference': reference, 'phone': phone, 'summary': summary,
-                        'requested_resolution': requested_resolution})
+    _complaints.append(
+        {
+            'reference': reference,
+            'phone': phone,
+            'summary': summary,
+            'requested_resolution': requested_resolution,
+        }
+    )
     return {'recorded': True, 'reference': reference}
 
 

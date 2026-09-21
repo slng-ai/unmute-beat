@@ -56,6 +56,7 @@ def an_authored_default_is_checked():
     field declared `Phone = 'oops'` sits there looking fine until something
     reads it -- on a live call, in front of a caller.
     """
+
     class Broken(SalonState):
         customer_phone: Phone = 'oops'
 
@@ -83,8 +84,14 @@ def a_nested_model_cannot_be_edited_past_its_validator():
     model it holds: that assignment happens on the child, so the child needs
     its own. This is the case the contract calls out by name.
     """
-    booked = Appointment(booking_id='BK0001', service='haircut', date='2026-09-21',
-                         time='09:00', spoken='Monday at 9:00 AM', action='book')
+    booked = Appointment(
+        booking_id='BK0001',
+        service='haircut',
+        date='2026-09-21',
+        time='09:00',
+        spoken='Monday at 9:00 AM',
+        action='book',
+    )
     call = SalonCall(state=SalonState(appointment=booked))
     _refused(setattr, call.state.appointment, 'time', 'half nine')
     _refused(setattr, call.state.appointment, 'service', 'nails')
@@ -98,8 +105,12 @@ def a_prebuilt_model_is_revalidated():
     it on the way into the state.
     """
     smuggled = Appointment.model_construct(
-        booking_id='BK0001', service='nails', date='not-a-date',
-        time='half nine', spoken='x', action='book',
+        booking_id='BK0001',
+        service='nails',
+        date='not-a-date',
+        time='half nine',
+        spoken='x',
+        action='book',
     )
     _refused(SalonState, appointment=smuggled)
 
@@ -193,8 +204,9 @@ def presence_governs_the_prerequisite():
         'act': Node(agent=None, requires=('wants_reminder',), satisfied_by='ask'),  # type: ignore[arg-type]
     }
     assert route(Answered(), nodes, 'act') == ('ask', 'act'), 'unanswered, so ask first'
-    assert route(Answered(wants_reminder=False), nodes, 'act') == ('act', None), \
+    assert route(Answered(wants_reminder=False), nodes, 'act') == ('act', None), (
         'they said no, which is an answer'
+    )
     assert route(Answered(wants_reminder=True), nodes, 'act') == ('act', None)
 
 
@@ -212,8 +224,14 @@ def a_malformed_service_response_writes_nothing():
     call.commit(customer_verified='existing')
     before = call.state
 
-    malformed = {'booking_id': 'BK0001', 'service': 'nails', 'date': 'next Tuesday',
-                 'time': 'half nine', 'spoken': '', 'action': 'book'}
+    malformed = {
+        'booking_id': 'BK0001',
+        'service': 'nails',
+        'date': 'next Tuesday',
+        'time': 'half nine',
+        'spoken': '',
+        'action': 'book',
+    }
     _refused(Appointment, **malformed)
     # Nothing was committed, because the value never became an Appointment.
     assert call.state is before and call.state.appointment is None
@@ -223,9 +241,9 @@ def a_malformed_service_response_writes_nothing():
 
 
 def the_historical_short_number_is_refused():
-    """+348340464: eight national digits, and a real call offered it.
+    r"""+348340464: eight national digits, and a real call offered it.
 
-    The old `^\\+[1-9]\\d{6,14}$` took it -- nine digits is inside 7 to 15 --
+    The old `^\+[1-9]\d{6,14}$` took it -- nine digits is inside 7 to 15 --
     and it went to the customer lookup. Refused here, before any lookup: this
     is a validation error on the tool's own argument, so the tool body never
     runs.
@@ -282,7 +300,7 @@ def a_number_shaped_non_number_is_refused():
     contact range, which is the reason this is not a regex.
     """
     _refused(SalonState, customer_phone='+34500111222')
-    _refused(SalonState, customer_phone='+3460011122')   # eight national digits
+    _refused(SalonState, customer_phone='+3460011122')  # eight national digits
     _refused(SalonState, customer_phone='+346001112223')  # ten
 
 

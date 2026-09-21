@@ -142,6 +142,7 @@ def the_quantile_is_nearest_rank():
 
 def the_old_convention_really_was_different():
     """Kept so the correction is a fact in the record, not a claim in a commit."""
+
     def previous(values, fraction):
         ordered = sorted(values)
         return ordered[min(len(ordered) - 1, max(0, round(fraction * len(ordered) + 0.5) - 1))]
@@ -167,7 +168,7 @@ def there_is_no_estimated_turn_latency():
     source = pathlib.Path(__file__).parent.parent / 'bench' / 'turns.py'
     text = source.read_text()
     assert 'for a p90 turn at the median round trip' not in text
-    assert "percentile(round_trip, 0.5) * percentile" not in text
+    assert 'percentile(round_trip, 0.5) * percentile' not in text
 
 
 # --- latencies are two different questions -----------------------------------

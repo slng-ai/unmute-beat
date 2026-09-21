@@ -71,9 +71,7 @@ class TurnBudget:
 
     def account(self) -> tuple[RunUsage, UsageLimits]:
         """A fresh tally and the limits to read it against, for one turn."""
-        return RunUsage(), UsageLimits(
-            request_limit=self.model_requests, tool_calls_limit=self.tool_calls
-        )
+        return RunUsage(), UsageLimits(request_limit=self.model_requests, tool_calls_limit=self.tool_calls)
 
 
 class Handoff(BaseModel):
@@ -313,8 +311,16 @@ class Exit(NamedTuple):
 @dataclass(frozen=True)
 class Node:
     """One step: the agent that runs it, where it may send the caller, and what
-    has to be true before it runs at all."""
+    has to be true before it runs at all.
+    """
 
+    # ponytail: `Node` is not generic, so `agent` is a bare `Agent` (ty resolves
+    # it to `Agent[object, str]`) and the callables below are fixed to
+    # `VoiceState`, while every salon agent is `Agent[SalonCall, ...]` with
+    # `SalonState` callables. That one mismatch is the whole of the
+    # `invalid-argument-type` diagnostics switched off in pyproject.toml, at
+    # ~15 sites. Upgrade path: make `Node` generic over the state type, then
+    # delete that line from `[tool.ty.rules]`.
     agent: Agent
     # Spoken by the processor, not the model, to cover the model round trip the
     # hop costs. Empty means the receiving agent answers straight away.
@@ -396,8 +402,10 @@ def moved_by(state: VoiceState, node: Node, nodes: dict[str, Node], succeeded: s
         if exit is None or not exit.guard(state):
             continue
         destination = nodes.get(exit.to)
-        if destination is not None and destination.requires and not all(
-            present(getattr(state, field, None)) for field in destination.requires
+        if (
+            destination is not None
+            and destination.requires
+            and not all(present(getattr(state, field, None)) for field in destination.requires)
         ):
             continue
         return exit.to

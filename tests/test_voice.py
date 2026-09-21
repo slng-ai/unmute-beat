@@ -8,17 +8,16 @@ import asyncio
 import json
 from contextlib import ExitStack
 
-from pydantic import TypeAdapter, ValidationError
-from pydantic_ai import ModelResponse, TemplateStr, TextPart
-from pydantic_ai.messages import ModelRequest, ToolCallPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
 from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMTextFrame,
     TTSSpeakFrame,
 )
+from pydantic import TypeAdapter, ValidationError
+from pydantic_ai import ModelResponse, TemplateStr, TextPart
+from pydantic_ai.messages import ModelRequest, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from voice.agents import AGENTS
 from voice.harness import TurnBudget
@@ -155,11 +154,16 @@ async def plain_turn():
 async def handoff():
     call = Call()
     probe = Probe(call)
-    with scripted(concierge=hands_to('intake'), intake=says('Is that plus three four, six zero zero, one one one, two two two?')):
+    with scripted(
+        concierge=hands_to('intake'),
+        intake=says('Is that plus three four, six zero zero, one one one, two two two?'),
+    ):
         await probe._turn('my number is plus three four six zero zero one one one two two two')
 
     assert call.state.agent == 'intake', call.state.agent
-    assert probe.spoken() == 'Is that plus three four, six zero zero, one one one, two two two?', probe.spoken()
+    assert probe.spoken() == 'Is that plus three four, six zero zero, one one one, two two two?', (
+        probe.spoken()
+    )
     # The hop is covered by a line we speak, not one the model wrote.
     assert probe.fixed_lines(), 'the receiving agent has enter lines; one must be spoken'
     assert probe.fixed_lines()[0] in AGENTS['intake'].enter
@@ -211,9 +215,9 @@ async def no_self_handoff():
     call = Call()
     probe = Probe(call)
     with scripted(
-        concierge=lambda m, i: hands_to('concierge')(m, i)
-        if len(m) < 3
-        else says('We are open until six.')(m, i)
+        concierge=lambda m, i: (
+            hands_to('concierge')(m, i) if len(m) < 3 else says('We are open until six.')(m, i)
+        )
     ):
         await probe._turn('when do you close?')
     assert call.state.agent == 'concierge', call.state.agent
@@ -252,7 +256,13 @@ async def truncation():
         await probe._turn('when are you free?')
 
     probe.note_spoken('Friday at nine, Sat', interrupted=True)
-    text = [p.content for m in call.messages if isinstance(m, ModelResponse) for p in m.parts if isinstance(p, TextPart)]
+    text = [
+        p.content
+        for m in call.messages
+        if isinstance(m, ModelResponse)
+        for p in m.parts
+        if isinstance(p, TextPart)
+    ]
     assert text == ['Friday at nine, Sat'], text
 
     # Nothing heard at all: the response goes, rather than staying as an empty

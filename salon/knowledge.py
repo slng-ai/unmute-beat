@@ -17,8 +17,55 @@ DOCS = Path(__file__).resolve().parent.parent / 'knowledge'
 
 # Words that match everything and therefore rank nothing.
 _NOISE = frozenset(
-    'a an and are as at be by can do does for from get has have how i if in is it me my of on or '
-    'our so that the their there they this to we what when where which who why will with you your'.split()
+    [
+        'a',
+        'an',
+        'and',
+        'are',
+        'as',
+        'at',
+        'be',
+        'by',
+        'can',
+        'do',
+        'does',
+        'for',
+        'from',
+        'get',
+        'has',
+        'have',
+        'how',
+        'i',
+        'if',
+        'in',
+        'is',
+        'it',
+        'me',
+        'my',
+        'of',
+        'on',
+        'or',
+        'our',
+        'so',
+        'that',
+        'the',
+        'their',
+        'there',
+        'they',
+        'this',
+        'to',
+        'we',
+        'what',
+        'when',
+        'where',
+        'which',
+        'who',
+        'why',
+        'will',
+        'with',
+        'you',
+        'your',
+    ]
 )
 
 

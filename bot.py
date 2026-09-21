@@ -29,9 +29,9 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.tts_service import TextAggregationMode
 from pipecat.transcriptions.language import Language
+from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
-from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
@@ -71,7 +71,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     stt = SlngSTTService(
         api_key=slng_key,
         base_url=SLNG_HOST,
-        model="soniox/speech-ai:rt-v5",
+        model='soniox/speech-ai:rt-v5',
         language=Language('en'),
     )
 
@@ -116,9 +116,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
                 stop=[
                     TurnAnalyzerUserTurnStopStrategy(
                         turn_analyzer=LocalSmartTurnAnalyzerV3(
-                            params=SmartTurnParams(
-                                stop_secs=float(os.getenv('SMART_TURN_STOP_SECS', '1.5'))
-                            )
+                            params=SmartTurnParams(stop_secs=float(os.getenv('SMART_TURN_STOP_SECS', '1.5')))
                         )
                     )
                 ]

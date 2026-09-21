@@ -10,7 +10,7 @@ wrong. What is left is what only the conversation can establish.
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 import phonenumbers
 from pydantic import AfterValidator, BaseModel, Field, TypeAdapter
@@ -51,7 +51,7 @@ def _shape(pattern: str, message: str):
 # to make. Without one it is refused and the agent asks which country.
 _spanish = TypeAdapter(
     Annotated[
-        Union[str, phonenumbers.PhoneNumber],
+        str | phonenumbers.PhoneNumber,
         PhoneNumberValidator(number_format='E164', supported_regions=['ES']),
     ]
 )
@@ -73,7 +73,9 @@ Phone = Annotated[
     AfterValidator(_spanish_or_absent),
     Field(description='A Spanish phone number in full international form, like +34600111222.'),
 ]
-Date = Annotated[str, _shape(r'^\d{4}-\d{2}-\d{2}$', 'expected a day written year-month-day, like 2026-03-19')]
+Date = Annotated[
+    str, _shape(r'^\d{4}-\d{2}-\d{2}$', 'expected a day written year-month-day, like 2026-03-19')
+]
 Time = Annotated[str, _shape(r'^([01]\d|2[0-3]):[0-5]\d$', 'expected a 24-hour time, like 09:30')]
 Id = Annotated[str, _shape(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', 'expected an identifier')]
 

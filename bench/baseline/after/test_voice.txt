@@ -1,18 +1,1 @@
-2026-09-21 14:13:25.118 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-                 pydantic-ai v2.46.0 • Python 3.14.5
-
-      / \        agent: concierge • model: function:function::stream • output: str | hand_over
-     /   \         tools: 0 • capabilities: 2
-   /___.___\
-  /    |    \    observability: off — see every model and tool call live, with cost
-/      |      \    set it up free with Logfire and a GitHub login: https://pydantic.dev/ai-setup.md
-`---.._|_..---'    or use any OpenTelemetry backend: https://pydantic.dev/docs/ai/logfire/#otel
-
-                 goes away once observability is on — or PYDANTIC_AI_NO_BANNER=1
-2026-09-21 14:13:25.563 | INFO     | voice.core:_hops:299 - handoff concierge -> intake (test)
-2026-09-21 14:13:25.571 | INFO     | voice.core:_hops:299 - handoff concierge -> intake (test)
-2026-09-21 14:13:25.580 | INFO     | voice.core:_hops:299 - handoff concierge -> intake (test)
-2026-09-21 14:13:25.584 | INFO     | voice.core:_hops:299 - handoff intake -> concierge (test)
-2026-09-21 14:13:25.587 | INFO     | voice.core:_hops:299 - handoff concierge -> intake (test)
-2026-09-21 14:13:25.587 | WARNING  | voice.core:run_turn:202 - turn exhausted: the 3-run hop budget
 ok

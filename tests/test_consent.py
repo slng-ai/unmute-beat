@@ -565,9 +565,7 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
     # One was, and then something else was written down.
     (await agents.ask_complaint(_context(call), 'the colour came out wrong')).put(call)
     call.turn_started("yes, that's right")
-    other = await _refuses(
-        agents.record_complaint, _context(call), 'the stylist was rude', 'a full refund'
-    )
+    other = await _refuses(agents.record_complaint, _context(call), 'the stylist was rude', 'a full refund')
     assert 'ask_complaint' in other, other
     assert diary.complaints() == [], diary.complaints()
 

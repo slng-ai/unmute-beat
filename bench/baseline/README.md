@@ -16,12 +16,28 @@ Phase 01 change. All four ended `ok`. That is the prior result, not a V1 gate:
 those four checks do not cover any of the defects Phase 01 exists to fix, which
 is why six more modules now run beside them.
 
-`after/` holds the same four plus the six new ones at the end of Phase 01. The
-pair is the point. `test_voice.txt` carries the line `handoff budget of 3
-spent, making intake answer` and `after/test_voice.txt` does not, because the
-extra model run that warning announced is gone -- which is the one behaviour
-change in this phase that a reader should be able to see rather than take on
-trust.
+`after/` holds the same four plus the seven that now run beside them, at the
+end of the Phase 01 completion work. The pair is the point. `test_voice.txt`
+carries the line `handoff budget of 3 spent, making intake answer` and
+`after/test_voice.txt` does not, because the extra model run that warning
+announced is gone -- which is the one behaviour change in this phase that a
+reader should be able to see rather than take on trust.
+
+Beside them, three records of the completion work itself:
+
+* `snapshot-e78ac56.json` and `snapshot-complete.json` -- the digests of
+  every tracked file at the revision it started from and the one it ended
+  at, with the lock and prompt roll-ups. `git ls-files | xargs shasum -a
+  256`, keyed by path, plus the commit and the interpreter.
+* `checks-e78ac56.txt` and `checks-complete.txt` -- the real output of
+  `ruff check`, `ty check` and `python -m tests` at each of those two
+  revisions. stdout only, because the suite logs its expected refusals to
+  stderr and several hundred lines of backtrace for exceptions the tests are
+  asserting on is noise rather than evidence.
+* `ledger.md` -- one row per requirement in the completion plan, `passed`,
+  `blocked` or `not-run`, each naming what holds it. It is the file to read
+  before believing anything else in this directory: `not-run` appears in it
+  a dozen times and none of those is a pass.
 
 `evidence/` is one JSON record per verification check, in the shape
 `10_VERIFICATION_MATRIX.md` specifies, with honest `passed` / `inconclusive` /

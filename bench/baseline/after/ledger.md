@@ -26,7 +26,7 @@ imported, so a module that forgot an override raises rather than billing.
 
 | Requirement | Status | What holds it |
 |---|---|---|
-| §1 baseline and digests | `passed` | `snapshot-e78ac56.json` before, `snapshot-a30824b.json` after, both from `git ls-files` + SHA-256, with the lock and prompt roll-ups |
+| §1 baseline and digests | `passed` | `snapshot-e78ac56.json` before, `snapshot-complete.json` after, both from `git ls-files` + SHA-256, with the lock and prompt roll-ups |
 | §1 SDK capability ledger | `passed` | `capability-ledger.md`, plus `tests.test_state::a_schema_authored_tool_validates_what_a_typed_one_does` which probes the `from_schema` row instead of asserting it is unused |
 | §2 / V5 state and service facts | `passed` | `tests.test_state` (atomic commits, nested revalidation, `False`/`0`, native day and time boundaries), `tests.test_salon` (every diary response validated then read) |
 | §2 / V5 / S20 effective inputs | `passed` | `a_schema_authored_tool_validates_what_a_typed_one_does`: handler-invocation counter stays at zero for a missing field, a wrong type, and a model overriding an injected one; an unsupported schema construct is refused at build |

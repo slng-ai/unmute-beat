@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.messages import ModelMessage, ToolCallPart
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
@@ -39,6 +40,40 @@ def present(value: object) -> bool:
     waiting on it should not be interposed a second time.
     """
     return value is not None and value != ''
+
+
+@dataclass(frozen=True)
+class TurnBudget:
+    """Everything one accepted caller turn is allowed to spend.
+
+    One object for the whole turn, not one per agent run: a turn that hands
+    the caller between four agents has spent four agents' worth of a caller's
+    patience, and budgets that reset per run bound nothing. The usage object
+    built by `account` is threaded through every run in the turn.
+
+    These numbers are **proposals to tune and record**, not SDK defaults and
+    not values anybody has yet shown to be right for production. They are
+    written down here so a change to them is a change to a file rather than a
+    different number in three places. `bench/baseline/budget.md` is where the
+    reasoning lives.
+
+    `repair_retries` counts semantic repair only -- a tool refusing and the
+    model correcting itself. Provider SDK retries and HTTP attempts are a
+    different layer with its own counter, and adding them together would hide
+    a model that cannot get a tool call right behind a flaky network.
+    """
+
+    step_runs: int = 4
+    model_requests: int = 8
+    tool_calls: int = 8
+    seconds: float = 20.0
+    repair_retries: int = 2
+
+    def account(self) -> tuple[RunUsage, UsageLimits]:
+        """A fresh tally and the limits to read it against, for one turn."""
+        return RunUsage(), UsageLimits(
+            request_limit=self.model_requests, tool_calls_limit=self.tool_calls
+        )
 
 
 class Handoff(BaseModel):

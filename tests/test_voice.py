@@ -21,7 +21,8 @@ from pipecat.frames.frames import (
 )
 
 from voice.agents import AGENTS
-from voice.processor import PydanticAgentProcessor
+from voice.harness import TurnBudget
+from voice.processor import EXHAUSTED, PydanticAgentProcessor
 from voice.state import Call, CallState, Phone
 
 # --- typed state -------------------------------------------------------------
@@ -187,15 +188,22 @@ async def one_line_per_gap():
 
 async def ping_pong():
     call = Call()
-    probe = Probe(call, max_hops=3)
+    probe = Probe(call, budget=TurnBudget(step_runs=3))
     # Every run hands the caller on, so the budget is certain to run out. A live
     # call did exactly this and the caller heard nothing at all and rang off.
     with scripted(concierge=hands_to('intake'), intake=hands_to('concierge')):
         await probe._turn('hello?')
-    # Bounded rather than hung, and never silent: the runs the budget paid for,
-    # then one more that can only speak.
-    assert sum(isinstance(f, LLMFullResponseStartFrame) for f in probe.frames) == 4
-    assert probe.spoken(), 'a turn that spends its handoff budget must still answer'
+    # Bounded rather than hung, and never silent: exactly the runs the budget
+    # paid for, and then a fixed line spoken by the processor.
+    #
+    # This used to expect a fourth run -- one more model request, made *after*
+    # the budget was declared spent and outside it. That bounded nothing: the
+    # extra run could itself hand off, call a tool, or take as long as it
+    # liked, and the number the budget named was never the number of requests
+    # a turn could make. The contract changed deliberately here.
+    assert sum(isinstance(f, LLMFullResponseStartFrame) for f in probe.frames) == 3
+    assert EXHAUSTED in probe.fixed_lines(), probe.fixed_lines()
+    assert not probe.spoken(), 'the fallback is fixed speech, not another model run'
 
 
 async def no_self_handoff():

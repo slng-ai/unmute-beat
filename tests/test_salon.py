@@ -22,7 +22,8 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from salon import diary, knowledge
 from salon.agents import AGENTS, FILLER, NOTED, get_a_manager, prompt
 from salon.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
-from voice.processor import PydanticAgentProcessor
+from voice.harness import TurnBudget
+from voice.processor import EXHAUSTED, PydanticAgentProcessor
 
 PHONE = '+34600111222'
 MONDAY = date(2026, 9, 21)
@@ -231,7 +232,7 @@ async def verify_then_book():
     """The whole round trip in one turn, and the front desk never named `verify`."""
     diary.reset()
     call = open_call(PHONE)
-    probe = Probe(call, max_hops=4)
+    probe = Probe(call, budget=TurnBudget(step_runs=4))
 
     day = diary.spoken_day(diary.now().date() + timedelta(days=2), diary.now().date())
     with scripted(
@@ -328,7 +329,7 @@ async def interpose_costs_one_run():
     """
     diary.reset()
     call = open_call(PHONE)
-    probe = Probe(call, max_hops=4)
+    probe = Probe(call, budget=TurnBudget(step_runs=4))
 
     with scripted(
         concierge=outputs('hand_over', to='booking', because='wants a haircut'),
@@ -349,7 +350,7 @@ async def resume_after_finisher():
     diary.reset()
     call = open_call(PHONE)
     call.commit(agent='verify', pending='booking')
-    probe = Probe(call, max_hops=3)
+    probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(
         verify=outputs('confirm_customer', phone=PHONE),
@@ -385,7 +386,7 @@ async def one_kind_b_per_turn():
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing')
-    probe = Probe(call, max_hops=3)
+    probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(
         concierge=outputs_or_says('hand_over', 'Sorry, what was that?',
@@ -395,10 +396,13 @@ async def one_kind_b_per_turn():
     ):
         await probe._turn('hello?')
 
-    # Bounded rather than hung, and never silent: the runs the budget paid for,
-    # then one more that can only speak.
-    assert probe.runs() == 4, probe.runs()
-    assert probe.spoken(), 'a turn that spends its handoff budget must still answer'
+    # Bounded rather than hung, and never silent: exactly the runs the budget
+    # paid for, and then a fixed line spoken by the processor. The fourth run
+    # this used to expect was an unbudgeted model request made after the
+    # budget was spent, which is the thing a budget is for.
+    assert probe.runs() == 3, probe.runs()
+    assert EXHAUSTED in probe.fixed(), probe.fixed()
+    assert not probe.spoken(), 'the fallback is fixed speech, not another model run'
 
 
 # --- a correction the application holds, not the prompt ----------------------
@@ -409,7 +413,7 @@ async def correction_refuses_stale_slot():
     diary.reset()
     call = open_call(PHONE)
     call.commit(agent='booking', customer_verified='existing')
-    probe = Probe(call, max_hops=2)
+    probe = Probe(call, budget=TurnBudget(step_runs=2))
 
     first, second = open_days(2)
     stale = diary.find_slots(PHONE, first.isoformat(), 'haircut', diary.now())['slots'][0]

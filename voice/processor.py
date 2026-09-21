@@ -19,6 +19,7 @@ it every agent run starts a trace of its own and a call arrives in pieces.
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from loguru import logger
@@ -48,12 +49,17 @@ from pydantic_ai import (
     TextPartDelta,
 )
 
-from voice.harness import CallContext, Handoff, Node
+from pydantic_ai.usage import UsageLimitExceeded
+
+from voice.harness import CallContext, Handoff, Node, TurnBudget
 from voice.harness import moved_by as _moved_by
 from voice.harness import pick as _pick
 from voice.harness import route as _route
 
 STUMBLE = 'Sorry, I had a problem there. Could you say that again?'
+# Said by this code when a turn runs out of budget: no further model request,
+# no business work, and no second chance at a budget that is already spent.
+EXHAUSTED = "Sorry, I'm going round in circles there. Could you say that again?"
 
 _tracer = trace.get_tracer('slng-voice-harness')
 
@@ -96,13 +102,16 @@ class PydanticAgentProcessor(FrameProcessor):
         call: CallContext,
         agents: dict[str, Node],
         *,
-        max_hops: int = 3,
+        budget: TurnBudget = TurnBudget(),
         **kwargs,
     ):
         super().__init__(**kwargs)
         self._call = call
         self._agents = agents
-        self._max_hops = max_hops
+        self._budget = budget
+        # This turn's shared tally and limits, replaced at the top of each
+        # turn. One per turn and not one per run: see `TurnBudget`.
+        self._usage, self._limits = budget.account()
         self._events = None
         self._interrupted = False
         self._tracing = None
@@ -195,96 +204,127 @@ class PydanticAgentProcessor(FrameProcessor):
         return self._tracing.get_turn_context() or self._tracing.get_conversation_context()
 
     async def _turn(self, prompt: str | None) -> None:
-        """One caller turn: run the current agent, follow handoffs until one speaks."""
+        """One caller turn: run the current agent, follow handoffs until one speaks.
+
+        The whole turn spends one budget: one tally of provider requests, one
+        tool-call allowance, a fixed number of step runs and a deadline over
+        all of them together. Threaded through every run, so four agents in
+        one turn cannot each start again with a full allowance.
+        """
         # One span for the whole chain: `start_as_current_span` attaches it, and
         # the agents run in this coroutine, so pydantic-ai's own run spans land
         # underneath instead of each opening a trace of its own.
         with _tracer.start_as_current_span('agents', context=self._parent()) as span:
             handoffs: list[str] = []
             self._turn_span = span
+            self._usage, self._limits = self._budget.account()
+            spent = ''
             try:
                 self._interrupted = False
                 # A new silence to cover, so one fixed line is allowed again.
                 self._call._covered = False
                 self._call.turn_started()
-                # `_max_hops` counts model runs, which is what a caller waits
+                # `step_runs` counts model runs, which is what a caller waits
                 # for. The graph's own moves are not in here to count: `route`
                 # replaces the destination the model named with the step that
                 # has to run first, so interposing a prerequisite costs the same
                 # one run that entering the destination would have.
-                for _ in range(self._max_hops):
-                    node = self._agents[self._call.state.agent]
-                    output = await self._speak(node, prompt)
-                    if not isinstance(output, Handoff):
-                        # The free edge. A borrowed tool *succeeded*, so the
-                        # caller is already in the step that owns it, and the
-                        # request that moved them is the one that just answered
-                        # them. Set after the run, not during, so the step that
-                        # spoke is the step whose prompt wrote the words.
-                        if (landed := _moved_by(self._call.state, node, self._agents, self._succeeded)) != self._call.state.agent:
-                            logger.info(
-                                'moved {} -> {} (via {})',
-                                self._call.state.agent, landed, ', '.join(sorted(self._succeeded)),
-                            )
-                            handoffs.append(landed)
-                            self._call.commit(agent=landed)
-                        return
-                    # Where they were sent, then where the graph actually puts
-                    # them: `booking` before anyone is identified means `verify`
-                    # first, with `booking` recorded to resume into.
-                    going_to, waiting = _route(self._call.state, self._agents, output.to)
-                    logger.info(
-                        'handoff {} -> {} ({})', self._call.state.agent, going_to, output.because or '-'
-                    )
-                    handoffs.append(going_to)
-                    # One commit: the step and what is waiting behind it are the
-                    # same decision, and a caller moved into `verify` with no
-                    # record of where they were going has lost their errand.
-                    self._call.commit(agent=going_to, pending=waiting)
-                    # `prompt` is deliberately kept: the agent taking over is
-                    # asked the caller's own question again. It used to be
-                    # cleared, on the reasoning that the turn is already in the
-                    # history -- and it is, two messages up. But the *last*
-                    # message the receiving run then reads is somebody else's
-                    # spent tool call, `hand_over` answered with "Final result
-                    # processed." and nothing to reply to. Measured on the call
-                    # of 2026-09-20: Gemini returned a candidate with no parts
-                    # at all, pydantic-ai sent back "Please return text or
-                    # include your response in a tool call", and the reply came
-                    # on the retry -- 0.64s of the 3.94s that turn cost, spent
-                    # producing nothing. Reading the question twice is cheaper
-                    # than reading a finished errand.
-                    if self._interrupted:
-                        # Barged in during the hop. Starting the next agent now
-                        # would answer a question the caller has moved on from.
-                        return
-                    if lines := self._agents[going_to].enter:
-                        # Cover the hop: a whole model request stands between the
-                        # caller finishing and the next agent's first word. Through
-                        # the state, so a tool firing next does not cover it twice.
-                        await self._call.say(_pick(f'enter:{output.to}', lines))
-                logger.warning(
-                    'handoff budget of {} spent, making {} answer', self._max_hops, self._call.state.agent
-                )
-                # Every hop handed the caller on, so nobody has said anything and
-                # the line has been silent since the last fixed line. Run whoever
-                # they ended up with once more with `str` as the only output: with
-                # `hand_over` and the finishers off the table, speech is all it can
-                # produce. That run cannot book or verify, which costs a turn -- a
-                # caller sitting in silence has already lost one.
-                await self._speak(self._agents[self._call.state.agent], prompt, output_type=str)
+                async with asyncio.timeout(self._budget.seconds):
+                    spent = await self._hops(prompt, handoffs)
+            except TimeoutError:
+                spent = f'the {self._budget.seconds:g}s turn deadline'
+            except UsageLimitExceeded as over:
+                spent = str(over)
             finally:
                 # In `finally`: the loop returns early both when an agent speaks
                 # and when the caller barges in mid-hop.
                 span.set_attribute('agent', self._call.state.agent)
                 span.set_attribute('hops', len(handoffs) + 1)
                 span.set_attribute('interrupted', self._interrupted)
+                span.set_attribute('model_requests', self._usage.requests)
+                if spent:
+                    span.set_attribute('exhausted', spent)
                 if handoffs:
                     span.set_attribute('handoffs', ', '.join(handoffs))
                 # A turn that ends without speech leaves TTFB armed, and the next
                 # turn reports its own first word as seconds late. Idempotent:
                 # a turn that did speak stopped it already.
                 await self.stop_ttfb_metrics()
+
+            if spent and not self._interrupted:
+                # The turn ran out. One fixed line, spoken by this code: no
+                # further provider request, no business work, and nothing that
+                # hands the exhausted budget back its money. A caller sitting
+                # in silence has already lost the turn; a caller told plainly
+                # that we are stuck can say it again.
+                #
+                # There used to be one more model run here, outside the budget
+                # that had just been declared spent -- which meant the budget
+                # bounded nothing, and the run it bought could still call a
+                # tool through a narrowed schema.
+                logger.warning('turn exhausted: {} -- speaking the fixed line', spent)
+                await self._call.speak_now(EXHAUSTED)
+
+    async def _hops(self, prompt: str | None, handoffs: list[str]) -> str:
+        """Run agents until one answers the caller.
+
+        Returns '' when one did, and otherwise why it stopped -- which is the
+        turn's own word for "exhausted", handed back to `_turn` to speak the
+        fixed line rather than raised, because running out of hops is an
+        ordinary outcome and not an error.
+        """
+        for _ in range(self._budget.step_runs):
+            node = self._agents[self._call.state.agent]
+            output = await self._speak(node, prompt)
+            if not isinstance(output, Handoff):
+                # The free edge. A borrowed tool *succeeded*, so the caller is
+                # already in the step that owns it, and the request that moved
+                # them is the one that just answered them. Set after the run,
+                # not during, so the step that spoke is the step whose prompt
+                # wrote the words.
+                landed = _moved_by(self._call.state, node, self._agents, self._succeeded)
+                if landed != self._call.state.agent:
+                    logger.info(
+                        'moved {} -> {} (via {})',
+                        self._call.state.agent, landed, ', '.join(sorted(self._succeeded)),
+                    )
+                    handoffs.append(landed)
+                    self._call.commit(agent=landed)
+                return ''
+            # Where they were sent, then where the graph actually puts them:
+            # `booking` before anyone is identified means `verify` first, with
+            # `booking` recorded to resume into.
+            going_to, waiting = _route(self._call.state, self._agents, output.to)
+            logger.info(
+                'handoff {} -> {} ({})', self._call.state.agent, going_to, output.because or '-'
+            )
+            handoffs.append(going_to)
+            # One commit: the step and what is waiting behind it are the same
+            # decision, and a caller moved into `verify` with no record of
+            # where they were going has lost their errand.
+            self._call.commit(agent=going_to, pending=waiting)
+            # `prompt` is deliberately kept: the agent taking over is asked the
+            # caller's own question again. It used to be cleared, on the
+            # reasoning that the turn is already in the history -- and it is,
+            # two messages up. But the *last* message the receiving run then
+            # reads is somebody else's spent tool call, `hand_over` answered
+            # with "Final result processed." and nothing to reply to. Measured
+            # on the call of 2026-09-20: Gemini returned a candidate with no
+            # parts at all, pydantic-ai sent back "Please return text or
+            # include your response in a tool call", and the reply came on the
+            # retry -- 0.64s of the 3.94s that turn cost, spent producing
+            # nothing. Reading the question twice is cheaper than reading a
+            # finished errand.
+            if self._interrupted:
+                # Barged in during the hop. Starting the next agent now would
+                # answer a question the caller has moved on from.
+                return ''
+            if lines := self._agents[going_to].enter:
+                # Cover the hop: a whole model request stands between the
+                # caller finishing and the next agent's first word. Through the
+                # call, so a tool firing next does not cover it twice.
+                await self._call.say(_pick(f'enter:{output.to}', lines))
+        return f'the {self._budget.step_runs}-run hop budget'
 
     async def _speak(self, node: Node, prompt: str | None, output_type=None):
         """Run one step's agent, streaming whatever it says straight to TTS.
@@ -311,6 +351,15 @@ class PydanticAgentProcessor(FrameProcessor):
                 deps=self._call,
                 message_history=list(self._call.messages),
                 output_type=output_type,
+                # The turn's own tally, not this run's: a turn that hands the
+                # caller between four agents spends one allowance between them.
+                usage=self._usage,
+                usage_limits=self._limits,
+                # Semantic repair only. A provider's own HTTP retries are a
+                # different layer with a different counter, and folding them
+                # together would let a flaky network buy extra attempts at
+                # getting a tool call right.
+                retries=self._budget.repair_retries,
             ) as events:
                 self._events = events
                 async for event in events:
@@ -355,6 +404,12 @@ class PydanticAgentProcessor(FrameProcessor):
                     elif isinstance(event, AgentRunResultEvent):
                         self._call.messages = event.result.all_messages()
                         output = event.result.output
+        except (UsageLimitExceeded, TimeoutError):
+            # The turn's budget, not this run's problem. Straight up to
+            # `_turn`, which owns the allowance and speaks the fixed line --
+            # swallowed here it would become one more agent run apologising,
+            # which is the unbudgeted extra request this replaced.
+            raise
         except RunCancelled as cancelled:
             # Barge-in. Keep what completed: a tool that ran and returned is a
             # thing that happened, and the next turn has to know about it.

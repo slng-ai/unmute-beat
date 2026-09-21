@@ -488,7 +488,7 @@ async def correction_refuses_stale_slot():
         # did not say, which is N2's finding, and a correction is two days said.
         await probe._turn(f'{said_first} please -- actually, make it {said_second}')
 
-    assert call.state.booking_day == second.isoformat(), call.state.booking_day
+    assert call.state.booking_day == second, call.state.booking_day
     assert call.state.appointment is None, 'a slot from the day they moved away from must not book'
     assert diary.bookings_for(PHONE, diary.now().date()) == [], 'and nothing reached the diary'
     assert call.state.agent == 'booking', 'the step stays open so the model can offer the right day'
@@ -939,12 +939,12 @@ async def a_search_withdraws_the_one_before_it():
         return await refuses_save(call, 'book', haircut, '')
 
     sunday = await read_diary(_context(call), 'sunday', 'any')
-    assert sunday.status == 'closed' and call.state.booking_day == ''
+    assert sunday.status == 'closed' and call.state.booking_day is None
     assert 'currently offering' in await refused_now()
 
     await read_diary(_context(call), 'friday', 'haircut')  # back on the table
     await read_diary(_context(call), 'whenever suits you', 'haircut')
-    assert call.state.booking_day == ''
+    assert call.state.booking_day is None
     assert 'currently offering' in await refused_now()
 
     # The one a day comparison can never see: same caller, same day, and the

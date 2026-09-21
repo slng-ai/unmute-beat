@@ -20,6 +20,7 @@ Asserts, no pytest, no fixtures, same as the rest.
 
 import asyncio
 import pathlib
+from datetime import date, datetime, time
 
 from pydantic import BaseModel, ValidationError
 
@@ -516,7 +517,7 @@ def a_commit_refuses_a_field_that_does_not_exist():
     # The correctly spelled one still works, which is what makes the refusal
     # a typo check rather than a wall.
     call.commit(booking_day='2026-09-25')
-    assert call.state.booking_day == '2026-09-25'
+    assert call.state.booking_day == date(2026, 9, 25)
 
 
 def a_day_that_does_not_exist_is_refused():
@@ -529,8 +530,58 @@ def a_day_that_does_not_exist_is_refused():
     """
     _refused(SalonState, agent='concierge', booking_day='2026-02-30')
     _refused(SalonState, agent='concierge', booking_day='2026-13-01')
-    assert SalonState(booking_day='2026-09-25').booking_day == '2026-09-25'
-    assert SalonState(booking_day='').booking_day == '', 'absence is still not a wrong value'
+    # A real `date` now, parsed from the ISO string a service sends.
+    assert SalonState(booking_day='2026-09-25').booking_day == date(2026, 9, 25)
+    assert SalonState(booking_day=date(2026, 9, 25)).booking_day == date(2026, 9, 25)
+    assert SalonState(booking_day=None).booking_day is None, 'absence is still not a wrong value'
+    # A leap day the calendar has, and one it does not.
+    assert SalonState(booking_day='2028-02-29').booking_day == date(2028, 2, 29)
+    _refused(SalonState, agent='concierge', booking_day='2027-02-29')
+    # Not a day, however plausible the number looks: Pydantic's ordinary lax
+    # mode reads 1700000000 as a date in 2023, and a number that reached this
+    # field by accident would become a real, wrong appointment.
+    _refused(SalonState, agent='concierge', booking_day=1700000000)
+    _refused(SalonState, agent='concierge', booking_day=datetime(2026, 9, 25, 10, 0))
+    # And a day round-trips through JSON as the string it arrived as.
+    assert SalonState(booking_day='2026-09-25').model_dump(mode='json')['booking_day'] == '2026-09-25'
+
+
+def a_time_is_a_local_salon_time():
+    """No timezone on it, no seconds, and never a number.
+
+    The salon has one timezone and a half-hour grid, so a time arriving with
+    an offset is asserting something about where it is rather than answering
+    the diary, and a time with seconds on it did not come off that grid.
+    """
+    at = time(9, 30)
+    assert (
+        Appointment(
+            booking_id='BK1', service='haircut', date='2026-09-25', time='09:30', spoken='x', action='book'
+        ).time
+        == at
+    )
+    for wrong in ('09:30:15', '09:30+02:00', '9:30', 1700000000):
+        _refused(
+            Appointment,
+            booking_id='BK1',
+            service='haircut',
+            date='2026-09-25',
+            time=wrong,
+            spoken='x',
+            action='book',
+        )
+    # And out again as the `HH:MM` the wire uses.
+    booked = Appointment(
+        booking_id='BK1', service='haircut', date='2026-09-25', time=at, spoken='x', action='book'
+    )
+    assert booked.model_dump(mode='json') | {} == {
+        'booking_id': 'BK1',
+        'service': 'haircut',
+        'date': '2026-09-25',
+        'time': '09:30:00',
+        'spoken': 'x',
+        'action': 'book',
+    }
 
 
 def a_submitted_number_is_not_the_same_type_as_a_stored_one():
@@ -563,6 +614,7 @@ async def main():
     a_commit_validates_rather_than_copies()
     a_commit_refuses_a_field_that_does_not_exist()
     a_day_that_does_not_exist_is_refused()
+    a_time_is_a_local_salon_time()
     a_submitted_number_is_not_the_same_type_as_a_stored_one()
     the_waiting_step_is_a_validated_name()
     presence_is_not_truthiness()

@@ -150,7 +150,7 @@ async def the_fallback_does_no_business_work():
         await probe._turn('hello?')
 
     assert EXHAUSTED in probe.fixed()
-    assert call.state.appointment is None and call.state.booking_day == ''
+    assert call.state.appointment is None and call.state.booking_day is None
     assert call.state.customer_verified == before.customer_verified
 
 

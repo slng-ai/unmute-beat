@@ -102,7 +102,7 @@ class Slots(BaseModel):
     bookings: list[Held] = []
     slots: list[Slot] = []
     day: str = ''
-    date: Date = ''
+    date: Date | None = None
     note: str = ''
     price_euros: int | None = None
 
@@ -299,7 +299,14 @@ def _disagrees(action: str, booking_id: str, offered: dict, written: Saved) -> s
     if action in ('move', 'cancel') and booking_id and written.booking_id != booking_id:
         return f'it is about booking {written.booking_id}, not {booking_id}'
     if action in ('book', 'move') and offered:
-        got = {'date': written.date, 'time': written.time, 'service': written.service}
+        got = {
+            # Back to the wire shape the offer was recorded in: the offer is a
+            # dict the service handed over, and comparing a `date` against the
+            # string it was written as is a comparison that always disagrees.
+            'date': written.date.isoformat(),
+            'time': written.time.strftime('%H:%M'),
+            'service': written.service,
+        }
         # Only the three that identify the slot. `offer_of` also hands back the
         # one phrasing to say it out loud, which is presentation and is not
         # something a result has to agree with.

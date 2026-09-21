@@ -282,7 +282,7 @@ async def n2_friday_is_not_next_friday():
 
     # Their own words go through, and resolve to the day they named.
     found = await agents.read_diary(_context(call), 'Friday', 'haircut')
-    assert found.date == FRIDAY.isoformat(), found.date
+    assert found.date == FRIDAY, found.date
 
     # And the modifier is not forbidden -- it is only forbidden when the
     # caller did not say it. A caller who says "next Friday" gets next Friday.
@@ -290,7 +290,7 @@ async def n2_friday_is_not_next_friday():
     _heard(later)
     later.turn_started('can I come in next Friday?')
     found = await agents.read_diary(_context(later), 'next Friday', 'haircut')
-    assert found.date == NEXT_FRIDAY.isoformat(), found.date
+    assert found.date == NEXT_FRIDAY, found.date
 
 
 async def n2_the_day_survives_the_verification_detour():

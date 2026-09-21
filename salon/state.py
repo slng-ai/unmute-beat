@@ -11,10 +11,20 @@ from __future__ import annotations
 
 import re
 from datetime import date as _date
+from datetime import datetime
+from datetime import time as _time
 from typing import Annotated, Literal
 
 import phonenumbers
-from pydantic import AfterValidator, BaseModel, Field, PrivateAttr, TypeAdapter, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    Field,
+    PrivateAttr,
+    TypeAdapter,
+    model_validator,
+)
 from pydantic_extra_types.phone_numbers import PhoneNumberValidator
 
 from salon import diary
@@ -80,13 +90,42 @@ def _spanish_and_present(value: str) -> str:
     return _spanish.validate_python(value)
 
 
-def _a_real_day(value: str) -> str:
-    """A day that exists. '2026-02-30' is the right shape and not a date."""
-    if value:
-        try:
-            _date.fromisoformat(value)
-        except ValueError:
-            raise ValueError('expected a day that exists, written year-month-day, like 2026-03-19') from None
+def _one_day(value: object) -> _date:
+    """A day, as a `date` or the ISO string a service sends. Nothing else is a day.
+
+    The narrow reading matters more than the parse. Pydantic's ordinary lax
+    mode would take `1700000000` here and call it a day in 2023: a number that
+    reached a date field by accident would become a real, plausible, wrong
+    appointment. `datetime` is refused too -- an appointment is on a day, and a
+    day carrying a time of its own is two answers to one question.
+    """
+    if isinstance(value, datetime):
+        raise ValueError('expected a day, not a moment in time')
+    if isinstance(value, _date):
+        return value
+    if isinstance(value, str):
+        # `date.fromisoformat` is the calendar check as well as the shape one:
+        # it refuses 2026-02-30, which the regex this replaced accepted.
+        return _date.fromisoformat(value)
+    raise ValueError('expected a day written year-month-day, like 2026-03-19')
+
+
+def _one_time(value: object) -> _time:
+    """A wall-clock time in this salon's own day: no timezone, no seconds.
+
+    The salon has one timezone and a half-hour grid. A time arriving with an
+    offset is asserting something about where it is, and a time with seconds
+    on it did not come off that grid; both are a service disagreeing with the
+    diary rather than answering it.
+    """
+    if isinstance(value, str):
+        value = _time.fromisoformat(value)
+    if not isinstance(value, _time) or isinstance(value, datetime):
+        raise ValueError('expected a 24-hour time, like 09:30')
+    if value.tzinfo is not None:
+        raise ValueError('expected a local salon time, with no timezone on it')
+    if value.second or value.microsecond:
+        raise ValueError('expected a time on the half hour, with no seconds on it')
     return value
 
 
@@ -100,14 +139,14 @@ Phone = Annotated[
     AfterValidator(_spanish_or_absent),
     Field(description='A Spanish phone number in full international form, like +34600111222.'),
 ]
-# The shape first, then the calendar: `fromisoformat` alone accepts '20260319'
-# and '2026-03-19T10:00', and the regex alone accepted 30 February.
-Date = Annotated[
-    str,
-    _shape(r'^\d{4}-\d{2}-\d{2}$', 'expected a day written year-month-day, like 2026-03-19'),
-    AfterValidator(_a_real_day),
-]
-Time = Annotated[str, _shape(r'^([01]\d|2[0-3]):[0-5]\d$', 'expected a 24-hour time, like 09:30')]
+# Native `date` and `time`, validated by Pydantic, rather than strings the
+# application checks the shape of. The diary has always worked in these
+# internally; what changes is that the boundary now agrees with it, so a
+# comparison is a comparison of days and not of spellings. `_one_day` and
+# `_one_time` are what keep the old refusals: an impossible date, a numeric
+# timestamp, a timezone, a stray second.
+Date = Annotated[_date, BeforeValidator(_one_day)]
+Time = Annotated[_time, BeforeValidator(_one_time)]
 Id = Annotated[str, _shape(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', 'expected an identifier')]
 # For tool arguments only. Never for state: see `_spanish_and_present`.
 SubmittedPhone = Annotated[
@@ -351,7 +390,7 @@ class SalonState(harness.VoiceState):
     # their mind about the day cannot be put back onto the old one: the offer
     # died with the question. The consequences of a correction are computed, not
     # asked about, because no prompt sentence can hold an invariant.
-    booking_day: Date = ''
+    booking_day: Date | None = None
     appointment: Appointment | None = None
     # How many business writes this call has already had accepted. Part of the
     # name of the next one, and that is its whole job: the operation token is

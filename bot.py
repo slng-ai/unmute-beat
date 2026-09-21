@@ -237,7 +237,9 @@ def _record(call, session_id: str) -> None:
             'session': session_id,
             'settings': settings(),
             'outcome': outcome(getattr(call.state, 'customer_phone', '')),
-            'state': call.state.model_dump(),
+            # JSON mode, so a day is the ISO string the record is read back as
+            # rather than a `date` nothing outside Python can load.
+            'state': call.state.model_dump(mode='json'),
             'ended': datetime.now(UTC).isoformat(),
         }
         path = pathlib.Path('bench/raw') / f'live-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json'

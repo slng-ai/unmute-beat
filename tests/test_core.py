@@ -23,12 +23,13 @@ from pipecat.frames.frames import (
     LLMTextFrame,
     TTSSpeakFrame,
 )
+from pydantic_ai import RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
 from salon import diary
 from salon.agents import AGENTS
-from salon.state import open_call
+from salon.state import SalonCall, open_call
 from voice import core
 from voice.core import EXHAUSTED, TurnBudget, take_turn
 from voice.processor import PydanticAgentProcessor
@@ -71,6 +72,17 @@ async def probe(question: str) -> str:
     return f'nothing useful about {question}'
 
 
+async def speaking_probe(ctx: RunContext[SalonCall], line: str) -> str:
+    """A tool that says a line of its own while it runs, which is what `record_complaint` does.
+
+    Needed because the interleaving only exists when something other than the
+    model speaks in the middle of a run. Borrowing a real tool for it would
+    tie this check to the agency's mind about that tool.
+    """
+    await ctx.deps.speak_now(line)
+    return 'said'
+
+
 SLOW = 0.05
 
 
@@ -97,7 +109,7 @@ def scripted(**by_agent):
                 # `probe` alongside the agent's real tools, never instead of
                 # them: `override(toolsets=...)` adds to what the agent was
                 # built with.
-                toolsets=[FunctionToolset([probe, slow_probe])],
+                toolsets=[FunctionToolset([probe, slow_probe, speaking_probe])],
             )
         )
     return stack
@@ -258,6 +270,42 @@ async def speech_before_a_tool_survives_the_seam():
     text = [f.text for f in probe.frames if isinstance(f, LLMTextFrame)]
     assert text and text[0].startswith('Let me see'), text
     assert 'We close at six.' in ''.join(text), text
+
+
+async def the_ledger_keeps_the_order_the_caller_heard_it_in():
+    """Model text, a fixed line from a tool, then more model text -- in that order.
+
+    Reproduced by the second recheck. Model speech was accumulated for the
+    whole run and appended once in `finally`, while a fixed line was appended
+    the moment it went out: the caller heard `Before. Fixed middle. After.`
+    and the ledger read `fixed: Fixed middle.` then `model: Before. After.`.
+    Both model sentences ended up on one side of a line spoken between them,
+    and no timestamp can put back a boundary that was never kept -- sorting
+    two records cannot split one of them in half.
+
+    Asserted against the frames rather than against an expected string alone:
+    what the ledger says was said has to be what went to the wire, in order.
+    """
+    call = _fresh(True)
+    probe = Probe(call)
+
+    async def talk_speak_talk(messages, info: AgentInfo):
+        if 'speaking_probe' in str(messages):
+            yield 'After.'
+            return
+        yield 'Before. '
+        yield {0: DeltaToolCall(name='speaking_probe', json_args=json.dumps({'line': 'Fixed middle. '}))}
+
+    with scripted(concierge=talk_speak_talk):
+        await probe._turn('when do you close?')
+
+    assert probe.heard() == 'Before. Fixed middle. After.', probe.heard()
+    assert [(s.kind, s.text) for s in call.spoken] == [
+        ('model', 'Before. '),
+        ('fixed', 'Fixed middle. '),
+        ('model', 'After.'),
+    ], call.spoken
+    assert ''.join(s.text for s in call.spoken) == probe.heard(), call.spoken
 
 
 async def every_response_frame_is_closed():
@@ -557,6 +605,7 @@ async def main():
     await time_to_first_token_is_timed_per_request()
     await a_new_turn_starts_a_new_clock()
     await the_ledger_holds_both_halves_of_what_was_said()
+    await the_ledger_keeps_the_order_the_caller_heard_it_in()
     await the_cores_own_fixed_lines_are_in_the_ledger_too()
     await the_ledger_is_cut_down_to_what_was_heard()
     await a_segment_is_timed_from_when_it_started_going_out()

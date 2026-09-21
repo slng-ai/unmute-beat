@@ -34,12 +34,10 @@ import os
 import pathlib
 import random
 import statistics
-import subprocess
 import sys
 import time
 from collections import Counter as Tally
 from datetime import UTC, datetime
-from importlib.metadata import version
 
 from dotenv import load_dotenv
 from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
@@ -49,7 +47,7 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
 from salon import diary  # noqa: E402
 from salon.state import open_call  # noqa: E402
-from voice.harness import TurnBudget  # noqa: E402
+from utils.arm import settings  # noqa: E402
 from voice.processor import PydanticAgentProcessor  # noqa: E402
 
 PHONE = '+34600111222'
@@ -143,7 +141,15 @@ SCENARIOS: dict[str, tuple[str, ...]] = {
 # `knowledge`: the salon's documents are in the prompt here and behind a
 # retrieval tool there, so a faster knowledge turn measures the inlining and
 # not the architecture.
-NOT_COMPARABLE = frozenset({'manager', 'knowledge'})
+# `reference`: the only conversation both arms have been driven with, and the
+# fixtures underneath it are not the same. The native run was offered 15:00
+# and this diary's twelve Friday haircut slots stop at 14:30, so the caller
+# asking for three o'clock is answered differently before the model has done
+# anything -- and availability changes tool work and requests, not only which
+# slot is booked. The identity differs too. It stays in the suite and its
+# requests are still printed beside the native ones, as a replay to read
+# rather than a result to pool.
+NOT_COMPARABLE = frozenset({'manager', 'knowledge', 'reference'})
 
 # What the native arm spent on the `reference` conversation, one number per
 # caller turn, counted off trace f1c4f999e516a7792dfdbed72fa8262d by
@@ -175,9 +181,17 @@ EXPECTED: dict[str, dict] = {
     'reference': {
         'service': 'haircut',
         'date': '2026-09-25',
-        # No time pinned. The caller asks for three o'clock and this diary's
-        # twelve offered slots stop at 14:30, so whatever they are given is
-        # the fixture mismatch showing through rather than a result to fix.
+        # The caller asks for three o'clock. This diary offers 09:00 to 14:30
+        # in half hours and nothing later, so the nearest thing to what they
+        # asked for is 14:30 and that is what a correct answer books.
+        #
+        # This used to pin no time at all, on the grounds that the fixture
+        # differs. It does -- but "no time" passes a run that books 09:00,
+        # six hours from what the caller said, and a booking at the wrong
+        # time is the failure this oracle exists to catch. The fixture
+        # mismatch is recorded by keeping the scenario out of the comparable
+        # population, not by declining to check it.
+        'time': '14:30',
         'writes': 1,
         'wrote_on_turn': 3,
     },
@@ -224,6 +238,14 @@ EXPECTED: dict[str, dict] = {
     'knowledge': {},
 }
 assert set(EXPECTED) == set(SCENARIOS), 'every scenario states its outcome, or it cannot be scored'
+# A booking has a time, and the oracle has to say which one. `reference` left
+# it out on the grounds that the fixture differs from the native arm's -- and
+# then passed a run that booked 09:00 against a caller who asked for three in
+# the afternoon. A fixture that does not match is recorded by keeping the
+# scenario out of the comparable population, not by declining to check it.
+assert all('time' in want for want in EXPECTED.values() if want.get('service')), (
+    'a scenario expecting a booking must say at what time, or the wrong appointment passes'
+)
 
 
 def judge(name: str, call, timeline: list[dict]) -> str:
@@ -447,49 +469,6 @@ def spread(values: list[float]) -> str:
     return f'p50 {p(0.5):.2f}  p90 {p(0.9):.2f}  max {ordered[-1]:.2f}  (nearest rank)'
 
 
-def settings() -> dict:
-    """What this arm was, recorded beside its numbers.
-
-    A latency difference between two arms means nothing without the two
-    configurations it is a difference between, and "the repository at the
-    time" is not a record anybody can pair a later run against. Unknown stays
-    unknown: the fields this process cannot see are the ones that block a
-    strict matched-configuration claim, and leaving them out is how that
-    block goes unnoticed.
-    """
-    from salon import agents
-
-    revision = subprocess.run(
-        ['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=False
-    ).stdout.strip()
-    dirty = subprocess.run(
-        ['git', 'status', '--porcelain'], capture_output=True, text=True, check=False
-    ).stdout.strip()
-    return {
-        'revision': revision or 'unknown',
-        'uncommitted_changes': bool(dirty),
-        'python': sys.version.split()[0],
-        'pydantic_ai': version('pydantic-ai-slim'),
-        'model': str(agents.MODEL),
-        'model_settings': str(agents.SETTINGS),
-        'budget': str(TurnBudget()),  # what the processor is built with
-        'speak_by': agents.SPEAK_BY,
-        'timezone': str(diary.TZ),
-        'started': datetime.now(UTC).isoformat(),
-        'seed_customers': sorted(diary._customers),
-        'clock': CLOCK.isoformat(),
-        # The rule that decides how many turns a booking takes, and one of
-        # the things two arms must match before their turn counts mean the
-        # same. This one books on an unambiguous choice of an offered time;
-        # the native arm reads the booking back and waits for a separate yes.
-        'confirmation_policy': 'books on an unambiguous selection; no separate readback turn',
-        # Not recorded here because this process cannot see them, and each one
-        # is a dimension the two arms have to match on before a difference
-        # between them means anything.
-        'unknown': ['provider endpoint', 'region', 'stt/tts route', 'transport', 'audio settings'],
-    }
-
-
 async def main() -> None:
     repeats = int(sys.argv[1]) if len(sys.argv) > 1 else 3
     label = sys.argv[2] if len(sys.argv) > 2 else ('D-pinned' if os.getenv('BENCH_PINNED') else 'D')
@@ -596,17 +575,25 @@ async def main() -> None:
         line = '  '.join(f'{turn}:{statistics.fmean(v):.1f}' for turn, v in sorted(by_turn.items()))
         marker = '' if name not in NOT_COMPARABLE else '   <- not comparable across arms'
         print(f'    {name:<22} {line}{marker}')
+    # Its own selection, because `reference` is deliberately out of the
+    # comparable population and `good` therefore does not contain it. Runs
+    # that did the job, so a replay that booked the wrong time is not
+    # averaged into what the conversation costs.
+    did_the_job = {r['run'] for r in scored if r['scenario'] == 'reference' and r['business'] == 'ok'}
+    replayed = [r for r in replied if r['scenario'] == 'reference' and r['run'] in did_the_job]
     ours = [
-        statistics.fmean([float(r['runs']) for r in good if r['scenario'] == 'reference' and r['turn'] == n])
+        statistics.fmean([float(r['runs']) for r in replayed if r['turn'] == n])
         for n in range(len(SCENARIOS['reference']))
-        if any(r['scenario'] == 'reference' and r['turn'] == n for r in good)
+        if any(r['turn'] == n for r in replayed)
     ]
     if len(ours) == len(NATIVE_REFERENCE):
         print('\n  the reference conversation, the same five utterances, requests per turn:')
         print(f'    native f1c4f999   {list(NATIVE_REFERENCE)}   total {sum(NATIVE_REFERENCE)}')
         print(f'    this harness      {[round(n, 1) for n in ours]}   total {sum(ours):.1f}')
-        print('    (the identity and the 15:00 slot differ; see the scenario. Requests are')
-        print('     comparable, seconds are not -- there is no native run of this layer.)')
+        print('    NOT a comparison. The two arms were offered different times for the slot the')
+        print('    caller asks for and identified the caller differently, and availability')
+        print('    changes how many requests a turn takes. Read it as a replay until the')
+        print('    fixtures, the consent policy and the identity match on both sides.')
 
     print('\n  Paired runs are the point: these numbers mean something only beside a')
     print('  contemporaneous run of the other arm on the same scenarios and settings.')

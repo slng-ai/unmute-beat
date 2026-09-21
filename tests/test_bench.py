@@ -309,6 +309,34 @@ def a_turn_with_no_latency_recorded_is_still_a_turn():
     assert len(found.user_bot_latency) == 4, 'the measurement is missing, and only the measurement'
 
 
+def pooling_two_calls_keeps_both_greetings():
+    """Every call has a greeting, not just the first one in the window.
+
+    Reproduced by the second recheck. The greeting was picked by
+    `index == 0` over the pooled list, which is one turn however many calls
+    are in it: two native reference calls read as **eleven** caller turns and
+    one greeting instead of ten and two, and the mean fell from 2.0 requests
+    per turn to 1.818. The distortion grows with the sample, which is the
+    direction pooling is supposed to improve in -- and partitioning by arm
+    does not touch it, because both calls are the same arm.
+    """
+    second = copy.deepcopy(NATIVE)
+    for span in second:
+        span['id'] = f'{span["id"]}-b'
+        span['traceId'] = f'{span["traceId"]}-b'
+        span['sessionId'] = f'{span.get("sessionId")}-b'
+        if span.get('parentObservationId'):
+            span['parentObservationId'] = f'{span["parentObservationId"]}-b'
+
+    found = analyse([*copy.deepcopy(NATIVE), *second])
+    assert found.arm == 'native', found.arm
+    assert len(found.turns) == 10, found.turns
+    assert found.greeting_spans == 2, found.greeting_spans
+    assert sum(found.requests_per_turn.values()) == 20, found.requests_per_turn
+    assert found.zero_model_turns == 0, 'no greeting is sitting in the denominator'
+    assert sum(found.counts) / len(found.counts) == 2.0, found.counts
+
+
 def the_greeting_is_identified_by_what_it_holds():
     """Not by position alone either: a first turn that did work is a caller turn."""
     busy = copy.deepcopy(NATIVE)
@@ -378,6 +406,7 @@ async def main():
     time_to_first_token_is_recorded_in_seconds()
     a_turn_with_no_latency_recorded_is_still_a_turn()
     the_greeting_is_identified_by_what_it_holds()
+    pooling_two_calls_keeps_both_greetings()
     two_arms_in_one_window_are_refused()
     a_span_attribute_is_found_under_either_spelling()
     print('ok')

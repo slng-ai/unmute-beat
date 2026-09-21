@@ -593,9 +593,25 @@ def every_tool_that_writes_is_an_action():
             if isinstance(inner, ast.Call) and name and name.startswith('_'):
                 called_by.setdefault(name, set()).add(node.name)
 
+    def reaches(helper: str, seen: set[str]) -> set[str]:
+        """Every named tool that can reach this helper, through however many private hops.
+
+        Transitive, because one hop is not the rule. `_unknown` commits and is
+        called by `_answered`, which is private too: a check that stopped at
+        the first caller reported a private helper as the claimant and would
+        have kept reporting one however long the chain got.
+        """
+        out: set[str] = set()
+        for caller in called_by.get(helper, set()):
+            if caller in seen:
+                continue
+            seen.add(caller)
+            out |= reaches(caller, seen) if caller.startswith('_') else {caller}
+        return out
+
     helpers = {name for name in writes if name.startswith('_')}
     for helper in helpers:
-        callers = called_by.get(helper, set())
+        callers = reaches(helper, {helper})
         assert callers and callers <= agents.ACTIONS, (
             f'{helper} writes to state and is reachable from {sorted(callers) or "nowhere"}, '
             'which is not an action that can claim the write'

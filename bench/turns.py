@@ -198,10 +198,22 @@ def caller_turns(spans: list[dict]) -> tuple[list[str], list[dict], str]:
         if kind == 'SPAN':
             hosted.add(home)
 
+    # The first turn *of each trace*, not the first of the window. Pooling two
+    # calls, `index == 0` is true of one of them and every other call's
+    # greeting became a caller turn that asked no model: two native
+    # reference calls read as eleven turns and one greeting instead of ten
+    # and two, and the mean requests per turn fell from 2.0 to 1.818. The
+    # distortion grows with the number of calls, which is the direction a
+    # pooled sample is supposed to improve in.
+    opened: dict[str, str] = {}
+    for turn in pipecat:
+        opened.setdefault(str(turn.get('traceId')), str(turn['id']))
     greetings = [
         turn
-        for index, turn in enumerate(pipecat)
-        if index == 0 and str(turn['id']) not in worked and _attribute(turn, USER_BOT_LATENCY) is None
+        for turn in pipecat
+        if opened.get(str(turn.get('traceId'))) == str(turn['id'])
+        and str(turn['id']) not in worked
+        and _attribute(turn, USER_BOT_LATENCY) is None
     ]
 
     if ours:

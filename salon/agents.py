@@ -22,11 +22,12 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NoReturn
 
 from pydantic import BaseModel, ValidationError
 from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr, Tool, ToolOutput
@@ -47,6 +48,7 @@ from salon.state import (
     Service,
     SubmittedPhone,
     Time,
+    Unresolved,
 )
 from voice.harness import (
     STRICT,
@@ -139,7 +141,15 @@ def operation_token(*parts: object) -> str:
 # response that reports one of the other two is not this request's answer,
 # however well-formed it is.
 DID = {'book': 'booked', 'move': 'moved', 'cancel': 'cancelled'}
-UNDID = {status: action for action, status in DID.items()}
+
+# Said by every entry point while an earlier write is outstanding. One string,
+# because a complaint and a booking are refused for the same reason and two
+# copies of a reason drift.
+OUTSTANDING = (
+    'There is a write on this call whose outcome is still unknown, so nothing else may be '
+    'written until somebody checks it. Tell the caller you will confirm what happened, and '
+    'do not try to book, move or cancel anything.'
+)
 
 UNKNOWN = (
     'It is not clear whether that saved: {why}. Nothing else can be written on this call until '
@@ -168,6 +178,63 @@ def _disagrees(action: str, booking_id: str, offered: dict, written: Saved) -> s
     return ''
 
 
+def _unknown(ctx: RunContext[SalonCall], pending: Unresolved, why: str) -> NoReturn:
+    """Record this write as outstanding and refuse, which is the only thing that blocks the next one.
+
+    On the state, not in a sentence. Retry text asking the model not to try
+    again is not a guard, and changing one argument changes the token, so the
+    service's own idempotency cache never sees the second attempt.
+    """
+    ctx.deps.commit(unresolved=pending)
+    raise ModelRetry(UNKNOWN.format(why=why))
+
+
+def _answered[Result: BaseModel](
+    ctx: RunContext[SalonCall],
+    pending: Unresolved,
+    shape: type[Result],
+    attempt: Callable[[], object],
+    book: str,
+) -> Result:
+    """Perform one write and read its answer, or record the outcome as unknown and refuse.
+
+    One place, because a booking and a complaint fail the same three ways: the
+    service does not answer, it answers in a shape nothing can read, or it
+    answers about something else. Only the third is specific to what was
+    written, so only the third is left to the caller of this.
+
+    A lost answer is never "nothing happened". The write may well have
+    committed, and the token is asked what it actually did before anything
+    concludes otherwise -- which is what the complaint book had a token for
+    and no code to use it, so a lost response there wrote the grievance down
+    twice.
+    """
+    try:
+        raw = attempt()
+    except diary.RefusedError:
+        # The service saying no, in words the caller can hear. Not this
+        # function's business: an answer, and a clear one.
+        raise
+    except Exception:
+        recovered = diary.outcome_of(pending.token)
+        if recovered is None:
+            _unknown(ctx, pending, f'the {book} did not answer')
+        raw = recovered
+    try:
+        return shape.model_validate(raw)
+    except ValidationError:
+        # The same question the lost-answer path asks, and for the same
+        # reason: the service may have recorded a perfectly good outcome
+        # under this token and merely told us about it badly.
+        recovered = diary.outcome_of(pending.token)
+        if recovered is None or recovered is raw:
+            _unknown(ctx, pending, f'the {book} answered in a shape this cannot read')
+        try:
+            return shape.model_validate(recovered)
+        except ValidationError:
+            _unknown(ctx, pending, f'the {book} answered in a shape this cannot read')
+
+
 async def _settle(ctx: RunContext[SalonCall]) -> str:
     """Finish an earlier write whose outcome was never established, or refuse to move past it.
 
@@ -177,19 +244,46 @@ async def _settle(ctx: RunContext[SalonCall]) -> str:
     sentence of retry text asking the model not to. Changing an argument
     changes the token, so the idempotency cache never saw the second attempt.
 
+    What comes back is checked against what was *asked for*, by the same rule
+    the first answer was checked by. It used to be checked against nothing:
+    only a token was retained, so the action was read off whatever status
+    came back, and a `cancelled` result refused on the first attempt as an
+    answer to a `book` request was accepted on the second as an ordinary
+    cancellation -- stored, confirmed out loud, and the caller's booking gone.
+
     Returns what to say when the earlier write turns out to have landed, and
-    raises when it is still unknown.
+    raises when it is still unknown or still does not answer the question.
     """
-    token = ctx.deps.state.unresolved
-    outcome = diary.outcome_of(token)
+    pending = ctx.deps.state.unresolved
+    assert pending is not None, 'only reached while a write is outstanding'
+    outcome = diary.outcome_of(pending.token)
     if outcome is None:
-        raise ModelRetry(
-            'There is a write on this call whose outcome is still unknown, so nothing else may be '
-            'written until somebody checks it. Tell the caller you will confirm what happened, and '
-            'do not try to book, move or cancel anything.'
-        )
-    written = Saved.model_validate(outcome)
-    action = UNDID[written.status]
+        raise ModelRetry(OUTSTANDING)
+    if pending.action == 'complaint':
+        try:
+            record = ComplaintRecord.model_validate(outcome)
+        except ValidationError:
+            raise ModelRetry(UNKNOWN.format(why='the complaint book answered unreadably')) from None
+        if not record.recorded:
+            # Settled, and settled as a refusal: the book answered, it said
+            # no, and nothing is outstanding any more.
+            ctx.deps.commit(unresolved=None)
+            raise ModelRetry(
+                'The complaint was never taken -- the book refused it. Tell the caller it is not '
+                'logged and that someone will call them back.'
+            )
+        ctx.deps.commit(writes=ctx.deps.state.writes + 1, unresolved=None)
+        await ctx.deps.speak_now(_pick('noted', NOTED))
+        return f'complaint recorded: {record.reference}'
+    try:
+        written = Saved.model_validate(outcome)
+    except ValidationError:
+        raise ModelRetry(UNKNOWN.format(why='the diary answered in a shape this cannot read')) from None
+    # The request, not the reply, says what this was. Reading the action off
+    # the status is what let a contradiction in as a completion.
+    action = pending.action
+    if why := _disagrees(action, pending.booking_id, pending.offered, written):
+        raise ModelRetry(UNKNOWN.format(why=why)) from None
     ctx.deps.commit(
         appointment=Appointment(
             booking_id=written.booking_id,
@@ -201,7 +295,7 @@ async def _settle(ctx: RunContext[SalonCall]) -> str:
         ),
         agent=ctx.deps.resume('concierge'),
         writes=ctx.deps.state.writes + 1,
-        unresolved='',
+        unresolved=None,
     )
     await ctx.deps.speak_now(
         _pick(f'saved:{written.status}', SAVED[written.status]).format(
@@ -362,10 +456,7 @@ async def record_complaint(
     if ctx.deps.state.unresolved:
         # The same bar a booking meets. A write nobody has settled blocks
         # every other one, whichever book it would be written in.
-        raise ModelRetry(
-            'There is a write on this call whose outcome is still unknown, so nothing else may be '
-            'written until somebody checks it. Tell the caller you will confirm what happened.'
-        )
+        raise ModelRetry(OUTSTANDING)
     if not _present(ctx.deps.state.customer_verified):
         raise ModelRetry(
             'A complaint record needs an owner and nobody is identified yet. Hand to the verify agent first.'
@@ -377,10 +468,20 @@ async def record_complaint(
     token = operation_token(
         ctx.deps.id, ctx.deps.state.writes, ctx.deps.state.customer_phone, summary, requested_resolution
     )
-    recorded = ComplaintRecord.model_validate(
-        diary.record_complaint(
+    # Through the same boundary a booking goes through. The token alone was
+    # never the guard: a lost response propagated straight out of here, so
+    # the complaint that had in fact been written was written again under a
+    # paraphrase -- a new token, a new entry, one accepted write and two
+    # records in the book.
+    pending = Unresolved(token=token, action='complaint')
+    recorded = _answered(
+        ctx,
+        pending,
+        ComplaintRecord,
+        lambda: diary.record_complaint(
             ctx.deps.state.customer_phone, summary, requested_resolution, operation_token=token
-        )
+        ),
+        'complaint book',
     )
     # Validated, then *read*. A well-formed `{'recorded': False}` is the
     # complaint book saying it did not take it, and this used to say "Okay,
@@ -613,7 +714,11 @@ async def save_booking(
     # the day still matched while the service the caller had just corrected
     # did not. An offer belongs to one question, so the diary withdraws the
     # last one on every new search and there is a single enforcement of it.
-    offered = diary.offer_of(ctx.deps.id, slot_id)
+    #
+    # Asked under the caller's *current* identity as well as this call: a
+    # number corrected mid-call makes the caller somebody else, and the slots
+    # the previous identity was shown are not theirs to book.
+    offered = diary.offer_of(ctx.deps.id, slot_id, ctx.deps.state.customer_phone)
     # One token per business action, not per attempt. Derived from what the
     # action *is*, so a retry after a lost response derives the same one and
     # the diary returns the outcome it already recorded rather than booking a
@@ -639,61 +744,40 @@ async def save_booking(
         booking_id,
         additional,
     )
+    # The whole request, not just its name. What a recovery has to be checked
+    # against cannot be read back out of a hash, and `_settle` used to have
+    # only the hash.
+    pending = Unresolved(token=token, action=action, booking_id=booking_id, offered=offered)
     try:
-        saved = diary.save_booking(
-            ctx.deps.state.customer_phone,
-            action,
-            slot_id,
-            booking_id,
-            additional,
-            diary.now(),
-            operation_token=token,
-            offered_to=ctx.deps.id,
+        # Validated before a single field is read, so a malformed response
+        # cannot reach the state through an annotation nobody checks -- and
+        # an unreadable answer is an *unknown* outcome, not a failure. The
+        # write may well have landed; only the answer is broken.
+        written = _answered(
+            ctx,
+            pending,
+            Saved,
+            lambda: diary.save_booking(
+                ctx.deps.state.customer_phone,
+                action,
+                slot_id,
+                booking_id,
+                additional,
+                diary.now(),
+                operation_token=token,
+                offered_to=ctx.deps.id,
+            ),
+            'diary',
         )
     except diary.RefusedError as refused:
         # The diary's own words, which name what is actually possible instead of
         # leaving the model to guess a new slot.
         raise ModelRetry(str(refused)) from None
-    except Exception:
-        # Not a refusal: the service did not say no, it failed to answer. The
-        # write may well have committed, so treating this as "nothing
-        # happened" is how a caller ends up with two appointments. Ask what
-        # the token actually did.
-        recovered = diary.outcome_of(token)
-        if recovered is None:
-            # Genuinely unknown. Recorded as unknown on the state, which is
-            # what makes the next write refuse: a sentence of retry text
-            # asking the model not to try again is not a guard, and changing
-            # one argument changes the token, so the idempotency cache never
-            # sees the second attempt.
-            ctx.deps.commit(unresolved=token)
-            raise ModelRetry(UNKNOWN.format(why='the diary did not answer')) from None
-        saved = recovered
-    # Validated before a single field is read, so a malformed response cannot
-    # reach the state through an annotation nobody checks -- and an unreadable
-    # answer is an *unknown* outcome, not a failure. The write may well have
-    # landed; only the answer is broken.
-    try:
-        written = Saved.model_validate(saved)
-    except ValidationError:
-        # The same question the lost-response path asks, and for the same
-        # reason: the service may have recorded a perfectly good outcome
-        # under this token and merely told us about it badly.
-        recovered = diary.outcome_of(token)
-        if recovered is None or recovered is saved:
-            ctx.deps.commit(unresolved=token)
-            raise ModelRetry(UNKNOWN.format(why='the diary answered in a shape this cannot read')) from None
-        try:
-            written = Saved.model_validate(recovered)
-        except ValidationError:
-            ctx.deps.commit(unresolved=token)
-            raise ModelRetry(UNKNOWN.format(why='the diary answered in a shape this cannot read')) from None
     # Legal values are not an answer to this request. Checked before anything
     # is committed or said, because both of those are irreversible in front of
     # a caller.
     if why := _disagrees(action, booking_id, offered, written):
-        ctx.deps.commit(unresolved=token)
-        raise ModelRetry(UNKNOWN.format(why=why)) from None
+        _unknown(ctx, pending, why)
     appointment = Appointment(
         booking_id=written.booking_id,
         service=written.service,
@@ -717,7 +801,7 @@ async def save_booking(
     # that reads fine and breaks under a later edit.
     going_back_to = ctx.deps.resume('concierge')
     ctx.deps.commit(
-        appointment=appointment, agent=going_back_to, writes=ctx.deps.state.writes + 1, unresolved=''
+        appointment=appointment, agent=going_back_to, writes=ctx.deps.state.writes + 1, unresolved=None
     )
     await ctx.deps.speak_now(
         _pick(f'saved:{written.status}', SAVED[written.status]).format(

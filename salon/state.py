@@ -145,6 +145,31 @@ class Appointment(BaseModel):
     action: Literal['book', 'move', 'cancel']
 
 
+class Unresolved(BaseModel):
+    """A write this call started and never learned the outcome of, and what it asked for.
+
+    The token on its own was not enough. Reconciliation has to check the
+    answer it finds against the request that produced it, and a token is a
+    hash: the action, the booking and the offered slot cannot be read back
+    out of it. Holding only the token, recovery took the action from
+    whatever status came back -- so a `cancelled` result, correctly refused
+    on the first attempt as an answer to a `book` request, was accepted on
+    the second as an ordinary cancellation nobody had asked for.
+    """
+
+    model_config = harness.STRICT
+
+    token: str
+    # What was asked for, so what comes back can be checked against it.
+    # `complaint` is here because a complaint is a write like any other and
+    # fails the same three ways; it is settled by its own branch.
+    action: Literal['book', 'move', 'cancel', 'complaint']
+    booking_id: str = ''
+    # The slot this caller was offered, exactly as `diary.offer_of` returned
+    # it, so the recovered result meets the check the first answer met.
+    offered: dict[str, str] = {}
+
+
 class Handoff(harness.Handoff):
     to: AgentName
 
@@ -222,12 +247,13 @@ class SalonState(harness.VoiceState):
     # no longer existed. A retry of one intent happens with this unchanged and
     # still reconciles; a new intent follows an accepted write and cannot.
     writes: int = 0
-    # The operation token of a write this call started and never learned the
-    # outcome of. While it is set, no other write may run: an unanswered
+    # The write this call started and never learned the outcome of, and the
+    # request that started it. While it is set, no other write may run: an
+    # unanswered
     # write is not a write that did not happen, and the only thing that used
     # to stand between it and a second appointment was a sentence of retry
     # text asking the model not to try again.
-    unresolved: str = ''
+    unresolved: Unresolved | None = None
 
 
 # Keypad spellings of the words a carrier substitutes for a withheld number.

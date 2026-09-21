@@ -229,6 +229,13 @@ class CallContext(BaseModel):
     # Everything the caller was sent this turn, in order. Fixed lines are here
     # and nowhere else: they never enter the model's history.
     _spoken: list[Spoken] = PrivateAttr(default_factory=list)
+    # The model segment currently streaming, held open until something else
+    # speaks or the run ends. Model text used to be accumulated for the whole
+    # run and appended once at the end, so a run that spoke, called a tool
+    # that said a line, and spoke again recorded the fixed line *first* and
+    # both model sentences after it. The ledger had every word and the wrong
+    # order, and a timestamp cannot put back a boundary that was never kept.
+    _open: Spoken | None = PrivateAttr(default=None)
     # Whether the *model* streamed text this turn. Read by `note_spoken`,
     # which may only cut down a response this turn produced.
     _spoke: bool = PrivateAttr(default=False)
@@ -249,8 +256,12 @@ class CallContext(BaseModel):
 
     @property
     def spoken(self) -> list[Spoken]:
-        """This turn's delivered speech segments, in the order they went out."""
-        return self._spoken
+        """This turn's delivered speech segments, in the order they went out.
+
+        The segment still streaming is included, so a reader does not have to
+        know whether a run has finished to see what it said.
+        """
+        return self._spoken if self._open is None else [*self._spoken, self._open]
 
     def note_said(self, kind: Literal['fixed', 'model'], text: str, at: float | None = None) -> None:
         """One more segment the caller was sent, in the order it went out.
@@ -267,7 +278,33 @@ class CallContext(BaseModel):
             # is its first token and not the moment the run finished
             # assembling it. Default only for a line that is written and sent
             # in one go.
+            # Whatever the model was in the middle of saying ends here. It
+            # went out first, so it is recorded first: the order of this list
+            # is the order the caller heard, and that is the only thing it is
+            # for.
+            self.close_model_text()
             self._spoken.append(Spoken(kind, text, at=time.perf_counter() if at is None else at))
+
+    def note_model_text(self, text: str) -> None:
+        """One more piece of the model segment now streaming, opening it if it is the first.
+
+        Kept open rather than appended per delta, because a segment is what
+        the caller hears as one stretch of speech and `at` has to be its
+        first token. Closed by the next fixed line or by the end of the run,
+        whichever comes first, which is what keeps fixed and model speech in
+        the order they went out.
+        """
+        if not text:
+            return
+        if self._open is None:
+            self._open = Spoken('model', '')
+        self._open.text += text
+
+    def close_model_text(self) -> None:
+        """End the model segment now streaming, if there is one."""
+        if self._open is not None and self._open.text:
+            self._spoken.append(self._open)
+        self._open = None
 
     def note_heard(self, delivered: str) -> None:
         """Cut this turn's last model segment down to what was actually heard.
@@ -276,6 +313,9 @@ class CallContext(BaseModel):
         knows where speech stopped, so it says, and the ledger stops claiming
         the rest of the sentence.
         """
+        # The open segment first: an interruption lands while the model is
+        # still mid-sentence, which is exactly when it is the one being cut.
+        self.close_model_text()
         for segment in reversed(self._spoken):
             if segment.kind == 'model':
                 segment.text, segment.interrupted = delivered, True
@@ -371,6 +411,7 @@ class CallContext(BaseModel):
         """
         self._requests.clear()
         self._spoken.clear()
+        self._open = None
         self._spoke = False
 
     async def speak_now(self, text: str) -> None:

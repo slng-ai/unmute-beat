@@ -82,13 +82,22 @@ class Offer:
     rang first was bookable by everybody after them, for as long as the
     process lived: "this diary issued that id once" is not the same claim as
     "this caller was offered that time".
+
+    Two things scope it, and they are not the same thing. The *call* is the
+    key's first half, because two calls from one number are two
+    conversations. `phone` is who that conversation had turned out to be
+    about when the offer was made, and it is checked separately: a caller who
+    corrects their number mid-call becomes somebody else, and slots put in
+    front of the previous identity are not theirs. This field briefly held
+    the call id, which made the identity check compare the call against
+    itself and always agree.
     """
 
     day: Date
     at: time
     service: str
     issued_on: Date  # the salon day the offer was made; a later day stales it
-    phone: str = ''  # the caller it was put in front of, which is half its key
+    phone: str = ''  # the identity the offer was made under, '' for nobody in particular
 
 
 _customers: set[str] = {'+34600111222'}
@@ -392,7 +401,8 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime, offered_t
             # never be offered under one set of checks and written under another.
             if not _eligible(day, at, name, at_time):
                 slot_id = _slot_id(day, at, name)
-                candidates[slot_id] = Offer(day=day, at=at, service=name, issued_on=today, phone=who)
+                # `phone`, never `who`: the identity, not the conversation.
+                candidates[slot_id] = Offer(day=day, at=at, service=name, issued_on=today, phone=phone)
                 slots.append(
                     {
                         'slot_id': slot_id,
@@ -431,15 +441,30 @@ class RefusedError(Exception):
     """The diary would not take it, and the caller needs to hear why."""
 
 
-def offer_of(offered_to: str, slot_id: str) -> dict:
-    """What this caller was offered under that id: the day, the time and the service.
+def _offer_for(offered_to: str, slot_id: str, phone: str) -> Offer | None:
+    """The offer this call holds under that id, if it is still this caller's.
 
-    Empty when this diary never offered it to them. Exists so the
-    caller-facing rules can *ask* what a slot means instead of reading it out
-    of the string, which is the parsing this module stopped doing -- and so a
-    result can be checked against the slot it claims to be about.
+    The one place an offer is matched, so the read and the write cannot
+    disagree about what counts. An offer made before anybody was identified
+    carries no identity and stays bookable by whoever this call turns out to
+    be; one made under a number is void the moment that number changes.
     """
     offer = _offers.get((offered_to, slot_id))
+    if offer is None or (offer.phone and phone and offer.phone != phone):
+        return None
+    return offer
+
+
+def offer_of(offered_to: str, slot_id: str, phone: str = '') -> dict:
+    """What this caller was offered under that id: the day, the time and the service.
+
+    Empty when this diary never offered it to them, or offered it to who they
+    were before they corrected their number. Exists so the caller-facing
+    rules can *ask* what a slot means instead of reading it out of the
+    string, which is the parsing this module stopped doing -- and so a result
+    can be checked against the slot it claims to be about.
+    """
+    offer = _offer_for(offered_to, slot_id, phone)
     if offer is None:
         return {}
     return {
@@ -506,7 +531,7 @@ def save_booking(
     # This caller's own offers, never the salon's. A slot id is the same
     # string whoever it was shown to, so a single dictionary keyed by the id
     # made every offer bookable by everybody for as long as the process lived.
-    offer = _offers.get((who, slot_id))
+    offer = _offer_for(who, slot_id, phone)
     if offer is None:
         raise RefusedError(
             'That is not a slot this diary is currently offering this caller. Read the diary again '

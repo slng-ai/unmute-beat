@@ -1011,7 +1011,7 @@ async def an_unknown_write_blocks_the_next_one():
     # It asked the token rather than guessing, so the caller is told about the
     # booking that really exists instead of being left with an unknown.
     assert 'booked' in recovered, recovered
-    assert call.state.appointment is not None and call.state.unresolved == ''
+    assert call.state.appointment is not None and call.state.unresolved is None
     assert len(diary.bookings_for(PHONE, diary.now().date())) == 1, diary.bookings_for(
         PHONE, diary.now().date()
     )
@@ -1144,6 +1144,163 @@ async def a_complaint_is_written_once():
     assert len(diary.complaints()) == 1, diary.complaints()
 
 
+async def a_lost_complaint_answer_is_recovered_rather_than_written_twice():
+    """The complaint book commits, then the answer goes missing on the way back.
+
+    Reproduced by the second recheck: `record_complaint` derived a token and
+    never used it. The exception propagated, `writes` stayed at zero, nothing
+    recorded an operation outstanding, and the model retrying in different
+    words derived a different token -- so the book ended with the same
+    grievance in it twice and the call with one accepted write.
+
+    The failure is injected at the service call, not by editing state
+    afterwards: the point is that a wrapper which raises after committing is
+    what a lost response looks like from in here.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE, agent='complaints')
+    said = _heard(call)
+
+    real = diary.record_complaint
+
+    def commits_then_loses_the_answer(*args, **kwargs) -> dict:
+        real(*args, **kwargs)  # written, and recorded under its token
+        raise TimeoutError('no answer')
+
+    diary.record_complaint = commits_then_loses_the_answer  # ty: ignore[invalid-assignment]
+    try:
+        recorded = await agents.record_complaint(_context(call), 'the colour was wrong', 'a refund')
+    finally:
+        diary.record_complaint = real
+
+    assert recorded.recorded, recorded
+    assert len(diary.complaints()) == 1, diary.complaints()
+    assert call.state.writes == 1 and call.state.unresolved is None, call.state
+    assert said, 'and the caller was told'
+
+
+async def a_complaint_nobody_answered_for_blocks_the_next_write():
+    """The other half: nothing written, nothing cached, so the operation stays open.
+
+    And it is settled by the same path a booking is, because it is the same
+    kind of thing: an outstanding write is outstanding whichever book it
+    would have gone in.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE, agent='complaints')
+    _heard(call)
+
+    real = diary.record_complaint
+
+    def never_answers(*args, **kwargs) -> dict:
+        raise TimeoutError('no answer')
+
+    diary.record_complaint = never_answers  # ty: ignore[invalid-assignment]
+    try:
+        refusal = await _refuses(agents.record_complaint, _context(call), 'the colour was wrong', 'a refund')
+        assert 'not clear whether that saved' in refusal, refusal
+        assert call.state.unresolved is not None, 'recorded as outstanding'
+        assert call.state.unresolved.action == 'complaint', call.state.unresolved
+        assert call.state.writes == 0
+
+        # Rewording it is a different token, so nothing the book's own
+        # idempotency can refuse. What refuses is the call.
+        blocked = await _refuses(
+            agents.record_complaint, _context(call), 'my colour came out wrong', 'money back'
+        )
+        assert 'still unknown' in blocked, blocked
+    finally:
+        diary.record_complaint = real
+
+    assert diary.complaints() == [], diary.complaints()
+    # And a booking may not run past it either, whichever book is outstanding.
+    call.commit(agent='booking')
+    assert 'still unknown' in await _refuses(
+        agents.save_booking, _context(call), 'book', 'HAIRCUT-1', '', True, False
+    )
+
+
+async def a_recovered_result_still_has_to_answer_the_request():
+    """The contradiction refused on the first attempt, offered again on the second.
+
+    Reproduced by the second recheck. `_settle` held only a token, so it took
+    the action from whatever status came back: a `cancelled` result correctly
+    refused as an answer to `book` was accepted on recovery as an ordinary
+    cancellation, stored with `action='cancel'`, and read out to the caller.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
+    said = _heard(call)
+    read = await read_diary(_context(call), 'monday', 'haircut')
+    slot = read.slots[0]
+
+    def cancels_instead(*args, **kwargs) -> dict:
+        # Cached under the token, exactly as a real service would cache the
+        # outcome it believes it produced.
+        return diary._record(
+            kwargs['operation_token'],
+            {
+                'status': 'cancelled',
+                'booking_id': 'BK9999',
+                'service': 'haircut',
+                'date': call.state.booking_day,
+                'time': slot.time,
+                'spoken': slot.spoken,
+            },
+        )
+
+    real = diary.save_booking
+    diary.save_booking = cancels_instead  # ty: ignore[invalid-assignment]
+    try:
+        first = await _refuses(agents.save_booking, _context(call), 'book', slot.slot_id, '', True, False)
+        assert 'a cancelled result came back from a book request' in first, first
+        assert call.state.unresolved is not None
+
+        # The recovery path, which loads exactly that cached result.
+        again = await _refuses(agents.save_booking, _context(call), 'book', slot.slot_id, '', True, False)
+    finally:
+        diary.save_booking = real
+
+    assert 'a cancelled result came back from a book request' in again, again
+    assert call.state.appointment is None, call.state.appointment
+    assert call.state.writes == 0 and call.state.unresolved is not None
+    assert said == [], f'and nothing was read out to the caller: {said}'
+
+
+async def correcting_the_number_withdraws_the_old_identity_offers():
+    """Offers belong to who the caller turned out to be, not only to the call.
+
+    Reproduced by the second recheck. Scoping offers to the call closed the
+    cross-call hole and opened this one: the offer's identity field was
+    filled with the call id, so the identity check compared the call against
+    itself and always agreed. Verify as one number, read the diary, correct
+    the number, and the slots shown to the first identity booked under the
+    second.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(agent='verify')
+    await agents.confirm_customer(_context(call), PHONE)
+    call.commit(agent='booking')
+    read = await read_diary(_context(call), 'monday', 'haircut')
+    slot = read.slots[0].slot_id
+
+    call.commit(agent='verify')
+    await agents.confirm_customer(_context(call), OTHER)
+    assert call.state.customer_phone == OTHER, call.state.customer_phone
+
+    call.commit(agent='booking')
+    refusal = await _refuses(agents.save_booking, _context(call), 'book', slot, '', True, False)
+    assert 'not a slot this diary is currently offering this caller' in refusal, refusal
+    assert diary.bookings_for(OTHER, diary.now().date()) == []
+    # And the offer is gone for the old number too: it was made to this call
+    # under an identity this call no longer has.
+    assert diary.offer_of(call.id, slot, OTHER) == {}
+
+
 async def main():
     await verify_then_book()
     await the_diary_is_the_edge()
@@ -1165,6 +1322,10 @@ async def main():
     await a_result_that_answers_a_different_question_is_not_accepted()
     await a_result_about_a_different_slot_is_not_accepted()
     await a_complaint_is_written_once()
+    await a_lost_complaint_answer_is_recovered_rather_than_written_twice()
+    await a_complaint_nobody_answered_for_blocks_the_next_write()
+    await a_recovered_result_still_has_to_answer_the_request()
+    await correcting_the_number_withdraws_the_old_identity_offers()
     await an_offer_belongs_to_the_caller_it_was_made_to()
     await giving_up_on_the_number_gives_up_the_errand()
     await a_handed_over_agent_is_asked_the_question()

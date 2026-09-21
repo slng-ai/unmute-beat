@@ -719,6 +719,19 @@ async def save_booking(
     # number corrected mid-call makes the caller somebody else, and the slots
     # the previous identity was shown are not theirs to book.
     offered = diary.offer_of(ctx.deps.id, slot_id, ctx.deps.state.customer_phone)
+    # `additional` is the caller's answer to a question, not a way past the
+    # refusal that asks it. On the live calls of 2026-09-21 the model sent
+    # `book` with `additional=False`, was refused because the caller already
+    # held a booking, and sent the same slot again one second later with
+    # `additional=True` -- so a caller who asked for one appointment got two.
+    # The flag is honoured again as soon as the caller has spoken, because by
+    # then it can be their answer.
+    if additional and ctx.deps.is_retry_of_refusal(slot_id):
+        raise ModelRetry(
+            'Nothing was saved. That is the slot the diary just refused, and the caller has not '
+            'said they want a second appointment since. Ask them: move the booking they already '
+            'have, or add another one on top of it? Call this again with their answer.'
+        )
     # One token per business action, not per attempt. Derived from what the
     # action *is*, so a retry after a lost response derives the same one and
     # the diary returns the outcome it already recorded rather than booking a
@@ -769,6 +782,12 @@ async def save_booking(
             ),
             'diary',
         )
+    except diary.AlreadyHoldsError as refused:
+        # The one refusal with a way past it. Recorded, so the retry that
+        # flips `additional` is recognisable as a retry rather than as the
+        # caller having changed their mind in the intervening second.
+        ctx.deps.refused_second(slot_id)
+        raise ModelRetry(str(refused)) from None
     except diary.RefusedError as refused:
         # The diary's own words, which name what is actually possible instead of
         # leaving the model to guess a new slot.

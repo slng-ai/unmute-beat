@@ -55,6 +55,10 @@ STUMBLE = 'Sorry, I had a problem there. Could you say that again?'
 # Said when a turn runs out of budget: no further model request, no business
 # work, and no second chance at an allowance that is already spent.
 EXHAUSTED = "Sorry, I'm going round in circles there. Could you say that again?"
+# Said when the model has told the caller it changed something the business
+# has no record of changing. It cannot be unsaid -- the words are already at
+# TTS -- so the next thing the caller hears is the correction.
+UNBACKED = "Sorry, let me correct myself: I haven't actually made that change. Let me check where we are."
 
 
 # --- what a turn emits -------------------------------------------------------
@@ -91,7 +95,7 @@ class FixedSpeech:
     """
 
     text: str
-    reason: Literal['error', 'exhausted']
+    reason: Literal['error', 'exhausted', 'unbacked']
 
 
 @dataclass(frozen=True)
@@ -202,6 +206,16 @@ async def run_turn(
         logger.warning('turn exhausted: {}', spent)
         call.note_said('fixed', EXHAUSTED)
         yield FixedSpeech(EXHAUSTED, reason='exhausted')
+
+    # Checked whatever else happened in the turn, because the sentence is
+    # already on its way to the caller and an exhausted or failed turn is
+    # exactly when a model is most likely to have invented an outcome. Not
+    # after a barge-in: the caller talked over it, so what they heard is not
+    # what was generated and `note_heard` has already cut it down.
+    if not barge.hit and (claim := call.unbacked_claim()):
+        logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
+        call.note_said('fixed', UNBACKED)
+        yield FixedSpeech(UNBACKED, reason='unbacked')
 
     status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
     if failure:

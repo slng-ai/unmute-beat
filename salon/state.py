@@ -14,7 +14,7 @@ from datetime import date as _date
 from typing import Annotated, Literal
 
 import phonenumbers
-from pydantic import AfterValidator, BaseModel, Field, TypeAdapter, model_validator
+from pydantic import AfterValidator, BaseModel, Field, PrivateAttr, TypeAdapter, model_validator
 from pydantic_extra_types.phone_numbers import PhoneNumberValidator
 
 from voice import harness
@@ -278,10 +278,74 @@ def prefetch_number(raw: str) -> str:
     return '' if any(word.startswith(digits) for word in _WITHHELD) else text
 
 
+# A first-person claim that a booking has already been changed. Only the
+# perfect forms, and only first person: "you're booked for Friday" is the
+# agent recounting what the caller holds, which is true and ordinary, while
+# "I've cancelled that" is a report of work just done.
+_CLAIMED = re.compile(
+    r"\b(?:i|we)(?:'ve| have|'ll have| had)?\s+(?:just\s+)?"
+    r'(?:cancelled|canceled|booked|moved|rebooked)\b'
+    r"|\bi(?:'ve| have)\s+(?:got\s+)?you\s+(?:down|booked|in)\b",
+    re.IGNORECASE,
+)
+
+
 class SalonCall(harness.CallContext):
     """This call's state, history and line. The agents' `deps`."""
 
     state: SalonState = Field(default_factory=SalonState)
+    # What `writes` stood at when this turn began, so "did anything land in
+    # this turn" is answerable without the turn having to carry it.
+    _writes_before: int = PrivateAttr(default=0)
+    # A slot the diary refused because this caller already holds a booking.
+    # Cleared when the caller next speaks: the refusal asks a question --
+    # move the one they have, or add a second -- and only the caller answers
+    # it. Within the turn it is what stops the model answering for them.
+    _refused_second: str = PrivateAttr(default='')
+
+    def turn_started(self) -> None:
+        """Also forget last turn's refusal, and mark where the write count stood."""
+        super().turn_started()
+        self._writes_before = self.state.writes
+        self._refused_second = ''
+
+    def refused_second(self, slot_id: str) -> None:
+        """The diary refused this slot because they already hold one."""
+        self._refused_second = slot_id
+
+    def is_retry_of_refusal(self, slot_id: str) -> bool:
+        """Whether `additional` on this slot is the model getting past that refusal."""
+        return bool(slot_id) and self._refused_second == slot_id
+
+    def unbacked_claim(self) -> str:
+        """Model speech this turn claiming a booking change the salon cannot corroborate.
+
+        Reproduced on the live call of 2026-09-21 12:23: *"I've cancelled
+        your appointment, and I have you down for a redo on Saturday at
+        2:30 PM."* No `save_booking` ran in that turn or after it. The
+        appointment was still there, there was no redo, and the next turn
+        promised the redo would be free. Every guard in this agency
+        constrains a write that happens; nothing constrained a sentence
+        about one that did not.
+
+        Three conditions, because any one of them alone is ordinary speech:
+        nothing was written in this turn, the model said in the first person
+        that it had just changed a booking, and the state does not bear that
+        out. An agent recounting an appointment made earlier in the call has
+        a state that agrees with it and does not trip this.
+        """
+        if self.state.writes != self._writes_before:
+            return ''
+        for segment in self.spoken:
+            if segment.kind != 'model' or not (hit := _CLAIMED.search(segment.text)):
+                continue
+            said = hit.group(0).lower()
+            held = self.state.appointment
+            if 'cancel' in said and (held is None or held.action != 'cancel'):
+                return hit.group(0)
+            if 'cancel' not in said and held is None:
+                return hit.group(0)
+        return ''
 
 
 def open_call(from_number: str = '') -> SalonCall:

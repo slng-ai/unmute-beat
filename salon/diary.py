@@ -441,6 +441,19 @@ class RefusedError(Exception):
     """The diary would not take it, and the caller needs to hear why."""
 
 
+class AlreadyHoldsError(RefusedError):
+    """A booking refused because this caller already has one.
+
+    Its own type because it is the one refusal with a way past it. The
+    wording names `additional`, and on the live calls of 2026-09-21 the model
+    read that as the retry knob: refused with `additional=False`, sent again
+    one second later with `additional=True`, same slot, and the caller who
+    asked for one appointment got two. The caller-facing rules need to tell
+    that refusal from the others, and matching on the message text is not a
+    way to do it.
+    """
+
+
 def _offer_for(offered_to: str, slot_id: str, phone: str) -> Offer | None:
     """The offer this call holds under that id, if it is still this caller's.
 
@@ -551,7 +564,7 @@ def save_booking(
 
     if action == 'book':
         if held and not additional:
-            raise RefusedError(
+            raise AlreadyHoldsError(
                 f'This caller already holds {bookings_for(phone, today)}. Moving that one is almost '
                 'always what they mean; only pass additional when they asked for a second appointment.'
             )

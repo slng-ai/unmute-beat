@@ -29,9 +29,9 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from salon import diary
 from salon.agents import AGENTS
-from salon.state import SalonCall, open_call
+from salon.state import Appointment, SalonCall, open_call
 from voice import core
-from voice.core import EXHAUSTED, TurnBudget, take_turn
+from voice.core import EXHAUSTED, UNBACKED, TurnBudget, take_turn
 from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34600111222'
@@ -306,6 +306,67 @@ async def the_ledger_keeps_the_order_the_caller_heard_it_in():
         ('model', 'After.'),
     ], call.spoken
     assert ''.join(s.text for s in call.spoken) == probe.heard(), call.spoken
+
+
+MOVED = Appointment(
+    booking_id='BK0001',
+    service='haircut',
+    date='2026-09-26',
+    time='14:30',
+    spoken='Saturday at 2:30 PM',
+    action='move',
+)
+
+
+async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
+    """The model says it cancelled something, and nothing was written.
+
+    Reproduced off the live call of 2026-09-21 12:23:22 -- *"I've cancelled
+    your appointment, and I have you down for a redo on Saturday at 2:30
+    PM."* The last write in that call was a move, three turns earlier; no
+    `save_booking` ran in that turn or after it. The appointment was still
+    there, there was no redo, and the next turn promised the redo would be
+    free.
+
+    It cannot be unsaid: the words were at TTS before anything could know.
+    What it can do is not leave the caller with them.
+    """
+    call = _fresh(True)
+    call.commit(appointment=MOVED)
+    probe = Probe(call)
+    with scripted(
+        concierge=says("I've cancelled your appointment, and I have you down for a redo on Saturday.")
+    ):
+        await probe._turn('can you cancel it and do the redo instead?')
+
+    assert UNBACKED in probe.heard(), probe.heard()
+    kinds = [(s.kind, s.text) for s in call.spoken]
+    assert kinds[-1] == ('fixed', UNBACKED), kinds
+    assert call.state.appointment == MOVED, 'and nothing was invented on the state either'
+
+
+async def recounting_a_booking_already_made_is_not_a_claim():
+    """The guard has to let ordinary speech through, which is most speech.
+
+    An agent answering "what have I got" says the same words in the same
+    tense. What separates them is whether the salon agrees: a booking on the
+    state is the corroboration, and only a *cancellation* nobody recorded,
+    or a booking claimed by a call that holds none, trips it.
+    """
+    held = _fresh(True)
+    held.commit(appointment=MOVED)
+    probe = Probe(held)
+    with scripted(concierge=says("I've booked you in for Saturday at 2:30 PM.")):
+        await probe._turn('what have I got?')
+    assert UNBACKED not in probe.heard(), probe.heard()
+
+    # And a cancellation the salon *did* record reads as true.
+    gone = _fresh(True)
+    gone.commit(appointment=MOVED.model_copy(update={'action': 'cancel'}))
+    probe = Probe(gone)
+    with scripted(concierge=says("I've cancelled that for you.")):
+        await probe._turn('cancel it please')
+    assert UNBACKED not in probe.heard(), probe.heard()
 
 
 async def every_response_frame_is_closed():
@@ -606,6 +667,8 @@ async def main():
     await a_new_turn_starts_a_new_clock()
     await the_ledger_holds_both_halves_of_what_was_said()
     await the_ledger_keeps_the_order_the_caller_heard_it_in()
+    await a_claim_the_salon_cannot_bear_out_is_corrected_out_loud()
+    await recounting_a_booking_already_made_is_not_a_claim()
     await the_cores_own_fixed_lines_are_in_the_ledger_too()
     await the_ledger_is_cut_down_to_what_was_heard()
     await a_segment_is_timed_from_when_it_started_going_out()

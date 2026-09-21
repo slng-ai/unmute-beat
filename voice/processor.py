@@ -230,6 +230,12 @@ class PydanticAgentProcessor(FrameProcessor):
                             # filler already said.
                             if reason == 'error':
                                 await self.push_error(f'agent run failed: {event.text}')
+                            if reason == 'unbacked':
+                                # On the span, because this is a business
+                                # failure and a latency table that cannot
+                                # see it will happily reward it: inventing
+                                # an outcome is quicker than writing one.
+                                span.set_attribute('unbacked_claim', True)
                             await self.say(text)
                         case core.TurnFinished() as done:
                             # Per provider request, timed at the model

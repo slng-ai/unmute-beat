@@ -321,6 +321,17 @@ class CallContext(BaseModel):
                 segment.text, segment.interrupted = delivered, True
                 return
 
+    def unbacked_claim(self) -> str:
+        """Model speech this turn asserting something only the business can assert. '' when clean.
+
+        The claim itself, when there is one, so it can be logged and traced.
+        This base has no business to write to and so nothing to check
+        against; an agency that does overrides it. `run_turn` says a
+        correction out loud rather than leaving the caller with it, because
+        a sentence the caller cannot check is worse than a pause.
+        """
+        return ''
+
     def note_first_output(self, kind: Literal['text', 'tool']) -> None:
         """The newest provider request has produced its first part.
 

@@ -1301,6 +1301,54 @@ async def correcting_the_number_withdraws_the_old_identity_offers():
     assert diary.offer_of(call.id, slot, OTHER) == {}
 
 
+async def the_second_appointment_flag_is_not_a_way_past_the_refusal():
+    """Refused because they already hold one, sent again with `additional=True`.
+
+    Reproduced off the live calls of 2026-09-21 13:00 and 13:02, where it
+    happened twice, identically, one second apart each time:
+
+        save_booking  book ... additional:false  -> refused
+        save_booking  book ... additional:true   -> booked
+
+    The diary's refusal names the flag -- "only pass additional when they
+    asked for a second appointment" -- and the model read that as the way
+    past it. Neither caller had asked for a second appointment.
+
+    The flag is the caller's answer to a question, so it is honoured again
+    the moment the caller has had a chance to answer.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
+    _heard(call)
+
+    call.turn_started()
+    read = await read_diary(_context(call), 'monday', 'haircut')
+    held, wanted = read.slots[0].slot_id, read.slots[1].slot_id
+    await agents.save_booking(_context(call), 'book', held, '', True, False)
+    assert call.state.writes == 1
+
+    # A new turn: the caller asks for another time, and the diary refuses
+    # because of the one they already hold.
+    call.turn_started()
+    read = await read_diary(_context(call), 'monday', 'haircut')
+    wanted = read.slots[0].slot_id
+    refusal = await _refuses(agents.save_booking, _context(call), 'book', wanted, '', True, False)
+    assert 'already holds' in refusal, refusal
+
+    # Same slot, same turn, flag flipped. This is the whole finding.
+    blocked = await _refuses(agents.save_booking, _context(call), 'book', wanted, '', True, True)
+    assert 'has not said they want a second appointment' in blocked, blocked
+    assert len(diary.bookings_for(PHONE, diary.now().date())) == 1, 'still one appointment'
+    assert call.state.writes == 1
+
+    # The caller speaks, and now the flag can be their answer.
+    call.turn_started()
+    saved = await agents.save_booking(_context(call), 'book', wanted, '', True, True)
+    assert 'booked' in saved, saved
+    assert len(diary.bookings_for(PHONE, diary.now().date())) == 2, 'the second one they asked for'
+
+
 async def main():
     await verify_then_book()
     await the_diary_is_the_edge()
@@ -1326,6 +1374,7 @@ async def main():
     await a_complaint_nobody_answered_for_blocks_the_next_write()
     await a_recovered_result_still_has_to_answer_the_request()
     await correcting_the_number_withdraws_the_old_identity_offers()
+    await the_second_appointment_flag_is_not_a_way_past_the_refusal()
     await an_offer_belongs_to_the_caller_it_was_made_to()
     await giving_up_on_the_number_gives_up_the_errand()
     await a_handed_over_agent_is_asked_the_question()

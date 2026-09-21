@@ -1,7 +1,7 @@
 [project]
 name = "slng-voice-harness"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Pydantic AI agency standing where Pipecat's LLM service would: the agents own the conversation, Pipecat owns the audio."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -17,3 +17,65 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "websockets>=16.1.1",
 ]
+
+[dependency-groups]
+# No pytest: tests/ are assert scripts run as modules, no framework, no network.
+dev = [
+    "ruff>=0.14",
+    "ty>=0.0.82",
+]
+
+[tool.ruff]
+# The width this code was already hand-wrapped to. target-version is inferred
+# from requires-python.
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "C4", "UP", "SIM", "RUF", "D"]
+ignore = [
+    "E501",          # Line too long -- the formatter owns wrapping.
+    "D1",            # undocumented-*: a docstring where one earns its place, not on every def.
+    "D203", "D213",  # Conflict with the google convention's D211/D212.
+    "D417",          # Every hit is `ctx`: pydantic-ai plumbing the model never sees.
+    "D205",          # Tool docstrings are prompt text the model reads; their opening
+                     # sentence is deliberately longer than one line.
+    "D415",          # Module docstrings here lead with a runnable command, where a
+                     # trailing period reads as part of the command.
+    "D210",          # Docstrings that open on a quoted phrase need the leading space,
+                     # or the opening `"""` runs into the quote as `""""`.
+]
+# `A` (flake8-builtins) is deliberately absent: its only hits are the variable
+# `exit`, which is this graph's own vocabulary (`Exit`, `exits`, `lent`).
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-bugbear]
+# `TurnBudget` is a frozen dataclass, so calling it in a default argument is
+# safe -- there is no shared mutable instance for a caller to write through.
+extend-immutable-calls = ["voice.harness.TurnBudget"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ty.rules]
+# Debt, not policy. One root cause: `voice.harness.Node` is not generic, so its
+# fields are fixed to the base -- a bare `Agent` (which ty resolves to
+# `Agent[object, str]`) and `Callable[[VoiceState], ...]` guards and outputs --
+# while every salon agent is `Agent[SalonCall, ...]` with `SalonState`
+# callables. ty reports that one mismatch at ~15 sites across four files.
+# The cost of ignoring it globally is that new argument-type errors go
+# unreported anywhere. Upgrade path: make `Node` generic over the state type,
+# then delete this. Marked at the definition itself for `/ponytail-debt`.
+invalid-argument-type = "ignore"
+
+[[tool.ty.overrides]]
+# Scaffolding passes `None` for a model, a usage and an agent it never reads,
+# reads attributes off optionals it knows are set, and parametrises cases with
+# heterogeneous tuples ty widens to a union.
+include = ["tests/**", "bench/**"]
+
+[tool.ty.overrides.rules]
+call-non-callable = "ignore"
+unresolved-attribute = "ignore"
+not-subscriptable = "ignore"

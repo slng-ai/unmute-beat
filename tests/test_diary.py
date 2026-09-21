@@ -333,6 +333,25 @@ def sunday_is_closed():
     assert diary.find_slots(ALICE, 'sunday', 'haircut', AT)['status'] == 'closed'
 
 
+def a_day_more_than_a_week_off_is_read_as_an_ordinal():
+    """ "Saturday the 3rd", never "Saturday the 3".
+
+    A bare numeral is a written shape, and the voice reads it as one: on the
+    live call of 2026-09-21 17:59 the caller was offered "a haircut, Saturday
+    the 3 at 9:00 AM". Same reason `spoken_time` says "9:00 AM" and not
+    "09:00" -- these strings are read out, not printed.
+    """
+    monday = date(2026, 9, 21)
+    assert diary.spoken_day(date(2026, 10, 3), monday) == 'Saturday the 3rd'
+    assert diary.spoken_day(date(2026, 10, 1), monday) == 'Thursday the 1st'
+    assert diary.spoken_day(date(2026, 10, 2), monday) == 'Friday the 2nd'
+    assert diary.spoken_day(date(2026, 10, 12), monday) == 'Monday the 12th'
+    assert diary.spoken_day(date(2026, 10, 21), monday) == 'Wednesday the 21st'
+    # Inside the week it is still just the weekday, and today is still today.
+    assert diary.spoken_day(date(2026, 9, 26), monday) == 'Saturday'
+    assert diary.spoken_day(monday, monday) == 'today'
+
+
 def midnight_and_the_clock_edges():
     """The salon opens at nine, so nothing is offered around midnight either side."""
     diary.reset()
@@ -524,6 +543,7 @@ async def main():
     an_impossible_date_is_asked_about()
     a_past_day_is_refused_without_writing()
     sunday_is_closed()
+    a_day_more_than_a_week_off_is_read_as_an_ordinal()
     midnight_and_the_clock_edges()
     the_clocks_changing_does_not_move_the_salon()
     changing_the_day_leaves_a_confirmed_booking_alone()

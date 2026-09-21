@@ -155,6 +155,13 @@ def spoken_time(at: time) -> str:
     return f'{(at.hour - 1) % 12 + 1}:{at.minute:02d} {"AM" if at.hour < 12 else "PM"}'
 
 
+def _ordinal(day: int) -> str:
+    """ "3rd", never "3": a bare numeral is read out as "the three"."""
+    if 11 <= day <= 13:
+        return f'{day}th'
+    return f'{day}{ {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th") }'
+
+
 def spoken_day(day: Date, today: Date) -> str:
     """The way a person names a day, which depends on how far away it is.
 
@@ -168,7 +175,7 @@ def spoken_day(day: Date, today: Date) -> str:
         return 'tomorrow'
     if (day - today).days < 7:
         return WEEKDAYS[day.weekday()]
-    return f'{WEEKDAYS[day.weekday()]} the {day.day}'
+    return f'{WEEKDAYS[day.weekday()]} the {_ordinal(day.day)}'
 
 
 def spoken(day: Date, at: time, today: Date) -> str:

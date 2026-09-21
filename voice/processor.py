@@ -121,6 +121,7 @@ class PydanticAgentProcessor(FrameProcessor):
         self._succeeded: set[str] = set()
         # This turn's span, while it is still waiting for its first word.
         self._turn_span = None
+        self._turn_started = 0.0
         call._say = self.say
         call._end = self.hang_up
 
@@ -217,6 +218,11 @@ class PydanticAgentProcessor(FrameProcessor):
         with _tracer.start_as_current_span('agents', context=self._parent()) as span:
             handoffs: list[str] = []
             self._turn_span = span
+            # The turn's clock, not the speaking hop's. `ttft` used to start
+            # inside `_speak`, so a turn that spent two routing runs before
+            # anybody said anything reported only the last one and the
+            # silence the caller actually sat through was invisible.
+            self._turn_started = time.perf_counter()
             self._usage, self._limits = self._budget.account()
             spent = ''
             try:
@@ -378,8 +384,23 @@ class PydanticAgentProcessor(FrameProcessor):
                             # word of the *turn*, which is why it is written
                             # once and the second hop does not overwrite it.
                             if self._turn_span is not None:
+                                # Named for what it is. This is not caller
+                                # audio latency: it starts when this processor
+                                # was handed the finished transcript, so the
+                                # endpointing wait and STT are already spent
+                                # and are not in it. Pipecat's own turn span
+                                # is the one that spans those, and the bench
+                                # reads it separately rather than letting this
+                                # number stand in for it.
                                 self._turn_span.set_attribute(
-                                    'ttft', round(time.perf_counter() - started, 3)
+                                    'turn_first_word',
+                                    round(time.perf_counter() - self._turn_started, 3),
+                                )
+                                # And the one request that produced it, which
+                                # is a different question with a different
+                                # answer whenever a turn took more than one.
+                                self._turn_span.set_attribute(
+                                    'request_ttft', round(time.perf_counter() - started, 3)
                                 )
                                 self._turn_span = None
                             # The model is talking, so the gap is closed: a tool

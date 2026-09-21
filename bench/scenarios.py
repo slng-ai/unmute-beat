@@ -4,11 +4,22 @@ Run: uv run --env-file .env python -m bench.scenarios [repeats] [label]
      BENCH_PINNED=1 uv run --env-file .env python -m bench.scenarios 3 D
 
 Configurations A and B live in another package and are measured off Langfuse.
-C and D are this harness, and here the harness is the instrument: the processor
-pushes exactly one `LLMFullResponseStartFrame` per model run, so the number of
-requests a caller waited through is a count of frames, not a query. No traces,
-no ingestion delay, no span tree to walk, and nothing to get wrong about which
-observation belonged to which turn.
+C and D are this harness, and here the harness is the instrument: the turn's
+own shared usage object counts provider requests directly, so the number of
+requests a caller waited through is read off the thing that made them. No
+traces, no ingestion delay, no span tree to walk, and nothing to get wrong
+about which observation belonged to which turn.
+
+Two counting methods have already been wrong here. Frames: one response
+envelope is one frame and can be several requests, so every tool turn was
+undercounted. Then `ModelResponse` history items: closer, but a cancelled run
+and a turn that resets history both lose responses that really were paid for,
+and a turn is not the same length as the history it leaves behind. The usage
+object is the provider's own count, shared across every run in the turn.
+
+Every row is written to JSONL, failures included, because a summary printed
+to a terminal is not evidence and a failed run that leaves no trace is a
+result quietly dropped.
 
 The scenarios are written once, here, and are the same ones the other two
 configurations get driven with. Real model, no audio, no transport.
@@ -17,14 +28,17 @@ configurations get driven with. Real model, no audio, no transport.
 from __future__ import annotations
 
 import asyncio
+import json
+import math
 import os
+import pathlib
 import statistics
 import sys
 import time
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
-from pydantic_ai import ModelResponse
 
 load_dotenv(override=True)
 os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
@@ -114,17 +128,17 @@ class Counter(PydanticAgentProcessor):
             self.fixed += 1
 
     def requests(self) -> int:
-        """Model requests so far this call, counted off the agents' own history.
+        """Provider requests in the turn that just ran, off the turn's own tally.
 
-        Not response envelopes: one agent run that calls a tool and then answers
-        is one envelope and **two** requests, and the ledger this benchmark
-        exists to settle is denominated in requests. Counting frames undercounted
-        every tool turn in the first draft of this script.
+        The processor threads one `RunUsage` through every run in a turn, so
+        this is the provider's count of requests actually made -- not frames,
+        which undercount a tool turn, and not `ModelResponse` history items,
+        which a cancelled run or a history reset quietly loses.
         """
-        return sum(isinstance(m, ModelResponse) for m in self._call.messages)
+        return self._usage.requests
 
 
-async def run_scenario(name: str, said: tuple[str, ...]) -> list[dict]:
+async def run_scenario(name: str, said: tuple[str, ...], repeat: int = 0) -> list[dict]:
     from salon.agents import AGENTS
 
     diary.reset()
@@ -133,22 +147,28 @@ async def run_scenario(name: str, said: tuple[str, ...]) -> list[dict]:
     rows = []
     for index, turn in enumerate(said):
         counter.reset()
-        before = counter.requests()
         started = time.monotonic()
+        row = {'scenario': name, 'turn': index, 'run': repeat,
+               'said': turn, 'at': datetime.now(UTC).isoformat()}
         try:
             await counter._turn(turn)
         except Exception as error:
-            rows.append({'scenario': name, 'turn': index, 'error': str(error)[:120]})
+            # Kept, not dropped. A turn that failed is a result, and a
+            # benchmark that reports only the turns that worked is reporting
+            # the wrong population.
+            rows.append(row | {'error': f'{type(error).__name__}: {error}'[:200],
+                               'seconds': time.monotonic() - started})
             break
-        rows.append({
-            'scenario': name,
-            'turn': index,
-            'runs': counter.requests() - before,
+        rows.append(row | {
+            # The turn's own usage, reset by the processor at the top of each
+            # turn, so this is that turn's requests and not a running total.
+            'runs': counter.requests(),
             'seconds': time.monotonic() - started,
             # Anything at all reaching the caller, model speech or a fixed line.
             # A goodbye goes out as a fixed line, so counting only model text
             # reported every hang-up turn as silence.
             'spoke': counter.spoke or counter.fixed > 0,
+            'fixed_lines': counter.fixed,
             'step': call.state.agent,
         })
         if counter.ended:
@@ -157,11 +177,17 @@ async def run_scenario(name: str, said: tuple[str, ...]) -> list[dict]:
 
 
 def spread(values: list[float]) -> str:
+    """p50, p90 and max under one stated convention.
+
+    Nearest rank, `ceil(p*n) - 1`, the same as `bench.turns` -- two figures in
+    one write-up computed two ways cannot be compared, and the previous form
+    here was neither nearest rank nor the same as the other module's.
+    """
     if not values:
-        return '-'
+        return 'no data'
     ordered = sorted(values)
-    p = lambda f: ordered[min(len(ordered) - 1, max(0, round(f * len(ordered) + 0.5) - 1))]  # noqa: E731
-    return f'p50 {p(0.5):.2f}  p90 {p(0.9):.2f}  max {ordered[-1]:.2f}'
+    p = lambda f: ordered[min(len(ordered) - 1, max(0, math.ceil(f * len(ordered)) - 1))]  # noqa: E731
+    return f'p50 {p(0.5):.2f}  p90 {p(0.9):.2f}  max {ordered[-1]:.2f}  (nearest rank)'
 
 
 async def main() -> None:
@@ -172,7 +198,16 @@ async def main() -> None:
     for run in range(repeats):
         for name, said in SCENARIOS.items():
             print(f'  run {run + 1}/{repeats}  {name}', file=sys.stderr)
-            rows.extend(await run_scenario(name, said))
+            rows.extend(await run_scenario(name, said, repeat=run))
+
+    # Written before anything is printed, so a crash in the summary cannot
+    # lose a run that really happened.
+    raw = pathlib.Path('bench/raw') / f'{label}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.jsonl'
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    with raw.open('w') as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + '\n')
+    print(f'  {len(rows)} rows -> {raw}', file=sys.stderr)
 
     good = [r for r in rows if 'runs' in r]
     errors = [r for r in rows if 'error' in r]

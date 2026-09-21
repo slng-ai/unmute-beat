@@ -290,6 +290,7 @@ class Report:
     request_latency: list[float]
     request_ttft: list[float]
     ttft_source: str
+    legacy_ttft: int  # turns carrying the old run-timed number, which is not comparable
     first_output: Counter  # what each request produced first: text, or a tool call
     turn_first_word: list[float]
     turn_lifetime: list[float]  # the whole turn span: user speech to bot finished
@@ -331,7 +332,7 @@ def analyse(spans: list[dict]) -> Report:
     turn_lifetime: list[float] = []
     user_bot_latency: list[float] = []
     greeting_spans = len(greetings)
-    unresolved_spans = unresolved_requests = speech_spans = refusals = 0
+    unresolved_spans = unresolved_requests = speech_spans = refusals = legacy = 0
 
     for span in spans:
         kind = span.get('type')
@@ -388,9 +389,19 @@ def analyse(spans: list[dict]) -> Report:
             # emits no first-token event, so the provider field on a POC
             # generation is null and this is the only place the number
             # exists.
-            for value in _attribute(span, 'request_ttft') or []:
-                if isinstance(value, (int, float)):
-                    stamped.append(float(value))
+            recorded = _attribute(span, 'request_ttft')
+            if isinstance(recorded, (int, float)):
+                # A trace from before this was timed per request: one number
+                # per *run*, which on a turn with a tool in it contains the
+                # tool's whole round trip. Counted so the report can say the
+                # trace is too old to answer, never pooled with the others --
+                # two different measurements under one name is how a
+                # distribution stops meaning anything.
+                legacy += 1
+            else:
+                for value in recorded or []:
+                    if isinstance(value, (int, float)):
+                        stamped.append(float(value))
             for produced in _attribute(span, 'request_first_output') or []:
                 first_output[str(produced)] += 1
         # No catch-all for other spans with no turn. A call root has no turn
@@ -417,6 +428,7 @@ def analyse(spans: list[dict]) -> Report:
         # comparison stops comparing anything.
         request_ttft=stamped or provider,
         ttft_source='agents span, stamped per request' if stamped else 'provider field or timestamps',
+        legacy_ttft=legacy,
         first_output=first_output,
         turn_first_word=turn_first_word,
         turn_lifetime=turn_lifetime,
@@ -471,6 +483,11 @@ def report(spans: list[dict], subject: str) -> Report:
         )
     print(f'  model round trip            {_pair(found.request_latency)}')
     print(f'  request time to first token {_pair(found.request_ttft)}   <- {found.ttft_source}')
+    if found.legacy_ttft:
+        print(
+            f'                              {found.legacy_ttft} turns carry the older run-timed '
+            'number instead, which includes any tool call in the run. Not pooled above.'
+        )
     if found.first_output:
         produced = ', '.join(f'{n} {kind}' for kind, n in sorted(found.first_output.items()))
         print(f'  what came back first        {produced}  (a tool call is not speech)')

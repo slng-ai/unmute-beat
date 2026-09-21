@@ -92,11 +92,17 @@ SCENARIOS: dict[str, tuple[str, ...]] = {
         "whatever's earliest",
         "that's everything, bye",
     ),
+    # Five turns, not four. The complaint needs an owner, so the flow is
+    # complaints -> verify -> complaints before anything can be written down,
+    # and a four-turn script ran out of caller before `record_complaint`
+    # could fire. Every arm failed it for the same reason, which makes it a
+    # scenario that measures nothing rather than a difference between them.
     'complaint': (
         'my colour came out completely wrong last week',
         'I want a refund',
         'yes, that is my number',
         'yes please, write it down',
+        "that's right, go ahead",
     ),
     'manager': ('I want to speak to a manager',),
     'knowledge': (

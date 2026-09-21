@@ -170,8 +170,11 @@ async def model_requests_are_counted_across_agents():
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
         await probe._turn('hello?')
 
-    assert probe._usage.requests == 4, probe._usage.requests
+    # Read off the turn's declared outcome, not a private tally: the count
+    # the core reports is the one a runtime and a trace both see.
+    assert probe._finished.requests == 4, probe._finished
     assert probe.runs() == 4
+    assert probe._finished.status == 'exhausted', probe._finished
 
 
 async def the_request_limit_stops_a_turn_that_never_hops():

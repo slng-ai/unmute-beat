@@ -110,4 +110,9 @@ async def main() -> None:
         print('So the `enter:` and filler lines are load-bearing, not belt-and-braces.')
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    # Guarded, unlike the test modules, because this one makes real model
+    # requests and writes files. Importing it -- which a linter, an editor or
+    # a stray `import bench.scenarios` will do -- used to run the whole
+    # benchmark.
+    asyncio.run(main())

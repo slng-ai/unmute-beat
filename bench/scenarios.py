@@ -135,7 +135,7 @@ class Counter(PydanticAgentProcessor):
         which undercount a tool turn, and not `ModelResponse` history items,
         which a cancelled run or a history reset quietly loses.
         """
-        return self._usage.requests
+        return self._finished.requests if self._finished else 0
 
 
 async def run_scenario(name: str, said: tuple[str, ...], repeat: int = 0) -> list[dict]:
@@ -236,4 +236,9 @@ async def main() -> None:
         print(f'    {name:<22} {line}')
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    # Guarded, unlike the test modules, because this one makes real model
+    # requests and writes files. Importing it -- which a linter, an editor or
+    # a stray `import bench.scenarios` will do -- used to run the whole
+    # benchmark.
+    asyncio.run(main())

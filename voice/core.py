@@ -1,0 +1,459 @@
+"""One caller turn, with no idea what a caller is.
+
+Contract C0's core half. Everything about *running* a turn lives here --
+which agent speaks, where the caller goes next, what the turn is allowed to
+spend, what happens when it is interrupted -- and nothing about how any of it
+reaches a person. No Pipecat frame, no LiveKit session, no STT and no TTS is
+imported in this file, and that is the property the second adapter depends
+on.
+
+What comes out is one ordered async stream of events. A runtime translates
+them: `RunStarted` and `RunEnded` bracket one model run, `TextDelta` is
+speech to stream, `FixedSpeech` is a line this code wrote rather than
+generated, and `TurnFinished` says how the turn ended -- answered,
+interrupted, exhausted or failed, explicitly, never implied by the absence of
+a complaint.
+
+Two things deliberately stay callbacks rather than events, because C0 allows
+it and the plumbing is much simpler: `call._say` and `call._end`, which a
+*tool* invokes in the middle of its own execution. A filler line has to reach
+TTS before the tool it is covering returns, and routing it through this
+generator would mean a queue and a select loop to buy back the ordering that
+awaiting the callback already has. The awaited outcome is the same either
+way.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
+from typing import Literal
+
+from loguru import logger
+from pydantic_ai import (
+    Agent,
+    AgentRunResultEvent,
+    FunctionToolResultEvent,
+    PartDeltaEvent,
+    PartStartEvent,
+    RetryPromptPart,
+    RunCancelled,
+    TextPart,
+    TextPartDelta,
+)
+from pydantic_ai.usage import UsageLimitExceeded
+
+from voice.harness import CallContext, Handoff, Node, TurnBudget
+from voice.harness import moved_by as _moved_by
+from voice.harness import pick as _pick
+from voice.harness import route as _route
+
+STUMBLE = 'Sorry, I had a problem there. Could you say that again?'
+# Said when a turn runs out of budget: no further model request, no business
+# work, and no second chance at an allowance that is already spent.
+EXHAUSTED = "Sorry, I'm going round in circles there. Could you say that again?"
+
+
+# --- what a turn emits -------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RunStarted:
+    """One model run is about to begin. A runtime opens its response here."""
+
+    step: str
+
+
+@dataclass(frozen=True)
+class TextDelta:
+    """Speech, as it arrives. Ordered, and never a tool's arguments."""
+
+    text: str
+    step: str
+
+
+@dataclass(frozen=True)
+class RunEnded:
+    """That model run is over, however it went."""
+
+    step: str
+
+
+@dataclass(frozen=True)
+class FixedSpeech:
+    """A line this code wrote, not one a model generated.
+
+    `reason` is what it is covering, so a runtime can decide whether it is
+    interruptible and a trace can tell a filler from a confirmation.
+    """
+
+    text: str
+    reason: Literal['error', 'exhausted']
+
+
+@dataclass(frozen=True)
+class TurnFinished:
+    """How the turn ended, said out loud rather than inferred.
+
+    An empty event stream is not success and an absent error is not success.
+    `status` is always one of the four, and `detail` carries the reason a
+    turn that did not answer did not answer.
+    """
+
+    status: Literal['answered', 'interrupted', 'exhausted', 'failed']
+    agent: str
+    handoffs: tuple[str, ...]
+    requests: int
+    detail: str = ''
+
+
+TurnEvent = RunStarted | TextDelta | RunEnded | FixedSpeech | TurnFinished
+
+
+# --- barge-in ----------------------------------------------------------------
+
+
+@dataclass
+class Barge:
+    """The caller talking over us, signalled from outside the turn.
+
+    The runtime owns the signal, because only the runtime can hear it. The
+    core owns what it does: cancel the run in flight and stop before starting
+    another. One per turn, so a stale signal cannot fence the next one.
+    """
+
+    hit: bool = False
+    _events: object = field(default=None, repr=False)
+
+    def attach(self, events) -> None:
+        self._events = events
+
+    def detach(self) -> None:
+        self._events = None
+
+    def fire(self) -> None:
+        self.hit = True
+        if self._events is not None:
+            self._events.cancel()
+
+
+# --- one turn ----------------------------------------------------------------
+
+
+async def run_turn(
+    call: CallContext,
+    agents: dict[str, Node],
+    prompt: str | None,
+    budget: TurnBudget,
+    barge: Barge | None = None,
+) -> AsyncIterator[TurnEvent]:
+    """Run agents until one answers the caller, and say what happened.
+
+    The whole turn spends one budget: one tally of provider requests, one
+    tool-call allowance, a fixed number of step runs and a deadline over all
+    of them together. Threaded through every run, so four agents in one turn
+    cannot each start again with a full allowance.
+    """
+    barge = barge if barge is not None else Barge()
+    usage, limits = budget.account()
+    handoffs: list[str] = []
+    # A new silence to cover, so one fixed line is allowed again.
+    call._covered = False
+    call.turn_started()
+
+    spent = ''
+    failure = ''
+    try:
+        async with asyncio.timeout(budget.seconds):
+            async for event in _hops(call, agents, prompt, budget, usage, limits, handoffs, barge):
+                if isinstance(event, _Exhausted):
+                    spent = event.why
+                elif isinstance(event, _Failed):
+                    failure = event.why
+                else:
+                    yield event
+    except TimeoutError:
+        spent = f'the {budget.seconds:g}s turn deadline'
+    except UsageLimitExceeded as over:
+        spent = str(over)
+
+    if failure:
+        # An error the caller can hear beats silence on an open line.
+        yield FixedSpeech(STUMBLE, reason='error')
+    elif spent and not barge.hit:
+        # The turn ran out. One fixed line: no further provider request, no
+        # business work, and nothing that hands the exhausted budget back its
+        # money. There used to be one more model run here, outside the budget
+        # that had just been declared spent -- so the budget bounded nothing,
+        # and the run it bought still held every ordinary tool.
+        logger.warning('turn exhausted: {}', spent)
+        yield FixedSpeech(EXHAUSTED, reason='exhausted')
+
+    status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
+    if failure:
+        status = 'failed'
+    elif barge.hit:
+        status = 'interrupted'
+    elif spent:
+        status = 'exhausted'
+    yield TurnFinished(
+        status=status,
+        agent=call.state.agent,
+        handoffs=tuple(handoffs),
+        requests=usage.requests,
+        detail=failure or spent,
+    )
+
+
+@dataclass(frozen=True)
+class _Exhausted:
+    """Internal: the hop loop ran out. Not part of the public stream."""
+
+    why: str
+
+
+@dataclass(frozen=True)
+class _Failed:
+    """Internal: a run raised something that is not a budget or a barge-in."""
+
+    why: str
+
+
+async def _hops(
+    call: CallContext,
+    agents: dict[str, Node],
+    prompt: str | None,
+    budget: TurnBudget,
+    usage,
+    limits,
+    handoffs: list[str],
+    barge: Barge,
+) -> AsyncIterator[object]:
+    """Run agents until one answers, yielding what each one says."""
+    for _ in range(budget.step_runs):
+        node = agents[call.state.agent]
+        output = None
+        succeeded: set[str] = set()
+
+        async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+            if isinstance(event, _Outcome):
+                output, succeeded = event.output, event.succeeded
+            elif isinstance(event, _Failed):
+                yield event
+                return
+            else:
+                yield event
+
+        if not isinstance(output, Handoff):
+            # The free edge. A borrowed tool *succeeded*, so the caller is
+            # already in the step that owns it, and the request that moved
+            # them is the one that just answered them. Set after the run, not
+            # during, so the step that spoke is the step whose prompt wrote
+            # the words.
+            landed = _moved_by(call.state, node, agents, succeeded)
+            if landed != call.state.agent:
+                logger.info('moved {} -> {} (via {})',
+                            call.state.agent, landed, ', '.join(sorted(succeeded)))
+                handoffs.append(landed)
+                call.commit(agent=landed)
+            return
+        # Where they were sent, then where the graph actually puts them:
+        # `booking` before anyone is identified means `verify` first, with
+        # `booking` recorded to resume into.
+        going_to, waiting = _route(call.state, agents, output.to)
+        logger.info('handoff {} -> {} ({})', call.state.agent, going_to, output.because or '-')
+        handoffs.append(going_to)
+        # One commit: the step and what is waiting behind it are the same
+        # decision, and a caller moved into `verify` with no record of where
+        # they were going has lost their errand.
+        call.commit(agent=going_to, pending=waiting)
+        # `prompt` is deliberately kept: the agent taking over is asked the
+        # caller's own question again. It used to be cleared, on the reasoning
+        # that the turn is already in the history -- and it is, two messages
+        # up. But the *last* message the receiving run then reads is somebody
+        # else's spent tool call, `hand_over` answered with "Final result
+        # processed." and nothing to reply to. Measured on the call of
+        # 2026-09-20: Gemini returned a candidate with no parts at all,
+        # pydantic-ai sent back "Please return text or include your response
+        # in a tool call", and the reply came on the retry -- 0.64s of the
+        # 3.94s that turn cost, spent producing nothing. Reading the question
+        # twice is cheaper than reading a finished errand.
+        if barge.hit:
+            # Barged in during the hop. Starting the next agent now would
+            # answer a question the caller has moved on from.
+            return
+        if lines := agents[going_to].enter:
+            # Cover the hop: a whole model request stands between the caller
+            # finishing and the next agent's first word. Through the call, so
+            # a tool firing next does not cover it twice.
+            await call.say(_pick(f'enter:{output.to}', lines))
+    yield _Exhausted(f'the {budget.step_runs}-run hop budget')
+
+
+@dataclass
+class _Outcome:
+    """Internal: what one run produced, handed back to the hop loop."""
+
+    output: object
+    succeeded: set[str]
+
+
+def _speech(event) -> str:
+    """The text of an event that is speech, and '' for everything that is not.
+
+    A `Handoff` arrives as a tool call part, so it never matches here and
+    never reaches the caller's ears.
+    """
+    match event:
+        case PartStartEvent(part=TextPart(content=text)):
+            return text
+        case PartDeltaEvent(delta=TextPartDelta(content_delta=text)):
+            return text
+    return ''
+
+
+async def _speak(
+    call: CallContext,
+    node: Node,
+    prompt: str | None,
+    budget: TurnBudget,
+    usage,
+    limits,
+    barge: Barge,
+) -> AsyncIterator[object]:
+    """Run one step's agent, streaming whatever it says.
+
+    `Node.outputs` builds the run's `output_type` from the live state; the
+    per-request narrowing that keeps it honest across several requests inside
+    one run is a capability on the agent itself, not something here.
+    """
+    agent: Agent = node.agent
+    output_type = node.outputs(call.state) if node.outputs is not None else None
+    step = call.state.agent
+    succeeded: set[str] = set()
+    output = None
+    spoke = False
+
+    yield RunStarted(step)
+    try:
+        async with agent.run_stream_events(
+            prompt,
+            deps=call,
+            message_history=list(call.messages),
+            output_type=output_type,
+            # The turn's own tally, not this run's: a turn that hands the
+            # caller between four agents spends one allowance between them.
+            usage=usage,
+            usage_limits=limits,
+            # Semantic repair only. A provider's own HTTP retries are a
+            # different layer with a different counter, and folding them
+            # together would let a flaky network buy extra attempts at getting
+            # a tool call right.
+            retries=budget.repair_retries,
+        ) as events:
+            barge.attach(events)
+            async for event in events:
+                if text := _speech(event):
+                    if not spoke:
+                        spoke = True
+                        # The model is talking, so the gap is closed: a tool
+                        # called later in this turn may speak its own line.
+                        call._covered = False
+                    yield TextDelta(text, step)
+                elif isinstance(event, FunctionToolResultEvent):
+                    # Which tools *succeeded* is how a free edge is taken. The
+                    # result, never the call: a `read_diary` that refused an
+                    # unidentified caller used to move them into `booking`
+                    # anyway, because the call event fires before the tool
+                    # runs and whatever it then does.
+                    if not isinstance(event.part, RetryPromptPart):
+                        succeeded.add(event.part.tool_name)
+                elif isinstance(event, AgentRunResultEvent):
+                    call.messages = event.result.all_messages()
+                    output = event.result.output
+    except (UsageLimitExceeded, TimeoutError):
+        # The turn's budget, not this run's problem. Straight up to
+        # `run_turn`, which owns the allowance -- swallowed here it would
+        # become one more agent run apologising, which is the unbudgeted extra
+        # request this replaced.
+        raise
+    except RunCancelled as cancelled:
+        # Barge-in. Keep what completed: a tool that ran and returned is a
+        # thing that happened, and the next turn has to know about it.
+        call.messages = cancelled.all_messages()
+    except Exception as error:
+        logger.exception('agent run failed')
+        yield RunEnded(step)
+        yield _Failed(f'{type(error).__name__}: {error}')
+        return
+    finally:
+        barge.detach()
+
+    yield RunEnded(step)
+    yield _Outcome(output, succeeded)
+
+
+# --- delivered-history reconciliation ----------------------------------------
+
+
+def note_spoken(call: CallContext, content: str, interrupted: bool) -> None:
+    """Cut the last answer down to what the caller actually heard.
+
+    Barge-in stops speech mid-sentence, but the run recorded every token the
+    model produced. Left alone the agent believes it said things nobody heard,
+    and says "as I mentioned" about them on the next turn.
+
+    The delivered prefix comes from the runtime, which is the only thing that
+    knows it: generated text is not heard text, and a core that assumed
+    otherwise would put the whole unheard suffix into the next request.
+    """
+    if not interrupted:
+        return
+    from pydantic_ai import ModelResponse  # local: keeps the import list honest
+
+    for index in range(len(call.messages) - 1, -1, -1):
+        message = call.messages[index]
+        if not isinstance(message, ModelResponse):
+            continue
+        if not any(isinstance(part, TextPart) for part in message.parts):
+            continue  # a tool-call-only response: nothing was ever spoken
+        kept = [part for part in message.parts if not isinstance(part, TextPart)]
+        if content:
+            kept.append(TextPart(content=content))
+        if kept:
+            message.parts = kept
+        else:
+            # Nothing was heard and nothing else happened. An empty response
+            # is not a message any provider will take back.
+            del call.messages[index]
+        return
+
+
+# --- a runtime-free way to run one turn --------------------------------------
+
+
+async def take_turn(
+    call: CallContext, agents: dict[str, Node], prompt: str | None,
+    budget: TurnBudget | None = None, barge: Barge | None = None,
+) -> tuple[str, TurnFinished]:
+    """Everything one turn said, and how it ended. For tests and benchmarks.
+
+    The same core the Pipecat processor drives, with the events collected
+    instead of translated into frames -- which is what makes "the same
+    scenario, both ways" a comparison rather than two different programs.
+    """
+    said: list[str] = []
+    done: TurnFinished | None = None
+    started = time.perf_counter()
+    async for event in run_turn(call, agents, prompt, budget or TurnBudget(), barge):
+        if isinstance(event, TextDelta):
+            said.append(event.text)
+        elif isinstance(event, FixedSpeech):
+            said.append(event.text)
+        elif isinstance(event, TurnFinished):
+            done = event
+    assert done is not None, 'run_turn always finishes with a TurnFinished'
+    logger.debug('turn {} in {:.2f}s', done.status, time.perf_counter() - started)
+    return ''.join(said), done

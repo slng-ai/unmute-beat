@@ -1,4 +1,4 @@
-"""A pydantic-ai agent standing where Pipecat's LLM service would.
+"""The Pipecat side of a caller turn: events in, frames out.
 
 A Pipecat LLM node is a frame contract, not a class. On an ``LLMContextFrame``
 it pushes ``LLMFullResponseStartFrame``, then one ``LLMTextFrame`` per chunk of
@@ -6,10 +6,16 @@ speech, then ``LLMFullResponseEndFrame``. TTS, the assistant aggregator, the
 transcript and the interruption machinery are all built on those three frames
 and on nothing else, so anything that speaks them can sit here.
 
+Running the turn is not here. ``voice.core`` does that and knows nothing about
+Pipecat; this file translates its event stream into those frames, and supplies
+the two things only this side can know: Pipecat's open turn span, and the
+moment a word actually reached the wire.
+
 What this does *not* use is Pipecat's own context: the agents keep their history
-as ``list[ModelMessage]`` on ``CallState``. ``LLMContext`` still fills up beside
-it, and that is deliberate -- it is the aggregators' record of what was actually
-spoken, which is what ``note_spoken`` below reads. It is never sent to a model.
+as ``list[ModelMessage]`` on the call. ``LLMContext`` still fills up beside it,
+and that is deliberate -- it is the aggregators' record of what was actually
+spoken, which is what ``note_spoken`` below hands to the core. It is never sent
+to a model.
 
 Tracing crosses the same seam. Pipecat opens a span for the call and one per
 turn, and passes the open one through ``FrameProcessorSetup``; each caller turn
@@ -19,10 +25,8 @@ it every agent run starts a trace of its own and a call arrives in pieces.
 
 from __future__ import annotations
 
-import asyncio
 import time
 
-from loguru import logger
 from opentelemetry import trace
 from pipecat.frames.frames import (
     EndWorkerFrame,
@@ -36,46 +40,13 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pydantic_ai import (
-    Agent,
-    AgentRunResultEvent,
-    FunctionToolResultEvent,
-    ModelResponse,
-    PartDeltaEvent,
-    PartStartEvent,
-    RetryPromptPart,
-    RunCancelled,
-    TextPart,
-    TextPartDelta,
-)
+from pydantic_ai import ModelResponse, TextPart
 
-from pydantic_ai.usage import UsageLimitExceeded
-
-from voice.harness import CallContext, Handoff, Node, TurnBudget
-from voice.harness import moved_by as _moved_by
-from voice.harness import pick as _pick
-from voice.harness import route as _route
-
-STUMBLE = 'Sorry, I had a problem there. Could you say that again?'
-# Said by this code when a turn runs out of budget: no further model request,
-# no business work, and no second chance at a budget that is already spent.
-EXHAUSTED = "Sorry, I'm going round in circles there. Could you say that again?"
+from voice import core
+from voice.core import EXHAUSTED, STUMBLE  # noqa: F401  -- re-exported for tests and bots
+from voice.harness import CallContext, Node, TurnBudget
 
 _tracer = trace.get_tracer('slng-voice-harness')
-
-
-def _speech(event) -> str:
-    """The text of an event that is speech, and '' for everything that is not.
-
-    A `Handoff` arrives as a tool call part, so it never matches here and never
-    reaches the caller's ears.
-    """
-    match event:
-        case PartStartEvent(part=TextPart(content=text)):
-            return text
-        case PartDeltaEvent(delta=TextPartDelta(content_delta=text)):
-            return text
-    return ''
 
 
 def _last_user_text(context: LLMContext) -> str | None:
@@ -112,16 +83,14 @@ class PydanticAgentProcessor(FrameProcessor):
         # This turn's shared tally and limits, replaced at the top of each
         # turn. One per turn and not one per run: see `TurnBudget`.
         self._usage, self._limits = budget.account()
-        self._events = None
-        self._interrupted = False
         self._tracing = None
-        # Tools that ran *and returned* in the run that just finished, read
-        # by `_turn` to see whether one of them was a free edge out of this
-        # step. A refusal or a cancellation is not in here.
-        self._succeeded: set[str] = set()
-        # This turn's span, while it is still waiting for its first word.
-        self._turn_span = None
-        self._turn_started = 0.0
+        self._interrupted = False
+        # This turn's barge-in signal. The runtime hears the caller; the core
+        # decides what interrupting means. Replaced per turn, so a stale
+        # signal cannot fence the next one.
+        self._barge = core.Barge()
+        # How the last turn ended, for a caller that wants to know.
+        self._finished: core.TurnFinished | None = None
         call._say = self.say
         call._end = self.hang_up
 
@@ -191,8 +160,7 @@ class PydanticAgentProcessor(FrameProcessor):
     def interrupt(self) -> None:
         """The caller spoke over us. Stop the run instead of finishing into a void."""
         self._interrupted = True
-        if self._events is not None:
-            self._events.cancel()
+        self._barge.fire()
 
     def _parent(self):
         """Pipecat's open turn span, so ours joins that trace instead of starting one.
@@ -205,275 +173,90 @@ class PydanticAgentProcessor(FrameProcessor):
         return self._tracing.get_turn_context() or self._tracing.get_conversation_context()
 
     async def _turn(self, prompt: str | None) -> None:
-        """One caller turn: run the current agent, follow handoffs until one speaks.
+        """One caller turn, translated from the core's events into frames.
 
-        The whole turn spends one budget: one tally of provider requests, one
-        tool-call allowance, a fixed number of step runs and a deadline over
-        all of them together. Threaded through every run, so four agents in
-        one turn cannot each start again with a full allowance.
+        Everything about *running* the turn is in `voice.core`. What is left
+        here is the translation: an event stream in, Pipecat frames out, plus
+        the metrics and the span, both of which need things only this side
+        knows -- Pipecat's own turn context, and when the first word reached
+        the wire.
         """
         # One span for the whole chain: `start_as_current_span` attaches it, and
         # the agents run in this coroutine, so pydantic-ai's own run spans land
         # underneath instead of each opening a trace of its own.
         with _tracer.start_as_current_span('agents', context=self._parent()) as span:
-            handoffs: list[str] = []
-            self._turn_span = span
-            # The turn's clock, not the speaking hop's. `ttft` used to start
-            # inside `_speak`, so a turn that spent two routing runs before
-            # anybody said anything reported only the last one and the
-            # silence the caller actually sat through was invisible.
-            self._turn_started = time.perf_counter()
-            self._usage, self._limits = self._budget.account()
-            spent = ''
+            # The turn's clock, not the speaking hop's. This used to start
+            # inside the run that happened to speak, so a turn that spent two
+            # routing requests before anybody said anything reported only the
+            # last one and the silence the caller sat through was invisible.
+            turn_started = time.perf_counter()
+            run_started = turn_started
+            spoke = False
+            self._barge = core.Barge()
+            self._interrupted = False
             try:
-                self._interrupted = False
-                # A new silence to cover, so one fixed line is allowed again.
-                self._call._covered = False
-                self._call.turn_started()
-                # `step_runs` counts model runs, which is what a caller waits
-                # for. The graph's own moves are not in here to count: `route`
-                # replaces the destination the model named with the step that
-                # has to run first, so interposing a prerequisite costs the same
-                # one run that entering the destination would have.
-                async with asyncio.timeout(self._budget.seconds):
-                    spent = await self._hops(prompt, handoffs)
-            except TimeoutError:
-                spent = f'the {self._budget.seconds:g}s turn deadline'
-            except UsageLimitExceeded as over:
-                spent = str(over)
+                async for event in core.run_turn(
+                    self._call, self._agents, prompt, self._budget, self._barge
+                ):
+                    match event:
+                        case core.RunStarted():
+                            run_started = time.perf_counter()
+                            await self.push_frame(LLMFullResponseStartFrame())
+                            await self.start_ttfb_metrics()
+                            await self.start_processing_metrics()
+                        case core.TextDelta(text=text):
+                            if not spoke:
+                                spoke = True
+                                await self.stop_ttfb_metrics()
+                                # Pydantic AI's OTel instrumentation emits no
+                                # first-token event, so Langfuse shows every
+                                # generation with a null `timeToFirstToken`
+                                # and a trace cannot say how much of a round
+                                # trip was waiting. This is the moment, and we
+                                # are standing in it.
+                                span.set_attribute(
+                                    'turn_first_word', round(time.perf_counter() - turn_started, 3)
+                                )
+                                span.set_attribute(
+                                    'request_ttft', round(time.perf_counter() - run_started, 3)
+                                )
+                            await self.push_frame(LLMTextFrame(text))
+                        case core.RunEnded():
+                            await self.stop_processing_metrics()
+                            await self.push_frame(LLMFullResponseEndFrame())
+                        case core.FixedSpeech(text=text, reason=reason):
+                            # Past the one-per-gap gate on purpose: an error
+                            # or an exhausted turn must be heard whatever a
+                            # filler already said.
+                            if reason == 'error':
+                                await self.push_error(f'agent run failed: {event.text}')
+                            await self.say(text)
+                        case core.TurnFinished() as done:
+                            span.set_attribute('agent', done.agent)
+                            span.set_attribute('status', done.status)
+                            span.set_attribute('hops', len(done.handoffs) + 1)
+                            span.set_attribute('interrupted', done.status == 'interrupted')
+                            span.set_attribute('model_requests', done.requests)
+                            if done.handoffs:
+                                span.set_attribute('handoffs', ', '.join(done.handoffs))
+                            if done.detail:
+                                span.set_attribute('detail', done.detail)
+                            self._finished = done
             finally:
-                # In `finally`: the loop returns early both when an agent speaks
-                # and when the caller barges in mid-hop.
-                span.set_attribute('agent', self._call.state.agent)
-                span.set_attribute('hops', len(handoffs) + 1)
-                span.set_attribute('interrupted', self._interrupted)
-                span.set_attribute('model_requests', self._usage.requests)
-                if spent:
-                    span.set_attribute('exhausted', spent)
-                if handoffs:
-                    span.set_attribute('handoffs', ', '.join(handoffs))
                 # A turn that ends without speech leaves TTFB armed, and the next
                 # turn reports its own first word as seconds late. Idempotent:
                 # a turn that did speak stopped it already.
                 await self.stop_ttfb_metrics()
-
-            if spent and not self._interrupted:
-                # The turn ran out. One fixed line, spoken by this code: no
-                # further provider request, no business work, and nothing that
-                # hands the exhausted budget back its money. A caller sitting
-                # in silence has already lost the turn; a caller told plainly
-                # that we are stuck can say it again.
-                #
-                # There used to be one more model run here, outside the budget
-                # that had just been declared spent -- which meant the budget
-                # bounded nothing, and the run it bought could still call a
-                # tool through a narrowed schema.
-                logger.warning('turn exhausted: {} -- speaking the fixed line', spent)
-                await self._call.speak_now(EXHAUSTED)
-
-    async def _hops(self, prompt: str | None, handoffs: list[str]) -> str:
-        """Run agents until one answers the caller.
-
-        Returns '' when one did, and otherwise why it stopped -- which is the
-        turn's own word for "exhausted", handed back to `_turn` to speak the
-        fixed line rather than raised, because running out of hops is an
-        ordinary outcome and not an error.
-        """
-        for _ in range(self._budget.step_runs):
-            node = self._agents[self._call.state.agent]
-            output = await self._speak(node, prompt)
-            if not isinstance(output, Handoff):
-                # The free edge. A borrowed tool *succeeded*, so the caller is
-                # already in the step that owns it, and the request that moved
-                # them is the one that just answered them. Set after the run,
-                # not during, so the step that spoke is the step whose prompt
-                # wrote the words.
-                landed = _moved_by(self._call.state, node, self._agents, self._succeeded)
-                if landed != self._call.state.agent:
-                    logger.info(
-                        'moved {} -> {} (via {})',
-                        self._call.state.agent, landed, ', '.join(sorted(self._succeeded)),
-                    )
-                    handoffs.append(landed)
-                    self._call.commit(agent=landed)
-                return ''
-            # Where they were sent, then where the graph actually puts them:
-            # `booking` before anyone is identified means `verify` first, with
-            # `booking` recorded to resume into.
-            going_to, waiting = _route(self._call.state, self._agents, output.to)
-            logger.info(
-                'handoff {} -> {} ({})', self._call.state.agent, going_to, output.because or '-'
-            )
-            handoffs.append(going_to)
-            # One commit: the step and what is waiting behind it are the same
-            # decision, and a caller moved into `verify` with no record of
-            # where they were going has lost their errand.
-            self._call.commit(agent=going_to, pending=waiting)
-            # `prompt` is deliberately kept: the agent taking over is asked the
-            # caller's own question again. It used to be cleared, on the
-            # reasoning that the turn is already in the history -- and it is,
-            # two messages up. But the *last* message the receiving run then
-            # reads is somebody else's spent tool call, `hand_over` answered
-            # with "Final result processed." and nothing to reply to. Measured
-            # on the call of 2026-09-20: Gemini returned a candidate with no
-            # parts at all, pydantic-ai sent back "Please return text or
-            # include your response in a tool call", and the reply came on the
-            # retry -- 0.64s of the 3.94s that turn cost, spent producing
-            # nothing. Reading the question twice is cheaper than reading a
-            # finished errand.
-            if self._interrupted:
-                # Barged in during the hop. Starting the next agent now would
-                # answer a question the caller has moved on from.
-                return ''
-            if lines := self._agents[going_to].enter:
-                # Cover the hop: a whole model request stands between the
-                # caller finishing and the next agent's first word. Through the
-                # call, so a tool firing next does not cover it twice.
-                await self._call.say(_pick(f'enter:{output.to}', lines))
-        return f'the {self._budget.step_runs}-run hop budget'
-
-    async def _speak(self, node: Node, prompt: str | None, output_type=None):
-        """Run one step's agent, streaming whatever it says straight to TTS.
-
-        `output_type` narrows what this one run may return. Left `None`, the
-        step's own `outputs` builds it from the live state, which is how a
-        guarded exit leaves the `hand_over` schema the moment its guard stops
-        holding. A step with no `outputs` keeps the agent's own. Its tools are
-        untouched either way.
-        """
-        agent: Agent = node.agent
-        if output_type is None and node.outputs is not None:
-            output_type = node.outputs(self._call.state)
-        spoke = False
-        output = None
-        self._succeeded = set()
-        started = time.perf_counter()
-        await self.push_frame(LLMFullResponseStartFrame())
-        await self.start_ttfb_metrics()
-        await self.start_processing_metrics()
-        try:
-            async with agent.run_stream_events(
-                prompt,
-                deps=self._call,
-                message_history=list(self._call.messages),
-                output_type=output_type,
-                # The turn's own tally, not this run's: a turn that hands the
-                # caller between four agents spends one allowance between them.
-                usage=self._usage,
-                usage_limits=self._limits,
-                # Semantic repair only. A provider's own HTTP retries are a
-                # different layer with a different counter, and folding them
-                # together would let a flaky network buy extra attempts at
-                # getting a tool call right.
-                retries=self._budget.repair_retries,
-            ) as events:
-                self._events = events
-                async for event in events:
-                    if text := _speech(event):
-                        if not spoke:
-                            await self.stop_ttfb_metrics()
-                            spoke = True
-                            # Pydantic AI's OTel instrumentation emits no
-                            # first-token event, so Langfuse shows every
-                            # generation with a null `timeToFirstToken` and a
-                            # trace cannot say how much of a round trip was
-                            # waiting. This is the moment, and we are standing
-                            # in it. On the turn span, not the current one: the
-                            # current one belongs to pydantic-ai and changes
-                            # under us, and what a caller feels is the first
-                            # word of the *turn*, which is why it is written
-                            # once and the second hop does not overwrite it.
-                            if self._turn_span is not None:
-                                # Named for what it is. This is not caller
-                                # audio latency: it starts when this processor
-                                # was handed the finished transcript, so the
-                                # endpointing wait and STT are already spent
-                                # and are not in it. Pipecat's own turn span
-                                # is the one that spans those, and the bench
-                                # reads it separately rather than letting this
-                                # number stand in for it.
-                                self._turn_span.set_attribute(
-                                    'turn_first_word',
-                                    round(time.perf_counter() - self._turn_started, 3),
-                                )
-                                # And the one request that produced it, which
-                                # is a different question with a different
-                                # answer whenever a turn took more than one.
-                                self._turn_span.set_attribute(
-                                    'request_ttft', round(time.perf_counter() - started, 3)
-                                )
-                                self._turn_span = None
-                            # The model is talking, so the gap is closed: a tool
-                            # called later in this turn may speak its own line.
-                            self._call._covered = False
-                        await self.push_frame(LLMTextFrame(text))
-                    elif isinstance(event, FunctionToolResultEvent):
-                        # Which tools *succeeded* is how a free edge is taken: a
-                        # step lends its neighbour's entry tool, and completing
-                        # it means the caller is now in the neighbour.
-                        #
-                        # The result, never the call. This used to watch
-                        # `FunctionToolCallEvent`, which fires when the model
-                        # asks for a tool -- before it runs, and regardless of
-                        # whether it then raises, retries or is cancelled by
-                        # barge-in. A `read_diary` that refused an unidentified
-                        # caller still moved them into `booking`. A
-                        # `RetryPromptPart` is the tool saying no, so it is not
-                        # a move.
-                        if not isinstance(event.part, RetryPromptPart):
-                            self._succeeded.add(event.part.tool_name)
-                    elif isinstance(event, AgentRunResultEvent):
-                        self._call.messages = event.result.all_messages()
-                        output = event.result.output
-        except (UsageLimitExceeded, TimeoutError):
-            # The turn's budget, not this run's problem. Straight up to
-            # `_turn`, which owns the allowance and speaks the fixed line --
-            # swallowed here it would become one more agent run apologising,
-            # which is the unbudgeted extra request this replaced.
-            raise
-        except RunCancelled as cancelled:
-            # Barge-in. Keep what completed: a tool that ran and returned is a
-            # thing that happened, and the next turn has to know about it.
-            self._call.messages = cancelled.all_messages()
-        except Exception as error:
-            logger.exception('agent run failed')
-            await self.push_error(f'agent run failed: {error}', exception=error)
-            if not spoke:
-                # An error the caller can hear beats silence on an open line, so
-                # this one goes past the gate: a filler may already have spoken.
-                await self.say(STUMBLE)
-        finally:
-            self._events = None
-            await self.stop_processing_metrics()
-            await self.push_frame(LLMFullResponseEndFrame())
-        return output
+                await self.stop_processing_metrics()
 
     def note_spoken(self, content: str, interrupted: bool) -> None:
-        """Cut the last answer down to what the caller actually heard.
+        """Tell the core what the caller actually heard.
 
         Barge-in stops TTS mid-sentence, but the run recorded every token the
-        model produced. Left alone the agent believes it said things nobody
-        heard, and says "as I mentioned" about them on the next turn. The
-        assistant aggregator has already worked out the spoken prefix, so read
-        it from there rather than counting TTS frames.
+        model produced. The assistant aggregator has already worked out the
+        spoken prefix, so read it from there rather than counting TTS frames
+        -- and hand it across, because the core cannot know it.
 
         Wire it to the aggregator's ``on_assistant_turn_stopped`` event.
         """
-        if not interrupted:
-            return
-        for index in range(len(self._call.messages) - 1, -1, -1):
-            message = self._call.messages[index]
-            if not isinstance(message, ModelResponse):
-                continue
-            if not any(isinstance(part, TextPart) for part in message.parts):
-                continue  # a tool-call-only response: nothing was ever spoken
-            kept = [part for part in message.parts if not isinstance(part, TextPart)]
-            if content:
-                kept.append(TextPart(content=content))
-            if kept:
-                message.parts = kept
-            else:
-                # Nothing was heard and nothing else happened. An empty response
-                # is not a message any provider will take back.
-                del self._call.messages[index]
-            return
+        core.note_spoken(self._call, content, interrupted)

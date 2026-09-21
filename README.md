@@ -103,13 +103,21 @@ uv run --env-file .env python bot.py --help
 No pytest and no network: they script the model, so they are fast and free.
 
 ```bash
-uv run --env-file .env python -m tests.test_graph   # the graph: routing, the stack, the schema
+uv run --env-file .env python -m tests.test_graph   # the graph: routing, the waiting step, the schema
 uv run --env-file .env python -m tests.test_salon   # the salon agency
 uv run --env-file .env python -m tests.test_voice   # the processor itself
 uv run --env-file .env python -m tests.test_traces  # one call is one trace
+uv run --env-file .env python -m tests.test_state   # validated state, and the phone policy
+uv run --env-file .env python -m tests.test_diary   # the service oracle: can it say no
+uv run --env-file .env python -m tests.test_flow    # guards and conflicts, at execution
+uv run --env-file .env python -m tests.test_budget  # one allowance per caller turn
+uv run --env-file .env python -m tests.test_bench   # the measurement, measured
+uv run --env-file .env python -m tests.test_core    # the core and the adapter agree
 ```
 
-Each prints `ok` or raises on the first failure.
+Each prints `ok` or raises on the first failure. All ten in one go, with live
+model requests disabled rather than merely unused, is in
+[`bench/baseline/README.md`](bench/baseline/README.md).
 
 ## 6. Switch agencies
 
@@ -194,10 +202,11 @@ Four things make this work, and all four are needed:
 # How it is built
 
 ```
-voice/harness.py     VoiceState, Handoff, Node, the filler hook   -- shared
-voice/processor.py   the Pipecat node: streams speech, follows handoffs
+voice/harness.py     VoiceState, CallContext, Handoff, Node, TurnBudget  -- shared
+voice/core.py        one caller turn, as an event stream. No runtime imports.
+voice/processor.py   the Pipecat node: translates those events into frames
 voice/{state,agents}.py   the two-agent demo
-salon/state.py       shapes, SalonState, caller-ID prefetch
+salon/state.py       shapes, SalonState, SalonCall, caller-ID prefetch
 salon/diary.py       customers, slots, bookings, complaints (in memory)
 salon/knowledge.py   section retrieval over knowledge/*.md
 salon/agents.py      the four agents, their tools, the AGENTS table
@@ -211,8 +220,10 @@ tests/               assert scripts, no pytest, no network
 ## How a turn works
 
 The user aggregator finishes the caller's turn and pushes an `LLMContextFrame`.
-The processor runs the current agent with `run_stream_events`, pushes each text
-chunk as an `LLMTextFrame`, and closes with `LLMFullResponseEndFrame`. TTS, the
+The processor hands the transcript to `voice.core.run_turn`, which runs the
+current agent and yields an ordered stream of events; the processor turns
+`RunStarted` into `LLMFullResponseStartFrame`, each `TextDelta` into an
+`LLMTextFrame`, and `RunEnded` into `LLMFullResponseEndFrame`. TTS, the
 transcript and the interruption machinery are built on those three frames and
 nothing else, which is why a Pydantic AI agent can sit here at all.
 

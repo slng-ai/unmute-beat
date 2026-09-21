@@ -11,7 +11,10 @@ Then open http://localhost:7860/client and talk.
 
 from __future__ import annotations
 
+import json
 import os
+import pathlib
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -66,6 +69,18 @@ transport_params = {
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
     setup()  # Langfuse: the agents' spans, one per agent per turn
+
+    from salon import diary
+
+    if pinned := os.getenv('SALON_CLOCK'):
+        # The salon's clock, for a call that has to be comparable with another
+        # one. "Monday" and "tomorrow" resolve against it, so the same words
+        # spoken on two different days book two different appointments and
+        # neither run can state what the right answer was. Format:
+        # SALON_CLOCK=2026-09-21T10:00, in the salon's own timezone.
+        when = datetime.fromisoformat(pinned)
+        diary.set_clock(when if when.tzinfo else when.replace(tzinfo=diary.TZ))
+        logger.info('salon clock pinned to {}', diary.now().isoformat())
 
     slng_key = os.environ['SLNG_API_KEY']
     stt = SlngSTTService(
@@ -175,7 +190,43 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
-    await runner.run()
+    try:
+        await runner.run()
+    finally:
+        _record(call, session_id)
+
+
+def _record(call, session_id: str) -> None:
+    """Write down what this call was and what the salon ended up holding.
+
+    The diary is in memory and dies with the process, so a live call
+    otherwise leaves a trace full of timings and nothing that can answer
+    whether it booked the right thing. A benchmark that can only score what
+    it can see scores the wrong thing quickly.
+
+    Written beside the scripted runs in `bench/raw/`, in the same shape, so
+    `bench.turns --session-id` covers the timing half and this covers the
+    correctness half.
+    """
+    try:
+        from utils.arm import outcome, settings
+
+        record = {
+            'arm': os.getenv('BENCH_LABEL', 'live'),
+            'session': session_id,
+            'settings': settings(),
+            'outcome': outcome(getattr(call.state, 'customer_phone', '')),
+            'state': call.state.model_dump(),
+            'ended': datetime.now(UTC).isoformat(),
+        }
+        path = pathlib.Path('bench/raw') / f'live-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record, indent=1) + '\n')
+        logger.info('call recorded -> {}', path)
+    except Exception:
+        # A call that ended is not a call that failed. Never let the
+        # bookkeeping be the thing that raises on the way out.
+        logger.exception('could not record the call')
 
 
 async def bot(runner_args: RunnerArguments) -> None:

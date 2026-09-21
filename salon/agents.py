@@ -803,7 +803,7 @@ async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
             'the call. Answer what they asked. Hang up only on their own goodbye.'
         )
     ctx.deps.end_requested('caller')
-    await ctx.deps.speak_now(goodbye)
+    await ctx.deps.speak_now(goodbye, origin='goodbye')
     await ctx.deps.end_call()
     return goodbye
 

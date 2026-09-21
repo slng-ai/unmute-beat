@@ -95,7 +95,23 @@ class PydanticAgentProcessor(FrameProcessor):
         call._end = self.hang_up
 
     def can_generate_metrics(self) -> bool:
-        return True
+        """No. This processor's own timings go on its span, not into Pipecat's metrics.
+
+        They used to go into both. The installed TTS tracing decorator takes
+        the first `TTFBMetricsData` that arrives under the playing audio
+        context without checking which processor emitted it, so this
+        processor's time to first token was recorded as the TTS service's
+        time to first audio: eight of the 47 TTS spans on the live calls of
+        2026-09-21 reported a TTFB longer than the span's own duration --
+        N1's goodbye, 0.233s long, 1.678s to first byte -- and each of those
+        numbers was the enclosing agent attempt's.
+
+        Nothing is lost by not emitting them. `request_ttft` is stamped per
+        provider request by `voice.harness.request_clock` and
+        `turn_first_word` is stamped here, both on the `agents` span, and
+        both say what they measured. The TTS service keeps its own.
+        """
+        return False
 
     async def setup(self, setup):
         await super().setup(setup)
@@ -114,8 +130,26 @@ class PydanticAgentProcessor(FrameProcessor):
         one line per gap and then calls this. Only the greeting and the error
         line come here directly, because both must be heard whatever else was
         said.
+
+        The ledger's own record of this segment rides along in the frame's
+        metadata. Every TTS observation on the live calls of 2026-09-21 hung
+        off the outer Pipecat turn with nothing to say which line it was, so
+        a filler, an entry line, a confirmation and a goodbye were four
+        indistinguishable spans -- and "did the caller hear this before the
+        tool ran" had no answer in the trace. Queue insertion is also stamped
+        here, which is not synthesis and not audio: three separate moments,
+        and only the first of them is one this process can see.
         """
-        await self.push_frame(TTSSpeakFrame(text))
+        frame = TTSSpeakFrame(text)
+        if segment := next((s for s in reversed(self._call.spoken) if s.text == text), None):
+            frame.metadata['speech'] = {
+                'segment': segment.id,
+                'origin': segment.origin,
+                'attempt': segment.attempt,
+                'tool_call_id': segment.tool_call_id,
+                'submitted_at': time.time(),
+            }
+        await self.push_frame(frame)
 
     async def hang_up(self) -> None:
         """Close the line, once whatever is queued ahead of this has been heard.
@@ -207,12 +241,9 @@ class PydanticAgentProcessor(FrameProcessor):
                         case core.RunStarted():
                             open_response = True
                             await self.push_frame(LLMFullResponseStartFrame())
-                            await self.start_ttfb_metrics()
-                            await self.start_processing_metrics()
                         case core.TextDelta(text=text):
                             if not spoke:
                                 spoke = True
-                                await self.stop_ttfb_metrics()
                                 # Pydantic AI's OTel instrumentation emits no
                                 # first-token event, so Langfuse shows every
                                 # generation with a null `timeToFirstToken`
@@ -225,7 +256,6 @@ class PydanticAgentProcessor(FrameProcessor):
                             await self.push_frame(LLMTextFrame(text))
                         case core.RunEnded():
                             open_response = False
-                            await self.stop_processing_metrics()
                             await self.push_frame(LLMFullResponseEndFrame())
                         case core.FixedSpeech(text=text, reason=reason):
                             # Past the one-per-gap gate on purpose: an error
@@ -253,6 +283,13 @@ class PydanticAgentProcessor(FrameProcessor):
                             span.set_attribute('request_first_output', [kind for _, kind in timed])
                             spoken = self._call.spoken
                             span.set_attribute('fixed_lines', sum(s.kind == 'fixed' for s in spoken))
+                            # The turn's speech, segment by segment, with
+                            # where each one came from. A trace can then say
+                            # what was said and who asked for it without
+                            # guessing from the shape of the TTS spans.
+                            span.set_attribute('speech_origins', [s.origin for s in spoken])
+                            span.set_attribute('speech_segments', [s.id for s in spoken])
+                            span.set_attribute('attempt', self._call.attempt)
                             # The first text of *any* kind handed to TTS,
                             # beside the first the model produced. A filler
                             # going out quickly is not an answer going out
@@ -318,8 +355,6 @@ class PydanticAgentProcessor(FrameProcessor):
                 # A turn that ends without speech leaves TTFB armed, and the next
                 # turn reports its own first word as seconds late. Idempotent:
                 # a turn that did speak stopped it already.
-                await self.stop_ttfb_metrics()
-                await self.stop_processing_metrics()
 
     def note_spoken(self, content: str, interrupted: bool) -> None:
         """Tell the core what the caller actually heard.

@@ -432,6 +432,13 @@ def calls(name, **args):
     return stream
 
 
+def tool_call(name, **args):
+    async def stream(messages, info: AgentInfo):
+        yield {0: DeltaToolCall(name=name, json_args=json.dumps(args))}
+
+    return stream
+
+
 def then(*steps):
     """A different scripted response for each request this agent receives."""
     seen = {'n': 0}
@@ -787,6 +794,70 @@ async def the_transcript_is_the_call_and_not_the_protocol():
     assert len(call.spoken) == 1, call.spoken
 
 
+async def every_segment_says_where_it_came_from():
+    """A filler, an entry line, a confirmation and a goodbye are four different things.
+
+    On the live calls of 2026-09-21 they were four TTS observations hanging
+    off the outer Pipecat turn with nothing to tell them apart, which is why
+    "did the caller hear this before the tool ran" had no answer in the
+    trace. Each segment now carries its own id, its origin and the attempt
+    that asked for it, and the id rides along in the frame's metadata so the
+    audio context that synthesises it can be matched back.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
+    probe_it = Probe(call)
+
+    with scripted(
+        booking=then(
+            tool_call('read_diary', when='tomorrow', service='haircut'),
+            says('I have a few times tomorrow.'),
+        )
+    ):
+        await probe_it._turn('what have you got tomorrow?')
+
+    origins = [(s.origin, s.kind) for s in call.spoken]
+    assert ('tool_filler', 'fixed') in origins, origins
+    assert ('model', 'model') in origins, origins
+    # The filler names the tool call it was covering; model speech does not.
+    filler = next(s for s in call.spoken if s.origin == 'tool_filler')
+    assert filler.tool_call_id, filler
+    # Ids are unique within the call and carry the turn they belong to.
+    ids = [s.id for s in call.spoken]
+    assert len(set(ids)) == len(ids) and all(f':{call.turn}:' in i for i in ids), ids
+    # And what went out on the wire carries the same id.
+    spoken_frames = [f for f in probe_it.frames if isinstance(f, TTSSpeakFrame)]
+    assert spoken_frames, probe_it.kinds()
+    carried = spoken_frames[0].metadata.get('speech') or {}
+    assert carried.get('segment') == filler.id, carried
+    assert carried.get('origin') == 'tool_filler' and carried.get('submitted_at'), carried
+
+
+async def the_processor_reports_no_metrics_of_its_own():
+    """Its timings go on its span. Pipecat's metrics belong to the services.
+
+    The installed TTS tracing decorator takes the first `TTFBMetricsData`
+    that arrives under the playing audio context without checking which
+    processor emitted it, so this processor's time to first token was
+    recorded as the TTS service's time to first audio. Eight of the 47 TTS
+    spans on the live calls of 2026-09-21 reported a TTFB longer than the
+    span's own duration -- N1's goodbye, 0.233s long against 1.678s to first
+    byte, which is the enclosing agent attempt's number.
+    """
+    from pipecat.frames.frames import MetricsFrame
+
+    diary.reset()
+    call = open_call(PHONE)
+    probe_it = Probe(call)
+    assert probe_it.can_generate_metrics() is False
+    with scripted(concierge=says('Hello there.')):
+        await probe_it._turn('hi')
+    assert not [f for f in probe_it.frames if isinstance(f, MetricsFrame)], probe_it.kinds()
+    # And nothing is lost: the numbers are on the span, per request.
+    assert [r.ttft for r in call.requests if r.ttft is not None], call.requests
+
+
 async def main():
     await the_same_scenarios_both_ways()
     await the_processor_still_speaks_pipecat()
@@ -799,6 +870,8 @@ async def main():
     await a_late_commit_cannot_move_a_caller_who_moved_on()
     await a_reset_step_is_sent_none_of_the_conversation()
     await the_transcript_is_the_call_and_not_the_protocol()
+    await every_segment_says_where_it_came_from()
+    await the_processor_reports_no_metrics_of_its_own()
     await a_barge_in_after_a_tool_still_moves_nobody()
     await an_interrupted_fixed_line_leaves_an_earlier_answer_alone()
     await time_to_first_token_is_timed_per_request()

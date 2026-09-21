@@ -13,7 +13,9 @@ how that block goes unnoticed.
 
 from __future__ import annotations
 
+import hashlib
 import os
+import pathlib
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -21,6 +23,21 @@ from importlib.metadata import version
 
 from salon import diary
 from voice.harness import TurnBudget
+
+_ROOT = pathlib.Path(__file__).resolve().parent.parent
+# Captured once, at import, and not again. The record a live call used to
+# write stamped `started` with the time it *ended*, so every configuration
+# figure in it was read as the configuration at the moment of writing --
+# which for anything that can change during a call is the wrong moment.
+PROCESS_STARTED_AT = datetime.now(UTC).isoformat()
+
+
+def _digest(paths: list[pathlib.Path]) -> str:
+    """One SHA-256 over these files, so a set of them can be named by a number."""
+    rolling = hashlib.sha256()
+    for path in sorted(paths):
+        rolling.update(path.read_bytes())
+    return rolling.hexdigest()
 
 
 def _git(*args: str) -> str:
@@ -47,13 +64,29 @@ def settings() -> dict:
         'model_settings': str(agents.SETTINGS),
         'budget': str(TurnBudget()),  # what the processor is built with
         'speak_by': agents.SPEAK_BY,
+        # What the prompts and the lock were, as one number each. Two runs
+        # whose prompt digests differ are not the same arm, however alike
+        # their settings read.
+        'prompt_sha256': _digest(
+            sorted(_ROOT.glob('prompts/**/*.md')) + sorted(_ROOT.glob('knowledge/*.md'))
+        ),
+        'lock_sha256': _digest([_ROOT / 'uv.lock']) if (_ROOT / 'uv.lock').exists() else '',
         'timezone': str(diary.TZ),
         'salon_clock': diary.now().isoformat(),
         # Whether this call started from an empty salon or inherited the last
         # one's. Two calls are only comparable when they agree on it, and a
         # continuation scenario is only meaningful when they do not.
         'fixture': os.getenv('SALON_FIXTURE', 'continue'),
-        'started': datetime.now(UTC).isoformat(),
+        # Three different moments, and the record used to carry one number
+        # under a name that meant the earliest of them. `process_started_at`
+        # is immutable configuration; `captured_at` is when this dict was
+        # built, which on a live call is when the call ended.
+        'process_started_at': PROCESS_STARTED_AT,
+        'captured_at': datetime.now(UTC).isoformat(),
+        # What the caller waits out before the agency hears them. Part of
+        # every gap measured on this arm, and not a thing the agency can
+        # make up for.
+        'endpointing_stop_secs': float(os.getenv('SMART_TURN_STOP_SECS', '1.5')),
         'seed_customers': sorted(diary._customers),
         # The rule that decides how many turns a booking takes, and one of the
         # things two arms must match before their turn counts mean the same.

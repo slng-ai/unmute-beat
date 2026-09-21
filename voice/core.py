@@ -216,7 +216,7 @@ async def run_turn(
 
     if failure:
         # An error the caller can hear beats silence on an open line.
-        call.note_said('fixed', STUMBLE)
+        call.note_said('fixed', STUMBLE, origin='error')
         yield FixedSpeech(STUMBLE, reason='error')
     elif spent and not barge.hit:
         # The turn ran out. One fixed line: no further provider request, no
@@ -225,7 +225,7 @@ async def run_turn(
         # that had just been declared spent -- so the budget bounded nothing,
         # and the run it bought still held every ordinary tool.
         logger.warning('turn exhausted: {}', spent)
-        call.note_said('fixed', EXHAUSTED)
+        call.note_said('fixed', EXHAUSTED, origin='error')
         yield FixedSpeech(EXHAUSTED, reason='exhausted')
 
     # Checked whatever else happened in the turn, because the sentence is
@@ -235,7 +235,7 @@ async def run_turn(
     # what was generated and `note_heard` has already cut it down.
     if not barge.hit and (claim := call.unbacked_claim()):
         logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
-        call.note_said('fixed', UNBACKED)
+        call.note_said('fixed', UNBACKED, origin='error')
         yield FixedSpeech(UNBACKED, reason='unbacked')
 
     status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
@@ -301,7 +301,7 @@ async def _hops(
             # to. Said through `speak_now` for the same reason a confirmation
             # is: the words are already decided, and a round trip spent asking
             # a model to repeat them is a round trip of silence.
-            await call.speak_now(output.put(call))
+            await call.speak_now(output.put(call), origin='ask')
         if not isinstance(output, Handoff):
             # The free edge. A borrowed tool *succeeded*, so the caller is
             # already in the step that owns it, and the request that moved
@@ -368,7 +368,7 @@ async def _hops(
             # Cover the hop: a whole model request stands between the caller
             # finishing and the next agent's first word. Through the call, so
             # a tool firing next does not cover it twice.
-            await call.say(_pick(f'enter:{output.to}', lines))
+            await call.say(_pick(f'enter:{output.to}', lines), origin='entry')
     yield _Exhausted(f'the {budget.step_runs}-run hop budget')
 
 
@@ -423,6 +423,7 @@ async def _speak(
     gate: str | None = 'clause' if node.guarded and not call.wrote_this_turn() else None
     held = ''
 
+    call.attempt_started()
     yield RunStarted(step)
     try:
         async with agent.run_stream_events(
@@ -536,7 +537,7 @@ async def _speak(
         # for the same reason: the next request must not be told the caller
         # heard something they did not.
         note_spoken(call, _delivered(call), interrupted=True)
-        call.note_said('fixed', WITHHELD)
+        call.note_said('fixed', WITHHELD, origin='error')
         yield FixedSpeech(WITHHELD, reason='withheld')
     yield RunEnded(step)
     yield _Outcome(output, succeeded)

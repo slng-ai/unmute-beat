@@ -211,13 +211,17 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
+    # When this call began, as distinct from when the process did and from
+    # when the record was written. Three moments the record used to carry one
+    # number for.
+    started_at = datetime.now(UTC).isoformat()
     try:
         await runner.run()
     finally:
-        _record(call, session_id)
+        _record(call, session_id, started_at)
 
 
-def _record(call, session_id: str) -> None:
+def _record(call, session_id: str, started_at: str = '') -> None:
     """Write down what this call was and what the salon ended up holding.
 
     The diary is in memory and dies with the process, so a live call
@@ -240,7 +244,15 @@ def _record(call, session_id: str) -> None:
             # JSON mode, so a day is the ISO string the record is read back as
             # rather than a `date` nothing outside Python can load.
             'state': call.state.model_dump(mode='json'),
-            'ended': datetime.now(UTC).isoformat(),
+            # What the caller and the agency actually said, kept apart from
+            # the model and tool protocol: a trace full of timings cannot be
+            # asked whether the right thing was booked, and neither can a
+            # message history that does not hold the fixed lines.
+            'transcript': call.transcript(),
+            'turns': call.turn,
+            'call_started_at': started_at,
+            'ended_at': datetime.now(UTC).isoformat(),
+            'ended': call.ended or 'unknown',
         }
         path = pathlib.Path('bench/raw') / f'live-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json'
         path.parent.mkdir(parents=True, exist_ok=True)

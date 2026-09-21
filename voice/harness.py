@@ -116,6 +116,21 @@ class Spoken:
 
     kind: Literal['fixed', 'model']
     text: str
+    # Where this segment came from, which the trace could not otherwise say.
+    # Every TTS observation on the live calls of 2026-09-21 hung off the
+    # outer Pipecat turn, so a filler, an entry line, a confirmation and a
+    # goodbye were four spans with nothing to tell them apart -- and the
+    # question the traces raised was which of them the caller heard before
+    # the tool ran.
+    origin: Literal['entry', 'tool_filler', 'ask', 'confirmation', 'model', 'goodbye', 'error'] = 'model'
+    # Stable within the call: turn, then position in it. What carries through
+    # the frame queue so a submitted segment and the audio context that
+    # synthesised it can be matched up afterwards.
+    id: str = ''
+    # Which run of the agency asked for it. A turn can have more than one.
+    attempt: int = 0
+    # The tool call it was covering, where there was one.
+    tool_call_id: str = ''
     # When this segment *started* going out, on the same clock as
     # `Request.started`. Text handed to TTS, which is not audio the caller
     # heard: the runtime's own playout is a separate boundary and nothing
@@ -305,6 +320,12 @@ class CallContext(BaseModel):
     # Every turn before this one, as the caller experienced it. See
     # `transcript`, which adds the turn still running.
     _record: list[dict[str, str]] = PrivateAttr(default_factory=list)
+    # Every stretch of speech gets a number, so the ledger entry and the
+    # audio context that synthesised it can be matched up afterwards.
+    _segments: int = PrivateAttr(default=0)
+    # Which run of the agency is going on inside this turn. More than one
+    # when a caller speaks again before the agency answers.
+    _attempt: int = PrivateAttr(default=0)
 
     @property
     def id(self) -> str:
@@ -330,7 +351,14 @@ class CallContext(BaseModel):
         """
         return self._spoken if self._open is None else [*self._spoken, self._open]
 
-    def note_said(self, kind: Literal['fixed', 'model'], text: str, at: float | None = None) -> None:
+    def note_said(
+        self,
+        kind: Literal['fixed', 'model'],
+        text: str,
+        at: float | None = None,
+        origin: str = '',
+        tool_call_id: str = '',
+    ) -> None:
         """One more segment the caller was sent, in the order it went out.
 
         Every route to the caller comes through here, which is the point: the
@@ -350,7 +378,32 @@ class CallContext(BaseModel):
             # is the order the caller heard, and that is the only thing it is
             # for.
             self.close_model_text()
-            self._spoken.append(Spoken(kind, text, at=time.perf_counter() if at is None else at))
+            self._spoken.append(
+                Spoken(
+                    kind,
+                    text,
+                    at=time.perf_counter() if at is None else at,
+                    origin=origin or ('model' if kind == 'model' else 'confirmation'),  # ty: ignore[invalid-argument-type]
+                    id=self.next_segment(),
+                    attempt=self._attempt,
+                    tool_call_id=tool_call_id,
+                )
+            )
+
+    def next_segment(self) -> str:
+        """One id for the next stretch of speech, stable within this call."""
+        self._segments += 1
+        return f'{self._id}:{self._turn}:{self._segments}'
+
+    def attempt_started(self) -> int:
+        """One more run of the agency inside this caller turn. Returns which."""
+        self._attempt += 1
+        return self._attempt
+
+    @property
+    def attempt(self) -> int:
+        """Which run of the agency is going on, counting from one within the turn."""
+        return self._attempt
 
     def note_model_text(self, text: str) -> None:
         """One more piece of the model segment now streaming, opening it if it is the first.
@@ -364,7 +417,7 @@ class CallContext(BaseModel):
         if not text:
             return
         if self._open is None:
-            self._open = Spoken('model', '')
+            self._open = Spoken('model', '', id=self.next_segment(), attempt=self._attempt)
         self._open.text += text
 
     def close_model_text(self) -> None:
@@ -502,7 +555,7 @@ class CallContext(BaseModel):
                 return
         self.state = type(self.state)(**(self.state.model_dump() | updates))
 
-    async def say(self, text: str) -> None:
+    async def say(self, text: str, origin: str = 'entry', tool_call_id: str = '') -> None:
         """Speak one fixed line now, without waiting for the model.
 
         At most one per gap. A handoff line and a tool's filler line cover the
@@ -514,7 +567,7 @@ class CallContext(BaseModel):
         if self._covered or self._say is None:
             return
         self._covered = True
-        self.note_said('fixed', text)
+        self.note_said('fixed', text, origin=origin, tool_call_id=tool_call_id)
         await self._say(text)
 
     def resume(self, fallback: str) -> str:
@@ -555,15 +608,16 @@ class CallContext(BaseModel):
         self._record.extend(self._this_turn())
         self.heard = heard
         self._turn += 1
+        self._attempt = 0
         self._requests.clear()
         self._spoken.clear()
         self._open = None
         self._spoke = False
 
-    async def speak_now(self, text: str) -> None:
+    async def speak_now(self, text: str, origin: str = 'confirmation') -> None:
         """Say this whatever else was said. For a goodbye or an error, never a filler."""
         if self._say is not None:
-            self.note_said('fixed', text)
+            self.note_said('fixed', text, origin=origin)
             await self._say(text)
 
     def end_requested(self, why: Literal['caller', 'abandoned', 'transport', 'error']) -> None:
@@ -694,7 +748,14 @@ def filler_hook(lines_by_tool: dict[str, tuple[str, ...]]) -> Hooks:
     @hooks.on.before_tool_execute
     async def cover_the_wait(ctx, *, call, tool_def, args):
         if lines := lines_by_tool.get(call.tool_name):
-            await ctx.deps.say(pick(f'tool:{call.tool_name}', lines))
+            # The tool call it is covering travels with it, so the trace can
+            # say which wait this speech was for rather than leaving a TTS
+            # span hanging off the turn with nothing to attach it to.
+            await ctx.deps.say(
+                pick(f'tool:{call.tool_name}', lines),
+                origin='tool_filler',
+                tool_call_id=getattr(call, 'tool_call_id', ''),
+            )
         return args
 
     return hooks

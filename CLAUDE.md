@@ -52,25 +52,23 @@ Everything needs `--env-file .env` — the model key is read at import.
 
 ```bash
 uv sync                                                  # venv + deps
+uv run python -m tests                                   # all ten modules, offline, no .env
 uv run --env-file .env python talk.py                    # no audio, the fast loop
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 ```
 
-All ten test modules, with live model requests disabled rather than merely
-unused — the canonical invocation is in
-[`bench/baseline/README.md`](bench/baseline/README.md):
+`uv run python -m tests` is the answer to "how do I test": it turns
+`ALLOW_MODEL_REQUESTS` off *before* any scenario module is imported, so a
+module that forgot to override an agent raises instead of billing. Running one
+module alone (`uv run python -m tests.test_salon`) is what you want while
+working on it, but it is only safe by convention.
 
-```bash
-for m in tests.test_graph tests.test_voice tests.test_salon tests.test_traces tests.test_state tests.test_diary tests.test_flow tests.test_budget tests.test_bench tests.test_core; do PYTHONDONTWRITEBYTECODE=1 GOOGLE_API_KEY=offline-test-placeholder .venv/bin/python -B -c 'import sys, runpy; import pydantic_ai.models as models; models.ALLOW_MODEL_REQUESTS = False; runpy.run_module(sys.argv[1], run_name="__main__")' "$m" || exit "$?"; done
-```
+`HARNESS=voice` swaps the salon for the demo agency. `talk.py` takes the whole
+call as arguments, which is the quickest way to exercise a prompt change.
 
-Each prints `ok` or raises on the first failure. `HARNESS=voice` swaps the
-salon for the demo agency. `talk.py` takes the whole call as arguments, which
-is the quickest way to exercise a prompt change.
-
-Before calling anything done: `ruff check`, `ty check` and all ten modules
-clean. Paste the real output; don't round up.
+Before calling anything done: `ruff check`, `ty check` and `python -m tests`
+all clean. Paste the real output; don't round up.
 
 ## Conventions
 

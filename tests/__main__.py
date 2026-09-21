@@ -30,6 +30,8 @@ pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
 os.environ.setdefault('GOOGLE_API_KEY', 'offline-test-placeholder')
 os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
+# The comments are aligned on purpose; the formatter would unalign them.
+# fmt: off
 MODULES = (
     'tests.test_graph',   # the graph: routing, the waiting step, the schema
     'tests.test_voice',   # the processor and the two-agent demo
@@ -42,6 +44,7 @@ MODULES = (
     'tests.test_bench',   # the measurement, measured
     'tests.test_core',    # the core and the Pipecat adapter agree
 )
+# fmt: on
 
 
 def main() -> int:
@@ -50,7 +53,7 @@ def main() -> int:
         print(f'\n--- {module} ---', flush=True)
         try:
             runpy.run_module(module, run_name='__main__')
-        except BaseException as error:  # noqa: BLE001 -- report, then carry on
+        except BaseException as error:
             # Carry on rather than stopping: one broken module should not hide
             # the state of the other nine, and the summary below is the thing
             # worth reading.

@@ -31,8 +31,17 @@ carrier, and none of it transfers to a live call.
 
 ## Rerunning the offline suite
 
-No network, no model. `ALLOW_MODEL_REQUESTS = False` is set before the scenario
-modules are imported, so an accidental live request raises instead of billing.
+```bash
+uv run python -m tests
+```
+
+No network, no model. `ALLOW_MODEL_REQUESTS` is set to `False` before the
+scenario modules are imported, so an accidental live request raises instead of
+billing, and a placeholder key stands in so the agents can be built at all.
+
+The long form below is the same thing without the runner, kept because the
+verification plan quotes it and because it is what produced the transcripts
+here:
 
 ```bash
 cd /Users/nicoferdi/Documents/GitHub/slng_voice_harness && for m in tests.test_graph tests.test_voice tests.test_salon tests.test_traces tests.test_state tests.test_diary tests.test_flow tests.test_budget tests.test_bench tests.test_core; do PYTHONDONTWRITEBYTECODE=1 GOOGLE_API_KEY=offline-test-placeholder .venv/bin/python -B -c 'import sys, runpy; import pydantic_ai.models as models; models.ALLOW_MODEL_REQUESTS = False; runpy.run_module(sys.argv[1], run_name="__main__")' "$m" || exit "$?"; done

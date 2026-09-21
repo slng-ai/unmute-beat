@@ -103,6 +103,16 @@ uv run --env-file .env python bot.py --help
 No pytest and no network: they script the model, so they are fast and free.
 
 ```bash
+uv run python -m tests
+```
+
+All ten modules, with live model requests disabled rather than merely unused,
+so a missed override raises instead of billing. No `.env` needed. It prints
+`all 10 modules ok` and exits 0, or names what failed and exits 1.
+
+One at a time, which is what you want while working on one thing:
+
+```bash
 uv run --env-file .env python -m tests.test_graph   # the graph: routing, the waiting step, the schema
 uv run --env-file .env python -m tests.test_salon   # the salon agency
 uv run --env-file .env python -m tests.test_voice   # the processor itself
@@ -115,9 +125,11 @@ uv run --env-file .env python -m tests.test_bench   # the measurement, measured
 uv run --env-file .env python -m tests.test_core    # the core and the adapter agree
 ```
 
-Each prints `ok` or raises on the first failure. All ten in one go, with live
-model requests disabled rather than merely unused, is in
-[`bench/baseline/README.md`](bench/baseline/README.md).
+Each prints `ok` or raises on the first failure.
+
+Run singly they are safe by convention: every agent they touch is overridden
+with a scripted model. Run through `python -m tests` they are safe by
+enforcement. Prefer the latter before committing.
 
 ## 6. Switch agencies
 

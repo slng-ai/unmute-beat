@@ -10,6 +10,7 @@ wrong. What is left is what only the conversation can establish.
 from __future__ import annotations
 
 import re
+from datetime import date as _date
 from typing import Annotated, Literal
 
 import phonenumbers
@@ -63,6 +64,31 @@ def _spanish_or_absent(value: str) -> str:
     return value if value == '' else _spanish.validate_python(value)
 
 
+def _spanish_and_present(value: str) -> str:
+    """A number somebody actually gave us. Absence is not one of them.
+
+    The state's `Phone` has to permit '', because that is what the field holds
+    before anybody has said a number. A tool *argument* is the opposite case:
+    it is a number being submitted for a lookup, and an empty one submitted as
+    if it were a number is how `confirm_customer(phone='')` used to create an
+    empty customer record, come back 'created', and leave the call verified as
+    nobody. Same digits, different question, so a different type.
+    """
+    if not value:
+        raise ValueError('no number was given. Ask the caller for one; never look up an empty number')
+    return _spanish.validate_python(value)
+
+
+def _a_real_day(value: str) -> str:
+    """A day that exists. '2026-02-30' is the right shape and not a date."""
+    if value:
+        try:
+            _date.fromisoformat(value)
+        except ValueError:
+            raise ValueError('expected a day that exists, written year-month-day, like 2026-03-19') from None
+    return value
+
+
 # AfterValidator over a plain `str`, never the `PhoneNumber` type itself and
 # never a `pattern=` constraint: both put a keyword in the schema the model is
 # sent (`format: phone`, `pattern`) and some providers reject it. The
@@ -73,11 +99,21 @@ Phone = Annotated[
     AfterValidator(_spanish_or_absent),
     Field(description='A Spanish phone number in full international form, like +34600111222.'),
 ]
+# The shape first, then the calendar: `fromisoformat` alone accepts '20260319'
+# and '2026-03-19T10:00', and the regex alone accepted 30 February.
 Date = Annotated[
-    str, _shape(r'^\d{4}-\d{2}-\d{2}$', 'expected a day written year-month-day, like 2026-03-19')
+    str,
+    _shape(r'^\d{4}-\d{2}-\d{2}$', 'expected a day written year-month-day, like 2026-03-19'),
+    AfterValidator(_a_real_day),
 ]
 Time = Annotated[str, _shape(r'^([01]\d|2[0-3]):[0-5]\d$', 'expected a 24-hour time, like 09:30')]
 Id = Annotated[str, _shape(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', 'expected an identifier')]
+# For tool arguments only. Never for state: see `_spanish_and_present`.
+SubmittedPhone = Annotated[
+    str,
+    AfterValidator(_spanish_and_present),
+    Field(description='A Spanish phone number in full international form, like +34600111222.'),
+]
 
 
 def unsupported_region(error: Exception) -> bool:
@@ -177,6 +213,15 @@ class SalonState(harness.VoiceState):
     # asked about, because no prompt sentence can hold an invariant.
     booking_day: Date = ''
     appointment: Appointment | None = None
+    # How many business writes this call has already had accepted. Part of the
+    # name of the next one, and that is its whole job: the operation token is
+    # derived from what the action *is*, so a caller who books a slot, cancels
+    # it and then books the same slot again derived the same token twice and
+    # the second write returned the first one's outcome without writing
+    # anything -- the diary empty, the call state holding an appointment that
+    # no longer existed. A retry of one intent happens with this unchanged and
+    # still reconciles; a new intent follows an accepted write and cannot.
+    writes: int = 0
 
 
 # Keypad spellings of the words a carrier substitutes for a withheld number.

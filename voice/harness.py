@@ -8,9 +8,11 @@ processor knows only what is here.
 from __future__ import annotations
 
 import random
+import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import NamedTuple
+from dataclasses import dataclass, field
+from typing import Literal, NamedTuple
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai import Agent, ModelRetry
@@ -60,7 +62,16 @@ class TurnBudget:
     `repair_retries` counts semantic repair only -- a tool refusing and the
     model correcting itself. Provider SDK retries and HTTP attempts are a
     different layer with its own counter, and adding them together would hide
-    a model that cannot get a tool call right behind a flaky network.
+    a model that cannot get a tool call right behind a flaky network. It is
+    also supplied to each agent run separately, so it bounds repairs *per run*
+    and is not an aggregate allowance across the turn the way the other four
+    are. `step_runs` is what bounds how many times it can be spent.
+
+    `tool_calls` is read against `RunUsage.tool_calls`, which the SDK
+    increments for tools that **succeeded**. A tool that refused with a
+    `ModelRetry` costs a model request and does not cost this, so the two
+    numbers answer different questions and a write-up that calls this "tool
+    invocations" is overstating what it bounds.
     """
 
     step_runs: int = 4
@@ -72,6 +83,72 @@ class TurnBudget:
     def account(self) -> tuple[RunUsage, UsageLimits]:
         """A fresh tally and the limits to read it against, for one turn."""
         return RunUsage(), UsageLimits(request_limit=self.model_requests, tool_calls_limit=self.tool_calls)
+
+
+@dataclass
+class Spoken:
+    """One segment of speech the caller was actually sent, and who wrote it.
+
+    A turn's delivered speech is not one string. A filler, a handoff line and
+    a computed confirmation are written by this code and never appear in the
+    model's history at all, so a benchmark row built from the history reports
+    a turn that said three things as a turn that said one -- or, when the
+    model spoke nothing, as a silent turn. `kind` keeps the two apart,
+    because "the agency answered" and "the model answered" are different
+    claims and only one of them costs a provider request.
+    """
+
+    kind: Literal['fixed', 'model']
+    text: str
+    # When it went out, on the same clock as `Request.started`. A benchmark
+    # that reports only time to the model's first word cannot tell a turn
+    # that answered quickly from one that said "let me check" quickly and
+    # answered slowly, and those are different products.
+    at: float = field(default_factory=time.perf_counter)
+
+
+@dataclass
+class Request:
+    """One provider request, timed at the model boundary.
+
+    `first_output` is the first part that came back, whatever it was, and
+    `kind` says which: a tool call answers the request without the caller
+    hearing anything, and a time to first token that cannot say which of the
+    two it measured is not a number anybody can compare across two
+    architectures.
+    """
+
+    started: float
+    first_output: float | None = None
+    kind: Literal['', 'text', 'tool'] = ''
+
+    @property
+    def ttft(self) -> float | None:
+        """Seconds from the request going out to its first part, or None if none came."""
+        return None if self.first_output is None else round(self.first_output - self.started, 3)
+
+
+def request_clock() -> Hooks:
+    """Stamp every provider request as it goes out, so time to first token is per request.
+
+    The turn's own clock cannot stand in for one. A run that calls a tool makes two
+    requests and only the second one speaks, so timing from the start of the run reports
+    the tool's entire round trip as time to first token -- which is what the processor's
+    `request_ttft` attribute carried before this existed, on a turn with a tool in it.
+
+    `before_model_request` fires exactly once per provider request, including the extra
+    one a repair retry buys (probed against 2.46.0), and `ctx.deps` is the call, so one
+    list collects every request of every run in the turn. The core closes each entry when
+    the first part of the response arrives.
+    """
+    hooks = Hooks()
+
+    @hooks.on.before_model_request
+    async def stamp(ctx, request_context):
+        ctx.deps.requests.append(Request(started=time.perf_counter()))
+        return request_context
+
+    return hooks
 
 
 class Handoff(BaseModel):
@@ -140,6 +217,47 @@ class CallContext(BaseModel):
     # whole response before any tool runs; read by every action that could be
     # the second one. `None` means this response proposed no such action.
     _claim: str | None = PrivateAttr(default=None)
+    # Every provider request of the turn now running, timed at the model
+    # boundary by `request_clock`. On the call, not on the turn, because one
+    # turn's requests are spread over as many agent runs as it hops through.
+    _requests: list[Request] = PrivateAttr(default_factory=list)
+    # Everything the caller was sent this turn, in order. Fixed lines are here
+    # and nowhere else: they never enter the model's history.
+    _spoken: list[Spoken] = PrivateAttr(default_factory=list)
+    # Whether the *model* streamed text this turn. Read by `note_spoken`,
+    # which may only cut down a response this turn produced.
+    _spoke: bool = PrivateAttr(default=False)
+    # This call, told apart from every other one sharing the process. Part of
+    # the name of every business operation it starts, so one call's write can
+    # never be answered out of another call's cache.
+    _id: str = PrivateAttr(default_factory=lambda: uuid4().hex[:12])
+
+    @property
+    def id(self) -> str:
+        """This call's own identity, stable for its whole life."""
+        return self._id
+
+    @property
+    def requests(self) -> list[Request]:
+        """This turn's provider requests, oldest first."""
+        return self._requests
+
+    @property
+    def spoken(self) -> list[Spoken]:
+        """This turn's delivered speech segments, in the order they went out."""
+        return self._spoken
+
+    def note_first_output(self, kind: Literal['text', 'tool']) -> None:
+        """The newest provider request has produced its first part.
+
+        Called by the core, which is the only thing that sees the stream. A
+        second part in the same response does not overwrite the first: time to
+        *first* output is the number, and `kind` says whether that first thing
+        was speech the caller can hear or a tool call they cannot.
+        """
+        if self._requests and self._requests[-1].first_output is None:
+            self._requests[-1].first_output = time.perf_counter()
+            self._requests[-1].kind = kind
 
     def begin_turn(self) -> int:
         """Open a new accepted caller turn, and say which one it is.
@@ -164,7 +282,15 @@ class CallContext(BaseModel):
         A caller writing a phone number and a verification status together gets
         both or neither: if the status is not a legal one the `ValidationError`
         leaves the previous state object exactly where it was.
+
+        A keyword naming no field is refused rather than dropped. Pydantic
+        ignores an extra keyword by default, so `commit(phone_confirmd=True)`
+        changed nothing and said so to nobody: a typo in a tool became a state
+        write that silently did not happen, which is the one failure a
+        validated boundary is supposed to make impossible.
         """
+        if unknown := set(updates) - set(type(self.state).model_fields):
+            raise ValueError(f'no such field on {type(self.state).__name__}: {", ".join(sorted(unknown))}')
         self.state = type(self.state)(**(self.state.model_dump() | updates))
 
     async def say(self, text: str) -> None:
@@ -179,6 +305,7 @@ class CallContext(BaseModel):
         if self._covered or self._say is None:
             return
         self._covered = True
+        self._spoken.append(Spoken('fixed', text))
         await self._say(text)
 
     def resume(self, fallback: str) -> str:
@@ -208,10 +335,14 @@ class CallContext(BaseModel):
         prompt can branch on "has this just happened" as a fact rather than
         asking the model to remember whether it already said it.
         """
+        self._requests.clear()
+        self._spoken.clear()
+        self._spoke = False
 
     async def speak_now(self, text: str) -> None:
         """Say this whatever else was said. For a goodbye or an error, never a filler."""
         if self._say is not None:
+            self._spoken.append(Spoken('fixed', text))
             await self._say(text)
 
     async def end_call(self) -> None:
@@ -297,6 +428,11 @@ def speak_by(request: int) -> Hooks:
     a run that has read the diary can still hand over or save, because those finish the run
     rather than extending it. Only the ones that buy another request go.
 
+    So this bounds the *loop*, and does not promise the caller a sentence: with its output
+    tools still offered, the third request may hand over or finish the step instead of
+    speaking. What it guarantees is that the run cannot buy a fourth request to look
+    something else up. The turn budget behind it is still what stops the turn.
+
     `ctx.run_step` counts model requests from 1 within one run, checked against 2.46.0.
     """
     hooks = Hooks()
@@ -361,10 +497,11 @@ class Node:
     # ponytail: `Node` is not generic, so `agent` is a bare `Agent` (ty resolves
     # it to `Agent[object, str]`) and the callables below are fixed to
     # `VoiceState`, while every salon agent is `Agent[SalonCall, ...]` with
-    # `SalonState` callables. That one mismatch is the whole of the
-    # `invalid-argument-type` diagnostics switched off in pyproject.toml, at
-    # ~15 sites. Upgrade path: make `Node` generic over the state type, then
-    # delete that line from `[tool.ty.rules]`.
+    # `SalonState` callables. That is most of the `invalid-argument-type`
+    # diagnostics switched off in pyproject.toml -- 31 of them, measured, not
+    # the ~15 this said before. Five are inside the SDK and would survive the
+    # fix; see the note there. Upgrade path: make `Node` generic over the
+    # state type, re-measure, narrow what is left.
     agent: Agent
     # Spoken by the processor, not the model, to cover the model round trip the
     # hop costs. Empty means the receiving agent answers straight away.

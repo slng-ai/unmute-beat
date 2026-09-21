@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr
 
-from voice.harness import Node, filler_hook
+from voice.harness import Node, filler_hook, request_clock
 from voice.state import AgentName, Call, Handoff, Phone
 
 PROMPTS = Path(__file__).resolve().parent.parent / 'prompts' / 'voice'
@@ -91,7 +91,7 @@ def build(name: AgentName, tools: list | None = None) -> Agent[Call, str | Hando
         output_type=[str, hand_over],  # type: ignore[arg-type]
         instructions=prompt(name),
         tools=tools or [],
-        capabilities=[filler_hook(FILLER)],
+        capabilities=[filler_hook(FILLER), request_clock()],
         model_settings={'service_tier': 'priority'},
     )
 

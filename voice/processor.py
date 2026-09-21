@@ -188,8 +188,8 @@ class PydanticAgentProcessor(FrameProcessor):
             # routing requests before anybody said anything reported only the
             # last one and the silence the caller sat through was invisible.
             turn_started = time.perf_counter()
-            run_started = turn_started
             spoke = False
+            first_word = None
             # Whether a response frame is open. The core can leave a run
             # without closing it -- a turn that blows its request limit or
             # hits the deadline unwinds through an exception, and the event
@@ -203,7 +203,6 @@ class PydanticAgentProcessor(FrameProcessor):
                 async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
                     match event:
                         case core.RunStarted():
-                            run_started = time.perf_counter()
                             open_response = True
                             await self.push_frame(LLMFullResponseStartFrame())
                             await self.start_ttfb_metrics()
@@ -211,6 +210,7 @@ class PydanticAgentProcessor(FrameProcessor):
                         case core.TextDelta(text=text):
                             if not spoke:
                                 spoke = True
+                                first_word = time.perf_counter()
                                 await self.stop_ttfb_metrics()
                                 # Pydantic AI's OTel instrumentation emits no
                                 # first-token event, so Langfuse shows every
@@ -220,9 +220,6 @@ class PydanticAgentProcessor(FrameProcessor):
                                 # are standing in it.
                                 span.set_attribute(
                                     'turn_first_word', round(time.perf_counter() - turn_started, 3)
-                                )
-                                span.set_attribute(
-                                    'request_ttft', round(time.perf_counter() - run_started, 3)
                                 )
                             await self.push_frame(LLMTextFrame(text))
                         case core.RunEnded():
@@ -237,6 +234,28 @@ class PydanticAgentProcessor(FrameProcessor):
                                 await self.push_error(f'agent run failed: {event.text}')
                             await self.say(text)
                         case core.TurnFinished() as done:
+                            # Per provider request, timed at the model
+                            # boundary by `request_clock`, with what each one
+                            # produced first. This used to be one number
+                            # called `request_ttft` measured from the start of
+                            # the agent run, which on any turn with a tool in
+                            # it reported the tool's whole round trip as time
+                            # to first token.
+                            timed = [r for r in self._call.requests if r.ttft is not None]
+                            span.set_attribute('request_ttft', [r.ttft for r in timed])
+                            span.set_attribute('request_first_output', [r.kind for r in timed])
+                            span.set_attribute('fixed_lines', len(self._call.spoken))
+                            # The first thing of *any* kind the caller heard,
+                            # beside the first thing the model said. A filler
+                            # arriving quickly is not an answer arriving
+                            # quickly, and a benchmark with only one of these
+                            # numbers can be won by saying "let me check"
+                            # sooner and answering later.
+                            heard = [s.at for s in self._call.spoken]
+                            if first_word is not None:
+                                heard.append(first_word)
+                            if heard:
+                                span.set_attribute('turn_first_speech', round(min(heard) - turn_started, 3))
                             span.set_attribute('agent', done.agent)
                             span.set_attribute('status', done.status)
                             span.set_attribute('hops', len(done.handoffs) + 1)

@@ -19,11 +19,21 @@ import asyncio
 import json
 import pathlib
 
-from bench.turns import analyse, percentile, turn_of
+from bench.turns import _ttft, analyse, caller_turns, percentile, seconds_between, turn_of
 
 FIXTURE = pathlib.Path(__file__).parent / 'fixtures' / 'trace_s15.json'
 SPANS = json.loads(FIXTURE.read_text())['data']
 BY_ID = {str(s['id']): s for s in SPANS if s.get('id')}
+TURNS = set(caller_turns(SPANS)[0])
+
+# The real thing, from the native arm: Langfuse observations for trace
+# f1c4f999e516a7792dfdbed72fa8262d, the reference conversation of
+# 2026-09-21 09:15:54Z. Trimmed to the fields and span attributes this reader
+# reads -- the `param.*` and `resourceAttributes.*` metadata is dropped -- and
+# otherwise exactly as the API returned it. A handwritten fixture can only
+# check the reader against what its author expected; this one checks it
+# against the arm it has to measure.
+NATIVE = json.loads((pathlib.Path(__file__).parent / 'fixtures' / 'trace_native.json').read_text())['data']
 
 
 # --- turn identity -----------------------------------------------------------
@@ -37,10 +47,10 @@ def a_request_belongs_to_its_nearest_turn():
     on and the call had ended, so the bug was invisible in exactly the runs
     that mattered.
     """
-    assert turn_of(BY_ID['req-1a'], BY_ID) == 'turn-1'
-    assert turn_of(BY_ID['req-2a'], BY_ID) == 'turn-2'
-    assert turn_of(BY_ID['tool-1a'], BY_ID) == 'turn-1'
-    assert turn_of(BY_ID['tool-2a'], BY_ID) == 'turn-2'
+    assert turn_of(BY_ID['req-1a'], BY_ID, TURNS) == 'turn-1'
+    assert turn_of(BY_ID['req-2a'], BY_ID, TURNS) == 'turn-2'
+    assert turn_of(BY_ID['tool-1a'], BY_ID, TURNS) == 'turn-1'
+    assert turn_of(BY_ID['tool-2a'], BY_ID, TURNS) == 'turn-2'
 
 
 def a_missing_parent_stays_unresolved():
@@ -50,16 +60,30 @@ def a_missing_parent_stays_unresolved():
     unknown denominator reported as a confident one is worse than an unknown
     one reported as unknown.
     """
-    assert turn_of(BY_ID['req-orphan'], BY_ID) is None
+    assert turn_of(BY_ID['req-orphan'], BY_ID, TURNS) is None
 
 
 def the_call_root_is_not_a_turn():
-    assert turn_of(BY_ID['root-call'], BY_ID) is None
-    assert turn_of(BY_ID['greeting-1'], BY_ID) is None
+    assert turn_of(BY_ID['root-call'], BY_ID, TURNS) is None
+    assert turn_of(BY_ID['greeting-1'], BY_ID, TURNS) is None
 
 
 def a_turn_is_its_own_turn():
-    assert turn_of(BY_ID['turn-1'], BY_ID) == 'turn-1'
+    assert turn_of(BY_ID['turn-1'], BY_ID, TURNS) == 'turn-1'
+
+
+def the_pipecat_turn_around_ours_is_not_a_second_turn():
+    """Both arms call something a turn, and only one of them may be counted.
+
+    A POC call nests an `agents` span inside Pipecat's `turn` span. Reading
+    both names as caller turns doubles every denominator: three turns become
+    six, and the requests per turn halve without anything changing.
+    """
+    turns, greetings, arm = caller_turns(SPANS)
+    assert arm == 'poc'
+    assert turns == ['turn-1', 'turn-2', 'turn-3'], turns
+    assert turn_of(BY_ID['req-1a'], BY_ID, TURNS) == 'turn-1', 'ours, not the pipecat one around it'
+    assert [g['id'] for g in greetings] == ['pipecat-turn-greeting'], greetings
 
 
 # --- what gets counted -------------------------------------------------------
@@ -71,7 +95,7 @@ def the_counts_are_exact():
     assert found.requests_per_turn == {'turn-1': 2, 'turn-2': 1, 'turn-3': 0}, found.requests_per_turn
     assert found.counts == [2, 1, 0], found.counts
     assert found.zero_model_turns == 1
-    assert found.greeting_spans == 1
+    assert found.greeting_spans == 2, 'the named greeting span, and the turn nobody waited through'
     assert found.speech_spans == 4, 'two stt, two tts'
     assert found.unresolved_requests == 1
     assert found.unresolved_spans == 1
@@ -105,8 +129,9 @@ def a_zero_model_turn_is_still_a_caller_turn():
 
 def the_greeting_is_labelled_not_counted():
     found = analyse(SPANS)
-    assert found.greeting_spans == 1
+    assert found.greeting_spans == 2
     assert 'greeting-1' not in found.turns
+    assert 'pipecat-turn-greeting' not in found.turns
 
 
 # --- repairs need evidence ---------------------------------------------------
@@ -184,15 +209,88 @@ def the_two_latencies_are_kept_apart():
     """
     found = analyse(SPANS)
     assert found.turn_first_word == [1.2, 0.8], found.turn_first_word
-    assert sorted(found.request_ttft) == [0.2, 0.3, 0.4], found.request_ttft
-    # And Pipecat's own turn span, which is the only thing here that spans the
-    # endpointing wait, is a labelled proxy rather than the caller gap.
-    assert sorted(found.pipecat_turn_latency) == [0.6, 1.9, 2.5], found.pipecat_turn_latency
+    # Per provider request, stamped at the model boundary. `turn-1` made two
+    # and only the second one spoke, so one run-long number cannot describe
+    # both.
+    assert sorted(found.request_ttft) == [0.3, 0.35, 0.4], found.request_ttft
+    assert found.ttft_source.startswith('agents span'), found.ttft_source
+    assert found.first_output == {'tool': 1, 'text': 2}, found.first_output
+
+
+def a_turn_span_lifetime_is_not_a_response_latency():
+    """Pipecat's turn span runs until the bot stops speaking.
+
+    It was reported as a proxy "ending at response start", which it does not:
+    on the native reference these spans last 3.3 to 15.1 seconds on turns the
+    caller waited 1.0 to 1.8 for. The number that answers the latency
+    question is the one Pipecat records as an attribute.
+    """
+    found = analyse(SPANS)
+    assert sorted(found.turn_lifetime) == [0.5, 0.6, 1.9, 2.5], found.turn_lifetime
+    assert sorted(found.user_bot_latency) == [0.9, 1.2, 1.5], found.user_bot_latency
+    assert max(found.turn_lifetime) > max(found.user_bot_latency)
 
 
 def round_trips_exclude_speech():
     found = analyse(SPANS)
     assert sorted(found.request_latency) == [0.6, 0.9, 1.2], found.request_latency
+
+
+# --- the native arm ----------------------------------------------------------
+
+
+def the_native_reference_reads_as_five_turns_and_ten_requests():
+    """The arm this POC has to beat, counted off its own trace.
+
+    It used to read as **zero** caller turns and ten unresolved requests: the
+    reader knew only the `agents` span name, which the native arm does not
+    emit. A comparison whose instrument cannot see one of the two arms is not
+    a comparison.
+    """
+    found = analyse(NATIVE)
+    assert found.arm == 'native', found.arm
+    assert len(found.turns) == 5, found.turns
+    assert found.greeting_spans == 1, 'the fixed greeting is not a caller turn'
+    assert sum(found.requests_per_turn.values()) == 10, found.requests_per_turn
+    assert found.counts == [2, 3, 1, 2, 2], found.counts
+    assert found.unresolved_requests == 0, found.unresolved_requests
+    assert found.speech_spans == 13, 'five stt and eight tts, none of them a model request'
+
+
+def the_native_caller_gap_comes_from_pipecats_own_number():
+    """1.198s p50, 1.769s p90 -- and the turn spans say 6.658s and 15.125s."""
+    found = analyse(NATIVE)
+    assert percentile(found.user_bot_latency, 0.5) == 1.1981770992279053
+    assert percentile(found.user_bot_latency, 0.9) == 1.7685189247131348
+    assert len(found.turn_lifetime) == 6, 'the greeting turn has a lifetime and no caller gap'
+
+
+def time_to_first_token_is_recorded_in_seconds():
+    """The API field, checked against the timestamps it is derived from.
+
+    It was divided by a thousand. On the native arm the LLM spans report the
+    field as null so nothing showed; on the POC arm every recorded value
+    became a tenth of a millisecond, which reads as an architecture four
+    orders of magnitude faster than the one it is being compared with.
+    """
+    speech = [s for s in NATIVE if s['name'] == 'tts' and s.get('completionStartTime')]
+    assert speech, 'the fixture must contain a span that records both'
+    for span in speech:
+        reported, measured = _ttft(span), seconds_between(span['startTime'], span['completionStartTime'])
+        assert reported is not None and measured is not None, span['id']
+        assert abs(reported - measured) < 0.002, (span['id'], reported, measured)
+    # And the native LLM spans, whose own field is null, fall back to what the
+    # Pipecat integration records instead.
+    llm = [s for s in NATIVE if s['name'] == 'llm']
+    assert all(s.get('timeToFirstToken') is None for s in llm)
+    assert all(_ttft(s) is not None for s in llm), 'metrics.ttfb is there and was not being read'
+
+
+def a_span_attribute_is_found_under_either_spelling():
+    """An exporter prefixes what it writes; the SDK does not."""
+    found = analyse(NATIVE)
+    assert found.user_bot_latency, 'attributes.turn.user_bot_latency_seconds was not read'
+    assert analyse(SPANS).turn_first_word, 'and the bare spelling still is'
 
 
 async def main():
@@ -209,8 +307,14 @@ async def main():
     the_old_convention_really_was_different()
     no_data_is_missing_and_not_zero()
     there_is_no_estimated_turn_latency()
+    the_pipecat_turn_around_ours_is_not_a_second_turn()
     the_two_latencies_are_kept_apart()
+    a_turn_span_lifetime_is_not_a_response_latency()
     round_trips_exclude_speech()
+    the_native_reference_reads_as_five_turns_and_ten_requests()
+    the_native_caller_gap_comes_from_pipecats_own_number()
+    time_to_first_token_is_recorded_in_seconds()
+    a_span_attribute_is_found_under_either_spelling()
     print('ok')
 
 

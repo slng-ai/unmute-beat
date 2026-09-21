@@ -28,7 +28,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr, Tool, ToolOutput
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models.google import GoogleModelSettings
@@ -45,6 +45,7 @@ from salon.state import (
     SalonCall,
     SalonState,
     Service,
+    SubmittedPhone,
     Time,
 )
 from voice.harness import (
@@ -54,6 +55,7 @@ from voice.harness import (
     claim_or_refuse,
     filler_hook,
     one_action_per_reply,
+    request_clock,
     speak_by,
 )
 from voice.harness import lent as _lent
@@ -143,6 +145,7 @@ ACTIONS = frozenset(
         'hang_up',
         'record_complaint',
         'read_diary',
+        'stop_verifying',
     }
 )
 
@@ -287,6 +290,16 @@ async def record_complaint(
     recorded = ComplaintRecord.model_validate(
         diary.record_complaint(ctx.deps.state.customer_phone, summary, requested_resolution)
     )
+    # Validated, then *read*. A well-formed `{'recorded': False}` is the
+    # complaint book saying it did not take it, and this used to say "Okay,
+    # that's written down." to it anyway: the response parsed, so the write
+    # was called a success. A schema says the service answered in the right
+    # shape; only the field says what it did.
+    if not recorded.recorded:
+        raise ModelRetry(
+            'The complaint book refused it and nothing is on record. Tell the caller you could '
+            'not log it and that someone will call them back, and do not call this again.'
+        )
     # Before the next request, not after it, so this covers the wait the filler
     # used to cover -- and says the one thing worth saying rather than
     # announcing that something is about to happen.
@@ -390,7 +403,7 @@ def hand_over_for(exits: tuple[Exit, ...]):
 # --- the two steps that finish themselves ------------------------------------
 
 
-async def confirm_customer(ctx: RunContext[SalonCall], phone: Phone) -> Handoff:
+async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) -> Handoff:
     """Look the caller up by the number they have just agreed to, and finish this step.
 
     Only after a clear yes to the digits you read back. A caller giving
@@ -401,6 +414,17 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: Phone) -> Handoff:
     """
     claim_or_refuse(ctx, ACTIONS)
     found = CustomerLookup.model_validate(diary.find_or_create_customer(phone))
+    # The lookup has to have been about the number we asked about. Ignored,
+    # a customer service answering for somebody else verified this caller as
+    # them: the status was legal, the phone was legal, and nothing compared
+    # the two. Not a `ModelRetry` the model can fix by rewording -- it is the
+    # service disagreeing with itself -- so it says what to do instead.
+    if found.customer_phone != phone:
+        raise ModelRetry(
+            'The customer lookup came back about a different number, so nobody was identified '
+            'and nothing was saved. Tell the caller you cannot check who they are just now, and '
+            'do not call this again.'
+        )
     # One commit, not two assignments. Written separately, a status the diary
     # could not produce would fail *after* the phone number had already been
     # saved, leaving a caller whose number is on the state and whose
@@ -426,6 +450,26 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: Phone) -> Handoff:
     # cost a model request and a turn in which the caller heard nothing new.
     # This version does not even ask the model where they were heading.
     return Handoff(to=ctx.deps.resume('concierge'), because='the caller is identified')
+
+
+async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
+    """Give the caller back to the front desk without identifying them, and finish this step.
+
+    For a caller who will not confirm a number, or who asks about something
+    else entirely. Whatever they were waiting to do that needed identifying is
+    given up with it, so use it when they have moved on and not while they are
+    still correcting the digits.
+
+    Args:
+        because: One short sentence: why this stopped. Never spoken.
+    """
+    claim_or_refuse(ctx, ACTIONS)
+    # The errand goes too. `verify` is interposed in front of a step that
+    # needs an identity, and that step is recorded so it can be resumed --
+    # so leaving it behind means a caller who verifies an hour later for some
+    # other reason is silently put back into a booking they abandoned.
+    ctx.deps.commit(pending=None)
+    return Handoff(to='concierge', because=because)
 
 
 async def save_booking(
@@ -459,22 +503,45 @@ async def save_booking(
     # Asked of the diary, not read out of the id. The id is the service's own
     # opaque token now; an empty answer means it never issued that slot, which
     # is the diary's refusal to make and not this one's.
-    offered = diary.offered_day(slot_id)
-    if offered and ctx.deps.state.booking_day and offered != ctx.deps.state.booking_day:
+    offered = diary.offered_day(ctx.deps.state.customer_phone, slot_id)
+    if offered and offered != ctx.deps.state.booking_day:
+        # Including when the last read established no day at all. A read that
+        # came back `closed` or `past` returns no date, so this clears -- and
+        # while the rule also required a day to be set, clearing it *disabled*
+        # the rule: read Friday, read Sunday, then book the Friday slot, and
+        # the stale offer went straight through. An empty day is not a licence,
+        # it is the absence of a current offer.
         raise ModelRetry(
-            f'That slot is not on {ctx.deps.state.booking_day}, which is the day the diary was last read '
-            'for. The caller changed the day, so that offer is gone. Read the diary for the day '
-            'they actually want and offer what it returns.'
+            f'That offer is gone. The diary was last read for '
+            f'{ctx.deps.state.booking_day or "no day at all"} and that slot is on {offered}, so it '
+            'is not on the table any more. Read the diary for the day they actually want and offer '
+            'what it returns.'
         )
     # One token per business action, not per attempt. Derived from what the
     # action *is*, so a retry after a lost response derives the same one and
     # the diary returns the outcome it already recorded rather than booking a
     # second time. Nothing has to carry it between turns.
     #
-    # ponytail: a hash of the arguments is the token. It is wrong only if the
-    # caller genuinely wants the identical action twice in one call, which
-    # `additional` already distinguishes. A real service would hand one out.
-    token = operation_token(ctx.deps.state.customer_phone, action, slot_id, booking_id, additional)
+    # The call and the number of writes it has already had accepted are part
+    # of the name, and they are what make it the *action's* name rather than
+    # the arguments'. Book a slot, cancel it, book it again: same caller, same
+    # arguments, and the old token returned the first booking's outcome
+    # without writing anything -- the diary empty and the call state holding
+    # an appointment that no longer existed. An attempt at one intent happens
+    # with the count unchanged and still reconciles; a new intent follows an
+    # accepted write and cannot.
+    #
+    # ponytail: derived rather than handed out by the service. A real one
+    # would issue it, and then this line goes.
+    token = operation_token(
+        ctx.deps.id,
+        ctx.deps.state.writes,
+        ctx.deps.state.customer_phone,
+        action,
+        slot_id,
+        booking_id,
+        additional,
+    )
     try:
         saved = diary.save_booking(
             ctx.deps.state.customer_phone,
@@ -503,8 +570,19 @@ async def save_booking(
             ) from None
         saved = recovered
     # Validated before a single field is read, so a malformed response cannot
-    # reach the state through an annotation nobody checks.
-    written = Saved.model_validate(saved)
+    # reach the state through an annotation nobody checks -- and an unreadable
+    # answer is an *unknown* outcome, not a failure. The write may well have
+    # landed; only the answer is broken. Parsed outside this guard, it raised
+    # past the reconciliation the lost-response case already has, and the
+    # caller was told the turn had gone wrong about a booking that may exist.
+    try:
+        written = Saved.model_validate(saved)
+    except ValidationError:
+        raise ModelRetry(
+            'The diary answered in a shape this cannot read, so it is not clear whether that '
+            'saved. Tell the caller you will check and not to book again, and do not call this '
+            'a second time.'
+        ) from None
     appointment = Appointment(
         booking_id=written.booking_id,
         service=written.service,
@@ -527,7 +605,7 @@ async def save_booking(
     # argument evaluation order to sequence two writes is the kind of thing
     # that reads fine and breaks under a later edit.
     going_back_to = ctx.deps.resume('concierge')
-    ctx.deps.commit(appointment=appointment, agent=going_back_to)
+    ctx.deps.commit(appointment=appointment, agent=going_back_to, writes=ctx.deps.state.writes + 1)
     await ctx.deps.speak_now(
         _pick(f'saved:{written.status}', SAVED[written.status]).format(
             spoken=written.spoken,
@@ -669,6 +747,9 @@ def build(
                 Hooks(prepare_tools=only_reachable, prepare_output_tools=narrow),
                 # Last, so what it empties is the set the guards already narrowed.
                 speak_by(SPEAK_BY),
+                # Measurement, not behaviour: it stamps each provider request
+                # on the way out so time to first token is per request.
+                request_clock(),
             ],
             model_settings=SETTINGS,
         ),
@@ -727,7 +808,7 @@ AGENTS: dict[str, Node] = {
     ),
     'verify': build(
         'verify',
-        finishers=[confirm_customer],
+        finishers=[confirm_customer, stop_verifying],
         # Guarded, because an incomplete number is a reason to ask again and not
         # a reason to leave. Unguarded, a live call on 2026-09-20 went
         # `verify -> concierge ("The caller gave an incomplete phone number and

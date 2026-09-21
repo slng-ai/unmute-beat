@@ -1,7 +1,7 @@
                  pydantic-ai v2.46.0 • Python 3.14.5
 
       / \        agent: concierge • model: function:function::probe
-     /   \         output: str | ToolOutput(output=<function hand_… • tools: 0 • capabilities: 4
+     /   \         output: str | ToolOutput(output=<function hand_… • tools: 0 • capabilities: 5
    /___.___\
   /    |    \    observability: off — see every model and tool call live, with cost
 /      |      \    set it up free with Logfire and a GitHub login: https://pydantic.dev/ai-setup.md

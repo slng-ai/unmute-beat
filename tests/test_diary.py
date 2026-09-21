@@ -93,7 +93,7 @@ def a_fabricated_slot_is_refused():
         'have-a-slot',
         '',
     ):
-        assert 'not a slot this diary returned' in _refused(
+        assert 'not a slot this diary returned to this caller' in _refused(
             diary.save_booking, ALICE, 'book', invented, '', False, AT
         ), invented
     assert diary.bookings_for(ALICE, TODAY) == [], 'and nothing was written'
@@ -368,10 +368,49 @@ def correcting_the_number_leaves_the_other_customers_record():
     assert len(diary.bookings_for(ALICE, TODAY)) == 1, 'the refusal wrote nothing'
 
 
+def only_the_slots_it_returned_were_offered():
+    """Twelve are shown and the rest were registered as offers anyway.
+
+    A caller asking for `any` service gets the first twelve times across the
+    three, and every eligible slot on the day used to be recorded as an offer
+    before the cap was applied. A slot id nobody was ever read out therefore
+    passed the "this diary offered that" check at write time -- which is the
+    check that stops a fabricated time being booked, standing in for a claim
+    it was not making.
+    """
+    diary.reset()
+    # Learn a late blowout id, then throw the offers away with it.
+    late = diary.find_slots(ALICE, 'tomorrow', 'blowout', AT)['slots'][-1]
+    diary.reset()
+
+    shown = diary.find_slots(ALICE, 'tomorrow', 'any', AT)['slots']
+    assert len(shown) == 12, len(shown)
+    assert late['slot_id'] not in {slot['slot_id'] for slot in shown}, 'the fixture needs an unshown slot'
+    assert 'not a slot this diary returned' in _refused(
+        diary.save_booking, ALICE, 'book', late['slot_id'], '', False, AT
+    )
+    assert diary.offered_day(ALICE, late['slot_id']) == '', 'and it is not on record as offered'
+
+
+def an_offer_is_made_to_one_caller():
+    """Two callers, one slot id, and the offer is not the salon's to share."""
+    diary.reset()
+    mine = _slot(ALICE, 'tomorrow', 'haircut')
+    assert diary.offered_day(ALICE, mine['slot_id']) == TOMORROW.isoformat()
+    assert diary.offered_day(BOB, mine['slot_id']) == '', 'BOB was never offered it'
+    assert 'not a slot this diary returned to this caller' in _refused(
+        diary.save_booking, BOB, 'book', mine['slot_id'], '', False, AT
+    )
+    # And ALICE, who was offered it, still has it.
+    assert diary.save_booking(ALICE, 'book', mine['slot_id'], '', False, AT)['status'] == 'booked'
+
+
 async def main():
     a_hair_colour_slot_can_be_booked()
     every_offered_slot_can_be_taken()
     a_fabricated_slot_is_refused()
+    only_the_slots_it_returned_were_offered()
+    an_offer_is_made_to_one_caller()
     an_expired_offer_is_refused()
     a_slot_that_has_gone_past_is_refused()
     a_slot_taken_in_between_is_refused()

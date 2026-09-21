@@ -71,6 +71,23 @@ async def probe(question: str) -> str:
     return f'nothing useful about {question}'
 
 
+SLOW = 0.05
+
+
+async def slow_probe(question: str) -> str:
+    """A tool that takes long enough to tell two clocks apart.
+
+    `request_ttft` used to be timed from the start of the *run*, so on any
+    turn with a tool in it the number reported as time to first token
+    contained the tool's whole round trip. Fifty milliseconds is nothing to a
+    caller and plenty to a comparison: it is the difference between measuring
+    the provider and measuring the provider plus whatever the agency did
+    while waiting for it.
+    """
+    await asyncio.sleep(SLOW)
+    return f'slowly, nothing useful about {question}'
+
+
 def scripted(**by_agent):
     stack = ExitStack()
     for name, fn in by_agent.items():
@@ -80,7 +97,7 @@ def scripted(**by_agent):
                 # `probe` alongside the agent's real tools, never instead of
                 # them: `override(toolsets=...)` adds to what the agent was
                 # built with.
-                toolsets=[FunctionToolset([probe])],
+                toolsets=[FunctionToolset([probe, slow_probe])],
             )
         )
     return stack
@@ -294,6 +311,28 @@ def _stalls():
     return stream
 
 
+def calls(name, **args):
+    """One scripted tool call, whatever else the agent was offered."""
+
+    async def stream(messages, info: AgentInfo):
+        yield {0: DeltaToolCall(name=name, json_args=json.dumps(args))}
+
+    return stream
+
+
+def then(*steps):
+    """A different scripted response for each request this agent receives."""
+    seen = {'n': 0}
+
+    async def stream(messages, info: AgentInfo):
+        step = steps[min(seen['n'], len(steps) - 1)]
+        seen['n'] += 1
+        async for chunk in step(messages, info):
+            yield chunk
+
+    return stream
+
+
 async def the_turn_says_how_it_ended():
     """Never implied. Four statuses, and an absent complaint is not success."""
     call = _fresh(True)
@@ -327,6 +366,99 @@ async def a_barge_in_is_reported_as_one():
     assert call.state.agent == 'concierge', 'a cancelled run moved nobody'
 
 
+async def a_barge_in_after_a_tool_still_moves_nobody():
+    """The later window: the tool ran, and the caller talked over what came next.
+
+    `read_diary` is borrowed by the front desk, and a *successful* borrowed
+    tool is what takes the free edge into `booking`. That move was committed
+    on a turn the caller had interrupted, so a run that came back
+    `status='interrupted'` had silently moved them into a step whose answer
+    they never heard. The existing barge test fires before the tool runs and
+    cannot see it.
+
+    The diary read itself stands: it wrote nothing, and the work that did
+    happen is not pretended away.
+    """
+    call = _fresh(True)
+    barge = core.Barge()
+
+    async def cut_off(messages, info: AgentInfo):
+        barge.fire()
+        yield 'we have nine, ten thirty and'
+
+    with scripted(concierge=then(calls('read_diary', when='tomorrow', service='haircut'), cut_off)):
+        _, finished = await take_turn(call, AGENTS, 'anything tomorrow?', barge=barge)
+
+    assert finished.status == 'interrupted', finished
+    assert call.state.agent == 'concierge', 'an interrupted turn does not move the caller'
+    assert call.state.booking_day, 'and the diary read it did do is not undone'
+
+
+async def an_interrupted_fixed_line_leaves_an_earlier_answer_alone():
+    """`note_spoken` cut down the newest answer with text in it, whoever said it.
+
+    A turn whose only speech is written by this code -- a confirmation, a
+    goodbye, the exhausted line -- has nothing in the history to cut down,
+    because fixed speech never goes there. So the walk backwards found the
+    *previous* turn's answer and replaced it with this turn's delivered
+    prefix: an answer the caller heard in full, rewritten in the history as
+    half a sentence they never heard at all.
+    """
+    call = _fresh(True)
+    with scripted(concierge=says('We are open until six.')):
+        await take_turn(call, AGENTS, 'when do you close?')
+    answered = len(call.messages)
+
+    # A turn that speaks nothing of its own: it spends its budget calling a
+    # tool and the caller hears only the fixed line the core writes.
+    with scripted(concierge=calls('probe', question='anything')):
+        heard, finished = await take_turn(
+            call, AGENTS, 'and parking?', TurnBudget(step_runs=4, model_requests=2)
+        )
+    assert finished.status == 'exhausted', finished
+    assert EXHAUSTED in heard and 'until six' not in heard
+
+    core.note_spoken(call, EXHAUSTED[:12], interrupted=True)
+    said = [
+        part.content
+        for message in call.messages[:answered]
+        for part in getattr(message, 'parts', [])
+        if getattr(part, 'content', None) == 'We are open until six.'
+    ]
+    assert said == ['We are open until six.'], 'the earlier answer was rewritten'
+
+
+async def time_to_first_token_is_timed_per_request():
+    """Two requests in one run, and the tool between them belongs to neither.
+
+    Timed from the start of the run, the second request's time to first token
+    contained the whole tool call: the number compared against the native
+    arm's per-request TTFB was measuring something else entirely.
+    """
+    call = _fresh(True)
+    script = then(calls('slow_probe', question='anything'), says('Nothing to report.'))
+    with scripted(concierge=script):
+        _, finished = await take_turn(call, AGENTS, 'anything tomorrow?')
+
+    assert finished.requests == 2, finished
+    assert len(call.requests) == 2, call.requests
+    assert [r.kind for r in call.requests] == ['tool', 'text'], call.requests
+    assert all(r.ttft is not None for r in call.requests)
+    # The tool slept between them, and neither request paid for it.
+    assert call.requests[1].ttft < SLOW, call.requests[1]
+    assert call.requests[0].started + SLOW < call.requests[1].started, 'the tool really did run between'
+
+
+async def a_new_turn_starts_a_new_clock():
+    """The list is the turn's, not the call's, so turn five is not fifteen requests."""
+    call = _fresh(True)
+    with scripted(concierge=says('We are open until six.')):
+        await take_turn(call, AGENTS, 'when do you close?')
+        assert len(call.requests) == 1
+        await take_turn(call, AGENTS, 'and on Sunday?')
+    assert len(call.requests) == 1, call.requests
+
+
 def the_core_imports_no_runtime():
     """The property the second adapter depends on, enforced rather than promised.
 
@@ -356,6 +488,10 @@ async def main():
     await every_response_frame_is_closed()
     await the_turn_says_how_it_ended()
     await a_barge_in_is_reported_as_one()
+    await a_barge_in_after_a_tool_still_moves_nobody()
+    await an_interrupted_fixed_line_leaves_an_earlier_answer_alone()
+    await time_to_first_token_is_timed_per_request()
+    await a_new_turn_starts_a_new_clock()
     the_core_imports_no_runtime()
     the_processor_no_longer_runs_the_turn()
     print('ok')

@@ -18,6 +18,7 @@ Asserts, no pytest, no fixtures, same as the rest.
 import asyncio
 import json
 from contextlib import ExitStack
+from datetime import datetime
 
 from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
 from pydantic_ai import ModelRequest, ModelRetry, RetryPromptPart, RunContext
@@ -347,17 +348,33 @@ async def an_uncertain_write_is_reconciled_not_repeated():
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    slot = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())['slots'][0]
+    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())
+    slot = read['slots'][0]
+    call.commit(booking_day=read['date'])  # what `read_diary` would have written
 
     real = diary.save_booking
     attempts = []
 
-    def commits_then_loses_the_response(*args, **kwargs):
+    def commits_then_loses_the_response(
+        phone: str,
+        action: str,
+        slot_id: str,
+        booking_id: str,
+        additional: bool,
+        at_time: datetime,
+        operation_token: str = '',
+    ) -> dict:
+        # The signature of the thing it stands in for, spelled out rather
+        # than `*args`: a stand-in that does not typecheck as the real one is
+        # not standing in for it, and the type checker was reporting exactly
+        # that.
         attempts.append(1)
-        real(*args, **kwargs)  # the write lands
+        real(phone, action, slot_id, booking_id, additional, at_time, operation_token)  # the write lands
         raise TimeoutError('the diary did not answer')  # and the answer does not
 
-    diary.save_booking = commits_then_loses_the_response
+    # A module-level `def` is its own type to ty, so no other function is assignable to it
+    # however exactly the signature matches. Substituting the service is the point here.
+    diary.save_booking = commits_then_loses_the_response  # ty: ignore[invalid-assignment]
     try:
         saved = await agents.save_booking(
             RunContext(deps=call, model=None, usage=None),  # type: ignore[arg-type]
@@ -381,10 +398,23 @@ async def a_write_that_never_landed_is_reported_unresolved():
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    slot = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())['slots'][0]
+    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now())
+    slot = read['slots'][0]
+    call.commit(booking_day=read['date'])  # what `read_diary` would have written
+
+    def never_answers(
+        phone: str,
+        action: str,
+        slot_id: str,
+        booking_id: str,
+        additional: bool,
+        at_time: datetime,
+        operation_token: str = '',
+    ) -> dict:
+        raise TimeoutError('no answer')
 
     real = diary.save_booking
-    diary.save_booking = lambda *a, **k: (_ for _ in ()).throw(TimeoutError('no answer'))
+    diary.save_booking = never_answers  # ty: ignore[invalid-assignment]
     try:
         await agents.save_booking(
             RunContext(deps=call, model=None, usage=None),  # type: ignore[arg-type]

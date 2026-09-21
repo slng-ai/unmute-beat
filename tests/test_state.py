@@ -496,6 +496,63 @@ def every_business_model_opted_in():
         assert model.model_config.get('revalidate_instances') == 'always', model.__name__
 
 
+def a_commit_refuses_a_field_that_does_not_exist():
+    """A typo in a tool was a write that silently did not happen.
+
+    Pydantic drops an unknown keyword by default, so `commit(phone_confirmd=
+    True)` rebuilt the state from its own values, changed nothing, and
+    returned as if it had. Every other write path here raises on bad input;
+    this one accepted a name that means nothing and said so to nobody.
+    """
+    call = open_call(PHONE)
+    before = call.state
+    try:
+        call.commit(booking_dai='2026-09-25')
+    except ValueError as refused:
+        assert 'no such field' in str(refused), refused
+    else:
+        raise AssertionError('a keyword naming no field must not be accepted')
+    assert call.state is before, 'and nothing was rebuilt on the way to refusing'
+    # The correctly spelled one still works, which is what makes the refusal
+    # a typo check rather than a wall.
+    call.commit(booking_day='2026-09-25')
+    assert call.state.booking_day == '2026-09-25'
+
+
+def a_day_that_does_not_exist_is_refused():
+    """`2026-02-30` is the right shape and not a date.
+
+    The validator checked spelling with a regular expression, so a day the
+    calendar does not have passed into state and only the diary's own parser
+    later objected -- by which point it is a value the prompts have rendered
+    and the model has been told is real.
+    """
+    _refused(SalonState, agent='concierge', booking_day='2026-02-30')
+    _refused(SalonState, agent='concierge', booking_day='2026-13-01')
+    assert SalonState(booking_day='2026-09-25').booking_day == '2026-09-25'
+    assert SalonState(booking_day='').booking_day == '', 'absence is still not a wrong value'
+
+
+def a_submitted_number_is_not_the_same_type_as_a_stored_one():
+    """The state may hold no number. A lookup may not be given none.
+
+    One type did both, and `confirm_customer(phone='')` was the result: an
+    empty string submitted as an identity, looked up, and answered
+    'created'. `tests.test_salon` runs that through the real invocation; this
+    is the type rule underneath it.
+    """
+    from pydantic import TypeAdapter
+
+    from salon.state import SubmittedPhone
+
+    submitted = TypeAdapter(SubmittedPhone)
+    assert submitted.validate_python(PHONE) == PHONE
+    _refused(submitted.validate_python, '')
+    # And the stored one still permits absence, because that is what a field
+    # holds before anybody has said a number.
+    assert TypeAdapter(Phone).validate_python('') == ''
+
+
 async def main():
     an_authored_default_is_checked()
     assignment_is_checked()
@@ -504,6 +561,9 @@ async def main():
     a_failed_batch_commits_nothing()
     a_commit_replaces_the_state_object()
     a_commit_validates_rather_than_copies()
+    a_commit_refuses_a_field_that_does_not_exist()
+    a_day_that_does_not_exist_is_refused()
+    a_submitted_number_is_not_the_same_type_as_a_stored_one()
     the_waiting_step_is_a_validated_name()
     presence_is_not_truthiness()
     presence_governs_the_prerequisite()

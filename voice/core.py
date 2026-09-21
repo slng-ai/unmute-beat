@@ -42,6 +42,7 @@ from pydantic_ai import (
     RunCancelled,
     TextPart,
     TextPartDelta,
+    ToolCallPart,
 )
 from pydantic_ai.usage import UsageLimitExceeded
 
@@ -264,12 +265,18 @@ async def _hops(
             # the words.
             landed = _moved_by(call.state, node, agents, succeeded)
             if landed != call.state.agent:
-                if not call.is_current(generation):
-                    # A newer caller turn has been accepted since this one
-                    # started, so this result is about a question they have
-                    # moved on from. The tool's own effect stands and is
-                    # reconciled by its operation token; where the caller
-                    # *is* is no longer this turn's to say.
+                if not call.is_current(generation) or barge.hit:
+                    # Either a newer caller turn has been accepted since this
+                    # one started, or the caller talked over this one. Both
+                    # mean the same thing: this result is about a question
+                    # they have moved on from. The tool's own effect stands
+                    # and is reconciled by its operation token; where the
+                    # caller *is* is no longer this turn's to say.
+                    #
+                    # The barge half was missing, and a turn could come back
+                    # `status='interrupted'` having moved the caller from
+                    # `concierge` into `booking` on a diary read nobody heard
+                    # the answer to.
                     logger.info('fenced a move to {} from turn {}', landed, generation)
                     return
                 logger.info('moved {} -> {} (via {})', call.state.agent, landed, ', '.join(sorted(succeeded)))
@@ -279,9 +286,11 @@ async def _hops(
         # Where they were sent, then where the graph actually puts them:
         # `booking` before anyone is identified means `verify` first, with
         # `booking` recorded to resume into.
-        if not call.is_current(generation):
-            # The same fence on an explicit handoff. A superseded turn does
-            # not get to choose who takes the caller next.
+        if not call.is_current(generation) or barge.hit:
+            # The same fence on an explicit handoff. A superseded or
+            # interrupted turn does not get to choose who takes the caller
+            # next: the agent they are with hears what they actually said and
+            # can hand them over again if it is still the right answer.
             logger.info('fenced a handoff from turn {}', generation)
             return
         going_to, waiting = _route(call.state, agents, output.to)
@@ -377,9 +386,25 @@ async def _speak(
         ) as events:
             barge.attach(events)
             async for event in events:
+                if isinstance(event, PartStartEvent):
+                    # The first thing this provider request produced, and
+                    # what kind of thing it was. A tool call closes the
+                    # request's clock exactly as speech does -- the model
+                    # answered, the caller just cannot hear this one -- and a
+                    # time to first token that does not say which it measured
+                    # cannot be compared with another architecture's.
+                    match event.part:
+                        case TextPart():
+                            call.note_first_output('text')
+                        case ToolCallPart():
+                            call.note_first_output('tool')
                 if text := _speech(event):
                     if not spoke:
                         spoke = True
+                        # This turn has model speech of its own, so there is
+                        # something in the history for `note_spoken` to cut
+                        # down if the caller talks over it.
+                        call._spoke = True
                         # The model is talking, so the gap is closed: a tool
                         # called later in this turn may speak its own line.
                         call._covered = False
@@ -432,6 +457,15 @@ def note_spoken(call: CallContext, content: str, interrupted: bool) -> None:
     otherwise would put the whole unheard suffix into the next request.
     """
     if not interrupted:
+        return
+    if not call._spoke:
+        # Everything the caller heard this turn was a fixed line -- a
+        # confirmation, a filler, a goodbye -- and none of those are in the
+        # history. The newest response carrying text belongs to an *earlier*
+        # turn, so cutting it down to this turn's delivered prefix rewrites an
+        # answer the caller heard in full. Reproduced: an ordinary answer, then
+        # a turn whose computed "You're all set for..." was talked over, and
+        # the earlier answer became "Your booking is".
         return
     from pydantic_ai import ModelResponse  # local: keeps the import list honest
 

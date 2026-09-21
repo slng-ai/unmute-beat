@@ -226,6 +226,7 @@ knowledge/           the salon's own documents, substituted into the prompts at 
 bot.py               pipeline wiring
 talk.py              the no-audio transcript loop
 tests/               assert scripts, no pytest, no network
+bench/               latency and behaviour against the real model, and the trace reader
 ```
 
 ## How a turn works
@@ -327,6 +328,15 @@ uv run python -m bench.turns --env .env --sessions    # per-turn numbers off Lan
 `BENCH_PINNED=1` pins the model to `gemini-3.1-flash-lite` with
 `thinking_level: MINIMAL`, which is what the `salon-concierge` package runs, so
 a comparison between the two measures the architecture rather than the model.
+
+The reader normalises both arms onto one caller turn: this harness opens an
+`agents` span per accepted turn and the native one has only Pipecat's `turn`
+span, so it picks one or the other and never counts both. The greeting is the
+turn Pipecat records no `user_bot_latency_seconds` for. What a caller waited
+is that attribute; a turn span's own duration runs until the bot stops
+speaking and is three to fifteen seconds on the same call. `bench/review-20260921.md`
+is the ledger of what that reader used to get wrong, and what is still open
+before any latency claim is worth making.
 
 If an agent's words should be heard, it is an agent in `AGENTS`. If they should
 not — a classifier, an extractor, a summariser — it is delegation:

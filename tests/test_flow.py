@@ -163,15 +163,16 @@ async def a_shut_guard_is_not_offered():
 
 
 async def a_step_with_no_open_exit_keeps_its_own_name():
-    """`verify` before anyone is identified has nowhere to go, and still asks.
+    """`verify` before anyone is identified has nowhere to hand over, and still asks.
 
     `hand_over` is dropped entirely rather than offered with an empty enum,
-    and the finisher that is left keeps the name that describes it. Pydantic
-    AI renames a lone output function `final_result`, which would leave the
-    model one tool and no word for what it does.
+    and the finishers that are left keep the names that describe them.
+    Pydantic AI renames a lone output function `final_result`, which would
+    leave the model one tool and no word for what it does, so `build` names
+    every one of them explicitly.
     """
     offered = await _offered(AGENTS['verify'], SalonState(agent='verify'))
-    assert offered['requests'][0]['outputs'] == ['confirm_customer'], offered
+    assert offered['requests'][0]['outputs'] == ['confirm_customer', 'stop_verifying'], offered
     assert offered['requests'][0]['to'] is None
 
 

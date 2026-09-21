@@ -24,8 +24,9 @@ measurements behind the design. Read it before changing how a turn works.
 | `utils/observability.py` | Langfuse/OTel wiring; call `setup()` once, before any agent is built |
 | `prompts/<agency>/` | one Handlebars prompt per agent, plus the shared voice rules and the salon's own documents, substituted in at import |
 | `bench/` | latency and behaviour measurement against the real model |
-| `bench/baseline/` | the pre-Phase-01 snapshot, digests and evidence ledger — don't edit |
-| `tests/` | assert scripts — no pytest, no network |
+| `bench/baseline/` | the pre-Phase-01 snapshot, digests and evidence ledger — don't edit, except `after/` when the suite's output changes |
+| `bench/review-20260921.md` | the review of `28516da`: every defect it reproduced, the check that now holds it, and what is still open |
+| `tests/` | assert scripts — no pytest, no network. `fixtures/trace_native.json` is the real native reference call, which is what keeps the trace reader able to read both arms |
 
 **The split that matters:** `voice/core.py` runs a turn and knows nothing about
 how it reaches a person; `voice/processor.py` is the Pipecat adapter over it.

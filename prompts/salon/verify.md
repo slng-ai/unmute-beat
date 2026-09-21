@@ -43,10 +43,11 @@ finish.
 
 If the look-up says the number is not usable, ask for the correction and read it
 back once, in different words. If that fails too, or the caller will not
-confirm, give them back to the `concierge` agent without saving anything.
+confirm, stop verifying: that hands them back to the front desk without saving
+anything, and gives up whatever they were waiting to do.
 
-If they ask for something that is not their phone number, give them back to the
-`concierge` agent straight away.
+If they ask for something that is not their phone number, stop verifying
+straight away and let the front desk answer them.
 
 ## How you sound
 

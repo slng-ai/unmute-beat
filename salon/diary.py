@@ -77,17 +77,26 @@ class Offer:
 
     Held so a slot id never has to be parsed to find out what it means, and so
     a fabricated one is simply absent rather than plausible.
+
+    One caller's, not the salon's. Without `phone` an offer made to whoever
+    rang first was bookable by everybody after them, for as long as the
+    process lived: "this diary issued that id once" is not the same claim as
+    "this caller was offered that time".
     """
 
     day: Date
     at: time
     service: str
     issued_on: Date  # the salon day the offer was made; a later day stales it
+    phone: str = ''  # the caller it was put in front of, which is half its key
 
 
 _customers: set[str] = {'+34600111222'}
 _bookings: dict[str, Booking] = {}
-_offers: dict[str, Offer] = {}
+# Keyed by the caller as well as the slot: two callers can be offered the same
+# time, and one dictionary keyed by slot alone let the second offer overwrite
+# the first -- so the caller who was offered it first could no longer book it.
+_offers: dict[tuple[str, str], Offer] = {}
 _operations: dict[str, dict] = {}
 _complaints: list[dict] = []
 _counter = {'booking': 0, 'complaint': 0}
@@ -305,8 +314,11 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
     """Free times on the day the caller named, and everything they already hold.
 
     One call answers both questions, so the agent never needs a second one.
-    Every slot returned is recorded as an offer, which is the only way one can
-    later be booked.
+    Every slot **returned** is recorded as an offer, which is the only way one
+    can later be booked -- and only the returned ones. Registering every
+    eligible slot and then returning the first twelve meant an id could be
+    accepted at write time that this caller was never shown: "issued
+    somewhere in the process" standing in for "currently offered to you".
     """
     today = at_time.date()
     held = bookings_for(phone, today)
@@ -333,6 +345,7 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
     wanted = [service] if service in SERVICES else list(SERVICES)
     opens, closes = hours
     slots = []
+    candidates: dict[str, Offer] = {}
     for name in wanted:
         minutes, _price = SERVICES[name]
         start = datetime.combine(day, time(opens), tzinfo=TZ)
@@ -343,7 +356,7 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
             # never be offered under one set of checks and written under another.
             if not _eligible(day, at, name, at_time):
                 slot_id = _slot_id(day, at, name)
-                _offers[slot_id] = Offer(day=day, at=at, service=name, issued_on=today)
+                candidates[slot_id] = Offer(day=day, at=at, service=name, issued_on=today, phone=phone)
                 slots.append(
                     {
                         'slot_id': slot_id,
@@ -359,13 +372,18 @@ def find_slots(phone: str, when: str, service: str, at_time: datetime) -> dict:
     # service `SERVICES` happened to list first, so asking for `any` returned
     # haircuts and nothing else -- the diary saying the salon does one thing.
     slots.sort(key=lambda slot: (slot['time'], slot['service']))
+    shown = slots[:12]
+    # Recorded after the cap, not before it: an offer is a thing this caller
+    # was told about.
+    for slot in shown:
+        _offers[phone, slot['slot_id']] = candidates[slot['slot_id']]
 
     return {
         'status': 'ok' if slots else 'full',
         'day': spoken_day(day, today),
         'date': day.isoformat(),
         'bookings': held,
-        'slots': slots[:12],
+        'slots': shown,
         'price_euros': SERVICES[service][1] if service in SERVICES else None,
     }
 
@@ -377,14 +395,14 @@ class RefusedError(Exception):
     """The diary would not take it, and the caller needs to hear why."""
 
 
-def offered_day(slot_id: str) -> str:
-    """The day a slot sits on, as this diary recorded when it offered it.
+def offered_day(phone: str, slot_id: str) -> str:
+    """The day a slot sits on, as this diary recorded when it offered it to this caller.
 
-    '' when this diary never issued that id. Exists so the caller-facing
-    stale-day rule can ask instead of reading the day out of the string, which
-    is the parsing this module just stopped doing.
+    '' when this diary never offered that id to that number. Exists so the
+    caller-facing stale-day rule can ask instead of reading the day out of the
+    string, which is the parsing this module just stopped doing.
     """
-    offer = _offers.get(slot_id)
+    offer = _offers.get((phone, slot_id))
     return offer.day.isoformat() if offer else ''
 
 
@@ -440,10 +458,14 @@ def save_booking(
 
     # Looked up, never parsed. A slot this diary did not offer is not a slot,
     # whatever it looks like: a fabricated 03:07 is absent here and stops.
-    offer = _offers.get(slot_id)
+    # This caller's own offers, never the salon's. A slot id is the same
+    # string whoever it was shown to, so a single dictionary keyed by the id
+    # made every offer bookable by everybody for as long as the process lived.
+    offer = _offers.get((phone, slot_id))
     if offer is None:
         raise RefusedError(
-            'That is not a slot this diary returned. Read the diary again and use one of its slots.'
+            'That is not a slot this diary returned to this caller. Read the diary again and use '
+            'one of its slots.'
         )
     if offer.issued_on != today:
         raise RefusedError(

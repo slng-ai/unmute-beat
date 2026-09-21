@@ -1,18 +1,18 @@
-2026-09-21 11:33:54.382 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 12:38:57.000 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
                  pydantic-ai v2.46.0 • Python 3.14.5
 
       / \        agent: concierge • model: function:function::stream • output: str | hand_over
-     /   \         tools: 0 • capabilities: 1
+     /   \         tools: 0 • capabilities: 2
    /___.___\
   /    |    \    observability: off — see every model and tool call live, with cost
 /      |      \    set it up free with Logfire and a GitHub login: https://pydantic.dev/ai-setup.md
 `---.._|_..---'    or use any OpenTelemetry backend: https://pydantic.dev/docs/ai/logfire/#otel
 
                  goes away once observability is on — or PYDANTIC_AI_NO_BANNER=1
-2026-09-21 11:33:54.653 | INFO     | voice.core:_hops:288 - handoff concierge -> intake (test)
-2026-09-21 11:33:54.660 | INFO     | voice.core:_hops:288 - handoff concierge -> intake (test)
-2026-09-21 11:33:54.669 | INFO     | voice.core:_hops:288 - handoff concierge -> intake (test)
-2026-09-21 11:33:54.672 | INFO     | voice.core:_hops:288 - handoff intake -> concierge (test)
-2026-09-21 11:33:54.675 | INFO     | voice.core:_hops:288 - handoff concierge -> intake (test)
-2026-09-21 11:33:54.675 | WARNING  | voice.core:run_turn:200 - turn exhausted: the 3-run hop budget
+2026-09-21 12:38:57.448 | INFO     | voice.core:_hops:297 - handoff concierge -> intake (test)
+2026-09-21 12:38:57.455 | INFO     | voice.core:_hops:297 - handoff concierge -> intake (test)
+2026-09-21 12:38:57.464 | INFO     | voice.core:_hops:297 - handoff concierge -> intake (test)
+2026-09-21 12:38:57.467 | INFO     | voice.core:_hops:297 - handoff intake -> concierge (test)
+2026-09-21 12:38:57.470 | INFO     | voice.core:_hops:297 - handoff concierge -> intake (test)
+2026-09-21 12:38:57.470 | WARNING  | voice.core:run_turn:201 - turn exhausted: the 3-run hop budget
 ok

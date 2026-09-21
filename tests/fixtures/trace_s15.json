@@ -1,220 +1,262 @@
 {
-  "_comment": [
-    "S15. One synthetic Langfuse observation set, shaped like the /api/public/v2/observations",
-    "payload bench.turns reads, holding every case the counting has to get right at once:",
-    "two caller turns under one call root; a third caller turn that ran no model at all;",
-    "a greeting spoken before any turn; two model requests inside one turn; stt and tts,",
-    "which Langfuse types as GENERATION and which are not model requests; a genuine",
-    "validation retry, marked with level ERROR; the same tool used twice legitimately in",
-    "one turn, which is not a repair; and one observation whose parent is not in the set,",
-    "which must stay unresolved rather than being counted into a turn to make the sums",
-    "come out. Written by hand rather than captured, so every number in test_bench.py is",
-    "arithmetic somebody can check against this file."
-  ],
-  "data": [
-    {
-      "id": "root-call",
-      "name": "conversation",
-      "type": "SPAN",
-      "parentObservationId": null,
-      "startTime": "2026-09-21T09:00:00Z",
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "greeting-1",
-      "name": "greeting",
-      "type": "SPAN",
-      "parentObservationId": "root-call",
-      "startTime": "2026-09-21T09:00:01Z",
-      "latency": 0.4,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-
-    {
-      "id": "pipecat-turn-1",
-      "name": "turn",
-      "type": "SPAN",
-      "parentObservationId": "root-call",
-      "startTime": "2026-09-21T09:00:10Z",
-      "latency": 2.5,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "stt-1",
-      "name": "stt",
-      "type": "GENERATION",
-      "parentObservationId": "pipecat-turn-1",
-      "startTime": "2026-09-21T09:00:10Z",
-      "latency": 0.3,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "turn-1",
-      "name": "agents",
-      "type": "SPAN",
-      "parentObservationId": "pipecat-turn-1",
-      "startTime": "2026-09-21T09:00:10Z",
-      "latency": 1.8,
-      "metadata": { "turn_first_word": 1.2, "request_ttft": 0.4, "model_requests": 2 },
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "req-1a",
-      "name": "chat gemini-3.5-flash-lite",
-      "type": "GENERATION",
-      "parentObservationId": "turn-1",
-      "startTime": "2026-09-21T09:00:10Z",
-      "completionStartTime": "2026-09-21T09:00:10.400Z",
-      "latency": 0.9,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "tool-1a",
-      "name": "read_diary",
-      "type": "TOOL",
-      "parentObservationId": "turn-1",
-      "startTime": "2026-09-21T09:00:11Z",
-      "latency": 0.05,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "tool-1b",
-      "name": "read_diary",
-      "type": "TOOL",
-      "parentObservationId": "turn-1",
-      "startTime": "2026-09-21T09:00:11.2Z",
-      "latency": 0.05,
-      "_comment": "the caller changed their mind about the day: two legitimate uses, not a repair",
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "req-1b",
-      "name": "chat gemini-3.5-flash-lite",
-      "type": "GENERATION",
-      "parentObservationId": "turn-1",
-      "startTime": "2026-09-21T09:00:11.5Z",
-      "completionStartTime": "2026-09-21T09:00:11.700Z",
-      "latency": 0.6,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "tts-1",
-      "name": "tts",
-      "type": "GENERATION",
-      "parentObservationId": "pipecat-turn-1",
-      "startTime": "2026-09-21T09:00:12Z",
-      "latency": 0.2,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-
-    {
-      "id": "pipecat-turn-2",
-      "name": "turn",
-      "type": "SPAN",
-      "parentObservationId": "root-call",
-      "startTime": "2026-09-21T09:00:20Z",
-      "latency": 1.9,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "stt-2",
-      "name": "stt",
-      "type": "GENERATION",
-      "parentObservationId": "pipecat-turn-2",
-      "startTime": "2026-09-21T09:00:20Z",
-      "latency": 0.3,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "turn-2",
-      "name": "agents",
-      "type": "SPAN",
-      "parentObservationId": "pipecat-turn-2",
-      "startTime": "2026-09-21T09:00:20Z",
-      "latency": 1.4,
-      "metadata": { "turn_first_word": 0.8, "request_ttft": 0.3, "model_requests": 1 },
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "req-2a",
-      "name": "chat gemini-3.5-flash-lite",
-      "type": "GENERATION",
-      "parentObservationId": "turn-2",
-      "startTime": "2026-09-21T09:00:20Z",
-      "completionStartTime": "2026-09-21T09:00:20.300Z",
-      "latency": 1.2,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "tool-2a",
-      "name": "confirm_customer",
-      "type": "TOOL",
-      "parentObservationId": "turn-2",
-      "startTime": "2026-09-21T09:00:20.5Z",
-      "latency": 0.02,
-      "level": "ERROR",
-      "statusMessage": "value is not a valid phone number",
-      "_comment": "a genuine validation retry: this is what a repair is made of",
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "tts-2",
-      "name": "tts",
-      "type": "GENERATION",
-      "parentObservationId": "pipecat-turn-2",
-      "startTime": "2026-09-21T09:00:21Z",
-      "latency": 0.2,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-
-    {
-      "id": "pipecat-turn-3",
-      "name": "turn",
-      "type": "SPAN",
-      "parentObservationId": "root-call",
-      "startTime": "2026-09-21T09:00:30Z",
-      "latency": 0.6,
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-    {
-      "id": "turn-3",
-      "name": "agents",
-      "type": "SPAN",
-      "parentObservationId": "pipecat-turn-3",
-      "startTime": "2026-09-21T09:00:30Z",
-      "latency": 0.05,
-      "_comment": "a caller turn the agency answered without asking a model at all",
-      "sessionId": "s15",
-      "traceId": "t15"
-    },
-
-    {
-      "id": "req-orphan",
-      "name": "chat gemini-3.5-flash-lite",
-      "type": "GENERATION",
-      "parentObservationId": "turn-that-was-not-exported",
-      "startTime": "2026-09-21T09:00:40Z",
-      "latency": 0.7,
-      "_comment": "its parent is not in this set: unresolved, and it must stay that way",
-      "sessionId": "s15",
-      "traceId": "t15"
-    }
-  ]
+ "_comment": [
+  "S15. One synthetic Langfuse observation set, shaped like the /api/public/v2/observations",
+  "payload bench.turns reads, holding every case the counting has to get right at once:",
+  "two caller turns under one call root; a third caller turn that ran no model at all;",
+  "a greeting spoken before any turn; two model requests inside one turn; stt and tts,",
+  "which Langfuse types as GENERATION and which are not model requests; a genuine",
+  "validation retry, marked with level ERROR; the same tool used twice legitimately in",
+  "one turn, which is not a repair; and one observation whose parent is not in the set,",
+  "which must stay unresolved rather than being counted into a turn to make the sums",
+  "come out. Written by hand rather than captured, so every number in test_bench.py is",
+  "arithmetic somebody can check against this file."
+ ],
+ "data": [
+  {
+   "id": "root-call",
+   "name": "conversation",
+   "type": "SPAN",
+   "parentObservationId": null,
+   "startTime": "2026-09-21T09:00:00Z",
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "greeting-1",
+   "name": "greeting",
+   "type": "SPAN",
+   "parentObservationId": "root-call",
+   "startTime": "2026-09-21T09:00:01Z",
+   "latency": 0.4,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "pipecat-turn-greeting",
+   "traceId": "trace-s15",
+   "parentObservationId": "root-call",
+   "type": "SPAN",
+   "name": "turn",
+   "level": "DEFAULT",
+   "statusMessage": "",
+   "latency": 0.5,
+   "metadata": {
+    "attributes.turn.was_interrupted": false,
+    "attributes.turn.number": 1
+   }
+  },
+  {
+   "id": "pipecat-turn-1",
+   "name": "turn",
+   "type": "SPAN",
+   "parentObservationId": "root-call",
+   "startTime": "2026-09-21T09:00:10Z",
+   "latency": 2.5,
+   "sessionId": "s15",
+   "traceId": "t15",
+   "metadata": {
+    "attributes.turn.user_bot_latency_seconds": 1.5,
+    "attributes.turn.was_interrupted": false
+   }
+  },
+  {
+   "id": "stt-1",
+   "name": "stt",
+   "type": "GENERATION",
+   "parentObservationId": "pipecat-turn-1",
+   "startTime": "2026-09-21T09:00:10Z",
+   "latency": 0.3,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "turn-1",
+   "name": "agents",
+   "type": "SPAN",
+   "parentObservationId": "pipecat-turn-1",
+   "startTime": "2026-09-21T09:00:10Z",
+   "latency": 1.8,
+   "metadata": {
+    "turn_first_word": 1.2,
+    "request_ttft": [
+     0.4,
+     0.35
+    ],
+    "model_requests": 2,
+    "request_first_output": [
+     "tool",
+     "text"
+    ]
+   },
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "req-1a",
+   "name": "chat gemini-3.5-flash-lite",
+   "type": "GENERATION",
+   "parentObservationId": "turn-1",
+   "startTime": "2026-09-21T09:00:10Z",
+   "completionStartTime": "2026-09-21T09:00:10.400Z",
+   "latency": 0.9,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "tool-1a",
+   "name": "read_diary",
+   "type": "TOOL",
+   "parentObservationId": "turn-1",
+   "startTime": "2026-09-21T09:00:11Z",
+   "latency": 0.05,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "tool-1b",
+   "name": "read_diary",
+   "type": "TOOL",
+   "parentObservationId": "turn-1",
+   "startTime": "2026-09-21T09:00:11.2Z",
+   "latency": 0.05,
+   "_comment": "the caller changed their mind about the day: two legitimate uses, not a repair",
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "req-1b",
+   "name": "chat gemini-3.5-flash-lite",
+   "type": "GENERATION",
+   "parentObservationId": "turn-1",
+   "startTime": "2026-09-21T09:00:11.5Z",
+   "completionStartTime": "2026-09-21T09:00:11.700Z",
+   "latency": 0.6,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "tts-1",
+   "name": "tts",
+   "type": "GENERATION",
+   "parentObservationId": "pipecat-turn-1",
+   "startTime": "2026-09-21T09:00:12Z",
+   "latency": 0.2,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "pipecat-turn-2",
+   "name": "turn",
+   "type": "SPAN",
+   "parentObservationId": "root-call",
+   "startTime": "2026-09-21T09:00:20Z",
+   "latency": 1.9,
+   "sessionId": "s15",
+   "traceId": "t15",
+   "metadata": {
+    "attributes.turn.user_bot_latency_seconds": 1.2,
+    "attributes.turn.was_interrupted": false
+   }
+  },
+  {
+   "id": "stt-2",
+   "name": "stt",
+   "type": "GENERATION",
+   "parentObservationId": "pipecat-turn-2",
+   "startTime": "2026-09-21T09:00:20Z",
+   "latency": 0.3,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "turn-2",
+   "name": "agents",
+   "type": "SPAN",
+   "parentObservationId": "pipecat-turn-2",
+   "startTime": "2026-09-21T09:00:20Z",
+   "latency": 1.4,
+   "metadata": {
+    "turn_first_word": 0.8,
+    "request_ttft": [
+     0.3
+    ],
+    "model_requests": 1,
+    "request_first_output": [
+     "text"
+    ]
+   },
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "req-2a",
+   "name": "chat gemini-3.5-flash-lite",
+   "type": "GENERATION",
+   "parentObservationId": "turn-2",
+   "startTime": "2026-09-21T09:00:20Z",
+   "completionStartTime": "2026-09-21T09:00:20.300Z",
+   "latency": 1.2,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "tool-2a",
+   "name": "confirm_customer",
+   "type": "TOOL",
+   "parentObservationId": "turn-2",
+   "startTime": "2026-09-21T09:00:20.5Z",
+   "latency": 0.02,
+   "level": "ERROR",
+   "statusMessage": "value is not a valid phone number",
+   "_comment": "a genuine validation retry: this is what a repair is made of",
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "tts-2",
+   "name": "tts",
+   "type": "GENERATION",
+   "parentObservationId": "pipecat-turn-2",
+   "startTime": "2026-09-21T09:00:21Z",
+   "latency": 0.2,
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "pipecat-turn-3",
+   "name": "turn",
+   "type": "SPAN",
+   "parentObservationId": "root-call",
+   "startTime": "2026-09-21T09:00:30Z",
+   "latency": 0.6,
+   "sessionId": "s15",
+   "traceId": "t15",
+   "metadata": {
+    "attributes.turn.user_bot_latency_seconds": 0.9,
+    "attributes.turn.was_interrupted": false
+   }
+  },
+  {
+   "id": "turn-3",
+   "name": "agents",
+   "type": "SPAN",
+   "parentObservationId": "pipecat-turn-3",
+   "startTime": "2026-09-21T09:00:30Z",
+   "latency": 0.05,
+   "_comment": "a caller turn the agency answered without asking a model at all",
+   "sessionId": "s15",
+   "traceId": "t15"
+  },
+  {
+   "id": "req-orphan",
+   "name": "chat gemini-3.5-flash-lite",
+   "type": "GENERATION",
+   "parentObservationId": "turn-that-was-not-exported",
+   "startTime": "2026-09-21T09:00:40Z",
+   "latency": 0.7,
+   "_comment": "its parent is not in this set: unresolved, and it must stay that way",
+   "sessionId": "s15",
+   "traceId": "t15"
+  }
+ ]
 }

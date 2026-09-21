@@ -59,14 +59,26 @@ extend-immutable-calls = ["voice.harness.TurnBudget"]
 quote-style = "single"
 
 [tool.ty.rules]
-# Debt, not policy. One root cause: `voice.harness.Node` is not generic, so its
-# fields are fixed to the base -- a bare `Agent` (which ty resolves to
-# `Agent[object, str]`) and `Callable[[VoiceState], ...]` guards and outputs --
-# while every salon agent is `Agent[SalonCall, ...]` with `SalonState`
-# callables. ty reports that one mismatch at ~15 sites across four files.
+# Debt, not policy. `voice.harness.Node` is not generic, so its fields are
+# fixed to the base -- a bare `Agent` (which ty resolves to `Agent[object,
+# str]`) and `Callable[[VoiceState], ...]` guards and outputs -- while every
+# salon agent is `Agent[SalonCall, ...]` with `SalonState` callables.
+#
+# Measured on 2026-09-21 with this line set to "error": **31** diagnostics
+# across twelve files, not the ~15 this note used to claim. Five of them are
+# reported inside `.venv` -- three at `pydantic_ai.toolsets.FunctionToolset`
+# and two in `google.genai` -- where the argument ty objects to is a
+# `RunContext[SalonCall]` tool passed to an `Agent[SalonCall, object]` that it
+# resolves as `Agent[object, str]` anyway. Those five are not `Node`'s fault
+# and making `Node` generic would not clear them, which is the fact that
+# stopped this being removed in the review of 2026-09-21: the suppression
+# cannot come off until ty resolves the explicit subscript, whatever we do to
+# our own types.
+#
 # The cost of ignoring it globally is that new argument-type errors go
-# unreported anywhere. Upgrade path: make `Node` generic over the state type,
-# then delete this. Marked at the definition itself for `/ponytail-debt`.
+# unreported anywhere, and that cost is real. Upgrade path unchanged: make
+# `Node` generic over the state type, re-measure, and narrow this to whatever
+# is left. Marked at the definition itself for `/ponytail-debt`.
 invalid-argument-type = "ignore"
 
 [[tool.ty.overrides]]

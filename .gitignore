@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets -- .env holds live API keys. .env.example is the template to commit.
+.env
+.env.*
+!.env.example
+
+# Tooling
+.ruff_cache/

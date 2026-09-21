@@ -19,7 +19,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, TypeAdapter, create_model
 from pydantic_ai import Agent, ModelRetry, Tool
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.messages import ModelMessage, ToolCallPart
+from pydantic_ai.messages import ModelMessage, ToolCallPart, UserPromptPart
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 SayFn = Callable[[str], Awaitable[None]]
@@ -455,6 +455,22 @@ class CallContext(BaseModel):
     def wrote_this_turn(self) -> bool:
         """Whether this turn has already changed the business. Base: it has no business."""
         return False
+
+    def delivered(self, heard: str) -> bool:
+        """Whether this utterance reached a model and is in the history it keeps.
+
+        A turn the runtime cancels outright leaves no trace of what the
+        caller said: the task carrying the run is cancelled, so the core's
+        own barge-in path -- which keeps `all_messages()` -- never runs. On
+        the live call of 2026-09-21 14:59 "I wanted to book a haircut
+        appointment" was lost exactly that way, and two agents later the
+        caller was asked which service they wanted.
+        """
+        return any(
+            isinstance(part, UserPromptPart) and part.content == heard
+            for message in self.messages
+            for part in message.parts
+        )
 
     def transcript(self) -> list[dict[str, str]]:
         """What was actually said on this call, in order, as a record rather than a protocol.

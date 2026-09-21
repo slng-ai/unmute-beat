@@ -91,6 +91,9 @@ class PydanticAgentProcessor(FrameProcessor):
         self._barge = core.Barge()
         # How the last turn ended, for a caller that wants to know.
         self._finished: core.TurnFinished | None = None
+        # What a cancelled turn heard and never got as far as delivering. The
+        # caller said it, so the next turn says it too.
+        self._carried = ''
         call._say = self.say
         call._end = self.hang_up
 
@@ -191,6 +194,20 @@ class PydanticAgentProcessor(FrameProcessor):
         else:
             await self.push_frame(frame, direction)
 
+    async def _start_interruption(self):
+        """Pipecat's own interruption hook, taken before it cancels this turn's task.
+
+        The `InterruptionFrame` branch in `process_frame` is too late. Pipecat
+        handles a system frame by calling this and then cancelling the task
+        running `process_frame`, so on the live call of 2026-09-21 14:59 the
+        turn unwound with a bare `CancelledError` before the frame reached
+        our own branch: `_interrupted` was still false, the turn was recorded
+        as `failed` with `ended='transport'` on a call that ran another
+        ninety seconds, and the barge never reached the core at all.
+        """
+        self.interrupt()
+        await super()._start_interruption()
+
     def interrupt(self) -> None:
         """The caller spoke over us. Stop the run instead of finishing into a void."""
         self._interrupted = True
@@ -215,6 +232,12 @@ class PydanticAgentProcessor(FrameProcessor):
         knows -- Pipecat's own turn context, and when the first word reached
         the wire.
         """
+        if self._carried:
+            # A previous turn heard this and was cancelled before any model
+            # saw it. Joined rather than replaced: two stretches of speech
+            # with no answer between them are one thing the caller said.
+            prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
+            self._carried = ''
         # One span for the whole chain: `start_as_current_span` attaches it, and
         # the agents run in this coroutine, so pydantic-ai's own run spans land
         # underneath instead of each opening a trace of its own.
@@ -318,11 +341,16 @@ class PydanticAgentProcessor(FrameProcessor):
                                 span.set_attribute('detail', done.detail)
                             self._finished = done
             except asyncio.CancelledError:
-                # The pipeline is being torn down under us -- the transport
-                # dropped, or the worker is ending. Recorded before it
-                # propagates, because a turn that ends this way is otherwise
-                # indistinguishable from one that simply stopped yielding.
-                self._call.end_requested('transport')
+                # Two different things cancel this task and only one of them
+                # is the transport: the pipeline being torn down, and Pipecat
+                # cutting the turn off because the caller started speaking
+                # again. `ended` is the call's terminal outcome and is
+                # written once, so a barge-in recorded as a disconnect is
+                # stamped on every span for the rest of the call -- which is
+                # what the call of 2026-09-21 14:59 did from its second turn
+                # to its last.
+                if not self._interrupted:
+                    self._call.end_requested('transport')
                 raise
             finally:
                 if self._finished is None:
@@ -348,6 +376,16 @@ class PydanticAgentProcessor(FrameProcessor):
                 # the agency hung up on a caller mid-question.
                 if self._call.ended:
                     span.set_attribute('ended', self._call.ended)
+                if prompt and not self._call.delivered(prompt):
+                    # Nothing ever read it. Whatever happened to this turn,
+                    # the caller still said it, so it goes to the front of
+                    # the next one rather than out of the conversation.
+                    #
+                    # ponytail: a run of cancelled turns joins into one long
+                    # prompt, because a caller who says four things over four
+                    # cut-off turns said four things. Bound it if a real call
+                    # ever carries more than a sentence or two.
+                    self._carried = prompt
                 if open_response:
                     # The core left a run open on its way out. Close it, so
                     # every start has an end whatever happened in between.

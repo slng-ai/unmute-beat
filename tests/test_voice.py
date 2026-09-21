@@ -5,8 +5,9 @@ model: no transport, no audio, no network.
 """
 
 import asyncio
+import inspect
 import json
-from contextlib import ExitStack
+from contextlib import ExitStack, suppress
 
 from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
@@ -16,7 +17,7 @@ from pipecat.frames.frames import (
 )
 from pydantic import TypeAdapter, ValidationError
 from pydantic_ai import ModelResponse, TemplateStr, TextPart
-from pydantic_ai.messages import ModelRequest, ToolCallPart
+from pydantic_ai.messages import ModelRequest, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from voice.agents import AGENTS
@@ -303,6 +304,86 @@ async def barge_in():
     assert any(isinstance(m, ModelRequest) for m in call.messages), call.messages
 
 
+# --- what a cancelled turn owes the next one ---------------------------------
+
+
+async def _slowly(messages, info):
+    """A model slow enough to still be talking when the caller talks over it."""
+    _seen.append(messages)
+    line = 'a fairly long answer indeed'
+    for word in line.split():
+        yield word + ' '
+        await asyncio.sleep(0.05)
+
+
+_seen: list = []
+
+
+async def _cut_off(probe, prompt, *, barge: bool):
+    """Run a turn and have the runtime cancel its task, the way Pipecat does."""
+    turn = asyncio.create_task(probe._turn(prompt))
+    await asyncio.sleep(0.02)
+    if barge:
+        probe.interrupt()
+    turn.cancel()
+    with suppress(asyncio.CancelledError):
+        await turn
+
+
+async def a_cancelled_turn_carries_what_the_caller_said():
+    """A turn the runtime cancels still heard something, and the next turn says it too.
+
+    Pipecat interrupts by cancelling the task running `process_frame`, so the
+    core's own barge-in path -- the one that keeps `all_messages()` -- never
+    runs and the utterance is in no history at all. On the live call of
+    2026-09-21 14:59 "I wanted to book a haircut appointment" was cut off by
+    "For Friday" two hundred milliseconds later, and three agents and five
+    turns later the caller was asked which service they wanted.
+    """
+    _seen.clear()
+    call = Call()
+    probe = Probe(call)
+    with scripted(concierge=_slowly):
+        await _cut_off(probe, 'I wanted to book a haircut appointment.', barge=True)
+        assert not call.messages, 'nothing was committed, which is the whole problem'
+        await probe._turn('For Friday.')
+
+    asked = [
+        part.content
+        for message in _seen[-1]
+        if isinstance(message, ModelRequest)
+        for part in message.parts
+        if isinstance(part, UserPromptPart)
+    ]
+    assert asked == ['I wanted to book a haircut appointment. For Friday.'], asked
+
+
+async def a_barge_is_not_a_disconnect():
+    """Two things cancel a turn's task and only one of them ended the call.
+
+    `ended` is written once and read for the rest of the call, so a barge-in
+    recorded as a transport drop is stamped on every span after it. That is
+    what the live call of 2026-09-21 14:59 did from its second turn onwards,
+    while the caller carried on talking for another ninety seconds.
+    """
+    _seen.clear()
+    dropped = Call()
+    with scripted(concierge=_slowly):
+        await _cut_off(Probe(dropped), 'tell me everything', barge=False)
+    assert dropped.ended == 'transport', dropped.ended
+
+    barged = Call()
+    with scripted(concierge=_slowly):
+        await _cut_off(Probe(barged), 'tell me everything', barge=True)
+    assert barged.ended == '', barged.ended
+
+    # And the barge has to be seen *before* the cancel to get that far. Pipecat
+    # handles an `InterruptionFrame` by calling this and then cancelling the
+    # task, so the frame never reaches `process_frame`'s own branch in time.
+    hook = inspect.getsource(PydanticAgentProcessor._start_interruption)
+    assert 'self.interrupt()' in hook, hook
+
+
 async def main():
     await plain_turn()
     await handoff()
@@ -312,6 +393,8 @@ async def main():
     await tool_turn()
     await truncation()
     await barge_in()
+    await a_cancelled_turn_carries_what_the_caller_said()
+    await a_barge_is_not_a_disconnect()
     print('ok')
 
 

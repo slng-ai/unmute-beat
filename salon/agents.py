@@ -263,6 +263,29 @@ async def ask_booking(
     return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)
 
 
+# The words in "I'd like to raise a complaint" and nothing else. A summary
+# made only of these describes wanting to complain, not what went wrong, and
+# reading it back asks the caller to confirm their own request.
+#
+# ponytail: a closed word list, like the consent matchers in `salon/state.py`,
+# and it fails the same way -- towards asking what happened. Upgrade it with
+# them.
+_COMPLAINT_REQUEST_WORDS = (
+    'a about an are be been caller can client complain complaining complaint complaints could customer '
+    'er file files filing formal had has have he hello her hi his i id im in is it leave leaving like '
+    'lodge lodges lodging make makes making may maybe me might my need official our please put raise '
+    'raises raising register registering she someone something submit submitting the their they to uh '
+    'um us want wants was we were wish would yeah yes you your '
+)
+_ASKING_TO_COMPLAIN = frozenset(_COMPLAINT_REQUEST_WORDS.split())
+
+
+def _describes_nothing(summary: str) -> bool:
+    """Whether this summary says only that they want to complain."""
+    words = [word.strip("'") for word in re.findall(r"[a-zA-Z']+", summary.lower())]
+    return not words or all(word in _ASKING_TO_COMPLAIN for word in words)
+
+
 async def ask_complaint(ctx: RunContext[SalonCall], summary: str) -> Ask:
     """Say their complaint back in one sentence and wait. The only way to reach `record_complaint`.
 
@@ -274,10 +297,18 @@ async def ask_complaint(ctx: RunContext[SalonCall], summary: str) -> Ask:
     """
     if not summary.strip():
         raise ModelRetry('Nothing was asked: a complaint summary cannot be empty.')
+    if _describes_nothing(summary):
+        # On 2026-09-21 14:59 a caller said "maybe raising a complaint" and
+        # heard "So, Raising a complaint. Have I got that right?" back before
+        # anyone had asked what happened -- and then had to be asked again.
+        raise ModelRetry(
+            f'Nothing was asked: {summary.strip()!r} is them asking to complain, not what went '
+            'wrong. Ask them what happened, and put it to them once they have said.'
+        )
     return Ask(
         about='complaint',
         value=_gist(summary),
-        spoken=f'So, {summary.rstrip(".")}. Have I got that right?',
+        spoken=f'{summary.strip().rstrip(".")}. Have I got that right?',
     )
 
 

@@ -574,6 +574,32 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
     assert record.recorded and len(diary.complaints()) == 1
 
 
+async def asking_to_complain_is_not_a_complaint():
+    """The readback is of what went wrong, not of them asking to raise it.
+
+    On the live call of 2026-09-21 14:59 the caller said "uh, maybe raising a
+    complaint", the complaints agent put that straight back as the summary --
+    "So, Raising a complaint. Have I got that right?" -- and then, once they
+    had actually said what happened, asked again. Two readbacks for one
+    complaint, the first of them of nothing.
+    """
+    call = _salon()
+    _heard(call)
+    call.commit(agent='complaints')
+    call.turn_started('uh, maybe raising a complaint')
+
+    for nothing in ('Raising a complaint', 'the customer would like to make a formal complaint', '  '):
+        refusal = await _refuses(agents.ask_complaint, _context(call), nothing)
+        assert 'Nothing was asked' in refusal, refusal
+        assert call._asked is None, 'and nothing is pending for a later yes to land on'
+
+    # What they went on to say is one, and it is read back as they said it.
+    call.turn_started('yeah, sorry, the last haircut was completely uneven')
+    question = await agents.ask_complaint(_context(call), 'the last haircut was completely uneven')
+    assert question.spoken.startswith('the last haircut was completely uneven'), question.spoken
+    assert question.spoken.endswith('?'), question.spoken
+
+
 async def main():
     the_matchers_refuse_rather_than_guess()
     await n1_a_move_question_cannot_hang_up()
@@ -587,6 +613,7 @@ async def main():
     await earlier_b_a_cancellation_nobody_made_is_not_spoken()
     await a_redo_request_keeps_the_booking_and_is_told_the_truth()
     await a_complaint_is_written_in_the_words_they_agreed_to()
+    await asking_to_complain_is_not_a_complaint()
     await recounting_what_is_really_booked_still_streams()
     print('ok')
 

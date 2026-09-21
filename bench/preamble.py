@@ -31,7 +31,7 @@ load_dotenv(override=True)
 os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
 from salon.agents import AGENTS  # noqa: E402
-from salon.state import SalonState  # noqa: E402
+from salon.state import SalonCall, SalonState  # noqa: E402
 
 # One turn per row, each one a turn that has to call something before it can
 # answer. The interesting column is whether any text arrived with the call.
@@ -48,13 +48,13 @@ TURNS = (
 async def one(step: str, said: str, facts: dict, model: str | None):
     """Run one turn and say what arrived in the response that carried the call."""
     node = AGENTS[step]
-    state = SalonState(agent=step, **facts)
+    call = SalonCall(state=SalonState(agent=step, **facts))
     override = node.agent.override(model=model) if model else None
     if override:
         override.__enter__()
     try:
         result = await node.agent.run(
-            said, deps=state, output_type=node.outputs(state)
+            said, deps=call, output_type=node.outputs(call.state)
         )
     finally:
         if override:

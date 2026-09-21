@@ -38,7 +38,7 @@ Agent.instrument_all()
 
 from voice.agents import AGENTS  # noqa: E402
 from voice.processor import PydanticAgentProcessor  # noqa: E402
-from voice.state import CallState  # noqa: E402
+from voice.state import Call  # noqa: E402
 
 
 def named(name):
@@ -88,8 +88,8 @@ def open_turn() -> tuple[TracingContext, trace.Span, trace.Span]:
 async def one_trace_per_call():
     context, conversation, turn = open_turn()
 
-    state = CallState()
-    probe = Probe(state, AGENTS)
+    call = Call()
+    probe = Probe(call, AGENTS)
     # What `setup()` does on a real pipeline, from FrameProcessorSetup.
     probe._tracing = context
 

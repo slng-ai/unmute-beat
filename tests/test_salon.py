@@ -21,7 +21,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import diary, knowledge
 from salon.agents import AGENTS, FILLER, NOTED, get_a_manager, prompt
-from salon.state import Appointment, SalonState, open_call, prefetch_number
+from salon.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
 from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34600111222'
@@ -106,19 +106,19 @@ assert prefetch_number('+8656696123') == '+8656696123'
 
 # --- the prompt is branched before the model reads it ------------------------
 
-unverified = prompt('concierge').render(SalonState(customer_phone=PHONE))
-verified = prompt('concierge').render(SalonState(customer_phone=PHONE, customer_verified='existing'))
+unverified = prompt('concierge').render(SalonCall(state=SalonState(customer_phone=PHONE)))
+verified = prompt('concierge').render(SalonCall(state=SalonState(customer_phone=PHONE, customer_verified='existing')))
 assert 'Nobody has been identified' in unverified
 assert 'Nobody has been identified' not in verified
 assert 'has been identified, for the rest of the call' in verified
 # The front desk never holds a number, whatever state it is in.
 assert PHONE not in unverified and PHONE not in verified
 # Only the verification step renders one.
-assert PHONE in prompt('verify').render(SalonState(customer_phone=PHONE))
+assert PHONE in prompt('verify').render(SalonCall(state=SalonState(customer_phone=PHONE)))
 
 appointment = Appointment(booking_id='BK0001', service='haircut', date='2026-09-21',
                           time='09:00', spoken='Monday at 9:00 AM', action='book')
-with_booking = prompt('concierge').render(SalonState(customer_verified='existing', appointment=appointment))
+with_booking = prompt('concierge').render(SalonCall(state=SalonState(customer_verified='existing', appointment=appointment)))
 assert 'Monday at 9:00 AM' in with_booking
 assert 'Their booking' not in verified, 'no appointment, no section about one'
 
@@ -198,10 +198,10 @@ def open_days(count=2):
 
 
 class Probe(PydanticAgentProcessor):
-    def __init__(self, state, **kwargs):
-        super().__init__(state, AGENTS, **kwargs)
+    def __init__(self, call, **kwargs):
+        super().__init__(call, AGENTS, **kwargs)
         self.frames = []
-        # `state._end` is deliberately left alone: hanging up is the processor's
+        # `call._end` is deliberately left alone: hanging up is the processor's
         # own `hang_up`, and what it pushes is the thing worth asserting.
 
     async def push_frame(self, frame, direction=None):
@@ -230,8 +230,8 @@ def scripted(**by_agent):
 async def verify_then_book():
     """The whole round trip in one turn, and the front desk never named `verify`."""
     diary.reset()
-    state = open_call(PHONE)
-    probe = Probe(state, max_hops=4)
+    call = open_call(PHONE)
+    probe = Probe(call, max_hops=4)
 
     day = diary.spoken_day(diary.now().date() + timedelta(days=2), diary.now().date())
     with scripted(
@@ -247,11 +247,11 @@ async def verify_then_book():
     ):
         await probe._turn('can I get a haircut, and my number is right')
 
-    assert state.customer_verified == 'existing', state.customer_verified
-    assert state.customer_phone == PHONE
+    assert call.state.customer_verified == 'existing', call.state.customer_verified
+    assert call.state.customer_phone == PHONE
     # verify handed straight to booking, never back through the front desk.
-    assert state.agent == 'booking', state.agent
-    assert state.pending == [], 'the stack was pushed on the way in and popped on the way out'
+    assert call.state.agent == 'booking', call.state.agent
+    assert call.state.pending is None, 'the stack was pushed on the way in and popped on the way out'
     assert probe.spoken() == 'I can do that. Shall I book it?'
     # One fixed line per silence: the verify hop spoke, the booking hop and the
     # diary tool did not pile another two on top.
@@ -270,9 +270,9 @@ async def the_diary_is_the_edge():
     `booking` from the next turn on with no request having said so.
     """
     diary.reset()
-    state = open_call(PHONE)
-    state.customer_verified = 'existing'
-    probe = Probe(state)
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing')
+    probe = Probe(call)
 
     day = diary.spoken_day(diary.now().date() + timedelta(days=2), diary.now().date())
     with scripted(
@@ -283,12 +283,12 @@ async def the_diary_is_the_edge():
 
     assert probe.spoken() == 'I can do that. Which suits you?'
     # The move happened, and nothing was spent announcing it.
-    assert state.agent == 'booking', state.agent
+    assert call.state.agent == 'booking', call.state.agent
     # One run, and two model requests inside it: the tool call and the answer.
     # Before, this was two runs and four requests -- the front desk spending one
     # to say "booking" and the booking step spending three more.
     assert probe.runs() == 1, probe.runs()
-    assert sum(isinstance(m, ModelResponse) for m in state.messages) == 2, state.messages
+    assert sum(isinstance(m, ModelResponse) for m in call.messages) == 2, call.messages
     # The diary's own filler covers the lookup, and that is the only fixed line:
     # no hop happened, so no `enter:` line piled on top of it. Before, the
     # caller heard the booking step's entry line *and* this one.
@@ -305,8 +305,8 @@ async def the_diary_is_not_lent_before_verification():
     pay a retry -- the round trip the lending exists to save.
     """
     diary.reset()
-    state = open_call(PHONE)
-    probe = Probe(state)
+    call = open_call(PHONE)
+    probe = Probe(call)
 
     with scripted(
         concierge=outputs('hand_over', to='booking', because='wants to book'),
@@ -314,8 +314,8 @@ async def the_diary_is_not_lent_before_verification():
     ):
         await probe._turn('can I book a haircut?')
 
-    assert state.agent == 'verify', state.agent
-    assert state.pending == ['booking'], state.pending
+    assert call.state.agent == 'verify', call.state.agent
+    assert call.state.pending == 'booking', call.state.pending
 
 
 async def interpose_costs_one_run():
@@ -327,8 +327,8 @@ async def interpose_costs_one_run():
     move has started running a model to decide itself.
     """
     diary.reset()
-    state = open_call(PHONE)
-    probe = Probe(state, max_hops=4)
+    call = open_call(PHONE)
+    probe = Probe(call, max_hops=4)
 
     with scripted(
         concierge=outputs('hand_over', to='booking', because='wants a haircut'),
@@ -337,8 +337,8 @@ async def interpose_costs_one_run():
         await probe._turn('can I book a haircut on Monday')
 
     assert probe.runs() == 2, probe.runs()
-    assert state.agent == 'verify', state.agent
-    assert state.pending == ['booking'], state.pending
+    assert call.state.agent == 'verify', call.state.agent
+    assert call.state.pending == 'booking', call.state.pending
     assert probe.fixed() == [probe.fixed()[0]] and probe.fixed()[0] in AGENTS['verify'].enter, (
         'the line covering the hop is the interposed step\'s, not the destination\'s'
     )
@@ -347,9 +347,9 @@ async def interpose_costs_one_run():
 async def resume_after_finisher():
     """The pop, on its own: verify finishes and the caller lands where they were going."""
     diary.reset()
-    state = open_call(PHONE)
-    state.agent, state.pending = 'verify', ['booking']
-    probe = Probe(state, max_hops=3)
+    call = open_call(PHONE)
+    call.commit(agent='verify', pending='booking')
+    probe = Probe(call, max_hops=3)
 
     with scripted(
         verify=outputs('confirm_customer', phone=PHONE),
@@ -357,8 +357,8 @@ async def resume_after_finisher():
     ):
         await probe._turn("yes, that's right")
 
-    assert state.agent == 'booking', state.agent
-    assert state.pending == []
+    assert call.state.agent == 'booking', call.state.agent
+    assert call.state.pending is None
     assert probe.spoken() == 'Which day were you thinking?'
     # Two runs: the one that verified and the one that spoke. Nothing in between
     # asked the model where the caller had been heading.
@@ -368,24 +368,24 @@ async def resume_after_finisher():
 async def side_question_does_not_move():
     """A turn that only speaks takes no edge, so there is nothing to suspend or resume."""
     diary.reset()
-    state = open_call(PHONE)
-    state.agent, state.customer_verified = 'booking', 'existing'
-    probe = Probe(state)
+    call = open_call(PHONE)
+    call.commit(agent='booking', customer_verified='existing')
+    probe = Probe(call)
 
     with scripted(booking=says('Parking is free for the first hour round the back.')):
         await probe._turn('quick one -- where do I park?')
 
-    assert state.agent == 'booking', state.agent
-    assert state.pending == [], 'no edge was taken, so nothing was stacked'
+    assert call.state.agent == 'booking', call.state.agent
+    assert call.state.pending is None, 'no edge was taken, so nothing was stacked'
     assert probe.runs() == 1
 
 
 async def one_kind_b_per_turn():
     """Model-chosen edges are budgeted, never chained until the caller gives up."""
     diary.reset()
-    state = open_call(PHONE)
-    state.customer_verified = 'existing'
-    probe = Probe(state, max_hops=3)
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing')
+    probe = Probe(call, max_hops=3)
 
     with scripted(
         concierge=outputs_or_says('hand_over', 'Sorry, what was that?',
@@ -407,9 +407,9 @@ async def one_kind_b_per_turn():
 async def correction_refuses_stale_slot():
     """The caller changes the day. The offer made for the old one dies with it."""
     diary.reset()
-    state = open_call(PHONE)
-    state.agent, state.customer_verified = 'booking', 'existing'
-    probe = Probe(state, max_hops=2)
+    call = open_call(PHONE)
+    call.commit(agent='booking', customer_verified='existing')
+    probe = Probe(call, max_hops=2)
 
     first, second = open_days(2)
     stale = diary.find_slots(PHONE, first.isoformat(), 'haircut', diary.now())['slots'][0]
@@ -426,10 +426,10 @@ async def correction_refuses_stale_slot():
     ):
         await probe._turn('monday please -- actually, make it the day after')
 
-    assert state.booking_day == second.isoformat(), state.booking_day
-    assert state.appointment is None, 'a slot from the day they moved away from must not book'
+    assert call.state.booking_day == second.isoformat(), call.state.booking_day
+    assert call.state.appointment is None, 'a slot from the day they moved away from must not book'
     assert diary.bookings_for(PHONE, diary.now().date()) == [], 'and nothing reached the diary'
-    assert state.agent == 'booking', 'the step stays open so the model can offer the right day'
+    assert call.state.agent == 'booking', 'the step stays open so the model can offer the right day'
     assert probe.spoken() == 'That one has gone, I am afraid. Shall I look at the other day?'
     # The refusal came back inside the same run, so the caller waited for one
     # turn rather than two. No prompt sentence and no model request was involved
@@ -442,10 +442,10 @@ async def correction_refuses_stale_slot():
 
 async def save_finishes():
     diary.reset()
-    state = open_call(PHONE)
-    state.customer_verified = 'existing'
-    state.agent = 'booking'
-    probe = Probe(state)
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing')
+    call.commit(agent='booking')
+    probe = Probe(call)
 
     slot = diary.find_slots(PHONE, 'monday', 'haircut', diary.now())
     if slot['status'] != 'ok':  # a Monday run: ask for the next open day instead
@@ -458,9 +458,9 @@ async def save_finishes():
     ):
         await probe._turn('yes, book it')
 
-    assert state.appointment is not None and state.appointment.action == 'book'
-    assert state.appointment.spoken == slot['slots'][0]['spoken']
-    assert state.agent == 'concierge'
+    assert call.state.appointment is not None and call.state.appointment.action == 'book'
+    assert call.state.appointment.spoken == slot['slots'][0]['spoken']
+    assert call.state.agent == 'concierge'
     # The diary's own phrase, said by this code -- a fixed line, not model text.
     # The model is never asked to compose it, so it cannot turn a Friday into
     # "Thursday the 18th" or read 09:00 back as "09:00 AM", both of which it did
@@ -489,9 +489,9 @@ async def a_handed_over_agent_is_asked_the_question():
     this is about which message is last, not about what the model can see.
     """
     diary.reset()
-    state = open_call(PHONE)
-    state.customer_verified = 'existing'
-    probe = Probe(state)
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing')
+    probe = Probe(call)
     seen: dict = {}
 
     async def remember(messages, info: AgentInfo):
@@ -505,7 +505,7 @@ async def a_handed_over_agent_is_asked_the_question():
     ):
         await probe._turn('my last haircut was completely uneven')
 
-    assert state.agent == 'complaints', state.agent
+    assert call.state.agent == 'complaints', call.state.agent
     asked = [p for p in seen['last'].parts if isinstance(p, UserPromptPart)]
     assert any('uneven' in p.content for p in asked), seen['last'].parts
 
@@ -523,10 +523,10 @@ async def the_note_is_said_once():
     confirmation, so there is nothing left for a filler to duplicate.
     """
     diary.reset()
-    state = open_call(PHONE)
-    state.customer_verified = 'existing'
-    state.agent = 'complaints'
-    probe = Probe(state)
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing')
+    call.commit(agent='complaints')
+    probe = Probe(call)
 
     with scripted(
         complaints=then(
@@ -556,8 +556,8 @@ async def a_tool_result_is_never_a_script():
     is content; an instruction in it reads as content too. Instructions go in
     the docstring, which is the one place the model cannot repeat.
     """
-    state = open_call(PHONE)
-    result = await get_a_manager(RunContext(deps=state, model=None, usage=None))  # type: ignore[arg-type]
+    call = open_call(PHONE)
+    result = await get_a_manager(RunContext(deps=call, model=None, usage=None))  # type: ignore[arg-type]
     assert not result['transferred']
     assert 'say' not in result, result
     for key, value in result.items():
@@ -571,10 +571,10 @@ async def a_tool_result_is_never_a_script():
 
 async def refusal_retries():
     diary.reset()
-    state = open_call(PHONE)
-    state.customer_verified = 'existing'
-    state.agent = 'booking'
-    probe = Probe(state)
+    call = open_call(PHONE)
+    call.commit(customer_verified='existing')
+    call.commit(agent='booking')
+    probe = Probe(call)
     seen = []
 
     async def unconfirmed_then_ask(messages, info: AgentInfo):
@@ -591,8 +591,8 @@ async def refusal_retries():
     with scripted(booking=unconfirmed_then_ask):
         await probe._turn('monday morning')
 
-    assert state.appointment is None, 'an unconfirmed save must write nothing'
-    assert state.agent == 'booking', 'the step stays open so the model can fix it'
+    assert call.state.appointment is None, 'an unconfirmed save must write nothing'
+    assert call.state.agent == 'booking', 'the step stays open so the model can fix it'
     assert probe.spoken() == 'Shall I book it?'
     assert probe.runs() == 1, 'a retry is the same run, not a second turn'
 
@@ -602,8 +602,8 @@ async def refusal_retries():
 
 async def hangs_up():
     diary.reset()
-    state = open_call(PHONE)
-    probe = Probe(state)
+    call = open_call(PHONE)
+    probe = Probe(call)
     with scripted(concierge=outputs('hang_up', goodbye='Take care, bye!')):
         await probe._turn("no, that's all thanks")
     # The goodbye first, then the frame that closes the line. `EndWorkerFrame` is

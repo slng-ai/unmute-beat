@@ -45,9 +45,9 @@ def agency():
     """Which set of agents takes the call. `HARNESS=voice` for the small one."""
     if os.getenv('HARNESS', 'salon') == 'voice':
         from voice.agents import AGENTS, GREETING
-        from voice.state import CallState
+        from voice.state import Call
 
-        return CallState(), AGENTS, GREETING
+        return Call(), AGENTS, GREETING
 
     from salon.agents import AGENTS, GREETING
     from salon.state import open_call
@@ -89,8 +89,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         text_aggregation_mode=TextAggregationMode.TOKEN,
     )
 
-    state, table, greeting = agency()
-    agents = PydanticAgentProcessor(state, table)
+    call, table, greeting = agency()
+    agents = PydanticAgentProcessor(call, table)
 
     # Kept even though no model ever reads it: the aggregators use it to work
     # out the caller's turn and, on a barge-in, what the bot actually managed to

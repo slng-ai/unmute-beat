@@ -12,13 +12,24 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.messages import ModelMessage
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
+
+
+def present(value: object) -> bool:
+    """Whether a prerequisite is filled, under one written-down rule.
+
+    `None` is absent and a permitted empty string is absent. A legitimate
+    `False` or `0` is **present**, which plain truthiness gets wrong: a field
+    holding `False` because the caller said no has been answered, and a step
+    waiting on it should not be interposed a second time.
+    """
+    return value is not None and value != ''
 
 
 class Handoff(BaseModel):
@@ -29,20 +40,48 @@ class Handoff(BaseModel):
 
 
 class VoiceState(BaseModel):
-    """The call, as the agents see it.
+    """The business facts of one call, and nothing else.
 
-    Also their `deps` and the scope their prompt templates render against, so a
-    `{{placeholder}}` and a field here cannot drift apart: a name that is not a
-    field fails when the prompt is compiled, at import, rather than rendering as
-    nothing on a live call.
+    Every supported write path is validated: authored defaults on the way in,
+    assignments on the way back, and nested models every time they are handed
+    over rather than only when first built. That is three separate opt-ins in
+    Pydantic and none of them is on by default.
+
+    Conversation history and the runtime's callbacks are deliberately **not**
+    here. They live on `CallContext`, which holds this object and replaces it
+    wholesale. Keeping them out is what makes a whole-candidate commit possible:
+    a state that carried a message list and two bound methods could not be
+    rebuilt from its own values.
+
+    Still the scope the prompt templates render against, now one level down: a
+    `{{state.placeholder}}` naming no field fails when the prompt is compiled,
+    at import, rather than rendering as nothing on a live call.
     """
 
+    model_config = ConfigDict(
+        validate_default=True, validate_assignment=True, revalidate_instances='always'
+    )
+
     agent: str
-    # Steps waiting to resume: a step whose prerequisite was not met is pushed
-    # here and the graph enters the step that satisfies it. Depth is 1 by
-    # construction -- `test_graph` refuses a satisfier that has prerequisites of
-    # its own, so `route` cannot chain and this cannot grow.
-    pending: list[str] = Field(default_factory=list)
+    # The step waiting to resume: a step whose prerequisite was not met is
+    # recorded here and the graph enters the step that satisfies it. One slot,
+    # not a list -- `test_graph` refuses a satisfier that has prerequisites of
+    # its own, so `route` cannot chain and a second waiting step cannot arise.
+    # A list invited in-place mutation that no validator would ever see.
+    pending: str | None = None
+
+
+class CallContext(BaseModel):
+    """One call: its validated state, its history, and the line to the caller.
+
+    The agents' `deps`. This object is stable for the whole call and `state` is
+    replaced inside it, so a tool holding `ctx.deps` always reads the current
+    state -- there is no way to capture a snapshot and write to it later.
+    """
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    state: VoiceState
     messages: list[ModelMessage] = Field(default_factory=list)
 
     # Deliberately not fields: a Callable would land in the JSON schema the
@@ -51,6 +90,18 @@ class VoiceState(BaseModel):
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
     _covered: bool = PrivateAttr(default=False)
+
+    def commit(self, **updates) -> None:
+        """Replace the whole state with one validated candidate, or change nothing.
+
+        Built from values rather than `model_copy(update=...)`, which copies
+        updates in without validating them at all, and rather than a sequence of
+        assignments, which commits the first field before the second is checked.
+        A caller writing a phone number and a verification status together gets
+        both or neither: if the status is not a legal one the `ValidationError`
+        leaves the previous state object exactly where it was.
+        """
+        self.state = type(self.state)(**(self.state.model_dump() | updates))
 
     async def say(self, text: str) -> None:
         """Speak one fixed line now, without waiting for the model.
@@ -70,22 +121,21 @@ class VoiceState(BaseModel):
         """Where the caller goes now this step is done: back to what they were doing.
 
         A finisher calls this instead of asking the model where to go next. The
-        step that was waiting pushed itself on the way in, so the application
+        step that was waiting recorded itself on the way in, so the application
         already knows the answer and the model is never asked a question it
         cannot answer better than the graph.
 
-        Never the step that is finishing. A push is only popped by a finisher,
-        and a step that is entered and then left without finishing -- the caller
-        changed the subject -- leaves its push behind. Resuming into it would
-        hand the caller to the agent they are already with: a whole model
-        request that says nothing, and it happened on the first real run of the
-        benchmark.
+        Never the step that is finishing. The slot is only cleared by a
+        finisher, and a step that is entered and then left without finishing --
+        the caller changed the subject -- leaves its record behind. Resuming
+        into it would hand the caller to the agent they are already with: a
+        whole model request that says nothing, and it happened on the first real
+        run of the benchmark.
         """
-        while self.pending:
-            step = self.pending.pop()
-            if step != self.agent:
-                return step
-        return fallback
+        step = self.state.pending
+        if step is not None:
+            self.commit(pending=None)
+        return step if step is not None and step != self.state.agent else fallback
 
     def turn_started(self) -> None:
         """The caller has said something new. Age out anything that was only news.
@@ -172,30 +222,34 @@ class Node:
     outputs: Callable[[VoiceState], list] | None = None
 
 
-def route(state: VoiceState, nodes: dict[str, Node], to: str) -> str:
-    """Where the caller actually goes, given where the model sent them.
+def route(state: VoiceState, nodes: dict[str, Node], to: str) -> tuple[str, str | None]:
+    """Where the caller actually goes, and what is left waiting.
 
-    Pure, and free. It interposes a prerequisite by pushing the destination onto
-    the stack and entering the step that satisfies it; the finisher there pops
-    it back. No model request decides any of this, and the step at the other end
-    is the one that was going to run anyway, so it costs no extra round trip.
+    Pure now, in the strict sense: it returns the decision and writes nothing.
+    Its caller commits the step and the pending slot in one validated candidate,
+    because they are one application decision -- a move that half-happened would
+    leave the caller in a step with nothing recorded to come back to.
+
+    Free, as before. It interposes a prerequisite by recording the destination
+    and entering the step that satisfies it; the finisher there clears it. No
+    model request decides any of this, and the step at the other end is the one
+    that was going to run anyway, so it costs no extra round trip.
     """
     node = nodes[to]
-    # Assigned rather than appended: one satisfier is being waited on at a time,
-    # so a second interposition means the first was abandoned and its push is
-    # stale. ponytail: the cap is one because no satisfier has prerequisites of
-    # its own, which `test_graph` refuses to let change. If one ever does, this
-    # becomes a real stack and `resume` needs a matching loop.
-    if node.satisfied_by and not all(getattr(state, field, '') for field in node.requires):
-        state.pending = [to]
-        return node.satisfied_by
+    # One slot, overwritten rather than stacked: one satisfier is being waited
+    # on at a time, so a second interposition means the first was abandoned and
+    # its record is stale. ponytail: the cap is one because no satisfier has
+    # prerequisites of its own, which `test_graph` refuses to let change. If one
+    # ever does, this becomes a real stack and `resume` needs a matching loop.
+    if node.satisfied_by and not all(present(getattr(state, field, None)) for field in node.requires):
+        return node.satisfied_by, to
     if state.agent != to and any(other.satisfied_by == to for other in nodes.values()):
         # Sent straight to a step whose job is to satisfy something, rather than
         # interposed into it. Same promise either way: the caller came from
         # somewhere and goes back there. Without this a caller mid-complaint who
         # gets identified is handed to the front desk and has to start again.
-        state.pending = [state.agent]
-    return to
+        return to, state.agent
+    return to, state.pending
 
 
 def lent(exits: tuple[Exit, ...]) -> dict[str, Exit]:

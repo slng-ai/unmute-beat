@@ -31,7 +31,7 @@ from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.tools import ToolDefinition
 
 from salon import diary, knowledge
-from salon.state import AgentName, Appointment, Handoff, Phone, SalonState
+from salon.state import AgentName, Appointment, Handoff, Phone, SalonCall, SalonState
 from voice.harness import Exit, Node, filler_hook
 from voice.harness import lent as _lent
 from voice.harness import pick as _pick
@@ -114,7 +114,7 @@ _VOICE = (PROMPTS / '_voice.md').read_text()
 _DIARY = (PROMPTS / '_diary.md').read_text()
 
 
-def prompt(name: str) -> TemplateStr[SalonState]:
+def prompt(name: str) -> TemplateStr[SalonCall]:
     """One agent's prompt, with the rules every agent shares appended.
 
     Compiled against SalonState at import: a `{{placeholder}}` naming no field
@@ -129,13 +129,13 @@ def prompt(name: str) -> TemplateStr[SalonState]:
     one line and needs nothing registered.
     """
     text = (PROMPTS / f'{name}.md').read_text().replace('<!--diary-->', _DIARY)
-    return TemplateStr(f'{text}\n\n{_VOICE}', deps_type=SalonState)
+    return TemplateStr(f'{text}\n\n{_VOICE}', deps_type=SalonCall)
 
 
 # --- what the front desk can do ---------------------------------------------
 
 
-async def look_up_salon_info(ctx: RunContext[SalonState], query: str) -> dict:
+async def look_up_salon_info(ctx: RunContext[SalonCall], query: str) -> dict:
     """Look up anything about the salon: services and prices, how long things take, opening hours,
     the stylists, booking, deposits, cancellation and lateness, payment, parking and access.
 
@@ -151,7 +151,7 @@ async def look_up_salon_info(ctx: RunContext[SalonState], query: str) -> dict:
     return knowledge.look_up('services', query)
 
 
-async def look_up_refund_policy(ctx: RunContext[SalonState], query: str) -> dict:
+async def look_up_refund_policy(ctx: RunContext[SalonCall], query: str) -> dict:
     """Look up the salon's refund and complaints policy: the redo window, the three refund tiers,
     colour corrections, retail returns, and how a complaint is handled.
 
@@ -165,7 +165,7 @@ async def look_up_refund_policy(ctx: RunContext[SalonState], query: str) -> dict
     return knowledge.look_up('refunds', query)
 
 
-async def get_a_manager(ctx: RunContext[SalonState]) -> dict:
+async def get_a_manager(ctx: RunContext[SalonCall]) -> dict:
     """Call this the moment the caller asks for a manager, a supervisor, an owner, a person or a
     human, or when they are clearly and strongly frustrated.
 
@@ -184,13 +184,13 @@ async def get_a_manager(ctx: RunContext[SalonState]) -> dict:
     Tell them in your own words that a transfer needs them to be on a phone
     call, and offer what you can do here instead.
     """
-    if ctx.deps.transfer:
-        return {'already': ctx.deps.transfer}
+    if ctx.deps.state.transfer:
+        return {'already': ctx.deps.state.transfer}
     # ponytail: this harness runs on WebRTC, which has no call leg for a carrier
     # to redirect, so there is nothing to dial and saying so is the honest
     # answer. A telephony transport adds the one HTTPS request here; the
     # conversational contract above does not change.
-    ctx.deps.transfer = 'unavailable'
+    ctx.deps.commit(transfer='unavailable')
     # Facts about the line, and not one sentence that could be read out as it
     # stands. This used to carry `say:` holding "Tell the caller a direct
     # transfer needs an inbound phone call, and offer what you can do here." and
@@ -200,7 +200,7 @@ async def get_a_manager(ctx: RunContext[SalonState]) -> dict:
     return {'transferred': False, 'reason': 'no phone leg: this caller is on a web session'}
 
 
-async def record_complaint(ctx: RunContext[SalonState], summary: str, requested_resolution: str) -> dict:
+async def record_complaint(ctx: RunContext[SalonCall], summary: str, requested_resolution: str) -> dict:
     """Write the caller's complaint down, once they have agreed to your summary of it.
 
     Recording what they asked for is not approving it.
@@ -209,9 +209,9 @@ async def record_complaint(ctx: RunContext[SalonState], summary: str, requested_
         summary: Short, factual summary of what went wrong, in their own terms.
         requested_resolution: What they want the salon to do, or an empty string.
     """
-    if not ctx.deps.customer_verified:
+    if not ctx.deps.state.customer_verified:
         raise ModelRetry('A complaint record needs an owner and nobody is identified yet. Hand to the verify agent first.')
-    recorded = diary.record_complaint(ctx.deps.customer_phone, summary, requested_resolution)
+    recorded = diary.record_complaint(ctx.deps.state.customer_phone, summary, requested_resolution)
     # Before the next request, not after it, so this covers the wait the filler
     # used to cover -- and says the one thing worth saying rather than
     # announcing that something is about to happen.
@@ -220,7 +220,7 @@ async def record_complaint(ctx: RunContext[SalonState], summary: str, requested_
 
 
 async def read_diary(
-    ctx: RunContext[SalonState], when: str, service: Literal['any', 'haircut', 'hair-color', 'blowout']
+    ctx: RunContext[SalonCall], when: str, service: Literal['any', 'haircut', 'hair-color', 'blowout']
 ) -> dict:
     """Read the diary: what this caller already holds, and what is free on the day they named.
 
@@ -233,19 +233,19 @@ async def read_diary(
             "the 25th" -- or an empty string if they have not named one.
         service: Narrow the free times to one service, or `any` to see them all.
     """
-    if not ctx.deps.customer_verified:
+    if not ctx.deps.state.customer_verified:
         raise ModelRetry('The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.')
-    found = diary.find_slots(ctx.deps.customer_phone, when, service, diary.now())
+    found = diary.find_slots(ctx.deps.state.customer_phone, when, service, diary.now())
     # The day this look confirmed. `save_booking` refuses a slot from any other
     # one, so a caller who changes their mind about the day cannot be booked
     # onto the day they changed away from. The model is not asked whether the
     # change invalidated the slot: it is an application invariant and it is held
     # here, in code, whatever the model does next.
-    ctx.deps.booking_day = found.get('date', '')
+    ctx.deps.commit(booking_day=found.get('date', ''))
     return found
 
 
-async def hang_up(ctx: RunContext[SalonState], goodbye: str) -> str:
+async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
     """End the call, once the caller's own words say it is over: "no, that's all", "I'm good,
     thanks", "goodbye". A question is never one of those, however tired it sounds: answer it and wait.
 
@@ -288,7 +288,7 @@ def hand_over_for(exits: tuple[str, ...]):
     # `from __future__ import annotations` every annotation is a string, and
     # pydantic-ai resolves `Literal[exits]` in a scope where `exits` is gone.
     hand_over.__annotations__ = {
-        'ctx': RunContext[SalonState], 'to': Literal[exits], 'because': str, 'return': Handoff,
+        'ctx': RunContext[SalonCall], 'to': Literal[exits], 'because': str, 'return': Handoff,
     }
     return hand_over
 
@@ -296,7 +296,7 @@ def hand_over_for(exits: tuple[str, ...]):
 # --- the two steps that finish themselves ------------------------------------
 
 
-async def confirm_customer(ctx: RunContext[SalonState], phone: Phone) -> Handoff:
+async def confirm_customer(ctx: RunContext[SalonCall], phone: Phone) -> Handoff:
     """Look the caller up by the number they have just agreed to, and finish this step.
 
     Only after a clear yes to the digits you read back. A caller giving
@@ -306,8 +306,21 @@ async def confirm_customer(ctx: RunContext[SalonState], phone: Phone) -> Handoff
         phone: The exact number they confirmed, in E.164.
     """
     found = diary.find_or_create_customer(phone)
-    ctx.deps.customer_phone = phone
-    ctx.deps.customer_verified = found['customer_status']
+    # One commit, not two assignments. Written separately, a status the diary
+    # could not produce would fail *after* the phone number had already been
+    # saved, leaving a caller whose number is on the state and whose
+    # verification never happened -- which every downstream guard reads as
+    # "identified enough to have a number". Both or neither.
+    #
+    # `phone_confirmed` records only that the caller said yes to the digits
+    # read back. It is not proof the number is theirs: a caller who agrees to a
+    # wrong readback gets a structurally valid number belonging to somebody
+    # else, and that stays a conversational risk this field does not launder.
+    ctx.deps.commit(
+        customer_phone=phone,
+        phone_confirmed=True,
+        customer_verified=found['customer_status'],
+    )
     # Straight on to what they actually rang about -- which the graph already
     # knows, because the step that needed them identified pushed itself on the
     # way in. The node-graph version came back to the front desk first, which
@@ -317,7 +330,7 @@ async def confirm_customer(ctx: RunContext[SalonState], phone: Phone) -> Handoff
 
 
 async def save_booking(
-    ctx: RunContext[SalonState],
+    ctx: RunContext[SalonCall],
     action: Literal['book', 'move', 'cancel'],
     slot_id: str,
     booking_id: str,
@@ -337,25 +350,25 @@ async def save_booking(
     """
     if not confirmed:
         raise ModelRetry('Nothing was saved. Say the service, the day and the time back in one sentence, ask one yes-or-no question, and call this again on their yes.')
-    if not ctx.deps.customer_verified:
+    if not ctx.deps.state.customer_verified:
         raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
     # A slot from a day the diary is no longer being read for. The caller named
     # a different day after this slot was offered, and the offer died with it.
     # The day is already in the slot's own id, so this costs a comparison, and
     # no prompt sentence asks the model to notice.
-    if slot_id and ctx.deps.booking_day and not slot_id.startswith(ctx.deps.booking_day):
+    if slot_id and ctx.deps.state.booking_day and not slot_id.startswith(ctx.deps.state.booking_day):
         raise ModelRetry(
-            f'That slot is not on {ctx.deps.booking_day}, which is the day the diary was last read '
+            f'That slot is not on {ctx.deps.state.booking_day}, which is the day the diary was last read '
             'for. The caller changed the day, so that offer is gone. Read the diary for the day '
             'they actually want and offer what it returns.'
         )
     try:
-        saved = diary.save_booking(ctx.deps.customer_phone, action, slot_id, booking_id, additional, diary.now())
+        saved = diary.save_booking(ctx.deps.state.customer_phone, action, slot_id, booking_id, additional, diary.now())
     except diary.Refused as refused:
         # The diary's own words, which name what is actually possible instead of
         # leaving the model to guess a new slot.
         raise ModelRetry(str(refused)) from None
-    ctx.deps.appointment = Appointment(
+    appointment = Appointment(
         booking_id=saved['booking_id'], service=saved['service'], date=saved['date'],
         time=saved['time'], spoken=saved['spoken'], action=action,
     )
@@ -365,7 +378,15 @@ async def save_booking(
     # the 18th", and a 24 hour time was read back as "09:00 AM". It also costs a
     # whole round trip in which the caller hears nothing, which is what a
     # confirmation is least able to afford.
-    ctx.deps.agent = ctx.deps.resume('concierge')
+    # The appointment and the step the caller lands in are one decision, so
+    # they commit together: a booking recorded without the move would leave
+    # the caller inside `booking` with nothing left to book, and a move
+    # recorded without the booking would lose the only record that it happened.
+    # `resume` clears the pending slot, so it runs on its own line: relying on
+    # argument evaluation order to sequence two writes is the kind of thing
+    # that reads fine and breaks under a later edit.
+    going_back_to = ctx.deps.resume('concierge')
+    ctx.deps.commit(appointment=appointment, agent=going_back_to)
     await ctx.deps.speak_now(_pick(f'saved:{saved["status"]}', SAVED[saved['status']]).format(
         spoken=saved['spoken'], service=saved['service'].replace('hair-color', 'hair colour'),
     ))
@@ -413,7 +434,7 @@ def build(
         legal = tuple(dict.fromkeys(exit.to for exit in exits if exit.guard(state)))
         return [str, *([hand_over_for(legal)] if legal else []), *named]
 
-    async def only_reachable(ctx: RunContext[SalonState], defs: list[ToolDefinition]) -> list[ToolDefinition]:
+    async def only_reachable(ctx: RunContext[SalonCall], defs: list[ToolDefinition]) -> list[ToolDefinition]:
         """Take a borrowed tool back out while the edge it stands for is shut.
 
         The same narrowing `outputs` does to the exits, done to the tools: an
@@ -421,13 +442,13 @@ def build(
         cannot read it and be refused, which costs the round trip the lending
         was there to save.
         """
-        return [d for d in defs if d.name not in borrowed or borrowed[d.name].guard(ctx.deps)]
+        return [d for d in defs if d.name not in borrowed or borrowed[d.name].guard(ctx.deps.state)]
 
     return Node(
-        Agent[SalonState, object](
+        Agent[SalonCall, object](
             model,
             name=name,  # labels this agent's span in Langfuse
-            deps_type=SalonState,
+            deps_type=SalonCall,
             # `str` keeps speech streaming to TTS. Everything else ends the run:
             # `hand_over` names who takes the caller, a finisher does this step's
             # work and the graph works out who takes them next. An action rather

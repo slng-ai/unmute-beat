@@ -14,7 +14,7 @@ from contextlib import ExitStack
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from salon.agents import AGENTS
-from salon.state import SalonState
+from salon.state import SalonCall, SalonState
 from voice.harness import moved_by, route
 
 # --- the shape of the graph --------------------------------------------------
@@ -42,7 +42,7 @@ async def _reachable_tools(node, state) -> set[str]:
 
     with node.agent.override(model=FunctionModel(stream_function=probe)):
         async with node.agent.run_stream_events(
-            'hello', deps=state, output_type=node.outputs(state)
+            'hello', deps=SalonCall(state=state), output_type=node.outputs(state)
         ) as events:
             async for _ in events:
                 pass
@@ -87,28 +87,28 @@ for name, node in AGENTS.items():
 
 def prerequisite_interposed():
     state = SalonState()
-    assert route(state, AGENTS, 'booking') == 'verify', 'nobody is identified, so verify runs first'
-    assert state.pending == ['booking'], state.pending
+    # `route` decides and writes nothing: the step to enter and what is left
+    # waiting come back together, so its caller commits them as one.
+    assert route(state, AGENTS, 'booking') == ('verify', 'booking'), 'nobody is identified, so verify runs first'
+    assert state.pending is None, 'and route itself changed nothing'
     # And the model was never asked: the front desk said "booking" and the
     # graph, not a request, worked out that verification comes first.
 
 
 def no_interpose_when_met():
     state = SalonState(customer_verified='existing')
-    assert route(state, AGENTS, 'booking') == 'booking'
-    assert state.pending == [], 'a met prerequisite pushes nothing'
+    assert route(state, AGENTS, 'booking') == ('booking', None), 'a met prerequisite leaves nothing waiting'
     # A step with no prerequisites at all is never interposed either way.
-    assert route(state, AGENTS, 'complaints') == 'complaints'
-    assert state.pending == []
+    assert route(state, AGENTS, 'complaints') == ('complaints', None)
 
 
-def stack_pops():
-    state = SalonState(pending=['booking'])
-    assert state.resume('concierge') == 'booking'
-    assert state.pending == [], 'popped, so the next finisher does not go there again'
+def the_pending_slot_clears():
+    call = SalonCall(state=SalonState(pending='booking'))
+    assert call.resume('concierge') == 'booking'
+    assert call.state.pending is None, 'cleared, so the next finisher does not go there again'
     # Nothing waiting: whoever finished says where the fallback is.
-    assert state.resume('concierge') == 'concierge'
-    assert state.resume('complaints') == 'complaints'
+    assert call.resume('concierge') == 'concierge'
+    assert call.resume('complaints') == 'complaints'
 
 
 def never_resumes_into_itself():
@@ -119,9 +119,9 @@ def never_resumes_into_itself():
     caller who changes the subject leaves the push behind, and the next finisher
     to look found its own name.
     """
-    state = SalonState(agent='booking', pending=['booking'])
-    assert state.resume('concierge') == 'concierge'
-    assert state.pending == [], 'and the stale push is gone, not left for the next one'
+    call = SalonCall(state=SalonState(agent='booking', pending='booking'))
+    assert call.resume('concierge') == 'concierge'
+    assert call.state.pending is None, 'and the stale record is gone, not left for the next one'
 
 
 def sent_to_a_satisfier_comes_back():
@@ -131,29 +131,41 @@ def sent_to_a_satisfier_comes_back():
     who was part-way through a complaint at the front desk, with the whole thing
     to say again. The graph knows where they came from; nobody needed to ask.
     """
-    state = SalonState(agent='complaints')
-    assert route(state, AGENTS, 'verify') == 'verify'
-    assert state.pending == ['complaints'], state.pending
-    state.agent, state.customer_verified = 'verify', 'existing'
-    assert state.resume('concierge') == 'complaints'
+    call = SalonCall(state=SalonState(agent='complaints'))
+    going_to, waiting = route(call.state, AGENTS, 'verify')
+    assert (going_to, waiting) == ('verify', 'complaints')
+    call.commit(agent=going_to, pending=waiting, customer_verified='existing')
+    assert call.resume('concierge') == 'complaints'
 
 
-def one_push_at_a_time():
-    """A second interposition replaces the first; it does not pile up."""
-    state = SalonState()
-    route(state, AGENTS, 'booking')
-    route(state, AGENTS, 'booking')
-    assert state.pending == ['booking'], state.pending
-    assert len(state.pending) <= 1, 'the stack is capped at one while no satisfier requires anything'
+def one_waiting_step_at_a_time():
+    """A second interposition replaces the first; it does not pile up.
+
+    Now unrepresentable rather than merely untrue: `pending` is one optional
+    step name, so there is no list for a second push to grow into.
+    """
+    call = SalonCall()
+    for _ in range(2):
+        going_to, waiting = route(call.state, AGENTS, 'booking')
+        call.commit(agent=going_to, pending=waiting)
+    assert call.state.pending == 'booking', call.state.pending
+    assert SalonState.model_fields['pending'].annotation is not list
 
 
 def round_trip():
-    """The whole point, in four lines: out through verify and back into booking."""
-    state = SalonState()
-    assert route(state, AGENTS, 'booking') == 'verify'
-    state.customer_verified = 'existing'  # what confirm_customer does
-    assert route(state, AGENTS, state.resume('concierge')) == 'booking'
-    assert state.pending == []
+    """The whole point, in five lines: out through verify and back into booking."""
+    call = SalonCall()
+    going_to, waiting = route(call.state, AGENTS, 'booking')
+    assert going_to == 'verify'
+    call.commit(agent=going_to, pending=waiting, customer_verified='existing')  # what confirm_customer does
+    # Two lines, and they have to be: `resume` commits, which replaces the
+    # state object, so reading `call.state` in the same expression would hand
+    # `route` the state from before the pending slot was cleared. Written as
+    # one line this test failed, which is the whole reason the context holds a
+    # replaceable state instead of tools holding a state directly.
+    back_to = call.resume('concierge')
+    assert route(call.state, AGENTS, back_to) == ('booking', None)
+    assert call.state.pending is None
 
 
 def no_model_request_on_kind_a():
@@ -168,7 +180,7 @@ def no_model_request_on_kind_a():
         state = SalonState()
         route(state, AGENTS, 'booking')
         route(state, AGENTS, 'complaints')
-        SalonState(pending=['booking']).resume('concierge')
+        SalonCall(state=SalonState(pending='booking')).resume('concierge')
 
 
 # --- the schema the model is actually sent -----------------------------------
@@ -189,7 +201,7 @@ async def offered_exits(node, state) -> tuple[str, ...]:
 
     with node.agent.override(model=FunctionModel(stream_function=probe)):
         async with node.agent.run_stream_events(
-            'hello', deps=state, output_type=node.outputs(state)
+            'hello', deps=SalonCall(state=state), output_type=node.outputs(state)
         ) as events:
             async for _ in events:
                 pass
@@ -257,7 +269,7 @@ async def a_shut_edge_lends_nothing():
     fresh = SalonState()
     assert moved_by(fresh, AGENTS['concierge'], {'read_diary'}) == 'concierge'
     assert 'read_diary' not in await _reachable_tools(AGENTS['concierge'], fresh)
-    assert 'read_diary' in await _reachable_tools(AGENTS['concierge'], SalonState(customer_verified='x'))
+    assert 'read_diary' in await _reachable_tools(AGENTS['concierge'], SalonState(customer_verified='existing'))
     # The step that owns it always has it, guard or no guard.
     assert 'read_diary' in await _reachable_tools(AGENTS['booking'], fresh)
 
@@ -294,7 +306,7 @@ async def a_finisher_keeps_its_name():
 
             with node.agent.override(model=FunctionModel(stream_function=probe)):
                 async with node.agent.run_stream_events(
-                    'hello', deps=state, output_type=node.outputs(state)
+                    'hello', deps=SalonCall(state=state), output_type=node.outputs(state)
                 ) as events:
                     async for _ in events:
                         pass
@@ -304,10 +316,10 @@ async def a_finisher_keeps_its_name():
 async def main():
     prerequisite_interposed()
     no_interpose_when_met()
-    stack_pops()
+    the_pending_slot_clears()
     never_resumes_into_itself()
     sent_to_a_satisfier_comes_back()
-    one_push_at_a_time()
+    one_waiting_step_at_a_time()
     round_trip()
     no_model_request_on_kind_a()
     a_borrowed_tool_is_the_move()

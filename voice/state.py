@@ -31,6 +31,14 @@ def _e164(value: str) -> str:
     return value
 
 
+# Deliberately *not* the salon's Spain-only type, which is a business rule
+# belonging to one agency and not to this two-agent demo. This one stays a
+# generic E.164 shape check: it is what the demo's own tests pin, and there is
+# no country here to validate a national plan against. The two look alike and
+# are not the same rule -- the salon's refuses +348340464 because Spanish
+# numbers have nine national digits, which is a fact about Spain and nothing
+# this file can know.
+#
 # AfterValidator and never a `pattern=` constraint: a pattern reaches the schema
 # the model is sent, and some providers reject it. The description is how the
 # shape reaches the model instead -- it travels as prose, so no strict schema
@@ -47,7 +55,14 @@ class Handoff(harness.Handoff):
 
 
 class CallState(harness.VoiceState):
-    """Everything this call knows."""
+    """The business facts of this call."""
 
     agent: AgentName = 'concierge'
+    pending: AgentName | None = None
     caller_phone: Phone = ''
+
+
+class Call(harness.CallContext):
+    """This call's state, history and line. The agents' `deps`."""
+
+    state: CallState = Field(default_factory=CallState)

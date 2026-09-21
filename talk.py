@@ -31,11 +31,11 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 class Transcript(PydanticAgentProcessor):
     """The processor with its downstream replaced by the terminal."""
 
-    def __init__(self, state, agents):
-        super().__init__(state, agents)
+    def __init__(self, call, agents):
+        super().__init__(call, agents)
         self._lines: list[list[str]] = []
         self.ended = False
-        state._end = self._hang_up
+        call._end = self._hang_up
 
     async def _hang_up(self):
         self.ended = True
@@ -59,9 +59,9 @@ class Transcript(PydanticAgentProcessor):
 def agency():
     if os.getenv('HARNESS', 'salon') == 'voice':
         from voice.agents import AGENTS, GREETING
-        from voice.state import CallState
+        from voice.state import Call
 
-        return CallState(), AGENTS, GREETING
+        return Call(), AGENTS, GREETING
 
     from salon.agents import AGENTS, GREETING
     from salon.state import open_call
@@ -85,8 +85,8 @@ def turns():
 
 
 async def main():
-    state, agents, greeting = agency()
-    transcript = Transcript(state, agents)
+    call, agents, greeting = agency()
+    transcript = Transcript(call, agents)
     print(f'  [fixed] {greeting}')
     for said in turns():
         if len(sys.argv) > 1:
@@ -96,7 +96,7 @@ async def main():
         transcript.flush()
         summary = ' '.join(
             f'{name}={value!r}'
-            for name, value in state.model_dump(exclude={'messages'}).items()
+            for name, value in call.state.model_dump().items()
             if value
         )
         print(f'  -> {summary}  ({time.monotonic() - started:.1f}s)')

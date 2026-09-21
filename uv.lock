@@ -1527,6 +1527,15 @@ wheels = [
 ]
 
 [[package]]
+name = "phonenumbers"
+version = "9.0.39"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/d9/f73babd005dd7569a81789f4db9cc82efaf001af018d5752bf6d7ea14e19/phonenumbers-9.0.39.tar.gz", hash = "sha256:41a7ff0257d5a7a096a8e263da7efc0a96a6162c84ba64af2ebf8972d09e70e1", size = 2310991, upload-time = "2026-09-10T11:26:52.485Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/53/238c99f028b9c638ceae8218a33904e4b84d60e1c3bd707c0ff231b388cf/phonenumbers-9.0.39-py2.py3-none-any.whl", hash = "sha256:d83b878d0188c81a5f5e8572cedcc7262bd0ea3806eb7c8e35d8666d262a8af0", size = 2594744, upload-time = "2026-09-10T11:26:49.561Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1873,6 +1882,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/71/dba38ee2651f84f7842206adbd2233d8bbdb59fb85e9fa14232486a8c471/pydantic_extra_types-2.11.1.tar.gz", hash = "sha256:46792d2307383859e923d8fcefa82108b1a141f8a9c0198982b3832ab5ef1049", size = 172002, upload-time = "2026-03-16T08:08:03.92Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/17/c1/3226e6d7f5a4f736f38ac11a6fbb262d701889802595cdb0f53a885ac2e0/pydantic_extra_types-2.11.1-py3-none-any.whl", hash = "sha256:1722ea2bddae5628ace25f2aa685b69978ef533123e5638cfbddb999e0100ec1", size = 79526, upload-time = "2026-03-16T08:08:02.533Z" },
+]
+
+[package.optional-dependencies]
+phonenumbers = [
+    { name = "phonenumbers" },
 ]
 
 [[package]]
@@ -2245,6 +2259,7 @@ dependencies = [
     { name = "pipecat-ai", extra = ["runner", "webrtc"] },
     { name = "pipecat-slng" },
     { name = "pydantic-ai-slim", extra = ["google", "openai", "spec"] },
+    { name = "pydantic-extra-types", extra = ["phonenumbers"] },
     { name = "python-dotenv" },
     { name = "websockets" },
 ]
@@ -2255,6 +2270,7 @@ requires-dist = [
     { name = "pipecat-ai", extras = ["runner", "silero", "webrtc"], specifier = ">=1.11.0" },
     { name = "pipecat-slng", specifier = ">=0.5.2" },
     { name = "pydantic-ai-slim", extras = ["google", "openai", "spec"], specifier = ">=2.46.0" },
+    { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "websockets", specifier = ">=16.1.1" },
 ]

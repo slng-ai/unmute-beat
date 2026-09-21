@@ -38,16 +38,17 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic_ai import (
     Agent,
     AgentRunResultEvent,
-    FunctionToolCallEvent,
+    FunctionToolResultEvent,
     ModelResponse,
     PartDeltaEvent,
     PartStartEvent,
+    RetryPromptPart,
     RunCancelled,
     TextPart,
     TextPartDelta,
 )
 
-from voice.harness import Handoff, Node, VoiceState
+from voice.harness import CallContext, Handoff, Node
 from voice.harness import moved_by as _moved_by
 from voice.harness import pick as _pick
 from voice.harness import route as _route
@@ -92,26 +93,27 @@ class PydanticAgentProcessor(FrameProcessor):
 
     def __init__(
         self,
-        state: VoiceState,
+        call: CallContext,
         agents: dict[str, Node],
         *,
         max_hops: int = 3,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self._state = state
+        self._call = call
         self._agents = agents
         self._max_hops = max_hops
         self._events = None
         self._interrupted = False
         self._tracing = None
-        # Tool names from the run that just finished, read by `_turn` to see
-        # whether one of them was a free edge out of this step.
-        self._called: set[str] = set()
+        # Tools that ran *and returned* in the run that just finished, read
+        # by `_turn` to see whether one of them was a free edge out of this
+        # step. A refusal or a cancellation is not in here.
+        self._succeeded: set[str] = set()
         # This turn's span, while it is still waiting for its first word.
         self._turn_span = None
-        state._say = self.say
-        state._end = self.hang_up
+        call._say = self.say
+        call._end = self.hang_up
 
     def can_generate_metrics(self) -> bool:
         return True
@@ -160,7 +162,7 @@ class PydanticAgentProcessor(FrameProcessor):
         about who spoke first.
         """
         await self.say(line)
-        self._state.messages.append(ModelResponse(parts=[TextPart(content=line)]))
+        self._call.messages.append(ModelResponse(parts=[TextPart(content=line)]))
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -203,39 +205,42 @@ class PydanticAgentProcessor(FrameProcessor):
             try:
                 self._interrupted = False
                 # A new silence to cover, so one fixed line is allowed again.
-                self._state._covered = False
-                self._state.turn_started()
+                self._call._covered = False
+                self._call.turn_started()
                 # `_max_hops` counts model runs, which is what a caller waits
                 # for. The graph's own moves are not in here to count: `route`
                 # replaces the destination the model named with the step that
                 # has to run first, so interposing a prerequisite costs the same
                 # one run that entering the destination would have.
                 for _ in range(self._max_hops):
-                    node = self._agents[self._state.agent]
+                    node = self._agents[self._call.state.agent]
                     output = await self._speak(node, prompt)
                     if not isinstance(output, Handoff):
-                        # The free edge. A borrowed tool ran, so the caller is
-                        # already in the step that owns it, and the request that
-                        # moved them is the one that just answered them. Set
-                        # after the run, not during, so the step that spoke is
-                        # the step whose prompt wrote the words.
-                        if (landed := _moved_by(self._state, node, self._called)) != self._state.agent:
+                        # The free edge. A borrowed tool *succeeded*, so the
+                        # caller is already in the step that owns it, and the
+                        # request that moved them is the one that just answered
+                        # them. Set after the run, not during, so the step that
+                        # spoke is the step whose prompt wrote the words.
+                        if (landed := _moved_by(self._call.state, node, self._succeeded)) != self._call.state.agent:
                             logger.info(
                                 'moved {} -> {} (via {})',
-                                self._state.agent, landed, ', '.join(sorted(self._called)),
+                                self._call.state.agent, landed, ', '.join(sorted(self._succeeded)),
                             )
                             handoffs.append(landed)
-                            self._state.agent = landed
+                            self._call.commit(agent=landed)
                         return
                     # Where they were sent, then where the graph actually puts
                     # them: `booking` before anyone is identified means `verify`
-                    # first, with `booking` pushed to resume into.
-                    going_to = _route(self._state, self._agents, output.to)
+                    # first, with `booking` recorded to resume into.
+                    going_to, waiting = _route(self._call.state, self._agents, output.to)
                     logger.info(
-                        'handoff {} -> {} ({})', self._state.agent, going_to, output.because or '-'
+                        'handoff {} -> {} ({})', self._call.state.agent, going_to, output.because or '-'
                     )
                     handoffs.append(going_to)
-                    self._state.agent = going_to
+                    # One commit: the step and what is waiting behind it are the
+                    # same decision, and a caller moved into `verify` with no
+                    # record of where they were going has lost their errand.
+                    self._call.commit(agent=going_to, pending=waiting)
                     # `prompt` is deliberately kept: the agent taking over is
                     # asked the caller's own question again. It used to be
                     # cleared, on the reasoning that the turn is already in the
@@ -257,9 +262,9 @@ class PydanticAgentProcessor(FrameProcessor):
                         # Cover the hop: a whole model request stands between the
                         # caller finishing and the next agent's first word. Through
                         # the state, so a tool firing next does not cover it twice.
-                        await self._state.say(_pick(f'enter:{output.to}', lines))
+                        await self._call.say(_pick(f'enter:{output.to}', lines))
                 logger.warning(
-                    'handoff budget of {} spent, making {} answer', self._max_hops, self._state.agent
+                    'handoff budget of {} spent, making {} answer', self._max_hops, self._call.state.agent
                 )
                 # Every hop handed the caller on, so nobody has said anything and
                 # the line has been silent since the last fixed line. Run whoever
@@ -267,11 +272,11 @@ class PydanticAgentProcessor(FrameProcessor):
                 # `hand_over` and the finishers off the table, speech is all it can
                 # produce. That run cannot book or verify, which costs a turn -- a
                 # caller sitting in silence has already lost one.
-                await self._speak(self._agents[self._state.agent], prompt, output_type=str)
+                await self._speak(self._agents[self._call.state.agent], prompt, output_type=str)
             finally:
                 # In `finally`: the loop returns early both when an agent speaks
                 # and when the caller barges in mid-hop.
-                span.set_attribute('agent', self._state.agent)
+                span.set_attribute('agent', self._call.state.agent)
                 span.set_attribute('hops', len(handoffs) + 1)
                 span.set_attribute('interrupted', self._interrupted)
                 if handoffs:
@@ -292,10 +297,10 @@ class PydanticAgentProcessor(FrameProcessor):
         """
         agent: Agent = node.agent
         if output_type is None and node.outputs is not None:
-            output_type = node.outputs(self._state)
+            output_type = node.outputs(self._call.state)
         spoke = False
         output = None
-        self._called = set()
+        self._succeeded = set()
         started = time.perf_counter()
         await self.push_frame(LLMFullResponseStartFrame())
         await self.start_ttfb_metrics()
@@ -303,8 +308,8 @@ class PydanticAgentProcessor(FrameProcessor):
         try:
             async with agent.run_stream_events(
                 prompt,
-                deps=self._state,
-                message_history=list(self._state.messages),
+                deps=self._call,
+                message_history=list(self._call.messages),
                 output_type=output_type,
             ) as events:
                 self._events = events
@@ -330,21 +335,30 @@ class PydanticAgentProcessor(FrameProcessor):
                                 self._turn_span = None
                             # The model is talking, so the gap is closed: a tool
                             # called later in this turn may speak its own line.
-                            self._state._covered = False
+                            self._call._covered = False
                         await self.push_frame(LLMTextFrame(text))
-                    elif isinstance(event, FunctionToolCallEvent):
-                        # Which tools ran is how a free edge is taken: a step
-                        # lends its neighbour's entry tool, and calling it means
-                        # the caller is now in the neighbour. Collected here
-                        # because the run is the only place that knows.
-                        self._called.add(event.part.tool_name)
+                    elif isinstance(event, FunctionToolResultEvent):
+                        # Which tools *succeeded* is how a free edge is taken: a
+                        # step lends its neighbour's entry tool, and completing
+                        # it means the caller is now in the neighbour.
+                        #
+                        # The result, never the call. This used to watch
+                        # `FunctionToolCallEvent`, which fires when the model
+                        # asks for a tool -- before it runs, and regardless of
+                        # whether it then raises, retries or is cancelled by
+                        # barge-in. A `read_diary` that refused an unidentified
+                        # caller still moved them into `booking`. A
+                        # `RetryPromptPart` is the tool saying no, so it is not
+                        # a move.
+                        if not isinstance(event.part, RetryPromptPart):
+                            self._succeeded.add(event.part.tool_name)
                     elif isinstance(event, AgentRunResultEvent):
-                        self._state.messages = event.result.all_messages()
+                        self._call.messages = event.result.all_messages()
                         output = event.result.output
         except RunCancelled as cancelled:
             # Barge-in. Keep what completed: a tool that ran and returned is a
             # thing that happened, and the next turn has to know about it.
-            self._state.messages = cancelled.all_messages()
+            self._call.messages = cancelled.all_messages()
         except Exception as error:
             logger.exception('agent run failed')
             await self.push_error(f'agent run failed: {error}', exception=error)
@@ -371,8 +385,8 @@ class PydanticAgentProcessor(FrameProcessor):
         """
         if not interrupted:
             return
-        for index in range(len(self._state.messages) - 1, -1, -1):
-            message = self._state.messages[index]
+        for index in range(len(self._call.messages) - 1, -1, -1):
+            message = self._call.messages[index]
             if not isinstance(message, ModelResponse):
                 continue
             if not any(isinstance(part, TextPart) for part in message.parts):
@@ -385,5 +399,5 @@ class PydanticAgentProcessor(FrameProcessor):
             else:
                 # Nothing was heard and nothing else happened. An empty response
                 # is not a message any provider will take back.
-                del self._state.messages[index]
+                del self._call.messages[index]
             return

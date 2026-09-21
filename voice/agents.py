@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr
 
 from voice.harness import Node, filler_hook
-from voice.state import AgentName, CallState, Handoff, Phone
+from voice.state import AgentName, Call, Handoff, Phone
 
 PROMPTS = Path(__file__).resolve().parent.parent / 'prompts' / 'voice'
 
@@ -22,14 +22,14 @@ MODEL = 'google-cloud:gemini-3.5-flash-lite'
 GREETING = "Hi, you've reached the harness. Robin speaking, what can I do for you?"
 
 
-def prompt(name: str) -> TemplateStr[CallState]:
-    """Compile one prompt file against CallState.
+def prompt(name: str) -> TemplateStr[Call]:
+    """Compile one prompt file against the call context.
 
     At import, so a `{{placeholder}}` naming no field raises TemplateSchemaError
     here and the process never starts, rather than rendering as an empty string
     into a live call.
     """
-    return TemplateStr((PROMPTS / f'{name}.md').read_text(), deps_type=CallState)
+    return TemplateStr((PROMPTS / f'{name}.md').read_text(), deps_type=Call)
 
 
 # --- spoken filler ---------------------------------------------------------
@@ -44,7 +44,7 @@ FILLER: dict[str, tuple[str, ...]] = {
 # --- tools -------------------------------------------------------------------
 
 
-async def confirm_phone(ctx: RunContext[CallState], phone: Phone) -> str:
+async def confirm_phone(ctx: RunContext[Call], phone: Phone) -> str:
     """Record the caller's number. Call this only after they agreed to the digits you read back.
 
     A caller who answers your readback with different digits is correcting you,
@@ -53,14 +53,14 @@ async def confirm_phone(ctx: RunContext[CallState], phone: Phone) -> str:
     # Validated before it gets here: `Phone` is the tool's own argument type, so
     # a badly shaped number never reaches the state -- the model is handed the
     # error and corrects itself on the next turn.
-    ctx.deps.caller_phone = phone
+    ctx.deps.commit(caller_phone=phone)
     return 'recorded'
 
 
 # --- the table ---------------------------------------------------------------
 
 
-async def hand_over(ctx: RunContext[CallState], to: AgentName, because: str) -> Handoff:
+async def hand_over(ctx: RunContext[Call], to: AgentName, because: str) -> Handoff:
     """Give the caller to another agent, right now, for something that is not yours to do.
 
     This is the only way to move a caller. Writing a sentence about transferring
@@ -71,7 +71,7 @@ async def hand_over(ctx: RunContext[CallState], to: AgentName, because: str) -> 
         to: The agent that takes it from here.
         because: One short sentence: what the caller wants. Never spoken.
     """
-    if to == ctx.deps.agent:
+    if to == ctx.deps.state.agent:
         # A hop to yourself is a whole model request that says nothing, and the
         # processor's hop budget pays for it. Refused here instead, so the model
         # corrects itself inside this run and the caller hears an answer.
@@ -79,11 +79,11 @@ async def hand_over(ctx: RunContext[CallState], to: AgentName, because: str) -> 
     return Handoff(to=to, because=because)
 
 
-def build(name: AgentName, tools: list = []) -> Agent[CallState, str | Handoff]:
-    return Agent[CallState, str | Handoff](
+def build(name: AgentName, tools: list = []) -> Agent[Call, str | Handoff]:
+    return Agent[Call, str | Handoff](
         MODEL,
         name=name,  # labels this agent's span in Langfuse
-        deps_type=CallState,
+        deps_type=Call,
         # `str` keeps speech streaming token by token to TTS; `Handoff` ends the
         # run with a typed value instead. A BaseModel-only output_type would
         # make every turn a tool call, so there would be nothing to stream and

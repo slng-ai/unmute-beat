@@ -41,7 +41,7 @@ never a reason to hand over.
 
 ## What this call already knows
 
-{{#if caller_phone}}Confirmed number: {{caller_phone}}. It is already recorded,
+{{#if state.caller_phone}}Confirmed number: {{state.caller_phone}}. It is already recorded,
 so never ask for it again and never read it back.{{else}}No number has been
 confirmed on this call yet.{{/if}}
 

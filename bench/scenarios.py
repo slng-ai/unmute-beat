@@ -94,10 +94,10 @@ SCENARIOS: dict[str, tuple[str, ...]] = {
 class Counter(PydanticAgentProcessor):
     """The processor with its downstream replaced by a tally."""
 
-    def __init__(self, state, agents):
-        super().__init__(state, agents)
+    def __init__(self, call, agents):
+        super().__init__(call, agents)
         self.ended = False
-        state._end = self._hang_up
+        call._end = self._hang_up
         self.reset()
 
     async def _hang_up(self):
@@ -121,15 +121,15 @@ class Counter(PydanticAgentProcessor):
         exists to settle is denominated in requests. Counting frames undercounted
         every tool turn in the first draft of this script.
         """
-        return sum(isinstance(m, ModelResponse) for m in self._state.messages)
+        return sum(isinstance(m, ModelResponse) for m in self._call.messages)
 
 
 async def run_scenario(name: str, said: tuple[str, ...]) -> list[dict]:
     from salon.agents import AGENTS
 
     diary.reset()
-    state = open_call(PHONE)
-    counter = Counter(state, AGENTS)
+    call = open_call(PHONE)
+    counter = Counter(call, AGENTS)
     rows = []
     for index, turn in enumerate(said):
         counter.reset()
@@ -149,7 +149,7 @@ async def run_scenario(name: str, said: tuple[str, ...]) -> list[dict]:
             # A goodbye goes out as a fixed line, so counting only model text
             # reported every hang-up turn as silence.
             'spoke': counter.spoke or counter.fixed > 0,
-            'step': state.agent,
+            'step': call.state.agent,
         })
         if counter.ended:
             break

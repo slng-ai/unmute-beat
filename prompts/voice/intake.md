@@ -15,7 +15,7 @@ already spoken as you arrived. Do not open by agreeing with it.
    what they just said, those are the number: go straight to the readback in
    step 2. Asking a caller to repeat digits they have just spoken is the single
    worst thing this step can do.
-   {{#if caller_phone}}A number is already on file: {{caller_phone}}. They are
+   {{#if state.caller_phone}}A number is already on file: {{state.caller_phone}}. They are
    here to change it, so use the new digits they gave and never that one.
    {{/if}}Only when nobody has said any digits at all, ask for the number, once,
    in one short question.

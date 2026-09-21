@@ -7,6 +7,7 @@ processor knows only what is here.
 
 from __future__ import annotations
 
+import contextvars
 import random
 import time
 from collections.abc import Awaitable, Callable
@@ -14,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Literal, NamedTuple, Protocol, runtime_checkable
 from uuid import uuid4
 
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities.hooks import Hooks
@@ -22,6 +24,20 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
+
+# Which accepted caller turn the code running right now belongs to. A context
+# variable rather than an argument because the thing that has to know is
+# `commit`, and every tool in the agency would otherwise have to carry a
+# number it never reads. Tool tasks inherit the context they were spawned in,
+# so a tool still running after its turn was cancelled still reports that
+# turn's number while the call has moved on to the next.
+#
+# The call as well as the number, because the number only means anything
+# within one call: two calls in one process each count their own turns from
+# one, and comparing across them fences a perfectly current write.
+_turn_generation: contextvars.ContextVar[tuple[str, int] | None] = contextvars.ContextVar(
+    'turn_generation', default=None
+)
 
 
 # Every model that holds business facts opts into all three. Defaults are
@@ -198,6 +214,17 @@ class VoiceState(BaseModel):
     """
 
     model_config = STRICT
+
+    @classmethod
+    def flow_fields(cls) -> frozenset[str]:
+        """The fields that say where the caller is, rather than what is true of them.
+
+        Read by `CallContext.commit` to decide what a superseded turn may
+        still write. A business fact it established really happened; the step
+        it was going to send the caller to next is an answer to a question
+        they have moved on from.
+        """
+        return frozenset({'agent', 'pending'})
 
     agent: str
     # The step waiting to resume: a step whose prerequisite was not met is
@@ -432,6 +459,24 @@ class CallContext(BaseModel):
         """
         if unknown := set(updates) - set(type(self.state).model_fields):
             raise ValueError(f'no such field on {type(self.state).__name__}: {", ".join(sorted(unknown))}')
+        # A commit from a turn the caller has moved on from. `_hops` already
+        # fenced the two transitions it makes itself; this is the same rule
+        # for every other write, including one from a tool that kept running
+        # after its run was cancelled.
+        #
+        # Flow only. Where the caller *is* belongs to the current turn and a
+        # stale answer about it is wrong by definition -- but a booking that
+        # really happened is a fact whichever turn it was made in, and
+        # refusing to record it would leave the diary holding an appointment
+        # the call has no memory of and would book again. Completed effects
+        # land; the routing that was going to follow them does not.
+        running = _turn_generation.get()
+        if running is not None and running[0] == self._id and running[1] != self._generation:
+            if late := set(updates) & self.state.flow_fields():
+                logger.info('fenced a late commit of {} from turn {}', ', '.join(sorted(late)), running[1])
+                updates = {name: value for name, value in updates.items() if name not in late}
+            if not updates:
+                return
         self.state = type(self.state)(**(self.state.model_dump() | updates))
 
     async def say(self, text: str) -> None:

@@ -25,6 +25,7 @@ it every agent run starts a trace of its own and a call arrives in pieces.
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from opentelemetry import trace
@@ -198,6 +199,7 @@ class PydanticAgentProcessor(FrameProcessor):
             open_response = False
             self._barge = core.Barge()
             self._interrupted = False
+            self._finished = None
             try:
                 async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
                     match event:
@@ -277,7 +279,37 @@ class PydanticAgentProcessor(FrameProcessor):
                             if done.detail:
                                 span.set_attribute('detail', done.detail)
                             self._finished = done
+            except asyncio.CancelledError:
+                # The pipeline is being torn down under us -- the transport
+                # dropped, or the worker is ending. Recorded before it
+                # propagates, because a turn that ends this way is otherwise
+                # indistinguishable from one that simply stopped yielding.
+                self._call.end_requested('transport')
+                raise
             finally:
+                if self._finished is None:
+                    # The core unwound without saying how it went: cancelled
+                    # mid-turn, or the generator was closed from outside.
+                    # An absent outcome is not a good one, and a benchmark
+                    # that reads a missing row as a pass has scored a
+                    # disconnection as an answered turn.
+                    ended = self._call.ended
+                    status = 'interrupted' if self._interrupted else 'failed'
+                    self._finished = core.TurnFinished(
+                        status=status,
+                        agent=self._call.state.agent,
+                        handoffs=(),
+                        requests=len(self._call.requests),
+                        detail=f'the turn never finished ({ended or "no reason recorded"})',
+                    )
+                    span.set_attribute('status', self._finished.status)
+                    span.set_attribute('detail', self._finished.detail)
+                # Why the *call* is ending, when something has said so. Queuing
+                # a goodbye and observing a disconnect are different facts, and
+                # the live call of 2026-09-21 12:57 was scored `answered` while
+                # the agency hung up on a caller mid-question.
+                if self._call.ended:
+                    span.set_attribute('ended', self._call.ended)
                 if open_response:
                     # The core left a run open on its way out. Close it, so
                     # every start has an end whatever happened in between.

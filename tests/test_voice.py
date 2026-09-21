@@ -315,4 +315,8 @@ async def main():
     print('ok')
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
+    # still runs there -- and a debugging session can import one module
+    # without running every check in it.
+    asyncio.run(main())

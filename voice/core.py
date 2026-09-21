@@ -47,7 +47,14 @@ from pydantic_ai import (
 )
 from pydantic_ai.usage import UsageLimitExceeded
 
-from voice.harness import CallContext, Handoff, Node, Question, TurnBudget
+from voice.harness import (
+    CallContext,
+    Handoff,
+    Node,
+    Question,
+    TurnBudget,
+    _turn_generation,  # the turn a late commit would be from
+)
 from voice.harness import moved_by as _moved_by
 from voice.harness import pick as _pick
 from voice.harness import route as _route
@@ -177,6 +184,10 @@ async def run_turn(
     # This turn's identity. Read back before any move is committed, so a turn
     # that was superseded while it was unwinding cannot still move the caller.
     generation = call.begin_turn()
+    # Everything this turn runs -- including a tool task that outlives it --
+    # carries this number, so `commit` can tell a late write from a current
+    # one without every tool having to hold it.
+    _turn_generation.set((call.id, generation))
     usage, limits = budget.account()
     handoffs: list[str] = []
     # A new silence to cover, so one fixed line is allowed again.

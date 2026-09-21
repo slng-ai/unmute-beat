@@ -13,6 +13,7 @@ Asserts, no pytest, no fixtures, same as the rest.
 """
 
 import asyncio
+import contextlib
 import json
 import pathlib
 from contextlib import ExitStack
@@ -32,6 +33,7 @@ from salon.agents import AGENTS
 from salon.state import Appointment, SalonCall, open_call
 from voice import core
 from voice.core import EXHAUSTED, UNBACKED, TurnBudget, take_turn
+from voice.harness import _turn_generation
 from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34600111222'
@@ -653,6 +655,70 @@ def the_processor_no_longer_runs_the_turn():
         assert moved not in source, f'{moved!r} is still in the processor'
 
 
+async def a_turn_that_never_finished_says_so():
+    """A turn cancelled from outside still records how it ended.
+
+    An absent outcome is not a good one. The live call of 2026-09-21 12:57 was
+    scored `answered` on a turn where the agency hung up on a caller
+    mid-question, and a benchmark that reads a missing row as a pass will
+    score a dropped transport the same way.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    probe_it = Probe(call)
+
+    async def never_returns(messages, info: AgentInfo):
+        await asyncio.sleep(10)
+        yield 'too late'
+
+    with scripted(concierge=never_returns):
+        turn = asyncio.create_task(probe_it._turn('hello?'))
+        await asyncio.sleep(0.05)
+        turn.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await turn
+
+    assert probe_it._finished is not None, 'the turn ended with no outcome at all'
+    assert probe_it._finished.status in ('failed', 'interrupted'), probe_it._finished
+    assert 'never finished' in probe_it._finished.detail, probe_it._finished
+    # And the transport dropping is told apart from the caller ringing off.
+    assert call.ended == 'transport', call.ended
+
+
+async def a_late_commit_cannot_move_a_caller_who_moved_on():
+    """A tool that outlives its turn keeps what it did and loses where it was going.
+
+    Two different things, and the old fence only covered one of them: `_hops`
+    checked the generation before its own two transitions, and every other
+    write went through unexamined. A write that really happened is a fact
+    whichever turn made it, and refusing to record it leaves the business
+    holding something the call has no memory of -- so completed effects land
+    and the routing that was going to follow them does not.
+    """
+    diary.reset()
+    call = open_call(PHONE)
+    first = call.begin_turn()
+    _turn_generation.set((call.id, first))
+    call.commit(agent='concierge')
+
+    # The caller speaks again, and the old turn's tool is still running.
+    call.begin_turn()
+
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    assert call.state.agent == 'concierge', 'the move was fenced'
+    assert call.state.customer_verified == 'existing', 'the fact it established was not'
+
+    # A commit with nothing but flow in it changes nothing at all.
+    call.commit(agent='complaints')
+    assert call.state.agent == 'concierge', call.state.agent
+
+    # And the current turn writes freely.
+    _turn_generation.set((call.id, call._generation))
+    call.commit(agent='booking')
+    assert call.state.agent == 'booking'
+    _turn_generation.set(None)
+
+
 async def main():
     await the_same_scenarios_both_ways()
     await the_processor_still_speaks_pipecat()
@@ -661,6 +727,8 @@ async def main():
     await every_response_frame_is_closed()
     await the_turn_says_how_it_ended()
     await a_barge_in_is_reported_as_one()
+    await a_turn_that_never_finished_says_so()
+    await a_late_commit_cannot_move_a_caller_who_moved_on()
     await a_barge_in_after_a_tool_still_moves_nobody()
     await an_interrupted_fixed_line_leaves_an_earlier_answer_alone()
     await time_to_first_token_is_timed_per_request()
@@ -677,4 +745,8 @@ async def main():
     print('ok')
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
+    # still runs there -- and a debugging session can import one module
+    # without running every check in it.
+    asyncio.run(main())

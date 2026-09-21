@@ -97,6 +97,8 @@ class Appointment(BaseModel):
     two agents cannot describe the same appointment two different ways.
     """
 
+    model_config = harness.STRICT
+
     booking_id: Id
     service: Service
     date: Date

@@ -21,6 +21,15 @@ SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
 
 
+# Every model that holds business facts opts into all three. Defaults are
+# validated (an authored default that breaks its own type fails at import, not
+# on the call that first reads it), assignments are validated, and a nested
+# model handed in is revalidated rather than trusted because it is already an
+# instance of the right class. None of the three is on by default, and each one
+# alone leaves a hole the other two do not cover.
+STRICT = ConfigDict(validate_default=True, validate_assignment=True, revalidate_instances='always')
+
+
 def present(value: object) -> bool:
     """Whether a prerequisite is filled, under one written-down rule.
 
@@ -58,9 +67,7 @@ class VoiceState(BaseModel):
     at import, rather than rendering as nothing on a live call.
     """
 
-    model_config = ConfigDict(
-        validate_default=True, validate_assignment=True, revalidate_instances='always'
-    )
+    model_config = STRICT
 
     agent: str
     # The step waiting to resume: a step whose prerequisite was not met is

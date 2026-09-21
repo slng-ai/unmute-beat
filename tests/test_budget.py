@@ -27,7 +27,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from salon import agents, diary
 from salon.agents import AGENTS
-from salon.state import open_call
+from salon.state import Asked, open_call
 from voice.harness import TurnBudget
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
 
@@ -300,6 +300,10 @@ async def a_permitted_repair_succeeds():
     call = open_call(PHONE)
     call.commit(agent='verify')
     probe = Probe(call, budget=TurnBudget(repair_retries=2))
+    # The readback of the right number went out last turn, so the repair has
+    # somewhere to land: the first attempt is refused by the phone policy, not
+    # by consent.
+    call.ask(Asked(about='phone', value=PHONE))
     attempts = []
 
     async def wrong_then_right(messages, info: AgentInfo):
@@ -309,7 +313,7 @@ async def a_permitted_repair_succeeds():
         yield {0: DeltaToolCall(name='confirm_customer', json_args=json.dumps({'phone': phone}))}
 
     with scripted(verify=wrong_then_right, concierge=says('What can I do for you?')):
-        await probe._turn('it is plus three four six zero zero one one one two two two')
+        await probe._turn("yes, that's right")
 
     assert len(attempts) == 2, attempts
     assert _refusals(call), 'the model was told what was wrong'
@@ -351,6 +355,11 @@ async def an_uncertain_write_is_reconciled_not_repeated():
     read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now(), offered_to=call.id)
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])  # what `read_diary` would have written
+    # And what `ask_booking` would have: the readback went out last turn, and
+    # this is the turn the caller's yes arrives on. Consent is not what this
+    # test is about -- `tests.test_consent` is -- but nothing writes without it.
+    call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
+    call.turn_started("yes, that's right")
 
     real = diary.save_booking
     attempts = []
@@ -382,8 +391,6 @@ async def an_uncertain_write_is_reconciled_not_repeated():
             'book',
             slot['slot_id'],
             '',
-            True,
-            False,
         )
     finally:
         diary.save_booking = real
@@ -402,6 +409,8 @@ async def a_write_that_never_landed_is_reported_unresolved():
     read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now(), offered_to=call.id)
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])  # what `read_diary` would have written
+    call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
+    call.turn_started("yes, that's right")
 
     def never_answers(
         phone: str,
@@ -423,8 +432,6 @@ async def a_write_that_never_landed_is_reported_unresolved():
             'book',
             slot['slot_id'],
             '',
-            True,
-            False,
         )
     except ModelRetry as retry:
         assert 'not clear whether that saved' in str(retry), retry

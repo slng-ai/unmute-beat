@@ -11,7 +11,7 @@ import random
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Literal, NamedTuple
+from typing import Literal, NamedTuple, Protocol, runtime_checkable
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -163,6 +163,21 @@ class Handoff(BaseModel):
     because: str = Field(default='', description='One short sentence: what the caller wants. Never spoken.')
 
 
+@runtime_checkable
+class Question(Protocol):
+    """An agent output that is a question for the caller, worded by the application.
+
+    The core says it and ends the turn. It exists so the one sentence the next
+    consequential action will be checked against is the sentence the caller
+    actually heard -- not a paraphrase the model wrote and then treated as
+    having been agreed to.
+    """
+
+    def put(self, call: CallContext) -> str:
+        """Record the question as pending, and hand back the words to say."""
+        ...
+
+
 class VoiceState(BaseModel):
     """The business facts of one call, and nothing else.
 
@@ -205,6 +220,15 @@ class CallContext(BaseModel):
 
     state: VoiceState
     messages: list[ModelMessage] = Field(default_factory=list)
+    # What the caller actually said to open this turn, as the runtime accepted
+    # it. A field rather than a private attribute because the prompts are
+    # compiled against this schema and may render it -- and because everything
+    # an action claims the caller agreed to has to be checkable against
+    # something the model did not write. Every consent fact used to enter as a
+    # model-authored argument (`confirmed=True`, `additional=True`, the number
+    # handed to a lookup), and on the calls of 2026-09-21 the model supplied
+    # all three for things the caller had never said.
+    heard: str = ''
 
     # Deliberately not fields: a Callable would land in the JSON schema the
     # prompt templates are compiled against, and Handlebars cannot render one.
@@ -243,11 +267,24 @@ class CallContext(BaseModel):
     # the name of every business operation it starts, so one call's write can
     # never be answered out of another call's cache.
     _id: str = PrivateAttr(default_factory=lambda: uuid4().hex[:12])
+    # How many caller turns this call has accepted. A question put to the
+    # caller is stamped with it, so "they answered the thing we asked" is a
+    # comparison and not an assumption: an agreement two turns after the
+    # question is not an answer to it.
+    _turn: int = PrivateAttr(default=0)
+    # Why this call ended, set by whoever established it. Empty while it has
+    # not: an absent reason is not "the caller rang off".
+    _ended: str = PrivateAttr(default='')
 
     @property
     def id(self) -> str:
         """This call's own identity, stable for its whole life."""
         return self._id
+
+    @property
+    def turn(self) -> int:
+        """Which accepted caller turn this is, counting from one."""
+        return self._turn
 
     @property
     def requests(self) -> list[Request]:
@@ -332,6 +369,25 @@ class CallContext(BaseModel):
         """
         return ''
 
+    def wrote_this_turn(self) -> bool:
+        """Whether this turn has already changed the business. Base: it has no business."""
+        return False
+
+    def claims_completion(self, clause: str) -> bool:
+        """Whether this clause, on its own, tells the caller the business has changed.
+
+        Asked of each clause **before** it goes out, on a step that can
+        write, so the answer can be to not say it. `unbacked_claim` asks the
+        same question of a whole turn afterwards, which is all that can be
+        done once the words are at TTS -- and on the call of 2026-09-21 12:23
+        they were: *"I've cancelled your appointment, and I have you down for
+        a redo on Saturday at 2:30 PM."* Nothing had been cancelled.
+
+        This base has no business to write to and so nothing to check
+        against; an agency that does overrides it.
+        """
+        return False
+
     def note_first_output(self, kind: Literal['text', 'tool']) -> None:
         """The newest provider request has produced its first part.
 
@@ -413,13 +469,19 @@ class CallContext(BaseModel):
             self.commit(pending=None)
         return step if step is not None and step != self.state.agent else fallback
 
-    def turn_started(self) -> None:
+    def turn_started(self, heard: str = '') -> None:
         """The caller has said something new. Age out anything that was only news.
 
-        Called by the processor before the first agent of a turn runs, so a
-        prompt can branch on "has this just happened" as a fact rather than
-        asking the model to remember whether it already said it.
+        Called by the core before the first agent of a turn runs, so a prompt
+        can branch on "has this just happened" as a fact rather than asking the
+        model to remember whether it already said it.
+
+        `heard` is what they said. It is kept for the whole turn, because an
+        action three hops later still has to be able to ask what the caller
+        actually asked for rather than take the model's word for it.
         """
+        self.heard = heard
+        self._turn += 1
         self._requests.clear()
         self._spoken.clear()
         self._open = None
@@ -431,8 +493,24 @@ class CallContext(BaseModel):
             self.note_said('fixed', text)
             await self._say(text)
 
+    def end_requested(self, why: Literal['caller', 'abandoned', 'transport', 'error']) -> None:
+        """Record *why* the call is ending, before anything acts on it.
+
+        Queuing a goodbye and observing a disconnect are different facts, and
+        a benchmark that cannot tell "the caller rang off" from "the agency
+        hung up on them" scored the live call of 2026-09-21 12:57 as answered.
+        """
+        self._ended = why
+
+    @property
+    def ended(self) -> str:
+        """Why this call is ending, or '' while it is not."""
+        return self._ended
+
     async def end_call(self) -> None:
         """Hang up, once the caller has said the call is over."""
+        if not self._ended:
+            self._ended = 'caller'
         if self._end is not None:
             await self._end()
 
@@ -603,6 +681,12 @@ class Node:
     # guard reads live state, so the narrowed `Literal` cannot be fixed at
     # import. `None` leaves the agent's own, which is the unguarded superset.
     outputs: Callable[[VoiceState], list] | None = None
+    # Whether this step can change the business. On one that can, the core
+    # holds each clause of model speech back until it is complete and drops
+    # the run's speech if it claims a change nothing has made -- see
+    # `CallContext.claims_completion`. Costs one clause of streaming latency,
+    # on these steps only, and only until something is actually written.
+    guarded: bool = False
 
 
 def route(state: VoiceState, nodes: dict[str, Node], to: str) -> tuple[str, str | None]:

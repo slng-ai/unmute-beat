@@ -200,6 +200,45 @@ _UNHANDLED = re.compile(
 )
 
 
+# The caller's own day words, lifted out of a whole utterance. `resolve_day`
+# takes a phrase somebody hands it; this finds the phrase in what was actually
+# said, so the two can be compared. "this"/"next" are captured because they are
+# the whole difference between two Fridays a week apart.
+_PHRASE = re.compile(
+    r'\b((?:this|next)\s+)?(' + '|'.join(w.casefold() for w in WEEKDAYS) + r')\b'
+    r'|\b(today|tomorrow)\b'
+    r'|\b(\d{4}-\d{2}-\d{2})\b',
+    re.IGNORECASE,
+)
+
+
+def day_phrases(heard: str) -> list[str]:
+    """Every day the caller named in this utterance, in their own words.
+
+    Kept beside `resolve_day` because they are two halves of one rule: this
+    says what was said, that says which day it is. On the live call of
+    2026-09-21 12:58 the caller said "Friday" and the diary was asked for
+    "next Friday" -- a week out under that clock, and booked. The resolver was
+    right; it was given the wrong words.
+
+    All of them, not the first: "Monday, actually make it Tuesday" is one
+    utterance naming two days, and both are days the caller said.
+
+    ponytail: it does not read negation. "Not Monday, Tuesday" yields both, so
+    a lookup for Monday is permitted where it should be questioned. This is
+    the guard against a day the caller never mentioned, which is what the live
+    call got wrong; deciding which of two named days they meant is the
+    model's, and the readback before the write is where it is caught.
+    """
+    found = []
+    for hit in _PHRASE.finditer(heard):
+        if hit.group(2):
+            found.append(f'{(hit.group(1) or "").strip()} {hit.group(2)}'.strip().casefold())
+        else:
+            found.append((hit.group(3) or hit.group(4) or '').casefold())
+    return found
+
+
 def resolve_day(words: str, today: Date) -> Date | None:
     """The day a caller named, or None when they named none this policy covers.
 
@@ -484,7 +523,38 @@ def offer_of(offered_to: str, slot_id: str, phone: str = '') -> dict:
         'date': offer.day.isoformat(),
         'time': offer.at.strftime('%H:%M'),
         'service': offer.service,
+        # The one phrasing of this slot, computed here like every other spoken
+        # date, so the question the caller is asked and the confirmation they
+        # get afterwards cannot word the same appointment two ways.
+        'spoken': spoken(offer.day, offer.at, now().date()),
     }
+
+
+def offered_to(offered_to: str, phone: str = '') -> list[dict]:
+    """Every slot currently on the table for this call, soonest first.
+
+    What "unambiguous" is measured against: a caller naming a time has chosen
+    a slot only when exactly one of these is at it. Same matching rule as
+    `offer_of`, because an offer the write would refuse is not one the caller
+    can have chosen.
+    """
+    today = now().date()
+    live = [
+        (slot_id, offer)
+        for (who, slot_id), offer in _offers.items()
+        if who == offered_to and _offer_for(offered_to, slot_id, phone) is not None
+    ]
+    live.sort(key=lambda pair: (pair[1].day, pair[1].at, pair[1].service))
+    return [
+        {
+            'slot_id': slot_id,
+            'date': offer.day.isoformat(),
+            'time': offer.at.strftime('%H:%M'),
+            'service': offer.service,
+            'spoken': spoken(offer.day, offer.at, today),
+        }
+        for slot_id, offer in live
+    ]
 
 
 def outcome_of(operation_token: str) -> dict | None:

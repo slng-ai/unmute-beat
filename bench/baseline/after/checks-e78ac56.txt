@@ -1,0 +1,44 @@
+# Offline checks at e78ac56, before any Phase-01 completion change.
+# Captured 2026-09-21T13:48:46Z.
+# stdout only: the suite logs its expected refusals to stderr through loguru, which is
+# several hundred lines of backtrace for exceptions the tests are asserting on.
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run ty check .
+All checks passed!
+
+$ uv run python -m tests
+
+--- tests.test_graph ---
+ok
+
+--- tests.test_voice ---
+ok
+
+--- tests.test_salon ---
+ok
+
+--- tests.test_traces ---
+ok
+
+--- tests.test_state ---
+ok
+
+--- tests.test_diary ---
+ok
+
+--- tests.test_flow ---
+ok
+
+--- tests.test_budget ---
+ok
+
+--- tests.test_bench ---
+ok
+
+--- tests.test_core ---
+ok
+
+all 10 modules ok

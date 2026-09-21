@@ -1,0 +1,62 @@
+{
+ "arm": "live",
+ "session": "a057004c-3eea-4589-89a2-e6c09f73f085",
+ "settings": {
+  "revision": "337f5134ce1469c8eaf927d968bfa46cc085e072",
+  "uncommitted_changes": false,
+  "python": "3.14.5",
+  "pydantic_ai": "2.46.0",
+  "model": "google-cloud:gemini-3.5-flash-lite",
+  "model_pinned": false,
+  "region": "unpinned",
+  "model_settings": "{'service_tier': 'priority', 'google_thinking_config': {'thinking_level': 'MINIMAL'}}",
+  "budget": "TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)",
+  "speak_by": 3,
+  "timezone": "Europe/Madrid",
+  "salon_clock": "2026-09-21T14:58:52.698539+02:00",
+  "started": "2026-09-21T12:58:52.698560+00:00",
+  "seed_customers": [
+   "+34600111222",
+   "+34680840464"
+  ],
+  "confirmation_policy": "books on an unambiguous selection; no separate readback turn",
+  "unknown": [
+   "provider endpoint",
+   "stt/tts route and voice",
+   "transport",
+   "audio settings"
+  ]
+ },
+ "outcome": {
+  "bookings": [
+   {
+    "booking_id": "BK0001",
+    "service": "haircut",
+    "date": "2026-09-25",
+    "time": "09:00",
+    "spoken": "Friday at 9:00 AM"
+   }
+  ],
+  "complaints": []
+ },
+ "state": {
+  "agent": "booking",
+  "pending": null,
+  "customer_phone": "+34680840464",
+  "phone_confirmed": true,
+  "customer_verified": "created",
+  "verified_phone": "+34680840464",
+  "booking_day": "2026-09-26",
+  "appointment": {
+   "booking_id": "BK0001",
+   "service": "haircut",
+   "date": "2026-09-25",
+   "time": "09:00",
+   "spoken": "Friday at 9:00 AM",
+   "action": "book"
+  },
+  "writes": 1,
+  "unresolved": null
+ },
+ "ended": "2026-09-21T12:58:52.698674+00:00"
+}

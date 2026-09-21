@@ -36,6 +36,7 @@ MODULES = (
     'tests.test_graph',   # the graph: routing, the waiting step, the schema
     'tests.test_voice',   # the processor and the two-agent demo
     'tests.test_salon',   # the salon agency end to end
+    'tests.test_consent', # the caller's own words, and what may act on them
     'tests.test_traces',  # one call is one trace
     'tests.test_state',   # validated state, and the phone policy
     'tests.test_diary',   # the service oracle: can it say no

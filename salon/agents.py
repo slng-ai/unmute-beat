@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
@@ -39,6 +40,7 @@ from salon import diary
 from salon.state import (
     AgentName,
     Appointment,
+    Asked,
     Date,
     Handoff,
     Id,
@@ -49,6 +51,10 @@ from salon.state import (
     SubmittedPhone,
     Time,
     Unresolved,
+    agrees,
+    ends,
+    move_or_add,
+    times_named,
 )
 from voice.harness import (
     STRICT,
@@ -158,6 +164,128 @@ UNKNOWN = (
 )
 
 
+# --- asking the caller, in words this code chose -----------------------------
+
+# "The same time" names a time exactly, without naming any digits: the one the
+# caller already holds. `prompts/salon/_diary.md` has said so for a while; this
+# is the half of that rule the application enforces.
+_SAME_TIME = re.compile(r'\b(?:same|usual) time\b', re.IGNORECASE)
+
+
+class Ask(Asked):
+    """A question for the caller, worded here and said by the core.
+
+    An output type, so putting the question ends the run: one model request
+    decides *that* a question is needed and this code decides what it says.
+    The alternative -- letting the model word it -- is what the calls of
+    2026-09-21 did, and a model that writes the question also gets to decide
+    afterwards what it was: it asked which country the caller was ringing from
+    and then treated the yes as agreement to a phone number.
+
+    `Asked` is the record the next turn checks against; this adds the sentence
+    the caller hears, so the two can never be about different things.
+    """
+
+    model_config = STRICT
+
+    spoken: str
+
+    def put(self, call: SalonCall) -> str:
+        """Record the question as pending on the call, and hand back what to say."""
+        call.ask(self)
+        return self.spoken
+
+
+def _readback(phone: str) -> str:
+    """A number as digits to read out, grouped the way a person says one."""
+    country, rest = phone[:3], phone[3:]
+    return ' '.join([country, rest[:3], rest[3:6], rest[6:]]).strip()
+
+
+async def ask_number(ctx: RunContext[SalonCall], phone: SubmittedPhone) -> Ask:
+    """Read a number back to the caller and wait. The only way to reach `confirm_customer`.
+
+    Nothing is looked up until they have agreed to these exact digits. Their
+    answer next turn is what decides it, so say nothing after calling this.
+
+    Args:
+        phone: The number to read back, in E.164, exactly as they gave it.
+    """
+    return Ask(
+        about='phone',
+        value=phone,
+        spoken=f'Let me read that back to you: {_readback(phone)}. Have I got that right?',
+    )
+
+
+async def ask_booking(
+    ctx: RunContext[SalonCall],
+    action: Literal['book', 'move', 'cancel'],
+    slot_id: str = '',
+    booking_id: str = '',
+) -> Ask:
+    """Say back what you are about to write, and wait for their yes. Nothing is saved by this.
+
+    The sentence is built here from the diary's own record of the slot, so it
+    cannot describe a time the caller was never offered. Say nothing after
+    calling it: their next answer is what decides.
+
+    Args:
+        action: book a new time, move an existing booking, or cancel one.
+        slot_id: The slot exactly as the diary returned it. Empty when cancelling.
+        booking_id: The booking exactly as the diary returned it. Empty when booking.
+    """
+    call = ctx.deps
+    phone = call.state.customer_phone
+    if action in ('book', 'move'):
+        offered = diary.offer_of(call.id, slot_id, phone)
+        if not offered:
+            raise ModelRetry(
+                'Nothing was asked. That slot is not one this caller is currently being offered; '
+                'read the diary again and offer a time it actually returned.'
+            )
+        service = offered['service'].replace('hair-color', 'hair colour')
+        words = (
+            f'So that is a {service}, {offered["spoken"]}. Shall I book that in?'
+            if action == 'book'
+            else f'So I will move you to {offered["spoken"]}. Shall I do that?'
+        )
+    else:
+        held = {b['booking_id']: b for b in diary.bookings_for(phone, diary.now().date())}
+        if booking_id not in held:
+            raise ModelRetry(
+                'Nothing was asked. That is not a booking this caller holds; read the diary to see '
+                'what they actually have.'
+            )
+        one = held[booking_id]
+        service = one['service'].replace('hair-color', 'hair colour')
+        words = f'So that is your {service} {one["spoken"]} cancelled. Shall I go ahead?'
+    return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)
+
+
+async def ask_complaint(ctx: RunContext[SalonCall], summary: str) -> Ask:
+    """Say their complaint back in one sentence and wait. The only way to reach `record_complaint`.
+
+    Nothing is written down until they have agreed to this summary. Say
+    nothing after calling it.
+
+    Args:
+        summary: Short, factual summary of what went wrong, in their own terms.
+    """
+    if not summary.strip():
+        raise ModelRetry('Nothing was asked: a complaint summary cannot be empty.')
+    return Ask(
+        about='complaint',
+        value=_gist(summary),
+        spoken=f'So, {summary.rstrip(".")}. Have I got that right?',
+    )
+
+
+def _gist(summary: str) -> str:
+    """One stable name for a complaint summary, so agreement is to the summary that was read out."""
+    return hashlib.sha256(' '.join(summary.casefold().split()).encode()).hexdigest()[:12]
+
+
 def _disagrees(action: str, booking_id: str, offered: dict, written: Saved) -> str:
     """Why a well-formed result is not an answer to the request, or '' when it is.
 
@@ -173,8 +301,12 @@ def _disagrees(action: str, booking_id: str, offered: dict, written: Saved) -> s
         return f'it is about booking {written.booking_id}, not {booking_id}'
     if action in ('book', 'move') and offered:
         got = {'date': written.date, 'time': written.time, 'service': written.service}
-        if got != offered:
-            return f'it is {got}, not the slot that was offered: {offered}'
+        # Only the three that identify the slot. `offer_of` also hands back the
+        # one phrasing to say it out loud, which is presentation and is not
+        # something a result has to agree with.
+        was = {key: offered[key] for key in got if key in offered}
+        if got != was:
+            return f'it is {got}, not the slot that was offered: {was}'
     return ''
 
 
@@ -461,6 +593,20 @@ async def record_complaint(
         raise ModelRetry(
             'A complaint record needs an owner and nobody is identified yet. Hand to the verify agent first.'
         )
+    # The same bar the diary meets: the caller agreed to *this* summary, read
+    # back to them by `ask_complaint` on the turn before. A paraphrase written
+    # after the fact is a different complaint from the one they agreed to.
+    if ctx.deps.pending('complaint', value=_gist(summary)) is None:
+        raise ModelRetry(
+            'Nothing was written down. Read this summary back with `ask_complaint` and wait for '
+            'their answer; if they have already agreed to a different wording, use that wording.'
+        )
+    if not agrees(ctx.deps.heard):
+        raise ModelRetry(
+            f'Nothing was written down: the caller said "{ctx.deps.heard}", which is not agreement '
+            'to the summary. Put it to them again with `ask_complaint`.'
+        )
+    ctx.deps.answered()
     # One token per complaint, so an attempt that lost its answer and is
     # retried leaves one entry in the book rather than two. Same derivation
     # as a booking's: the call, the writes it has already had accepted, and
@@ -520,6 +666,23 @@ async def read_diary(
         raise ModelRetry(
             'The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.'
         )
+    # The caller's words for the day, against the ones this call was given.
+    # The resolver is right; on the live call of 2026-09-21 12:58 it was given
+    # the wrong input -- the caller said "Friday", the lookup asked for "next
+    # Friday", and under that Monday clock those are a week apart. The whole
+    # difference is a modifier the model added, so the check is on the words
+    # and not on the date they resolve to.
+    if (theirs := ctx.deps.day_words) and (mine := diary.day_phrases(when)):
+        today = diary.now().date()
+        wanted = {diary.resolve_day(words, today) for words in theirs} - {None}
+        asked_for = diary.resolve_day(mine[-1], today)
+        if wanted and asked_for not in wanted:
+            said = '" or "'.join(theirs)
+            raise ModelRetry(
+                f'Nothing was looked up. The caller said "{said}" and this asked for "{mine[-1]}", '
+                f'which is a different day. Call this again with their words. If you think they '
+                'meant another day, ask them which one.'
+            )
     found = Slots.model_validate(
         # `offered_to` is this call, not this number: what was put in front of
         # one conversation was never put in front of another, even from the
@@ -544,6 +707,17 @@ async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
         goodbye: One short goodbye in your own words. It is the last thing they hear.
     """
     claim_or_refuse(ctx, ACTIONS)
+    # The caller's own words, not a goodbye string the model wrote. On the
+    # live call of 2026-09-21 12:57 the caller asked "Can you help me moving
+    # it to Saturday, the same time?", the agent read Saturday's availability,
+    # and then hung up on them -- `answered`, no move, no goodbye from the
+    # caller. A model-chosen farewell is not evidence the call is over.
+    if not ends(ctx.deps.heard):
+        raise ModelRetry(
+            f'The line is still open: the caller said "{ctx.deps.heard}", which is not them ending '
+            'the call. Answer what they asked. Hang up only on their own goodbye.'
+        )
+    ctx.deps.end_requested('caller')
     await ctx.deps.speak_now(goodbye)
     await ctx.deps.end_call()
     return goodbye
@@ -613,6 +787,25 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
         phone: The exact number they confirmed, in E.164.
     """
     claim_or_refuse(ctx, ACTIONS)
+    call = ctx.deps
+    # The caller has to have agreed to *these digits*, last turn, in answer to
+    # a readback this code put to them. On the live call of 2026-09-21 13:02
+    # the agent asked "are you calling from Spain?", the caller said yes, and
+    # that yes was used as agreement to a number nobody had read back. The
+    # number was structurally fine; the procedure was skipped, and the whole
+    # of what `phone_confirmed` means is that the procedure happened.
+    if call.pending('phone', value=phone) is None:
+        raise ModelRetry(
+            'Nothing was looked up: those digits have not been read back to this caller and agreed '
+            f'to. Call `ask_number` with {phone} and wait for their answer.'
+        )
+    if not agrees(call.heard):
+        raise ModelRetry(
+            'Nothing was looked up: the caller did not agree to the number that was read back. '
+            f'They said "{call.heard}". If those are different digits it is a correction -- read '
+            'the new number back with `ask_number`; otherwise ask again.'
+        )
+    call.answered()
     found = CustomerLookup.model_validate(diary.find_or_create_customer(phone))
     # The lookup has to have been about the number we asked about. Ignored,
     # a customer service answering for somebody else verified this caller as
@@ -672,24 +865,123 @@ async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
     return Handoff(to='concierge', because=because)
 
 
+def _authorised(ctx: RunContext[SalonCall], action: str, slot_id: str, booking_id: str) -> bool:
+    """Whether the caller authorised this exact write, and whether it is a second appointment.
+
+    Refuses by raising, so a write that reaches past here has caller evidence
+    behind it. Three ways in, and the model supplies none of them:
+
+    * They agreed to an `ask_booking` readback of this same action, slot and
+      booking, on the turn before this one.
+    * They named a time, and exactly one of the times currently on the table
+      is that time. This is the fast path the booking policy is built on: an
+      unambiguous choice of an offered slot authorises that slot. It is not
+      available while they already hold something that day, because then the
+      unanswered question is whether this replaces it.
+    * They answered the move-or-add question in their own words.
+
+    The boolean it returns is the *second appointment* decision, and it comes
+    from what the caller said, never from an argument. Reproduced on the live
+    calls of 2026-09-21 13:01 and 13:03: refused with `additional=false`, sent
+    again one second later with `additional=true`, same caller, no turn in
+    between. The flag was the model's own permission slip.
+    """
+    call, phone = ctx.deps, ctx.deps.state.customer_phone
+    held = diary.bookings_for(phone, diary.now().date()) if phone else []
+
+    if call.pending('booking', value=slot_id, action=action, booking_id=booking_id) is not None:
+        if not agrees(call.heard):
+            raise ModelRetry(
+                'Nothing was saved: the caller did not agree to what was read back to them. They '
+                f'said "{call.heard}". Answer what they actually asked.'
+            )
+        call.answered()
+        # They agreed to a sentence that named this one appointment, so a
+        # second one is not what they agreed to unless they said so.
+        return action == 'book' and move_or_add(call.heard) == 'add'
+
+    if action == 'cancel':
+        raise ModelRetry(
+            'Nothing was cancelled: nobody has agreed to cancel anything. Call `ask_booking` with '
+            "action='cancel' and that booking, and wait for their answer."
+        )
+
+    if (decision := call.pending('move_or_add', value=slot_id)) is not None:
+        match move_or_add(call.heard):
+            case 'add':
+                call.answered()
+                return True
+            case 'move':
+                call.answered()
+                if action != 'move' or not booking_id:
+                    raise ModelRetry(
+                        'The caller asked to move the booking they already have, not to add one. '
+                        f"Call this again with action='move' and booking_id={decision.booking_id!r}."
+                    )
+                return False
+            case _:
+                raise ModelRetry(
+                    f'Nothing was saved. The caller said "{call.heard}", which does not answer '
+                    'whether to move the appointment they already have or add another one. Ask '
+                    'them again in those words.'
+                )
+
+    # The fast path, and the reason this agency books a turn sooner than one
+    # that reads everything back: an unambiguous choice of a time it has just
+    # offered is the caller authorising that time. Unambiguous means exactly
+    # one slot on the table is at the time they named -- so "three" with a
+    # haircut and a colour both free at three is two appointments and a
+    # question, not a booking.
+    offered = diary.offer_of(call.id, slot_id, phone)
+    named = times_named(call.heard)
+    on_the_table = diary.offered_to(call.id, phone)
+    at_that_time = [slot for slot in on_the_table if slot['time'] in named]
+    picked = bool(offered) and offered['time'] in named and len(at_that_time) == 1
+    if action == 'book' and picked and not held:
+        # Nothing to displace, so choosing a time is the whole decision.
+        return False
+    if action == 'move' and offered and move_or_add(call.heard) == 'move' and booking_id:
+        moving = next((b for b in held if b['booking_id'] == booking_id), None)
+        # "Move it to Saturday, the same time" names no digits and still names
+        # one time exactly: the one they already hold. The live call of
+        # 2026-09-21 12:57 answered that sentence by hanging up.
+        same = bool(moving) and _SAME_TIME.search(call.heard) and offered['time'] == moving['time']
+        if moving and (picked or same):
+            return False
+
+    if held and action == 'book':
+        # The one refusal with a question behind it. Recorded as that
+        # question, so the answer to it is the caller's and not a retry's.
+        one = held[0]
+        call.ask(Asked(about='move_or_add', value=slot_id, action='move', booking_id=one['booking_id']))
+        raise ModelRetry(
+            f'Nothing was saved: this caller already has a {one["service"]} {one["spoken"]}. Ask '
+            'them, in one question, whether to move that one or add another appointment on top of '
+            'it, and call this again with their answer. Do not decide it for them.'
+        )
+    raise ModelRetry(
+        'Nothing was saved: the caller has not said they want this. Read it back with '
+        '`ask_booking` and call this again once they have agreed.'
+    )
+
+
 async def save_booking(
     ctx: RunContext[SalonCall],
     action: Literal['book', 'move', 'cancel'],
     slot_id: str,
     booking_id: str,
-    confirmed: bool,
-    additional: bool,
 ) -> str:
     """Write the diary, and finish this step. Nothing is booked, moved or cancelled until this runs.
 
-    It speaks the confirmation itself, so say nothing after calling it.
+    Only after the caller has authorised this exact appointment -- by naming
+    one of the times just offered to them, or by agreeing to an `ask_booking`
+    readback of it. It speaks the confirmation itself, so say nothing after
+    calling it.
 
     Args:
         action: book a new time, move an existing booking, or cancel one.
         slot_id: The slot exactly as the diary returned it. Empty when cancelling.
         booking_id: The booking exactly as the diary returned it. Empty when booking.
-        confirmed: True only after the caller said yes to the sentence you read back.
-        additional: True only when they asked for a second appointment on top of one they hold.
     """
     claim_or_refuse(ctx, ACTIONS)
     # Before anything else. A write whose outcome was never established is
@@ -697,10 +989,7 @@ async def save_booking(
     # one is a second appointment waiting to be made.
     if ctx.deps.state.unresolved:
         return await _settle(ctx)
-    if not confirmed:
-        raise ModelRetry(
-            'Nothing was saved. Say the service, the day and the time back in one sentence, ask one yes-or-no question, and call this again on their yes.'
-        )
+    additional = _authorised(ctx, action, slot_id, booking_id)
     if not _present(ctx.deps.state.customer_verified):
         raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
     # What this caller is being offered under that id, asked of the diary
@@ -719,19 +1008,6 @@ async def save_booking(
     # number corrected mid-call makes the caller somebody else, and the slots
     # the previous identity was shown are not theirs to book.
     offered = diary.offer_of(ctx.deps.id, slot_id, ctx.deps.state.customer_phone)
-    # `additional` is the caller's answer to a question, not a way past the
-    # refusal that asks it. On the live calls of 2026-09-21 the model sent
-    # `book` with `additional=False`, was refused because the caller already
-    # held a booking, and sent the same slot again one second later with
-    # `additional=True` -- so a caller who asked for one appointment got two.
-    # The flag is honoured again as soon as the caller has spoken, because by
-    # then it can be their answer.
-    if additional and ctx.deps.is_retry_of_refusal(slot_id):
-        raise ModelRetry(
-            'Nothing was saved. That is the slot the diary just refused, and the caller has not '
-            'said they want a second appointment since. Ask them: move the booking they already '
-            'have, or add another one on top of it? Call this again with their answer.'
-        )
     # One token per business action, not per attempt. Derived from what the
     # action *is*, so a retry after a lost response derives the same one and
     # the diary returns the outcome it already recorded rather than booking a
@@ -783,10 +1059,11 @@ async def save_booking(
             'diary',
         )
     except diary.AlreadyHoldsError as refused:
-        # The one refusal with a way past it. Recorded, so the retry that
-        # flips `additional` is recognisable as a retry rather than as the
-        # caller having changed their mind in the intervening second.
-        ctx.deps.refused_second(slot_id)
+        # The diary refusing what `_authorised` let through: a booking this
+        # caller was authorised to make that the diary itself will not take
+        # alongside one they hold. Recorded as the question it raises, so the
+        # only way past it is the caller's answer to that question.
+        ctx.deps.ask(Asked(about='move_or_add', value=slot_id, action='move'))
         raise ModelRetry(str(refused)) from None
     except diary.RefusedError as refused:
         # The diary's own words, which name what is actually possible instead of
@@ -847,10 +1124,12 @@ def build(
     name: AgentName,
     tools=(),
     finishers=(),
+    asks=(),
     exits: tuple[Exit, ...] = (),
     enter: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
     satisfied_by: str = '',
+    guarded: bool = False,
     model=MODEL,
 ) -> Node:
     """One step: its agent, its legal exits, and what has to hold before it runs."""
@@ -869,6 +1148,12 @@ def build(
     # and the conflict policy refuses the second before its service runs. This
     # is the belt to that brace, and it is one keyword.
     named = [ToolOutput(fn, name=fn.__name__, sequential=fn.__name__ in ACTIONS) for fn in finishers]
+    # Putting a question to the caller ends the run the same way finishing the
+    # step does, and for the same reason: the words are already decided, so a
+    # further model request would only be a chance to word them differently.
+    # Not in `ACTIONS` -- asking changes nothing and writes nothing, and a turn
+    # that reads the diary and then asks about what it found is one action.
+    questions = [ToolOutput(fn, name=fn.__name__) for fn in asks]
     # The whole set, always declared. What varies per request is which of them
     # is *offered*, which `narrow` below decides -- so a step whose exits all
     # shut does not silently change the name of its remaining output tool.
@@ -878,7 +1163,7 @@ def build(
     # narrowing below then failed to find by name, silently offering every
     # destination whatever the guards said.
     handoff = [ToolOutput(hand_over_for(exits), name='hand_over', sequential=True)] if exits else []
-    declared = [str, *handoff, *named]
+    declared = [str, *handoff, *named, *questions]
 
     def outputs(state: SalonState) -> list:
         """What this step may return, declared once for the whole turn.
@@ -974,6 +1259,7 @@ def build(
         requires=requires,
         satisfied_by=satisfied_by,
         outputs=outputs,
+        guarded=guarded,
     )
 
 
@@ -1025,6 +1311,7 @@ AGENTS: dict[str, Node] = {
     'verify': build(
         'verify',
         finishers=[confirm_customer, stop_verifying],
+        asks=[ask_number],
         # Guarded, because an incomplete number is a reason to ask again and not
         # a reason to leave. Unguarded, a live call on 2026-09-20 went
         # `verify -> concierge ("The caller gave an incomplete phone number and
@@ -1045,6 +1332,10 @@ AGENTS: dict[str, Node] = {
         'booking',
         tools=[read_diary],
         finishers=[save_booking],
+        asks=[ask_booking],
+        # This step writes, so its speech goes out a clause at a time until
+        # it has. See `voice.harness.Node.guarded`.
+        guarded=True,
         exits=(Exit('concierge'), Exit('complaints')),
         # The ordering rule, as a fact instead of a sentence in a prompt.
         requires=('customer_verified',),
@@ -1059,6 +1350,8 @@ AGENTS: dict[str, Node] = {
         'complaints',
         tools=[record_complaint],
         finishers=[hang_up],
+        asks=[ask_complaint],
+        guarded=True,
         # `record_complaint` needs an owner, so this step sends them to be
         # identified -- and only while there is anybody to identify.
         exits=(Exit('concierge'), Exit('verify', unverified)),

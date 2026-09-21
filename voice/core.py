@@ -26,6 +26,7 @@ way.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -46,7 +47,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.usage import UsageLimitExceeded
 
-from voice.harness import CallContext, Handoff, Node, TurnBudget
+from voice.harness import CallContext, Handoff, Node, Question, TurnBudget
 from voice.harness import moved_by as _moved_by
 from voice.harness import pick as _pick
 from voice.harness import route as _route
@@ -59,6 +60,15 @@ EXHAUSTED = "Sorry, I'm going round in circles there. Could you say that again?"
 # has no record of changing. It cannot be unsaid -- the words are already at
 # TTS -- so the next thing the caller hears is the correction.
 UNBACKED = "Sorry, let me correct myself: I haven't actually made that change. Let me check where we are."
+# Said in place of a sentence that claimed a change the business has no record
+# of, on a step that can write. Unlike `UNBACKED`, these words were caught
+# before they reached TTS, so nothing has to be taken back.
+WITHHELD = 'Sorry -- nothing has been changed yet. Let me check where we are.'
+# Where one clause ends. On a guarded step, speech is held to here so it can
+# be read before it is said; the cap is what stops a model that never
+# punctuates from holding the whole answer.
+_CLAUSE = re.compile(r'[.!?,;:]')
+_CLAUSE_MAX = 60
 
 
 # --- what a turn emits -------------------------------------------------------
@@ -95,7 +105,7 @@ class FixedSpeech:
     """
 
     text: str
-    reason: Literal['error', 'exhausted', 'unbacked']
+    reason: Literal['error', 'exhausted', 'unbacked', 'withheld']
 
 
 @dataclass(frozen=True)
@@ -171,7 +181,7 @@ async def run_turn(
     handoffs: list[str] = []
     # A new silence to cover, so one fixed line is allowed again.
     call._covered = False
-    call.turn_started()
+    call.turn_started(prompt or '')
 
     spent = ''
     failure = ''
@@ -273,6 +283,14 @@ async def _hops(
             else:
                 yield event
 
+        if isinstance(output, Question) and not barge.hit:
+            # A question the application worded, said by the application. It
+            # ends the turn like any other answer, and what it records is the
+            # one sentence the caller's next reply will be read as an answer
+            # to. Said through `speak_now` for the same reason a confirmation
+            # is: the words are already decided, and a round trip spent asking
+            # a model to repeat them is a round trip of silence.
+            await call.speak_now(output.put(call))
         if not isinstance(output, Handoff):
             # The free edge. A borrowed tool *succeeded*, so the caller is
             # already in the step that owns it, and the request that moved
@@ -382,6 +400,13 @@ async def _speak(
     succeeded: set[str] = set()
     output = None
     spoke = False
+    # On a step that can write, speech is released a clause at a time so each
+    # clause can be read before the caller hears it. `None` once the step has
+    # written something -- the confirmation is then the diary's own words and
+    # there is nothing left to claim falsely -- or on a step that cannot write
+    # at all, where every sentence streams token by token as before.
+    gate: str | None = 'clause' if node.guarded and not call.wrote_this_turn() else None
+    held = ''
 
     yield RunStarted(step)
     try:
@@ -414,7 +439,24 @@ async def _speak(
                             call.note_first_output('text')
                         case ToolCallPart():
                             call.note_first_output('tool')
-                if text := _speech(event):
+                if chunk := _speech(event):
+                    if gate is not None:
+                        held += chunk
+                        if not (_CLAUSE.search(held) or len(held) >= _CLAUSE_MAX):
+                            # Mid-clause on a step that can write. Nothing
+                            # goes out until the clause can be read.
+                            continue
+                        text, held = held, ''
+                        if call.claims_completion(text):
+                            # It says the business changed and nothing has.
+                            # These words have not left this process, so
+                            # unlike the after-the-fact correction they can
+                            # simply not be said.
+                            logger.error('withheld an unbacked claim: {!r}', text.strip())
+                            gate = 'blocked'
+                            break
+                    else:
+                        text = chunk
                     # Into the ledger as it streams, so a fixed line spoken
                     # by a tool later in this run lands *after* what was said
                     # before it and *before* what is said after.
@@ -457,10 +499,30 @@ async def _speak(
         return
     finally:
         barge.detach()
+        # Whatever was still mid-clause when the run ended goes out: the model
+        # stopped, so there is nothing more coming to complete it.
+        if held and gate != 'blocked':
+            call.note_model_text(held)
+            call._spoke = True
+            yield TextDelta(held, step)
         call.close_model_text()
 
+    if gate == 'blocked':
+        # The model's history has the whole sentence; the caller heard the
+        # part that went out before it. Same reconciliation a barge-in gets,
+        # for the same reason: the next request must not be told the caller
+        # heard something they did not.
+        note_spoken(call, _delivered(call), interrupted=True)
+        call.note_said('fixed', WITHHELD)
+        yield FixedSpeech(WITHHELD, reason='withheld')
     yield RunEnded(step)
     yield _Outcome(output, succeeded)
+
+
+def _delivered(call: CallContext) -> str:
+    """What the caller actually heard of the model's current segment."""
+    segments = [s for s in call.spoken if s.kind == 'model']
+    return segments[-1].text if segments else ''
 
 
 # --- delivered-history reconciliation ----------------------------------------

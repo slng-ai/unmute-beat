@@ -172,7 +172,9 @@ async def a_step_with_no_open_exit_keeps_its_own_name():
     every one of them explicitly.
     """
     offered = await _offered(AGENTS['verify'], SalonState(agent='verify'))
-    assert offered['requests'][0]['outputs'] == ['confirm_customer', 'stop_verifying'], offered
+    # `ask_number` beside them: putting the readback to the caller ends the run
+    # the same way finishing the step does, so it is an output and not a tool.
+    assert offered['requests'][0]['outputs'] == ['ask_number', 'confirm_customer', 'stop_verifying'], offered
     assert offered['requests'][0]['to'] is None
 
 

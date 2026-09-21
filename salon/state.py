@@ -17,6 +17,7 @@ import phonenumbers
 from pydantic import AfterValidator, BaseModel, Field, PrivateAttr, TypeAdapter, model_validator
 from pydantic_extra_types.phone_numbers import PhoneNumberValidator
 
+from salon import diary
 from voice import harness
 
 AgentName = Literal['concierge', 'verify', 'booking', 'complaints']
@@ -170,6 +171,159 @@ class Unresolved(BaseModel):
     offered: dict[str, str] = {}
 
 
+# --- what the caller actually said -------------------------------------------
+
+# Closed word lists over the accepted utterance, not language understanding.
+# Every one of them fails towards *asking*: an utterance none of these
+# recognises is a reason to put the question again, never a reason to act. So
+# the cost of a miss is one clarifying turn, and the cost of a false positive
+# -- which is what a permissive "does it contain yes" check buys -- is a
+# booking nobody asked for.
+#
+# ponytail: regex, not a classifier. Upgrade path, if the live calls show too
+# many clarifications: run a small model *only* on the utterances these return
+# nothing for, and keep them as the fast path.
+
+# Anchored at the start. "Yes" has to be the answer, not a word inside one.
+_YES = re.compile(
+    r'^(?:yes|yeah|yep|yup|aye|sure|please|perfect|great|exactly|correct|right|'
+    r'ok|okay|k|go ahead|do it|book it|sounds (?:good|right|fine|great)|'
+    r"that(?:'s| is|s) (?:right|correct|it|fine|great|perfect)|that works|"
+    r"i(?:'m| am) happy (?:with that|enough))\b",
+    re.IGNORECASE,
+)
+# Anywhere in it. A yes that arrives with one of these attached is answering
+# some other question, or changing the one that was asked.
+_NOT_YES = re.compile(
+    r"\b(?:no|nope|nah|not|don'?t|but|actually|instead|change|wait|hold on|rather|"
+    r'different|another|else|sorry|maybe|unless|though)\b',
+    re.IGNORECASE,
+)
+_BYE = re.compile(
+    r"\b(?:bye|goodbye|good ?bye|see you|that(?:'s| is|s) (?:all|everything|it)|"
+    r"nothing else|no more|i(?:'m| am) (?:good|fine|all set|done|done thanks)|"
+    r"we(?:'re| are) done|thanks?,? (?:that(?:'s| is) )?all)\b",
+    re.IGNORECASE,
+)
+# A goodbye with any of these in it is not only a goodbye. The live call of
+# 2026-09-21 12:57 hung up on "Can you help me moving it to Saturday, the same
+# time?" -- a question, answered with a goodbye string the model wrote itself.
+_STILL_ASKING = re.compile(
+    r'\?|\b(?:book|booking|move|moving|switch|change|cancel|reschedule|complain|complaint|'
+    r'can you|could you|would you|what|when|where|how|why|which|who|also|another|instead|'
+    r'but|actually|still|help|about)\b',
+    re.IGNORECASE,
+)
+_MOVE_IT = re.compile(
+    r'\b(?:move|moving|switch|swap|change|reschedule|instead of|rather than|replace)\b', re.IGNORECASE
+)
+_ADD_ONE = re.compile(
+    r'\b(?:another|second|additional|extra|as well|also|on top|both|two appointments|'
+    r'keep (?:the|that|it|both))\b',
+    re.IGNORECASE,
+)
+_HOURS = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6,
+    'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12,
+}  # fmt: skip
+_HOUR_WORD = '|'.join(_HOURS)
+_EXACT = re.compile(r'\b([01]?\d|2[0-3]):([0-5]\d)\b')
+_OCLOCK_WORD = r"o\s?'?\s?clock"
+_TWELVE = re.compile(rf'\b(1[0-2]|[1-9])\s*(?:{_OCLOCK_WORD}\s*)?([ap])\.?m\.?\b', re.IGNORECASE)
+_HALF = re.compile(rf'\bhalf past\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
+_OCLOCK = re.compile(rf'\b(1[0-2]|[1-9]|{_HOUR_WORD})\s*{_OCLOCK_WORD}\b', re.IGNORECASE)
+# A bare number is only a time when the caller put it after "at" or "around":
+# "Friday the 25th" is a number and not a time. "for" is deliberately not in
+# here -- "for 2 people" would name 14:00, and this set is intersected with
+# what the diary is actually offering, so a wrong reading books something.
+_BARE = re.compile(rf'\b(?:at|around|about)\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
+
+
+def agrees(heard: str) -> bool:
+    """Whether this utterance is the caller agreeing to the question they were asked.
+
+    Not "does it contain a yes". The live call of 2026-09-21 13:02 asked the
+    caller which country they were ringing from, took their yes, and used it
+    as agreement to a phone number nobody had read back.
+    """
+    text = heard.strip()
+    # A bound, so a yes buried at the front of a paragraph of new instructions
+    # is not read as an answer to anything.
+    return bool(text) and len(text.split()) <= 12 and bool(_YES.match(text)) and not _NOT_YES.search(text)
+
+
+def ends(heard: str) -> bool:
+    """Whether the caller's own words say the call is over.
+
+    A question is never one, however tired it sounds, and neither is a goodbye
+    with a request attached to it.
+    """
+    text = heard.strip()
+    return bool(text) and bool(_BYE.search(text)) and not _STILL_ASKING.search(text)
+
+
+def move_or_add(heard: str) -> Literal['move', 'add', '']:
+    """Which of the two the caller asked for, or neither, which means ask them."""
+    moving, adding = bool(_MOVE_IT.search(heard)), bool(_ADD_ONE.search(heard))
+    if moving == adding:
+        return ''
+    return 'move' if moving else 'add'
+
+
+def times_named(heard: str) -> set[str]:
+    """Every `HH:MM` this utterance could be naming.
+
+    Both readings of an unqualified hour, because "three" is 15:00 in a salon
+    and 03:00 in a clock, and it is the diary's offers that decide which of
+    them the caller can have meant. Intersected with what is actually on the
+    table, an utterance naming exactly one of them is an unambiguous choice.
+
+    ponytail: English, digits and the twelve hour words. A caller saying
+    "quarter past" is not understood and gets asked, which is the right
+    failure.
+    """
+    found: set[str] = set()
+    for hour, minute in _EXACT.findall(heard):
+        found.add(f'{int(hour):02d}:{minute}')
+    for hour, half in _TWELVE.findall(heard):
+        h = int(hour) % 12 + (12 if half.lower() == 'p' else 0)
+        found.add(f'{h:02d}:00')
+    for pattern, minute in ((_HALF, '30'), (_OCLOCK, '00'), (_BARE, '00')):
+        for word in pattern.findall(heard):
+            hour = _HOURS.get(str(word).lower()) or (int(word) if str(word).isdigit() else None)
+            if hour is None:
+                continue
+            found.add(f'{hour % 12:02d}:{minute}')
+            found.add(f'{hour % 12 + 12:02d}:{minute}')
+    return found
+
+
+# How many days back the caller's own words are kept. Four is two corrections
+# and the original, which is more than any call here has needed.
+_DAYS_REMEMBERED = 4
+
+
+class Asked(BaseModel):
+    """A question this call put to the caller, and is waiting on the answer to.
+
+    Application-owned. A tool may *propose* the question; nothing a model
+    writes can create one, and nothing it writes can claim one was answered.
+    The turn it was asked on is part of it, so an agreement two turns later is
+    not an answer to it.
+    """
+
+    model_config = harness.STRICT
+
+    about: Literal['phone', 'booking', 'move_or_add', 'complaint']
+    # The exact thing agreement would be agreement *to*: the number read back,
+    # the slot offered, or the complaint summary paraphrased.
+    value: str = ''
+    action: Literal['book', 'move', 'cancel', ''] = ''
+    booking_id: str = ''
+    # The caller turn it went out on. Set by `SalonCall.ask`, never by a tool.
+    turn: int = 0
+
+
 class Handoff(harness.Handoff):
     to: AgentName
 
@@ -297,25 +451,85 @@ class SalonCall(harness.CallContext):
     # What `writes` stood at when this turn began, so "did anything land in
     # this turn" is answerable without the turn having to carry it.
     _writes_before: int = PrivateAttr(default=0)
-    # A slot the diary refused because this caller already holds a booking.
-    # Cleared when the caller next speaks: the refusal asks a question --
-    # move the one they have, or add a second -- and only the caller answers
-    # it. Within the turn it is what stops the model answering for them.
-    _refused_second: str = PrivateAttr(default='')
+    # The question this call is waiting on an answer to, and nothing else is
+    # authority for a consequential action. It replaces a boolean the model
+    # filled in: `confirmed=True` was the caller's agreement as asserted by the
+    # party that wanted the write to go through.
+    _asked: Asked | None = PrivateAttr(default=None)
+    # Every day the caller has named, in their own words, from whichever turn
+    # they said it on. The live call of 2026-09-21 12:58 heard "Friday" and
+    # looked up "next Friday", which under that clock is a week later, and
+    # booked it. Bounded, because a long call naming a dozen days would
+    # otherwise end up permitting all of them.
+    _day_words: list[str] = PrivateAttr(default_factory=list)
 
-    def turn_started(self) -> None:
-        """Also forget last turn's refusal, and mark where the write count stood."""
-        super().turn_started()
+    def turn_started(self, heard: str = '') -> None:
+        """Also age out a question nobody answered, and mark where the write count stood."""
+        super().turn_started(heard)
         self._writes_before = self.state.writes
-        self._refused_second = ''
+        # A question is answerable on the turn after it was asked and no
+        # later. Left standing, a "yes" to something else entirely three turns
+        # on would still find it.
+        if self._asked is not None and self._asked.turn < self._turn - 1:
+            self._asked = None
+        # The caller's own words for the day, from whichever turn they said
+        # them on. Separate from the resolved date on purpose: Pydantic can
+        # validate that a date exists, but only the utterance says whether
+        # "Friday" was turned into "next Friday" on the way to the diary.
+        for words in diary.day_phrases(heard):
+            if words not in self._day_words:
+                self._day_words = [*self._day_words, words][-_DAYS_REMEMBERED:]
 
-    def refused_second(self, slot_id: str) -> None:
-        """The diary refused this slot because they already hold one."""
-        self._refused_second = slot_id
+    def ask(self, question: Asked) -> None:
+        """Record that this question has gone out to the caller, on this turn."""
+        self._asked = question.model_copy(update={'turn': self._turn})
 
-    def is_retry_of_refusal(self, slot_id: str) -> bool:
-        """Whether `additional` on this slot is the model getting past that refusal."""
-        return bool(slot_id) and self._refused_second == slot_id
+    def pending(self, about: str, **fields: str) -> Asked | None:
+        """The question the caller is answering right now, if it is this one.
+
+        Only the turn after it was asked: a question put two turns ago has
+        been overtaken by whatever the caller said in between.
+        """
+        asked = self._asked
+        if asked is None or asked.about != about or asked.turn != self._turn - 1:
+            return None
+        return asked if all(getattr(asked, name) == value for name, value in fields.items()) else None
+
+    def answered(self) -> None:
+        """Consume the pending question. One answer authorises one action."""
+        self._asked = None
+
+    @property
+    def day_words(self) -> tuple[str, ...]:
+        """The days the caller has named, in their own words, most recent last."""
+        return tuple(self._day_words)
+
+    def wrote_this_turn(self) -> bool:
+        """Whether this turn has already changed the salon's books."""
+        return self.state.writes != self._writes_before
+
+    def claims_completion(self, clause: str) -> bool:
+        """Whether this clause tells the caller a booking changed, when none has.
+
+        The same three conditions `unbacked_claim` applies to a whole turn,
+        asked of one clause on its way out. Asked *before* the words are said,
+        so on a step that can write the answer can be to not say them at all
+        -- which is the difference between this and the correction that
+        follows an invention the caller has already heard.
+        """
+        return not self.wrote_this_turn() and bool(self._invented(clause))
+
+    def _invented(self, text: str) -> str:
+        """The first-person claim of a change this state does not bear out, or ''."""
+        if not (hit := _CLAIMED.search(text)):
+            return ''
+        said = hit.group(0).lower()
+        held = self.state.appointment
+        if 'cancel' in said and (held is None or held.action != 'cancel'):
+            return hit.group(0)
+        if 'cancel' not in said and held is None:
+            return hit.group(0)
+        return ''
 
     def unbacked_claim(self) -> str:
         """Model speech this turn claiming a booking change the salon cannot corroborate.
@@ -334,17 +548,11 @@ class SalonCall(harness.CallContext):
         out. An agent recounting an appointment made earlier in the call has
         a state that agrees with it and does not trip this.
         """
-        if self.state.writes != self._writes_before:
+        if self.wrote_this_turn():
             return ''
         for segment in self.spoken:
-            if segment.kind != 'model' or not (hit := _CLAIMED.search(segment.text)):
-                continue
-            said = hit.group(0).lower()
-            held = self.state.appointment
-            if 'cancel' in said and (held is None or held.action != 'cancel'):
-                return hit.group(0)
-            if 'cancel' not in said and held is None:
-                return hit.group(0)
+            if segment.kind == 'model' and (claim := self._invented(segment.text)):
+                return claim
         return ''
 
 

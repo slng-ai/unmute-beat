@@ -1,0 +1,77 @@
+{
+ "arm": "live",
+ "session": "997be5ec-d73b-49cc-82bb-da9ec5e2151f",
+ "settings": {
+  "revision": "337f5134ce1469c8eaf927d968bfa46cc085e072",
+  "uncommitted_changes": false,
+  "python": "3.14.5",
+  "pydantic_ai": "2.46.0",
+  "model": "google-cloud:gemini-3.5-flash-lite",
+  "model_pinned": false,
+  "region": "unpinned",
+  "model_settings": "{'service_tier': 'priority', 'google_thinking_config': {'thinking_level': 'MINIMAL'}}",
+  "budget": "TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)",
+  "speak_by": 3,
+  "timezone": "Europe/Madrid",
+  "salon_clock": "2026-09-21T15:02:14.943724+02:00",
+  "started": "2026-09-21T13:02:14.943739+00:00",
+  "seed_customers": [
+   "+34600111222",
+   "+34680830464",
+   "+34680840464"
+  ],
+  "confirmation_policy": "books on an unambiguous selection; no separate readback turn",
+  "unknown": [
+   "provider endpoint",
+   "stt/tts route and voice",
+   "transport",
+   "audio settings"
+  ]
+ },
+ "outcome": {
+  "bookings": [
+   {
+    "booking_id": "BK0001",
+    "service": "haircut",
+    "date": "2026-09-25",
+    "time": "09:00",
+    "spoken": "Friday at 9:00 AM"
+   },
+   {
+    "booking_id": "BK0003",
+    "service": "haircut",
+    "date": "2026-09-25",
+    "time": "15:00",
+    "spoken": "Friday at 3:00 PM"
+   }
+  ],
+  "complaints": [
+   {
+    "reference": "CX0001",
+    "phone": "+34680840464",
+    "summary": "Uneven haircut from one week ago",
+    "requested_resolution": "Redo for uneven cut"
+   }
+  ]
+ },
+ "state": {
+  "agent": "complaints",
+  "pending": null,
+  "customer_phone": "+34680840464",
+  "phone_confirmed": true,
+  "customer_verified": "existing",
+  "verified_phone": "+34680840464",
+  "booking_day": "2026-09-25",
+  "appointment": {
+   "booking_id": "BK0003",
+   "service": "haircut",
+   "date": "2026-09-25",
+   "time": "15:00",
+   "spoken": "Friday at 3:00 PM",
+   "action": "book"
+  },
+  "writes": 2,
+  "unresolved": null
+ },
+ "ended": "2026-09-21T13:02:14.943834+00:00"
+}

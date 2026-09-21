@@ -22,7 +22,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import agents, diary
 from salon.agents import AGENTS, FILLER, NOTED, prompt, read_diary, record_complaint
-from salon.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
+from salon.state import Appointment, Asked, SalonCall, SalonState, open_call, prefetch_number
 from voice.harness import TurnBudget
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
 
@@ -248,6 +248,19 @@ class Probe(PydanticAgentProcessor):
         return sum(isinstance(f, LLMFullResponseStartFrame) for f in self.frames)
 
 
+def agreed(call, about='booking', said="yes, that's right", **fields):
+    """Put the caller's agreement to one question on the call, as a readback turn would.
+
+    Most of what follows is about the service boundary -- what a diary
+    response is allowed to say, what a lost answer means -- and not about
+    consent, which `tests.test_consent` covers on its own. This says in one
+    line what those tests would otherwise each have to script: the question
+    went out last turn, and this turn the caller agreed to it.
+    """
+    call.ask(Asked(about=about, **fields))
+    call.turn_started(said)
+
+
 def scripted(**by_agent):
     stack = ExitStack()
     for name, fn in by_agent.items():
@@ -265,6 +278,8 @@ async def verify_then_book():
     probe = Probe(call, budget=TurnBudget(step_runs=4))
 
     day = diary.spoken_day(diary.now().date() + timedelta(days=2), diary.now().date())
+    # Last turn read their number back; this is the turn their yes arrives on.
+    call.ask(Asked(about='phone', value=PHONE))
     with scripted(
         # It asks for `booking`, which is all the model knows: what the caller
         # wants. That verification comes first is the graph's business.
@@ -279,7 +294,7 @@ async def verify_then_book():
             tool_call('read_diary', when=day, service='haircut'), says('I can do that. Shall I book it?')
         ),
     ):
-        await probe._turn('can I get a haircut, and my number is right')
+        await probe._turn("yes that's right, and can I get a haircut?")
 
     assert call.state.customer_verified == 'existing', call.state.customer_verified
     assert call.state.customer_phone == PHONE
@@ -314,7 +329,9 @@ async def the_diary_is_the_edge():
             tool_call('read_diary', when=day, service='haircut'), says('I can do that. Which suits you?')
         ),
     ):
-        await probe._turn('can you move my appointment to Saturday?')
+        # The day the script looks up is the day the caller names: `read_diary`
+        # now refuses a day the caller did not say, which is N2's finding.
+        await probe._turn(f'can you move my appointment to {day}?')
 
     assert probe.spoken() == 'I can do that. Which suits you?'
     # The move happened, and nothing was spent announcing it.
@@ -384,6 +401,7 @@ async def resume_after_finisher():
     diary.reset()
     call = open_call(PHONE)
     call.commit(agent='verify', pending='booking')
+    call.ask(Asked(about='phone', value=PHONE))
     probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(
@@ -448,6 +466,8 @@ async def correction_refuses_stale_slot():
     probe = Probe(call, budget=TurnBudget(step_runs=2))
 
     first, second = open_days(2)
+    today = diary.now().date()
+    said_first, said_second = diary.spoken_day(first, today), diary.spoken_day(second, today)
     stale = diary.find_slots(PHONE, first.isoformat(), 'haircut', diary.now())['slots'][0]
 
     with scripted(
@@ -460,13 +480,13 @@ async def correction_refuses_stale_slot():
                 action='book',
                 slot_id=stale['slot_id'],
                 booking_id='',
-                confirmed=True,
-                additional=False,
             ),
             says('That one has gone, I am afraid. Shall I look at the other day?'),
         ),
     ):
-        await probe._turn('monday please -- actually, make it the day after')
+        # Both days in the caller's own words: `read_diary` refuses a day they
+        # did not say, which is N2's finding, and a correction is two days said.
+        await probe._turn(f'{said_first} please -- actually, make it {said_second}')
 
     assert call.state.booking_day == second.isoformat(), call.state.booking_day
     assert call.state.appointment is None, 'a slot from the day they moved away from must not book'
@@ -500,11 +520,11 @@ async def save_finishes():
     # the diary was last read for, and that now holds whatever the day is --
     # including when the last read found nothing to offer and left it empty.
     call.commit(booking_day=slot['date'])
+    # And what `ask_booking` would have: the readback went out last turn.
+    call.ask(Asked(about='booking', value=slot_id, action='book'))
 
     with scripted(
-        booking=outputs(
-            'save_booking', action='book', slot_id=slot_id, booking_id='', confirmed=True, additional=False
-        ),
+        booking=outputs('save_booking', action='book', slot_id=slot_id, booking_id=''),
     ):
         await probe._turn('yes, book it')
 
@@ -576,6 +596,8 @@ async def the_note_is_said_once():
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     call.commit(agent='complaints')
+    # The summary went back to them last turn; this is the turn their yes lands.
+    call.ask(Asked(about='complaint', value=agents._gist('an uneven haircut')))
     probe = Probe(call)
 
     with scripted(
@@ -584,7 +606,7 @@ async def the_note_is_said_once():
             says('Would you like me to put that redo in the diary?'),
         ),
     ):
-        await probe._turn('yes, please write it down')
+        await probe._turn("yes, that's right")
 
     assert diary.complaints(), 'the complaint really is on the record'
     assert 'record_complaint' not in FILLER, (
@@ -613,6 +635,8 @@ async def a_tool_result_is_never_a_script():
     call.commit(customer_verified='existing', verified_phone=PHONE)
     ctx = RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
 
+    call.ask(Asked(about='complaint', value=agents._gist('the cut was uneven')))
+    call.turn_started("yes, that's right")
     results = [
         await read_diary(ctx, 'tomorrow', 'haircut'),
         await record_complaint(ctx, 'the cut was uneven', 'a redo'),
@@ -645,31 +669,23 @@ async def refusal_retries():
     probe = Probe(call)
     seen = []
 
-    async def unconfirmed_then_ask(messages, info: AgentInfo):
+    async def unauthorised_then_ask(messages, info: AgentInfo):
         if not seen:
             seen.append('tried')
             yield {
                 0: DeltaToolCall(
                     name=_output_tool(info, 'save_booking'),
-                    json_args=json.dumps(
-                        {
-                            'action': 'book',
-                            'slot_id': 'x',
-                            'booking_id': '',
-                            'confirmed': False,
-                            'additional': False,
-                        }
-                    ),
+                    json_args=json.dumps({'action': 'book', 'slot_id': 'x', 'booking_id': ''}),
                 )
             }
         else:
             for chunk in ('Shall I ', 'book it?'):
                 yield chunk
 
-    with scripted(booking=unconfirmed_then_ask):
+    with scripted(booking=unauthorised_then_ask):
         await probe._turn('monday morning')
 
-    assert call.state.appointment is None, 'an unconfirmed save must write nothing'
+    assert call.state.appointment is None, 'a save nobody agreed to must write nothing'
     assert call.state.agent == 'booking', 'the step stays open so the model can fix it'
     assert probe.spoken() == 'Shall I book it?'
     assert probe.runs() == 1, 'a retry is the same run, not a second turn'
@@ -726,6 +742,42 @@ async def _refuses(fn, *args) -> str:
     raise AssertionError(f'{getattr(fn, "__name__", fn)} accepted what it must refuse')
 
 
+async def complain(call, summary, wanted, said="yes, that's right"):
+    """Read a complaint summary back, take the caller's yes, and record it."""
+    agreed(call, 'complaint', said, value=agents._gist(summary))
+    return await agents.record_complaint(_context(call), summary, wanted)
+
+
+async def refuses_complaint(call, summary, wanted, said="yes, that's right"):
+    """The same, for a complaint refused for a reason that is not consent."""
+    agreed(call, 'complaint', said, value=agents._gist(summary))
+    return await _refuses(agents.record_complaint, _context(call), summary, wanted)
+
+
+async def confirm(call, phone, said="yes, that's right"):
+    """Read a number back, take the caller's yes, and look them up."""
+    agreed(call, 'phone', said, value=phone)
+    return await agents.confirm_customer(_context(call), phone)
+
+
+async def refuses_confirm(call, phone, said="yes, that's right"):
+    """The same, for a lookup that must be refused for a reason that is not consent."""
+    agreed(call, 'phone', said, value=phone)
+    return await _refuses(agents.confirm_customer, _context(call), phone)
+
+
+async def save(call, action, slot_id='', booking_id='', said="yes, that's right"):
+    """Authorise one write the way an agreed readback would, then perform it."""
+    agreed(call, 'booking', said, value=slot_id, action=action, booking_id=booking_id)
+    return await agents.save_booking(_context(call), action, slot_id, booking_id)
+
+
+async def refuses_save(call, action, slot_id='', booking_id='', said="yes, that's right"):
+    """The same, for a write that must be refused for a reason that is not consent."""
+    agreed(call, 'booking', said, value=slot_id, action=action, booking_id=booking_id)
+    return await _refuses(agents.save_booking, _context(call), action, slot_id, booking_id)
+
+
 async def an_empty_number_identifies_nobody():
     """`confirm_customer(phone='')` came back 'created' and verified the call.
 
@@ -779,7 +831,7 @@ async def a_lookup_about_somebody_else_verifies_nobody():
     real = diary.find_or_create_customer
     diary.find_or_create_customer = answers_about_somebody_else  # ty: ignore[invalid-assignment]
     try:
-        refusal = await _refuses(agents.confirm_customer, _context(call), PHONE)
+        refusal = await refuses_confirm(call, PHONE)
     finally:
         diary.find_or_create_customer = real
 
@@ -806,7 +858,7 @@ async def a_complaint_the_book_refused_is_not_confirmed():
     real = diary.record_complaint
     diary.record_complaint = refuses  # ty: ignore[invalid-assignment]
     try:
-        refusal = await _refuses(agents.record_complaint, _context(call), 'the colour was wrong', 'a refund')
+        refusal = await refuses_complaint(call, 'the colour was wrong', 'a refund')
     finally:
         diary.record_complaint = real
 
@@ -843,9 +895,7 @@ async def a_malformed_save_response_is_an_unknown_outcome():
     real = diary.save_booking
     diary.save_booking = answers_nonsense  # ty: ignore[invalid-assignment]
     try:
-        refusal = await _refuses(
-            agents.save_booking, _context(call), 'book', read['slots'][0]['slot_id'], '', True, False
-        )
+        refusal = await refuses_save(call, 'book', read['slots'][0]['slot_id'], '')
     finally:
         diary.save_booking = real
 
@@ -879,7 +929,7 @@ async def a_search_withdraws_the_one_before_it():
     haircut = friday.slots[0].slot_id
 
     async def refused_now() -> str:
-        return await _refuses(agents.save_booking, _context(call), 'book', haircut, '', True, False)
+        return await refuses_save(call, 'book', haircut, '')
 
     sunday = await read_diary(_context(call), 'sunday', 'any')
     assert sunday.status == 'closed' and call.state.booking_day == ''
@@ -916,17 +966,17 @@ async def the_same_slot_can_be_booked_again_after_it_is_cancelled():
 
     read = await read_diary(_context(call), 'monday', 'haircut')
     slot = read.slots[0].slot_id
-    first = await agents.save_booking(_context(call), 'book', slot, '', True, False)
+    first = await save(call, 'book', slot, '')
     assert 'booked' in first, first
     held = diary.bookings_for(PHONE, diary.now().date())[0]['booking_id']
 
     call.commit(agent='booking')
-    await agents.save_booking(_context(call), 'cancel', '', held, True, False)
+    await save(call, 'cancel', '', held)
     assert diary.bookings_for(PHONE, diary.now().date()) == []
 
     call.commit(agent='booking')
     await read_diary(_context(call), 'monday', 'haircut')
-    again = await agents.save_booking(_context(call), 'book', slot, '', True, False)
+    again = await save(call, 'book', slot, '')
     assert 'booked' in again, again
     assert len(diary.bookings_for(PHONE, diary.now().date())) == 1, 'the second booking really happened'
     assert call.state.writes == 3, call.state.writes
@@ -943,7 +993,7 @@ async def an_offer_belongs_to_the_caller_it_was_made_to():
     theirs = open_call(OTHER)
     theirs.commit(customer_verified='existing', verified_phone=OTHER, agent='booking')
     theirs.commit(booking_day=read.date)  # the same day, without being offered it
-    refusal = await _refuses(agents.save_booking, _context(theirs), 'book', slot, '', True, False)
+    refusal = await refuses_save(theirs, 'book', slot, '')
     assert 'not a slot this diary is currently offering this caller' in refusal, refusal
     assert diary.bookings_for(OTHER, diary.now().date()) == []
 
@@ -971,7 +1021,7 @@ async def giving_up_on_the_number_gives_up_the_errand():
 
     # And verifying later resumes nothing: the booking was abandoned, not parked.
     call.commit(agent='verify')
-    resumed = await agents.confirm_customer(_context(call), PHONE)
+    resumed = await confirm(call, PHONE)
     assert resumed.to == 'concierge', resumed
 
 
@@ -1004,7 +1054,7 @@ async def an_unknown_write_blocks_the_next_one():
 
     diary.save_booking = commits_then_garbles  # ty: ignore[invalid-assignment]
     try:
-        recovered = await agents.save_booking(_context(call), 'book', first, '', True, False)
+        recovered = await save(call, 'book', first, '')
     finally:
         diary.save_booking = real
 
@@ -1039,15 +1089,13 @@ async def an_outcome_nobody_knows_stops_every_other_write():
     real = diary.save_booking
     diary.save_booking = never_answers  # ty: ignore[invalid-assignment]
     try:
-        assert 'not clear whether that saved' in await _refuses(
-            agents.save_booking, _context(call), 'book', first, '', True, False
-        )
+        assert 'not clear whether that saved' in await refuses_save(call, 'book', first, '')
         assert call.state.unresolved, 'the operation is recorded as outstanding'
         assert call.state.writes == 0
 
         # A different slot, flagged as an extra appointment: new arguments, so
         # a new token, so nothing the idempotency cache can refuse.
-        blocked = await _refuses(agents.save_booking, _context(call), 'book', second, '', True, True)
+        blocked = await refuses_save(call, 'book', second, '')
         assert 'still unknown' in blocked, blocked
     finally:
         diary.save_booking = real
@@ -1055,9 +1103,7 @@ async def an_outcome_nobody_knows_stops_every_other_write():
     assert diary.bookings_for(PHONE, diary.now().date()) == [], 'not one booking, let alone two'
     # A complaint is a business write too, and meets the same bar.
     call.commit(agent='complaints')
-    assert 'still unknown' in await _refuses(
-        agents.record_complaint, _context(call), 'the colour was wrong', 'a refund'
-    )
+    assert 'still unknown' in await refuses_complaint(call, 'the colour was wrong', 'a refund')
     assert diary.complaints() == []
 
 
@@ -1090,7 +1136,7 @@ async def a_result_that_answers_a_different_question_is_not_accepted():
     real = diary.save_booking
     diary.save_booking = cancels_instead  # ty: ignore[invalid-assignment]
     try:
-        refusal = await _refuses(agents.save_booking, _context(call), 'book', slot.slot_id, '', True, False)
+        refusal = await refuses_save(call, 'book', slot.slot_id, '')
     finally:
         diary.save_booking = real
 
@@ -1121,7 +1167,7 @@ async def a_result_about_a_different_slot_is_not_accepted():
     real = diary.save_booking
     diary.save_booking = books_something_else  # ty: ignore[invalid-assignment]
     try:
-        refusal = await _refuses(agents.save_booking, _context(call), 'book', asked.slot_id, '', True, False)
+        refusal = await refuses_save(call, 'book', asked.slot_id, '')
     finally:
         diary.save_booking = real
 
@@ -1136,9 +1182,9 @@ async def a_complaint_is_written_once():
     call.commit(customer_verified='existing', verified_phone=PHONE, agent='complaints')
     _heard(call)
 
-    first = await agents.record_complaint(_context(call), 'the colour was wrong', 'a refund')
+    first = await complain(call, 'the colour was wrong', 'a refund')
     call.commit(writes=call.state.writes - 1)  # the attempt whose answer went missing
-    again = await agents.record_complaint(_context(call), 'the colour was wrong', 'a refund')
+    again = await complain(call, 'the colour was wrong', 'a refund')
 
     assert first.reference == again.reference, (first, again)
     assert len(diary.complaints()) == 1, diary.complaints()
@@ -1170,7 +1216,7 @@ async def a_lost_complaint_answer_is_recovered_rather_than_written_twice():
 
     diary.record_complaint = commits_then_loses_the_answer  # ty: ignore[invalid-assignment]
     try:
-        recorded = await agents.record_complaint(_context(call), 'the colour was wrong', 'a refund')
+        recorded = await complain(call, 'the colour was wrong', 'a refund')
     finally:
         diary.record_complaint = real
 
@@ -1199,7 +1245,7 @@ async def a_complaint_nobody_answered_for_blocks_the_next_write():
 
     diary.record_complaint = never_answers  # ty: ignore[invalid-assignment]
     try:
-        refusal = await _refuses(agents.record_complaint, _context(call), 'the colour was wrong', 'a refund')
+        refusal = await refuses_complaint(call, 'the colour was wrong', 'a refund')
         assert 'not clear whether that saved' in refusal, refusal
         assert call.state.unresolved is not None, 'recorded as outstanding'
         assert call.state.unresolved.action == 'complaint', call.state.unresolved
@@ -1207,9 +1253,7 @@ async def a_complaint_nobody_answered_for_blocks_the_next_write():
 
         # Rewording it is a different token, so nothing the book's own
         # idempotency can refuse. What refuses is the call.
-        blocked = await _refuses(
-            agents.record_complaint, _context(call), 'my colour came out wrong', 'money back'
-        )
+        blocked = await refuses_complaint(call, 'my colour came out wrong', 'money back')
         assert 'still unknown' in blocked, blocked
     finally:
         diary.record_complaint = real
@@ -1217,9 +1261,7 @@ async def a_complaint_nobody_answered_for_blocks_the_next_write():
     assert diary.complaints() == [], diary.complaints()
     # And a booking may not run past it either, whichever book is outstanding.
     call.commit(agent='booking')
-    assert 'still unknown' in await _refuses(
-        agents.save_booking, _context(call), 'book', 'HAIRCUT-1', '', True, False
-    )
+    assert 'still unknown' in await refuses_save(call, 'book', 'HAIRCUT-1', '')
 
 
 async def a_recovered_result_still_has_to_answer_the_request():
@@ -1255,12 +1297,12 @@ async def a_recovered_result_still_has_to_answer_the_request():
     real = diary.save_booking
     diary.save_booking = cancels_instead  # ty: ignore[invalid-assignment]
     try:
-        first = await _refuses(agents.save_booking, _context(call), 'book', slot.slot_id, '', True, False)
+        first = await refuses_save(call, 'book', slot.slot_id, '')
         assert 'a cancelled result came back from a book request' in first, first
         assert call.state.unresolved is not None
 
         # The recovery path, which loads exactly that cached result.
-        again = await _refuses(agents.save_booking, _context(call), 'book', slot.slot_id, '', True, False)
+        again = await refuses_save(call, 'book', slot.slot_id, '')
     finally:
         diary.save_booking = real
 
@@ -1283,17 +1325,17 @@ async def correcting_the_number_withdraws_the_old_identity_offers():
     diary.reset()
     call = open_call(PHONE)
     call.commit(agent='verify')
-    await agents.confirm_customer(_context(call), PHONE)
+    await confirm(call, PHONE)
     call.commit(agent='booking')
     read = await read_diary(_context(call), 'monday', 'haircut')
     slot = read.slots[0].slot_id
 
     call.commit(agent='verify')
-    await agents.confirm_customer(_context(call), OTHER)
+    await confirm(call, OTHER)
     assert call.state.customer_phone == OTHER, call.state.customer_phone
 
     call.commit(agent='booking')
-    refusal = await _refuses(agents.save_booking, _context(call), 'book', slot, '', True, False)
+    refusal = await refuses_save(call, 'book', slot, '')
     assert 'not a slot this diary is currently offering this caller' in refusal, refusal
     assert diary.bookings_for(OTHER, diary.now().date()) == []
     # And the offer is gone for the old number too: it was made to this call
@@ -1301,52 +1343,11 @@ async def correcting_the_number_withdraws_the_old_identity_offers():
     assert diary.offer_of(call.id, slot, OTHER) == {}
 
 
-async def the_second_appointment_flag_is_not_a_way_past_the_refusal():
-    """Refused because they already hold one, sent again with `additional=True`.
-
-    Reproduced off the live calls of 2026-09-21 13:00 and 13:02, where it
-    happened twice, identically, one second apart each time:
-
-        save_booking  book ... additional:false  -> refused
-        save_booking  book ... additional:true   -> booked
-
-    The diary's refusal names the flag -- "only pass additional when they
-    asked for a second appointment" -- and the model read that as the way
-    past it. Neither caller had asked for a second appointment.
-
-    The flag is the caller's answer to a question, so it is honoured again
-    the moment the caller has had a chance to answer.
-    """
-    diary.reset()
-    call = open_call(PHONE)
-    call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
-    _heard(call)
-
-    call.turn_started()
-    read = await read_diary(_context(call), 'monday', 'haircut')
-    held, wanted = read.slots[0].slot_id, read.slots[1].slot_id
-    await agents.save_booking(_context(call), 'book', held, '', True, False)
-    assert call.state.writes == 1
-
-    # A new turn: the caller asks for another time, and the diary refuses
-    # because of the one they already hold.
-    call.turn_started()
-    read = await read_diary(_context(call), 'monday', 'haircut')
-    wanted = read.slots[0].slot_id
-    refusal = await _refuses(agents.save_booking, _context(call), 'book', wanted, '', True, False)
-    assert 'already holds' in refusal, refusal
-
-    # Same slot, same turn, flag flipped. This is the whole finding.
-    blocked = await _refuses(agents.save_booking, _context(call), 'book', wanted, '', True, True)
-    assert 'has not said they want a second appointment' in blocked, blocked
-    assert len(diary.bookings_for(PHONE, diary.now().date())) == 1, 'still one appointment'
-    assert call.state.writes == 1
-
-    # The caller speaks, and now the flag can be their answer.
-    call.turn_started()
-    saved = await agents.save_booking(_context(call), 'book', wanted, '', True, True)
-    assert 'booked' in saved, saved
-    assert len(diary.bookings_for(PHONE, diary.now().date())) == 2, 'the second one they asked for'
+# The `additional` flag that this used to check is gone from `save_booking`
+# altogether: a second appointment is now decided by the caller's answer to
+# the question the refusal asks, not by an argument the model fills in. The
+# replay of both live calls that found it lives in `tests.test_consent`, as
+# `n3_a_flipped_flag_is_not_consent`.
 
 
 async def main():
@@ -1374,7 +1375,6 @@ async def main():
     await a_complaint_nobody_answered_for_blocks_the_next_write()
     await a_recovered_result_still_has_to_answer_the_request()
     await correcting_the_number_withdraws_the_old_identity_offers()
-    await the_second_appointment_flag_is_not_a_way_past_the_refusal()
     await an_offer_belongs_to_the_caller_it_was_made_to()
     await giving_up_on_the_number_gives_up_the_errand()
     await a_handed_over_agent_is_asked_the_question()

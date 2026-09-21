@@ -30,7 +30,7 @@ import re
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from loguru import logger
 from pydantic_ai import (
@@ -168,7 +168,7 @@ class Barge:
 
 async def run_turn(
     call: CallContext,
-    agents: dict[str, Node],
+    agents: dict[str, Node[Any]],
     prompt: str | None,
     budget: TurnBudget,
     barge: Barge | None = None,
@@ -270,7 +270,7 @@ class _Failed:
 
 async def _hops(
     call: CallContext,
-    agents: dict[str, Node],
+    agents: dict[str, Node[Any]],
     prompt: str | None,
     budget: TurnBudget,
     usage,
@@ -584,7 +584,9 @@ def note_spoken(call: CallContext, content: str, interrupted: bool) -> None:
             continue  # a tool-call-only response: nothing was ever spoken
         kept = [part for part in message.parts if not isinstance(part, TextPart)]
         if content:
-            kept.append(TextPart(content=content))
+            # ty: the SDK types this list as tool parts only, though a
+            # `ModelResponse` holds text parts and that is what this is.
+            kept.append(TextPart(content=content))  # ty: ignore[invalid-argument-type]
         if kept:
             message.parts = kept
         else:
@@ -599,7 +601,7 @@ def note_spoken(call: CallContext, content: str, interrupted: bool) -> None:
 
 async def take_turn(
     call: CallContext,
-    agents: dict[str, Node],
+    agents: dict[str, Node[Any]],
     prompt: str | None,
     budget: TurnBudget | None = None,
     barge: Barge | None = None,

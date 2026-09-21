@@ -253,7 +253,8 @@ def _record(call, session_id: str) -> None:
 
 
 async def bot(runner_args: RunnerArguments) -> None:
-    transport = await create_transport(runner_args, transport_params)
+    # ty: Pipecat's own parameter type is looser than the table it is given.
+    transport = await create_transport(runner_args, transport_params)  # ty: ignore[invalid-argument-type]
     await run_bot(transport, runner_args)
 
 

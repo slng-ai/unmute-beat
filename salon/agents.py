@@ -521,7 +521,8 @@ MODEL: object = 'google-cloud:gemini-3.5-flash-lite'
 # turn cannot absorb. The live trace showed no thinking tokens, so this is
 # writing down what is already true rather than changing it.
 SETTINGS: object = GoogleModelSettings(
-    service_tier='priority', google_thinking_config={'thinking_level': 'MINIMAL'}
+    service_tier='priority',
+    google_thinking_config={'thinking_level': 'MINIMAL'},  # ty: ignore[invalid-argument-type]
 )
 
 if os.getenv('BENCH_PINNED'):
@@ -547,7 +548,9 @@ if os.getenv('BENCH_PINNED'):
         'gemini-3.1-flash-lite',
         provider=GoogleCloudProvider(project=project, location='eu') if project else GoogleCloudProvider(),
     )
-    SETTINGS = GoogleModelSettings(google_thinking_config={'thinking_level': 'MINIMAL'})
+    SETTINGS = GoogleModelSettings(
+        google_thinking_config={'thinking_level': 'MINIMAL'}  # ty: ignore[invalid-argument-type]
+    )
 
 GREETING = "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
 
@@ -924,7 +927,9 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
     # way in. The node-graph version came back to the front desk first, which
     # cost a model request and a turn in which the caller heard nothing new.
     # This version does not even ask the model where they were heading.
-    return Handoff(to=ctx.deps.resume('concierge'), because='the caller is identified')
+    # ty: `resume` hands back a step name as `str`; `Handoff.to` narrows it
+    # to the four this agency has, and validates it here rather than trusting it.
+    return Handoff(to=ctx.deps.resume('concierge'), because='the caller is identified')  # ty: ignore[invalid-argument-type]
 
 
 async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
@@ -1207,13 +1212,13 @@ def build(
     tools=(),
     finishers=(),
     asks=(),
-    exits: tuple[Exit, ...] = (),
+    exits: tuple[Exit[SalonState], ...] = (),
     enter: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
     satisfied_by: str = '',
     guarded: bool = False,
     model=MODEL,
-) -> Node:
+) -> Node[SalonState]:
     """One step: its agent, its legal exits, and what has to hold before it runs."""
     # `dict.fromkeys`, not `set`: two exits can name one step -- `booking` is
     # reachable by `hand_over` whoever is calling, and reachable by lending
@@ -1373,7 +1378,7 @@ def unverified(state: SalonState) -> bool:
 # If its words should be heard, it is an agent in here. If they should not -- a
 # classifier, an extractor, a summariser -- it is delegation:
 # `await worker.run(..., deps=ctx.deps, usage=ctx.usage)` from inside a tool.
-AGENTS: dict[str, Node] = {
+AGENTS: dict[str, Node[SalonState]] = {
     'concierge': build(
         'concierge',
         finishers=[hang_up],

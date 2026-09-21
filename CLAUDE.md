@@ -100,10 +100,10 @@ all clean. Paste the real output; don't round up.
 
 ## Known debt
 
-`Node` is not generic, so `agent` is a bare `Agent` (ty resolves it to
-`Agent[object, str]`) and its guard/output callables are fixed to `VoiceState`,
-while every salon agent is `Agent[SalonCall, ...]` with `SalonState` callables.
-`invalid-argument-type` is switched off in `pyproject.toml` to keep the baseline
-green — which means ty catches no new errors of that kind anywhere. Making
-`Node` generic over the state type fixes all ~15 sites and lets the line go.
-Marked at the definition in `voice/harness.py`.
+The consent matchers in `salon/state.py` — `agrees`, `ends`, `move_or_add`,
+and `times_named` in `salon/diary.py` — are closed word lists over the
+caller's accepted utterance, not language understanding. Every one of them
+fails towards *asking*, so a miss costs one clarifying turn and cannot cost a
+booking nobody wanted. Upgrade path, if the live runs show too many
+clarifications: a small model on the utterances they return nothing for, with
+these kept as the fast path. Marked at each definition.

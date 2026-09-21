@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 from opentelemetry import trace
 from pipecat.frames.frames import (
@@ -70,7 +71,7 @@ class PydanticAgentProcessor(FrameProcessor):
     def __init__(
         self,
         call: CallContext,
-        agents: dict[str, Node],
+        agents: dict[str, Node[Any]],
         *,
         budget: TurnBudget = TurnBudget(),
         **kwargs,
@@ -247,9 +248,9 @@ class PydanticAgentProcessor(FrameProcessor):
                             # the agent run, which on any turn with a tool in
                             # it reported the tool's whole round trip as time
                             # to first token.
-                            timed = [r for r in self._call.requests if r.ttft is not None]
-                            span.set_attribute('request_ttft', [r.ttft for r in timed])
-                            span.set_attribute('request_first_output', [r.kind for r in timed])
+                            timed = [(r.ttft, r.kind) for r in self._call.requests if r.ttft is not None]
+                            span.set_attribute('request_ttft', [ttft for ttft, _ in timed])
+                            span.set_attribute('request_first_output', [kind for _, kind in timed])
                             spoken = self._call.spoken
                             span.set_attribute('fixed_lines', sum(s.kind == 'fixed' for s in spoken))
                             # The first text of *any* kind handed to TTS,

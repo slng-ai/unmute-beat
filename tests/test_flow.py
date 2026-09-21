@@ -81,7 +81,7 @@ def scripted(**by_agent):
                 # `probe` alongside the agent's real tools, never instead of
                 # them: `override(toolsets=...)` adds to what the agent was
                 # built with.
-                toolsets=[FunctionToolset([probe])],
+                toolsets=[FunctionToolset([probe])],  # ty: ignore[invalid-argument-type]
             )
         )
     return stack

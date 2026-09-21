@@ -54,7 +54,8 @@ TURNS = (
 async def one(step: str, said: str, facts: dict, model: str | None):
     """Run one turn and say what arrived in the response that carried the call."""
     node = AGENTS[step]
-    call = SalonCall(state=SalonState(agent=step, **facts))
+    # ty: `step` is a command-line string; `SalonState` narrows and validates it.
+    call = SalonCall(state=SalonState(agent=step, **facts))  # ty: ignore[invalid-argument-type]
     override = node.agent.override(model=model) if model else None
     if override:
         override.__enter__()

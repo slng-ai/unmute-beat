@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr
 
 from voice.harness import Node, filler_hook, request_clock
-from voice.state import AgentName, Call, Handoff, Phone
+from voice.state import AgentName, Call, CallState, Handoff, Phone
 
 PROMPTS = Path(__file__).resolve().parent.parent / 'prompts' / 'voice'
 
@@ -101,7 +101,7 @@ def build(name: AgentName, tools: list | None = None) -> Agent[Call, str | Hando
 # `await worker.run(..., deps=ctx.deps, usage=ctx.usage)` from inside a tool,
 # and it never goes in this table, because a delegated agent's text never
 # reaches TTS and the caller would hear the gap.
-AGENTS: dict[str, Node] = {
+AGENTS: dict[str, Node[CallState]] = {
     'concierge': Node(build('concierge')),
     'intake': Node(
         build('intake', [confirm_phone]),

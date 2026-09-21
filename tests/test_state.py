@@ -203,8 +203,8 @@ def presence_governs_the_prerequisite():
         wants_reminder: bool | None = None
 
     nodes = {
-        'ask': Node(agent=None),  # type: ignore[arg-type]
-        'act': Node(agent=None, requires=('wants_reminder',), satisfied_by='ask'),  # type: ignore[arg-type]
+        'ask': Node(agent=None),  # ty: ignore[invalid-argument-type]
+        'act': Node(agent=None, requires=('wants_reminder',), satisfied_by='ask'),  # ty: ignore[invalid-argument-type]
     }
     assert route(Answered(), nodes, 'act') == ('ask', 'act'), 'unanswered, so ask first'
     assert route(Answered(wants_reminder=False), nodes, 'act') == ('act', None), (
@@ -493,7 +493,7 @@ async def a_schema_authored_tool_validates_what_a_typed_one_does():
         'log_it', 'Log it.', schema, handler, injected={'phone': lambda call: call.state.customer_phone}
     )
     call = SalonCall(state=SalonState(agent='complaints', customer_phone=PHONE, verified_phone=PHONE))
-    ctx = RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
+    ctx = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
     validate, invoke = tool.args_validator, tool.function
 
     # The injected field is not in front of the model at all.
@@ -520,7 +520,7 @@ async def a_schema_authored_tool_validates_what_a_typed_one_does():
 
     # And a legal call, with the salon's own value in it and not the model's.
     good = validate(ctx, note='a mess', urgent=True)
-    assert await invoke(ctx, **good) == 'done'
+    assert await invoke(ctx, **good) == 'done'  # ty: ignore[invalid-argument-type]
     assert calls == [{'note': 'a mess', 'urgent': True, 'phone': PHONE}], calls
 
     # A schema this cannot honour is refused when the tool is built, not when

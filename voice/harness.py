@@ -700,7 +700,7 @@ def filler_hook(lines_by_tool: dict[str, tuple[str, ...]]) -> Hooks:
     return hooks
 
 
-class Exit(NamedTuple):
+class Exit[S: VoiceState](NamedTuple):
     """One legal move out of a step, and the state it is legal in.
 
     The exits whose guard holds are lowered into that step's own `hand_over` as
@@ -719,32 +719,29 @@ class Exit(NamedTuple):
     """
 
     to: str
-    guard: Callable[[VoiceState], bool] = lambda _: True
+    guard: Callable[[S], bool] = lambda _: True
     # The functions themselves, not their names: this is what a step lends, and
     # the lender has to be able to hand them to `Agent(tools=...)`.
     via: tuple = ()
 
 
 @dataclass(frozen=True)
-class Node:
+class Node[S: VoiceState]:
     """One step: the agent that runs it, where it may send the caller, and what
     has to be true before it runs at all.
     """
 
-    # ponytail: `Node` is not generic, so `agent` is a bare `Agent` (ty resolves
-    # it to `Agent[object, str]`) and the callables below are fixed to
-    # `VoiceState`, while every salon agent is `Agent[SalonCall, ...]` with
-    # `SalonState` callables. That is most of the `invalid-argument-type`
-    # diagnostics switched off in pyproject.toml -- 31 of them, measured, not
-    # the ~15 this said before. Five are inside the SDK and would survive the
-    # fix; see the note there. Upgrade path: make `Node` generic over the
-    # state type, re-measure, narrow what is left.
-    agent: Agent
+    # The agent is `Agent[Any, Any]` rather than `Agent[S, ...]`: the output
+    # type varies per step -- `str`, a handoff, a finisher's return -- and
+    # naming the union here would fix it for every agency. The state type is
+    # what the guards and outputs below are parametrised on, and that is what
+    # the `invalid-argument-type` suppression used to exist for.
+    agent: Agent[Any, Any]
     # Spoken by the processor, not the model, to cover the model round trip the
     # hop costs. Empty means the receiving agent answers straight away.
     enter: tuple[str, ...] = ()
     # The legal model-chosen moves out of this step.
-    exits: tuple[Exit, ...] = ()
+    exits: tuple[Exit[S], ...] = ()
     # State fields that must be truthy before this step may run, and the step
     # that fills them. The graph interposes it and comes back: no model request
     # decides any of that, and no prompt has to state the ordering.
@@ -753,7 +750,7 @@ class Node:
     # This turn's `output_type`, given the state. It is a callable because a
     # guard reads live state, so the narrowed `Literal` cannot be fixed at
     # import. `None` leaves the agent's own, which is the unguarded superset.
-    outputs: Callable[[VoiceState], list] | None = None
+    outputs: Callable[[S], list] | None = None
     # Whether this step can change the business. On one that can, the core
     # holds each clause of model speech back until it is complete and drops
     # the run's speech if it claims a change nothing has made -- see
@@ -769,7 +766,7 @@ class Node:
     history: Literal['messages', 'reset'] = 'messages'
 
 
-def route(state: VoiceState, nodes: dict[str, Node], to: str) -> tuple[str, str | None]:
+def route[S: VoiceState](state: S, nodes: dict[str, Node[S]], to: str) -> tuple[str, str | None]:
     """Where the caller actually goes, and what is left waiting.
 
     Pure now, in the strict sense: it returns the decision and writes nothing.
@@ -799,7 +796,7 @@ def route(state: VoiceState, nodes: dict[str, Node], to: str) -> tuple[str, str 
     return to, state.pending
 
 
-def lent(exits: tuple[Exit, ...]) -> dict[str, Exit]:
+def lent[S: VoiceState](exits: tuple[Exit[S], ...]) -> dict[str, Exit[S]]:
     """The tools a step borrows from its neighbours, by the name the model sees.
 
     One map, read twice: `build` uses it to put the borrowed tools in the schema
@@ -809,7 +806,7 @@ def lent(exits: tuple[Exit, ...]) -> dict[str, Exit]:
     return {tool.__name__: exit for exit in exits for tool in exit.via}
 
 
-def moved_by(state: VoiceState, node: Node, nodes: dict[str, Node], succeeded: set[str]) -> str:
+def moved_by[S: VoiceState](state: S, node: Node[S], nodes: dict[str, Node[S]], succeeded: set[str]) -> str:
     """The step a *successful* tool call has put the caller in, or where they were.
 
     Free, like `route`: the move rides the request that called the tool.
@@ -968,5 +965,8 @@ def schema_tool(
         takes_ctx=True,
         # Without this, `from_schema` calls the handler with whatever came
         # back. Probed against 2.46.0: the schema alone validates nothing.
-        args_validator=validate,
+        # ty: the SDK annotates `args_validator` as returning `None`, and
+        # then uses what it returns as the validated arguments. Probed
+        # against 2.46.0: `tool.args_validator_func(ctx, **args)` is assigned.
+        args_validator=validate,  # ty: ignore[invalid-argument-type]
     )

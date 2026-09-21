@@ -112,7 +112,7 @@ def scripted(**by_agent):
                 # `probe` alongside the agent's real tools, never instead of
                 # them: `override(toolsets=...)` adds to what the agent was
                 # built with.
-                toolsets=[FunctionToolset([probe, slow_probe, speaking_probe])],
+                toolsets=[FunctionToolset([probe, slow_probe, speaking_probe])],  # ty: ignore[invalid-argument-type]
             )
         )
     return stack
@@ -204,14 +204,14 @@ async def the_same_scenarios_both_ways():
     two sides legitimately differ in everything else.
     """
     for name, case in SCENARIOS.items():
-        direct_call = _fresh(case['verified'])
+        direct_call = _fresh(case['verified'])  # ty: ignore[invalid-argument-type]
         with scripted(**case['scripts']()):
-            said, finished = await take_turn(direct_call, AGENTS, case['said'], case['budget'])
+            said, finished = await take_turn(direct_call, AGENTS, case['said'], case['budget'])  # ty: ignore[invalid-argument-type]
 
-        framed_call = _fresh(case['verified'])
+        framed_call = _fresh(case['verified'])  # ty: ignore[invalid-argument-type]
         probe = Probe(framed_call, budget=case['budget'])
         with scripted(**case['scripts']()):
-            await probe._turn(case['said'])
+            await probe._turn(case['said'])  # ty: ignore[invalid-argument-type]
 
         assert said == probe.heard(), f'{name}: {said!r} != {probe.heard()!r}'
         assert finished.requests == probe._finished.requests, name

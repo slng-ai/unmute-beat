@@ -59,27 +59,22 @@ extend-immutable-calls = ["voice.harness.TurnBudget"]
 quote-style = "single"
 
 [tool.ty.rules]
-# Debt, not policy. `voice.harness.Node` is not generic, so its fields are
-# fixed to the base -- a bare `Agent` (which ty resolves to `Agent[object,
-# str]`) and `Callable[[VoiceState], ...]` guards and outputs -- while every
-# salon agent is `Agent[SalonCall, ...]` with `SalonState` callables.
+# `invalid-argument-type` is **on**. It was off, globally, which meant ty
+# caught no new argument-type error anywhere -- the cost this note used to
+# name and pay. Measured with it on, on 2026-09-21: 39 diagnostics.
 #
-# Measured on 2026-09-21 with this line set to "error": **31** diagnostics
-# across twelve files, not the ~15 this note used to claim. Five of them are
-# reported inside `.venv` -- three at `pydantic_ai.toolsets.FunctionToolset`
-# and two in `google.genai` -- where the argument ty objects to is a
-# `RunContext[SalonCall]` tool passed to an `Agent[SalonCall, object]` that it
-# resolves as `Agent[object, str]` anyway. Those five are not `Node`'s fault
-# and making `Node` generic would not clear them, which is the fact that
-# stopped this being removed in the review of 2026-09-21: the suppression
-# cannot come off until ty resolves the explicit subscript, whatever we do to
-# our own types.
+# Making `Node` generic over its state type cleared the largest group of
+# them, which is the upgrade path the note at the definition described. The
+# eight that were left in the application are individually marked with
+# `# ty: ignore[invalid-argument-type]` and a line saying why, and every one
+# of them is a place where an SDK's own annotation is narrower or looser than
+# what it accepts -- Pipecat's transport table, Google's thinking config,
+# pydantic-ai's `args_validator` return and its response-part union. The
+# scaffolding's are marked the same way, at the line rather than the file.
 #
-# The cost of ignoring it globally is that new argument-type errors go
-# unreported anywhere, and that cost is real. Upgrade path unchanged: make
-# `Node` generic over the state type, re-measure, and narrow this to whatever
-# is left. Marked at the definition itself for `/ponytail-debt`.
-invalid-argument-type = "ignore"
+# The five this note used to say were reported inside `.venv` are gone with
+# the generics: they were the bare `Agent` field, and ty resolves the
+# explicit subscript once there is one to resolve.
 
 [[tool.ty.overrides]]
 # Scaffolding passes `None` for a model, a usage and an agent it never reads,

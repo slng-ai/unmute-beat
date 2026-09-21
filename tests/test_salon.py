@@ -655,7 +655,7 @@ async def a_tool_result_is_never_a_script():
     diary.reset()
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    ctx = RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
+    ctx = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
 
     call.ask(Asked(about='complaint', value=agents._gist('the cut was uneven')))
     call.turn_started("yes, that's right")
@@ -752,7 +752,7 @@ def _heard(call) -> list[str]:
 
 
 def _context(call):
-    return RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
+    return RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
 
 
 async def _refuses(fn, *args) -> str:

@@ -102,7 +102,7 @@ def _heard(call) -> list[str]:
 
 
 def _context(call):
-    return RunContext(deps=call, model=None, usage=None)  # type: ignore[arg-type]
+    return RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
 
 
 async def _refuses(fn, *args) -> str:

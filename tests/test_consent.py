@@ -545,6 +545,37 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     assert diary.bookings_for(PHONE, CLOCK.date()) == held, 'still untouched'
 
 
+async def a_complaint_is_written_in_the_words_they_agreed_to():
+    """Not a paraphrase written after the fact, and not one nobody heard.
+
+    The summary the caller agreed to is the complaint. A different wording
+    recorded under that yes is a different complaint, and the caller has
+    agreed to a sentence they were never read.
+    """
+    call = _salon()
+    call.commit(agent='complaints')
+    _heard(call)
+
+    # No summary was ever put to them.
+    call.turn_started('my colour came out wrong')
+    refusal = await _refuses(agents.record_complaint, _context(call), 'the colour was wrong', 'a refund')
+    assert 'ask_complaint' in refusal, refusal
+    assert diary.complaints() == []
+
+    # One was, and then something else was written down.
+    (await agents.ask_complaint(_context(call), 'the colour came out wrong')).put(call)
+    call.turn_started("yes, that's right")
+    other = await _refuses(
+        agents.record_complaint, _context(call), 'the stylist was rude', 'a full refund'
+    )
+    assert 'ask_complaint' in other, other
+    assert diary.complaints() == [], diary.complaints()
+
+    # The one they agreed to goes through.
+    record = await agents.record_complaint(_context(call), 'the colour came out wrong', 'a refund')
+    assert record.recorded and len(diary.complaints()) == 1
+
+
 async def main():
     the_matchers_refuse_rather_than_guess()
     await n1_a_move_question_cannot_hang_up()
@@ -557,6 +588,7 @@ async def main():
     await n4_a_correction_is_not_an_agreement()
     await earlier_b_a_cancellation_nobody_made_is_not_spoken()
     await a_redo_request_keeps_the_booking_and_is_told_the_truth()
+    await a_complaint_is_written_in_the_words_they_agreed_to()
     await recounting_what_is_really_booked_still_streams()
     print('ok')
 

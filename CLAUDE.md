@@ -25,8 +25,9 @@ measurements behind the design. Read it before changing how a turn works.
 | `prompts/<agency>/` | one Handlebars prompt per agent, plus the shared voice rules and the salon's own documents, substituted in at import |
 | `bench/` | latency and behaviour measurement against the real model |
 | `bench/baseline/` | the pre-Phase-01 snapshot, digests and evidence ledger — don't edit, except `after/` when the suite's output changes |
-| `bench/review-20260921.md` | the review of `28516da`: every defect it reproduced, the check that now holds it, and what is still open |
-| `tests/` | assert scripts — no pytest, no network. `fixtures/trace_native.json` is the real native reference call, which is what keeps the trace reader able to read both arms |
+| `bench/review-20260921.md` | the closure ledger: every defect a review reproduced, the check that now holds it, the message its negative control printed, and what is still open |
+| `bench/baseline/after/ledger.md` | the Phase-01 completion ledger: one row per requirement, `passed` / `blocked` / `not-run`, with the command and the retained output |
+| `tests/` | assert scripts — no pytest, no network. `test_consent.py` replays the five live conversation failures of 2026-09-21. `fixtures/trace_native.json` is the real native reference call and `trace_n{1..4}.json` are the four live ones, which is what keeps the trace reader honest about both arms |
 
 **The split that matters:** `voice/core.py` runs a turn and knows nothing about
 how it reaches a person; `voice/processor.py` is the Pipecat adapter over it.
@@ -67,6 +68,13 @@ working on it, but it is only safe by convention.
 `HARNESS=voice` swaps the salon for the demo agency. `talk.py` takes the whole
 call as arguments, which is the quickest way to exercise a prompt change.
 
+`SALON_FIXTURE=fresh` empties the salon at the start of each call, which is
+what a scored benchmark run wants; `continue` (the default) leaves it alone,
+which is what a real salon does and what a two-call scenario needs. Pinning
+`SALON_CLOCK` does **not** reset anything: a clock makes two calls comparable
+and a reset makes the second destroy the first, and they are separate
+decisions.
+
 Before calling anything done: `ruff check`, `ty check` and `python -m tests`
 all clean. Paste the real output; don't round up.
 
@@ -97,6 +105,14 @@ all clean. Paste the real output; don't round up.
 4. **One action per model reply.** `one_action_per_reply` picks the single tool
    call in a response allowed to move the caller or write to the business;
    `claim_or_refuse` is how an action checks it holds that claim.
+5. **Consent is application-owned.** Nothing a model writes establishes that
+   the caller agreed to anything. `CallContext.heard` is what they actually
+   said; `SalonCall._asked` is the one question they are answering, put to
+   them by an `Ask` output whose words this code chose. Every consequential
+   action checks the two against each other — and on a step that can write,
+   model speech goes out a clause at a time so a claim about a change nothing
+   made is never said. Five model-authored arguments used to carry this and
+   the live calls of 2026-09-21 forged all five.
 
 ## Known debt
 

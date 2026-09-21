@@ -356,7 +356,11 @@ async def save_booking(
     # a different day after this slot was offered, and the offer died with it.
     # The day is already in the slot's own id, so this costs a comparison, and
     # no prompt sentence asks the model to notice.
-    if slot_id and ctx.deps.state.booking_day and not slot_id.startswith(ctx.deps.state.booking_day):
+    # Asked of the diary, not read out of the id. The id is the service's own
+    # opaque token now; an empty answer means it never issued that slot, which
+    # is the diary's refusal to make and not this one's.
+    offered = diary.offered_day(slot_id)
+    if offered and ctx.deps.state.booking_day and offered != ctx.deps.state.booking_day:
         raise ModelRetry(
             f'That slot is not on {ctx.deps.state.booking_day}, which is the day the diary was last read '
             'for. The caller changed the day, so that offer is gone. Read the diary for the day '

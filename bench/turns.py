@@ -437,11 +437,19 @@ def analyse(spans: list[dict]) -> Report:
 
 
 def _pair(values: list[float], unit: str = 's') -> str:
-    """p50 and p90, or an honest gap where a number would be a lie."""
+    """p50 and p90, or an honest gap where a number would be a lie.
+
+    Under ten values the p90 *is* the largest one -- `ceil(0.9*n)-1` reaches
+    the last index at n=9 and below -- so it is the worst turn of one call
+    and not an estimate of anything's tail. Labelled, because "p90" in a
+    results table is read as a distribution, and two single calls whose p90s
+    are both their own maxima cannot be compared however close they land.
+    """
     p50, p90 = percentile(values, 0.5), percentile(values, 0.9)
     if p50 is None:
         return 'no data'
-    return f'p50 {p50:.3f}{unit}   p90 {p90:.3f}{unit}   (n={len(values)})'
+    tail = 'p90' if math.ceil(0.9 * len(values)) - 1 < len(values) - 1 else 'max (n<10, so not a p90)'
+    return f'p50 {p50:.3f}{unit}   {tail} {p90:.3f}{unit}   (n={len(values)})'
 
 
 def report(spans: list[dict], subject: str) -> Report:

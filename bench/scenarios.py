@@ -32,6 +32,7 @@ import json
 import math
 import os
 import pathlib
+import random
 import statistics
 import subprocess
 import sys
@@ -57,6 +58,25 @@ PHONE = '+34600111222'
 # ledger is actually about: the turn after the caller agrees to their number,
 # where today a request is spent deciding where they go and nobody speaks.
 SCENARIOS: dict[str, tuple[str, ...]] = {
+    # The five caller utterances of the native reference call, trace
+    # f1c4f999e516a7792dfdbed72fa8262d of 2026-09-21 09:15:54Z, word for word.
+    # It is the only scenario here whose request counts can be put beside
+    # another arm's, because it is the only one both arms have actually been
+    # driven with -- every other entry measures this harness against itself.
+    #
+    # Two divergences are known in advance and are findings, not faults to
+    # paper over: the reference identity is a US number this agency refuses,
+    # so the seeded Spanish one stands in; and the reference was offered
+    # 09:00, 11:30 and 15:00 where this diary offers a half-hour grid capped
+    # at twelve, which on a Friday haircut stops at 14:30. What the caller
+    # asking for three o'clock then gets is the thing to read in the row.
+    'reference': (
+        'Hey, I would like to book a haircut appointment on Friday.',
+        "That's correct.",
+        "3 o'clock in the afternoon.",
+        'That would be lovely, yes.',
+        "No, I'm good, thanks.",
+    ),
     'book': (
         'can I book a haircut for Monday',
         "yes that's right",
@@ -124,6 +144,12 @@ SCENARIOS: dict[str, tuple[str, ...]] = {
 # not the architecture.
 NOT_COMPARABLE = frozenset({'manager', 'knowledge'})
 
+# What the native arm spent on the `reference` conversation, one number per
+# caller turn, counted off trace f1c4f999e516a7792dfdbed72fa8262d by
+# `bench.turns`. Written down here so the comparison is against a measurement
+# and not against a memory of one. Ten requests over five caller turns.
+NATIVE_REFERENCE = (2, 3, 1, 2, 2)
+
 
 def _held(service: str = '', weekday: str = '') -> str:
     """'' when this caller holds exactly the one booking described, else why not."""
@@ -157,6 +183,11 @@ def _one_complaint() -> str:
 # A row that says the turn answered says the agency spoke; only this says it
 # did the thing. Every one of them returns '' for a pass.
 CHECKS = {
+    # A Friday haircut, without naming the time: three o'clock is not on this
+    # diary's grid, so pinning the check to it would score an offer the salon
+    # cannot make. The time that was booked is in the row's spoken
+    # confirmation, which is where the divergence belongs.
+    'reference': lambda: _held('haircut', 'Friday'),
     'book': lambda: _held('haircut'),
     'book_then_change_day': lambda: _held('haircut', 'Wednesday'),
     'change_after_booking': lambda: _held('haircut', 'Saturday'),
@@ -311,6 +342,28 @@ async def run_scenario(name: str, said: tuple[str, ...], repeat: int, write) -> 
     return rows
 
 
+def confidence(calls: list[list[float]], fraction: float = 0.9, draws: int = 2000) -> tuple[float, float]:
+    """A 95% interval for a quantile, resampled over calls rather than turns.
+
+    The turns of one call are not independent of each other -- one slow
+    handoff, one caller who has to repeat themselves, and every later turn of
+    that call carries it. Resampling turns treats them as if they were, which
+    narrows the interval to a width nobody measured. So the unit of resampling
+    is the call, which is also the unit two arms get paired on.
+    """
+    random.seed(0)
+    got = []
+    for _ in range(draws):
+        picked = [random.choice(calls) for _ in calls]
+        got.append(_quantile([s for call in picked for s in call], fraction))
+    return _quantile(got, 0.025), _quantile(got, 0.975)
+
+
+def _quantile(values: list[float], fraction: float) -> float:
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, max(0, math.ceil(fraction * len(ordered)) - 1))]
+
+
 def spread(values: list[float]) -> str:
     """p50, p90 and max under one stated convention.
 
@@ -417,6 +470,15 @@ async def main() -> None:
     print(f'  model requests per turn     mean {statistics.fmean(runs):.2f}   {spread(runs)}')
     print(f'  seconds per turn            mean {statistics.fmean(seconds):.2f}   {spread(seconds)}')
     print(f'  turns that said nothing     {len(silent)}/{len(good)}   <- a caller sitting in silence')
+    by_call: dict[tuple, list[float]] = {}
+    for row in good:
+        by_call.setdefault((row['scenario'], row['run']), []).append(row['seconds'])
+    if len(by_call) > 1:
+        low, high = confidence(list(by_call.values()))
+        print(
+            f'  p90 seconds/turn, 95% CI    [{low:.2f}, {high:.2f}] over {len(by_call)} calls   '
+            "<- resampled over calls, because a call's turns are correlated"
+        )
     first = [t for r in good for t in r.get('request_ttft', [])]
     if first:
         kinds = Tally(k for r in good for k in r.get('request_first_output', []))
@@ -431,6 +493,18 @@ async def main() -> None:
         line = '  '.join(f'{turn}:{statistics.fmean(v):.1f}' for turn, v in sorted(by_turn.items()))
         marker = '' if name not in NOT_COMPARABLE else '   <- not comparable across arms'
         print(f'    {name:<22} {line}{marker}')
+    ours = [
+        statistics.fmean([float(r['runs']) for r in good if r['scenario'] == 'reference' and r['turn'] == n])
+        for n in range(len(SCENARIOS['reference']))
+        if any(r['scenario'] == 'reference' and r['turn'] == n for r in good)
+    ]
+    if len(ours) == len(NATIVE_REFERENCE):
+        print('\n  the reference conversation, the same five utterances, requests per turn:')
+        print(f'    native f1c4f999   {list(NATIVE_REFERENCE)}   total {sum(NATIVE_REFERENCE)}')
+        print(f'    this harness      {[round(n, 1) for n in ours]}   total {sum(ours):.1f}')
+        print('    (the identity and the 15:00 slot differ; see the scenario. Requests are')
+        print('     comparable, seconds are not -- there is no native run of this layer.)')
+
     print('\n  Paired runs are the point: these numbers mean something only beside a')
     print('  contemporaneous run of the other arm on the same scenarios and settings.')
 

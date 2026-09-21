@@ -123,6 +123,9 @@ ACTIONS = frozenset(
         'hang_up',
         'record_complaint',
         'read_diary',
+        # Writes `transfer`, so it belongs with the rest. Missed on the first
+        # pass because it reads like a lookup and is not one.
+        'get_a_manager',
     }
 )
 
@@ -270,10 +273,20 @@ async def get_a_manager(ctx: RunContext[SalonCall]) -> dict:
     it. On the call of 2026-09-20 this ran on "No, thanks", which is the whole
     reason the line below was ever read out.
 
+    Moving an appointment is not asking for a person. "Move it", "change it to
+    Saturday", "can you transfer that booking" are ordinary booking work: read
+    the diary, or hand them to the booking agent. On the call of 2026-09-21
+    this ran on "Can you actually move the appointment to Saturday, same
+    time?", and the caller was told "I can't transfer you because you're on a
+    web session" about a transfer nobody had asked for -- in the middle of a
+    booking change that then worked. The word "transfer" is about the caller,
+    never about their appointment.
+
     When the result says `transferred: False` there is no phone leg to redirect.
     Tell them in your own words that a transfer needs them to be on a phone
     call, and offer what you can do here instead.
     """
+    claim_or_refuse(ctx, ACTIONS)
     if ctx.deps.state.transfer:
         return {'already': ctx.deps.state.transfer}
     # ponytail: this harness runs on WebRTC, which has no call leg for a carrier

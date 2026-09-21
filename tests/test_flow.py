@@ -434,6 +434,39 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
 # --- a tool that did not succeed is not a move -------------------------------
 
 
+def every_tool_that_writes_is_an_action():
+    """A tool that commits state must be in `ACTIONS`, or the policy skips it.
+
+    `get_a_manager` was not, for exactly the reason this check exists: it
+    reads like a lookup and it is not one -- it writes `transfer`. Nothing
+    caught that, because the conflict tests only ever exercised the tools
+    somebody remembered to list.
+
+    Source inspection rather than a registry, because the registry is the
+    thing being checked. A tool added tomorrow is covered without anybody
+    remembering this test exists.
+    """
+    import ast
+    import inspect
+    import pathlib
+
+    from salon import agents
+
+    source = pathlib.Path(inspect.getfile(agents)).read_text()
+    writes = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            call = getattr(inner, 'func', None)
+            if isinstance(inner, ast.Call) and isinstance(call, ast.Attribute) and call.attr == 'commit':
+                writes.add(node.name)
+
+    assert writes, 'found no tools that commit, so this check is not checking anything'
+    missing = writes - agents.ACTIONS
+    assert not missing, f'these write to state and are not in ACTIONS: {sorted(missing)}'
+
+
 def a_refused_tool_does_not_move_the_caller():
     """`moved_by` is given what *succeeded*, and re-derives everything else.
 
@@ -502,6 +535,7 @@ async def main():
     await a_split_destination_name_never_moves_anybody()
     await a_name_that_prefixes_another_is_not_acted_on_early()
     await text_before_a_tool_streams_and_the_tool_still_runs()
+    every_tool_that_writes_is_an_action()
     a_refused_tool_does_not_move_the_caller()
     a_borrowed_tool_cannot_skip_a_prerequisite()
     await a_cancelled_tool_is_not_a_move()

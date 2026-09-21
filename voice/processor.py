@@ -221,7 +221,7 @@ class PydanticAgentProcessor(FrameProcessor):
                         # request that moved them is the one that just answered
                         # them. Set after the run, not during, so the step that
                         # spoke is the step whose prompt wrote the words.
-                        if (landed := _moved_by(self._call.state, node, self._succeeded)) != self._call.state.agent:
+                        if (landed := _moved_by(self._call.state, node, self._agents, self._succeeded)) != self._call.state.agent:
                             logger.info(
                                 'moved {} -> {} (via {})',
                                 self._call.state.agent, landed, ', '.join(sorted(self._succeeded)),

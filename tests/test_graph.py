@@ -253,10 +253,10 @@ def a_borrowed_tool_is_the_move():
     three times in one live call -- does not happen.
     """
     known = SalonState(customer_verified='existing')
-    assert moved_by(known, AGENTS['concierge'], {'read_diary'}) == 'booking'
+    assert moved_by(known, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'booking'
     # A tool nobody lends moves nobody.
-    assert moved_by(known, AGENTS['concierge'], {'look_up_salon_info'}) == 'concierge'
-    assert moved_by(known, AGENTS['concierge'], set()) == 'concierge'
+    assert moved_by(known, AGENTS['concierge'], AGENTS, {'look_up_salon_info'}) == 'concierge'
+    assert moved_by(known, AGENTS['concierge'], AGENTS, set()) == 'concierge'
 
 
 async def a_shut_edge_lends_nothing():
@@ -267,7 +267,7 @@ async def a_shut_edge_lends_nothing():
     anyway.
     """
     fresh = SalonState()
-    assert moved_by(fresh, AGENTS['concierge'], {'read_diary'}) == 'concierge'
+    assert moved_by(fresh, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'concierge'
     assert 'read_diary' not in await _reachable_tools(AGENTS['concierge'], fresh)
     assert 'read_diary' in await _reachable_tools(AGENTS['concierge'], SalonState(customer_verified='existing'))
     # The step that owns it always has it, guard or no guard.

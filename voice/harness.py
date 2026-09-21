@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from typing import NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, ToolCallPart
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
@@ -97,6 +97,11 @@ class CallContext(BaseModel):
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
     _covered: bool = PrivateAttr(default=False)
+    # The one tool call in the current model response that is allowed to change
+    # the flow or write to the business. Set by `one_action_per_reply` from the
+    # whole response before any tool runs; read by every action that could be
+    # the second one. `None` means this response proposed no such action.
+    _claim: str | None = PrivateAttr(default=None)
 
     def commit(self, **updates) -> None:
         """Replace the whole state with one validated candidate, or change nothing.
@@ -161,6 +166,69 @@ class CallContext(BaseModel):
         """Hang up, once the caller has said the call is over."""
         if self._end is not None:
             await self._end()
+
+
+CONFLICT = (
+    'Only one of these may run per reply, and another one is already running: {other}. '
+    'Nothing was done here. Wait for that result, then decide what to do next.'
+)
+
+
+def claim_or_refuse(ctx, actions: frozenset[str]) -> None:
+    """Refuse this action if another one in the same reply already has the claim.
+
+    Called first, before the tool does anything, so a refused action never
+    reaches its service. `ctx.deps._claim` was decided from the complete model
+    response before any tool ran -- a real preflight, in the order the model
+    emitted the calls, never by iterating a set and taking whatever came out
+    first.
+    """
+    claim = ctx.deps._claim
+    if ctx.tool_name in actions and claim is not None and ctx.tool_call_id != claim:
+        raise ModelRetry(CONFLICT.format(other=claim))
+
+
+def one_action_per_reply(actions: frozenset[str]) -> Hooks:
+    """One flow-changing or business-mutating action per model response.
+
+    Two of them in one reply is the model proposing two futures. Letting both
+    run and rejecting one transition afterwards is the thing to avoid: the
+    losing action has already written to the salon by then.
+
+    So the winner is chosen from the whole response, before anything executes,
+    by the order the model emitted the calls. `after_model_request` is the
+    place that can see the complete set -- it runs after the provider replies
+    and before the tool-calling node -- which is why controlled iteration is
+    not needed here.
+
+    Enforcement is in two halves because the SDK only offers one:
+    `before_tool_execute` covers ordinary tools, and does not fire for output
+    tools at all (checked against 2.46.0: an output tool ran with the hook
+    never called). Output tools call `claim_or_refuse` themselves on their
+    first line, which is the same refusal at the same point -- before the
+    service.
+    """
+    hooks = Hooks()
+
+    @hooks.on.after_model_request
+    async def choose(ctx, *, request_context, response):
+        ctx.deps._claim = None
+        for part in response.parts:
+            # Emission order, not a set: "whichever the iterator yields first"
+            # is not arbitration, and two runs of the same reply have to reach
+            # the same answer.
+            if isinstance(part, ToolCallPart) and part.tool_name in actions:
+                ctx.deps._claim = part.tool_call_id
+                break
+        return response
+
+    @hooks.on.before_tool_execute
+    async def refuse_the_rest(ctx, *, call, tool_def, args):
+        if call.tool_name in actions and ctx.deps._claim is not None and call.tool_call_id != ctx.deps._claim:
+            raise ModelRetry(CONFLICT.format(other=call.tool_name))
+        return args
+
+    return hooks
 
 
 def filler_hook(lines_by_tool: dict[str, tuple[str, ...]]) -> Hooks:
@@ -269,19 +337,35 @@ def lent(exits: tuple[Exit, ...]) -> dict[str, Exit]:
     return {tool.__name__: exit for exit in exits for tool in exit.via}
 
 
-def moved_by(state: VoiceState, node: Node, called: set[str]) -> str:
-    """The step a tool call has put the caller in, or where they already were.
+def moved_by(state: VoiceState, node: Node, nodes: dict[str, Node], succeeded: set[str]) -> str:
+    """The step a *successful* tool call has put the caller in, or where they were.
 
-    Free, like `route`: the move rides the request that called the tool. The
-    guard is checked again here rather than trusted from schema-building time,
-    because a tool that ran earlier in the same run can change the state that
-    made it legal.
+    Free, like `route`: the move rides the request that called the tool.
+
+    Three things are re-derived here rather than trusted from when the schema
+    was built, because all three can have changed since:
+
+    * the edge is one this step actually owns;
+    * its guard still holds -- a tool that ran earlier in the same run can
+      undo what made the edge legal;
+    * the destination's own prerequisites are met. Entering a step whose
+      prerequisites are unmet by the back door skips the interposition `route`
+      exists to do.
+
+    `succeeded` is tools that ran *and returned*. A tool that raised, retried
+    or was cancelled by barge-in is not a move: the caller is where they were.
     """
     borrowed = lent(node.exits)
-    for name in called:
+    for name in sorted(succeeded):
         exit = borrowed.get(name)
-        if exit and exit.guard(state):
-            return exit.to
+        if exit is None or not exit.guard(state):
+            continue
+        destination = nodes.get(exit.to)
+        if destination is not None and destination.requires and not all(
+            present(getattr(state, field, None)) for field in destination.requires
+        ):
+            continue
+        return exit.to
     return state.agent
 
 

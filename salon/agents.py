@@ -25,16 +25,102 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr, ToolOutput
-from pydantic_ai.capabilities import PrepareTools
+from copy import deepcopy
+from dataclasses import replace
+
+from pydantic import BaseModel
+from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr, Tool, ToolOutput
+from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.tools import ToolDefinition
 
 from salon import diary, knowledge
-from salon.state import AgentName, Appointment, Handoff, Phone, SalonCall, SalonState
-from voice.harness import Exit, Node, filler_hook
+from salon.state import (
+    AgentName,
+    Appointment,
+    Date,
+    Handoff,
+    Id,
+    Phone,
+    SalonCall,
+    SalonState,
+    Service,
+    Time,
+)
+from voice.harness import STRICT, Exit, Node, claim_or_refuse, filler_hook, one_action_per_reply
 from voice.harness import lent as _lent
 from voice.harness import pick as _pick
+from voice.harness import present as _present
+
+
+# --- the service boundary ----------------------------------------------------
+
+# What the salon service is allowed to have said. `salon.diary` stands in for
+# an HTTP service and hands back plain JSON-shaped dicts, so every one of them
+# is validated here before a single field is read. A return annotation on the
+# service function is not validation: Python does not check it, and the one
+# place a malformed response could reach the state is the place that trusted
+# the annotation.
+
+
+class Held(BaseModel):
+    model_config = STRICT
+    booking_id: Id
+    service: Service
+    date: Date
+    time: Time
+    spoken: str
+
+
+class Slot(BaseModel):
+    model_config = STRICT
+    slot_id: str
+    service: Service
+    time: Time
+    spoken: str
+
+
+class Slots(BaseModel):
+    model_config = STRICT
+    status: Literal['ok', 'full', 'need_day', 'past', 'closed']
+    bookings: list[Held] = []
+    slots: list[Slot] = []
+    day: str = ''
+    date: Date = ''
+    note: str = ''
+    price_euros: int | None = None
+
+
+class Saved(BaseModel):
+    model_config = STRICT
+    status: Literal['booked', 'moved', 'cancelled']
+    booking_id: Id
+    service: Service
+    date: Date
+    time: Time
+    spoken: str
+
+
+class CustomerLookup(BaseModel):
+    model_config = STRICT
+    # No '' here. An empty status is what the state holds before a lookup has
+    # run; it is not something a lookup may come back with.
+    customer_status: Literal['existing', 'created']
+    customer_phone: Phone
+
+
+class ComplaintRecord(BaseModel):
+    model_config = STRICT
+    recorded: bool
+    reference: Id
+
+
+# Actions that change where the caller is, or write to the salon. At most one
+# of these runs per model response; see `one_action_per_reply`.
+ACTIONS = frozenset({
+    'hand_over', 'confirm_customer', 'save_booking', 'hang_up',
+    'record_complaint', 'read_diary',
+})
 
 # What the caller hears the moment the diary is written, said by this code. The
 # `{spoken}` phrase is the diary's own, computed once, so two turns cannot
@@ -209,9 +295,12 @@ async def record_complaint(ctx: RunContext[SalonCall], summary: str, requested_r
         summary: Short, factual summary of what went wrong, in their own terms.
         requested_resolution: What they want the salon to do, or an empty string.
     """
-    if not ctx.deps.state.customer_verified:
+    claim_or_refuse(ctx, ACTIONS)
+    if not _present(ctx.deps.state.customer_verified):
         raise ModelRetry('A complaint record needs an owner and nobody is identified yet. Hand to the verify agent first.')
-    recorded = diary.record_complaint(ctx.deps.state.customer_phone, summary, requested_resolution)
+    recorded = ComplaintRecord.model_validate(
+        diary.record_complaint(ctx.deps.state.customer_phone, summary, requested_resolution)
+    )
     # Before the next request, not after it, so this covers the wait the filler
     # used to cover -- and says the one thing worth saying rather than
     # announcing that something is about to happen.
@@ -233,15 +322,18 @@ async def read_diary(
             "the 25th" -- or an empty string if they have not named one.
         service: Narrow the free times to one service, or `any` to see them all.
     """
-    if not ctx.deps.state.customer_verified:
+    claim_or_refuse(ctx, ACTIONS)
+    if not _present(ctx.deps.state.customer_verified):
         raise ModelRetry('The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.')
-    found = diary.find_slots(ctx.deps.state.customer_phone, when, service, diary.now())
+    found = Slots.model_validate(
+        diary.find_slots(ctx.deps.state.customer_phone, when, service, diary.now())
+    )
     # The day this look confirmed. `save_booking` refuses a slot from any other
     # one, so a caller who changes their mind about the day cannot be booked
     # onto the day they changed away from. The model is not asked whether the
     # change invalidated the slot: it is an application invariant and it is held
     # here, in code, whatever the model does next.
-    ctx.deps.commit(booking_day=found.get('date', ''))
+    ctx.deps.commit(booking_day=found.date)
     return found
 
 
@@ -252,13 +344,14 @@ async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
     Args:
         goodbye: One short goodbye in your own words. It is the last thing they hear.
     """
+    claim_or_refuse(ctx, ACTIONS)
     await ctx.deps.speak_now(goodbye)
     await ctx.deps.end_call()
     return goodbye
 
 
 @lru_cache
-def hand_over_for(exits: tuple[str, ...]):
+def hand_over_for(exits: tuple[Exit, ...]):
     """One step's `hand_over`, carrying only the steps that step may actually reach.
 
     A shared `hand_over` over every step in the agency offers the model routes
@@ -268,6 +361,8 @@ def hand_over_for(exits: tuple[str, ...]):
     sent, and pydantic-ai hands back its own retry if a provider ignores the
     enum anyway.
     """
+
+    names = tuple(dict.fromkeys(exit.to for exit in exits))
 
     async def hand_over(ctx, to, because) -> Handoff:
         """Give the caller to another agent, right now, for something that is not yours to do.
@@ -282,13 +377,24 @@ def hand_over_for(exits: tuple[str, ...]):
             to: The agent that takes it from here.
             because: One short sentence: what the caller wants. Never spoken.
         """
+        claim_or_refuse(ctx, ACTIONS)
+        # Checked again here, against the state as it is now. The schema that
+        # offered this destination was built before the tools in this same
+        # reply ran, and one of them can have closed the edge. A schema that
+        # omits a destination is a convenience for the model, never the
+        # enforcement.
+        if not any(exit.to == to and exit.guard(ctx.deps.state) for exit in exits):
+            raise ModelRetry(
+                f'{to} is not somewhere this caller can go from here right now. '
+                'Nothing was done. Answer them yourself, or pick a destination that is open.'
+            )
         return Handoff(to=to, because=because)
 
     # Built from a value, so it cannot be written as an annotation: under
     # `from __future__ import annotations` every annotation is a string, and
     # pydantic-ai resolves `Literal[exits]` in a scope where `exits` is gone.
     hand_over.__annotations__ = {
-        'ctx': RunContext[SalonCall], 'to': Literal[exits], 'because': str, 'return': Handoff,
+        'ctx': RunContext[SalonCall], 'to': Literal[names], 'because': str, 'return': Handoff,
     }
     return hand_over
 
@@ -305,7 +411,8 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: Phone) -> Handoff:
     Args:
         phone: The exact number they confirmed, in E.164.
     """
-    found = diary.find_or_create_customer(phone)
+    claim_or_refuse(ctx, ACTIONS)
+    found = CustomerLookup.model_validate(diary.find_or_create_customer(phone))
     # One commit, not two assignments. Written separately, a status the diary
     # could not produce would fail *after* the phone number had already been
     # saved, leaving a caller whose number is on the state and whose
@@ -319,7 +426,7 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: Phone) -> Handoff:
     ctx.deps.commit(
         customer_phone=phone,
         phone_confirmed=True,
-        customer_verified=found['customer_status'],
+        customer_verified=found.customer_status,
     )
     # Straight on to what they actually rang about -- which the graph already
     # knows, because the step that needed them identified pushed itself on the
@@ -348,14 +455,13 @@ async def save_booking(
         confirmed: True only after the caller said yes to the sentence you read back.
         additional: True only when they asked for a second appointment on top of one they hold.
     """
+    claim_or_refuse(ctx, ACTIONS)
     if not confirmed:
         raise ModelRetry('Nothing was saved. Say the service, the day and the time back in one sentence, ask one yes-or-no question, and call this again on their yes.')
-    if not ctx.deps.state.customer_verified:
+    if not _present(ctx.deps.state.customer_verified):
         raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
     # A slot from a day the diary is no longer being read for. The caller named
     # a different day after this slot was offered, and the offer died with it.
-    # The day is already in the slot's own id, so this costs a comparison, and
-    # no prompt sentence asks the model to notice.
     # Asked of the diary, not read out of the id. The id is the service's own
     # opaque token now; an empty answer means it never issued that slot, which
     # is the diary's refusal to make and not this one's.
@@ -372,9 +478,12 @@ async def save_booking(
         # The diary's own words, which name what is actually possible instead of
         # leaving the model to guess a new slot.
         raise ModelRetry(str(refused)) from None
+    # Validated before a single field is read, so a malformed response cannot
+    # reach the state through an annotation nobody checks.
+    written = Saved.model_validate(saved)
     appointment = Appointment(
-        booking_id=saved['booking_id'], service=saved['service'], date=saved['date'],
-        time=saved['time'], spoken=saved['spoken'], action=action,
+        booking_id=written.booking_id, service=written.service, date=written.date,
+        time=written.time, spoken=written.spoken, action=action,
     )
     # Said here rather than handed to a model to say. The diary already computed
     # the one right phrasing, so a second request only risks getting it wrong:
@@ -391,10 +500,10 @@ async def save_booking(
     # that reads fine and breaks under a later edit.
     going_back_to = ctx.deps.resume('concierge')
     ctx.deps.commit(appointment=appointment, agent=going_back_to)
-    await ctx.deps.speak_now(_pick(f'saved:{saved["status"]}', SAVED[saved['status']]).format(
-        spoken=saved['spoken'], service=saved['service'].replace('hair-color', 'hair colour'),
+    await ctx.deps.speak_now(_pick(f'saved:{written.status}', SAVED[written.status]).format(
+        spoken=written.spoken, service=written.service.replace('hair-color', 'hair colour'),
     ))
-    return f'{saved["status"]}: {saved["spoken"]}'
+    return f'{written.status}: {written.spoken}'
 
 
 # --- the table ---------------------------------------------------------------
@@ -418,7 +527,6 @@ def build(
     # reachable by `hand_over` whoever is calling, and reachable by lending
     # `read_diary` only once somebody is identified -- and the `Literal` the
     # model sees should say it once, in the order it was written.
-    every = tuple(dict.fromkeys(exit.to for exit in exits))
     borrowed = _lent(exits)
     # Named, always. Pydantic AI calls a lone output function `final_result`
     # ("If not specified and only one output is provided, `final_result` will be
@@ -426,27 +534,74 @@ def build(
     # exits are all shut -- `verify` before anyone is identified -- would offer
     # the model a tool called `final_result` and nothing else to tell it what
     # the tool does. The name is the shortest description a tool has.
-    named = [ToolOutput(fn, name=fn.__name__) for fn in finishers]
+    # `sequential` on everything that writes: two of them must never overlap,
+    # and the conflict policy refuses the second before its service runs. This
+    # is the belt to that brace, and it is one keyword.
+    named = [ToolOutput(fn, name=fn.__name__, sequential=fn.__name__ in ACTIONS) for fn in finishers]
+    # The whole set, always declared. What varies per request is which of them
+    # is *offered*, which `narrow` below decides -- so a step whose exits all
+    # shut does not silently change the name of its remaining output tool.
+    # `hand_over` named explicitly, like the finishers. Left as a bare
+    # function in the output list, pydantic-ai renames it `final_result_hand_over`
+    # as soon as there is more than one output -- which the per-request
+    # narrowing below then failed to find by name, silently offering every
+    # destination whatever the guards said.
+    handoff = [ToolOutput(hand_over_for(exits), name='hand_over', sequential=True)] if exits else []
+    declared = [str, *handoff, *named]
 
     def outputs(state: SalonState) -> list:
-        """What this step may return on this turn, given where the call has got to.
+        """What this step may return, declared once for the whole turn.
 
-        Rebuilt per turn because a guard reads live state: an exit whose guard
-        has stopped holding leaves the `Literal` the model is sent, so it cannot
-        be chosen rather than being refused after it was.
+        Narrowing used to happen here, once per turn. That was too early: a
+        run makes several model requests, and a tool in the first one can shut
+        an edge the second one is still being offered. `narrow` does it per
+        request instead; this stays the superset it picks from.
         """
-        legal = tuple(dict.fromkeys(exit.to for exit in exits if exit.guard(state)))
-        return [str, *([hand_over_for(legal)] if legal else []), *named]
+        return declared
 
     async def only_reachable(ctx: RunContext[SalonCall], defs: list[ToolDefinition]) -> list[ToolDefinition]:
         """Take a borrowed tool back out while the edge it stands for is shut.
 
-        The same narrowing `outputs` does to the exits, done to the tools: an
+        The same narrowing `narrow` does to the exits, done to the tools: an
         unidentified caller's front desk is not holding the diary, so the model
         cannot read it and be refused, which costs the round trip the lending
         was there to save.
+
+        Re-run before every model request, not once per turn: `for_run_step`
+        in pydantic-ai 2.46 re-resolves the toolset at each request node, so a
+        tool that ran a moment ago and changed the state is reflected in the
+        very next schema.
         """
         return [d for d in defs if d.name not in borrowed or borrowed[d.name].guard(ctx.deps.state)]
+
+    async def narrow(ctx: RunContext[SalonCall], defs: list[ToolDefinition]) -> list[ToolDefinition]:
+        """Offer only the destinations that are open at this request.
+
+        The output-tool half of `only_reachable`, and a separate hook because
+        pydantic-ai prepares ordinary and output tools through different ones:
+        filtering the normal tools does nothing to the handoff alternatives.
+
+        An exit whose guard has stopped holding leaves the enum the model is
+        sent, so it cannot be chosen rather than being refused after it was.
+        With none left, `hand_over` goes entirely and the step still has `str`
+        -- which for `verify` is exactly right: an incomplete number is a
+        reason to ask again, not a reason to leave.
+        """
+        legal = [e.to for e in exits if e.guard(ctx.deps.state)]
+        legal = list(dict.fromkeys(legal))
+        kept = []
+        for tool_def in defs:
+            if tool_def.name != 'hand_over':
+                kept.append(tool_def)
+                continue
+            if not legal:
+                continue
+            schema = deepcopy(tool_def.parameters_json_schema)
+            if (to := schema.get('properties', {}).get('to')) is not None:
+                to.pop('const', None)
+                to['enum'] = legal
+            kept.append(replace(tool_def, parameters_json_schema=schema))
+        return kept
 
     return Node(
         Agent[SalonCall, object](
@@ -463,12 +618,20 @@ def build(
             # The unguarded superset, so a run that does not come through the
             # processor -- `talk.py`, a delegation -- still has every exit. The
             # processor narrows it per turn through `Node.outputs`.
-            output_type=[str, *([hand_over_for(every)] if every else []), *named],  # type: ignore[arg-type]
+            output_type=declared,  # type: ignore[arg-type]
             instructions=prompt(name),
             # Its own tools, plus the entry tools of the steps it can reach.
             # `only_reachable` hides the borrowed ones while their edge is shut.
-            tools=[*tools, *(tool for exit in exits for tool in exit.via)],
-            capabilities=[filler_hook(FILLER), PrepareTools(only_reachable)],
+            tools=[
+                *(Tool(fn, sequential=fn.__name__ in ACTIONS) for fn in tools),
+                *(Tool(fn, sequential=fn.__name__ in ACTIONS)
+                  for exit in exits for fn in exit.via),
+            ],
+            capabilities=[
+                filler_hook(FILLER),
+                one_action_per_reply(ACTIONS),
+                Hooks(prepare_tools=only_reachable, prepare_output_tools=narrow),
+            ],
             model_settings=SETTINGS,
         ),
         enter=enter,

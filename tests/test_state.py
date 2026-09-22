@@ -23,16 +23,16 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, ValidationError
 
-from salon.state import (
+from core.state import STRICT, CallContext, VoiceState, present
+from salon.models.shapes import unsupported_region
+from salon.models.state import (
     Appointment,
     Phone,
     SalonCall,
     SalonState,
     open_call,
     prefetch_number,
-    unsupported_region,
 )
-from voice.harness import STRICT, CallContext, VoiceState, present
 
 PHONE = '+34600111222'
 OTHER = '+34934567890'
@@ -195,7 +195,7 @@ def presence_governs_the_prerequisite():
     prerequisite today -- the rule is in `route`, and it should be provable
     without waiting for a package that needs it.
     """
-    from voice.harness import Node, route
+    from core.graph import Node, route
 
     class Answered(VoiceState):
         model_config = STRICT
@@ -471,8 +471,8 @@ async def a_schema_authored_tool_validates_what_a_typed_one_does():
     """
     from pydantic_ai import ModelRetry, RunContext
 
-    from salon.state import SalonCall, SalonState
-    from voice.harness import UnsupportedSchemaError, schema_tool
+    from core.policies import UnsupportedSchemaError, schema_tool
+    from salon.models.state import SalonCall, SalonState
 
     calls: list[dict] = []
 
@@ -666,7 +666,7 @@ def a_submitted_number_is_not_the_same_type_as_a_stored_one():
     """
     from pydantic import TypeAdapter
 
-    from salon.state import SubmittedPhone
+    from salon.models.shapes import SubmittedPhone
 
     submitted = TypeAdapter(SubmittedPhone)
     assert submitted.validate_python(PHONE) == PHONE

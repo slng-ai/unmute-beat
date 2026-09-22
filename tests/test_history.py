@@ -17,10 +17,11 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
-from voice.core import Barge, note_spoken, take_turn
-from voice.harness import CallContext, Handoff, Node, VoiceState
-from voice.history import paired, project
-from voice.processor import PydanticAgentProcessor
+from core.graph import Node
+from core.history import paired, project
+from core.processor import PydanticAgentProcessor
+from core.state import CallContext, Handoff, VoiceState
+from core.turn import Barge, note_spoken, take_turn
 
 
 class State(VoiceState):

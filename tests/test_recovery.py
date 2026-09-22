@@ -13,10 +13,12 @@ from pipecat.utils.asyncio.task_manager import TaskManager
 from pydantic_ai import ModelRequest, ModelResponse, ModelRetry, RunContext, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
+from core.processor import PydanticAgentProcessor
 from salon import agents, diary
 from salon.diary import Diary
-from salon.state import open_call
-from voice.processor import PydanticAgentProcessor
+from salon.instructions import COMPLAINT_GUIDANCE
+from salon.models.state import open_call
+from salon.tools import complaints, desk
 
 PHONE = '+34680840464'
 
@@ -136,7 +138,7 @@ async def verified_complaint_uses_exact_approved_wording():
     (await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')).put(call)
     call.turn_started('Absolutely.')
     try:
-        await agents._record_complaint(context(call), 'My haircut yesterday was uneven', 'a refund')
+        await complaints._record_complaint(context(call), 'My haircut yesterday was uneven', 'a refund')
     except ModelRetry:
         pass
     else:
@@ -144,7 +146,7 @@ async def verified_complaint_uses_exact_approved_wording():
     result = await agents.record_complaint(context(call))
     assert result.recorded and len(books.complaints()) == 1
     try:
-        await agents._record_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')
+        await complaints._record_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')
     except ModelRetry:
         pass
     else:
@@ -262,7 +264,7 @@ async def apology_alone_needs_a_followup():
         with agents.AGENTS['complaints'].agent.override(model=FunctionModel(stream_function=stream)):
             await Probe(call, agents.AGENTS)._turn('My last haircut was uneven.')
         assert requests == 2
-        assert [s.text for s in call.spoken] == [agents.COMPLAINT_GUIDANCE['resolution']]
+        assert [s.text for s in call.spoken] == [COMPLAINT_GUIDANCE['resolution']]
         assert call.state.writes == 0 and call._asked is None
 
 
@@ -386,9 +388,9 @@ async def complaint_preamble_cannot_bypass_structured_speech():
     with agents.AGENTS['complaints'].agent.override(model=FunctionModel(stream_function=stream)):
         await probe._turn('My haircut was uneven.')
     assert len(call.requests) == 1
-    assert [s.text for s in call.spoken] == [agents.COMPLAINT_GUIDANCE['resolution']]
+    assert [s.text for s in call.spoken] == [COMPLAINT_GUIDANCE['resolution']]
     assert [f.text for f in frames if isinstance(f, (LLMTextFrame, TTSSpeakFrame))] == [
-        agents.COMPLAINT_GUIDANCE['resolution']
+        COMPLAINT_GUIDANCE['resolution']
     ]
     assert call.state.agent == 'complaints' and not call.state.writes
 
@@ -528,14 +530,14 @@ def consent_and_history_boundaries():
     call = open_call(PHONE, diary=books)
     call.turn_started('No, thanks.')
     call.messages = [ModelResponse(parts=[TextPart(content='Would you like a redo?')])]
-    assert not agents._can_end(call)
+    assert not desk._can_end(call)
     call.messages = [ModelResponse(parts=[TextPart(content='Anything else?')])]
-    assert agents._can_end(call)
+    assert desk._can_end(call)
     call.note_model_text('Anything else?')
     call.note_heard('')
-    assert not agents._can_end(call), 'unheard speech cannot establish permission to hang up'
+    assert not desk._can_end(call), 'unheard speech cannot establish permission to hang up'
     call.turn_started('No thanks, but can you move my booking?')
-    assert not agents._can_end(call)
+    assert not desk._can_end(call)
     call.commit(agent='complaints')
     assert call.claims_completion('I have recorded your request for a redo.')
 

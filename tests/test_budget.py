@@ -25,12 +25,13 @@ from pydantic_ai import ModelRequest, ModelRetry, RetryPromptPart, RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
+from core.policies import TurnBudget
+from core.processor import EXHAUSTED, PydanticAgentProcessor
 from salon import agents
 from salon.agents import AGENTS
 from salon.diary import Diary
-from salon.state import Asked, open_call
-from voice.harness import TurnBudget
-from voice.processor import EXHAUSTED, PydanticAgentProcessor
+from salon.models.consent import Asked
+from salon.models.state import open_call
 
 PHONE = '+34600111222'
 

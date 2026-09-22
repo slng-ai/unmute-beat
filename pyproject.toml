@@ -53,7 +53,7 @@ convention = "google"
 [tool.ruff.lint.flake8-bugbear]
 # `TurnBudget` is a frozen dataclass, so calling it in a default argument is
 # safe -- there is no shared mutable instance for a caller to write through.
-extend-immutable-calls = ["voice.harness.TurnBudget"]
+extend-immutable-calls = ["core.policies.TurnBudget"]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -80,7 +80,7 @@ quote-style = "single"
 # Scaffolding passes `None` for a model, a usage and an agent it never reads,
 # reads attributes off optionals it knows are set, and parametrises cases with
 # heterogeneous tuples ty widens to a union.
-include = ["tests/**", "bench/**"]
+include = ["tests/**"]
 
 [tool.ty.overrides.rules]
 call-non-callable = "ignore"

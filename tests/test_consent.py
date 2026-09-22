@@ -24,11 +24,13 @@ from pipecat.frames.frames import EndWorkerFrame, LLMTextFrame, TTSSpeakFrame
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from core.processor import PydanticAgentProcessor
 from salon import agents, diary
 from salon.agents import AGENTS
 from salon.diary import Diary, times_named
-from salon.state import agrees, ends, move_or_add, open_call
-from voice.processor import PydanticAgentProcessor
+from salon.models.consent import agrees, ends, move_or_add
+from salon.models.state import open_call
+from salon.tools import complaints, writes
 
 # --- the scripted model ------------------------------------------------------
 #
@@ -573,15 +575,15 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     question.put(call)
 
     call.turn_started("yes, that's right")
-    record = await agents._record_complaint(_context(call), summary, 'a free redo')
+    record = await complaints._record_complaint(_context(call), summary, 'a free redo')
     assert record.recorded and record.reference
 
     # One acknowledgement, carrying the reference, and the policy's own step.
     spoken = [seg.text for seg in call.spoken if seg.kind == 'fixed']
     assert len(spoken) == 1, spoken
     assert record.reference in spoken[0], spoken[0]
-    assert agents.REPLY_SOON in spoken[0], spoken[0]
-    assert agents.MANAGER_CALLS not in spoken[0], 'a redo is not a refund tier'
+    assert writes.REPLY_SOON in spoken[0], spoken[0]
+    assert writes.MANAGER_CALLS not in spoken[0], 'a redo is not a refund tier'
 
     # And the appointment they hold is exactly where it was.
     after = books.bookings_for(PHONE, CLOCK.date())
@@ -593,9 +595,9 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     refund = 'the last cut was completely uneven'
     (await agents.ask_complaint(_context(call), refund, 'a full refund')).put(call)
     call.turn_started('yes')
-    await agents._record_complaint(_context(call), refund, 'a full refund')
+    await complaints._record_complaint(_context(call), refund, 'a full refund')
     latest = [seg.text for seg in call.spoken if seg.kind == 'fixed'][-1]
-    assert agents.MANAGER_CALLS in latest, latest
+    assert writes.MANAGER_CALLS in latest, latest
     assert books.bookings_for(PHONE, CLOCK.date()) == held, 'still untouched'
 
 
@@ -612,19 +614,21 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
 
     # No summary was ever put to them.
     call.turn_started('the colour came out wrong, I want a refund')
-    refusal = await _refuses(agents._record_complaint, _context(call), 'the colour was wrong', 'a refund')
+    refusal = await _refuses(complaints._record_complaint, _context(call), 'the colour was wrong', 'a refund')
     assert 'ask_complaint' in refusal, refusal
     assert books.complaints() == []
 
     # One was, and then something else was written down.
     (await agents.ask_complaint(_context(call), 'the colour came out wrong', 'a refund')).put(call)
     call.turn_started("yes, that's right")
-    other = await _refuses(agents._record_complaint, _context(call), 'the stylist was rude', 'a full refund')
+    other = await _refuses(
+        complaints._record_complaint, _context(call), 'the stylist was rude', 'a full refund'
+    )
     assert 'ask_complaint' in other, other
     assert books.complaints() == [], books.complaints()
 
     # The one they agreed to goes through.
-    record = await agents._record_complaint(_context(call), 'the colour came out wrong', 'a refund')
+    record = await complaints._record_complaint(_context(call), 'the colour came out wrong', 'a refund')
     assert record.recorded and len(books.complaints()) == 1
 
 

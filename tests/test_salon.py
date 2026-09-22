@@ -20,12 +20,18 @@ from pydantic import BaseModel
 from pydantic_ai import ModelRetry, RunContext, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from core.policies import TurnBudget
+from core.processor import EXHAUSTED, PydanticAgentProcessor
 from salon import agents, diary
-from salon.agents import AGENTS, MANAGER_CALLS, REPLY_SOON, _record_complaint, prompt, read_diary
+from salon.agents import AGENTS
 from salon.diary import Diary
-from salon.state import Appointment, Asked, SalonCall, SalonState, open_call, prefetch_number
-from voice.harness import TurnBudget
-from voice.processor import EXHAUSTED, PydanticAgentProcessor
+from salon.instructions import instructions
+from salon.models.consent import Asked
+from salon.models.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
+from salon.tools import complaints
+from salon.tools.booking import read_diary
+from salon.tools.complaints import _record_complaint
+from salon.tools.writes import MANAGER_CALLS, REPLY_SOON
 
 books = Diary()
 """This module's salon, emptied by each case that writes to it."""
@@ -106,7 +112,7 @@ assert books.bookings_for(PHONE, TODAY) == []
 # go wrong is different: a substitution that does not fire leaves the marker
 # sitting in the prompt and the agent answering from nothing at all. Both
 # prompts are checked for a fact only their own document carries.
-_concierge, _complaints = str(prompt('concierge')), str(prompt('complaints'))
+_concierge, _complaints = str(instructions('concierge')), str(instructions('complaints'))
 assert 'metered street parking' in _concierge and 'nine in the morning' in _concierge
 assert 'complaint_guidance' in _complaints and 'fourteen days' not in _complaints
 assert '<!--' not in _concierge and '<!--' not in _complaints
@@ -124,8 +130,8 @@ assert prefetch_number('+8656696123') == '+8656696123'
 
 # --- the prompt is branched before the model reads it ------------------------
 
-unverified = prompt('concierge').render(SalonCall(state=SalonState(customer_phone=PHONE)))
-verified = prompt('concierge').render(
+unverified = instructions('concierge').render(SalonCall(state=SalonState(customer_phone=PHONE)))
+verified = instructions('concierge').render(
     SalonCall(state=SalonState(customer_phone=PHONE, customer_verified='existing', verified_phone=PHONE))
 )
 assert 'Nobody has been identified' in unverified
@@ -134,7 +140,7 @@ assert 'has been identified, for the rest of the call' in verified
 # The front desk never holds a number, whatever state it is in.
 assert PHONE not in unverified and PHONE not in verified
 # Only the verification step renders one.
-assert PHONE in prompt('verify').render(SalonCall(state=SalonState(customer_phone=PHONE)))
+assert PHONE in instructions('verify').render(SalonCall(state=SalonState(customer_phone=PHONE)))
 
 appointment = Appointment(
     booking_id='BK0001',
@@ -144,7 +150,7 @@ appointment = Appointment(
     spoken='Monday at 9:00 AM',
     action='book',
 )
-with_booking = prompt('concierge').render(
+with_booking = instructions('concierge').render(
     SalonCall(
         state=SalonState(
             customer_phone=PHONE,
@@ -613,8 +619,8 @@ async def the_note_is_said_once():
     call.ask(
         Asked(
             about='complaint',
-            value=agents._gist('an uneven haircut'),
-            resolution=agents._gist('a redo'),
+            value=complaints._gist('an uneven haircut'),
+            resolution=complaints._gist('a redo'),
             summary='an uneven haircut',
             requested_resolution='a redo',
         )
@@ -662,7 +668,11 @@ async def a_tool_result_is_never_a_script():
     ctx = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
 
     call.ask(
-        Asked(about='complaint', value=agents._gist('the cut was uneven'), resolution=agents._gist('a redo'))
+        Asked(
+            about='complaint',
+            value=complaints._gist('the cut was uneven'),
+            resolution=complaints._gist('a redo'),
+        )
     )
     call.turn_started("yes, that's right")
     results = [
@@ -772,14 +782,14 @@ async def _refuses(fn, *args) -> str:
 
 async def complain(call, summary, wanted, said="yes, that's right"):
     """Read a complaint summary back, take the caller's yes, and record it."""
-    agreed(call, 'complaint', said, value=agents._gist(summary), resolution=agents._gist(wanted))
-    return await agents._record_complaint(_context(call), summary, wanted)
+    agreed(call, 'complaint', said, value=complaints._gist(summary), resolution=complaints._gist(wanted))
+    return await complaints._record_complaint(_context(call), summary, wanted)
 
 
 async def refuses_complaint(call, summary, wanted, said="yes, that's right"):
     """The same, for a complaint refused for a reason that is not consent."""
-    agreed(call, 'complaint', said, value=agents._gist(summary), resolution=agents._gist(wanted))
-    return await _refuses(agents._record_complaint, _context(call), summary, wanted)
+    agreed(call, 'complaint', said, value=complaints._gist(summary), resolution=complaints._gist(wanted))
+    return await _refuses(complaints._record_complaint, _context(call), summary, wanted)
 
 
 async def confirm(call, phone, said="yes, that's right"):

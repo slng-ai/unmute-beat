@@ -1,0 +1,320 @@
+"""What a call to Sage and Stone knows, and the call itself.
+
+Only what the conversation can establish is here. The date, the weekday and
+the salon clock are not: the diary works those out in code, so nothing has to
+be told to the model and nothing can be got wrong.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Literal
+
+from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_validator
+
+from core import state as core
+from salon.diary import Diary, day_phrases
+from salon.models.consent import NOT_YES, Asked, agrees
+from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
+
+
+class Appointment(BaseModel):
+    """The last booking action that actually succeeded.
+
+    Every field comes from the diary, never from the model: `spoken` in
+    particular is the one phrase to say this booking out loud, computed once so
+    two agents cannot describe the same appointment two different ways.
+    """
+
+    model_config = core.STRICT
+
+    booking_id: Id
+    service: Service
+    date: Date
+    time: Time
+    spoken: str
+    action: Literal['book', 'move', 'cancel']
+
+
+class Unresolved(BaseModel):
+    """A write this call started and never learned the outcome of, and what it asked for.
+
+    The token on its own was not enough. Reconciliation has to check the
+    answer it finds against the request that produced it, and a token is a
+    hash: the action, the booking and the offered slot cannot be read back out
+    of it. Holding only the token, recovery took the action from whatever
+    status came back, so a `cancelled` result refused on the first attempt as
+    an answer to a `book` request was accepted on the second as a cancellation
+    nobody had asked for.
+    """
+
+    model_config = core.STRICT
+
+    token: str
+    action: Literal['book', 'move', 'cancel', 'complaint']
+    """What was asked for, so what comes back can be checked against it. A complaint is a write like any other."""
+    booking_id: str = ''
+    offered: dict[str, str] = {}
+    """The slot this caller was offered, exactly as the diary returned it, so the recovered result meets the check the first answer met."""
+    wanted: str = ''
+    """What a complaint asked the salon to do, because it decides what the caller is told happens next."""
+
+
+class Handoff(core.Handoff):
+    to: AgentName
+
+
+class SalonState(core.VoiceState):
+    """The business facts of one salon call.
+
+    Three facts about the caller's number are kept apart on purpose:
+    `customer_phone` says the digits are a real Spanish number, `phone_confirmed`
+    that the caller agreed to them when they were read back, and
+    `customer_verified` what the customer lookup found. They used to be one
+    field, which let structural validity stand in for identity, and a
+    valid-length wrong number is still the wrong customer.
+    """
+
+    agent: AgentName = 'concierge'
+    pending: AgentName | None = None
+    """Narrowed from the base `str | None`: an unknown step name is a validation error, not a `KeyError` next turn."""
+
+    customer_phone: Phone = ''
+    """Prefetched from the carrier, and a guess until the caller agrees to it. Only the verify prompt renders it."""
+    phone_confirmed: bool = False
+    customer_verified: Verification = ''
+    """'' until verification has run. Every prompt branches on this and every tool touching a customer record refuses without it.
+
+    Written only by the verify step's finisher, from what the customer lookup
+    came back with. It is a fact the service established, not a value the
+    model may assert; the invariant below is what makes that enforceable.
+    """
+    verified_phone: Phone = ''
+    """The number the lookup was performed against. Verification belongs to an identity, and this ties the two together."""
+
+    @model_validator(mode='after')
+    def _verification_belongs_to_one_identity(self) -> SalonState:
+        """Drop verification that does not belong to the number now on the call.
+
+        Two things this makes unrepresentable rather than merely discouraged: a
+        status nobody earned, since `SalonState(customer_verified='existing')`
+        with no matching `verified_phone` is not a verified caller; and
+        authorisation surviving a correction, since a caller verified as one
+        number who then gives a different one is a different person until the
+        new number is looked up.
+
+        Runs on every commit, because `commit` rebuilds the whole model, so
+        there is no write path that can skip it. Writes go through `__dict__`
+        because a plain assignment here recurses: `validate_assignment` re-runs
+        the model validators on every set, and this is one of them.
+        """
+        if self.customer_phone != self.verified_phone:
+            self.__dict__['customer_verified'] = ''
+            self.__dict__['verified_phone'] = ''
+            self.__dict__['phone_confirmed'] = False
+        return self
+
+    booking_day: Date | None = None
+    """The day the diary was last read for, written by the read and never by the model."""
+    appointment: Appointment | None = None
+    writes: int = 0
+    """How many business writes this call has had accepted.
+
+    Part of the name of the next one: an operation token is derived from what
+    the action *is*, so booking a slot, cancelling it and booking the same slot
+    again must derive a new token, or the second write returns the first one's
+    outcome and writes nothing. A retry of one intent happens with this
+    unchanged and still reconciles; a new intent follows an accepted write.
+    """
+    unresolved: Unresolved | None = None
+    """The write this call started and never learned the outcome of.
+
+    While it is set, no other write may run: an unanswered write is not a
+    write that did not happen, and a sentence of retry text asking the model
+    not to try again is not a guard.
+    """
+
+
+_WITHHELD = ('266696687', '7378742833', '8656696', '86282452253', '7748283')
+"""Keypad spellings of the words a carrier substitutes for a withheld number. They pass a shape check because they are the right shape."""
+
+
+def prefetch_number(raw: str) -> str:
+    """The caller's number, or '' when the carrier sent a placeholder instead.
+
+    A withheld caller ID arrives three ways: empty, as a word, or as the keypad
+    digits of a word an upstream carrier sent. All three mean the same thing,
+    and a value that reaches a prompt is one the agent reads back as theirs.
+    Only a value that *begins* with a spelling is refused: "unknown" spells
+    8656696, and +86 5669 6xxx is an ordinary mobile.
+    """
+    text = (raw or '').strip()
+    digits = text[1:] if text.startswith('+') else text
+    if not (text.startswith('+') and digits.isascii() and digits.isdigit() and 8 <= len(digits) <= 15):
+        return ''
+    return '' if any(word.startswith(digits) for word in _WITHHELD) else text
+
+
+_CLAIMED = re.compile(
+    r"\b(?:i|we)(?:'ve| have|'ll have| had)?\s+(?:just\s+)?"
+    r'(?:cancelled|canceled|booked|moved|rebooked)\b'
+    r"|\bi(?:'ve| have)\s+(?:got\s+)?you\s+(?:down|booked|in)\b",
+    re.IGNORECASE,
+)
+"""A first-person claim that a booking has already been changed.
+
+Only the perfect forms, and only first person: "you're booked for Friday" is
+the agent recounting what the caller holds, while "I've cancelled that" is a
+report of work just done.
+"""
+_RECORDED = re.compile(
+    r"\b(?:i|we)(?:'ve| have)?\s+(?:just\s+)?(?:recorded|logged|noted|written down)\b"
+    r"|\b(?:that|it|your complaint)(?:'s| is| has been)\s+(?:on record|recorded|logged)\b",
+    re.IGNORECASE,
+)
+_DAYS_REMEMBERED = 4
+"""How many days back the caller's own words are kept: two corrections and the original."""
+
+
+class SalonCall(core.CallContext):
+    """This call's state, history, line and salon. The agents' `deps`.
+
+    The question the call is waiting on an answer to is the only authority for
+    a consequential action. It replaced a boolean the model filled in:
+    `confirmed=True` was the caller's agreement as asserted by the party that
+    wanted the write to go through.
+    """
+
+    state: SalonState = Field(default_factory=SalonState)
+    _diary: Diary = PrivateAttr(default_factory=Diary)
+    """The salon's books. A private attribute because the prompt templates are compiled against this model's schema."""
+    _writes_before: int = PrivateAttr(default=0)
+    """What `writes` stood at when this turn began, so "did anything land in this turn" is answerable."""
+    _asked: Asked | None = PrivateAttr(default=None)
+    _complaint: Asked | None = PrivateAttr(default=None)
+    """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
+    _day_words: list[str] = PrivateAttr(default_factory=list)
+    """Every day the caller has named, in their own words, from whichever turn.
+
+    Separate from the resolved date on purpose: Pydantic can validate that a
+    date exists, but only the utterance says whether "Friday" was turned into
+    "next Friday" on the way to the diary. Bounded, or a long call naming a
+    dozen days would end up permitting all of them.
+    """
+
+    @property
+    def diary(self) -> Diary:
+        """The salon's books this call reads and writes."""
+        return self._diary
+
+    def turn_started(self, heard: str = '') -> None:
+        """Also age out a question nobody answered, and mark where the write count stood.
+
+        A question is answerable on the turn after it was asked and no later;
+        left standing, a "yes" to something else entirely three turns on would
+        still find it. An approved complaint survives only while the caller is
+        being verified for it and only under the identity it was approved for.
+        """
+        super().turn_started(heard)
+        self._writes_before = self.state.writes
+        if (question := self.pending('complaint')) and agrees(heard):
+            self._complaint = question.model_copy(update={'owner': self.state.customer_phone})
+        elif self._complaint and (self.state.agent != 'verify' or NOT_YES.search(heard)):
+            self._complaint = None
+        if self._complaint and self._complaint.owner and self._complaint.owner != self.state.customer_phone:
+            self._complaint = None
+        if self._asked is not None and self._asked.turn < self._turn - 1:
+            self._asked = None
+        for words in day_phrases(heard):
+            if words not in self._day_words:
+                self._day_words = [*self._day_words, words][-_DAYS_REMEMBERED:]
+
+    def ask(self, question: Asked) -> None:
+        """Record that this question has gone out to the caller, on this turn."""
+        if question.about == 'complaint':
+            self._complaint = None
+        self._asked = question.model_copy(update={'turn': self._turn})
+
+    def pending(self, about: str, **fields: str) -> Asked | None:
+        """The question the caller is answering right now, if it is this one.
+
+        Only the turn after it was asked: a question put two turns ago has
+        been overtaken by whatever the caller said in between.
+        """
+        asked = self._asked
+        if asked is None or asked.about != about or asked.turn != self._turn - 1:
+            return None
+        return asked if all(getattr(asked, name) == value for name, value in fields.items()) else None
+
+    def answered(self) -> None:
+        """Consume the pending question. One answer authorises one action."""
+        self._asked = None
+
+    @computed_field
+    @property
+    def complaint_approved(self) -> bool:
+        """Whether approved complaint wording still belongs to this caller. Never model-authored."""
+        approved = self._complaint
+        return approved is not None and (not approved.owner or approved.owner == self.state.customer_phone)
+
+    @property
+    def day_words(self) -> tuple[str, ...]:
+        """The days the caller has named, in their own words, most recent last."""
+        return tuple(self._day_words)
+
+    def wrote_this_turn(self) -> bool:
+        """Whether this turn has already changed the salon's books."""
+        return self.state.writes != self._writes_before
+
+    def claims_completion(self, clause: str) -> bool:
+        """Whether this clause tells the caller a booking changed, when none has.
+
+        The same three conditions `unbacked_claim` applies to a whole turn,
+        asked of one clause on its way out, so on a step that can write the
+        answer can be to not say them at all.
+        """
+        return not self.wrote_this_turn() and bool(self._invented(clause))
+
+    def _invented(self, text: str) -> str:
+        """The first-person claim of a change this state does not bear out, or ''."""
+        if hit := _RECORDED.search(text):
+            return hit.group(0)
+        if not (hit := _CLAIMED.search(text)):
+            return ''
+        said = hit.group(0).lower()
+        held = self.state.appointment
+        if 'cancel' in said and (held is None or held.action != 'cancel'):
+            return hit.group(0)
+        if 'cancel' not in said and held is None:
+            return hit.group(0)
+        return ''
+
+    def unbacked_claim(self) -> str:
+        """Model speech this turn claiming a booking change the salon cannot corroborate.
+
+        Three conditions, because any one of them alone is ordinary speech:
+        nothing was written in this turn, the model said in the first person
+        that it had just changed a booking, and the state does not bear that
+        out. An agent recounting an appointment made earlier in the call has a
+        state that agrees with it and does not trip this.
+        """
+        if self.wrote_this_turn():
+            return ''
+        for segment in self.spoken:
+            if segment.kind == 'model' and (claim := self._invented(segment.text)):
+                return claim
+        return ''
+
+
+def open_call(from_number: str = '', diary: Diary | None = None) -> SalonCall:
+    """A fresh call on the salon's books. Nothing here can fail it; a fact we cannot get is left unset.
+
+    It does **not** empty the diary. The diary is the business, shared by
+    everyone who rings; only the conversation is per-call. Without a diary the
+    call gets its own empty one, which is what a test wants and a bot must
+    never rely on.
+    """
+    call = SalonCall(state=SalonState(customer_phone=prefetch_number(from_number)))
+    if diary is not None:
+        call._diary = diary
+    return call

@@ -1,7 +1,7 @@
 """Run: uv run --env-file .env python -m tests.test_core
 
-The extraction, checked from both sides. `voice.core` runs a caller turn and
-knows nothing about how it reaches anybody; `voice.processor` turns its events
+The extraction, checked from both sides. `core.turn` runs a caller turn and
+knows nothing about how it reaches anybody; `core.processor` turns its events
 into Pipecat frames. The claim Phase 02 rests on is that those are two views
 of one behaviour, so the same scenarios run both ways here and are compared
 outcome by outcome.
@@ -29,13 +29,13 @@ from pydantic_ai import RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
+from core import turn as core
+from core.processor import PydanticAgentProcessor
+from core.state import turn_generation
+from core.turn import EXHAUSTED, UNBACKED, TurnBudget, take_turn
 from salon.agents import AGENTS
 from salon.diary import Diary
-from salon.state import Appointment, SalonCall, open_call
-from voice import core
-from voice.core import EXHAUSTED, UNBACKED, TurnBudget, take_turn
-from voice.harness import _turn_generation
-from voice.processor import PydanticAgentProcessor
+from salon.models.state import Appointment, SalonCall, open_call
 
 PHONE = '+34600111222'
 
@@ -652,9 +652,11 @@ def the_core_imports_no_runtime():
     A Pipecat import in here would compile and pass every behavioural test in
     this file, and Phase 02 would find it.
     """
-    source = (pathlib.Path(__file__).parent.parent / 'voice' / 'core.py').read_text()
-    for banned in ('pipecat', 'livekit', 'SlngSTT', 'SlngTTS', 'TTSSpeakFrame', 'LLMTextFrame'):
-        assert banned not in source, f'{banned!r} reached the runtime-neutral core'
+    engine = pathlib.Path(__file__).parent.parent / 'core'
+    for module in ('state', 'graph', 'policies', 'history', 'turn'):
+        source = (engine / f'{module}.py').read_text()
+        for banned in ('pipecat', 'livekit', 'SlngSTT', 'SlngTTS', 'TTSSpeakFrame', 'LLMTextFrame'):
+            assert banned not in source, f'{banned!r} reached the runtime-neutral core ({module}.py)'
 
 
 def the_processor_no_longer_runs_the_turn():
@@ -662,7 +664,7 @@ def the_processor_no_longer_runs_the_turn():
 
     Two turn loops that drift apart is worse than one in the wrong place.
     """
-    source = (pathlib.Path(__file__).parent.parent / 'voice' / 'processor.py').read_text()
+    source = (pathlib.Path(__file__).parent.parent / 'core' / 'processor.py').read_text()
     for moved in ('run_stream_events', 'RunCancelled', 'moved_by', 'route('):
         assert moved not in source, f'{moved!r} is still in the processor'
 
@@ -710,7 +712,7 @@ async def a_late_commit_cannot_move_a_caller_who_moved_on():
     books.reset()
     call = open_call(PHONE, diary=books)
     first = call.begin_turn()
-    _turn_generation.set((call.id, first))
+    turn_generation.set((call.id, first))
     call.commit(agent='concierge')
 
     # The caller speaks again, and the old turn's tool is still running.
@@ -725,10 +727,10 @@ async def a_late_commit_cannot_move_a_caller_who_moved_on():
     assert call.state.agent == 'concierge', call.state.agent
 
     # And the current turn writes freely.
-    _turn_generation.set((call.id, call._generation))
+    turn_generation.set((call.id, call._generation))
     call.commit(agent='booking')
     assert call.state.agent == 'booking'
-    _turn_generation.set(None)
+    turn_generation.set(None)
 
 
 async def a_reset_step_is_sent_none_of_the_conversation():

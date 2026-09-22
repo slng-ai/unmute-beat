@@ -13,9 +13,9 @@ from contextlib import ExitStack
 
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from core.graph import moved_by, route
 from salon.agents import AGENTS
-from salon.state import SalonCall, SalonState
-from voice.harness import moved_by, route
+from salon.models.state import SalonCall, SalonState
 
 # --- the shape of the graph --------------------------------------------------
 

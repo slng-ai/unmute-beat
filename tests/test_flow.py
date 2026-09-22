@@ -26,11 +26,11 @@ from pydantic_ai.messages import ModelRequest
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
+from core.graph import moved_by
+from core.processor import EXHAUSTED, PydanticAgentProcessor
 from salon.agents import AGENTS
 from salon.diary import Diary
-from salon.state import SalonCall, SalonState, open_call
-from voice.harness import moved_by
-from voice.processor import EXHAUSTED, PydanticAgentProcessor
+from salon.models.state import SalonCall, SalonState, open_call
 
 PHONE = '+34600111222'
 # The same number, named for what it means where a state is built by hand:
@@ -565,74 +565,74 @@ async def the_loop_from_the_call_of_2026_09_21():
 
 
 def every_tool_that_writes_is_an_action():
-    """A tool that commits state must be in `ACTIONS`, or the policy skips it.
-
-    The since-deleted `get_a_manager` was not, for exactly the reason this
-    check exists: it read like a lookup and was not one -- it wrote a state
-    field. Nothing caught that, because the conflict tests only ever
-    exercised the tools somebody had remembered to list.
+    """A tool that commits state must be in `ACTIONS`, or the conflict policy skips it.
 
     Source inspection rather than a registry, because the registry is the
-    thing being checked. A tool added tomorrow is covered without anybody
-    remembering this test exists.
+    thing being checked: a tool added tomorrow is covered without anybody
+    remembering this test exists. Every module the salon's tools live in is
+    scanned.
+
+    A model-callable tool is a public function whose first parameter is
+    `ctx`. Anything else that commits is an executor or a helper, and is
+    exempt only while every path to it starts at an action or at `advance`:
+    otherwise a helper becomes the way to write to state without a claim.
+    Transitively, because `_unknown` commits and is reached through
+    `_answered`, which is not a tool either.
     """
     import ast
-    import inspect
     import pathlib
 
     from salon import agents
+    from salon.tools.policy import ACTIONS
 
-    source = pathlib.Path(inspect.getfile(agents)).read_text()
-    writes = set()
-    for node in ast.walk(ast.parse(source)):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        for inner in ast.walk(node):
-            call = getattr(inner, 'func', None)
-            if isinstance(inner, ast.Call) and isinstance(call, ast.Attribute) and call.attr == 'commit':
-                writes.add(node.name)
+    root = pathlib.Path(agents.__file__).parent
+    functions: dict[str, ast.AST] = {}
+    for path in [root / 'agents.py', *sorted((root / 'tools').glob('*.py'))]:
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                functions.setdefault(node.name, node)
 
+    def commits(node: ast.AST) -> bool:
+        return any(
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr == 'commit'
+            for inner in ast.walk(node)
+        )
+
+    writes = {name for name, node in functions.items() if commits(node)}
     assert writes, 'found no tools that commit, so this check is not checking anything'
 
-    # A private helper is not a tool. The model cannot call `_settle`, and the
-    # claim for what it writes is made by the action that calls it -- so it is
-    # exempt, but only while every one of its callers is itself an action.
-    # Otherwise a leading underscore becomes the way to write to state
-    # without a claim.
+    tools = {
+        name
+        for name, node in functions.items()
+        if not name.startswith('_') and node.args.args and node.args.args[0].arg == 'ctx'
+    }
     called_by: dict[str, set[str]] = {}
-    for node in ast.walk(ast.parse(source)):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
+    for name, node in functions.items():
         for inner in ast.walk(node):
-            name = getattr(getattr(inner, 'func', None), 'id', None)
-            if isinstance(inner, ast.Call) and name and name.startswith('_'):
-                called_by.setdefault(name, set()).add(node.name)
+            callee = getattr(getattr(inner, 'func', None), 'id', None)
+            if isinstance(inner, ast.Call) and callee in functions:
+                called_by.setdefault(callee, set()).add(name)
+    terminal = tools | {'advance'}
 
     def reaches(helper: str, seen: set[str]) -> set[str]:
-        """Every named tool that can reach this helper, through however many private hops.
-
-        Transitive, because one hop is not the rule. `_unknown` commits and is
-        called by `_answered`, which is private too: a check that stopped at
-        the first caller reported a private helper as the claimant and would
-        have kept reporting one however long the chain got.
-        """
         out: set[str] = set()
         for caller in called_by.get(helper, set()):
             if caller in seen:
                 continue
             seen.add(caller)
-            out |= reaches(caller, seen) if caller.startswith('_') else {caller}
+            out |= {caller} if caller in terminal else reaches(caller, seen)
         return out
 
-    helpers = {name for name in writes if name.startswith('_')}
-    for helper in helpers:
+    for helper in writes - tools:
         callers = reaches(helper, {helper})
-        assert callers and callers <= agents.ACTIONS | {'advance'}, (
+        assert callers and callers <= ACTIONS | {'advance'}, (
             f'{helper} writes to state and is reachable from {sorted(callers) or "nowhere"}, '
             'which is not an action that can claim the write'
         )
 
-    missing = (writes - helpers) - agents.ACTIONS
+    missing = (writes & tools) - ACTIONS
     assert not missing, f'these write to state and are not in ACTIONS: {sorted(missing)}'
 
 

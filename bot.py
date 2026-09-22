@@ -37,12 +37,12 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
+from core.graph import model_clients
+from core.processor import PydanticAgentProcessor
 from salon.agents import AGENTS, GREETING
 from salon.diary import Diary
-from salon.state import open_call
+from salon.models.state import open_call
 from utils.observability import setup
-from voice.harness import model_clients
-from voice.processor import PydanticAgentProcessor
 
 load_dotenv(override=True)
 

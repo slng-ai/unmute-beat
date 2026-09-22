@@ -10,12 +10,14 @@ from pydantic import ValidationError
 from pydantic_ai import Agent, RunContext, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
+from core.graph import Node, model_clients
+from core.policies import TurnBudget
+from core.processor import PydanticAgentProcessor
+from core.turn import Barge, RunStarted, run_turn
 from salon import agents, diary
 from salon.diary import Diary
-from salon.state import open_call
-from voice.core import Barge, RunStarted, run_turn
-from voice.harness import Node, TurnBudget, model_clients
-from voice.processor import PydanticAgentProcessor
+from salon.models.state import open_call
+from salon.tools import booking
 
 PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -110,7 +112,7 @@ async def approvals_and_receipts():
     call.turn_started('Yes.')
     assert agents.advance(call) is None, 'stale approval'
     try:
-        await agents._save_booking(call, 'invented', '', '')  # ty: ignore[invalid-argument-type]
+        await booking.write_booking(call, 'invented', '', '')  # ty: ignore[invalid-argument-type]
     except ValidationError:
         pass
     else:

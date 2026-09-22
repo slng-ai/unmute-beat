@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 
 from salon import diary
 from salon.diary import Diary
-from salon.state import open_call
+from salon.models.state import open_call
 
 AT = datetime(2026, 9, 21, 10, 0, tzinfo=diary.TZ)  # a Monday morning
 TODAY = AT.date()

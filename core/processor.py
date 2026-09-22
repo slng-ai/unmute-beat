@@ -1,26 +1,24 @@
 """The Pipecat side of a caller turn: events in, frames out.
 
-A Pipecat LLM node is a frame contract, not a class. On an ``LLMContextFrame``
-it pushes ``LLMFullResponseStartFrame``, then one ``LLMTextFrame`` per chunk of
-speech, then ``LLMFullResponseEndFrame``. TTS, the assistant aggregator, the
+A Pipecat LLM node is a frame contract, not a class. On an `LLMContextFrame`
+it pushes `LLMFullResponseStartFrame`, then one `LLMTextFrame` per chunk of
+speech, then `LLMFullResponseEndFrame`. TTS, the assistant aggregator, the
 transcript and the interruption machinery are all built on those three frames
 and on nothing else, so anything that speaks them can sit here.
 
-Running the turn is not here. ``voice.core`` does that and knows nothing about
-Pipecat; this file translates its event stream into those frames, and supplies
-the two things only this side can know: Pipecat's open turn span, and the
-moment a word actually reached the wire.
+Running the turn is not here. `core.turn` does that and knows nothing about
+Pipecat; this file translates its event stream into those frames and supplies
+the things only this side can know: Pipecat's open turn span, the moment a
+word reached the wire, and what the caller actually heard.
 
-What this does *not* use is Pipecat's own context: the agents keep their history
-as ``list[ModelMessage]`` on the call. ``LLMContext`` still fills up beside it,
-and that is deliberate -- it is the aggregators' record of what was actually
-spoken, which is what ``note_spoken`` below hands to the core. It is never sent
-to a model.
+The agents keep their history as `list[ModelMessage]` on the call. Pipecat's
+own `LLMContext` still fills up beside it: it is the aggregators' record of
+what was actually spoken, which is what `note_spoken` hands to the engine,
+and it is never sent to a model.
 
 Tracing crosses the same seam. Pipecat opens a span for the call and one per
-turn, and passes the open one through ``FrameProcessorSetup``; each caller turn
-here opens a span inside it, and the agents' own spans land under that. Without
-it every agent run starts a trace of its own and a call arrives in pieces.
+turn and passes the open one through `FrameProcessorSetup`; each caller turn
+here opens a span inside it, and the agents' own spans land under that.
 """
 
 from __future__ import annotations
@@ -44,9 +42,11 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic_ai import ModelResponse, TextPart
 
-from voice import core
-from voice.core import EXHAUSTED, STUMBLE  # noqa: F401  -- re-exported for tests and bots
-from voice.harness import CallContext, Node, TurnBudget
+from core import turn as core
+from core.graph import Node
+from core.policies import TurnBudget
+from core.state import CallContext
+from core.turn import EXHAUSTED, STUMBLE  # noqa: F401  -- re-exported for tests
 
 _tracer = trace.get_tracer('slng-voice-harness')
 
@@ -66,7 +66,13 @@ def _last_user_text(context: LLMContext) -> str | None:
 
 
 class PydanticAgentProcessor(FrameProcessor):
-    """Runs the current agent for one caller turn, and follows its handoffs."""
+    """Runs the current agent for one caller turn, and follows its handoffs.
+
+    One barge-in signal per turn, replaced at the top of each, so a stale
+    signal cannot fence the next one. Input a cancelled turn heard and never
+    delivered is carried to the front of the next one, because the caller
+    still said it.
+    """
 
     def __init__(
         self,
@@ -80,19 +86,11 @@ class PydanticAgentProcessor(FrameProcessor):
         self._call = call
         self._agents = agents
         self._budget = budget
-        # This turn's shared tally and limits, replaced at the top of each
-        # turn. One per turn and not one per run: see `TurnBudget`.
         self._usage, self._limits = budget.account()
         self._tracing = None
         self._interrupted = False
-        # This turn's barge-in signal. The runtime hears the caller; the core
-        # decides what interrupting means. Replaced per turn, so a stale
-        # signal cannot fence the next one.
         self._barge = core.Barge()
-        # How the last turn ended, for a caller that wants to know.
         self._finished: core.TurnFinished | None = None
-        # What a cancelled turn heard and never got as far as delivering. The
-        # caller said it, so the next turn says it too.
         self._carried = ''
         self._context_users = 0
         self._playback_turns: dict[str, list[str] | None] = {}
@@ -104,48 +102,39 @@ class PydanticAgentProcessor(FrameProcessor):
     def can_generate_metrics(self) -> bool:
         """No. This processor's own timings go on its span, not into Pipecat's metrics.
 
-        They used to go into both. The installed TTS tracing decorator takes
-        the first `TTFBMetricsData` that arrives under the playing audio
-        context without checking which processor emitted it, so this
-        processor's time to first token was recorded as the TTS service's
-        time to first audio: eight of the 47 TTS spans on the live calls of
-        2026-09-21 reported a TTFB longer than the span's own duration --
-        N1's goodbye, 0.233s long, 1.678s to first byte -- and each of those
-        numbers was the enclosing agent attempt's.
-
-        Nothing is lost by not emitting them. `request_ttft` is stamped per
-        provider request by `voice.harness.request_clock` and
-        `turn_first_word` is stamped here, both on the `agents` span, and
-        both say what they measured. The TTS service keeps its own.
+        Pipecat's TTS tracing takes the first `TTFBMetricsData` that arrives
+        under the playing audio context without checking which processor
+        emitted it, so this processor's time to first token was recorded as the
+        TTS service's time to first audio. Nothing is lost: `request_ttft` is
+        stamped per provider request by `request_clock` and `turn_first_word`
+        is stamped here, both on the `agents` span.
         """
         return False
 
     async def setup(self, setup):
+        """Take Pipecat's open turn span from the setup object.
+
+        Pipecat hands it around here rather than in OTel's ambient context: the
+        span is started by an observer running on another task, so there is
+        nothing ambient to inherit.
+        """
         await super().setup(setup)
-        # Pipecat hands its open turn span around in this object rather than in
-        # OTel's ambient context: the span is started by an observer running on
-        # another task, so there is nothing ambient here to inherit.
         self._tracing = setup.tracing_context
 
     async def say(self, text: str) -> None:
         """Put one fixed line on the wire, past the one-per-gap rule.
 
-        TTSSpeakFrame is a data frame, so it is queued and speech starts while
-        whatever prompted it is still running.
+        `TTSSpeakFrame` is a data frame, so it is queued and speech starts while
+        whatever prompted it is still running. Anything covering a silence goes
+        through `CallContext.say`, which allows one line per gap and then calls
+        this; the greeting and the error lines come here directly because both
+        must be heard whatever else was said.
 
-        Anything covering a silence goes through `CallState.say`, which allows
-        one line per gap and then calls this. Only the greeting and the error
-        line come here directly, because both must be heard whatever else was
-        said.
-
-        The ledger's own record of this segment rides along in the frame's
-        metadata. Every TTS observation on the live calls of 2026-09-21 hung
-        off the outer Pipecat turn with nothing to say which line it was, so
-        a filler, an entry line, a confirmation and a goodbye were four
-        indistinguishable spans -- and "did the caller hear this before the
-        tool ran" had no answer in the trace. Queue insertion is also stamped
-        here, which is not synthesis and not audio: three separate moments,
-        and only the first of them is one this process can see.
+        The ledger's own record of the segment rides along in the frame's
+        metadata, so a trace can say which line a TTS span was and whether the
+        caller heard it before the tool ran. Queue insertion is stamped here:
+        it is not synthesis and not audio, and only the first of those three
+        moments is one this process can see.
         """
         frame = TTSSpeakFrame(text)
         if segment := next((s for s in reversed(self._call.spoken) if s.text == text), None):
@@ -165,14 +154,13 @@ class PydanticAgentProcessor(FrameProcessor):
         """Close the line, once whatever is queued ahead of this has been heard.
 
         `EndWorkerFrame` is a control frame, so it travels in order: the goodbye
-        pushed a moment earlier by the tool is played, then the sink bounces this
-        back up, the source turns it into an `EndFrame` and the pipeline drains.
+        pushed a moment earlier is played, then the sink bounces this back up,
+        the source turns it into an `EndFrame` and the pipeline drains.
 
-        A frame rather than `PipelineWorker.end()`, which is what this used to
-        call: `end()` waits for a flush probe to cross the pipeline, and the only
-        caller is a tool running inside this processor's `process_frame`. The
-        probe queued behind the very coroutine that was waiting for it, and the
-        call sat there until the caller's browser dropped the connection.
+        A frame rather than `PipelineWorker.end()`: `end()` waits for a flush
+        probe to cross the pipeline, and the only caller is a tool running
+        inside this processor's `process_frame`, so the probe queued behind the
+        very coroutine that was waiting for it.
         """
         await self.push_frame(EndWorkerFrame())
 
@@ -180,9 +168,8 @@ class PydanticAgentProcessor(FrameProcessor):
         """Open the call with a fixed line, and record it as said.
 
         Fixed rather than generated: the caller hears it as the transport
-        connects instead of a model round trip later, and it is the same
-        sentence on every call. Recording it keeps the agents' history honest
-        about who spoke first.
+        connects instead of a model round trip later. Recording it keeps the
+        agents' history honest about who spoke first.
         """
         self._call.note_said('fixed', line, origin='entry')
         await self.say(line)
@@ -191,12 +178,16 @@ class PydanticAgentProcessor(FrameProcessor):
         )
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
+        """Interruptions land while a turn is still streaming, which is the point.
+
+        System frames run on their own task; without that, barge-in would queue
+        behind the answer it is meant to cut off. Every unseen user message in
+        the aggregator's context is consumed, joined into one turn, so a
+        context frame discarded by barge-in still reaches the agents.
+        """
         await super().process_frame(frame, direction)
 
         if isinstance(frame, InterruptionFrame):
-            # System frames run on their own task, so this lands while a turn is
-            # still streaming below. That is exactly the point: without it,
-            # barge-in would queue behind the answer it is meant to cut off.
             self.interrupt()
             await self.push_frame(frame, direction)
         elif isinstance(frame, LLMContextFrame):
@@ -213,13 +204,11 @@ class PydanticAgentProcessor(FrameProcessor):
     async def _start_interruption(self):
         """Pipecat's own interruption hook, taken before it cancels this turn's task.
 
-        The `InterruptionFrame` branch in `process_frame` is too late. Pipecat
+        The `InterruptionFrame` branch in `process_frame` is too late: Pipecat
         handles a system frame by calling this and then cancelling the task
-        running `process_frame`, so on the live call of 2026-09-21 14:59 the
-        turn unwound with a bare `CancelledError` before the frame reached
-        our own branch: `_interrupted` was still false, the turn was recorded
-        as `failed` with `ended='transport'` on a call that ran another
-        ninety seconds, and the barge never reached the core at all.
+        running `process_frame`, so the turn would unwind with a bare
+        `CancelledError` before the frame reached that branch and the barge
+        would never reach the engine.
         """
         self.interrupt()
         await super()._start_interruption()
@@ -232,46 +221,50 @@ class PydanticAgentProcessor(FrameProcessor):
     def _parent(self):
         """Pipecat's open turn span, so ours joins that trace instead of starting one.
 
-        None under `talk.py`, which has no pipeline and so no turn: there the
-        agents' own spans stay roots, exactly as they were.
+        None when there is no pipeline, in which case the agents' own spans
+        stay roots.
         """
         if self._tracing is None:
             return None
         return self._tracing.get_turn_context() or self._tracing.get_conversation_context()
 
     async def _turn(self, prompt: str | None) -> None:
-        """One caller turn, translated from the core's events into frames.
+        """One caller turn, translated from the engine's events into frames.
 
-        Everything about *running* the turn is in `voice.core`. What is left
-        here is the translation: an event stream in, Pipecat frames out, plus
-        the metrics and the span, both of which need things only this side
-        knows -- Pipecat's own turn context, and when the first word reached
-        the wire.
+        One span for the whole chain: `start_as_current_span` attaches it and
+        the agents run in this coroutine, so Pydantic AI's own run spans land
+        underneath instead of each opening a trace of its own. The clock is
+        the turn's, not the speaking hop's, so the silence a caller sits
+        through before anybody speaks is visible.
+
+        Pairing the response frames is this side's job: the engine can leave a
+        run open on its way out when a budget or deadline unwinds it through
+        an exception, and an unclosed response wedges the aggregators.
+
+        Two different things cancel this task and only one is the transport:
+        the pipeline being torn down, and Pipecat cutting the turn off because
+        the caller spoke again. `ended` is written once, so a barge-in must not
+        be recorded as a disconnect. A turn that unwinds without a
+        `TurnFinished` is given one here, because an absent outcome is not a
+        good one.
+
+        Every attribute stamped on the span names what it measured. `turn_first_word`
+        is the model's first token and `turn_first_text_out` the first text of
+        *any* kind handed to TTS, because a question going out quickly is not
+        an answer going out quickly. `unbacked_claim` is on the span because a
+        latency table that cannot see it will reward inventing an outcome.
+
+        ponytail: a run of cancelled turns joins into one long carried prompt.
+        Bound it if a real call ever carries more than a sentence or two.
         """
         previous_messages = tuple(self._call.messages)
         previous_parts = frozenset(id(p) for m in previous_messages for p in m.parts)
         if self._carried:
-            # A previous turn heard this and was cancelled before any model
-            # saw it. Joined rather than replaced: two stretches of speech
-            # with no answer between them are one thing the caller said.
             prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
             self._carried = ''
-        # One span for the whole chain: `start_as_current_span` attaches it, and
-        # the agents run in this coroutine, so pydantic-ai's own run spans land
-        # underneath instead of each opening a trace of its own.
         with _tracer.start_as_current_span('agents', context=self._parent()) as span:
-            # The turn's clock, not the speaking hop's. This used to start
-            # inside the run that happened to speak, so a turn that spent two
-            # routing requests before anybody said anything reported only the
-            # last one and the silence the caller sat through was invisible.
             turn_started = time.perf_counter()
             spoke = False
-            # Whether a response frame is open. The core can leave a run
-            # without closing it -- a turn that blows its request limit or
-            # hits the deadline unwinds through an exception, and the event
-            # that would have said RunEnded is never yielded. Pairing the
-            # frames is this side's job anyway: the contract they belong to
-            # is Pipecat's, and an unclosed response wedges the aggregators.
             open_response = False
             self._barge = core.Barge()
             self._interrupted = False
@@ -289,12 +282,6 @@ class PydanticAgentProcessor(FrameProcessor):
                         case core.TextDelta(text=text):
                             if not spoke:
                                 spoke = True
-                                # Pydantic AI's OTel instrumentation emits no
-                                # first-token event, so Langfuse shows every
-                                # generation with a null `timeToFirstToken`
-                                # and a trace cannot say how much of a round
-                                # trip was waiting. This is the moment, and we
-                                # are standing in it.
                                 span.set_attribute(
                                     'turn_first_word', round(time.perf_counter() - turn_started, 3)
                                 )
@@ -313,50 +300,20 @@ class PydanticAgentProcessor(FrameProcessor):
                             open_response = False
                             await self.push_frame(LLMFullResponseEndFrame())
                         case core.FixedSpeech(text=text, reason=reason):
-                            # Past the one-per-gap gate on purpose: an error
-                            # or an exhausted turn must be heard whatever a
-                            # filler already said.
                             if reason == 'error':
                                 await self.push_error(f'agent run failed: {event.text}')
                             if reason == 'unbacked':
-                                # On the span, because this is a business
-                                # failure and a latency table that cannot
-                                # see it will happily reward it: inventing
-                                # an outcome is quicker than writing one.
                                 span.set_attribute('unbacked_claim', True)
                             await self.say(text)
                         case core.TurnFinished() as done:
-                            # Per provider request, timed at the model
-                            # boundary by `request_clock`, with what each one
-                            # produced first. This used to be one number
-                            # called `request_ttft` measured from the start of
-                            # the agent run, which on any turn with a tool in
-                            # it reported the tool's whole round trip as time
-                            # to first token.
                             timed = [(r.ttft, r.kind) for r in self._call.requests if r.ttft is not None]
                             span.set_attribute('request_ttft', [ttft for ttft, _ in timed])
                             span.set_attribute('request_first_output', [kind for _, kind in timed])
                             spoken = self._call.spoken
                             span.set_attribute('fixed_lines', sum(s.kind == 'fixed' for s in spoken))
-                            # The turn's speech, segment by segment, with
-                            # where each one came from. A trace can then say
-                            # what was said and who asked for it without
-                            # guessing from the shape of the TTS spans.
                             span.set_attribute('speech_origins', [s.origin for s in spoken])
                             span.set_attribute('speech_segments', [s.id for s in spoken])
                             span.set_attribute('attempt', self._call.attempt)
-                            # The first text of *any* kind handed to TTS,
-                            # beside the first the model produced. A filler
-                            # going out quickly is not an answer going out
-                            # quickly, and a benchmark with only one of these
-                            # can be won by saying "let me check" sooner and
-                            # answering later.
-                            #
-                            # Text handed to TTS, and named that way: audio
-                            # the caller heard is a boundary nothing in this
-                            # process can see, and a name that implied
-                            # otherwise would be read as the latency the
-                            # whole decision turns on.
                             if spoken:
                                 span.set_attribute(
                                     'turn_first_text_out',
@@ -373,24 +330,11 @@ class PydanticAgentProcessor(FrameProcessor):
                                 span.set_attribute('detail', done.detail)
                             self._finished = done
             except asyncio.CancelledError:
-                # Two different things cancel this task and only one of them
-                # is the transport: the pipeline being torn down, and Pipecat
-                # cutting the turn off because the caller started speaking
-                # again. `ended` is the call's terminal outcome and is
-                # written once, so a barge-in recorded as a disconnect is
-                # stamped on every span for the rest of the call -- which is
-                # what the call of 2026-09-21 14:59 did from its second turn
-                # to its last.
                 if not self._interrupted:
                     self._call.end_requested('transport')
                 raise
             finally:
                 if self._finished is None:
-                    # The core unwound without saying how it went: cancelled
-                    # mid-turn, or the generator was closed from outside.
-                    # An absent outcome is not a good one, and a benchmark
-                    # that reads a missing row as a pass has scored a
-                    # disconnection as an answered turn.
                     ended = self._call.ended
                     status = 'interrupted' if self._interrupted else 'failed'
                     self._finished = core.TurnFinished(
@@ -402,10 +346,6 @@ class PydanticAgentProcessor(FrameProcessor):
                     )
                     span.set_attribute('status', self._finished.status)
                     span.set_attribute('detail', self._finished.detail)
-                # Why the *call* is ending, when something has said so. Queuing
-                # a goodbye and observing a disconnect are different facts, and
-                # the live call of 2026-09-21 12:57 was scored `answered` while
-                # the agency hung up on a caller mid-question.
                 if self._call.ended:
                     span.set_attribute('ended', self._call.ended)
                 if (
@@ -413,31 +353,21 @@ class PydanticAgentProcessor(FrameProcessor):
                     and self._call.turn not in self._call._retained_turns
                     and not self._call.delivered(prompt, excluding=previous_parts)
                 ):
-                    # Nothing ever read it. Whatever happened to this turn,
-                    # the caller still said it, so it goes to the front of
-                    # the next one rather than out of the conversation.
-                    #
-                    # ponytail: a run of cancelled turns joins into one long
-                    # prompt, because a caller who says four things over four
-                    # cut-off turns said four things. Bound it if a real call
-                    # ever carries more than a sentence or two.
                     self._carried = prompt
                 self._active_playback = None
                 if open_response:
-                    # The core left a run open on its way out. Close it, so
-                    # every start has an end whatever happened in between.
                     await self.push_frame(LLMFullResponseEndFrame())
-                # A turn that ends without speech leaves TTFB armed, and the next
-                # turn reports its own first word as seconds late. Idempotent:
-                # a turn that did speak stopped it already.
 
     def playback_started(self, timestamp: str, *, run: tuple[int, int] | None = None) -> None:
-        """Bind before speech starts, using the identity carried by the runtime frame."""
+        """Bind the speech about to play to the run that produced it, by the identity the runtime frame carries.
+
+        ponytail: unframed TTS has no segment identity, so only one pending
+        segment is accepted. A runtime with playout ids can pass segment ids
+        directly.
+        """
         if run is not None:
             self._playback_turns[timestamp] = self._playback_runs.get(run)
         else:
-            # ponytail: unframed TTS has no segment identity; accept only one pending
-            # segment. A runtime with playout IDs can pass segment_ids directly.
             pending = [s.id for s in self._call.all_spoken if s.delivery == 'submitted']
             self._playback_turns[timestamp] = pending if len(pending) == 1 else None
 
@@ -449,7 +379,12 @@ class PydanticAgentProcessor(FrameProcessor):
         timestamp: str | None = None,
         segment_ids: tuple[str, ...] = (),
     ) -> None:
-        """Apply an identified callback; Pipecat aggregate text remains a runtime estimate."""
+        """Tell the engine what the caller actually heard.
+
+        The assistant aggregator has already worked out the spoken prefix; it
+        is a runtime estimate, applied only to segments it can be matched to.
+        Wired to the aggregator's `on_assistant_turn_stopped` event.
+        """
         if timestamp is not None:
             identified = self._playback_turns.pop(timestamp, None)
             if not identified:

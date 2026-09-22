@@ -37,9 +37,9 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel 
 
 Agent.instrument_all()
 
+from core.processor import PydanticAgentProcessor  # noqa: E402
 from salon.agents import AGENTS  # noqa: E402
-from salon.state import open_call  # noqa: E402
-from voice.processor import PydanticAgentProcessor  # noqa: E402
+from salon.models.state import open_call  # noqa: E402
 
 PHONE = '+34600111222'
 

@@ -632,7 +632,7 @@ async def a_segment_is_timed_from_when_it_started_going_out():
     """
     call = _fresh(True)
     probe = Probe(call)  # a runtime, so the filler has a line to go out on
-    script = then(calls('read_diary', when='tomorrow', service='haircut'), says('Nine is free.'))
+    script = then(calls('speaking_probe', line='Checking.'), says('Nine is free.'))
     with scripted(concierge=script):
         await probe._turn('anything tomorrow?')
 
@@ -795,43 +795,24 @@ async def the_transcript_is_the_call_and_not_the_protocol():
 
 
 async def every_segment_says_where_it_came_from():
-    """A filler, an entry line, a confirmation and a goodbye are four different things.
-
-    On the live calls of 2026-09-21 they were four TTS observations hanging
-    off the outer Pipecat turn with nothing to tell them apart, which is why
-    "did the caller hear this before the tool ran" had no answer in the
-    trace. Each segment now carries its own id, its origin and the attempt
-    that asked for it, and the id rides along in the frame's metadata so the
-    audio context that synthesises it can be matched back.
-    """
+    """A tracked readback carries its origin and segment id into the TTS frame."""
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing', verified_phone=PHONE, agent='concierge')
+    call.commit(agent='verify')
     probe_it = Probe(call)
 
-    with scripted(
-        concierge=then(
-            tool_call('read_diary', when='tomorrow', service='haircut'),
-            says('I have a few times tomorrow.'),
-        )
-    ):
-        await probe_it._turn('what have you got tomorrow?')
+    with scripted(verify=calls('ask_number', phone=PHONE)):
+        await probe_it._turn('my number is ' + PHONE)
 
-    origins = [(s.origin, s.kind) for s in call.spoken]
-    assert ('tool_filler', 'fixed') in origins, origins
-    assert ('model', 'model') in origins, origins
-    # The filler names the tool call it was covering; model speech does not.
-    filler = next(s for s in call.spoken if s.origin == 'tool_filler')
-    assert filler.tool_call_id, filler
-    # Ids are unique within the call and carry the turn they belong to.
-    ids = [s.id for s in call.spoken]
-    assert len(set(ids)) == len(ids) and all(f':{call.turn}:' in i for i in ids), ids
-    # And what went out on the wire carries the same id.
+    assert len(call.spoken) == 1, call.spoken
+    readback = call.spoken[0]
+    assert (readback.origin, readback.kind) == ('ask', 'fixed'), readback
+    assert f':{call.turn}:' in readback.id, readback
     spoken_frames = [f for f in probe_it.frames if isinstance(f, TTSSpeakFrame)]
-    assert spoken_frames, probe_it.kinds()
+    assert len(spoken_frames) == 1, probe_it.kinds()
     carried = spoken_frames[0].metadata.get('speech') or {}
-    assert carried.get('segment') == filler.id, carried
-    assert carried.get('origin') == 'tool_filler' and carried.get('submitted_at'), carried
+    assert carried.get('segment') == readback.id, carried
+    assert carried.get('origin') == 'ask' and carried.get('submitted_at'), carried
 
 
 async def the_processor_reports_no_metrics_of_its_own():

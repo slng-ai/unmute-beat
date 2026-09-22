@@ -21,7 +21,7 @@ from pydantic_ai import ModelRetry, RunContext, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import agents, diary
-from salon.agents import AGENTS, FILLER, MANAGER_CALLS, REPLY_SOON, _record_complaint, prompt, read_diary
+from salon.agents import AGENTS, MANAGER_CALLS, REPLY_SOON, _record_complaint, prompt, read_diary
 from salon.state import Appointment, Asked, SalonCall, SalonState, open_call, prefetch_number
 from voice.harness import TurnBudget
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
@@ -300,11 +300,10 @@ async def verify_then_book():
     assert call.state.agent == 'booking', call.state.agent
     assert call.state.pending is None, 'the stack was pushed on the way in and popped on the way out'
     assert probe.spoken() == ''
-    # One fixed line per silence: the verify hop spoke, the booking hop and the
-    # diary tool did not pile another two on top.
-    assert len(probe.fixed()) == 2, probe.fixed()
-    assert probe.fixed()[0] in AGENTS['verify'].enter
-    assert probe.fixed()[1].endswith('Which time works for you?')
+    # Routing and lookup stay silent; the actual availability still speaks.
+    assert all(not node.enter for node in AGENTS.values())
+    assert len(probe.fixed()) == 1, probe.fixed()
+    assert probe.fixed()[0].endswith('Which time works for you?')
 
 
 async def the_diary_is_the_edge():
@@ -340,12 +339,7 @@ async def the_diary_is_the_edge():
     # to say "booking" and the booking step spending three more.
     assert probe.runs() == 1, probe.runs()
     assert len(call.requests) == 2, call.requests
-    # The diary's own filler covers the lookup, and that is the only fixed line:
-    # no hop happened, so no `enter:` line piled on top of it. Before, the
-    # caller heard the booking step's entry line *and* this one.
-    assert probe.fixed() == [probe.fixed()[0]], probe.fixed()
-    assert probe.fixed()[0] in FILLER['read_diary'], probe.fixed()
-    assert probe.fixed()[0] not in AGENTS['booking'].enter
+    assert probe.fixed() == [], probe.fixed()
 
 
 async def the_diary_is_not_lent_before_verification():
@@ -390,8 +384,8 @@ async def interpose_costs_one_run():
     assert probe.runs() == 2, probe.runs()
     assert call.state.agent == 'verify', call.state.agent
     assert call.state.pending == 'booking', call.state.pending
-    assert len(probe.fixed()) == 2 and probe.fixed()[0] in AGENTS['verify'].enter
-    assert probe.fixed()[1].startswith('Let me read that back to you:')
+    assert len(probe.fixed()) == 1, probe.fixed()
+    assert probe.fixed()[0].startswith('Let me read that back to you:')
     assert call._asked and call._asked.value == PHONE
 
 
@@ -632,9 +626,6 @@ async def the_note_is_said_once():
         await probe._turn("yes, that's right")
 
     assert diary.complaints(), 'the complaint really is on the record'
-    assert 'record_complaint' not in FILLER, (
-        'a filler here announces what NOTED then states; that pair is the defect'
-    )
     # One line, and it carries the reference the book handed back plus the step
     # the policy actually promises. A live call took a reference and never told
     # the caller it, then promised a manager callback the policy does not give

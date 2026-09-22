@@ -25,48 +25,38 @@ flowchart TD
 
 # Running it
 
-## 1. What you need
-
-- **uv**: `brew install uv`, or see https://docs.astral.sh/uv/. It installs the
-  right Python itself. This project pins 3.14.
-- **A Vertex AI Express Mode key** for `GOOGLE_API_KEY`. The model string is
-  `google-cloud:gemini-3.5-flash-lite`, so a plain Gemini Developer API key is
-  rejected.
-- **An SLNG key** for `SLNG_API_KEY`, from https://slng.ai. One key covers both
-  speech to text and text to speech.
-- Langfuse keys are optional. Without them the bot runs and prints one warning
-  that traces are going nowhere.
-
-## 2. Install
+You need **uv** (`brew install uv`, or https://docs.astral.sh/uv/ — it installs
+the right Python itself, this project pins 3.14) and a `.env` holding the two
+keys at the bottom of this file. Nothing else.
 
 ```bash
-git clone <this repo> && cd slng_voice_harness
-uv sync                       # creates .venv and installs everything
-cp .env.example .env          # then fill in the two required keys
+CALLER_ID=+34600111222 \
+SALON_FIXTURE=fresh \
+SALON_CLOCK=2026-09-21T10:00:00+02:00 \
+uv run bot.py -t webrtc --host localhost --port 7861
 ```
 
-## 3. Talk to it
-
-```bash
-uv run --env-file .env python bot.py
-```
-
-Then open **http://localhost:7860** and click connect. The runner serves a
+Then open **http://localhost:7861** and click connect. The runner serves a
 browser client, so there is nothing else to start.
 
 ```
 🚀 Bot ready!
-   → Open: http://localhost:7860
-   → Enabled transports: webrtc, telephony, websocket
+   → Open: http://localhost:7861
+   → Enabled transports: webrtc
 ```
 
-Useful flags, all from Pipecat's runner:
+| | |
+|---|---|
+| `CALLER_ID` | the number a phone call would arrive with; read back and confirmed before it is trusted |
+| `SALON_FIXTURE` | `fresh` empties the diary first, so every call starts from the same salon. `continue`, the default, is what a real salon does: the last call's booking is still there |
+| `SALON_CLOCK` | pins the salon's idea of now, so "tomorrow" resolves to the same day on every run. No offset means the salon's own timezone |
+| `-t webrtc` | one transport instead of all of them |
+| `--host` / `--port` | Pipecat's runner flags. `uv run bot.py --help` for the rest |
 
-```bash
-uv run --env-file .env python bot.py --port 8080
-uv run --env-file .env python bot.py -t webrtc     # one transport only
-uv run --env-file .env python bot.py --help
-```
+All three variables are optional: `uv run bot.py` on its own is a live-clock
+call, from an anonymous number, into the salon as the last call left it. The
+remaining dials are in `.env.example`; `SMART_TURN_STOP_SECS` is the one worth
+measuring.
 
 A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
 hands the caller to booking; booking needs an identified caller, so the graph
@@ -76,73 +66,7 @@ diary's free times are offered. *"Three o'clock."* An unambiguous choice of an
 offered time is the authorisation, so the write lands and the confirmation is
 spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
 
-## 4. Run the tests
-
-```bash
-uv run python -m tests
-```
-
-Offline, no `.env`, no network. It prints `all 12 modules ok` or names what failed.
-
-## 5. Traces
-
-With the Langfuse keys set, one call is one trace. Pipecat opens a span for the
-whole conversation and one per turn; the agents' runs go inside the turn they
-belong to, so a handoff reads as two runs in one exchange rather than two
-unrelated traces.
-
-```
-conversation                      the whole transcript in, the last line out
-├── turn 1                        turn.was_interrupted, turn.user_bot_latency_seconds
-│   ├── stt
-│   ├── concierge  (agent)  caller's words in, what was spoken out; hops=1 model_requests=1
-│   │   └── concierge run         output: the sentence it produced
-│   │       └── chat gemini       output: its text, or its tool calls
-│   └── tts
-└── turn 2
-    ├── stt
-    ├── verify  (agent)  hops=2 handoffs=verify
-    │   ├── concierge run         output: handed over to verify: wants to book
-    │   └── verify run            output: the readback question
-    └── tts
-```
-
-Every observation carries the call's session and trace name, not just the root.
-Langfuse v4 queries observations rather than traces, so anything left on the root
-alone cannot filter or aggregate its children — and Pydantic AI writes a
-`gen_ai.conversation.id` of its own, which Langfuse reads as the session unless
-something says otherwise. Left alone it did: the whole agency's spend landed
-under an id nothing else in the call used.
-
-Input and output are on the observations too, the root included. Pipecat fills
-its `conversation` and `turn` spans from the LLM service, which is the one thing
-this harness replaced, so both arrived empty; the transcript is rebuilt from the
-`stt` and `tts` spans on their way out instead.
-
-Five things make this work, and all five are needed:
-
-| Where | What |
-|---|---|
-| `bot.py` | `enable_tracing=True` on the `PipelineWorker`, or Pipecat opens no spans at all |
-| `utils/observability.py` | a Langfuse client that exports non-GenAI spans; the default filter drops the conversation span everything hangs from |
-| `utils/observability.py` | a span processor translating Pipecat's attributes into the `langfuse.observation.*` keys Langfuse renders |
-| `utils/observability.py` | the same processor stamping the session and trace name on every span, and rebuilding each turn's and the call's input and output from the speech going past |
-| `core/processor.py` | each caller turn parented on Pipecat's open turn span, with what it was asked and answered, `request_ttft`, `turn_first_word`, `speech_origins` and `status` on it |
-
-## 6. Environment
-
-| Variable | Required | What it is |
-|---|---|---|
-| `GOOGLE_API_KEY` | yes | Vertex AI Express Mode key |
-| `SLNG_API_KEY` | yes | SLNG key, for both STT and TTS |
-| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` | no | traces, one per call; one warning if unset |
-| `LANGFUSE_TRACING_ENVIRONMENT` | no | which Langfuse environment the traces land in; default `default` |
-| `CALLER_ID` | no | the number a phone call would arrive with; read back and confirmed before it is trusted |
-| `SMART_TURN_STOP_SECS` | no | how long a pause ends the caller's turn when the smart-turn model is unsure; default 1.5 |
-| `SLNG_BASE_URL` | no | `eu-north.api.slng.ai` |
-| `SLNG_STT_MODEL` / `SLNG_TTS_MODEL` / `SLNG_TTS_VOICE` | no | the SLNG routes and voice |
-
-`.env` is git-ignored; `.env.example` is the template.
+Tests: `uv run python -m tests`. Offline, no `.env`, no network.
 
 ---
 
@@ -445,3 +369,20 @@ counting `model_requests` on the turn span, not every observation labelled
 a generation: speech services are generations too.
 
 - Langfuse trace structure and counting: https://langfuse.com/docs/observability/best-practices
+
+---
+
+# Secrets
+
+Two keys, both required, both in `.env`, which is never committed;
+`.env.example` is the template.
+
+| | |
+|---|---|
+| `GOOGLE_API_KEY` | a **Vertex AI Express Mode** key. The model string is `google-cloud:gemini-3.5-flash-lite`, so a plain Gemini Developer API key is rejected |
+| `SLNG_API_KEY` | an SLNG key from https://slng.ai. One key covers both speech to text and text to speech |
+
+Langfuse is optional. With `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
+`LANGFUSE_BASE_URL` set, one call is one trace, and
+`LANGFUSE_TRACING_ENVIRONMENT` says which environment it lands in. Without
+them the bot runs and prints one warning that traces are going nowhere.

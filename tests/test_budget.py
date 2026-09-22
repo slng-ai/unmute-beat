@@ -13,6 +13,9 @@ anywhere that said how many requests a turn could make.
 Scripted models, no audio, no network.
 
 Asserts, no pytest, no fixtures, same as the rest.
+
+`tests/__main__.py` runs each module with `run_name='__main__'`, so this still runs there -- and a
+debugging session can import one module without running every check in it.
 """
 
 import asyncio
@@ -75,14 +78,14 @@ async def probe(question: str) -> str:
 
 
 def scripted(**by_agent):
+    """`probe` alongside the agent's real tools, never instead of them: `override(toolsets=...)` adds
+    to what the agent was built with.
+    """
     stack = ExitStack()
     for name, fn in by_agent.items():
         stack.enter_context(
             AGENTS[name].agent.override(
                 model=FunctionModel(stream_function=fn),
-                # `probe` alongside the agent's real tools, never instead of
-                # them: `override(toolsets=...)` adds to what the agent was
-                # built with.
                 toolsets=[FunctionToolset([probe])],  # ty: ignore[invalid-argument-type]
             )
         )
@@ -115,9 +118,6 @@ def _refusals(call) -> list[str]:
         for part in message.parts
         if isinstance(part, RetryPromptPart)
     ]
-
-
-# --- the hop budget bounds the turn, and nothing follows it -----------------
 
 
 async def exhaustion_makes_no_further_request():
@@ -184,14 +184,14 @@ async def the_budget_is_not_refilled_by_exhausting_it():
     assert probe.spoken() == 'We are open until six.'
 
 
-# --- one tally across every run in the turn ---------------------------------
-
-
 async def model_requests_are_counted_across_agents():
     """Four agents in one turn spend one allowance between them.
 
     Counted per run, a turn could hand the caller round the houses and each
     agent would start again from zero.
+
+    Read off the turn's declared outcome, not a private tally: the count the core reports is the one
+    a runtime and a trace both see.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -201,8 +201,6 @@ async def model_requests_are_counted_across_agents():
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
         await probe._turn('hello?')
 
-    # Read off the turn's declared outcome, not a private tally: the count
-    # the core reports is the one a runtime and a trace both see.
     assert probe._finished.requests == 4, probe._finished
     assert probe.runs() == 4
     assert probe._finished.status == 'exhausted', probe._finished
@@ -266,9 +264,6 @@ async def the_tool_limit_is_its_own_number():
     assert EXHAUSTED in probe.fixed(), probe.fixed()
 
 
-# --- the deadline covers the whole turn -------------------------------------
-
-
 async def a_slow_tool_hits_the_turn_deadline():
     """The deadline is over the turn, not over one request.
 
@@ -293,28 +288,25 @@ async def a_slow_tool_hits_the_turn_deadline():
     assert EXHAUSTED in probe.fixed(), probe.fixed()
 
 
-# --- repair is allowed, and also counted ------------------------------------
-
-
 async def a_permitted_repair_succeeds():
     """A tool refuses, the model corrects itself, the turn completes.
 
     Repair is the thing the budget must not forbid: this is the case where
     the second attempt is the right one.
+
+    The readback of the right number went out last turn, so the repair has somewhere to land: the
+    first attempt is refused by the phone policy, not by consent.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
     call.commit(agent='verify')
     probe = Probe(call, budget=TurnBudget(repair_retries=2))
-    # The readback of the right number went out last turn, so the repair has
-    # somewhere to land: the first attempt is refused by the phone policy, not
-    # by consent.
     call.ask(Asked(about='phone', value=PHONE))
     attempts = []
 
     async def wrong_then_right(messages, info: AgentInfo):
+        """First a number that is not a Spanish one; then the real one."""
         attempts.append(1)
-        # First a number that is not a Spanish one; then the real one.
         phone = '+348340464' if len(attempts) == 1 else PHONE
         yield {0: DeltaToolCall(name='confirm_customer', json_args=json.dumps({'phone': phone}))}
 
@@ -354,16 +346,22 @@ async def an_uncertain_write_is_reconciled_not_repeated():
     Treating it as "nothing happened" and retrying is how a caller ends up
     with two appointments; treating it as a failure is how a booking that
     really exists gets denied. The operation token lets the tool ask.
+
+    what `read_diary` would have written
+
+    And what `ask_booking` would have: the readback went out last turn, and this is the turn the
+    caller's yes arrives on. Consent is not what this test is about -- `tests.test_consent` is --
+    but nothing writes without it.
+
+    A module-level `def` is its own type to ty, so no other function is assignable to it however
+    exactly the signature matches. Substituting the service is the point here.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     read = books.find_slots(PHONE, 'tomorrow', 'haircut', books.now(), offered_to=call.id)
     slot = read['slots'][0]
-    call.commit(booking_day=read['date'])  # what `read_diary` would have written
-    # And what `ask_booking` would have: the readback went out last turn, and
-    # this is the turn the caller's yes arrives on. Consent is not what this
-    # test is about -- `tests.test_consent` is -- but nothing writes without it.
+    call.commit(booking_day=read['date'])
     call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
     call.turn_started("yes, that's right")
 
@@ -380,16 +378,16 @@ async def an_uncertain_write_is_reconciled_not_repeated():
         operation_token: str = '',
         offered_to: str = '',
     ) -> dict:
-        # The signature of the thing it stands in for, spelled out rather
-        # than `*args`: a stand-in that does not typecheck as the real one is
-        # not standing in for it, and the type checker was reporting exactly
-        # that.
+        """The signature of the thing it stands in for, spelled out rather than `*args`: a stand-in
+        that does not typecheck as the real one is not standing in for it, and the type checker was
+        reporting exactly that.
+
+        and the answer does not
+        """
         attempts.append(1)
         real(phone, action, slot_id, booking_id, additional, at_time, operation_token, offered_to)
-        raise TimeoutError('the diary did not answer')  # and the answer does not
+        raise TimeoutError('the diary did not answer')
 
-    # A module-level `def` is its own type to ty, so no other function is assignable to it
-    # however exactly the signature matches. Substituting the service is the point here.
     books.save_booking = commits_then_loses_the_response  # ty: ignore[invalid-assignment]
     try:
         saved = await agents.save_booking(
@@ -408,13 +406,16 @@ async def an_uncertain_write_is_reconciled_not_repeated():
 
 
 async def a_write_that_never_landed_is_reported_unresolved():
-    """The other half: no outcome recorded, so nothing is claimed either way."""
+    """The other half: no outcome recorded, so nothing is claimed either way.
+
+    what `read_diary` would have written
+    """
     books.reset()
     call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     read = books.find_slots(PHONE, 'tomorrow', 'haircut', books.now(), offered_to=call.id)
     slot = read['slots'][0]
-    call.commit(booking_day=read['date'])  # what `read_diary` would have written
+    call.commit(booking_day=read['date'])
     call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
     call.turn_started("yes, that's right")
 
@@ -456,6 +457,9 @@ async def a_superseded_turn_cannot_move_the_caller():
     result is about a question they have moved on from, so the move is
     fenced -- while whatever the tool actually did stands, to be reconciled
     by its own operation token rather than pretended away.
+
+    The tool still ran and its effect stands: the diary was read for that day, and pretending
+    otherwise would lose real work.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -465,14 +469,16 @@ async def a_superseded_turn_cannot_move_the_caller():
     read = []
 
     async def reads_diary_then_is_superseded(messages, info: AgentInfo):
+        """The run answers, so the turn ends on a move rather than on an exhausted budget -- which is
+        the path the fence sits in.
+
+        The caller says something new while the tool is running: a newer turn is accepted, and this
+        one is now stale.
+        """
         if read:
-            # The run answers, so the turn ends on a move rather than on an
-            # exhausted budget -- which is the path the fence sits in.
             yield 'Nine or eleven tomorrow.'
             return
         read.append(1)
-        # The caller says something new while the tool is running: a newer
-        # turn is accepted, and this one is now stale.
         call.begin_turn()
         yield {
             0: DeltaToolCall(
@@ -485,8 +491,6 @@ async def a_superseded_turn_cannot_move_the_caller():
 
     assert read, 'the tool ran'
     assert call.state.agent == 'concierge', f'a superseded turn moved the caller to {call.state.agent}'
-    # The tool still ran and its effect stands: the diary was read for that
-    # day, and pretending otherwise would lose real work.
     assert call.state.booking_day, 'the work the tool did is not pretended away'
 
 
@@ -507,7 +511,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
-    # still runs there -- and a debugging session can import one module
-    # without running every check in it.
     asyncio.run(main())

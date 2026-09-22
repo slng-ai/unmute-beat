@@ -10,6 +10,9 @@ Also the place the runtime-neutrality claim is actually enforced, rather than
 asserted in a docstring: the core's imports are read and checked.
 
 Asserts, no pytest, no fixtures, same as the rest.
+
+`tests/__main__.py` runs each module with `run_name='__main__'`, so this still runs there -- and a
+debugging session can import one module without running every check in it.
 """
 
 import asyncio
@@ -108,14 +111,14 @@ async def slow_probe(question: str) -> str:
 
 
 def scripted(**by_agent):
+    """`probe` alongside the agent's real tools, never instead of them: `override(toolsets=...)` adds
+    to what the agent was built with.
+    """
     stack = ExitStack()
     for name, fn in by_agent.items():
         stack.enter_context(
             AGENTS[name].agent.override(
                 model=FunctionModel(stream_function=fn),
-                # `probe` alongside the agent's real tools, never instead of
-                # them: `override(toolsets=...)` adds to what the agent was
-                # built with.
                 toolsets=[FunctionToolset([probe, slow_probe, speaking_probe])],  # ty: ignore[invalid-argument-type]
             )
         )
@@ -155,9 +158,6 @@ def reads_then_answers(text):
     return stream
 
 
-# The scenarios both sides are driven with. One entry per shape of turn the
-# extraction could plausibly break: a plain answer, a handoff, a borrowed tool
-# that moves the caller, and a turn that runs out of budget.
 SCENARIOS = {
     'plain answer': {
         'verified': True,
@@ -190,6 +190,10 @@ SCENARIOS = {
         'budget': TurnBudget(step_runs=2),
     },
 }
+"""The scenarios both sides are driven with. One entry per shape of turn the extraction could plausibly
+break: a plain answer, a handoff, a borrowed tool that moves the caller, and a turn that runs out of
+budget.
+"""
 
 
 def _fresh(verified: bool):
@@ -359,6 +363,8 @@ async def recounting_a_booking_already_made_is_not_a_claim():
     tense. What separates them is whether the salon agrees: a booking on the
     state is the corroboration, and only a *cancellation* nobody recorded,
     or a booking claimed by a call that holds none, trips it.
+
+    And a cancellation the salon *did* record reads as true.
     """
     held = _fresh(True)
     held.commit(appointment=MOVED)
@@ -367,7 +373,6 @@ async def recounting_a_booking_already_made_is_not_a_claim():
         await probe._turn('what have I got?')
     assert UNBACKED not in probe.heard(), probe.heard()
 
-    # And a cancellation the salon *did* record reads as true.
     gone = _fresh(True)
     gone.commit(appointment=MOVED.model_copy(update={'action': 'cancel'}))
     probe = Probe(gone)
@@ -526,14 +531,15 @@ async def an_interrupted_fixed_line_leaves_an_earlier_answer_alone():
     *previous* turn's answer and replaced it with this turn's delivered
     prefix: an answer the caller heard in full, rewritten in the history as
     half a sentence they never heard at all.
+
+    A turn that speaks nothing of its own: it spends its budget calling a tool and the caller hears
+    only the fixed line the core writes.
     """
     call = _fresh(True)
     with scripted(concierge=says('We are open until six.')):
         await take_turn(call, AGENTS, 'when do you close?')
     answered = len(call.messages)
 
-    # A turn that speaks nothing of its own: it spends its budget calling a
-    # tool and the caller hears only the fixed line the core writes.
     with scripted(concierge=calls('probe', question='anything')):
         heard, finished = await take_turn(
             call, AGENTS, 'and parking?', TurnBudget(step_runs=4, model_requests=2)
@@ -557,6 +563,8 @@ async def time_to_first_token_is_timed_per_request():
     Timed from the start of the run, the second request's time to first token
     contained the whole tool call: the number compared against the native
     arm's per-request TTFB was measuring something else entirely.
+
+    The tool slept between them, and neither request paid for it.
     """
     call = _fresh(True)
     script = then(calls('slow_probe', question='anything'), says('Nothing to report.'))
@@ -567,7 +575,6 @@ async def time_to_first_token_is_timed_per_request():
     assert len(call.requests) == 2, call.requests
     assert [r.kind for r in call.requests] == ['tool', 'text'], call.requests
     assert all(r.ttft is not None for r in call.requests)
-    # The tool slept between them, and neither request paid for it.
     assert call.requests[1].ttft < SLOW, call.requests[1]
     assert call.requests[0].started + SLOW < call.requests[1].started, 'the tool really did run between'
 
@@ -633,9 +640,11 @@ async def a_segment_is_timed_from_when_it_started_going_out():
     Timed at the end instead, every model segment would look later than the
     filler that was covering it, and "first text out" would name the wrong
     one.
+
+    a runtime, so the filler has a line to go out on
     """
     call = _fresh(True)
-    probe = Probe(call)  # a runtime, so the filler has a line to go out on
+    probe = Probe(call)
     script = then(calls('speaking_probe', line='Checking.'), says('Nine is free.'))
     with scripted(concierge=script):
         await probe._turn('anything tomorrow?')
@@ -676,6 +685,8 @@ async def a_turn_that_never_finished_says_so():
     scored `answered` on a turn where the agency hung up on a caller
     mid-question, and a benchmark that reads a missing row as a pass will
     score a dropped transport the same way.
+
+    And the transport dropping is told apart from the caller ringing off.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -695,7 +706,6 @@ async def a_turn_that_never_finished_says_so():
     assert probe_it._finished is not None, 'the turn ended with no outcome at all'
     assert probe_it._finished.status in ('failed', 'interrupted'), probe_it._finished
     assert 'never finished' in probe_it._finished.detail, probe_it._finished
-    # And the transport dropping is told apart from the caller ringing off.
     assert call.ended == 'transport', call.ended
 
 
@@ -708,6 +718,12 @@ async def a_late_commit_cannot_move_a_caller_who_moved_on():
     whichever turn made it, and refusing to record it leaves the business
     holding something the call has no memory of -- so completed effects land
     and the routing that was going to follow them does not.
+
+    The caller speaks again, and the old turn's tool is still running.
+
+    A commit with nothing but flow in it changes nothing at all.
+
+    And the current turn writes freely.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -715,18 +731,15 @@ async def a_late_commit_cannot_move_a_caller_who_moved_on():
     turn_generation.set((call.id, first))
     call.commit(agent='concierge')
 
-    # The caller speaks again, and the old turn's tool is still running.
     call.begin_turn()
 
     call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
     assert call.state.agent == 'concierge', 'the move was fenced'
     assert call.state.customer_verified == 'existing', 'the fact it established was not'
 
-    # A commit with nothing but flow in it changes nothing at all.
     call.commit(agent='complaints')
     assert call.state.agent == 'concierge', call.state.agent
 
-    # And the current turn writes freely.
     turn_generation.set((call.id, call._generation))
     call.commit(agent='booking')
     assert call.state.agent == 'booking'
@@ -740,6 +753,14 @@ async def a_reset_step_is_sent_none_of_the_conversation():
     gets its own instructions and the values projected into them, and nothing
     the caller said to anybody else -- so what it does not need, it cannot
     leak. Both are declared on the step, not decided per request.
+
+    An ordinary step: the conversation so far arrives with it.
+
+    The same step, declared `reset`.
+
+    Its own question, and nothing anybody said to anybody else.
+
+    What it is told instead is projected into its own instructions.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -751,14 +772,12 @@ async def a_reset_step_is_sent_none_of_the_conversation():
         async for chunk in says('Right.')(messages, info):
             yield chunk
 
-    # An ordinary step: the conversation so far arrives with it.
     probe_it = Probe(call)
     with scripted(concierge=remember):
         await probe_it._turn('hello there')
         await probe_it._turn('and my last cut was uneven')
     assert len(seen['sent'][1]) > len(seen['sent'][0]), 'the second turn saw the first'
 
-    # The same step, declared `reset`.
     seen['sent'] = []
     quiet = replace(AGENTS['concierge'], history='reset')
     table = AGENTS | {'concierge': quiet}
@@ -768,10 +787,8 @@ async def a_reset_step_is_sent_none_of_the_conversation():
         await reset_probe._turn('and about that colour')
     only = seen['sent'][0]
     assert len(only) == 1, [type(m).__name__ for m in only]
-    # Its own question, and nothing anybody said to anybody else.
     assert 'and about that colour' in str(only[0].parts[0].content), only[0].parts
     assert 'and my last cut was uneven' not in str(only), 'the earlier turns leaked into a reset step'
-    # What it is told instead is projected into its own instructions.
     assert 'and about that colour' in (only[0].instructions or '')
 
 
@@ -783,6 +800,8 @@ async def the_transcript_is_the_call_and_not_the_protocol():
     went out, fixed lines included -- and those never enter the model's
     history at all, so a record built from it reports a turn that said three
     things as a turn that said one.
+
+    The ledger itself is still this turn's alone.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -796,7 +815,6 @@ async def the_transcript_is_the_call_and_not_the_protocol():
     assert [line['said'] for line in said] == ['caller', 'model', 'caller', 'model'], said
     assert said[0]['text'] == 'hi there' and said[1]['text'] == 'Hello, how can I help?'
     assert said[2]['text'] == 'can I book something', said
-    # The ledger itself is still this turn's alone.
     assert len(call.spoken) == 1, call.spoken
 
 
@@ -831,6 +849,8 @@ async def the_processor_reports_no_metrics_of_its_own():
     spans on the live calls of 2026-09-21 reported a TTFB longer than the
     span's own duration -- N1's goodbye, 0.233s long against 1.678s to first
     byte, which is the enclosing agent attempt's number.
+
+    And nothing is lost: the numbers are on the span, per request.
     """
     from pipecat.frames.frames import MetricsFrame
 
@@ -841,7 +861,6 @@ async def the_processor_reports_no_metrics_of_its_own():
     with scripted(concierge=says('Hello there.')):
         await probe_it._turn('hi')
     assert not [f for f in probe_it.frames if isinstance(f, MetricsFrame)], probe_it.kinds()
-    # And nothing is lost: the numbers are on the span, per request.
     assert [r.ttft for r in call.requests if r.ttft is not None], call.requests
 
 
@@ -876,7 +895,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
-    # still runs there -- and a debugging session can import one module
-    # without running every check in it.
     asyncio.run(main())

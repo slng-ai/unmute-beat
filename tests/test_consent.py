@@ -13,6 +13,10 @@ what the caller had actually said. Each test below is the shortest script that
 makes the model assert one of those things falsely.
 
 Asserts, no pytest, no network.
+
+Guarded, unlike its siblings: `tests/__main__.py` runs each module with `run_name='__main__'`, so
+this still runs there, and a debugging session can import one of these replays without running all
+of them.
 """
 
 import asyncio
@@ -31,14 +35,6 @@ from salon.diary import Diary, times_named
 from salon.models.consent import agrees, ends, move_or_add
 from salon.models.state import open_call
 from salon.tools import complaints, writes
-
-# --- the scripted model ------------------------------------------------------
-#
-# The same shape as `tests.test_salon`'s, written out again rather than
-# imported: that module runs its own suite at import, so importing it here
-# would run the salon tests twice and this module's failures would be reported
-# under its name.
-
 
 books = Diary()
 """This module's salon, emptied by each case that writes to it."""
@@ -121,9 +117,10 @@ async def _refuses(fn, *args) -> str:
 
 
 PHONE = '+34680840464'
-# Monday, the clock every one of those calls ran under. "Friday" is the 25th
-# and "next Friday" is 2 October, which is the whole of N2.
 CLOCK = datetime(2026, 9, 21, 10, 0, tzinfo=diary.TZ)
+"""Monday, the clock every one of those calls ran under. "Friday" is the 25th and "next Friday" is 2
+October, which is the whole of N2.
+"""
 FRIDAY = date(2026, 9, 25)
 NEXT_FRIDAY = date(2026, 10, 2)
 SATURDAY = date(2026, 9, 26)
@@ -154,11 +151,22 @@ def _slot(call, when: str, service: str = 'haircut', at: str = ''):
     return slots[0]
 
 
-# --- the words themselves ----------------------------------------------------
-
-
 def the_matchers_refuse_rather_than_guess():
-    """Every one of them fails towards asking. That is the property, not the word lists."""
+    """Every one of them fails towards asking. That is the property, not the word lists.
+
+    N4's yes is a perfectly good yes. That is the point: the wording is not what was wrong with it.
+    It answered "are you calling from Spain?", and nothing compared it against the question that had
+    actually been asked, so it became agreement to a phone number instead. What stops it is the
+    pending question, not the word list -- see `n4_a_yes_about_spain_...`.
+
+    N1, word for word.
+
+    Both, or neither, is a question and not a decision.
+
+    Both readings of an unqualified hour, so the diary's own offers decide.
+
+    Not a time. Intersected with real offers, a wrong reading books something.
+    """
     for yes in (
         'yes',
         "yeah, that's right",
@@ -182,17 +190,11 @@ def the_matchers_refuse_rather_than_guess():
     ):
         assert not agrees(other), other
 
-    # N4's yes is a perfectly good yes. That is the point: the wording is not
-    # what was wrong with it. It answered "are you calling from Spain?", and
-    # nothing compared it against the question that had actually been asked,
-    # so it became agreement to a phone number instead. What stops it is the
-    # pending question, not the word list -- see `n4_a_yes_about_spain_...`.
     assert agrees('Yes, from Spain')
 
     for bye in ("no, that's all thanks", "I'm good, thanks", 'goodbye', "that's everything, thank you"):
         assert ends(bye), bye
     for still in (
-        # N1, word for word.
         'Can you help me moving it to Saturday, the same time?',
         "that's all -- oh, can you also book Friday?",
         'no',
@@ -202,15 +204,12 @@ def the_matchers_refuse_rather_than_guess():
 
     assert move_or_add('move it to Saturday') == 'move'
     assert move_or_add("I'd like another one as well") == 'add'
-    # Both, or neither, is a question and not a decision.
     assert move_or_add('change it and add another') == ''
     assert move_or_add('three o clock') == ''
 
-    # Both readings of an unqualified hour, so the diary's own offers decide.
     assert times_named("three o'clock") == {'03:00', '15:00'}
     assert times_named('3 pm') == {'15:00'}
     assert times_named('half past two') == {'02:30', '14:30'}
-    # Not a time. Intersected with real offers, a wrong reading books something.
     assert times_named('Friday the 25th') == set()
     assert times_named('for 2 people') == set()
     for words in ('01:00, please.', 'one, please.', '1:00 PM'):
@@ -224,9 +223,6 @@ def the_matchers_refuse_rather_than_guess():
     assert not ends('No thanks, but can you book Friday?')
 
 
-# --- N1: a question answered by hanging up -----------------------------------
-
-
 async def n1_a_move_question_cannot_hang_up():
     """Live call 12:57:53, `hang_up` observation `2c818c9ca1ddb7ce`.
 
@@ -238,14 +234,18 @@ async def n1_a_move_question_cannot_hang_up():
     Nothing in the tool's arguments was wrong. The goodbye was a string the
     model wrote, and a string the model wrote was the whole of the evidence
     that the call was over.
+
+    where `hang_up` lives
+
+    The refusal leaves the step open with the reason in front of the model, so its next request can
+    do what the caller asked. That is the second half of the fix: refusing to hang up is worth
+    nothing if the caller is left with an apology instead.
+
+    The caller's own goodbye still works, and still works in one turn.
     """
     call = _salon()
-    call.commit(agent='concierge')  # where `hang_up` lives
+    call.commit(agent='concierge')
     probe = Probe(call)
-    # The refusal leaves the step open with the reason in front of the model,
-    # so its next request can do what the caller asked. That is the second
-    # half of the fix: refusing to hang up is worth nothing if the caller is
-    # left with an apology instead.
     answer = 'Of course, let me look at Saturday for you.'
     with scripted(concierge=then(outputs('hang_up', goodbye='Take care, bye!'), says(answer))):
         await probe._turn('Can you help me moving it to Saturday, the same time?')
@@ -254,7 +254,6 @@ async def n1_a_move_question_cannot_hang_up():
     assert call.ended == '', call.ended
     assert probe.spoken() == answer, probe.spoken()
 
-    # The caller's own goodbye still works, and still works in one turn.
     probe = Probe(call)
     with scripted(concierge=outputs('hang_up', goodbye='Take care, bye!')):
         await probe._turn("no, that's all thanks")
@@ -317,9 +316,6 @@ async def go_for_it_approves_only_the_pending_move():
     assert call.state.writes == 2 and call.pending('booking') is None
 
 
-# --- N2: the day the caller did not say --------------------------------------
-
-
 async def n2_friday_is_not_next_friday():
     """Live call 12:58:57, lookup `340b3c24843835dd`, write `5a9ecb2aef3c48fd`.
 
@@ -330,6 +326,11 @@ async def n2_friday_is_not_next_friday():
     2 October. The caller later moved it to Saturday, so the *final* state
     looks fine -- which is why this asserts the day of every accepted write
     and not the state at the end.
+
+    Their own words go through, and resolve to the day they named.
+
+    And the modifier is not forbidden -- it is only forbidden when the caller did not say it. A
+    caller who says "next Friday" gets next Friday.
     """
     call = _salon()
     _heard(call)
@@ -338,12 +339,9 @@ async def n2_friday_is_not_next_friday():
     assert 'friday' in refusal.lower() and 'next friday' in refusal.lower(), refusal
     assert books.bookings_for(PHONE, CLOCK.date()) == [], 'nothing may be written'
 
-    # Their own words go through, and resolve to the day they named.
     found = await agents.read_diary(_context(call), 'Friday', 'haircut')
     assert found.date == FRIDAY, found.date
 
-    # And the modifier is not forbidden -- it is only forbidden when the
-    # caller did not say it. A caller who says "next Friday" gets next Friday.
     later = _salon()
     _heard(later)
     later.turn_started('can I come in next Friday?')
@@ -356,19 +354,17 @@ async def n2_the_day_survives_the_verification_detour():
 
     In the live call the day was collected by the front desk and the lookup
     happened two agents later. Whatever the caller said has to still be there.
+
+    A verification turn in between, naming no day at all.
     """
     call = _salon(verified=False)
     _heard(call)
     call.turn_started('Hi, I would like a haircut on Friday')
     assert call.day_words == ('friday',), call.day_words
-    # A verification turn in between, naming no day at all.
     call.turn_started('yes, that is my number')
     assert call.day_words == ('friday',), call.day_words
     call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
     assert 'friday' in (await _refuses(agents.read_diary, _context(call), 'next Friday', 'haircut')).lower()
-
-
-# --- N3 and N4: a flag that granted itself permission ------------------------
 
 
 async def n3_a_flipped_flag_is_not_consent():
@@ -382,6 +378,17 @@ async def n3_a_flipped_flag_is_not_consent():
 
     The flag is gone from the signature. What decides it is the caller's
     answer to the question the refusal asks.
+
+    A new turn: they pick another time. The diary already holds one for them.
+
+    The retry, in the same turn, with nothing said in between. This is the finding: there is no
+    argument left to flip, and no second way in.
+
+    A different slot is not a different question, either.
+
+    Nor is an unrelated next utterance an answer to it. The caller has spoken, so the old "has the
+    caller had a chance to answer" rule would let this through -- and what they said was about
+    something else.
     """
     call = _salon()
     _heard(call)
@@ -390,27 +397,20 @@ async def n3_a_flipped_flag_is_not_consent():
     await agents.save_booking(_context(call), 'book', first['slot_id'], '')
     assert call.state.writes == 1
 
-    # A new turn: they pick another time. The diary already holds one for them.
     call.turn_started('and three in the afternoon')
     second = _slot(call, 'friday', 'haircut', '15:00')
     refusal = await _refuses(agents.save_booking, _context(call), 'book', second['slot_id'], '')
     assert 'move that one or add another' in refusal, refusal
 
-    # The retry, in the same turn, with nothing said in between. This is the
-    # finding: there is no argument left to flip, and no second way in.
     again = await _refuses(agents.save_booking, _context(call), 'book', second['slot_id'], '')
     assert 'Nothing was saved' in again, again
     assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'still the one they asked for'
 
-    # A different slot is not a different question, either.
     third = _slot(call, 'friday', 'haircut', '11:00')
     elsewhere = await _refuses(agents.save_booking, _context(call), 'book', third['slot_id'], '')
     assert 'move that one or add another' in elsewhere, elsewhere
     assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
 
-    # Nor is an unrelated next utterance an answer to it. The caller has
-    # spoken, so the old "has the caller had a chance to answer" rule would
-    # let this through -- and what they said was about something else.
     call.turn_started('what do you charge for a blow dry?')
     unrelated = await _refuses(agents.save_booking, _context(call), 'book', second['slot_id'], '')
     assert 'Nothing was saved' in unrelated, unrelated
@@ -418,7 +418,10 @@ async def n3_a_flipped_flag_is_not_consent():
 
 
 async def n3_an_answered_question_books_what_they_answered():
-    """The other half. A caller who says "another one" gets another one."""
+    """The other half. A caller who says "another one" gets another one.
+
+    And a caller who says "move it" moves it, rather than adding a third.
+    """
     call = _salon()
     _heard(call)
     call.turn_started('a haircut on Friday at nine please')
@@ -434,7 +437,6 @@ async def n3_an_answered_question_books_what_they_answered():
     assert 'booked' in saved, saved
     assert len(books.bookings_for(PHONE, CLOCK.date())) == 2
 
-    # And a caller who says "move it" moves it, rather than adding a third.
     call.turn_started('actually, move the afternoon one to four o clock')
     held = books.bookings_for(PHONE, CLOCK.date())
     afternoon = next(b for b in held if b['time'] == '15:00')
@@ -456,6 +458,8 @@ async def n4_a_yes_about_spain_verifies_nobody():
     The number was structurally fine. What the yes proves is that the caller
     is in Spain, and what `phone_confirmed` is supposed to mean is that they
     heard their own digits and agreed to them.
+
+    The readback, then the yes. Two turns, and the second one is theirs.
     """
     call = _salon(verified=False)
     _heard(call)
@@ -464,7 +468,6 @@ async def n4_a_yes_about_spain_verifies_nobody():
     assert 'read back' in refusal, refusal
     assert call.state.customer_verified == '' and not call.state.phone_confirmed
 
-    # The readback, then the yes. Two turns, and the second one is theirs.
     call.turn_started('my number is six eight zero, eight four zero, four six four')
     question = await agents.ask_number(_context(call), PHONE)
     assert '+34 680 840 464' in question.spoken, question.spoken
@@ -476,7 +479,11 @@ async def n4_a_yes_about_spain_verifies_nobody():
 
 
 async def n4_a_correction_is_not_an_agreement():
-    """Different digits back are the caller correcting the readback, not taking it."""
+    """Different digits back are the caller correcting the readback, not taking it.
+
+    And an agreement that arrives a turn late is not an answer either: the caller has said something
+    else since, and that is what is on the table.
+    """
     call = _salon(verified=False)
     _heard(call)
     call.turn_started('my number is six eight zero...')
@@ -486,8 +493,6 @@ async def n4_a_correction_is_not_an_agreement():
     assert 'did not agree' in refusal, refusal
     assert call.state.customer_verified == ''
 
-    # And an agreement that arrives a turn late is not an answer either: the
-    # caller has said something else since, and that is what is on the table.
     call = _salon(verified=False)
     _heard(call)
     call.turn_started('my number is six eight zero...')
@@ -496,9 +501,6 @@ async def n4_a_correction_is_not_an_agreement():
     call.turn_started('yes')
     assert call.pending('phone', value=PHONE) is None
     assert 'read back' in await _refuses(agents.confirm_customer, _context(call), PHONE)
-
-
-# --- the earlier call: a sentence about a write that never happened ----------
 
 
 async def earlier_b_a_cancellation_nobody_made_is_not_spoken():
@@ -513,6 +515,11 @@ async def earlier_b_a_cancellation_nobody_made_is_not_spoken():
     is the best that can be done once they have. The check here is that they
     do not go: on a step that can write, a first-person claim about a write is
     held back until the clause is complete and then not sent at all.
+
+    `save_booking` sent them back to the front desk, and the live call's invention came from the
+    step that can write. Put them back in it.
+
+    And the caller is told plainly, rather than being left with silence.
     """
     call = _salon()
     _heard(call)
@@ -520,8 +527,6 @@ async def earlier_b_a_cancellation_nobody_made_is_not_spoken():
     friday = _slot(call, 'friday', 'haircut', '09:00')
     await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
 
-    # `save_booking` sent them back to the front desk, and the live call's
-    # invention came from the step that can write. Put them back in it.
     call.commit(agent='booking')
     probe = Probe(call)
     invention = "I've cancelled your appointment, and I have you down for a redo on Saturday at 2:30 PM."
@@ -530,7 +535,6 @@ async def earlier_b_a_cancellation_nobody_made_is_not_spoken():
     said = probe.spoken()
     assert 'cancelled' not in said.lower(), said
     assert 'redo' not in said.lower(), said
-    # And the caller is told plainly, rather than being left with silence.
     assert any('Sorry' in line for line in probe.fixed()), probe.fixed()
     assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
 
@@ -558,6 +562,12 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     Neither had happened. What is supported is recording the request, which is
     what the complaint book does, and saying plainly that it is pending -- the
     appointment they hold is untouched by any of it.
+
+    One acknowledgement, carrying the reference, and the policy's own step.
+
+    And the appointment they hold is exactly where it was.
+
+    A refund request does get the manager, because the policy says so.
     """
     call = _salon()
     _heard(call)
@@ -578,19 +588,16 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     record = await complaints._record_complaint(_context(call), summary, 'a free redo')
     assert record.recorded and record.reference
 
-    # One acknowledgement, carrying the reference, and the policy's own step.
     spoken = [seg.text for seg in call.spoken if seg.kind == 'fixed']
     assert len(spoken) == 1, spoken
     assert record.reference in spoken[0], spoken[0]
     assert writes.REPLY_SOON in spoken[0], spoken[0]
     assert writes.MANAGER_CALLS not in spoken[0], 'a redo is not a refund tier'
 
-    # And the appointment they hold is exactly where it was.
     after = books.bookings_for(PHONE, CLOCK.date())
     assert after == held, after
     assert len(books.complaints()) == 1, books.complaints()
 
-    # A refund request does get the manager, because the policy says so.
     call.turn_started('actually I want a full refund')
     refund = 'the last cut was completely uneven'
     (await agents.ask_complaint(_context(call), refund, 'a full refund')).put(call)
@@ -607,18 +614,22 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
     The summary the caller agreed to is the complaint. A different wording
     recorded under that yes is a different complaint, and the caller has
     agreed to a sentence they were never read.
+
+    No summary was ever put to them.
+
+    One was, and then something else was written down.
+
+    The one they agreed to goes through.
     """
     call = _salon()
     call.commit(agent='complaints')
     _heard(call)
 
-    # No summary was ever put to them.
     call.turn_started('the colour came out wrong, I want a refund')
     refusal = await _refuses(complaints._record_complaint, _context(call), 'the colour was wrong', 'a refund')
     assert 'ask_complaint' in refusal, refusal
     assert books.complaints() == []
 
-    # One was, and then something else was written down.
     (await agents.ask_complaint(_context(call), 'the colour came out wrong', 'a refund')).put(call)
     call.turn_started("yes, that's right")
     other = await _refuses(
@@ -627,7 +638,6 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
     assert 'ask_complaint' in other, other
     assert books.complaints() == [], books.complaints()
 
-    # The one they agreed to goes through.
     record = await complaints._record_complaint(_context(call), 'the colour came out wrong', 'a refund')
     assert record.recorded and len(books.complaints()) == 1
 
@@ -640,6 +650,8 @@ async def asking_to_complain_is_not_a_complaint():
     "So, Raising a complaint. Have I got that right?" -- and then, once they
     had actually said what happened, asked again. Two readbacks for one
     complaint, the first of them of nothing.
+
+    What they went on to say is one, and it is read back as they said it.
     """
     call = _salon()
     _heard(call)
@@ -651,7 +663,6 @@ async def asking_to_complain_is_not_a_complaint():
         assert 'Nothing was asked' in refusal, refusal
         assert call._asked is None, 'and nothing is pending for a later yes to land on'
 
-    # What they went on to say is one, and it is read back as they said it.
     call.turn_started('yeah, sorry, the last haircut was completely uneven')
     question = await agents.ask_complaint(_context(call), 'the last haircut was completely uneven', '')
     assert 'the last haircut was completely uneven' in question.spoken, question.spoken
@@ -678,7 +689,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # Guarded, unlike its siblings: `tests/__main__.py` runs each module with
-    # `run_name='__main__'`, so this still runs there, and a debugging session
-    # can import one of these replays without running all of them.
     asyncio.run(main())

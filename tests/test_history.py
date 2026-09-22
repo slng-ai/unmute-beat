@@ -37,8 +37,8 @@ class Call(CallContext):
 
 class Adapter(PydanticAgentProcessor):
     async def push_frame(self, frame, direction=None):
+        """Like the assistant aggregator, start before the first speech segment."""
         if isinstance(frame, LLMFullResponseStartFrame):
-            # Like the assistant aggregator, start before the first speech segment.
             assert not self._active_playback
             self.playback_started('old-audio', run=frame.metadata['voice_run'])
 
@@ -320,6 +320,7 @@ async def cancellation_before_sdk_start():
 
 
 def interrupted_protocol():
+    """Two submitted turns cannot be identified from an aggregate callback."""
     call = Call(state=State())
     call.turn_started('Hello')
     call.note_model_text('Partial answer unheard suffix.')
@@ -341,7 +342,6 @@ def interrupted_protocol():
     note_spoken(call, 'Partial', True, segment_ids=(segment.id,))
     assert call._open is current, 'late playback closed the newer streaming segment'
     assert not call.note_heard('wrong', segment_ids=('unknown',))
-    # Two submitted turns cannot be identified from an aggregate callback.
     segment.delivery = 'submitted'
     adapter.playback_started('ambiguous')
     adapter.note_spoken('', True, timestamp='ambiguous')

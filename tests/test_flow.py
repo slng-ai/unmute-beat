@@ -14,6 +14,9 @@ three reasons this module pins one at a time:
 Scripted models, no audio, no network.
 
 Asserts, no pytest, no fixtures, same as the rest.
+
+`tests/__main__.py` runs each module with `run_name='__main__'`, so this still runs there -- and a
+debugging session can import one module without running every check in it.
 """
 
 import asyncio
@@ -33,9 +36,10 @@ from salon.diary import Diary
 from salon.models.state import SalonCall, SalonState, open_call
 
 PHONE = '+34600111222'
-# The same number, named for what it means where a state is built by hand:
-# a verification status with no identity attached is cleared on construction.
 VERIFIED = PHONE
+"""The same number, named for what it means where a state is built by hand: a verification status with
+no identity attached is cleared on construction.
+"""
 
 
 books = Diary()
@@ -77,14 +81,14 @@ async def probe(question: str) -> str:
 
 
 def scripted(**by_agent):
+    """`probe` alongside the agent's real tools, never instead of them: `override(toolsets=...)` adds
+    to what the agent was built with.
+    """
     stack = ExitStack()
     for name, fn in by_agent.items():
         stack.enter_context(
             AGENTS[name].agent.override(
                 model=FunctionModel(stream_function=fn),
-                # `probe` alongside the agent's real tools, never instead of
-                # them: `override(toolsets=...)` adds to what the agent was
-                # built with.
                 toolsets=[FunctionToolset([probe])],  # ty: ignore[invalid-argument-type]
             )
         )
@@ -153,10 +157,8 @@ async def _offered(node, state) -> dict[str, list]:
     return seen
 
 
-# --- S04: a guard that closes must close the schema and the execution -------
-
-
 async def a_shut_guard_is_not_offered():
+    """The borrowed tool moves with its edge."""
     unverified = await _offered(AGENTS['concierge'], SalonState())
     verified = await _offered(
         AGENTS['concierge'],
@@ -164,7 +166,6 @@ async def a_shut_guard_is_not_offered():
     )
     assert unverified['requests'][0]['to'] == ['booking', 'complaints'], unverified
     assert verified['requests'][0]['to'] == ['booking', 'complaints', 'verify'], verified
-    # The borrowed tool moves with its edge.
     assert 'read_diary' not in unverified['requests'][0]['tools']
     assert 'read_diary' in verified['requests'][0]['tools']
 
@@ -177,10 +178,11 @@ async def a_step_with_no_open_exit_keeps_its_own_name():
     Pydantic AI renames a lone output function `final_result`, which would
     leave the model one tool and no word for what it does, so `build` names
     every one of them explicitly.
+
+    `ask_number` beside them: putting the readback to the caller ends the run the same way finishing
+    the step does, so it is an output and not a tool.
     """
     offered = await _offered(AGENTS['verify'], SalonState(agent='verify'))
-    # `ask_number` beside them: putting the readback to the caller ends the run
-    # the same way finishing the step does, so it is an output and not a tool.
     assert offered['requests'][0]['outputs'] == [
         'ask_number',
         'confirm_customer',
@@ -195,14 +197,19 @@ async def a_stale_destination_is_refused_at_execution():
 
     Straight at the tool, past the schema, which is what a provider ignoring
     an enum amounts to. It must not move the caller.
+
+    `verify` is open as an exit
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)  # `verify` is open as an exit
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     def hands_to_verify(messages, info: AgentInfo):
         async def stream(messages, info):
+            """Close the edge behind the model's back, exactly as a tool running earlier in the same
+            reply would have.
+            """
             if any(
                 isinstance(p, RetryPromptPart)
                 for m in messages
@@ -211,8 +218,6 @@ async def a_stale_destination_is_refused_at_execution():
             ):
                 yield 'Sorry, what was that?'
                 return
-            # Close the edge behind the model's back, exactly as a tool
-            # running earlier in the same reply would have.
             call.commit(customer_verified='')
             yield {
                 0: DeltaToolCall(name='hand_over', json_args=json.dumps({'to': 'verify', 'because': 'stale'}))
@@ -239,6 +244,7 @@ async def the_schema_is_rebuilt_between_requests_in_one_run():
     seen: list[dict] = []
 
     async def identify_then_answer(messages, info: AgentInfo):
+        """Something in this run changes the state the guards read."""
         to = next(
             (
                 t.parameters_json_schema.get('properties', {}).get('to')
@@ -249,7 +255,6 @@ async def the_schema_is_rebuilt_between_requests_in_one_run():
         )
         seen.append({'tools': sorted(t.name for t in info.function_tools), 'to': (to or {}).get('enum')})
         if len(seen) == 1:
-            # Something in this run changes the state the guards read.
             call.commit(customer_verified='existing', verified_phone=PHONE)
             yield {0: DeltaToolCall(name='probe', json_args=json.dumps({'question': 'opening hours'}))}
         else:
@@ -265,9 +270,6 @@ async def the_schema_is_rebuilt_between_requests_in_one_run():
     assert 'read_diary' not in seen[0]['tools'] and 'read_diary' in seen[1]['tools'], seen
 
 
-# --- S05: one flow-changing action per reply, refused before the service ----
-
-
 async def a_second_action_is_refused_before_it_runs():
     """Two actions in one reply is the model proposing two futures.
 
@@ -279,6 +281,10 @@ async def a_second_action_is_refused_before_it_runs():
     `read_diary` first, `hand_over` second. The refusal of an *output* tool is
     the half the SDK cannot do: `before_tool_execute` never fires for one
     (checked against 2.46.0), so `hand_over` refuses itself on entry.
+
+    The first by emission order did its work.
+
+    The second wrote nothing and moved nobody.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -305,9 +311,7 @@ async def a_second_action_is_refused_before_it_runs():
 
     refusals = [r for r in _retries(call) if 'one of these may run per reply' in r]
     assert refusals, _retries(call)
-    # The first by emission order did its work.
     assert call.state.booking_day, 'the claim holder ran'
-    # The second wrote nothing and moved nobody.
     assert call.state.agent != 'complaints', call.state.agent
 
 
@@ -383,15 +387,14 @@ async def the_winner_is_the_same_every_time():
     assert len(outcomes) == 1, outcomes
 
 
-# --- S06: a partial stream never acts ---------------------------------------
-
-
 async def a_split_destination_name_never_moves_anybody():
     """`complaints` is split after `co`, which is not a destination.
 
     The nastier form is a prefix that *is* one: the enum here holds `booking`
     and `complaints`, and a stream cut mid-name must not act on the prefix. No
     tool runs until the arguments validate whole.
+
+    One action, from the complete arguments, and it is the whole name.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -399,14 +402,13 @@ async def a_split_destination_name_never_moves_anybody():
     probe = Probe(call)
 
     async def dribble(messages, info: AgentInfo):
-        # The destination arrives in pieces, as a real provider streams it.
+        """The destination arrives in pieces, as a real provider streams it."""
         yield {0: DeltaToolCall(name='hand_over', json_args='{"to": "co')}
         yield {0: DeltaToolCall(json_args='mplaints", "because": "a refund"}')}
 
     with scripted(concierge=dribble, complaints=_says('Tell me what happened.')):
         await probe._turn('I want a refund')
 
-    # One action, from the complete arguments, and it is the whole name.
     assert _calls(call) == ['hand_over'], _calls(call)
     assert call.state.agent == 'complaints', call.state.agent
 
@@ -437,9 +439,6 @@ async def a_name_that_prefixes_another_is_not_acted_on_early():
         async for _ in events:
             pass
     assert acted == ['bookings'], acted
-
-
-# --- S07: speech before a tool must not end the run --------------------------
 
 
 async def text_before_a_tool_streams_and_the_tool_still_runs():
@@ -476,9 +475,6 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
     assert 'We close at six.' in probe.spoken(), probe.spoken()
 
 
-# --- a run answers before it runs out of budget -----------------------------
-
-
 async def a_run_speaks_by_its_third_request():
     """The bound in front of the turn budget: the third request has no tools left.
 
@@ -489,6 +485,8 @@ async def a_run_speaks_by_its_third_request():
 
     Its **output** tools are untouched: a run that has read the diary can
     still hand over or save. Only what buys another request goes.
+
+    The run can still finish itself; it just cannot keep going.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -514,7 +512,6 @@ async def a_run_speaks_by_its_third_request():
     assert len(offered) == 3, offered
     assert offered[0]['tools'] and offered[1]['tools'], offered
     assert offered[2]['tools'] == [], offered[2]
-    # The run can still finish itself; it just cannot keep going.
     assert 'hand_over' in offered[2]['outputs'], offered[2]
     assert probe_run.spoken() == 'We are open until six.', probe_run.spoken()
     assert EXHAUSTED not in probe_run.fixed(), probe_run.fixed()
@@ -531,6 +528,8 @@ async def the_loop_from_the_call_of_2026_09_21():
     What this pins is not the deleted tool: it is that *any* tool loop now
     ends in an answer. The diary read still moves the caller, and what it
     returned still reaches their ears.
+
+    The diary read is the free edge, and it still moved them.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -555,13 +554,9 @@ async def the_loop_from_the_call_of_2026_09_21():
         await probe_run._turn("let's move it to Saturday, same time")
 
     assert len(requests) == 3, requests
-    # The diary read is the free edge, and it still moved them.
     assert call.state.agent == 'booking', call.state.agent
     assert '9:00 AM' in probe_run.spoken(), probe_run.spoken()
     assert EXHAUSTED not in probe_run.fixed(), probe_run.fixed()
-
-
-# --- a tool that did not succeed is not a move -------------------------------
 
 
 def every_tool_that_writes_is_an_action():
@@ -643,12 +638,14 @@ def a_refused_tool_does_not_move_the_caller():
     the model asks for a tool -- before it runs, and whatever it then does. A
     `read_diary` that refused an unidentified caller still moved them into
     `booking`.
+
+    Nothing succeeded, so nobody moved.
+
+    A tool that is not an edge is not a move however well it went.
     """
     known = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'booking'
-    # Nothing succeeded, so nobody moved.
     assert moved_by(known, AGENTS['concierge'], AGENTS, set()) == 'concierge'
-    # A tool that is not an edge is not a move however well it went.
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'probe'}) == 'concierge'
 
 
@@ -672,7 +669,8 @@ async def a_cancelled_tool_is_not_a_move():
     probe = Probe(call)
 
     async def read_then_cancel(messages, info: AgentInfo):
-        probe.interrupt()  # the caller speaks over the tool
+        """The caller speaks over the tool"""
+        probe.interrupt()
         yield {
             0: DeltaToolCall(
                 name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
@@ -714,7 +712,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
-    # still runs there -- and a debugging session can import one module
-    # without running every check in it.
     asyncio.run(main())

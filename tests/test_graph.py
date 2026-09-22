@@ -6,6 +6,13 @@ a node table, so the only way it can be wrong is arithmetic, and arithmetic is
 testable in a millisecond.
 
 Asserts, no pytest, no fixtures, same as the rest.
+
+`route` interposes one prerequisite and does not loop, which is only safe while no satisfier has
+prerequisites of its own. Held here rather than by a loop in `route`: a graph that cannot chain
+needs no cycle detection, and `pending` can never hold more than one step.
+
+`tests/__main__.py` runs each module with `run_name='__main__'`, so this still runs there -- and a
+debugging session can import one module without running every check in it.
 """
 
 import asyncio
@@ -17,16 +24,15 @@ from core.graph import moved_by, route
 from salon.agents import AGENTS
 from salon.models.state import SalonCall, SalonState
 
-# --- the shape of the graph --------------------------------------------------
-
 STEPS = set(AGENTS)
-# A number a lookup really ran against. A verification status with no
-# identity attached is cleared by `SalonState`'s own invariant, so a test
-# that wants a verified caller has to say who.
 VERIFIED = '+34600111222'
-# Every tool any step holds, borrowed ones included. Read off the agents rather
-# than listed here, so a tool that stops existing fails the lending check.
+"""A number a lookup really ran against. A verification status with no identity attached is cleared by
+`SalonState`'s own invariant, so a test that wants a verified caller has to say who.
+"""
 _ALL_TOOLS = {t.name for node in AGENTS.values() for t in node.agent._function_toolset.tools.values()}
+"""Every tool any step holds, borrowed ones included. Read off the agents rather than listed here, so a
+tool that stops existing fails the lending check.
+"""
 
 
 def _guidance(info):
@@ -76,8 +82,8 @@ for name, node in AGENTS.items():
         for field in node.requires:
             assert field in SalonState.model_fields, f'{name} requires {field!r}, not a state field'
 
-# Every step is somewhere a caller can actually end up.
 reached, edge = {'concierge'}, True
+"""Every step is somewhere a caller can actually end up."""
 while edge:
     edge = False
     for name in list(reached):
@@ -87,10 +93,6 @@ while edge:
                 edge = True
 assert reached == STEPS, f'unreachable from the front desk: {STEPS - reached}'
 
-# `route` interposes one prerequisite and does not loop, which is only safe
-# while no satisfier has prerequisites of its own. Held here rather than by a
-# loop in `route`: a graph that cannot chain needs no cycle detection, and
-# `pending` can never hold more than one step.
 for name, node in AGENTS.items():
     if node.satisfied_by:
         assert not AGENTS[node.satisfied_by].requires, (
@@ -98,23 +100,23 @@ for name, node in AGENTS.items():
             'route interposes once, so this would leave the first one unmet'
         )
 
-# --- route: the prerequisite is interposed, free ------------------------------
-
 
 def prerequisite_interposed():
+    """`route` decides and writes nothing: the step to enter and what is left waiting come back
+    together, so its caller commits them as one.
+    """
     state = SalonState()
-    # `route` decides and writes nothing: the step to enter and what is left
-    # waiting come back together, so its caller commits them as one.
     for destination in ('booking', 'complaints'):
         assert route(state, AGENTS, destination) == ('verify', destination), (
             'nobody is identified, so verify runs first'
         )
     assert state.pending is None, 'and route itself changed nothing'
-    # And the model was never asked: the front desk said "booking" and the
-    # graph, not a request, worked out that verification comes first.
 
 
 def no_interpose_when_met():
+    """And the model was never asked: the front desk said "booking" and the graph, not a request,
+    worked out that verification comes first.
+    """
     state = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert route(state, AGENTS, 'booking') == ('booking', None), 'a met prerequisite leaves nothing waiting'
     assert route(state, AGENTS, 'complaints') == ('complaints', None)
@@ -122,10 +124,10 @@ def no_interpose_when_met():
 
 
 def the_pending_slot_clears():
+    """Nothing waiting: whoever finished says where the fallback is."""
     call = SalonCall(state=SalonState(pending='booking'))
     assert call.resume('concierge') == 'booking'
     assert call.state.pending is None, 'cleared, so the next finisher does not go there again'
-    # Nothing waiting: whoever finished says where the fallback is.
     assert call.resume('concierge') == 'concierge'
     assert call.resume('complaints') == 'complaints'
 
@@ -178,12 +180,19 @@ def one_waiting_step_at_a_time():
 
 
 def round_trip():
-    """The whole point, in five lines: out through verify and back into booking."""
+    """The whole point, in five lines: out through verify and back into booking.
+
+    What `confirm_customer` does, identity included: a status without the number it was established
+    for is cleared by the state's own invariant.
+
+    Two lines, and they have to be: `resume` commits, which replaces the state object, so reading
+    `call.state` in the same expression would hand `route` the state from before the pending slot
+    was cleared. Written as one line this test failed, which is the whole reason the context holds a
+    replaceable state instead of tools holding a state directly.
+    """
     call = SalonCall()
     going_to, waiting = route(call.state, AGENTS, 'booking')
     assert going_to == 'verify'
-    # What `confirm_customer` does, identity included: a status without the
-    # number it was established for is cleared by the state's own invariant.
     call.commit(
         agent=going_to,
         pending=waiting,
@@ -191,11 +200,6 @@ def round_trip():
         customer_verified='existing',
         verified_phone=VERIFIED,
     )
-    # Two lines, and they have to be: `resume` commits, which replaces the
-    # state object, so reading `call.state` in the same expression would hand
-    # `route` the state from before the pending slot was cleared. Written as
-    # one line this test failed, which is the whole reason the context holds a
-    # replaceable state instead of tools holding a state directly.
     back_to = call.resume('concierge')
     assert route(call.state, AGENTS, back_to) == ('booking', None)
     assert call.state.pending is None
@@ -205,8 +209,9 @@ def no_model_request_on_kind_a():
     """The invariant. A graph move that costs a round trip is not a graph move."""
 
     async def explode(messages, info: AgentInfo):
+        """unreachable, and here only to make this an async generator"""
         raise AssertionError('route ran a model; a deterministic hop must cost nothing')
-        yield  # unreachable, and here only to make this an async generator
+        yield
 
     with ExitStack() as stack:
         for node in AGENTS.values():
@@ -217,15 +222,17 @@ def no_model_request_on_kind_a():
         SalonCall(state=SalonState(pending='booking')).resume('concierge')
 
 
-# --- the schema the model is actually sent -----------------------------------
-
-
 async def offered_exits(node, state) -> tuple[str, ...]:
     """The `to` enum in this step's `hand_over`, read off the emitted tool schema.
 
     Off the schema and never off the source: the claim is about what the model
     receives, and a `Literal` built from a value is exactly the thing that could
     be right in the table and wrong on the wire.
+
+    a finisher: it has no destination to narrow
+
+    Pydantic writes a one-value `Literal` as `const` and a longer one as `enum`. Both are the same
+    claim about what the model may send.
     """
     seen: dict = {}
 
@@ -246,28 +253,27 @@ async def offered_exits(node, state) -> tuple[str, ...]:
     for schema in seen['tools']:
         to = schema.get('properties', {}).get('to')
         if to is None:
-            continue  # a finisher: it has no destination to narrow
-        # Pydantic writes a one-value `Literal` as `const` and a longer one as
-        # `enum`. Both are the same claim about what the model may send.
+            continue
         return tuple(to['enum']) if 'enum' in to else (to['const'],)
     return ()
 
 
 async def no_illegal_edge_offered():
+    """`dict.fromkeys`, matching `build`: two exits can name one step -- one a `hand_over` the model
+    may choose, one lending that step's entry tool -- and the model should be offered it once.
+
+    Named, so the two guards are asserted and not merely computed twice.
+    """
     for state in (
         SalonState(),
         SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
     ):
         for name, node in AGENTS.items():
-            # `dict.fromkeys`, matching `build`: two exits can name one step --
-            # one a `hand_over` the model may choose, one lending that step's
-            # entry tool -- and the model should be offered it once.
             want = tuple(dict.fromkeys(exit.to for exit in node.exits if exit.guard(state)))
             got = await offered_exits(node, state)
             assert got == want, f'{name} with verified={state.customer_verified!r}: {got} != {want}'
             assert name not in got, f'{name} was offered a hop to itself'
 
-    # Named, so the two guards are asserted and not merely computed twice.
     fresh, known = (
         SalonState(),
         SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
@@ -287,19 +293,17 @@ async def no_illegal_edge_offered():
     )
 
 
-# --- the free edge: a borrowed tool is the move ------------------------------
-
-
 def a_borrowed_tool_is_the_move():
     """Calling a lent tool puts the caller in the step that owns it.
 
     This is the edge that costs nothing. The request that read the diary is the
     request that moved them, so the routing round trip -- 0.85s of silence,
     three times in one live call -- does not happen.
+
+    A tool nobody lends moves nobody.
     """
     known = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'booking'
-    # A tool nobody lends moves nobody.
     assert moved_by(known, AGENTS['concierge'], AGENTS, {'probe'}) == 'concierge'
     assert moved_by(known, AGENTS['concierge'], AGENTS, set()) == 'concierge'
 
@@ -310,6 +314,8 @@ async def a_shut_edge_lends_nothing():
     Both halves matter: the guard keeps the tool out of the schema the model is
     sent, and it keeps `moved_by` from honouring a call that somehow happened
     anyway.
+
+    The step that owns it always has it, guard or no guard.
     """
     fresh = SalonState()
     assert moved_by(fresh, AGENTS['concierge'], AGENTS, {'read_diary'}) == 'concierge'
@@ -318,7 +324,6 @@ async def a_shut_edge_lends_nothing():
         AGENTS['concierge'],
         SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED),
     )
-    # The step that owns it always has it, guard or no guard.
     assert 'read_diary' in await _reachable_tools(AGENTS['booking'], fresh)
 
 
@@ -385,7 +390,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
-    # still runs there -- and a debugging session can import one module
-    # without running every check in it.
     asyncio.run(main())

@@ -16,6 +16,9 @@ Two contracts:
   tested apart.
 
 Asserts, no pytest, no fixtures, same as the rest.
+
+`tests/__main__.py` runs each module with `run_name='__main__'`, so this still runs there -- and a
+debugging session can import one module without running every check in it.
 """
 
 import asyncio
@@ -47,15 +50,15 @@ def _refused(fn, *args, **kwargs) -> ValidationError:
     raise AssertionError(f'{fn} accepted {args or kwargs}, and must not have')
 
 
-# --- defaults are validated --------------------------------------------------
-
-
 def an_authored_default_is_checked():
     """A default that breaks its own type must fail here, not on the first call.
 
     `validate_default` is off in Pydantic unless asked for, so without it a
     field declared `Phone = 'oops'` sits there looking fine until something
     reads it -- on a live call, in front of a caller.
+
+    And the real state's own defaults are legal, which is the same check pointed at the code that
+    ships.
     """
 
     class Broken(SalonState):
@@ -63,19 +66,15 @@ def an_authored_default_is_checked():
 
     _refused(Broken)
 
-    # And the real state's own defaults are legal, which is the same check
-    # pointed at the code that ships.
     assert SalonState().customer_phone == ''
 
 
-# --- assignment and nested assignment are validated --------------------------
-
-
 def assignment_is_checked():
+    """Not a step in this agency"""
     state = SalonState()
     _refused(setattr, state, 'customer_verified', 'probably')
     _refused(setattr, state, 'customer_phone', '+348340464')
-    _refused(setattr, state, 'pending', 'accounts')  # not a step in this agency
+    _refused(setattr, state, 'pending', 'accounts')
 
 
 def a_nested_model_cannot_be_edited_past_its_validator():
@@ -116,9 +115,6 @@ def a_prebuilt_model_is_revalidated():
     _refused(SalonState, appointment=smuggled)
 
 
-# --- one commit, or none of it -----------------------------------------------
-
-
 def a_failed_batch_commits_nothing():
     """The defect this whole change exists for.
 
@@ -127,6 +123,8 @@ def a_failed_batch_commits_nothing():
     second one and left the first committed: a caller with a number on file
     who was never identified, which every prompt and guard downstream reads as
     further along than it is.
+
+    The same batch with a legal status commits both.
     """
     call = open_call()
     before = call.state
@@ -137,7 +135,6 @@ def a_failed_batch_commits_nothing():
     assert call.state.customer_phone == '', 'and the first field of the batch is not on it'
     assert call.state.customer_verified == ''
 
-    # The same batch with a legal status commits both.
     call.commit(
         customer_phone=PHONE, phone_confirmed=True, customer_verified='existing', verified_phone=PHONE
     )
@@ -159,10 +156,12 @@ def a_commit_replaces_the_state_object():
 
 
 def a_commit_validates_rather_than_copies():
-    """`model_copy(update=...)` would take any of this. `commit` takes none of it."""
+    """`model_copy(update=...)` would take any of this. `commit` takes none of it.
+
+    Pydantic's own copy-with-update does no validation at all -- shown here so the difference is on
+    the record rather than asserted from memory.
+    """
     call = open_call()
-    # Pydantic's own copy-with-update does no validation at all -- shown here
-    # so the difference is on the record rather than asserted from memory.
     assert call.state.model_copy(update={'customer_verified': 'nonsense'}).customer_verified == 'nonsense'
     _refused(call.commit, customer_verified='nonsense')
 
@@ -173,9 +172,6 @@ def the_waiting_step_is_a_validated_name():
     assert call.state.pending == 'booking'
     _refused(call.commit, pending='accounts')
     assert call.state.pending == 'booking', 'the refused name did not land'
-
-
-# --- presence, spelled out ---------------------------------------------------
 
 
 def presence_is_not_truthiness():
@@ -213,15 +209,14 @@ def presence_governs_the_prerequisite():
     assert route(Answered(wants_reminder=True), nodes, 'act') == ('act', None)
 
 
-# --- a service response is not trusted because a function returned it --------
-
-
 def a_malformed_service_response_writes_nothing():
     """The diary handing back nonsense must not reach the state.
 
     An annotation on the service function proves nothing: Python does not
     check it. What holds here is that the value is validated into
     `Appointment` before anything is committed, and the commit never runs.
+
+    Nothing was committed, because the value never became an Appointment.
     """
     call = open_call(PHONE)
     call.commit(customer_verified='existing', verified_phone=PHONE)
@@ -236,11 +231,7 @@ def a_malformed_service_response_writes_nothing():
         'action': 'book',
     }
     _refused(Appointment, **malformed)
-    # Nothing was committed, because the value never became an Appointment.
     assert call.state is before and call.state.appointment is None
-
-
-# --- the phone policy --------------------------------------------------------
 
 
 def the_historical_short_number_is_refused():
@@ -301,10 +292,14 @@ def a_number_shaped_non_number_is_refused():
     +34500111222 is nine digits after +34 and passes every length rule anyone
     would write by hand. libphonenumber knows 5xx is not an ordinary Spanish
     contact range, which is the reason this is not a regex.
+
+    eight national digits
+
+    ten
     """
     _refused(SalonState, customer_phone='+34500111222')
-    _refused(SalonState, customer_phone='+3460011122')  # eight national digits
-    _refused(SalonState, customer_phone='+346001112223')  # ten
+    _refused(SalonState, customer_phone='+3460011122')
+    _refused(SalonState, customer_phone='+346001112223')
 
 
 def a_number_said_in_pieces_arrives_whole():
@@ -323,24 +318,28 @@ def a_number_said_in_pieces_arrives_whole():
 
 
 def a_corrected_digit_group_replaces_the_whole_number():
-    """They said one number, then a different one. The second is what is held."""
+    """They said one number, then a different one. The second is what is held.
+
+    And a correction to something invalid does not silently keep the old one *and* claim it was
+    confirmed again: the commit fails whole.
+    """
     call = open_call()
     call.commit(customer_phone=PHONE, phone_confirmed=True)
     call.commit(customer_phone=OTHER, phone_confirmed=True)
     assert call.state.customer_phone == OTHER
-    # And a correction to something invalid does not silently keep the old one
-    # *and* claim it was confirmed again: the commit fails whole.
     _refused(call.commit, customer_phone='+34500111222', phone_confirmed=True)
     assert call.state.customer_phone == OTHER
 
 
 def a_withheld_caller_id_is_absence():
-    """Three ways a carrier says "no number", all of which mean the same thing."""
+    """Three ways a carrier says "no number", all of which mean the same thing.
+
+    A real number that merely starts with those digits is a real number.
+    """
     assert prefetch_number('') == ''
     assert prefetch_number('unknown') == ''
     assert prefetch_number('+8656696') == '', 'the keypad spelling of "unknown"'
     assert prefetch_number(PHONE) == PHONE
-    # A real number that merely starts with those digits is a real number.
     assert prefetch_number('+8656696123') == '+8656696123'
 
 
@@ -352,6 +351,8 @@ def agreeing_to_a_wrong_number_is_not_identity():
     three facts stay three fields: the digits are legal, the caller agreed,
     and the lookup found a record. None of them is the claim that this is the
     person, and nothing in the code pretends otherwise.
+
+    Three separate fields, so nothing downstream can read "valid" as "theirs".
     """
     call = open_call()
     call.commit(
@@ -360,7 +361,6 @@ def agreeing_to_a_wrong_number_is_not_identity():
     assert call.state.customer_phone == OTHER
     assert call.state.phone_confirmed, 'they said yes'
     assert call.state.customer_verified == 'existing', 'and a record was found'
-    # Three separate fields, so nothing downstream can read "valid" as "theirs".
     fields = SalonState.model_fields
     assert {'customer_phone', 'phone_confirmed', 'customer_verified'} <= set(fields)
 
@@ -373,9 +373,6 @@ def the_prefetched_number_is_not_confirmed():
     assert call.state.customer_verified == ''
 
 
-# --- the context holds nothing a candidate could not be rebuilt from ---------
-
-
 def a_forged_verification_status_does_not_verify_anybody():
     """A correctly typed `existing` is not evidence that a lookup happened.
 
@@ -386,12 +383,13 @@ def a_forged_verification_status_does_not_verify_anybody():
 
     This is what stops a finisher, a replayed message or a hand-edited state
     from satisfying `booking`'s prerequisite without the lookup ever running.
+
+    The same status, with the identity the lookup actually used, stands.
     """
     forged = SalonState(customer_phone=PHONE, customer_verified='existing')
     assert forged.customer_verified == '', forged
     assert not present(forged.customer_verified), 'so the booking prerequisite is unmet'
 
-    # The same status, with the identity the lookup actually used, stands.
     real = SalonState(customer_phone=PHONE, customer_verified='existing', verified_phone=PHONE)
     assert real.customer_verified == 'existing'
 
@@ -403,6 +401,9 @@ def correcting_the_number_withdraws_the_old_authorisation():
     authority earned by the old one goes with it -- along with the readback
     they confirmed, which was a readback of something else. Their previous
     business record is not touched; only the authority to act on this call.
+
+    And an old successful result cannot be replayed to get it back: the status still has to arrive
+    with the number now on the call.
     """
     call = open_call()
     call.commit(
@@ -416,8 +417,6 @@ def correcting_the_number_withdraws_the_old_authorisation():
     assert not call.state.phone_confirmed, 'nor does the old readback'
     assert call.state.verified_phone == ''
 
-    # And an old successful result cannot be replayed to get it back: the
-    # status still has to arrive with the number now on the call.
     call.commit(customer_verified='existing', verified_phone=PHONE)
     assert call.state.customer_verified == '', 'a stale identity is still stale'
 
@@ -437,6 +436,8 @@ def no_tool_but_the_verifier_takes_a_phone_number():
 
     `confirm_customer` is the exception by design: establishing the number is
     its whole job, and what it produces is checked by the lookup.
+
+    And what each step actually offers, which is the thing the model reads.
     """
     import inspect
 
@@ -450,7 +451,6 @@ def no_tool_but_the_verifier_takes_a_phone_number():
         taken = set(inspect.signature(tool).parameters)
         assert not (taken & {'customer_phone', 'number'}), f'{name}: {sorted(taken)}'
 
-    # And what each step actually offers, which is the thing the model reads.
     for step, node in agents.AGENTS.items():
         for tool in node.agent._function_toolset.tools.values():
             offered = set(tool.function_schema.json_schema.get('properties') or {})
@@ -468,6 +468,18 @@ async def a_schema_authored_tool_validates_what_a_typed_one_does():
 
     The counter is the assertion. Every refusal below has to leave it at
     zero: a tool that validates *after* it has acted has not validated.
+
+    The injected field is not in front of the model at all.
+
+    A missing field, and a field of the wrong type. Neither reaches it.
+
+    The model filling in what the application supplies.
+
+    And a legal call, with the salon's own value in it and not the model's.
+
+    A schema this cannot honour is refused when the tool is built, not when it is called: a
+    converter that quietly drops a keyword produces a tool that validates less than its schema
+    claims and nobody can tell.
     """
     from pydantic_ai import ModelRetry, RunContext
 
@@ -496,10 +508,8 @@ async def a_schema_authored_tool_validates_what_a_typed_one_does():
     ctx = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
     validate, invoke = tool.args_validator, tool.function
 
-    # The injected field is not in front of the model at all.
     assert set(tool.function_schema.json_schema['properties']) == {'note', 'urgent'}
 
-    # A missing field, and a field of the wrong type. Neither reaches it.
     for wrong in ({'note': 'a mess'}, {'note': 'a mess', 'urgent': 'very'}):
         try:
             validate(ctx, **wrong)
@@ -509,7 +519,6 @@ async def a_schema_authored_tool_validates_what_a_typed_one_does():
             raise AssertionError(f'invalid arguments were accepted: {wrong}')
     assert calls == [], calls
 
-    # The model filling in what the application supplies.
     try:
         validate(ctx, note='a mess', urgent=True, phone='+34934567890')
     except ModelRetry as refused:
@@ -518,14 +527,10 @@ async def a_schema_authored_tool_validates_what_a_typed_one_does():
         raise AssertionError('the model overrode an injected field')
     assert calls == [], calls
 
-    # And a legal call, with the salon's own value in it and not the model's.
     good = validate(ctx, note='a mess', urgent=True)
     assert await invoke(ctx, **good) == 'done'  # ty: ignore[invalid-argument-type]
     assert calls == [{'note': 'a mess', 'urgent': True, 'phone': PHONE}], calls
 
-    # A schema this cannot honour is refused when the tool is built, not when
-    # it is called: a converter that quietly drops a keyword produces a tool
-    # that validates less than its schema claims and nobody can tell.
     for bad in (
         {'type': 'object', 'properties': {'x': {'type': 'object'}}},
         {'type': 'object', 'properties': {'x': {'type': 'string', 'pattern': '^a'}}},
@@ -545,12 +550,13 @@ def the_business_state_carries_no_history_or_handles():
     A state that carried a message list would be rebuilt from `model_dump`
     every commit, and one that carried a bound method could not be rebuilt at
     all. Both are also JSON-schema poison: the prompts compile against this.
+
+    Nothing unrenderable reached the schema the prompts are compiled against.
     """
     assert 'messages' not in SalonState.model_fields
     assert 'messages' in CallContext.model_fields
     for private in ('_say', '_end', '_covered'):
         assert private not in SalonState.model_fields
-    # Nothing unrenderable reached the schema the prompts are compiled against.
     schema = SalonCall.model_json_schema()
     assert 'state' in schema['properties']
 
@@ -576,6 +582,9 @@ def a_commit_refuses_a_field_that_does_not_exist():
     True)` rebuilt the state from its own values, changed nothing, and
     returned as if it had. Every other write path here raises on bad input;
     this one accepted a name that means nothing and said so to nobody.
+
+    The correctly spelled one still works, which is what makes the refusal a typo check rather than
+    a wall.
     """
     call = open_call(PHONE)
     before = call.state
@@ -586,8 +595,6 @@ def a_commit_refuses_a_field_that_does_not_exist():
     else:
         raise AssertionError('a keyword naming no field must not be accepted')
     assert call.state is before, 'and nothing was rebuilt on the way to refusing'
-    # The correctly spelled one still works, which is what makes the refusal
-    # a typo check rather than a wall.
     call.commit(booking_day='2026-09-25')
     assert call.state.booking_day == date(2026, 9, 25)
 
@@ -599,22 +606,26 @@ def a_day_that_does_not_exist_is_refused():
     calendar does not have passed into state and only the diary's own parser
     later objected -- by which point it is a value the prompts have rendered
     and the model has been told is real.
+
+    A real `date` now, parsed from the ISO string a service sends.
+
+    A leap day the calendar has, and one it does not.
+
+    Not a day, however plausible the number looks: Pydantic's ordinary lax mode reads 1700000000 as
+    a date in 2023, and a number that reached this field by accident would become a real, wrong
+    appointment.
+
+    And a day round-trips through JSON as the string it arrived as.
     """
     _refused(SalonState, agent='concierge', booking_day='2026-02-30')
     _refused(SalonState, agent='concierge', booking_day='2026-13-01')
-    # A real `date` now, parsed from the ISO string a service sends.
     assert SalonState(booking_day='2026-09-25').booking_day == date(2026, 9, 25)
     assert SalonState(booking_day=date(2026, 9, 25)).booking_day == date(2026, 9, 25)
     assert SalonState(booking_day=None).booking_day is None, 'absence is still not a wrong value'
-    # A leap day the calendar has, and one it does not.
     assert SalonState(booking_day='2028-02-29').booking_day == date(2028, 2, 29)
     _refused(SalonState, agent='concierge', booking_day='2027-02-29')
-    # Not a day, however plausible the number looks: Pydantic's ordinary lax
-    # mode reads 1700000000 as a date in 2023, and a number that reached this
-    # field by accident would become a real, wrong appointment.
     _refused(SalonState, agent='concierge', booking_day=1700000000)
     _refused(SalonState, agent='concierge', booking_day=datetime(2026, 9, 25, 10, 0))
-    # And a day round-trips through JSON as the string it arrived as.
     assert SalonState(booking_day='2026-09-25').model_dump(mode='json')['booking_day'] == '2026-09-25'
 
 
@@ -624,6 +635,8 @@ def a_time_is_a_local_salon_time():
     The salon has one timezone and a half-hour grid, so a time arriving with
     an offset is asserting something about where it is rather than answering
     the diary, and a time with seconds on it did not come off that grid.
+
+    And out again as the `HH:MM` the wire uses.
     """
     at = time(9, 30)
     assert (
@@ -642,7 +655,6 @@ def a_time_is_a_local_salon_time():
             spoken='x',
             action='book',
         )
-    # And out again as the `HH:MM` the wire uses.
     booked = Appointment(
         booking_id='BK1', service='haircut', date='2026-09-25', time=at, spoken='x', action='book'
     )
@@ -663,6 +675,9 @@ def a_submitted_number_is_not_the_same_type_as_a_stored_one():
     empty string submitted as an identity, looked up, and answered
     'created'. `tests.test_salon` runs that through the real invocation; this
     is the type rule underneath it.
+
+    And the stored one still permits absence, because that is what a field holds before anybody has
+    said a number.
     """
     from pydantic import TypeAdapter
 
@@ -671,8 +686,6 @@ def a_submitted_number_is_not_the_same_type_as_a_stored_one():
     submitted = TypeAdapter(SubmittedPhone)
     assert submitted.validate_python(PHONE) == PHONE
     _refused(submitted.validate_python, '')
-    # And the stored one still permits absence, because that is what a field
-    # holds before anybody has said a number.
     assert TypeAdapter(Phone).validate_python('') == ''
 
 
@@ -713,7 +726,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
-    # still runs there -- and a debugging session can import one module
-    # without running every check in it.
     asyncio.run(main())

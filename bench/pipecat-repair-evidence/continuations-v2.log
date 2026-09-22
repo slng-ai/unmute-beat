@@ -1,0 +1,13 @@
+2026-09-21 20:26:40.056 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 20:26:41.748 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+1 split_phone: ok
+2026-09-21 20:26:44.418 | INFO     | voice.core:_hops:376 - handoff complaints -> verify (Verify the complaint details before recording.)
+2026-09-21 20:26:46.219 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+1 complaint_live: ok
+2026-09-21 20:26:47.945 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+2 split_phone: ok
+2 complaint_live: AssertionError: complaint stalled without the required structured readback
+2026-09-21 20:26:50.983 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+3 split_phone: ok
+3 complaint_live: AssertionError: complaint stalled without the required structured readback
+2 failures; evidence: bench/raw/pipecat-continuations-v2-20260921T182640Z.jsonl

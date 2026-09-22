@@ -313,7 +313,7 @@ async def a_permitted_repair_succeeds():
         yield {0: DeltaToolCall(name='confirm_customer', json_args=json.dumps({'phone': phone}))}
 
     with scripted(verify=wrong_then_right, concierge=says('What can I do for you?')):
-        await probe._turn("yes, that's right")
+        await probe._turn("yes, that's right, thank you")
 
     assert len(attempts) == 2, attempts
     assert _refusals(call), 'the model was told what was wrong'

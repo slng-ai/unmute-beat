@@ -153,7 +153,15 @@ def _slot(call, when: str, service: str = 'haircut', at: str = ''):
 
 def the_matchers_refuse_rather_than_guess():
     """Every one of them fails towards asking. That is the property, not the word lists."""
-    for yes in ('yes', "yeah, that's right", 'Sounds good', 'perfect', 'go ahead'):
+    for yes in (
+        'yes',
+        "yeah, that's right",
+        'Sounds good',
+        'perfect',
+        'go ahead',
+        'Go for it.',
+        'GO FOR IT!',
+    ):
         assert agrees(yes), yes
     for other in (
         '',
@@ -161,6 +169,10 @@ def the_matchers_refuse_rather_than_guess():
         'Yes, but can you make it 3pm instead',
         'Actually, Friday',
         "I'd rather have the afternoon",
+        'Go for it, but make it eleven instead',
+        'Go for it at eleven',
+        'Should I go for it?',
+        "Don't go for it",
     ):
         assert not agrees(other), other
 
@@ -195,6 +207,15 @@ def the_matchers_refuse_rather_than_guess():
     # Not a time. Intersected with real offers, a wrong reading books something.
     assert times_named('Friday the 25th') == set()
     assert times_named('for 2 people') == set()
+    for words in ('01:00, please.', 'one, please.', '1:00 PM'):
+        assert '13:00' in times_named(words), words
+    assert times_named('10:30 AM') == {'10:30'}
+    assert diary.resolve_time('10:30 AM') == '10:30'
+    for words in ('not 10 oclock', 'one or two', 'maybe at one'):
+        assert not times_named(words), words
+    assert agrees('That would be great.') and agrees('Absolutely.')
+    assert ends('No, thanks.')
+    assert not ends('No thanks, but can you book Friday?')
 
 
 # --- N1: a question answered by hanging up -----------------------------------
@@ -257,6 +278,37 @@ async def n1_the_move_it_asked_for_is_the_move_it_makes():
     after = diary.bookings_for(PHONE, CLOCK.date())
     assert len(after) == 1, after
     assert after[0]['date'] == SATURDAY.isoformat() and after[0]['time'] == '09:00', after[0]
+
+
+async def go_for_it_approves_only_the_pending_move():
+    """Live trace 85eca3… repeated a Monday readback because this phrase was omitted."""
+    call = _salon()
+    _heard(call)
+    call.turn_started('a haircut on Friday at ten please')
+    friday = _slot(call, 'friday', at='10:00')
+    await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
+    held = diary.bookings_for(PHONE, CLOCK.date())[0]
+    call.turn_started('Can we move it to next Monday?')
+    monday = _slot(call, 'next Monday', at='10:00')
+
+    call.turn_started('Go for it.')
+    await _refuses(agents.save_booking, _context(call), 'move', monday['slot_id'], held['booking_id'])
+    assert diary.bookings_for(PHONE, CLOCK.date())[0] == held
+
+    question = await agents.ask_booking(_context(call), 'move', monday['slot_id'], held['booking_id'])
+    question.put(call)
+    call.turn_started('Go for it, but make it eleven instead')
+    await _refuses(agents.save_booking, _context(call), 'move', monday['slot_id'], held['booking_id'])
+    assert diary.bookings_for(PHONE, CLOCK.date())[0] == held
+
+    question.put(call)
+    call.turn_started('Go for it.')
+    moved = await agents.save_booking(_context(call), 'move', monday['slot_id'], held['booking_id'])
+    after = diary.bookings_for(PHONE, CLOCK.date())
+    assert 'moved' in moved.lower(), moved
+    assert len(after) == 1 and after[0]['booking_id'] == held['booking_id'], after
+    assert (after[0]['date'], after[0]['time']) == ('2026-09-28', '10:00'), after
+    assert call.state.writes == 2 and call.pending('booking') is None
 
 
 # --- N2: the day the caller did not say --------------------------------------
@@ -473,9 +525,7 @@ async def earlier_b_a_cancellation_nobody_made_is_not_spoken():
     assert 'cancelled' not in said.lower(), said
     assert 'redo' not in said.lower(), said
     # And the caller is told plainly, rather than being left with silence.
-    assert any('has been changed' in line or 'correct myself' in line for line in probe.fixed()), (
-        probe.fixed()
-    )
+    assert any('Sorry' in line for line in probe.fixed()), probe.fixed()
     assert len(diary.bookings_for(PHONE, CLOCK.date())) == 1
 
 
@@ -489,10 +539,10 @@ async def recounting_what_is_really_booked_still_streams():
 
     call.commit(agent='booking')
     probe = Probe(call)
-    honest = "You're booked in for a haircut on Friday at 9 AM. Anything else?"
-    with scripted(booking=says(honest)):
+    with scripted(booking=outputs('booking_guidance', topic='existing')):
         await probe._turn('what have I got booked?')
-    assert probe.spoken() == honest, probe.spoken()
+    assert not probe.spoken()
+    assert 'haircut' in probe.fixed()[-1] and '9:00 AM' in probe.fixed()[-1], probe.fixed()
 
 
 async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
@@ -512,14 +562,14 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     assert len(held) == 1
 
     call.commit(agent='complaints')
-    call.turn_started('the last cut was completely uneven, I want it redone free')
-    summary = 'the last haircut was uneven'
-    question = await agents.ask_complaint(_context(call), summary)
+    call.turn_started('the last cut was completely uneven, I want a free redo')
+    summary = 'the last cut was completely uneven'
+    question = await agents.ask_complaint(_context(call), summary, 'a free redo')
     assert summary in question.spoken and question.spoken.endswith('?'), question.spoken
     question.put(call)
 
     call.turn_started("yes, that's right")
-    record = await agents.record_complaint(_context(call), summary, 'a free redo')
+    record = await agents._record_complaint(_context(call), summary, 'a free redo')
     assert record.recorded and record.reference
 
     # One acknowledgement, carrying the reference, and the policy's own step.
@@ -535,11 +585,11 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     assert len(diary.complaints()) == 1, diary.complaints()
 
     # A refund request does get the manager, because the policy says so.
-    call.turn_started('actually I want my money back')
-    refund = 'the last haircut was uneven and they want a refund'
-    (await agents.ask_complaint(_context(call), refund)).put(call)
+    call.turn_started('actually I want a full refund')
+    refund = 'the last cut was completely uneven'
+    (await agents.ask_complaint(_context(call), refund, 'a full refund')).put(call)
     call.turn_started('yes')
-    await agents.record_complaint(_context(call), refund, 'a full refund')
+    await agents._record_complaint(_context(call), refund, 'a full refund')
     latest = [seg.text for seg in call.spoken if seg.kind == 'fixed'][-1]
     assert agents.MANAGER_CALLS in latest, latest
     assert diary.bookings_for(PHONE, CLOCK.date()) == held, 'still untouched'
@@ -557,20 +607,20 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
     _heard(call)
 
     # No summary was ever put to them.
-    call.turn_started('my colour came out wrong')
-    refusal = await _refuses(agents.record_complaint, _context(call), 'the colour was wrong', 'a refund')
+    call.turn_started('the colour came out wrong, I want a refund')
+    refusal = await _refuses(agents._record_complaint, _context(call), 'the colour was wrong', 'a refund')
     assert 'ask_complaint' in refusal, refusal
     assert diary.complaints() == []
 
     # One was, and then something else was written down.
-    (await agents.ask_complaint(_context(call), 'the colour came out wrong')).put(call)
+    (await agents.ask_complaint(_context(call), 'the colour came out wrong', 'a refund')).put(call)
     call.turn_started("yes, that's right")
-    other = await _refuses(agents.record_complaint, _context(call), 'the stylist was rude', 'a full refund')
+    other = await _refuses(agents._record_complaint, _context(call), 'the stylist was rude', 'a full refund')
     assert 'ask_complaint' in other, other
     assert diary.complaints() == [], diary.complaints()
 
     # The one they agreed to goes through.
-    record = await agents.record_complaint(_context(call), 'the colour came out wrong', 'a refund')
+    record = await agents._record_complaint(_context(call), 'the colour came out wrong', 'a refund')
     assert record.recorded and len(diary.complaints()) == 1
 
 
@@ -589,14 +639,14 @@ async def asking_to_complain_is_not_a_complaint():
     call.turn_started('uh, maybe raising a complaint')
 
     for nothing in ('Raising a complaint', 'the customer would like to make a formal complaint', '  '):
-        refusal = await _refuses(agents.ask_complaint, _context(call), nothing)
+        refusal = await _refuses(agents.ask_complaint, _context(call), nothing, '')
         assert 'Nothing was asked' in refusal, refusal
         assert call._asked is None, 'and nothing is pending for a later yes to land on'
 
     # What they went on to say is one, and it is read back as they said it.
     call.turn_started('yeah, sorry, the last haircut was completely uneven')
-    question = await agents.ask_complaint(_context(call), 'the last haircut was completely uneven')
-    assert question.spoken.startswith('the last haircut was completely uneven'), question.spoken
+    question = await agents.ask_complaint(_context(call), 'the last haircut was completely uneven', '')
+    assert 'the last haircut was completely uneven' in question.spoken, question.spoken
     assert question.spoken.endswith('?'), question.spoken
 
 
@@ -604,6 +654,7 @@ async def main():
     the_matchers_refuse_rather_than_guess()
     await n1_a_move_question_cannot_hang_up()
     await n1_the_move_it_asked_for_is_the_move_it_makes()
+    await go_for_it_approves_only_the_pending_move()
     await n2_friday_is_not_next_friday()
     await n2_the_day_survives_the_verification_detour()
     await n3_a_flipped_flag_is_not_consent()

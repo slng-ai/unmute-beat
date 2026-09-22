@@ -1,0 +1,30 @@
+2026-09-21 20:56:20.772 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 20:56:22.462 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+1 split_phone: ok
+2026-09-21 20:56:25.363 | INFO     | voice.core:_hops:376 - handoff complaints -> verify (The caller confirmed the complaint and requested resolution.)
+2026-09-21 20:56:27.187 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+1 complaint_live: ok
+2026-09-21 20:56:28.211 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about a previous haircut being uneven and asking if their upcoming booking can be free.)
+1 complaint_booked: ok
+2026-09-21 20:56:30.501 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about a service and asking for a free booking due to an uneven haircut.)
+1 complaint_booked_dated: ok
+2026-09-21 20:56:32.941 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+2 split_phone: ok
+2026-09-21 20:56:35.709 | INFO     | voice.core:_hops:376 - handoff complaints -> verify (Verify identity for complaint.)
+2026-09-21 20:56:37.619 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+2 complaint_live: ok
+2026-09-21 20:56:38.863 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about a bad haircut and asking for a free appointment.)
+2 complaint_booked: ok
+2026-09-21 20:56:41.156 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about a previous uneven haircut and asking for a free booking.)
+2 complaint_booked_dated: AssertionError: known complaint details did not reach structured readback
+2026-09-21 20:56:43.186 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+3 split_phone: ok
+2026-09-21 20:56:45.733 | INFO     | voice.core:_hops:376 - handoff complaints -> verify (Verify the caller before recording the approved complaint.)
+2026-09-21 20:56:47.326 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+3 complaint_live: ok
+2026-09-21 20:56:48.359 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about a bad haircut and asking for a free appointment.)
+2026-09-21 20:56:48.904 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (The caller wants to resolve a complaint.)
+3 complaint_booked: AssertionError: complaint routing loop
+2026-09-21 20:56:50.219 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about a previous uneven haircut and asking for a free booking.)
+3 complaint_booked_dated: AssertionError: known complaint details did not reach structured readback
+3 failures; evidence: bench/raw/complaint-progress-v3-20260921T185621Z.jsonl

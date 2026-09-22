@@ -1,0 +1,576 @@
+
+--- tests.test_graph ---
+ok
+
+--- tests.test_voice ---
+2026-09-21 21:45:33.210 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 21:45:33.348 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 21:45:33.358 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 21:45:33.370 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 21:45:33.374 | INFO     | voice.core:_hops:376 - handoff intake -> concierge (test)
+2026-09-21 21:45:33.378 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 21:45:33.378 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 3-run hop budget
+ok
+
+--- tests.test_salon ---
+2026-09-21 21:45:33.911 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (wants a haircut)
+2026-09-21 21:45:33.920 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:45:33.941 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+2026-09-21 21:45:33.948 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (wants to book)
+2026-09-21 21:45:33.959 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (wants a haircut)
+2026-09-21 21:45:33.972 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:45:33.990 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:33.996 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (loop)
+2026-09-21 21:45:34.001 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:34.002 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 3-run hop budget
+2026-09-21 21:45:34.081 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (an uneven haircut)
+ok
+
+--- tests.test_consent ---
+2026-09-21 21:45:34.162 | ERROR    | voice.core:_speak:567 - withheld an unbacked claim: "I've cancelled your appointment,"
+ok
+
+--- tests.test_traces ---
+2026-09-21 21:45:34.313 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+ok
+
+--- tests.test_state ---
+ok
+
+--- tests.test_diary ---
+ok
+
+--- tests.test_flow ---
+2026-09-21 21:45:34.512 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+2026-09-21 21:45:34.534 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+2026-09-21 21:45:34.547 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+2026-09-21 21:45:34.559 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+2026-09-21 21:45:34.572 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+2026-09-21 21:45:34.584 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+2026-09-21 21:45:34.591 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (a refund)
+2026-09-21 21:45:34.633 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via probe, read_diary)
+ok
+
+--- tests.test_budget ---
+2026-09-21 21:45:34.668 | INFO     | voice.core:_hops:332 - fenced a move to booking from turn 1
+2026-09-21 21:45:34.675 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:34.681 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (loop)
+2026-09-21 21:45:34.687 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:34.687 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 3-run hop budget
+2026-09-21 21:45:34.694 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:34.700 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (loop)
+2026-09-21 21:45:34.700 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 2-run hop budget
+2026-09-21 21:45:34.707 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:34.713 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (loop)
+2026-09-21 21:45:34.713 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 2-run hop budget
+2026-09-21 21:45:34.725 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:34.732 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (loop)
+2026-09-21 21:45:34.738 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (loop)
+2026-09-21 21:45:34.744 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (loop)
+2026-09-21 21:45:34.745 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 4-run hop budget
+2026-09-21 21:45:34.764 | WARNING  | voice.core:run_turn:233 - turn exhausted: The next request would exceed the request_limit of 3. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+2026-09-21 21:45:34.775 | WARNING  | voice.core:run_turn:233 - turn exhausted: The next tool call(s) would exceed the tool_calls_limit of 2 (tool_calls=4). Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+2026-09-21 21:45:35.030 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 0.25s turn deadline
+2026-09-21 21:45:35.059 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+2026-09-21 21:45:35.083 | ERROR    | voice.core:_speak:608 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_output.py", line 158, in run_output_validate_hooks
+    validated = await capability.on_output_validate_error(
+                      │          └ <function CombinedCapability.on_output_validate_error at 0x10896bc10>
+                      └ CombinedCapability(id=None, description=None, defer_loading=False, capabilities=[Instrumentation(id='instrumentation', descri...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 872, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 1210, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 1210, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 1210, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1295, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1295, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1295, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1295, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1295, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 864, in on_output_validate_error
+    return await capability.on_output_validate_error(
+                 │          └ <function AbstractCapability.on_output_validate_error at 0x108273b60>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1295, in on_output_validate_error
+    raise error
+          └ 1 validation error for confirm_customer
+            phone
+              value is not a valid phone number [type=value_error, input_value='+348340464'...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_output.py", line 149, in run_output_validate_hooks
+    validated = await capability.wrap_output_validate(
+                      │          └ <function CombinedCapability.wrap_output_validate at 0x10896bab0>
+                      └ CombinedCapability(id=None, description=None, defer_loading=False, capabilities=[Instrumentation(id='instrumentation', descri...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 849, in wrap_output_validate
+    return await chain(output)
+                 │     └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed9170>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function AbstractCapability.wrap_output_validate at 0x108273a00>
+                 └ Instrumentation(id='instrumentation', description=None, defer_loading=False, settings=InstrumentationSettings(include_binary_...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 1192, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed9220>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function AbstractCapability.wrap_output_validate at 0x108273a00>
+                 └ ToolSearch(id='tool_search', description=None, defer_loading=False, strategy=None, max_results=10, tool_description=None, par...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 1192, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed9b10>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function AbstractCapability.wrap_output_validate at 0x108273a00>
+                 └ PendingMessageDrainCapability(id=None, description=None, defer_loading=False)
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 1192, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed8a90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function Hooks.wrap_output_validate at 0x108b0e140>
+                 └ Hooks({'before_tool_execute': 1})
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1267, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed9380>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function Hooks.wrap_output_validate at 0x108b0e140>
+                 └ Hooks({'after_model_request': 1, 'before_tool_execute': 1})
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1267, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed9bc0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function Hooks.wrap_output_validate at 0x108b0e140>
+                 └ Hooks({'prepare_tools': 1, 'prepare_output_tools': 1})
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1267, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed97a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function Hooks.wrap_output_validate at 0x108b0e140>
+                 └ Hooks({'prepare_tools': 1})
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1267, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113ed99b0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function Hooks.wrap_output_validate at 0x108b0e140>
+                 └ Hooks({'before_model_request': 1})
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1267, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function _make_output_validate_wrap.<locals>.wrapped at 0x113eda350>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 1046, in wrapped
+    return await cap.wrap_output_validate(
+                 │   └ <function Hooks.wrap_output_validate at 0x108b0e140>
+                 └ Hooks({'before_model_request': 1, 'after_model_request': 1})
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1267, in wrap_output_validate
+    return await handler(output)
+                 │       └ '{"phone": "+348340464"}'
+                 └ <function ToolManager.validate_output_tool_call.<locals>.do_validate at 0x113edafb0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/tool_manager.py", line 823, in do_validate
+    semantic, _state = processor.hook_validate(args, run_context=ctx, allow_partial=allow_partial)
+                       │         │             │                 │                  └ False
+                       │         │             │                 └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending=None, customer_phone='+34600111222', phone_confirmed=False...
+                       │         │             └ '{"phone": "+348340464"}'
+                       │         └ <function ObjectOutputProcessor.hook_validate at 0x1089dc460>
+                       └ ObjectOutputProcessor(object_def=OutputObjectDefinition(json_schema={'additionalProperties': False, 'properties': {'phone': {...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_output.py", line 1023, in hook_validate
+    validated = self.validate(data, allow_partial=allow_partial, validation_context=run_context.validation_context)
+                │    │        │                   │                                 │           └ None
+                │    │        │                   │                                 └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending=None, customer_phone='+34600111222', phone_confirmed=False...
+                │    │        │                   └ False
+                │    │        └ '{"phone": "+348340464"}'
+                │    └ <function ObjectOutputProcessor.validate at 0x1089dc040>
+                └ ObjectOutputProcessor(object_def=OutputObjectDefinition(json_schema={'additionalProperties': False, 'properties': {'phone': {...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_output.py", line 958, in validate
+    return self.validator.validate_json(
+           │    │         └ <method 'validate_json' of 'pydantic_core._pydantic_core.SchemaValidator' objects>
+           │    └ SchemaValidator(title="confirm_customer", validator=TypedDict(
+           │          TypedDictValidator {
+           │              fields: [
+           │                  TypedDi...
+           └ ObjectOutputProcessor(object_def=OutputObjectDefinition(json_schema={'additionalProperties': False, 'properties': {'phone': {...
+
+pydantic_core._pydantic_core.ValidationError: 1 validation error for confirm_customer
+phone
+  value is not a valid phone number [type=value_error, input_value='+348340464', input_type=str]
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/__main__.py", line 77, in <module>
+    raise SystemExit(main())
+                     └ <function main at 0x108de9bc0>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/__main__.py", line 58, in main
+    runpy.run_module(module, run_name='__main__')
+    │     │          └ 'tests.test_budget'
+    │     └ <function run_module at 0x10671b5e0>
+    └ <module 'runpy' (frozen)>
+
+  File "<frozen runpy>", line 234, in run_module
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/test_budget.py", line 508, in <module>
+    asyncio.run(main())
+    │       │   └ <function main at 0x113abb950>
+    │       └ <function run at 0x106ccd380>
+    └ <module 'asyncio' from '/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/__in...
+
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object main at 0x113c9b7c0>
+           │      └ <function Runner.run at 0x106ccd900>
+           └ <asyncio.runners.Runner object at 0x113c42e50>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-605' coro=<main() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/test_bu...
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x106cc5bc0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x113c42e50>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x106cc5b10>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x106cc7c10>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x106c3f5e0>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/test_budget.py", line 500, in main
+    await repair_retries_are_bounded()
+          └ <function repair_retries_are_bounded at 0x113ab8b40>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/test_budget.py", line 337, in repair_retries_are_bounded
+    await probe._turn('my number is eight three four oh four six four')
+          │     └ <function PydanticAgentProcessor._turn at 0x112e9ada0>
+          └ <__main__.Probe object at 0x113ab16d0>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 280, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <__main__.Probe object at 0x113ab16d0>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=1, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=1)
+              │        │    │        │    │      │    │        │       └ <__main__.Probe object at 0x113ab16d0>
+              │        │    │        │    │      │    │        └ 'my number is eight three four oh four six four'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <__main__.Probe object at 0x113ab16d0>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='verify', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_verif...
+              │        │    │        └ <__main__.Probe object at 0x113ab16d0>
+              │        │    └ <function run_turn at 0x112e985c0>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 207, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x112e98a90>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 294, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(input_tokens=100, output_tokens=8, requests=2)
+              │        │      │     │     │       └ TurnBudget(step_runs=1, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=1)
+              │        │      │     │     └ 'my number is eight three four oh four six four'
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'go...
+              │        │      └ SalonCall(state=SalonState(agent='verify', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_verif...
+              │        └ <function _speak at 0x112e99bc0>
+              └ RunStarted(step='verify')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 538, in _speak
+    async for event in events:
+              │        └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x113cf1d50>
+              └ PartEndEvent(index=0, part=ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', tool_call_id='pyd_ai_69...
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-711' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Do...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x113cf1d50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x113b257a0>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x113b259b0>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x113cf1d50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x108d666c0>
+                 └ Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_thinki...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x113edaa30>
+                 │         │                    └ CallToolsNode(model_response=ModelResponse(parts=[ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', ...
+                 │         └ <function AgentRun._run_node_with_hooks at 0x108d48a90>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(input_tokens=100, output_tokens=8, requests=2)>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x113edaa30>
+                 │    │                 │            └ CallToolsNode(model_response=ModelResponse(parts=[ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', ...
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending=None, customer_phone='+34600111222', phone_confirmed=False...
+                 │    └ <function AgentRun._wrap_and_advance at 0x108d48930>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(input_tokens=100, output_tokens=8, requests=2)>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ CallToolsNode(model_response=ModelResponse(parts=[ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', ...
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x113edaa30>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x113aa57e0>
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending=None, customer_phone='+34600111222', phone_confirmed=False...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x113b257a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x113aa57e0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x113a5b010>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x113a5b100>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x113ad85e0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x113db5e00>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x113db5cf0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x113db6ac0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x113a62f00>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object _with_event_stream_buffer at 0x113d03300>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 209, in _with_event_stream_buffer
+    async for event in stream:
+                       └ <async_generator object CallToolsNode._run_stream at 0x113c41540>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 2248, in _run_stream
+    async for event in _run_stream():
+                       └ <function CallToolsNode._run_stream.<locals>._run_stream at 0x113ed9a60>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 2213, in _run_stream
+    async for event in self._handle_tool_calls(ctx, tool_calls, response_output=response_output):
+                       │    │                  │    │                           └ None
+                       │    │                  │    └ [ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', tool_call_id='pyd_ai_69de0efb66e74a45a6f7eb716a87...
+                       │    │                  └ GraphRunContext(state=GraphAgentState(message_history=[ModelRequest(parts=[UserPromptPart(content='my number is eight three f...
+                       │    └ <function CallToolsNode._handle_tool_calls at 0x108d1c5c0>
+                       └ CallToolsNode(model_response=ModelResponse(parts=[ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', ...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 2334, in _handle_tool_calls
+    async for event in process_tool_calls(
+                       └ <function process_tool_calls at 0x108ce8930>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_tool_execution.py", line 371, in process_tool_calls
+    async for event in processor.run():
+                       │         └ <function _ToolCallProcessor.run at 0x108ce90c0>
+                       └ _GracefulProcessor(tool_manager=ToolManager(toolset=CombinedToolset(toolsets=[PreparedToolset(wrapped=OutputToolset(_tool_def...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_tool_execution.py", line 504, in run
+    async for event in self._run_strategy():
+                       │    └ <function _GracefulProcessor._run_strategy at 0x108ceb320>
+                       └ _GracefulProcessor(tool_manager=ToolManager(toolset=CombinedToolset(toolsets=[PreparedToolset(wrapped=OutputToolset(_tool_def...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_tool_execution.py", line 1154, in _run_strategy
+    async for event in self._run_output(call):  # pragma: no branch
+                       │    │           └ ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', tool_call_id='pyd_ai_69de0efb66e74a45a6f7eb716a87b...
+                       │    └ <function _ToolCallProcessor._run_output at 0x108ce9900>
+                       └ _GracefulProcessor(tool_manager=ToolManager(toolset=CombinedToolset(toolsets=[PreparedToolset(wrapped=OutputToolset(_tool_def...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_tool_execution.py", line 606, in _run_output
+    raise r.raise_exc
+          │ └ UnexpectedModelBehavior('Exceeded maximum output retries (1)')
+          └ _OutputCallResult(call=ToolCallPart(tool_name='confirm_customer', args='{"phone": "+348340464"}', tool_call_id='pyd_ai_69de0e...
+
+pydantic_ai.exceptions.UnexpectedModelBehavior: Exceeded maximum output retries (1)
+2026-09-21 21:45:35.107 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Probe#53 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+ok
+
+--- tests.test_bench ---
+ok
+
+--- tests.test_recovery ---
+2026-09-21 21:45:35.165 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Book a haircut for Friday.)
+2026-09-21 21:45:35.178 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:45:35.195 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (Book a haircut for Friday.)
+2026-09-21 21:45:35.211 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Move my haircut to Saturday.)
+2026-09-21 21:45:35.224 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:45:35.241 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (Move my haircut to Saturday.)
+2026-09-21 21:45:35.258 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Cancel my haircut.)
+2026-09-21 21:45:35.304 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:45:35.321 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (Cancel my haircut.)
+2026-09-21 21:45:35.338 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (My haircut last week was uneven. I want a redo.)
+2026-09-21 21:45:35.351 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+2026-09-21 21:45:35.368 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (My haircut last week was uneven. I want a redo.)
+2026-09-21 21:45:35.381 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (I need help with booking.)
+2026-09-21 21:45:35.393 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (The caller declined and changed subject.)
+2026-09-21 21:45:35.405 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (I need help with complaints.)
+2026-09-21 21:45:35.417 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (The caller declined and changed subject.)
+recovery ok
+
+--- tests.test_history ---
+2026-09-21 21:45:35.563 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.567 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 21:45:35.585 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 21:45:35.591 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 21:45:35.596 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.600 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 21:45:35.605 | INFO     | voice.core:_hops:376 - handoff owner -> child (-)
+2026-09-21 21:45:35.609 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.613 | INFO     | voice.core:_hops:376 - handoff child -> owner (-)
+2026-09-21 21:45:35.616 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.620 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 21:45:35.625 | INFO     | voice.core:_hops:376 - handoff owner -> child (-)
+2026-09-21 21:45:35.628 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.632 | INFO     | voice.core:_hops:376 - handoff child -> owner (-)
+2026-09-21 21:45:35.636 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.640 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 21:45:35.648 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 21:45:35.680 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 21:45:35.682 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 21:45:35.690 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 21:45:35.697 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 21:45:35.699 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 21:45:35.706 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+ok
+
+--- tests.test_core ---
+2026-09-21 21:45:35.732 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.745 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (test)
+2026-09-21 21:45:35.751 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.758 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (test)
+2026-09-21 21:45:35.771 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:35.786 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (test)
+2026-09-21 21:45:35.792 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (test)
+2026-09-21 21:45:35.793 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 2-run hop budget
+2026-09-21 21:45:35.793 | DEBUG    | voice.core:take_turn:689 - turn exhausted in 0.01s
+2026-09-21 21:45:35.800 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (test)
+2026-09-21 21:45:35.807 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (test)
+2026-09-21 21:45:35.807 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 2-run hop budget
+2026-09-21 21:45:35.821 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (test)
+2026-09-21 21:45:35.827 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (test)
+2026-09-21 21:45:35.828 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 2-run hop budget
+2026-09-21 21:45:35.851 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (test)
+2026-09-21 21:45:35.858 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (test)
+2026-09-21 21:45:35.858 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 2-run hop budget
+2026-09-21 21:45:35.870 | WARNING  | voice.core:run_turn:233 - turn exhausted: The next request would exceed the request_limit of 2. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+2026-09-21 21:45:36.125 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 0.25s turn deadline
+2026-09-21 21:45:36.144 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:36.159 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (test)
+2026-09-21 21:45:36.169 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (test)
+2026-09-21 21:45:36.170 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 2-run hop budget
+2026-09-21 21:45:36.170 | DEBUG    | voice.core:take_turn:689 - turn exhausted in 0.02s
+2026-09-21 21:45:36.177 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.01s
+2026-09-21 21:45:36.232 | INFO     | voice.harness:commit:627 - fenced a late commit of agent from turn 1
+2026-09-21 21:45:36.233 | INFO     | voice.harness:commit:627 - fenced a late commit of agent from turn 1
+2026-09-21 21:45:36.298 | INFO     | voice.core:_hops:332 - fenced a move to booking from turn 1
+2026-09-21 21:45:36.298 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.01s
+2026-09-21 21:45:36.305 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:36.316 | WARNING  | voice.core:run_turn:233 - turn exhausted: The next request would exceed the request_limit of 2. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+2026-09-21 21:45:36.316 | DEBUG    | voice.core:take_turn:689 - turn exhausted in 0.01s
+2026-09-21 21:45:36.380 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.06s
+2026-09-21 21:45:36.387 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:36.394 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:36.401 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:36.420 | ERROR    | voice.core:run_turn:243 - unbacked claim, nothing was written this turn: "I've cancelled"
+2026-09-21 21:45:36.445 | WARNING  | voice.core:run_turn:233 - turn exhausted: The next request would exceed the request_limit of 2. Consider raising the limit, or see the docs on usage limits for budget-aware patterns: https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits
+2026-09-21 21:45:36.446 | DEBUG    | voice.core:take_turn:689 - turn exhausted in 0.01s
+2026-09-21 21:45:36.453 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 21:45:36.465 | INFO     | voice.core:_hops:334 - moved concierge -> booking (via read_diary)
+ok
+
+all 13 modules ok

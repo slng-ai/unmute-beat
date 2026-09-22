@@ -1,0 +1,25 @@
+{
+  "measure": "Whitespace-separated words, rendered instructions including policy but excluding tool schemas and conversation history; verified caller with booking.",
+  "rows": [
+    {
+      "agent": "concierge",
+      "before_words": 2103,
+      "after_words": 805
+    },
+    {
+      "agent": "booking",
+      "before_words": 1718,
+      "after_words": 473
+    },
+    {
+      "agent": "verify",
+      "before_words": 943,
+      "after_words": 311
+    },
+    {
+      "agent": "complaints",
+      "before_words": 1490,
+      "after_words": 717
+    }
+  ]
+}

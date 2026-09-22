@@ -1,0 +1,35 @@
+2026-09-21 21:51:46.802 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 21:51:48.441 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+1 split_phone: ok
+2026-09-21 21:51:49.500 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Complaint about a past service)
+2026-09-21 21:51:51.107 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+1 complaint_live: ok
+2026-09-21 21:51:53.340 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is asking for a free booking due to a past service problem.)
+1 complaint_booked: ok
+2026-09-21 21:51:55.497 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is requesting a free booking because of a past service problem.)
+1 complaint_booked_dated: ok
+2026-09-21 21:51:56.997 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about an uneven haircut.)
+1 complaint_no_remedy: ok
+2026-09-21 21:52:00.721 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+2 split_phone: ok
+2026-09-21 21:52:01.757 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Caller is complaining about a past service)
+2026-09-21 21:52:03.459 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+2 complaint_live: ok
+2026-09-21 21:52:05.606 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (Caller is requesting a free future booking due to a past service problem.)
+2 complaint_booked: ok
+2026-09-21 21:52:07.285 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (Caller is asking for a free booking due to a previous service problem.)
+2 complaint_booked_dated: ok
+2026-09-21 21:52:08.884 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (Caller is complaining about an uneven haircut and wants to discuss it.)
+2 complaint_no_remedy: ok
+2026-09-21 21:52:11.694 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+3 split_phone: ok
+2026-09-21 21:52:12.752 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (complaint about past service)
+2026-09-21 21:52:14.377 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+3 complaint_live: ok
+2026-09-21 21:52:16.429 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (Caller is asking for a free booking due to a past service problem.)
+3 complaint_booked: ok
+2026-09-21 21:52:18.087 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (Caller is requesting a free booking due to a past service problem.)
+3 complaint_booked_dated: ok
+2026-09-21 21:52:19.788 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is complaining about an uneven haircut.)
+3 complaint_no_remedy: ok
+0 failures; evidence: bench/raw/typed-complaint-continuations-20260921T195147Z.jsonl

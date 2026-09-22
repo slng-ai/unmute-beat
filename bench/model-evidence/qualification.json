@@ -1,0 +1,122 @@
+{
+  "hours-00-gemini-3.1-flash-lite.json": {
+    "arm": "poc",
+    "scenario": "hours",
+    "clock": "2026-09-21T10:00:00+02:00",
+    "mode": "transcript",
+    "rows": [
+      {
+        "said": "What are your opening hours on weekdays and Saturdays? Are you open on Sunday?",
+        "seconds": 1.44828908299678,
+        "requests": 1,
+        "ttft": [
+          0.918
+        ],
+        "first_speech_seconds": 0.9301223749935161,
+        "speech": "We're open Monday to Friday from 9:00 AM to 6:00 PM, and on Saturdays from 9:00 AM until 4:00 PM. We're closed on Sundays, though. Is there anything else I can help you with today?",
+        "status": "answered",
+        "tools": [],
+        "business": {
+          "bookings": [],
+          "complaints": []
+        }
+      }
+    ],
+    "errors": [],
+    "settings": {
+      "revision": "c6e8cfdb281c4186e98b125f62fd7b691e38cb06",
+      "uncommitted_changes": true,
+      "python": "3.14.5",
+      "pydantic_ai": "2.46.0",
+      "model": "google-cloud:gemini-3.1-flash-lite",
+      "model_pinned": false,
+      "region": "unpinned",
+      "model_settings": "{'service_tier': 'priority', 'google_thinking_config': {'thinking_level': 'MINIMAL'}}",
+      "budget": "TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)",
+      "speak_by": 3,
+      "prompt_sha256": "f4467e62759e6e2784c61057b4864129b3ad43ca8bbaa8ee1ae6cc71729ed34b",
+      "source_sha256": "268906ad9e8be0f535ea1218e8e06889a2de72b99e5b98b3128fc848f0f76a87",
+      "lock_sha256": "970eff87411eebb328677a92dd566c133c96f74749007357d79b5b36e15a7558",
+      "timezone": "Europe/Madrid",
+      "salon_clock": "2026-09-21T10:00:00+02:00",
+      "fixture": "fresh",
+      "process_started_at": "2026-09-21T22:19:34.720860+00:00",
+      "captured_at": "2026-09-21T22:19:34.754759+00:00",
+      "endpointing_stop_secs": 1.5,
+      "seed_customers": [
+        "+34600111222"
+      ],
+      "confirmation_policy": "books on an unambiguous selection; no separate readback turn",
+      "unknown": [
+        "provider endpoint",
+        "stt/tts route and voice",
+        "transport",
+        "audio settings"
+      ],
+      "override": "Agent.override(model=...), identical default model settings"
+    },
+    "model": "gemini-3.1-flash-lite",
+    "repeat": 0,
+    "process_exit": 0
+  },
+  "hours-00-gemini-3.5-flash-lite.json": {
+    "arm": "poc",
+    "scenario": "hours",
+    "clock": "2026-09-21T10:00:00+02:00",
+    "mode": "transcript",
+    "rows": [
+      {
+        "said": "What are your opening hours on weekdays and Saturdays? Are you open on Sunday?",
+        "seconds": 0.9324364579952089,
+        "requests": 1,
+        "ttft": [
+          0.772
+        ],
+        "first_speech_seconds": 0.7803869580093306,
+        "speech": "We're open Monday through Friday from nine to six, and Saturdays from nine to four. We're closed on Sundays.",
+        "status": "answered",
+        "tools": [],
+        "business": {
+          "bookings": [],
+          "complaints": []
+        }
+      }
+    ],
+    "errors": [],
+    "settings": {
+      "revision": "c6e8cfdb281c4186e98b125f62fd7b691e38cb06",
+      "uncommitted_changes": true,
+      "python": "3.14.5",
+      "pydantic_ai": "2.46.0",
+      "model": "google-cloud:gemini-3.5-flash-lite",
+      "model_pinned": false,
+      "region": "unpinned",
+      "model_settings": "{'service_tier': 'priority', 'google_thinking_config': {'thinking_level': 'MINIMAL'}}",
+      "budget": "TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)",
+      "speak_by": 3,
+      "prompt_sha256": "f4467e62759e6e2784c61057b4864129b3ad43ca8bbaa8ee1ae6cc71729ed34b",
+      "source_sha256": "268906ad9e8be0f535ea1218e8e06889a2de72b99e5b98b3128fc848f0f76a87",
+      "lock_sha256": "970eff87411eebb328677a92dd566c133c96f74749007357d79b5b36e15a7558",
+      "timezone": "Europe/Madrid",
+      "salon_clock": "2026-09-21T10:00:00+02:00",
+      "fixture": "fresh",
+      "process_started_at": "2026-09-21T22:19:37.039628+00:00",
+      "captured_at": "2026-09-21T22:19:37.068164+00:00",
+      "endpointing_stop_secs": 1.5,
+      "seed_customers": [
+        "+34600111222"
+      ],
+      "confirmation_policy": "books on an unambiguous selection; no separate readback turn",
+      "unknown": [
+        "provider endpoint",
+        "stt/tts route and voice",
+        "transport",
+        "audio settings"
+      ],
+      "override": "Agent.override(model=...), identical default model settings"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "repeat": 0,
+    "process_exit": 0
+  }
+}

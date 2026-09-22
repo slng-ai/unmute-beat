@@ -1,0 +1,41 @@
+2026-09-21 21:23:04.730 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+1 select_01: ok
+1 select_pm: ok
+1 select_word: ok
+2026-09-21 21:23:08.248 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (The caller wants to move their haircut to Saturday at the same time.)
+1 move_same_time: ok
+2026-09-21 21:23:12.740 | ERROR    | voice.core:_speak:567 - withheld an unbacked claim: "Got it, I've noted your phone number. Would you like to book the"
+2026-09-21 21:23:13.452 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (The caller is confirming details and needs to schedule their redo appointment with the concierge.)
+2026-09-21 21:23:14.092 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is requesting a free redo after a complaint.)
+2026-09-21 21:23:14.603 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (The caller is setting up their appointment.)
+2026-09-21 21:23:15.119 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller has a complaint about a previous service and wants a remedy.)
+2026-09-21 21:23:15.119 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 4-run hop budget
+1 complaint_verify: a turn did not complete
+1 complaint_verified: ok
+1 no_thanks: ok
+1 goodbye_with_a_request: ok
+2 select_01: ok
+2 select_pm: ok
+2 select_word: ok
+2026-09-21 21:23:20.371 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (The caller wants to move an existing booking.)
+2 move_same_time: ok
+2026-09-21 21:23:24.460 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (The caller wants to schedule their redo appointment with the concierge.)
+2026-09-21 21:23:25.567 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (The caller is providing their verified phone number.)
+2026-09-21 21:23:26.742 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:23:27.736 | INFO     | voice.core:_hops:376 - handoff booking -> concierge (The caller wants to schedule their redo appointment.)
+2 complaint_verify: complaint was not recorded exactly once
+2 complaint_verified: ok
+2 no_thanks: ok
+2 goodbye_with_a_request: ok
+3 select_01: ok
+3 select_pm: ok
+3 select_word: ok
+2026-09-21 21:23:33.552 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (Caller wants to move their booking to Saturday at the same time)
+3 move_same_time: ok
+2026-09-21 21:23:37.570 | INFO     | voice.core:_hops:376 - handoff complaints -> verify (Record the approved complaint)
+2026-09-21 21:23:39.353 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+3 complaint_verify: ok
+3 complaint_verified: ok
+3 no_thanks: ok
+3 goodbye_with_a_request: ok
+2 failures; evidence: bench/raw/complaint-goal-recovery-20260921T192305Z.jsonl

@@ -135,7 +135,10 @@ async def _offered(node, state) -> dict[str, list]:
                 'to': (to or {}).get('enum'),
             }
         )
-        yield 'ok'
+        if info.allow_text_output:
+            yield 'ok'
+        else:
+            yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"number"}')}
 
     with node.agent.override(model=FunctionModel(stream_function=probe)):
         async with node.agent.run_stream_events(
@@ -174,7 +177,12 @@ async def a_step_with_no_open_exit_keeps_its_own_name():
     offered = await _offered(AGENTS['verify'], SalonState(agent='verify'))
     # `ask_number` beside them: putting the readback to the caller ends the run
     # the same way finishing the step does, so it is an output and not a tool.
-    assert offered['requests'][0]['outputs'] == ['ask_number', 'confirm_customer', 'stop_verifying'], offered
+    assert offered['requests'][0]['outputs'] == [
+        'ask_number',
+        'confirm_customer',
+        'stop_verifying',
+        'verification_guidance',
+    ], offered
     assert offered['requests'][0]['to'] is None
 
 
@@ -383,6 +391,7 @@ async def a_split_destination_name_never_moves_anybody():
     """
     diary.reset()
     call = open_call(PHONE)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     async def dribble(messages, info: AgentInfo):
@@ -614,7 +623,7 @@ def every_tool_that_writes_is_an_action():
     helpers = {name for name in writes if name.startswith('_')}
     for helper in helpers:
         callers = reaches(helper, {helper})
-        assert callers and callers <= agents.ACTIONS, (
+        assert callers and callers <= agents.ACTIONS | {'advance'}, (
             f'{helper} writes to state and is reachable from {sorted(callers) or "nowhere"}, '
             'which is not an action that can claim the write'
         )

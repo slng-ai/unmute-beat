@@ -21,6 +21,7 @@ What this does differently from the same agency built on a node graph:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from collections.abc import Callable
@@ -30,9 +31,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, NoReturn
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_ai import Agent, ModelRetry, RunContext, TemplateStr, Tool, ToolOutput
 from pydantic_ai.capabilities.hooks import Hooks
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models import infer_model
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.tools import ToolDefinition
 
@@ -58,12 +61,12 @@ from salon.state import (
 from voice.harness import (
     STRICT,
     Exit,
+    LocalAction,
     Node,
     claim_or_refuse,
     filler_hook,
     one_action_per_reply,
     request_clock,
-    schema_tool,
     speak_by,
 )
 from voice.harness import lent as _lent
@@ -118,6 +121,16 @@ class Saved(BaseModel):
     spoken: str
 
 
+class BookingCommand(BaseModel):
+    model_config = STRICT
+    action: Literal['book', 'move', 'cancel']
+    slot_id: str
+    booking_id: str
+
+
+_PHONE = TypeAdapter(SubmittedPhone)
+
+
 class CustomerLookup(BaseModel):
     model_config = STRICT
     # No '' here. An empty status is what the state holds before a lookup has
@@ -169,7 +182,7 @@ UNKNOWN = (
 # "The same time" names a time exactly, without naming any digits: the one the
 # caller already holds. `prompts/salon/_diary.md` has said so for a while; this
 # is the half of that rule the application enforces.
-_SAME_TIME = re.compile(r'\b(?:same|usual) time\b', re.IGNORECASE)
+_SAME_TIME = re.compile(r'\b(?:same|usual)[\s\u2014\u2013-]+time\b', re.IGNORECASE)
 
 
 class Ask(Asked):
@@ -192,7 +205,7 @@ class Ask(Asked):
 
     def put(self, call: SalonCall) -> str:
         """Record the question as pending on the call, and hand back what to say."""
-        call.ask(self)
+        call.ask(self.model_copy(update={'owner': call.state.customer_phone}))
         return self.spoken
 
 
@@ -211,11 +224,33 @@ async def ask_number(ctx: RunContext[SalonCall], phone: SubmittedPhone) -> Ask:
     Args:
         phone: The number to read back, in E.164, exactly as they gave it.
     """
+    return await _ask_number(ctx.deps, phone)
+
+
+async def _ask_number(call: SalonCall, phone: str) -> Ask:
+    phone = _PHONE.validate_python(phone)
     return Ask(
         about='phone',
         value=phone,
         spoken=f'Let me read that back to you: {_readback(phone)}. Have I got that right?',
     )
+
+
+async def verification_guidance(
+    ctx: RunContext[SalonCall],
+    topic: Literal['number', 'country', 'incomplete', 'correction', 'unsupported'],
+) -> str:
+    """Ask for missing phone information. For a complete number, use ask_number instead."""
+    text = {
+        'number': 'What phone number should I use, including the country code?',
+        'country': 'Which country is that phone number from?',
+        'incomplete': 'Could you give me the remaining digits?',
+        'correction': 'Could you repeat the full number, including the country code?',
+        'unsupported': 'I can look up Spanish phone numbers. Do you have a Spanish number I can use?',
+    }[topic]
+    ctx.deps.answered()
+    await ctx.deps.speak_now(text, origin='guidance')
+    return text
 
 
 async def ask_booking(
@@ -286,14 +321,18 @@ def _describes_nothing(summary: str) -> bool:
     return not words or all(word in _ASKING_TO_COMPLAIN for word in words)
 
 
-async def ask_complaint(ctx: RunContext[SalonCall], summary: str) -> Ask:
-    """Say their complaint back in one sentence and wait. The only way to reach `record_complaint`.
+async def ask_complaint(ctx: RunContext[SalonCall], summary: str, requested_resolution: str) -> Ask:
+    """Ask for approval once the complaint details and requested outcome are known.
 
-    Nothing is written down until they have agreed to this summary. Say
-    nothing after calling it.
+    Use this instead of asking whether to record their complaint in ordinary
+    speech. It speaks the readback and waits; nothing is recorded or approved yet.
 
     Args:
-        summary: Short, factual summary of what went wrong, in their own terms.
+        summary: The shortest complete excerpt of the caller's words describing the faulty service.
+            Exclude filler and the requested outcome. Do not paraphrase or add dates from an upcoming
+            booking. Punctuation and case may differ.
+        requested_resolution: An exact excerpt of the caller's requested outcome, or empty if unspecified.
+            Never infer a redo. Recording a request does not approve it.
     """
     if not summary.strip():
         raise ModelRetry('Nothing was asked: a complaint summary cannot be empty.')
@@ -305,11 +344,43 @@ async def ask_complaint(ctx: RunContext[SalonCall], summary: str) -> Ask:
             f'Nothing was asked: {summary.strip()!r} is them asking to complain, not what went '
             'wrong. Ask them what happened, and put it to them once they have said.'
         )
+    for label, excerpt in (('summary', summary), ('requested_resolution', requested_resolution)):
+        if excerpt and not caller_excerpt(ctx.deps, excerpt):
+            raise ModelRetry(
+                f'Nothing was asked: {label} must quote the caller, not an assistant or a booking record. '
+                'Copy their words exactly; leave requested_resolution empty if they have not requested one.'
+            )
     return Ask(
         about='complaint',
         value=_gist(summary),
-        spoken=f'{summary.strip().rstrip(".")}. Have I got that right?',
+        resolution=_gist(requested_resolution),
+        summary=summary,
+        requested_resolution=requested_resolution,
+        spoken=f"I'll note your words: {summary.strip().rstrip('.?!')}. "
+        + (f'Your request: {requested_resolution.strip().rstrip(".?!")}. ' if requested_resolution else '')
+        + 'The salon will review this; no refund or booking change is approved. Shall I record that?',
     )
+
+
+def caller_excerpt(call: SalonCall, excerpt: str) -> bool:
+    """Ground readback facts in caller speech, never model-authored history.
+
+    Extractive readbacks trade paraphrasing for inspectable source evidence.
+    Case and punctuation may differ because STT inserts its own punctuation.
+    """
+
+    def words(text: str) -> str:
+        return ' '.join(re.findall(r'\w+', text.casefold()))
+
+    sources = [row['text'] for row in call.transcript() if row['said'] == 'caller']
+    sources.extend(
+        part.content
+        for message in call.messages
+        for part in message.parts
+        if isinstance(part, UserPromptPart) and isinstance(part.content, str)
+    )
+    wanted = words(excerpt)
+    return bool(wanted) and any(f' {wanted} ' in f' {words(source)} ' for source in sources)
 
 
 def _gist(summary: str) -> str:
@@ -348,19 +419,19 @@ def _disagrees(action: str, booking_id: str, offered: dict, written: Saved) -> s
     return ''
 
 
-def _unknown(ctx: RunContext[SalonCall], pending: Unresolved, why: str) -> NoReturn:
+def _unknown(call: SalonCall, pending: Unresolved, why: str) -> NoReturn:
     """Record this write as outstanding and refuse, which is the only thing that blocks the next one.
 
     On the state, not in a sentence. Retry text asking the model not to try
     again is not a guard, and changing one argument changes the token, so the
     service's own idempotency cache never sees the second attempt.
     """
-    ctx.deps.commit(unresolved=pending)
+    call.commit(unresolved=pending)
     raise ModelRetry(UNKNOWN.format(why=why))
 
 
 def _answered[Result: BaseModel](
-    ctx: RunContext[SalonCall],
+    call: SalonCall,
     pending: Unresolved,
     shape: type[Result],
     attempt: Callable[[], object],
@@ -388,7 +459,7 @@ def _answered[Result: BaseModel](
     except Exception:
         recovered = diary.outcome_of(pending.token)
         if recovered is None:
-            _unknown(ctx, pending, f'the {book} did not answer')
+            _unknown(call, pending, f'the {book} did not answer')
         raw = recovered
     try:
         return shape.model_validate(raw)
@@ -398,14 +469,14 @@ def _answered[Result: BaseModel](
         # under this token and merely told us about it badly.
         recovered = diary.outcome_of(pending.token)
         if recovered is None or recovered is raw:
-            _unknown(ctx, pending, f'the {book} answered in a shape this cannot read')
+            _unknown(call, pending, f'the {book} answered in a shape this cannot read')
         try:
             return shape.model_validate(recovered)
         except ValidationError:
-            _unknown(ctx, pending, f'the {book} answered in a shape this cannot read')
+            _unknown(call, pending, f'the {book} answered in a shape this cannot read')
 
 
-async def _settle(ctx: RunContext[SalonCall]) -> str:
+async def _settle(call: SalonCall) -> str:
     """Finish an earlier write whose outcome was never established, or refuse to move past it.
 
     An operation the service never answered for is not "nothing happened".
@@ -424,7 +495,7 @@ async def _settle(ctx: RunContext[SalonCall]) -> str:
     Returns what to say when the earlier write turns out to have landed, and
     raises when it is still unknown or still does not answer the question.
     """
-    pending = ctx.deps.state.unresolved
+    pending = call.state.unresolved
     assert pending is not None, 'only reached while a write is outstanding'
     outcome = diary.outcome_of(pending.token)
     if outcome is None:
@@ -437,13 +508,14 @@ async def _settle(ctx: RunContext[SalonCall]) -> str:
         if not record.recorded:
             # Settled, and settled as a refusal: the book answered, it said
             # no, and nothing is outstanding any more.
-            ctx.deps.commit(unresolved=None)
+            call.commit(unresolved=None)
             raise ModelRetry(
                 'The complaint was never taken -- the book refused it. Tell the caller it is not '
                 'logged and that someone will call them back.'
             )
-        ctx.deps.commit(writes=ctx.deps.state.writes + 1, unresolved=None)
-        await ctx.deps.speak_now(acknowledgement(record.reference, pending.wanted))
+        call.commit(writes=call.state.writes + 1, unresolved=None)
+        call.retain_action('record_complaint', record.model_dump(mode='json'))
+        await call.speak_now(acknowledgement(record.reference, pending.wanted))
         return f'complaint recorded: {record.reference}'
     try:
         written = Saved.model_validate(outcome)
@@ -454,7 +526,7 @@ async def _settle(ctx: RunContext[SalonCall]) -> str:
     action = pending.action
     if why := _disagrees(action, pending.booking_id, pending.offered, written):
         raise ModelRetry(UNKNOWN.format(why=why)) from None
-    ctx.deps.commit(
+    call.commit(
         appointment=Appointment(
             booking_id=written.booking_id,
             service=written.service,
@@ -463,11 +535,12 @@ async def _settle(ctx: RunContext[SalonCall]) -> str:
             spoken=written.spoken,
             action=action,
         ),
-        agent=ctx.deps.resume('concierge'),
-        writes=ctx.deps.state.writes + 1,
+        agent=call.resume('concierge'),
+        writes=call.state.writes + 1,
         unresolved=None,
     )
-    await ctx.deps.speak_now(
+    call.retain_action('save_booking', written.model_dump(mode='json'))
+    await call.speak_now(
         _pick(f'saved:{written.status}', SAVED[written.status]).format(
             spoken=written.spoken, service=written.service.replace('hair-color', 'hair colour')
         )
@@ -485,6 +558,7 @@ ACTIONS = frozenset(
         'hang_up',
         'record_complaint',
         'read_diary',
+        'offer_times',
         'stop_verifying',
     }
 )
@@ -538,14 +612,15 @@ _WANTS_MONEY = re.compile(r'\b(?:refund|money back|reimburse|compensat\w*|my mon
 def acknowledgement(reference: str, requested_resolution: str) -> str:
     """The one thing said when a complaint is written down: its reference, then the policy step."""
     step = MANAGER_CALLS if _WANTS_MONEY.search(requested_resolution) else REPLY_SOON
-    return NOTED.format(reference=reference, next_step=step)
+    pending = ' Your requested resolution is pending approval.' if requested_resolution else ''
+    return NOTED.format(reference=reference, next_step=step) + pending + ' Anything else I can help with?'
 
 
 PROMPTS = Path(__file__).resolve().parent.parent / 'prompts' / 'salon'
 
 # One model for now; `build` takes it per agent, so giving `complaints` a
 # stronger one or `verify` a cheaper one is a one-word edit.
-MODEL: object = 'google-cloud:gemini-3.5-flash-lite'
+MODEL = infer_model('google-cloud:gemini-3.5-flash-lite')
 # Thinking pinned off rather than left out. Left out, no `thinking_config` is
 # sent at all and whatever Google currently defaults this model to is what a
 # call gets -- a setting that can change under us, on the one dimension a voice
@@ -593,10 +668,11 @@ _DIARY = (PROMPTS / '_diary.md').read_text()
 # prompts that answer from them. They were a retrieval tool until the call of
 # 2026-09-21; see `prompt` below.
 _DOCS = {name: (KNOWLEDGE / f'{name}.md').read_text() for name in ('services', 'refunds')}
+COMPLAINT_GUIDANCE = json.loads((KNOWLEDGE / 'complaint-guidance.json').read_text())
 
 
 def prompt(name: str) -> TemplateStr[SalonCall]:
-    """One agent's prompt, with the rules every agent shares appended.
+    """Shared voice guidance, the role's task, then the current caller message.
 
     Compiled against SalonState at import: a `{{placeholder}}` naming no field
     raises here and the process never starts, rather than rendering as an empty
@@ -622,56 +698,95 @@ def prompt(name: str) -> TemplateStr[SalonCall]:
     text = (PROMPTS / f'{name}.md').read_text().replace('<!--diary-->', _DIARY)
     for topic, document in _DOCS.items():
         text = text.replace(f'<!--{topic}-->', document)
-    return TemplateStr(f'{text}\n\n{_VOICE}', deps_type=SalonCall)
+    return TemplateStr(
+        f'{_VOICE}\n\n{text}\n\n## Latest caller message\n\n'
+        'Use this with the conversation above, including earlier speech fragments.\n\n> {{heard}}',
+        deps_type=SalonCall,
+    )
 
 
 # --- what the front desk can do ---------------------------------------------
 
 
-async def record_complaint(
-    ctx: RunContext[SalonCall], summary: str, requested_resolution: str, phone: str = ''
+async def complaint_guidance(
+    ctx: RunContext[SalonCall],
+    topic: Literal['details', 'resolution', 'review', 'refunds', 'products', 'followup'],
+) -> str:
+    """Speak approved salon guidance and finish this turn. No booking or approval.
+
+    Args:
+        topic: details asks what happened; resolution asks what outcome they want;
+            review explains that requested free services or booking conversions need salon review;
+            refunds explains approval tiers; products explains return conditions;
+            followup explains the recorded complaint's response time.
+            Use ask_complaint instead when their complaint and requested outcome are already known.
+    """
+    ctx.deps.answered()
+    text = COMPLAINT_GUIDANCE[topic]
+    await ctx.deps.speak_now(text, origin='guidance')
+    return text
+
+
+async def record_complaint(ctx: RunContext[SalonCall]) -> ComplaintRecord:
+    """Record the exact complaint and resolution the caller already approved, then stop.
+
+    It speaks the receipt itself. Do not reword the approved complaint or say
+    another acknowledgement. It uses the approved wording without changes.
+    """
+    approved = ctx.deps._complaint
+    if approved is None:
+        raise ModelRetry('Use ask_complaint and wait for approval before recording anything.')
+    return await _record_complaint(ctx, approved.summary, approved.requested_resolution)
+
+
+async def _record_complaint(
+    ctx: RunContext[SalonCall], summary: str, requested_resolution: str
 ) -> ComplaintRecord:
     """Write the caller's complaint down, once they have agreed to your summary of it.
 
     Recording what they asked for is not approving it.
 
     Args:
-        summary: Short, factual summary of what went wrong, in their own terms.
+        summary: What went wrong and when, addressed to the caller. Exclude the requested resolution.
         requested_resolution: What they want the salon to do, or an empty string.
-        phone: Supplied by the salon. Not a field the model fills in.
     """
     claim_or_refuse(ctx, ACTIONS)
-    # Whoever the salon says this caller is. `complaint_tool` injects it and
-    # refuses a model that tries to send one; the default is for the direct
-    # calls the tests make, which are not the model.
-    phone = phone or ctx.deps.state.customer_phone
-    if ctx.deps.state.unresolved:
+    return await _record_approved_complaint(ctx.deps, summary, requested_resolution)
+
+
+async def _record_approved_complaint(
+    call: SalonCall, summary: str, requested_resolution: str
+) -> ComplaintRecord:
+    """Shared execution boundary for model tools and application steps."""
+    phone = call.state.customer_phone
+    if call.state.unresolved:
         # The same bar a booking meets. A write nobody has settled blocks
         # every other one, whichever book it would be written in.
         raise ModelRetry(OUTSTANDING)
-    if not _present(ctx.deps.state.customer_verified):
+    if not _present(call.state.customer_verified):
         raise ModelRetry(
-            'A complaint record needs an owner and nobody is identified yet. Hand to the verify agent first.'
+            'Nobody is identified yet. Return to concierge so verification can run before complaints.'
         )
-    # The same bar the diary meets: the caller agreed to *this* summary, read
-    # back to them by `ask_complaint` on the turn before. A paraphrase written
-    # after the fact is a different complaint from the one they agreed to.
-    if ctx.deps.pending('complaint', value=_gist(summary)) is None:
+    approved = call._complaint
+    if (
+        approved is None
+        or approved.value != _gist(summary)
+        or approved.resolution != _gist(requested_resolution)
+    ):
         raise ModelRetry(
-            'Nothing was written down. Read this summary back with `ask_complaint` and wait for '
-            'their answer; if they have already agreed to a different wording, use that wording.'
+            'Nothing was written down. Read this summary and requested resolution back with '
+            '`ask_complaint` and wait for their answer. Use the exact wording they approved.'
         )
-    if not agrees(ctx.deps.heard):
-        raise ModelRetry(
-            f'Nothing was written down: the caller said "{ctx.deps.heard}", which is not agreement '
-            'to the summary. Put it to them again with `ask_complaint`.'
-        )
-    ctx.deps.answered()
+    if approved.owner and approved.owner != phone:
+        call._complaint = None
+        raise ModelRetry('The caller identity changed. Confirm the complaint again with ask_complaint.')
+    call._complaint = None
+    call.answered()
     # One token per complaint, so an attempt that lost its answer and is
     # retried leaves one entry in the book rather than two. Same derivation
     # as a booking's: the call, the writes it has already had accepted, and
     # what this one is about.
-    token = operation_token(ctx.deps.id, ctx.deps.state.writes, phone, summary, requested_resolution)
+    token = operation_token(call.id, call.state.writes, phone, summary, requested_resolution)
     # Through the same boundary a booking goes through. The token alone was
     # never the guard: a lost response propagated straight out of here, so
     # the complaint that had in fact been written was written again under a
@@ -679,7 +794,7 @@ async def record_complaint(
     # records in the book.
     pending = Unresolved(token=token, action='complaint', wanted=requested_resolution)
     recorded = _answered(
-        ctx,
+        call,
         pending,
         ComplaintRecord,
         lambda: diary.record_complaint(phone, summary, requested_resolution, operation_token=token),
@@ -693,56 +808,16 @@ async def record_complaint(
     if not recorded.recorded:
         raise ModelRetry(
             'The complaint book refused it and nothing is on record. Tell the caller you could '
-            'not log it and that someone will call them back, and do not call this again.'
+            'not log it. Do not promise a callback or call this again.'
         )
-    ctx.deps.commit(writes=ctx.deps.state.writes + 1)
+    call.commit(writes=call.state.writes + 1)
     # Before the next request, not after it, so this covers the wait the filler
     # used to cover -- and says the one thing worth saying rather than
     # announcing that something is about to happen. The reference is in it: a
     # live call took one from the book and never told the caller.
-    await ctx.deps.speak_now(acknowledgement(recorded.reference, requested_resolution))
+    call.retain_action('record_complaint', recorded.model_dump(mode='json'))
+    await call.speak_now(acknowledgement(recorded.reference, requested_resolution))
     return recorded
-
-
-# `record_complaint`, offered to the model from a JSON schema rather than from
-# its annotations. One tool, deliberately: it is the proof that the
-# schema-authored path validates what an ordinary typed tool validates, and
-# that an injected field is injected rather than defaulted. Everything else
-# here stays a typed callable, because there is no reason for it not to be.
-#
-# `phone` is not in the schema the model is sent and cannot be set from there.
-# A verification the model supplies the identity for is not a verification.
-COMPLAINT_SCHEMA = {
-    'type': 'object',
-    'properties': {
-        'summary': {
-            'type': 'string',
-            'description': 'Short, factual summary of what went wrong, in their own terms.',
-        },
-        'requested_resolution': {
-            'type': 'string',
-            'description': 'What they want the salon to do, or an empty string.',
-        },
-        'phone': {'type': 'string', 'description': 'Supplied by the salon.'},
-    },
-    'required': ['summary', 'requested_resolution', 'phone'],
-}
-
-
-def _caller_number(call: SalonCall) -> str:
-    """Whoever the salon has established this caller to be. Never the model's word for it."""
-    return call.state.customer_phone
-
-
-def complaint_tool() -> Tool:
-    """`record_complaint` built from `COMPLAINT_SCHEMA`, with the identity injected."""
-    return schema_tool(
-        'record_complaint',
-        record_complaint.__doc__ or '',
-        COMPLAINT_SCHEMA,
-        record_complaint,
-        injected={'phone': _caller_number},
-    )
 
 
 async def read_diary(
@@ -815,6 +890,104 @@ async def read_diary(
     return found
 
 
+async def offer_times(
+    ctx: RunContext[SalonCall],
+    when: str,
+    service: Service,
+    at: str = '',
+) -> str:
+    """Read availability and speak up to three real choices, ending this reply.
+
+    Use when the caller needs to choose a time. For an already authorized same-time
+    move or clear selection, use read_diary then save_booking instead.
+
+    Args:
+        when: The caller's own day words.
+        service: The requested service.
+        at: The caller's time or daypart, if given.
+    """
+    found = await read_diary(ctx, when, service, at)
+    if found.slots:
+        times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in found.slots[:3])
+        text = f'For a {service.replace("hair-color", "hair colour")} on {found.day}, I have {times}. Which time works for you?'
+    else:
+        text = {
+            'need_day': 'Which day would you like?',
+            'past': 'That date has already passed. Which future day would you like?',
+            'closed': 'The salon is closed that day. Which other day works for you?',
+        }.get(found.status, 'There are no available times for that request. Which other day works for you?')
+    ctx.deps.answered()
+    await ctx.deps.speak_now(text, origin='guidance')
+    return text
+
+
+async def booking_guidance(
+    ctx: RunContext[SalonCall], topic: Literal['day', 'service', 'time', 'move_or_add', 'existing', 'retry']
+) -> str:
+    """Ask for missing booking details or recount the caller's actual appointments.
+
+    Use offer_times for availability, ask_booking for an exact readback, and
+    save_booking for an authorized change. This tool never claims a new write.
+    """
+    if topic == 'existing' and not ctx.deps.state.customer_verified:
+        raise ModelRetry('Identify the caller before discussing their bookings.')
+    if topic == 'existing':
+        held = [
+            Held.model_validate(row)
+            for row in diary.bookings_for(ctx.deps.state.customer_phone, diary.now().date())
+        ]
+        text = (
+            'You have '
+            + '; '.join(f'a {b.service.replace("hair-color", "hair colour")} {b.spoken}' for b in held)
+            + '. What would you like to do?'
+            if held
+            else 'There are no upcoming appointments under this number. Would you like to make one?'
+        )
+    elif topic == 'move_or_add':
+        question = ctx.deps._asked
+        if (
+            question is None
+            or question.about != 'move_or_add'
+            or question.turn not in (ctx.deps.turn, ctx.deps.turn - 1)
+        ):
+            raise ModelRetry(
+                'Attempt the requested save first; its refusal identifies the booking and choice.'
+            )
+        ctx.deps.ask(question)
+        text = 'Would you like to move the appointment you already have, or add another one?'
+    else:
+        text = {
+            'day': 'Which day would you like?',
+            'service': 'Would you like a haircut, hair colour, or a blowout?',
+            'time': 'Which time would you like?',
+            'retry': "I couldn't complete that request. What would you like to change?",
+        }[topic]
+    if topic != 'move_or_add':
+        ctx.deps.answered()
+    await ctx.deps.speak_now(text, origin='guidance')
+    return text
+
+
+def _can_end(call: SalonCall) -> bool:
+    """A bare 'no thanks' declines the last offer, not necessarily the whole call."""
+    if not ends(call.heard):
+        return False
+    if not re.fullmatch(r'no[ ,]*(?:thanks|thank you)[.! ]*', call.heard.strip(), re.IGNORECASE):
+        return True
+    previous = [r['text'] for r in call.transcript() if r['said'] != 'caller']
+    if not previous and not call.all_spoken:
+        previous = [
+            p.content
+            for m in call.messages
+            if isinstance(m, ModelResponse)
+            for p in m.parts
+            if isinstance(p, TextPart)
+        ]
+    return bool(
+        previous and re.search(r'anything else|anything more|something else', previous[-1], re.IGNORECASE)
+    )
+
+
 async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
     """End the call, once the caller's own words say it is over: "no, that's all", "I'm good,
     thanks", "goodbye". A question is never one of those, however tired it sounds: answer it and wait.
@@ -828,7 +1001,7 @@ async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
     # it to Saturday, the same time?", the agent read Saturday's availability,
     # and then hung up on them -- `answered`, no move, no goodbye from the
     # caller. A model-chosen farewell is not evidence the call is over.
-    if not ends(ctx.deps.heard):
+    if not _can_end(ctx.deps):
         raise ModelRetry(
             f'The line is still open: the caller said "{ctx.deps.heard}", which is not them ending '
             'the call. Answer what they asked. Hang up only on their own goodbye.'
@@ -839,8 +1012,13 @@ async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
     return goodbye
 
 
+async def complaint_goodbye(ctx: RunContext[SalonCall]) -> str:
+    """End the call only when the caller is finished. Speaks a fixed goodbye."""
+    return await hang_up(ctx, 'Thanks for calling. Goodbye.')
+
+
 @lru_cache
-def hand_over_for(exits: tuple[Exit, ...]):
+def hand_over_for(exits: tuple[Exit, ...], questions: tuple[str, ...] = ()):
     """One step's `hand_over`, carrying only the steps that step may actually reach.
 
     A shared `hand_over` over every step in the agency offers the model routes
@@ -849,6 +1027,9 @@ def hand_over_for(exits: tuple[Exit, ...]):
     is not refused at runtime, it is unrepresentable in the schema the model is
     sent, and pydantic-ai hands back its own retry if a provider ignores the
     enum anyway.
+
+    A readback keeps this step waiting for consent. Refuse a paired handoff
+    so the SDK can try that output instead of silently skipping the question.
     """
     names = tuple(dict.fromkeys(exit.to for exit in exits))
 
@@ -865,6 +1046,12 @@ def hand_over_for(exits: tuple[Exit, ...]):
             to: The agent that takes it from here.
             because: One short sentence: what the caller wants. Never spoken.
         """
+        if (
+            ctx.messages
+            and isinstance(reply := ctx.messages[-1], ModelResponse)
+            and any(isinstance(part, ToolCallPart) and part.tool_name in questions for part in reply.parts)
+        ):
+            raise ModelRetry('Ask the readback here and wait for the caller. Do not hand over in that reply.')
         claim_or_refuse(ctx, ACTIONS)
         # Checked again here, against the state as it is now. The schema that
         # offered this destination was built before the tools in this same
@@ -903,14 +1090,20 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
         phone: The exact number they confirmed, in E.164.
     """
     claim_or_refuse(ctx, ACTIONS)
-    call = ctx.deps
+    return await _confirm_customer(ctx.deps, phone)
+
+
+async def _confirm_customer(call: SalonCall, phone: SubmittedPhone) -> Handoff:
+    """Shared execution boundary for model tools and application steps."""
+    phone = _PHONE.validate_python(phone)
     # The caller has to have agreed to *these digits*, last turn, in answer to
     # a readback this code put to them. On the live call of 2026-09-21 13:02
     # the agent asked "are you calling from Spain?", the caller said yes, and
     # that yes was used as agreement to a number nobody had read back. The
     # number was structurally fine; the procedure was skipped, and the whole
     # of what `phone_confirmed` means is that the procedure happened.
-    if call.pending('phone', value=phone) is None:
+    question = call.pending('phone', value=phone)
+    if question is None or (question.owner and question.owner != call.state.customer_phone):
         raise ModelRetry(
             'Nothing was looked up: those digits have not been read back to this caller and agreed '
             f'to. Call `ask_number` with {phone} and wait for their answer.'
@@ -944,7 +1137,7 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
     # read back. It is not proof the number is theirs: a caller who agrees to a
     # wrong readback gets a structurally valid number belonging to somebody
     # else, and that stays a conversational risk this field does not launder.
-    ctx.deps.commit(
+    call.commit(
         customer_phone=phone,
         phone_confirmed=True,
         customer_verified=found.customer_status,
@@ -960,7 +1153,8 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
     # This version does not even ask the model where they were heading.
     # ty: `resume` hands back a step name as `str`; `Handoff.to` narrows it
     # to the four this agency has, and validates it here rather than trusting it.
-    return Handoff(to=ctx.deps.resume('concierge'), because='the caller is identified')  # ty: ignore[invalid-argument-type]
+    call.retain_action('confirm_customer', found.model_dump(mode='json'))
+    return Handoff(to=call.resume('concierge'), because='the caller is identified', status='completed')  # ty: ignore[invalid-argument-type]
 
 
 async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
@@ -979,11 +1173,12 @@ async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
     # needs an identity, and that step is recorded so it can be resumed --
     # so leaving it behind means a caller who verifies an hour later for some
     # other reason is silently put back into a booking they abandoned.
+    ctx.deps._complaint = None
     ctx.deps.commit(pending=None)
-    return Handoff(to='concierge', because=because)
+    return Handoff(to='concierge', because=because, status='unserved')
 
 
-def _authorised(ctx: RunContext[SalonCall], action: str, slot_id: str, booking_id: str) -> bool:
+def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> bool:
     """Whether the caller authorised this exact write, and whether it is a second appointment.
 
     Refuses by raising, so a write that reaches past here has caller evidence
@@ -1004,10 +1199,12 @@ def _authorised(ctx: RunContext[SalonCall], action: str, slot_id: str, booking_i
     again one second later with `additional=true`, same caller, no turn in
     between. The flag was the model's own permission slip.
     """
-    call, phone = ctx.deps, ctx.deps.state.customer_phone
+    phone = call.state.customer_phone
     held = diary.bookings_for(phone, diary.now().date()) if phone else []
 
-    if call.pending('booking', value=slot_id, action=action, booking_id=booking_id) is not None:
+    if question := call.pending('booking', value=slot_id, action=action, booking_id=booking_id):
+        if question.owner and question.owner != phone:
+            raise ModelRetry('The caller identity changed. Ask for approval again under this number.')
         if not agrees(call.heard):
             raise ModelRetry(
                 'Nothing was saved: the caller did not agree to what was read back to them. They '
@@ -1063,7 +1260,12 @@ def _authorised(ctx: RunContext[SalonCall], action: str, slot_id: str, booking_i
         # "Move it to Saturday, the same time" names no digits and still names
         # one time exactly: the one they already hold. The live call of
         # 2026-09-21 12:57 answered that sentence by hanging up.
-        same = bool(moving) and _SAME_TIME.search(call.heard) and offered['time'] == moving['time']
+        same = (
+            bool(moving)
+            and _SAME_TIME.search(call.heard)
+            and not diary._NEGATED_TIME.search(call.heard)
+            and offered['time'] == moving['time']
+        )
         if moving and (picked or same):
             return False
 
@@ -1102,13 +1304,22 @@ async def save_booking(
         booking_id: The booking exactly as the diary returned it. Empty when booking.
     """
     claim_or_refuse(ctx, ACTIONS)
+    return await _save_booking(ctx.deps, action, slot_id, booking_id)
+
+
+async def _save_booking(
+    call: SalonCall, action: Literal['book', 'move', 'cancel'], slot_id: str, booking_id: str
+) -> str:
+    """Shared execution boundary for model tools and application steps."""
+    command = BookingCommand(action=action, slot_id=slot_id, booking_id=booking_id)
+    action, slot_id, booking_id = command.action, command.slot_id, command.booking_id
     # Before anything else. A write whose outcome was never established is
     # not a write that did not happen, and until it is settled every other
     # one is a second appointment waiting to be made.
-    if ctx.deps.state.unresolved:
-        return await _settle(ctx)
-    additional = _authorised(ctx, action, slot_id, booking_id)
-    if not _present(ctx.deps.state.customer_verified):
+    if call.state.unresolved:
+        return await _settle(call)
+    additional = _authorised(call, action, slot_id, booking_id)
+    if not _present(call.state.customer_verified):
         raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
     # What this caller is being offered under that id, asked of the diary
     # rather than read out of the string: the id is the service's own opaque
@@ -1125,7 +1336,7 @@ async def save_booking(
     # Asked under the caller's *current* identity as well as this call: a
     # number corrected mid-call makes the caller somebody else, and the slots
     # the previous identity was shown are not theirs to book.
-    offered = diary.offer_of(ctx.deps.id, slot_id, ctx.deps.state.customer_phone)
+    offered = diary.offer_of(call.id, slot_id, call.state.customer_phone)
     # One token per business action, not per attempt. Derived from what the
     # action *is*, so a retry after a lost response derives the same one and
     # the diary returns the outcome it already recorded rather than booking a
@@ -1143,9 +1354,9 @@ async def save_booking(
     # ponytail: derived rather than handed out by the service. A real one
     # would issue it, and then this line goes.
     token = operation_token(
-        ctx.deps.id,
-        ctx.deps.state.writes,
-        ctx.deps.state.customer_phone,
+        call.id,
+        call.state.writes,
+        call.state.customer_phone,
         action,
         slot_id,
         booking_id,
@@ -1161,18 +1372,18 @@ async def save_booking(
         # an unreadable answer is an *unknown* outcome, not a failure. The
         # write may well have landed; only the answer is broken.
         written = _answered(
-            ctx,
+            call,
             pending,
             Saved,
             lambda: diary.save_booking(
-                ctx.deps.state.customer_phone,
+                call.state.customer_phone,
                 action,
                 slot_id,
                 booking_id,
                 additional,
                 diary.now(),
                 operation_token=token,
-                offered_to=ctx.deps.id,
+                offered_to=call.id,
             ),
             'diary',
         )
@@ -1181,7 +1392,7 @@ async def save_booking(
         # caller was authorised to make that the diary itself will not take
         # alongside one they hold. Recorded as the question it raises, so the
         # only way past it is the caller's answer to that question.
-        ctx.deps.ask(Asked(about='move_or_add', value=slot_id, action='move'))
+        call.ask(Asked(about='move_or_add', value=slot_id, action='move'))
         raise ModelRetry(str(refused)) from None
     except diary.RefusedError as refused:
         # The diary's own words, which name what is actually possible instead of
@@ -1191,7 +1402,7 @@ async def save_booking(
     # is committed or said, because both of those are irreversible in front of
     # a caller.
     if why := _disagrees(action, booking_id, offered, written):
-        _unknown(ctx, pending, why)
+        _unknown(call, pending, why)
     appointment = Appointment(
         booking_id=written.booking_id,
         service=written.service,
@@ -1213,17 +1424,71 @@ async def save_booking(
     # `resume` clears the pending slot, so it runs on its own line: relying on
     # argument evaluation order to sequence two writes is the kind of thing
     # that reads fine and breaks under a later edit.
-    going_back_to = ctx.deps.resume('concierge')
-    ctx.deps.commit(
-        appointment=appointment, agent=going_back_to, writes=ctx.deps.state.writes + 1, unresolved=None
-    )
-    await ctx.deps.speak_now(
+    going_back_to = call.resume('concierge')
+    call.commit(appointment=appointment, agent=going_back_to, writes=call.state.writes + 1, unresolved=None)
+    call.retain_action('save_booking', written.model_dump(mode='json'))
+    await call.speak_now(
         _pick(f'saved:{written.status}', SAVED[written.status]).format(
             spoken=written.spoken,
             service=written.service.replace('hair-color', 'hair colour'),
         )
     )
     return f'{written.status}: {written.spoken}'
+
+
+# ponytail: only complete, familiar answers bypass the model. Extend from observed misses.
+_CLEAR_APPROVAL = re.compile(
+    r'(?:yes|yeah|yep|yup|sure|okay|ok|right|correct|exactly|absolutely|go for it|go ahead|do it|'
+    r"that(?:'s| is) (?:right|correct)|yes[, ]+(?:that(?:'s| is) (?:right|correct|my number)))"
+    r'(?:[, ]+please)?[.! ]*',
+    re.IGNORECASE,
+)
+_PHONE_CONTENT = re.compile(
+    r'[+\d]|\b(?:phone|number|digits?|zero|one|two|three|four|five|six|seven|eight|nine|'
+    r'actually|instead|correction|wrong|wait)\b',
+    re.IGNORECASE,
+)
+
+
+def advance(call: SalonCall) -> LocalAction | None:
+    """Resolve only a known next step; ambiguous input still goes to the agent."""
+    if _CLEAR_APPROVAL.fullmatch(call.heard.strip()) and agrees(call.heard):
+        if (
+            call.state.agent == 'verify'
+            and (question := call.pending('phone'))
+            and (not question.owner or question.owner == call.state.customer_phone)
+        ):
+            phone = question.value
+            return LocalAction('confirm_customer', lambda: _confirm_customer(call, phone))
+        if (
+            call.state.customer_verified
+            and call.state.agent == 'booking'
+            and (question := call.pending('booking'))
+            and question.action in ('book', 'move', 'cancel')
+            and (not question.owner or question.owner == call.state.customer_phone)
+        ):
+            command = BookingCommand.model_validate(
+                {'action': question.action, 'slot_id': question.value, 'booking_id': question.booking_id}
+            )
+            return LocalAction('save_booking', lambda: _save_booking(call, **command.model_dump()))
+        if call.state.agent == 'complaints' and call.complaint_approved and call.pending('complaint'):
+            approved = call._complaint
+            assert approved is not None
+            return LocalAction(
+                'record_complaint',
+                lambda: _record_approved_complaint(call, approved.summary, approved.requested_resolution),
+            )
+    if (
+        call.state.agent == 'verify'
+        and call.state.pending
+        and call.pending('phone') is None
+        and not call.state.customer_verified
+        and call.state.customer_phone
+        and call._return_status.startswith('Application handoff:')
+        and not any(_PHONE_CONTENT.search(words) for words in call._inputs.values())
+    ):
+        return LocalAction('ask_number', lambda: _ask_number(call, call.state.customer_phone))
+    return None
 
 
 # --- the table ---------------------------------------------------------------
@@ -1265,7 +1530,14 @@ def build(
     # `sequential` on everything that writes: two of them must never overlap,
     # and the conflict policy refuses the second before its service runs. This
     # is the belt to that brace, and it is one keyword.
-    named = [ToolOutput(fn, name=fn.__name__, sequential=fn.__name__ in ACTIONS) for fn in finishers]
+    named = [
+        ToolOutput(
+            complaint_goodbye if name == 'complaints' and fn is hang_up else fn,
+            name=fn.__name__,
+            sequential=fn.__name__ in ACTIONS,
+        )
+        for fn in finishers
+    ]
     # Putting a question to the caller ends the run the same way finishing the
     # step does, and for the same reason: the words are already decided, so a
     # further model request would only be a chance to word them differently.
@@ -1280,8 +1552,17 @@ def build(
     # as soon as there is more than one output -- which the per-request
     # narrowing below then failed to find by name, silently offering every
     # destination whatever the guards said.
-    handoff = [ToolOutput(hand_over_for(exits), name='hand_over', sequential=True)] if exits else []
-    declared = [str, *handoff, *named, *questions]
+    handoff = (
+        [
+            ToolOutput(
+                hand_over_for(exits, tuple(fn.__name__ for fn in asks)), name='hand_over', sequential=True
+            )
+        ]
+        if exits
+        else []
+    )
+    structured_speech = name in ('verify', 'booking', 'complaints')
+    declared = [*([str] if not structured_speech else []), *handoff, *named, *questions]
 
     def outputs(state: SalonState) -> list:
         """What this step may return, declared once for the whole turn.
@@ -1317,14 +1598,17 @@ def build(
 
         An exit whose guard has stopped holding leaves the enum the model is
         sent, so it cannot be chosen rather than being refused after it was.
-        With none left, `hand_over` goes entirely and the step still has `str`
-        -- which for `verify` is exactly right: an incomplete number is a
-        reason to ask again, not a reason to leave.
+        With none left, `hand_over` goes entirely. Verification can still ask
+        for missing information through its guidance output.
         """
         legal = [e.to for e in exits if e.guard(ctx.deps.state)]
         legal = list(dict.fromkeys(legal))
         kept = []
         for tool_def in defs:
+            if tool_def.name == 'record_complaint' and (
+                not ctx.deps.state.customer_verified or not ctx.deps.complaint_approved
+            ):
+                continue
             if tool_def.name != 'hand_over':
                 kept.append(tool_def)
                 continue
@@ -1371,7 +1655,7 @@ def build(
                 one_action_per_reply(ACTIONS),
                 Hooks(prepare_tools=only_reachable, prepare_output_tools=narrow),
                 # Last, so what it empties is the set the guards already narrowed.
-                speak_by(SPEAK_BY),
+                *([speak_by(SPEAK_BY)] if not structured_speech else []),
                 # Measurement, not behaviour: it stamps each provider request
                 # on the way out so time to first token is per request.
                 request_clock(),
@@ -1384,6 +1668,8 @@ def build(
         satisfied_by=satisfied_by,
         outputs=outputs,
         guarded=guarded,
+        model_speech=not structured_speech,
+        advance=advance,
     )
 
 
@@ -1397,11 +1683,6 @@ def build(
 def verified(state: SalonState) -> bool:
     """Identified already, so `verify` is a correction rather than a first pass."""
     return bool(state.customer_verified)
-
-
-def unverified(state: SalonState) -> bool:
-    """Not identified yet, so there is still something for `verify` to do."""
-    return not state.customer_verified
 
 
 # --- the table ---------------------------------------------------------------
@@ -1435,7 +1716,7 @@ AGENTS: dict[str, Node[SalonState]] = {
     'verify': build(
         'verify',
         finishers=[confirm_customer, stop_verifying],
-        asks=[ask_number],
+        asks=[ask_number, verification_guidance],
         # Guarded, because an incomplete number is a reason to ask again and not
         # a reason to leave. Unguarded, a live call on 2026-09-20 went
         # `verify -> concierge ("The caller gave an incomplete phone number and
@@ -1443,8 +1724,7 @@ AGENTS: dict[str, Node[SalonState]] = {
         # interposed verify a second time, and the caller was asked for the same
         # number twice -- once as "which country are you calling from?" when
         # they had already said +34. Two requests and two questions for nothing.
-        # With no exit, this step still has `str`: it asks again, which is what
-        # it was always meant to do.
+        # With no exit, its guidance output asks for the missing information.
         exits=(Exit('concierge', verified),),
         enter=(
             "Let me confirm who I'm speaking to.",
@@ -1456,7 +1736,7 @@ AGENTS: dict[str, Node[SalonState]] = {
         'booking',
         tools=[read_diary],
         finishers=[save_booking],
-        asks=[ask_booking],
+        asks=[ask_booking, offer_times, booking_guidance],
         # This step writes, so its speech goes out a clause at a time until
         # it has. See `voice.harness.Node.guarded`.
         guarded=True,
@@ -1472,12 +1752,11 @@ AGENTS: dict[str, Node[SalonState]] = {
     ),
     'complaints': build(
         'complaints',
-        tools=[complaint_tool()],
-        finishers=[hang_up],
-        asks=[ask_complaint],
+        finishers=[hang_up, record_complaint],
+        asks=[ask_complaint, complaint_guidance],
         guarded=True,
-        # `record_complaint` needs an owner, so this step sends them to be
-        # identified -- and only while there is anybody to identify.
-        exits=(Exit('concierge'), Exit('verify', unverified)),
+        exits=(Exit('concierge'),),
+        requires=('customer_verified',),
+        satisfied_by='verify',
     ),
 }

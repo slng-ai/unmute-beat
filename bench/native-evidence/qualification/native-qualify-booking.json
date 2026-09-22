@@ -1,0 +1,310 @@
+{
+  "arm": "native",
+  "scenario": "booking",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "I would like a haircut this Friday afternoon.",
+      "seconds": 1.1023998340097023,
+      "requests": 2,
+      "ttft": [
+        0.5800638749933569,
+        0.33626445900881663
+      ],
+      "speech": "Let me confirm who I'm speaking to.I have 600 11 12 22. Is that the number you're calling from?",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "book",
+          "args": {}
+        }
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.5800638749933569,
+          "tools": [
+            {
+              "name": "book",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'I would like a haircut this Friday afternoon.'}]",
+          "started": 110913.227049875,
+          "usage": {
+            "candidates_token_count": 8,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 8
+              }
+            ],
+            "prompt_token_count": 1131,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1131
+              }
+            ],
+            "total_token_count": 1139,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.33626445900881663,
+          "tools": [],
+          "text": "I have 600 11 12 22. Is that the number you're calling from?",
+          "prompt": "[{'role': 'user', 'content': 'I would like a haircut this Friday afternoon.'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to.\"}]",
+          "started": 110913.842733916,
+          "usage": {
+            "candidates_token_count": 26,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 26
+              }
+            ],
+            "prompt_token_count": 1353,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1353
+              }
+            ],
+            "total_token_count": 1379,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    },
+    {
+      "said": "Yes, that is my number.",
+      "seconds": 1.762485832994571,
+      "requests": 3,
+      "ttft": [
+        0.5456313750037225,
+        0.5473550829919986,
+        0.516061707996414
+      ],
+      "speech": "I'll check the diary.We have openings on Friday at 3:00 PM, 3:30 PM, or 4:00 PM. Do any of those work for you?",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "find_or_create_customer",
+          "args": {
+            "phone": "+34600111222"
+          }
+        },
+        {
+          "name": "find_slots",
+          "args": {
+            "date": "this Friday",
+            "service": "haircut",
+            "prefer": "afternoon"
+          }
+        }
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.5456313750037225,
+          "tools": [
+            {
+              "name": "find_or_create_customer",
+              "args": {
+                "phone": "+34600111222"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'I would like a haircut this Friday afternoon.'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to.\"}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xc8\\x04P\\xa3\\xbajH\\x0b\\xfb^W\\xdez\\xe2\\x9crH\\xaeim9g\\xcf\\x1bP\\xd6K\\xd2h\\x06\\x1eyb#\\x1e\\x99\\n<2R\\xc1\\x8b\\x99\\xe9v\\xc3\\xddm\\x88y\\x90\\xff\\n\\x89\\xa8\\xf3\\x82P\\xa6\\x0b\\x18a\\xa54\\xa3\\x05\\xac9\\xa0>\\x1b\\x1bp\\x85\\x1eJ\\xdc\\xe4', 'bookmark': {'text': \"I have 600 11 12 22. Is that the number you're calling from?\"}}), {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to. I have 600 11 12 22. Is that the number you're calling from?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}]",
+          "started": 110914.33466425,
+          "usage": {
+            "candidates_token_count": 31,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 31
+              }
+            ],
+            "prompt_token_count": 1395,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1395
+              }
+            ],
+            "total_token_count": 1426,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.5473550829919986,
+          "tools": [
+            {
+              "name": "find_slots",
+              "args": {
+                "date": "this Friday",
+                "service": "haircut",
+                "prefer": "afternoon"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'I would like a haircut this Friday afternoon.'}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to.\"}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to. I have 600 11 12 22. Is that the number you're calling from?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_4497060', 'function': {'name': 'find_or_create_customer', 'arguments': '{\"phone\": \"+34600111222\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_4497060'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}]",
+          "started": 110914.888786583,
+          "usage": {
+            "candidates_token_count": 31,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 31
+              }
+            ],
+            "prompt_token_count": 1509,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1509
+              }
+            ],
+            "total_token_count": 1540,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.516061707996414,
+          "tools": [],
+          "text": "We have openings on Friday at 3:00 PM, 3:30 PM, or 4:00 PM. Do any of those work for you?",
+          "prompt": "[{'role': 'user', 'content': 'I would like a haircut this Friday afternoon.'}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to.\"}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to. I have 600 11 12 22. Is that the number you're calling from?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_4497060', 'function': {'name': 'find_or_create_customer', 'arguments': '{\"phone\": \"+34600111222\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_4497060'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\x8fNL\\x9d5\\xaf\\xbd\\xd9 Z\\xe1f|\\x90;Xk\\x1b\\xfa\\xc1\\xb7Y\\x85\\xaeN\\xe1`\\x80I\\xb3\\x0b\\xfdP\\x1c\\xbc\\xc6\\x15\\xe3\\x07\\x90\\xf7g\\xddt\\xe5\\x14\\xc3&\\x9a\\xcfh:\\xfe\\r\\xc2\\x14m\\xdc{\\xda\\x9bV\\xe9\\x85\\x0e\\xb5\\x92\\xdf8B_\\xf4\\x0b@\\xb4J\\xfd\\x11', 'bookmark': {'function_call': 'call_5169216'}}), {'role': 'assistant', 'content': \"I'll check the diary.\"}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5169216', 'function': {'name': 'find_slots', 'arguments': '{\"date\": \"this Friday\", \"service\": \"haircut\", \"prefer\": \"afternoon\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"ok\", \"day\": \"Friday\", \"date\": \"2026-09-25\", \"bookings\": [], \"slots\": [{\"slot_id\": \"2026-09-25T1200|haircut\", \"service\": \"haircut\", \"time\": \"12:00\", \"spoken\": \"Friday at 12:00 PM\"}, {\"slot_id\": \"2026-09-25T1230|haircut\", \"service\": \"haircut\", \"time\": \"12:30\", \"spoken\": \"Friday at 12:30 PM\"}, {\"slot_id\": \"2026-09-25T1300|haircut\", \"service\": \"haircut\", \"time\": \"13:00\", \"spoken\": \"Friday at 1:00 PM\"}, {\"slot_id\": \"2026-09-25T1330|haircut\", \"service\": \"haircut\", \"time\": \"13:30\", \"spoken\": \"Friday at 1:30 PM\"}, {\"slot_id\": \"2026-09-25T1400|haircut\", \"service\": \"haircut\", \"time\": \"14:00\", \"spoken\": \"Friday at 2:00 PM\"}, {\"slot_id\": \"2026-09-25T1430|haircut\", \"service\": \"haircut\", \"time\": \"14:30\", \"spoken\": \"Friday at 2:30 PM\"}, {\"slot_id\": \"2026-09-25T1500|haircut\", \"service\": \"haircut\", \"time\": \"15:00\", \"spoken\": \"Friday at 3:00 PM\"}, {\"slot_id\": \"2026-09-25T1530|haircut\", \"service\": \"haircut\", \"time\": \"15:30\", \"spoken\": \"Friday at 3:30 PM\"}, {\"slot_id\": \"2026-09-25T1600|haircut\", \"service\": \"haircut\", \"time\": \"16:00\", \"spoken\": \"Friday at 4:00 PM\"}, {\"slot_id\": \"2026-09-25T1630|haircut\", \"service\": \"haircut\", \"time\": \"16:30\", \"spoken\": \"Friday at 4:30 PM\"}], \"price_euros\": 28}', 'tool_call_id': 'call_5169216'}]",
+          "started": 110915.472520708,
+          "usage": {
+            "candidates_token_count": 36,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 36
+              }
+            ],
+            "prompt_token_count": 1952,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1952
+              }
+            ],
+            "total_token_count": 1988,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    },
+    {
+      "said": "The three o clock one please.",
+      "seconds": 1.278046749997884,
+      "requests": 2,
+      "ttft": [
+        0.705519084003754,
+        0.4631244579941267
+      ],
+      "speech": "Got that, your haircut is booked for this Friday at 3:00 PM.",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "save_booking",
+          "args": {
+            "additional": false,
+            "confirmed": true,
+            "booking_id": "",
+            "slot_id": "2026-09-25T1500|haircut",
+            "action": "book"
+          }
+        }
+      ],
+      "business": {
+        "bookings": [
+          {
+            "booking_id": "BK0001",
+            "service": "haircut",
+            "date": "2026-09-25",
+            "time": "15:00",
+            "spoken": "Friday at 3:00 PM"
+          }
+        ],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.705519084003754,
+          "tools": [
+            {
+              "name": "save_booking",
+              "args": {
+                "additional": false,
+                "confirmed": true,
+                "booking_id": "",
+                "slot_id": "2026-09-25T1500|haircut",
+                "action": "book"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'I would like a haircut this Friday afternoon.'}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to.\"}, {'role': 'assistant', 'content': \"Let me confirm who I'm speaking to. I have 600 11 12 22. Is that the number you're calling from?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_4497060', 'function': {'name': 'find_or_create_customer', 'arguments': '{\"phone\": \"+34600111222\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_4497060'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\x8fNL\\x9d5\\xaf\\xbd\\xd9 Z\\xe1f|\\x90;Xk\\x1b\\xfa\\xc1\\xb7Y\\x85\\xaeN\\xe1`\\x80I\\xb3\\x0b\\xfdP\\x1c\\xbc\\xc6\\x15\\xe3\\x07\\x90\\xf7g\\xddt\\xe5\\x14\\xc3&\\x9a\\xcfh:\\xfe\\r\\xc2\\x14m\\xdc{\\xda\\x9bV\\xe9\\x85\\x0e\\xb5\\x92\\xdf8B_\\xf4\\x0b@\\xb4J\\xfd\\x11', 'bookmark': {'function_call': 'call_5169216'}}), {'role': 'assistant', 'content': \"I'll check the diary.\"}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5169216', 'function': {'name': 'find_slots', 'arguments': '{\"date\": \"this Friday\", \"service\": \"haircut\", \"prefer\": \"afternoon\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"ok\", \"day\": \"Friday\", \"date\": \"2026-09-25\", \"bookings\": [], \"slots\": [{\"slot_id\": \"2026-09-25T1200|haircut\", \"service\": \"haircut\", \"time\": \"12:00\", \"spoken\": \"Friday at 12:00 PM\"}, {\"slot_id\": \"2026-09-25T1230|haircut\", \"service\": \"haircut\", \"time\": \"12:30\", \"spoken\": \"Friday at 12:30 PM\"}, {\"slot_id\": \"2026-09-25T1300|haircut\", \"service\": \"haircut\", \"time\": \"13:00\", \"spoken\": \"Friday at 1:00 PM\"}, {\"slot_id\": \"2026-09-25T1330|haircut\", \"service\": \"haircut\", \"time\": \"13:30\", \"spoken\": \"Friday at 1:30 PM\"}, {\"slot_id\": \"2026-09-25T1400|haircut\", \"service\": \"haircut\", \"time\": \"14:00\", \"spoken\": \"Friday at 2:00 PM\"}, {\"slot_id\": \"2026-09-25T1430|haircut\", \"service\": \"haircut\", \"time\": \"14:30\", \"spoken\": \"Friday at 2:30 PM\"}, {\"slot_id\": \"2026-09-25T1500|haircut\", \"service\": \"haircut\", \"time\": \"15:00\", \"spoken\": \"Friday at 3:00 PM\"}, {\"slot_id\": \"2026-09-25T1530|haircut\", \"service\": \"haircut\", \"time\": \"15:30\", \"spoken\": \"Friday at 3:30 PM\"}, {\"slot_id\": \"2026-09-25T1600|haircut\", \"service\": \"haircut\", \"time\": \"16:00\", \"spoken\": \"Friday at 4:00 PM\"}, {\"slot_id\": \"2026-09-25T1630|haircut\", \"service\": \"haircut\", \"time\": \"16:30\", \"spoken\": \"Friday at 4:30 PM\"}], \"price_euros\": 28}', 'tool_call_id': 'call_5169216'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_c\\xb8\\xa9\\x11\\xc9C\\xd99}c^R=.\\x97\\xfd\\xc4\\xf8\\x0b\\xab\\xff\\xa2\\x8c\\xa5\\xcfV>\\xa2\\x0b\\x16\\xc0\\x84h_\\\\D\\xcdU\\xd8\\x7f\\xf5\\x9e\\xd9\\x94~\\xcd@\\x1a\\xad\\xf4\\xb1\\xcb\\x96\\xa7#\\x05\\x93\\xf6m<mw\\x91I:\\xab\\xb9Q\\xb6\\x94t\\xcc\\xb5\\xa6\\xb2<\\xbd\\xdd', 'bookmark': {'text': 'We have openings on Friday at 3:00 PM, 3:30 PM, or 4:00 PM. Do any of those work for you?'}}), {'role': 'assistant', 'content': 'We have openings on Friday at 3:00 PM, 3:30 PM, or 4:00 PM. Do any of those work for you?'}, {'role': 'user', 'content': 'The three o clock one please.'}]",
+          "started": 110916.103937291,
+          "usage": {
+            "candidates_token_count": 56,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 56
+              }
+            ],
+            "prompt_token_count": 1995,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1995
+              }
+            ],
+            "total_token_count": 2051,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.4631244579941267,
+          "tools": [],
+          "text": "Got that, your haircut is booked for this Friday at 3:00 PM.",
+          "prompt": "[{'role': 'user', 'content': 'I would like a haircut this Friday afternoon.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\x86c\\xf4H\\x9fbB\\xba\\x9fT\\xe8x/\\xf3*\\x12$\\x04mX\\xeeD\\xfea\\xfdlU-n\\x19.1\\xbc\\xc3x/\\xf7\\xac\\x1f\\x10\\xec`d\\x8da\\x03\\xcax\\x10\\x91L\\x88\\x87\\x82\\\\yo\\x9e$\"\\x90\\xd9<\\xe3\\xf9>uIA\\xb6w\\xb6\\xc5>K\\xd6\\xde\\x97', 'bookmark': {'function_call': 'call_203271'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_203271', 'function': {'name': 'book', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_203271'}, {'role': 'user', 'content': 'The three o clock one please.'}, {'role': 'developer', 'content': '{\"status\": \"completed\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_5169274\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}]",
+          "started": 110916.818469833,
+          "usage": {
+            "candidates_token_count": 18,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 18
+              }
+            ],
+            "prompt_token_count": 1382,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1382
+              }
+            ],
+            "total_token_count": 1400,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

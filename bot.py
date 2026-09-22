@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from dotenv import load_dotenv
@@ -21,6 +22,7 @@ from loguru import logger
 from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import LLMFullResponseStartFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -37,8 +39,11 @@ from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 
+from utils.arm import settings
 from utils.observability import setup
+from voice.harness import model_clients
 from voice.processor import PydanticAgentProcessor
 
 load_dotenv(override=True)
@@ -126,6 +131,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     )
 
     call, table, greeting = agency()
+    starting_settings = settings()
     agents = PydanticAgentProcessor(call, table)
 
     # Kept even though no model ever reads it: the aggregators use it to work
@@ -191,10 +197,24 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         },
     )
 
+    playback_run = None
+
+    @assistant_aggregator.event_handler('on_before_process_frame')
+    async def before_assistant_frame(aggregator, frame):
+        nonlocal playback_run
+        if isinstance(frame, LLMFullResponseStartFrame):
+            playback_run = frame.metadata.get('voice_run')
+
+    @assistant_aggregator.event_handler('on_assistant_turn_started')
+    async def on_assistant_turn_started(aggregator):
+        nonlocal playback_run
+        agents.playback_started(aggregator._assistant_turn_start_timestamp, run=playback_run)
+        playback_run = None
+
     @assistant_aggregator.event_handler('on_assistant_turn_stopped')
     async def on_assistant_turn_stopped(aggregator, message):
         # Cut the agents' history down to what the caller heard.
-        agents.note_spoken(message.content, message.interrupted)
+        agents.note_spoken(message.content, message.interrupted, timestamp=message.timestamp)
 
     @worker.rtvi.event_handler('on_client_ready')
     async def on_client_ready(rtvi):
@@ -216,12 +236,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     # number for.
     started_at = datetime.now(UTC).isoformat()
     try:
-        await runner.run()
+        async with model_clients(table):
+            await runner.run()
     finally:
-        _record(call, session_id, started_at)
+        _record(call, session_id, started_at, starting_settings)
 
 
-def _record(call, session_id: str, started_at: str = '') -> None:
+def _record(call, session_id: str, started_at: str = '', starting_settings: dict | None = None) -> None:
     """Write down what this call was and what the salon ended up holding.
 
     The diary is in memory and dies with the process, so a live call
@@ -234,12 +255,12 @@ def _record(call, session_id: str, started_at: str = '') -> None:
     correctness half.
     """
     try:
-        from utils.arm import outcome, settings
+        from utils.arm import outcome
 
         record = {
             'arm': os.getenv('BENCH_LABEL', 'live'),
             'session': session_id,
-            'settings': settings(),
+            'settings': starting_settings or settings(),
             'outcome': outcome(getattr(call.state, 'customer_phone', '')),
             # JSON mode, so a day is the ISO string the record is read back as
             # rather than a `date` nothing outside Python can load.
@@ -249,6 +270,8 @@ def _record(call, session_id: str, started_at: str = '') -> None:
             # asked whether the right thing was booked, and neither can a
             # message history that does not hold the fixed lines.
             'transcript': call.transcript(),
+            'speech': [asdict(segment) for segment in call.all_spoken],
+            'protocol': ModelMessagesTypeAdapter.dump_python(call._protocol, mode='json'),
             'turns': call.turn,
             'call_started_at': started_at,
             'ended_at': datetime.now(UTC).isoformat(),

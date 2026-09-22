@@ -94,6 +94,10 @@ class PydanticAgentProcessor(FrameProcessor):
         # What a cancelled turn heard and never got as far as delivering. The
         # caller said it, so the next turn says it too.
         self._carried = ''
+        self._context_users = 0
+        self._playback_turns: dict[str, list[str] | None] = {}
+        self._playback_runs: dict[tuple[int, int], list[str]] = {}
+        self._active_playback: list[str] | None = None
         call._say = self.say
         call._end = self.hang_up
 
@@ -147,11 +151,14 @@ class PydanticAgentProcessor(FrameProcessor):
         if segment := next((s for s in reversed(self._call.spoken) if s.text == text), None):
             frame.metadata['speech'] = {
                 'segment': segment.id,
+                'turn': segment.turn,
                 'origin': segment.origin,
                 'attempt': segment.attempt,
                 'tool_call_id': segment.tool_call_id,
                 'submitted_at': time.time(),
             }
+        if segment is not None and self._active_playback is not None:
+            self._active_playback.append(segment.id)
         await self.push_frame(frame)
 
     async def hang_up(self) -> None:
@@ -177,8 +184,11 @@ class PydanticAgentProcessor(FrameProcessor):
         sentence on every call. Recording it keeps the agents' history honest
         about who spoke first.
         """
+        self._call.note_said('fixed', line, origin='entry')
         await self.say(line)
-        self._call.messages.append(ModelResponse(parts=[TextPart(content=line)]))
+        self._call.messages.append(
+            ModelResponse(parts=[TextPart(content=line)], metadata={'speech_ids': [self._call.spoken[-1].id]})
+        )
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -190,7 +200,13 @@ class PydanticAgentProcessor(FrameProcessor):
             self.interrupt()
             await self.push_frame(frame, direction)
         elif isinstance(frame, LLMContextFrame):
-            await self._turn(_last_user_text(frame.context))
+            users = [
+                m for m in frame.context.get_messages() if isinstance(m, dict) and m.get('role') == 'user'
+            ]
+            unseen = users[self._context_users :]
+            self._context_users = len(users)
+            if unseen:
+                await self._turn(' '.join(filter(None, (_last_user_text(LLMContext([m])) for m in unseen))))
         else:
             await self.push_frame(frame, direction)
 
@@ -232,6 +248,8 @@ class PydanticAgentProcessor(FrameProcessor):
         knows -- Pipecat's own turn context, and when the first word reached
         the wire.
         """
+        previous_messages = tuple(self._call.messages)
+        previous_parts = frozenset(id(p) for m in previous_messages for p in m.parts)
         if self._carried:
             # A previous turn heard this and was cancelled before any model
             # saw it. Joined rather than replaced: two stretches of speech
@@ -263,7 +281,11 @@ class PydanticAgentProcessor(FrameProcessor):
                     match event:
                         case core.RunStarted():
                             open_response = True
-                            await self.push_frame(LLMFullResponseStartFrame())
+                            run = (self._call.turn, self._call._attempt)
+                            self._active_playback = self._playback_runs[run] = []
+                            frame = LLMFullResponseStartFrame()
+                            frame.metadata['voice_run'] = run
+                            await self.push_frame(frame)
                         case core.TextDelta(text=text):
                             if not spoke:
                                 spoke = True
@@ -276,8 +298,18 @@ class PydanticAgentProcessor(FrameProcessor):
                                 span.set_attribute(
                                     'turn_first_word', round(time.perf_counter() - turn_started, 3)
                                 )
-                            await self.push_frame(LLMTextFrame(text))
+                            frame = LLMTextFrame(text)
+                            if self._call.spoken:
+                                segment = self._call.spoken[-1]
+                                frame.metadata['speech'] = {'segment': segment.id, 'turn': segment.turn}
+                                if (
+                                    self._active_playback is not None
+                                    and segment.id not in self._active_playback
+                                ):
+                                    self._active_playback.append(segment.id)
+                            await self.push_frame(frame)
                         case core.RunEnded():
+                            self._active_playback = None
                             open_response = False
                             await self.push_frame(LLMFullResponseEndFrame())
                         case core.FixedSpeech(text=text, reason=reason):
@@ -376,7 +408,11 @@ class PydanticAgentProcessor(FrameProcessor):
                 # the agency hung up on a caller mid-question.
                 if self._call.ended:
                     span.set_attribute('ended', self._call.ended)
-                if prompt and not self._call.delivered(prompt):
+                if (
+                    prompt
+                    and self._call.turn not in self._call._retained_turns
+                    and not self._call.delivered(prompt, excluding=previous_parts)
+                ):
                     # Nothing ever read it. Whatever happened to this turn,
                     # the caller still said it, so it goes to the front of
                     # the next one rather than out of the conversation.
@@ -386,6 +422,7 @@ class PydanticAgentProcessor(FrameProcessor):
                     # cut-off turns said four things. Bound it if a real call
                     # ever carries more than a sentence or two.
                     self._carried = prompt
+                self._active_playback = None
                 if open_response:
                     # The core left a run open on its way out. Close it, so
                     # every start has an end whatever happened in between.
@@ -394,14 +431,28 @@ class PydanticAgentProcessor(FrameProcessor):
                 # turn reports its own first word as seconds late. Idempotent:
                 # a turn that did speak stopped it already.
 
-    def note_spoken(self, content: str, interrupted: bool) -> None:
-        """Tell the core what the caller actually heard.
+    def playback_started(self, timestamp: str, *, run: tuple[int, int] | None = None) -> None:
+        """Bind before speech starts, using the identity carried by the runtime frame."""
+        if run is not None:
+            self._playback_turns[timestamp] = self._playback_runs.get(run)
+        else:
+            # ponytail: unframed TTS has no segment identity; accept only one pending
+            # segment. A runtime with playout IDs can pass segment_ids directly.
+            pending = [s.id for s in self._call.all_spoken if s.delivery == 'submitted']
+            self._playback_turns[timestamp] = pending if len(pending) == 1 else None
 
-        Barge-in stops TTS mid-sentence, but the run recorded every token the
-        model produced. The assistant aggregator has already worked out the
-        spoken prefix, so read it from there rather than counting TTS frames
-        -- and hand it across, because the core cannot know it.
-
-        Wire it to the aggregator's ``on_assistant_turn_stopped`` event.
-        """
-        core.note_spoken(self._call, content, interrupted)
+    def note_spoken(
+        self,
+        content: str,
+        interrupted: bool,
+        *,
+        timestamp: str | None = None,
+        segment_ids: tuple[str, ...] = (),
+    ) -> None:
+        """Apply an identified callback; Pipecat aggregate text remains a runtime estimate."""
+        if timestamp is not None:
+            identified = self._playback_turns.pop(timestamp, None)
+            if not identified:
+                return
+            segment_ids = tuple(identified)
+        core.note_spoken(self._call, content, interrupted, segment_ids=segment_ids)

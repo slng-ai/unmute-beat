@@ -1,0 +1,69 @@
+{
+  "arm": "poc",
+  "scenario": "booking",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "I would like a haircut this Friday afternoon.",
+      "seconds": 1.3265625420026481,
+      "requests": 2,
+      "ttft": [
+        0.573,
+        0.649
+      ],
+      "speech": "Let me confirm who I'm speaking to. Let me read that back to you: +34 600 111 222. Have I got that right?",
+      "status": "answered",
+      "tools": [
+        "verify"
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      }
+    },
+    {
+      "said": "Yes, that is my number.",
+      "seconds": 1.8303611250012182,
+      "requests": 3,
+      "ttft": [
+        0.45,
+        0.651,
+        0.515
+      ],
+      "speech": "Right, let me see what's free. For a haircut this Friday, I have 12:00 PM, 12:30 PM, or 1:00 PM. Do any of those work for you?",
+      "status": "answered",
+      "tools": [
+        "booking"
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      }
+    },
+    {
+      "said": "The three o clock one please.",
+      "seconds": 0.6213095420098398,
+      "requests": 1,
+      "ttft": [
+        0.577
+      ],
+      "speech": "You're all set for Friday at 3:00 PM. Anything else I can help with?",
+      "status": "answered",
+      "tools": [],
+      "business": {
+        "bookings": [
+          {
+            "booking_id": "BK0001",
+            "service": "haircut",
+            "date": "2026-09-25",
+            "time": "15:00",
+            "spoken": "Friday at 3:00 PM"
+          }
+        ],
+        "complaints": []
+      }
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,53 @@
+{
+  "models": {
+    "gemini-3.5-flash-lite": 43
+  },
+  "caller_turns": 13,
+  "model_requests": 43,
+  "resolved_requests": 43,
+  "unresolved_requests": 0,
+  "attempts": 16,
+  "extra_attempts": 3,
+  "attempt_statuses": {
+    "answered": 12,
+    "interrupted": 3,
+    "exhausted": 1
+  },
+  "explicitly_interrupted_attempts": 0,
+  "repair_turns": 4,
+  "caller_to_bot_seconds": {
+    "n": 11,
+    "p50": 1.756929874420166,
+    "p90": 2.636568069458008,
+    "max": 3.2000038623809814
+  },
+  "request_ttft_seconds": {
+    "n": 40,
+    "p50": 0.628,
+    "p90": 0.728,
+    "max": 0.828
+  },
+  "ttft_source": "agents span, stamped per request",
+  "first_output": {
+    "tool": 35,
+    "text": 5
+  },
+  "input_tokens_resolved": 160472,
+  "output_tokens_resolved": 1363,
+  "reported_cached_tokens_resolved": 43834,
+  "requests_with_usage": 40,
+  "requests_with_explicit_cache_field": 11,
+  "tool_events": 36,
+  "tool_output_characters": {
+    "n": 32,
+    "p50": 108,
+    "p90": 1290,
+    "max": 1504
+  },
+  "tool_output_bytes": {
+    "n": 32,
+    "p50": 108,
+    "p90": 1290,
+    "max": 1504
+  }
+}

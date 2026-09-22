@@ -1,0 +1,88 @@
+
+--- tests.test_graph ---
+tests.test_graph FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+--- tests.test_voice ---
+ok
+
+--- tests.test_salon ---
+tests.test_salon FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+--- tests.test_consent ---
+tests.test_consent FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+--- tests.test_traces ---
+ok
+
+--- tests.test_state ---
+tests.test_state FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+--- tests.test_diary ---
+ok
+
+--- tests.test_flow ---
+tests.test_flow FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+--- tests.test_budget ---
+tests.test_budget FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+--- tests.test_bench ---
+ok
+
+--- tests.test_recovery ---
+tests.test_recovery FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+--- tests.test_history ---
+ok
+
+--- tests.test_core ---
+tests.test_core FAILED: TemplateSchemaError: 1 error(s) found:
+  - complaint_approved: Field 'complaint_approved' not found in schema
+
+8 of 13 modules failed:
+  tests.test_graph
+  tests.test_salon
+  tests.test_consent
+  tests.test_state
+  tests.test_flow
+  tests.test_budget
+  tests.test_recovery
+  tests.test_core
+2026-09-21 20:17:49.142 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 20:17:49.247 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 20:17:49.256 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 20:17:49.266 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 20:17:49.270 | INFO     | voice.core:_hops:376 - handoff intake -> concierge (test)
+2026-09-21 20:17:49.275 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 20:17:49.275 | WARNING  | voice.core:run_turn:233 - turn exhausted: the 3-run hop budget
+2026-09-21 20:17:50.098 | INFO     | voice.core:_hops:376 - handoff concierge -> intake (test)
+2026-09-21 20:17:50.575 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 20:17:50.579 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 20:17:50.597 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 20:17:50.603 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 20:17:50.608 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 20:17:50.612 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 20:17:50.616 | INFO     | voice.core:_hops:376 - handoff owner -> child (-)
+2026-09-21 20:17:50.620 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 20:17:50.625 | INFO     | voice.core:_hops:376 - handoff child -> owner (-)
+2026-09-21 20:17:50.628 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 20:17:50.632 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 20:17:50.637 | INFO     | voice.core:_hops:376 - handoff owner -> child (-)
+2026-09-21 20:17:50.641 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 20:17:50.645 | INFO     | voice.core:_hops:376 - handoff child -> owner (-)
+2026-09-21 20:17:50.648 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.01s
+2026-09-21 20:17:50.652 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 20:17:50.660 | DEBUG    | voice.core:take_turn:689 - turn answered in 0.00s
+2026-09-21 20:17:50.694 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 20:17:50.696 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 20:17:50.703 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 20:17:50.709 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 20:17:50.712 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s
+2026-09-21 20:17:50.718 | DEBUG    | voice.core:take_turn:689 - turn interrupted in 0.00s

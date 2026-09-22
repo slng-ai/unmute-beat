@@ -1,9 +1,48 @@
 # Evidence ledger: what closed, what did not, and what nobody has run
 
+**Current assessment:** [POC report](../../poc-assessment-20260921.md). The table
+below supersedes earlier status statements; the rest of this ledger preserves
+historical evidence and intermediate failures.
+
+| Gate | Current status | Retained evidence |
+|---|---|---|
+| Phase 01 §§1–8 local core contracts | `passed` offline | All 13 modules after the approval-phrase repair; [output](../../approval-evidence/offline.txt). Full requirement mapping in the current report. |
+| Ruff / formatting / ty | `passed` | [Latest outputs](../../approval-evidence/README.md). |
+| Verification and complaint typed speech | `passed` offline and focused live samples | Provider text suppressed; tracked phone question, KB guidance, caller-excerpt complaint and deterministic receipt. Negative controls in `native-evidence/` and `typed-complaint-evidence/`. |
+| Real Gemini recovery / continuation | `passed` on measured build | 24/24 + 24/24 after typed verification, before the final phrase-only change; [evidence](../../native-evidence/README.md). |
+| Native Pipecat comparison | implementation comparison complete; exact schema parity `not claimed` | Latest scope preserves both implementations. Frozen 200-call comparison: POC 100/100, native 82/100, using the documented native overlay. Tool contracts differ; [audit](../../native-evidence/TOOL_CONTRACT_AUDIT.md). [Adoption assessment](../../native-evidence/ADOPTION.md) separates gains from existing native capabilities. The later shared-tool experiment is excluded. |
+| No-regression transcript latency | `failed` declared gate | Mixed intervals; booking slower on p50 and p90. No general speed/parity claim. |
+| Completion-plan §7.3 separate model comparison | current matched comparison `not-run` | Historical same-source recovery: 3.1 23/24, 3.5 24/24, with differing declared service-tier settings and earlier prompts/source. These do not establish current 3.1 acceptance or isolate the model effect; [details](../../poc-assessment-20260921.md#historical-voice-latency-and-payloads). |
+| Fresh voice complaint / booking | `partially passed` | Complaint recorded once; booking/move completed but “Go for it” was rejected twice. [Trace reconciliation](../../approval-evidence/README.md). |
+| “Go for it” approval | `passed` offline + hybrid replay; audio retest `not-run` | Shared matcher fixed; direct authorization negative control and 3/3 Gemini completions, one request each. |
+| C3 history and delivered projection | `passed` offline + hybrid replay | `test_history`, `test_core`, actual Pipecat queue cases, public SDK history boundaries; no client-playout claim. |
+| Completion-plan §6 separate trace reader | numeric repair `passed`; historical LiveKit export still missing | Actual external reader patched and tested, with [before/after and 50-request usage reconciliation](../../reader-evidence/README.md). N1–N4 remain 30 turns/53 requests; the distinct native Pipecat fixture is 5/10. No 8/16 LiveKit verification is claimed. |
+| Completion-plan §4 booking speech prevention | `partial` | Complaint/verification speech constrained; booking still has the clause/claim detector, not a universal prevention boundary. |
+| Remaining microphone matrix / matched audio / client playout | `not-run` | Split/corrected/withheld phone and write interruption need current audio evidence; no native matched-audio run or client-playout measurement. |
+
+## Historical ledger
+
+
 One row per requirement in `POC_COMPLETION_PLAN.md`'s completion ledger.
 `passed` means a retained result exists and is named here. `not-run` and
 `blocked` are not failures and are not passes either; a plan that reads them
 as passes is the thing this file exists to prevent.
+
+**Latest assessment, 2026-09-21:** the user's final sequence is general questions
+without identification, then verification before either booking or complaints.
+The graph enforces that prerequisite and resumes the original request. Complaint
+approval is still required before recording, after verification. This supersedes
+the earlier readback-before-verification rule.
+
+The final build passes all **13 offline modules**, Ruff, formatting and ty. Real
+Gemini recovery is **23/24**; continuation is **6/12**. Phone fragments and the
+initial complaint through verification pass 3/3 each. Upcoming-booking complaints
+still miss readbacks and can make unsupported free-service claims. Fresh microphone
+acceptance, client playout and matched native Pipecat comparison remain open.
+See the [current flow evidence](../../verification-first-evidence/README.md),
+[complaint-stall report](../../complaint-stall-20260921.md) and
+[Phase 01 report](../../poc-status-20260921.md). Earlier results below are historical,
+not the final build's acceptance result.
 
 **Started from:** `e78ac56`, digests in `snapshot-e78ac56.json`, checks in
 `checks-e78ac56.txt`. **Ends at** the commit that carries this file, on
@@ -33,13 +72,14 @@ imported, so a module that forgot an override raises rather than billing.
 | §2 / S21 forged verification | `passed` | `tests.test_salon::a_lookup_about_somebody_else_verifies_nobody`, `an_empty_number_identifies_nobody`, and the state invariant that clears verification when the number changes |
 | §3 trustworthy diary oracle | `passed` | `tests.test_diary` — eligibility, overlap, opacity, idempotency, offer ownership, the frozen clock, and `two_calls_from_one_phone_are_two_conversations` |
 | §3 preference before the cap | `passed` | `tests.test_diary::a_preference_is_answered_before_the_list_is_cut_down` reproduces the defect on the same fixture and then fixes it |
-| §4 / V6 phone capture | `passed` offline | `tests.test_state` (the Spain-only policy, short numbers, absence), `tests.test_consent::n4_*`. Audio fragmentation is `not-run`: it needs a real call |
+| §4 / V6 phone capture | `passed` offline + hybrid replay; fresh audio `not-run` | Structural/consent tests plus two/three fragments, history merging and native Pipecat queue cancellation in `test_history` / `test_recovery`; real Gemini readback/verification 3/3. Supplied voice trace 055ff5… exposed prefix loss; no post-repair microphone call yet |
 | §5 / V4 / V8 legal flow | `passed` | `tests.test_flow` — per-request schemas, stale destinations refused at execution, conflicts, partial JSON, abandonment |
 | §6 / V12 bounded turns | `passed` | `tests.test_budget` — exhaustion across runs, one allowance per turn, uncertain writes reconciled, superseded turns fenced |
 | §6 disconnect and cancellation | `passed` | `tests.test_core::a_turn_that_never_finished_says_so`, `a_late_commit_cannot_move_a_caller_who_moved_on`, and the four barge-in cases |
 | §7 trustworthy measurement | `passed` | `tests.test_bench` — the synthetic `trace_s15` fixture (now with a superseded attempt), the four live calls at 30 turns / 53 requests, and the usage aliases |
 | §8 / C0 / V13 core and adapter | `passed` | `tests.test_core::the_same_scenarios_both_ways` and the two source-level guards that keep the core runtime-neutral |
-| §8 / C3 history | `partial` | `a_reset_step_is_sent_none_of_the_conversation`, `the_transcript_is_the_call_and_not_the_protocol`, `a_handed_over_agent_reads_the_question_without_it_being_asked_twice`. The named-state projection is `{{heard}}` and the delivered-history reconciliation is `note_heard`; a general projection language is **not** implemented and is not claimed |
+| §8 / C3 history | `passed` offline + hybrid replay | Per-request snapshots, resets, owner completed/unserved returns, speech IDs, late playback, completed tool receipts and exact-once caller input. New repair uses SDK `new_messages()` after teardown instead of positional slicing. All 13 modules pass and split-phone replay is 3/3. [Current evidence](../../poc-status-20260921.md); [historical C3 evidence](../../c3-20260921.md). Client playout remains unmeasured |
+| Verification before booking or complaints; approval before complaint recording | `passed` offline; broader complaint acceptance `failed` | User-directed replacement of the old sequence. Native graph prerequisite, retained destination, already-verified fast path and abandonment tests; negative control removes the prerequisite and fails. Caller-approved wording and single receipts remain enforced. New complaint-through-verification replay 3/3; full recovery 23/24, continuation 6/12. [Current evidence](../../verification-first-evidence/README.md). |
 
 ## The supplied trace findings
 
@@ -58,22 +98,22 @@ imported, so a module that forgot an override raises rather than billing.
 | F7 TTS timing attribution | `passed` offline | `tests.test_core::the_processor_reports_no_metrics_of_its_own`. The live half -- that the eight impossible TTFB values are gone from a new call's spans -- is `not-run` |
 | F8 usage, session and transcript | `passed` offline | `the_aliases_in_a_usage_record_are_not_added_up`; the call record carries the transcript and three distinct times |
 | Speech causality | `passed` offline | `every_segment_says_where_it_came_from`: origin, attempt, id, the covering tool call, and the same id on the frame |
-| F9 responsiveness | `not-run` | see below |
+| F9 responsiveness | `inconclusive` | Deduplicated current/earlier Gemini 3.5 voice samples: p50 1.149s / 1.154s, p90 2.394s / 1.922s. These pre-repair calls are not matched or client-playout measurements; see the full report |
 
 ## Not run, and what each one needs
 
 | Gate | Status | Why |
 |---|---|---|
-| Focused live acceptance scenarios | `not-run` | Eight of them are written and scored (`n1_move_same_time` through `goodbye_with_a_request` in `bench/scenarios.py`). They need a provider key and the command below. Nothing in this ledger claims a real model obeys these guards; it claims the guards refuse it when it does not |
+| Focused live acceptance scenarios | `failed` on final sample | Updated verification-first recovery 23/24; continuation 6/12. One recovery complaint did not complete; six upcoming-booking complaints missed the readback, with unsupported free-service wording in some replies. Earlier same-time move variability is not proven resolved. [Current results](../../verification-first-evidence/README.md). Fresh audio acceptance remains open. |
 | Native Pipecat comparison | `blocked` | The native arm's build is not identified by its trace and no native source is in this repository. `tests/fixtures/trace_native.json` is one captured call of an unidentified build |
 | Matched latency decision | `not-run` | Depends on the row above. The 1.154s median in the follow-up is context and not an acceptance target, and the model changed underneath it |
-| Audio, playout and endpointing | `not-run` | Every timing in this repository is text handed to TTS. Client playout is a boundary this process cannot see, and it is named that way wherever it is reported |
+| Fresh audio acceptance and client playout | `not-run` after this repair | The supplied voice calls provide Pipecat server speech-marker timing and expose the defects. They predate the repair. Text replay measures neither microphone endpointing nor client audibility; client playout is still unobserved |
 | V10 carrier routes, V1 portability, generated providers | `blocked` | Later phases. No adapter but Pipecat exists here |
 
 The live command, from this worktree:
 
 ```bash
-SALON_FIXTURE=fresh SALON_CLOCK=2026-09-21T10:00 uv run --env-file /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.env python -m bench.scenarios 3 focused
+SALON_FIXTURE=fresh SALON_CLOCK=2026-09-21T10:00 uv run --env-file /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.env python -m bench.recovery --repeats 3 --label focused
 ```
 
 Three repetitions per scenario, rows flushed per turn to
@@ -108,12 +148,48 @@ one.
 
 ## What this adds up to
 
-**Phase 01 correctness complete offline; live focused checks not run;
-responsiveness parity unproven.**
+**Phase 01 boundaries checked offline, with verification now first for booking and
+complaints. Complaint conversation quality, fresh audio acceptance and native
+comparison remain open; responsiveness parity is unproven.**
 
-Every supplied correctness failure has a passing regression that asserts the
-emitted speech or the business operation, and the measurement reconciles the
-four live calls exactly. One call has since been placed against a real
-provider and a real voice; it found three more defects, which are fixed and
-held above, and it measured nothing. No row here should be read as though a
-provider, a voice or a second runtime had been measured.
+The historical hand-run voice call above was unscored. The subsequent recovery
+work has now run a matched text suite against the baseline and implementation
+revisions and the repaired default model. See [the recovery report](../../recovery-20260921.md)
+for retained results and limitations. Audio, native-runtime comparison and
+Gemini 3.1 acceptance remain open; this ledger does not close the POC. The final
+default-model results and current closure conditions are in the
+[2026-09-21 status report](../../poc-status-20260921.md).
+
+
+## 22 September: code-only optimization
+
+| Boundary | Status | Evidence |
+|---|---|---|
+| Shared client/lifecycle | implemented, offline passed | One model/client for four salon agents; bot/talk own lifecycle; deduplication/cleanup test. |
+| Known readback/approval advancement | implemented, offline passed | Same guarded executors; zero provider requests for clear approved writes; ambiguous input falls back. |
+| Retention/budget/interruption | passed offline | Input retained once; application receipts before awaited speech; cancellation and stale-generation/barge fences. |
+| Booking speech prevention | implemented, passed offline | Typed diary availability/clarification; receipt-only completion; false complimentary-appointment negative control fails. |
+| Existing prompt/KB/tool prose | unchanged | before.json hashes and AST docstrings match. |
+| Full offline/static checks | passed | 14 modules, Ruff and ty; optimization-evidence retained outputs. |
+| Gemini recovery/continuations | 24/24 + 24/24 | Three repetitions each; final additional identity guard covered offline and in qualification. |
+| Matched native latency acceptance | partially demonstrated | Frozen cohort: POC 100/100, native 80/100; 240 vs 519 requests. Booking/move/complaint-through-verification pass both latency bounds; public hours and verified-complaint p90 remain unproven. |
+| Fresh microphone / useful audio / playout | open | No post-optimization microphone or matched audio evidence yet. |
+
+[Current optimization report](../../optimization-evidence/README.md) supersedes
+older implementation-status statements in this ledger. Historical evidence stays
+historical; passing text tests does not close the POC.
+
+## 22 September: fresh microphone evidence
+
+The four calls at 07:20–07:27 UTC now verify the optimized runtime on microphone
+input: 4/4 intended call outcomes, 29 answered caller turns, six reconciled
+writes (two bookings, one move, three complaints), and no unresolved operations.
+Three interrupted continuations recover; four approved writes use no model.
+Two booking consent refusals recover through readback and approval.
+
+Caller→bot p50 is 1.152s, p90 2.575s; request TTFT p50/p90 is 0.615/0.782s.
+These establish fresh audio evidence for the exercised paths, while matched
+native useful-audio/client-playout parity and the remaining microphone scenarios
+stay open. The earlier “no post-optimization microphone” row is superseded by
+this sample, not by a claim of full acceptance. See the
+[review and retained metrics](../../microphone-evidence-20260922/README.md).

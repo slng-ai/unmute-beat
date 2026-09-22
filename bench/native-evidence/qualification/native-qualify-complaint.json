@@ -1,0 +1,178 @@
+{
+  "arm": "native",
+  "scenario": "complaint",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "My haircut was uneven yesterday. I want a full refund.",
+      "seconds": 1.309987792003085,
+      "requests": 2,
+      "ttft": [
+        0.5758180420089047,
+        0.4122503339895047
+      ],
+      "speech": "I'm sorry it came out uneven. I can record that request for a full refund for the salon to review. \n\nJust to make sure I have it right: you're saying your haircut yesterday was uneven, and you're requesting a full refund. Should I record that?",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "to_complaints",
+          "args": {}
+        }
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.5758180420089047,
+          "tools": [
+            {
+              "name": "to_complaints",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}]",
+          "started": 110911.966520333,
+          "usage": {
+            "candidates_token_count": 11,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 11
+              }
+            ],
+            "prompt_token_count": 1132,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1132
+              }
+            ],
+            "total_token_count": 1143,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.4122503339895047,
+          "tools": [],
+          "text": "I'm sorry it came out uneven. I can record that request for a full refund for the salon to review. \n\nJust to make sure I have it right: you're saying your haircut yesterday was uneven, and you're requesting a full refund. Should I record that?",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_6096969', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_6096969'}]",
+          "started": 110912.569922291,
+          "usage": {
+            "candidates_token_count": 59,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 59
+              }
+            ],
+            "prompt_token_count": 1056,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1056
+              }
+            ],
+            "total_token_count": 1115,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    },
+    {
+      "said": "Yes, that is right.",
+      "seconds": 1.1692813749978086,
+      "requests": 2,
+      "ttft": [
+        0.5600998339941725,
+        0.3972434159950353
+      ],
+      "speech": "I'll record that complaint.I've recorded that under reference CX0001. Requests for a full refund go to the manager for a callback, and the salon replies to recorded complaints within two working days. The resolution remains pending approval.",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "record_complaint",
+          "args": {
+            "summary": "Haircut yesterday was uneven",
+            "requested_resolution": "full refund"
+          }
+        }
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": [
+          {
+            "reference": "CX0001",
+            "phone": "+34600111222",
+            "summary": "Haircut yesterday was uneven",
+            "requested_resolution": "full refund"
+          }
+        ]
+      },
+      "protocol": [
+        {
+          "ttft": 0.5600998339941725,
+          "tools": [
+            {
+              "name": "record_complaint",
+              "args": {
+                "summary": "Haircut yesterday was uneven",
+                "requested_resolution": "full refund"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_6096969', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_6096969'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_C\\x94L\\xf4\\x0b\\x13~Yy\\x00\\x89\\x87S\\x8ag\\x92W\\xe9@/\\x8e\\xe2}\\xe5\\x1d\\xc7 F\\xaf\\x18%L\\xcd\\x1c\\x1b\\xb9\\x98Z\\xe9\\\\\\x94\\xe4e:\\xd7\"\\xed`\\x1f\\xe5\\xe54\\x1a\\x9c\\\\}\\x9a\\xf0\\xa3\\xa6\\xec\\xf0$\\xb1\\xf3\\xb7H:\\xa5\\n\\xbcUa\\x81\\xf2F\\x03\\x0c', 'bookmark': {'text': \"I'm sorry it came out uneven. I can record that request for a full refund for the salon to review. \\n\\nJust to make sure I have it right: you're saying your haircut yesterday was uneven, and you're requesting a full refund. Should I record that?\"}}), {'role': 'assistant', 'content': \"I'm sorry it came out uneven. I can record that request for a full refund for the salon to review. \\n\\nJust to make sure I have it right: you're saying your haircut yesterday was uneven, and you're requesting a full refund. Should I record that?\"}, {'role': 'user', 'content': 'Yes, that is right.'}]",
+          "started": 110913.277798541,
+          "usage": {
+            "candidates_token_count": 30,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 30
+              }
+            ],
+            "prompt_token_count": 1121,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1121
+              }
+            ],
+            "total_token_count": 1151,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.3972434159950353,
+          "tools": [],
+          "text": "I've recorded that under reference CX0001. Requests for a full refund go to the manager for a callback, and the salon replies to recorded complaints within two working days. The resolution remains pending approval.",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_6096969', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_6096969'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_C\\x94L\\xf4\\x0b\\x13~Yy\\x00\\x89\\x87S\\x8ag\\x92W\\xe9@/\\x8e\\xe2}\\xe5\\x1d\\xc7 F\\xaf\\x18%L\\xcd\\x1c\\x1b\\xb9\\x98Z\\xe9\\\\\\x94\\xe4e:\\xd7\"\\xed`\\x1f\\xe5\\xe54\\x1a\\x9c\\\\}\\x9a\\xf0\\xa3\\xa6\\xec\\xf0$\\xb1\\xf3\\xb7H:\\xa5\\n\\xbcUa\\x81\\xf2F\\x03\\x0c', 'bookmark': {'text': \"I'm sorry it came out uneven. I can record that request for a full refund for the salon to review. \\n\\nJust to make sure I have it right: you're saying your haircut yesterday was uneven, and you're requesting a full refund. Should I record that?\"}}), {'role': 'assistant', 'content': \"I'm sorry it came out uneven. I can record that request for a full refund for the salon to review. \\n\\nJust to make sure I have it right: you're saying your haircut yesterday was uneven, and you're requesting a full refund. Should I record that?\"}, {'role': 'user', 'content': 'Yes, that is right.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_Y\\xfd,PZ\\xd2&[\\xcd\\xfeb\\x13_\\xe3\\x0e\\xcf\\xeeN\\x10c\\xa4\\xa9\\x10\\xd9\\xb1\\x87\\xe1\\xa2/?/\\xfd-\\x11O\\x9e\\\\\\xd9\\xac.\\x95\\xf4\\xfc}H\\xc1 \\x1dv\\xbe\\x11\\xf6i\\xb6\\x0c\\x80\\xe3q\\xea\\xfcO\\'\\xaeKl\\xd0\\xe2\\xe0\\xfe-L\\r\\x11v\\xd9\"7<', 'bookmark': {'function_call': 'call_2797875'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_2797875', 'function': {'name': 'record_complaint', 'arguments': '{\"summary\": \"Haircut yesterday was uneven\", \"requested_resolution\": \"full refund\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"complaint_id\": \"CX0001\", \"status\": \"recorded\", \"complaint\": {\"complaint_id\": \"CX0001\", \"summary\": \"Haircut yesterday was uneven\", \"requested_resolution\": \"full refund\"}}', 'tool_call_id': 'call_2797875'}]",
+          "started": 110913.925726375,
+          "usage": {
+            "candidates_token_count": 44,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 44
+              }
+            ],
+            "prompt_token_count": 1181,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1181
+              }
+            ],
+            "total_token_count": 1225,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

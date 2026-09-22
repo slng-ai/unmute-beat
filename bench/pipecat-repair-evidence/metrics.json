@@ -1,0 +1,964 @@
+{
+  "quantiles": "nearest rank ceil(p*n)-1; absent measurements stay absent",
+  "per_trace": {
+    "055ff5320eee2ce481654acbc7051225": {
+      "models": {
+        "gemini-3.5-flash-lite": 22
+      },
+      "caller_turns": 12,
+      "model_requests": 22,
+      "resolved_requests": 22,
+      "unresolved_requests": 0,
+      "attempts": 17,
+      "extra_attempts": 5,
+      "attempt_statuses": {
+        "answered": 12,
+        "interrupted": 5
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 1,
+      "caller_to_bot_seconds": {
+        "n": 9,
+        "p50": 1.196031093597412,
+        "p90": 2.8062071800231934,
+        "max": 2.8062071800231934
+      },
+      "request_ttft_seconds": {
+        "n": 16,
+        "p50": 0.529,
+        "p90": 0.74,
+        "max": 0.819
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 8,
+        "text": 8
+      },
+      "input_tokens_resolved": 47669,
+      "output_tokens_resolved": 385,
+      "reported_cached_tokens_resolved": 0,
+      "requests_with_usage": 17,
+      "requests_with_explicit_cache_field": 0,
+      "tool_events": 8,
+      "tool_output_characters": {
+        "n": 7,
+        "p50": 105,
+        "p90": 341,
+        "max": 341
+      },
+      "tool_output_bytes": {
+        "n": 7,
+        "p50": 105,
+        "p90": 341,
+        "max": 341
+      }
+    },
+    "14036c1370b57cd94c313b5942b79815": {
+      "models": {
+        "gemini-3.5-flash-lite": 8
+      },
+      "caller_turns": 5,
+      "model_requests": 8,
+      "resolved_requests": 8,
+      "unresolved_requests": 0,
+      "attempts": 5,
+      "extra_attempts": 0,
+      "attempt_statuses": {
+        "answered": 5
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 0,
+      "caller_to_bot_seconds": {
+        "n": 5,
+        "p50": 1.0949592590332031,
+        "p90": 1.242368221282959,
+        "max": 1.242368221282959
+      },
+      "request_ttft_seconds": {
+        "n": 8,
+        "p50": 0.607,
+        "p90": 0.833,
+        "max": 0.833
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "text": 3,
+        "tool": 5
+      },
+      "input_tokens_resolved": 20578,
+      "output_tokens_resolved": 217,
+      "reported_cached_tokens_resolved": 0,
+      "requests_with_usage": 8,
+      "requests_with_explicit_cache_field": 0,
+      "tool_events": 5,
+      "tool_output_characters": {
+        "n": 5,
+        "p50": 88,
+        "p90": 854,
+        "max": 854
+      },
+      "tool_output_bytes": {
+        "n": 5,
+        "p50": 88,
+        "p90": 854,
+        "max": 854
+      }
+    },
+    "3e1a3d340c99f52ce879923d38bb0612": {
+      "models": {
+        "gemini-3.5-flash-lite": 9
+      },
+      "caller_turns": 5,
+      "model_requests": 9,
+      "resolved_requests": 9,
+      "unresolved_requests": 0,
+      "attempts": 6,
+      "extra_attempts": 1,
+      "attempt_statuses": {
+        "answered": 5,
+        "interrupted": 1
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 0,
+      "caller_to_bot_seconds": {
+        "n": 4,
+        "p50": 1.0826480388641357,
+        "p90": 3.363193988800049,
+        "max": 3.363193988800049
+      },
+      "request_ttft_seconds": {
+        "n": 8,
+        "p50": 0.579,
+        "p90": 0.765,
+        "max": 0.765
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "text": 4,
+        "tool": 4
+      },
+      "input_tokens_resolved": 20097,
+      "output_tokens_resolved": 211,
+      "reported_cached_tokens_resolved": 0,
+      "requests_with_usage": 8,
+      "requests_with_explicit_cache_field": 0,
+      "tool_events": 4,
+      "tool_output_characters": {
+        "n": 4,
+        "p50": 107,
+        "p90": 224,
+        "max": 224
+      },
+      "tool_output_bytes": {
+        "n": 4,
+        "p50": 107,
+        "p90": 224,
+        "max": 224
+      }
+    },
+    "421a85c24cd39615f2b9eed5ef768d1b": {
+      "models": {
+        "gemini-3.1-flash-lite": 24
+      },
+      "caller_turns": 13,
+      "model_requests": 24,
+      "resolved_requests": 24,
+      "unresolved_requests": 0,
+      "attempts": 17,
+      "extra_attempts": 4,
+      "attempt_statuses": {
+        "answered": 13,
+        "None": 4
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 1,
+      "caller_to_bot_seconds": {
+        "n": 11,
+        "p50": 1.6771819591522217,
+        "p90": 2.1357688903808594,
+        "max": 3.979314088821411
+      },
+      "request_ttft_seconds": {
+        "n": 20,
+        "p50": 0.814,
+        "p90": 1.101,
+        "max": 1.149
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 10,
+        "text": 10
+      },
+      "input_tokens_resolved": 70035,
+      "output_tokens_resolved": 733,
+      "reported_cached_tokens_resolved": 23792,
+      "requests_with_usage": 20,
+      "requests_with_explicit_cache_field": 7,
+      "tool_events": 10,
+      "tool_output_characters": {
+        "n": 9,
+        "p50": 53,
+        "p90": 1529,
+        "max": 1529
+      },
+      "tool_output_bytes": {
+        "n": 9,
+        "p50": 53,
+        "p90": 1529,
+        "max": 1529
+      }
+    },
+    "532451c178735dfa1379c5fcb764067e": {
+      "models": {
+        "gemini-3.5-flash-lite": 17
+      },
+      "caller_turns": 8,
+      "model_requests": 17,
+      "resolved_requests": 17,
+      "unresolved_requests": 0,
+      "attempts": 10,
+      "extra_attempts": 2,
+      "attempt_statuses": {
+        "answered": 8,
+        "interrupted": 2
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 0,
+      "caller_to_bot_seconds": {
+        "n": 8,
+        "p50": 1.1489770412445068,
+        "p90": 1.9137330055236816,
+        "max": 1.9137330055236816
+      },
+      "request_ttft_seconds": {
+        "n": 15,
+        "p50": 0.64,
+        "p90": 0.729,
+        "max": 0.815
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 12,
+        "text": 3
+      },
+      "input_tokens_resolved": 50190,
+      "output_tokens_resolved": 428,
+      "reported_cached_tokens_resolved": 3399,
+      "requests_with_usage": 15,
+      "requests_with_explicit_cache_field": 1,
+      "tool_events": 12,
+      "tool_output_characters": {
+        "n": 12,
+        "p50": 95,
+        "p90": 1367,
+        "max": 1504
+      },
+      "tool_output_bytes": {
+        "n": 12,
+        "p50": 95,
+        "p90": 1367,
+        "max": 1504
+      }
+    },
+    "710977c673077c2b6068d9bc985fea29": {
+      "models": {
+        "gemini-3.5-flash-lite": 17
+      },
+      "caller_turns": 9,
+      "model_requests": 17,
+      "resolved_requests": 17,
+      "unresolved_requests": 0,
+      "attempts": 11,
+      "extra_attempts": 2,
+      "attempt_statuses": {
+        "answered": 9,
+        "None": 2
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 1,
+      "caller_to_bot_seconds": {
+        "n": 9,
+        "p50": 1.1399507522583008,
+        "p90": 2.051668405532837,
+        "max": 2.051668405532837
+      },
+      "request_ttft_seconds": {
+        "n": 15,
+        "p50": 0.605,
+        "p90": 0.784,
+        "max": 0.938
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 7,
+        "text": 8
+      },
+      "input_tokens_resolved": 42139,
+      "output_tokens_resolved": 441,
+      "reported_cached_tokens_resolved": 10468,
+      "requests_with_usage": 15,
+      "requests_with_explicit_cache_field": 3,
+      "tool_events": 7,
+      "tool_output_characters": {
+        "n": 6,
+        "p50": 53,
+        "p90": 1572,
+        "max": 1572
+      },
+      "tool_output_bytes": {
+        "n": 6,
+        "p50": 53,
+        "p90": 1572,
+        "max": 1572
+      }
+    },
+    "8953247f2ec9501797574acfea819478": {
+      "models": {
+        "gemini-3.5-flash-lite": 17
+      },
+      "caller_turns": 8,
+      "model_requests": 17,
+      "resolved_requests": 17,
+      "unresolved_requests": 0,
+      "attempts": 9,
+      "extra_attempts": 1,
+      "attempt_statuses": {
+        "answered": 8,
+        "interrupted": 1
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 2,
+      "caller_to_bot_seconds": {
+        "n": 5,
+        "p50": 1.1866991519927979,
+        "p90": 3.948935031890869,
+        "max": 3.948935031890869
+      },
+      "request_ttft_seconds": {
+        "n": 15,
+        "p50": 0.632,
+        "p90": 0.71,
+        "max": 0.72
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 11,
+        "text": 4
+      },
+      "input_tokens_resolved": 56131,
+      "output_tokens_resolved": 485,
+      "reported_cached_tokens_resolved": 7079,
+      "requests_with_usage": 16,
+      "requests_with_explicit_cache_field": 2,
+      "tool_events": 11,
+      "tool_output_characters": {
+        "n": 9,
+        "p50": 114,
+        "p90": 1471,
+        "max": 1471
+      },
+      "tool_output_bytes": {
+        "n": 9,
+        "p50": 114,
+        "p90": 1471,
+        "max": 1471
+      }
+    },
+    "9667ac56ac0a6882a84160c3218c984b": {
+      "models": {
+        "gemini-3.5-flash-lite": 17
+      },
+      "caller_turns": 9,
+      "model_requests": 17,
+      "resolved_requests": 17,
+      "unresolved_requests": 0,
+      "attempts": 10,
+      "extra_attempts": 1,
+      "attempt_statuses": {
+        "answered": 9,
+        "interrupted": 1
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 1,
+      "caller_to_bot_seconds": {
+        "n": 7,
+        "p50": 1.1673669815063477,
+        "p90": 3.4700679779052734,
+        "max": 3.4700679779052734
+      },
+      "request_ttft_seconds": {
+        "n": 17,
+        "p50": 0.645,
+        "p90": 0.843,
+        "max": 1.003
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 13,
+        "text": 4
+      },
+      "input_tokens_resolved": 58669,
+      "output_tokens_resolved": 588,
+      "reported_cached_tokens_resolved": 6895,
+      "requests_with_usage": 17,
+      "requests_with_explicit_cache_field": 2,
+      "tool_events": 13,
+      "tool_output_characters": {
+        "n": 12,
+        "p50": 69,
+        "p90": 1153,
+        "max": 1503
+      },
+      "tool_output_bytes": {
+        "n": 12,
+        "p50": 69,
+        "p90": 1153,
+        "max": 1503
+      }
+    },
+    "a3fdf1fc7e681995db94fd76de32aae4": {
+      "models": {
+        "gemini-3.5-flash-lite": 12
+      },
+      "caller_turns": 7,
+      "model_requests": 12,
+      "resolved_requests": 12,
+      "unresolved_requests": 0,
+      "attempts": 8,
+      "extra_attempts": 1,
+      "attempt_statuses": {
+        "answered": 7,
+        "None": 1
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 0,
+      "caller_to_bot_seconds": {
+        "n": 7,
+        "p50": 1.189204216003418,
+        "p90": 1.3220570087432861,
+        "max": 1.3220570087432861
+      },
+      "request_ttft_seconds": {
+        "n": 11,
+        "p50": 0.681,
+        "p90": 0.744,
+        "max": 0.836
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 7,
+        "text": 4
+      },
+      "input_tokens_resolved": 31034,
+      "output_tokens_resolved": 337,
+      "reported_cached_tokens_resolved": 3463,
+      "requests_with_usage": 11,
+      "requests_with_explicit_cache_field": 1,
+      "tool_events": 7,
+      "tool_output_characters": {
+        "n": 7,
+        "p50": 53,
+        "p90": 1470,
+        "max": 1470
+      },
+      "tool_output_bytes": {
+        "n": 7,
+        "p50": 53,
+        "p90": 1470,
+        "max": 1470
+      }
+    },
+    "b1e329439ef96a79a4e69a029146f03d": {
+      "models": {
+        "gemini-3.5-flash-lite": 15
+      },
+      "caller_turns": 9,
+      "model_requests": 15,
+      "resolved_requests": 15,
+      "unresolved_requests": 0,
+      "attempts": 9,
+      "extra_attempts": 0,
+      "attempt_statuses": {
+        "answered": 9
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 1,
+      "caller_to_bot_seconds": {
+        "n": 8,
+        "p50": 1.0960121154785156,
+        "p90": 1.9223361015319824,
+        "max": 1.9223361015319824
+      },
+      "request_ttft_seconds": {
+        "n": 15,
+        "p50": 0.613,
+        "p90": 0.759,
+        "max": 0.786
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 8,
+        "text": 7
+      },
+      "input_tokens_resolved": 44349,
+      "output_tokens_resolved": 439,
+      "reported_cached_tokens_resolved": 17513,
+      "requests_with_usage": 15,
+      "requests_with_explicit_cache_field": 5,
+      "tool_events": 8,
+      "tool_output_characters": {
+        "n": 7,
+        "p50": 48,
+        "p90": 1438,
+        "max": 1438
+      },
+      "tool_output_bytes": {
+        "n": 7,
+        "p50": 48,
+        "p90": 1438,
+        "max": 1438
+      }
+    },
+    "d19f5384acd01c5d600815698f0572fc": {
+      "models": {
+        "gemini-3.5-flash-lite": 9
+      },
+      "caller_turns": 5,
+      "model_requests": 9,
+      "resolved_requests": 9,
+      "unresolved_requests": 0,
+      "attempts": 5,
+      "extra_attempts": 0,
+      "attempt_statuses": {
+        "answered": 5
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 0,
+      "caller_to_bot_seconds": {
+        "n": 5,
+        "p50": 1.1583352088928223,
+        "p90": 1.3251588344573975,
+        "max": 1.3251588344573975
+      },
+      "request_ttft_seconds": {
+        "n": 9,
+        "p50": 0.629,
+        "p90": 0.834,
+        "max": 0.834
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 6,
+        "text": 3
+      },
+      "input_tokens_resolved": 22757,
+      "output_tokens_resolved": 244,
+      "reported_cached_tokens_resolved": 3459,
+      "requests_with_usage": 9,
+      "requests_with_explicit_cache_field": 1,
+      "tool_events": 6,
+      "tool_output_characters": {
+        "n": 6,
+        "p50": 53,
+        "p90": 1464,
+        "max": 1464
+      },
+      "tool_output_bytes": {
+        "n": 6,
+        "p50": 53,
+        "p90": 1464,
+        "max": 1464
+      }
+    },
+    "db4a8f687ac508bf0eb371b294a362f6": {
+      "models": {
+        "gemini-3.5-flash-lite": 25
+      },
+      "caller_turns": 11,
+      "model_requests": 25,
+      "resolved_requests": 21,
+      "unresolved_requests": 4,
+      "attempts": 10,
+      "extra_attempts": 1,
+      "attempt_statuses": {
+        "answered": 11,
+        "failed": 1
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 2,
+      "caller_to_bot_seconds": {
+        "n": 5,
+        "p50": 1.1747138500213623,
+        "p90": 1.306049108505249,
+        "max": 1.306049108505249
+      },
+      "request_ttft_seconds": {
+        "n": 22,
+        "p50": 0.682,
+        "p90": 0.807,
+        "max": 0.859
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 17,
+        "text": 5
+      },
+      "input_tokens_resolved": 77929,
+      "output_tokens_resolved": 568,
+      "reported_cached_tokens_resolved": 15130,
+      "requests_with_usage": 24,
+      "requests_with_explicit_cache_field": 5,
+      "tool_events": 17,
+      "tool_output_characters": {
+        "n": 14,
+        "p50": 53,
+        "p90": 1504,
+        "max": 1504
+      },
+      "tool_output_bytes": {
+        "n": 14,
+        "p50": 53,
+        "p90": 1504,
+        "max": 1504
+      }
+    },
+    "de4c934fee4c268a0a696f531f592537": {
+      "models": {
+        "gemini-3.5-flash-lite": 16
+      },
+      "caller_turns": 8,
+      "model_requests": 16,
+      "resolved_requests": 16,
+      "unresolved_requests": 0,
+      "attempts": 9,
+      "extra_attempts": 1,
+      "attempt_statuses": {
+        "answered": 8,
+        "interrupted": 1
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 0,
+      "caller_to_bot_seconds": {
+        "n": 8,
+        "p50": 1.1499829292297363,
+        "p90": 2.27742600440979,
+        "max": 2.27742600440979
+      },
+      "request_ttft_seconds": {
+        "n": 15,
+        "p50": 0.662,
+        "p90": 0.853,
+        "max": 0.919
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 11,
+        "text": 4
+      },
+      "input_tokens_resolved": 52210,
+      "output_tokens_resolved": 469,
+      "reported_cached_tokens_resolved": 3488,
+      "requests_with_usage": 15,
+      "requests_with_explicit_cache_field": 1,
+      "tool_events": 11,
+      "tool_output_characters": {
+        "n": 11,
+        "p50": 78,
+        "p90": 1367,
+        "max": 1504
+      },
+      "tool_output_bytes": {
+        "n": 11,
+        "p50": 78,
+        "p90": 1367,
+        "max": 1504
+      }
+    },
+    "ec513a9973c75e4d7effe461113fdcd4": {
+      "models": {
+        "gemini-3.1-flash-lite": 25
+      },
+      "caller_turns": 16,
+      "model_requests": 25,
+      "resolved_requests": 25,
+      "unresolved_requests": 0,
+      "attempts": 16,
+      "extra_attempts": 0,
+      "attempt_statuses": {
+        "answered": 16
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 0,
+      "caller_to_bot_seconds": {
+        "n": 15,
+        "p50": 1.4555749893188477,
+        "p90": 2.7728960514068604,
+        "max": 3.5488171577453613
+      },
+      "request_ttft_seconds": {
+        "n": 25,
+        "p50": 0.758,
+        "p90": 0.913,
+        "max": 1.153
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 12,
+        "text": 13
+      },
+      "input_tokens_resolved": 97801,
+      "output_tokens_resolved": 756,
+      "reported_cached_tokens_resolved": 47024,
+      "requests_with_usage": 25,
+      "requests_with_explicit_cache_field": 13,
+      "tool_events": 12,
+      "tool_output_characters": {
+        "n": 12,
+        "p50": 78,
+        "p90": 1331,
+        "max": 1464
+      },
+      "tool_output_bytes": {
+        "n": 12,
+        "p50": 78,
+        "p90": 1331,
+        "max": 1464
+      }
+    }
+  },
+  "cohorts": {
+    "earliest_3.1": {
+      "models": {
+        "gemini-3.1-flash-lite": 49
+      },
+      "caller_turns": 29,
+      "model_requests": 49,
+      "resolved_requests": 49,
+      "unresolved_requests": 0,
+      "attempts": 33,
+      "extra_attempts": 4,
+      "attempt_statuses": {
+        "answered": 29,
+        "None": 4
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 1,
+      "caller_to_bot_seconds": {
+        "n": 26,
+        "p50": 1.4555749893188477,
+        "p90": 2.7728960514068604,
+        "max": 3.979314088821411
+      },
+      "request_ttft_seconds": {
+        "n": 45,
+        "p50": 0.781,
+        "p90": 1.097,
+        "max": 1.153
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 22,
+        "text": 23
+      },
+      "input_tokens_resolved": 167836,
+      "output_tokens_resolved": 1489,
+      "reported_cached_tokens_resolved": 70816,
+      "requests_with_usage": 45,
+      "requests_with_explicit_cache_field": 20,
+      "tool_events": 22,
+      "tool_output_characters": {
+        "n": 21,
+        "p50": 78,
+        "p90": 1440,
+        "max": 1529
+      },
+      "tool_output_bytes": {
+        "n": 21,
+        "p50": 78,
+        "p90": 1440,
+        "max": 1529
+      }
+    },
+    "earlier_3.5": {
+      "models": {
+        "gemini-3.5-flash-lite": 53
+      },
+      "caller_turns": 30,
+      "model_requests": 53,
+      "resolved_requests": 53,
+      "unresolved_requests": 0,
+      "attempts": 33,
+      "extra_attempts": 3,
+      "attempt_statuses": {
+        "answered": 30,
+        "None": 3
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 2,
+      "caller_to_bot_seconds": {
+        "n": 29,
+        "p50": 1.1538290977478027,
+        "p90": 1.9223361015319824,
+        "max": 2.051668405532837
+      },
+      "request_ttft_seconds": {
+        "n": 50,
+        "p50": 0.626,
+        "p90": 0.764,
+        "max": 0.938
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 28,
+        "text": 22
+      },
+      "input_tokens_resolved": 140279,
+      "output_tokens_resolved": 1461,
+      "reported_cached_tokens_resolved": 34903,
+      "requests_with_usage": 50,
+      "requests_with_explicit_cache_field": 10,
+      "tool_events": 28,
+      "tool_output_characters": {
+        "n": 26,
+        "p50": 53,
+        "p90": 1464,
+        "max": 1572
+      },
+      "tool_output_bytes": {
+        "n": 26,
+        "p50": 53,
+        "p90": 1464,
+        "max": 1572
+      }
+    },
+    "regressed_3.5": {
+      "models": {
+        "gemini-3.5-flash-lite": 75
+      },
+      "caller_turns": 36,
+      "model_requests": 75,
+      "resolved_requests": 71,
+      "unresolved_requests": 4,
+      "attempts": 38,
+      "extra_attempts": 4,
+      "attempt_statuses": {
+        "answered": 36,
+        "failed": 1,
+        "interrupted": 3
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 5,
+      "caller_to_bot_seconds": {
+        "n": 25,
+        "p50": 1.1613597869873047,
+        "p90": 2.27742600440979,
+        "max": 3.948935031890869
+      },
+      "request_ttft_seconds": {
+        "n": 69,
+        "p50": 0.66,
+        "p90": 0.81,
+        "max": 1.003
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 52,
+        "text": 17
+      },
+      "input_tokens_resolved": 244939,
+      "output_tokens_resolved": 2110,
+      "reported_cached_tokens_resolved": 32592,
+      "requests_with_usage": 72,
+      "requests_with_explicit_cache_field": 10,
+      "tool_events": 52,
+      "tool_output_characters": {
+        "n": 46,
+        "p50": 98,
+        "p90": 1471,
+        "max": 1504
+      },
+      "tool_output_bytes": {
+        "n": 46,
+        "p50": 98,
+        "p90": 1471,
+        "max": 1504
+      }
+    },
+    "current_voice_3.5": {
+      "models": {
+        "gemini-3.5-flash-lite": 56
+      },
+      "caller_turns": 30,
+      "model_requests": 56,
+      "resolved_requests": 56,
+      "unresolved_requests": 0,
+      "attempts": 38,
+      "extra_attempts": 8,
+      "attempt_statuses": {
+        "answered": 30,
+        "interrupted": 8
+      },
+      "explicitly_interrupted_attempts": 0,
+      "repair_turns": 1,
+      "caller_to_bot_seconds": {
+        "n": 26,
+        "p50": 1.1489770412445068,
+        "p90": 2.3943111896514893,
+        "max": 3.363193988800049
+      },
+      "request_ttft_seconds": {
+        "n": 47,
+        "p50": 0.607,
+        "p90": 0.765,
+        "max": 0.833
+      },
+      "ttft_source": "agents span, stamped per request",
+      "first_output": {
+        "tool": 29,
+        "text": 18
+      },
+      "input_tokens_resolved": 138534,
+      "output_tokens_resolved": 1241,
+      "reported_cached_tokens_resolved": 3399,
+      "requests_with_usage": 48,
+      "requests_with_explicit_cache_field": 1,
+      "tool_events": 29,
+      "tool_output_characters": {
+        "n": 28,
+        "p50": 105,
+        "p90": 854,
+        "max": 1504
+      },
+      "tool_output_bytes": {
+        "n": 28,
+        "p50": 105,
+        "p90": 854,
+        "max": 1504
+      }
+    }
+  },
+  "trace_ids": {
+    "earliest_3.1": [
+      "ec513a9973c75e4d7effe461113fdcd4",
+      "421a85c24cd39615f2b9eed5ef768d1b"
+    ],
+    "earlier_3.5": [
+      "d19f5384acd01c5d600815698f0572fc",
+      "a3fdf1fc7e681995db94fd76de32aae4",
+      "b1e329439ef96a79a4e69a029146f03d",
+      "710977c673077c2b6068d9bc985fea29"
+    ],
+    "regressed_3.5": [
+      "db4a8f687ac508bf0eb371b294a362f6",
+      "9667ac56ac0a6882a84160c3218c984b",
+      "de4c934fee4c268a0a696f531f592537",
+      "8953247f2ec9501797574acfea819478"
+    ],
+    "current_voice_3.5": [
+      "532451c178735dfa1379c5fcb764067e",
+      "14036c1370b57cd94c313b5942b79815",
+      "3e1a3d340c99f52ce879923d38bb0612",
+      "055ff5320eee2ce481654acbc7051225"
+    ]
+  }
+}

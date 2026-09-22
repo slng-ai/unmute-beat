@@ -23,6 +23,7 @@ from pydantic import (
     Field,
     PrivateAttr,
     TypeAdapter,
+    computed_field,
     model_validator,
 )
 from pydantic_extra_types.phone_numbers import PhoneNumberValidator
@@ -229,8 +230,9 @@ class Unresolved(BaseModel):
 
 # Anchored at the start. "Yes" has to be the answer, not a word inside one.
 _YES = re.compile(
-    r'^(?:yes|yeah|yep|yup|aye|sure|please|perfect|great|exactly|correct|right|'
-    r'ok|okay|k|go ahead|do it|book it|sounds (?:good|right|fine|great)|'
+    r'^(?:go for it(?=[.!]*$)|'
+    r'yes|yeah|yep|yup|aye|sure|please|perfect|great|exactly|correct|right|'
+    r'absolutely|certainly|that would be (?:great|good|fine|perfect)|ok|okay|k|go ahead|do it|book it|sounds (?:good|right|fine|great)|'
     r"that(?:'s| is|s) (?:right|correct|it|fine|great|perfect)|that works|"
     r"i(?:'m| am) happy (?:with that|enough))\b",
     re.IGNORECASE,
@@ -244,7 +246,7 @@ _NOT_YES = re.compile(
 )
 _BYE = re.compile(
     r"\b(?:bye|goodbye|good ?bye|see you|that(?:'s| is|s) (?:all|everything|it)|"
-    r"nothing else|no more|i(?:'m| am) (?:good|fine|all set|done|done thanks)|"
+    r"no,? thanks|no thank you|nothing else|no more|i(?:'m| am) (?:good|fine|all set|done|done thanks)|"
     r"we(?:'re| are) done|thanks?,? (?:that(?:'s| is) )?all)\b",
     re.IGNORECASE,
 )
@@ -318,6 +320,10 @@ class Asked(BaseModel):
     # The exact thing agreement would be agreement *to*: the number read back,
     # the slot offered, or the complaint summary paraphrased.
     value: str = ''
+    resolution: str = ''
+    summary: str = ''
+    requested_resolution: str = ''
+    owner: str = ''
     action: Literal['book', 'move', 'cancel', ''] = ''
     booking_id: str = ''
     # The caller turn it went out on. Set by `SalonCall.ask`, never by a tool.
@@ -443,6 +449,12 @@ _CLAIMED = re.compile(
     re.IGNORECASE,
 )
 
+_RECORDED = re.compile(
+    r"\b(?:i|we)(?:'ve| have)?\s+(?:just\s+)?(?:recorded|logged|noted|written down)\b"
+    r"|\b(?:that|it|your complaint)(?:'s| is| has been)\s+(?:on record|recorded|logged)\b",
+    re.IGNORECASE,
+)
+
 
 class SalonCall(harness.CallContext):
     """This call's state, history and line. The agents' `deps`."""
@@ -461,12 +473,19 @@ class SalonCall(harness.CallContext):
     # looked up "next Friday", which under that clock is a week later, and
     # booked it. Bounded, because a long call naming a dozen days would
     # otherwise end up permitting all of them.
+    _complaint: Asked | None = PrivateAttr(default=None)
     _day_words: list[str] = PrivateAttr(default_factory=list)
 
     def turn_started(self, heard: str = '') -> None:
         """Also age out a question nobody answered, and mark where the write count stood."""
         super().turn_started(heard)
         self._writes_before = self.state.writes
+        if (question := self.pending('complaint')) and agrees(heard):
+            self._complaint = question.model_copy(update={'owner': self.state.customer_phone})
+        elif self._complaint and (self.state.agent != 'verify' or _NOT_YES.search(heard)):
+            self._complaint = None
+        if self._complaint and self._complaint.owner and self._complaint.owner != self.state.customer_phone:
+            self._complaint = None
         # A question is answerable on the turn after it was asked and no
         # later. Left standing, a "yes" to something else entirely three turns
         # on would still find it.
@@ -482,6 +501,8 @@ class SalonCall(harness.CallContext):
 
     def ask(self, question: Asked) -> None:
         """Record that this question has gone out to the caller, on this turn."""
+        if question.about == 'complaint':
+            self._complaint = None
         self._asked = question.model_copy(update={'turn': self._turn})
 
     def pending(self, about: str, **fields: str) -> Asked | None:
@@ -498,6 +519,13 @@ class SalonCall(harness.CallContext):
     def answered(self) -> None:
         """Consume the pending question. One answer authorises one action."""
         self._asked = None
+
+    @computed_field
+    @property
+    def complaint_approved(self) -> bool:
+        """Whether approved wording still belongs to this caller; never model-authored."""
+        approved = self._complaint
+        return approved is not None and (not approved.owner or approved.owner == self.state.customer_phone)
 
     @property
     def day_words(self) -> tuple[str, ...]:
@@ -521,6 +549,8 @@ class SalonCall(harness.CallContext):
 
     def _invented(self, text: str) -> str:
         """The first-person claim of a change this state does not bear out, or ''."""
+        if hit := _RECORDED.search(text):
+            return hit.group(0)
         if not (hit := _CLAIMED.search(text)):
             return ''
         said = hit.group(0).lower()

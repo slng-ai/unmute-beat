@@ -1,0 +1,8 @@
+
+=== usage ===
+  span       n    input  output    total    mean     max  unit
+  chat gemini-3.5-flash-lite   1      427      19    14812   14812   14812  tokens
+
+=== latency, seconds ===
+  span                     n    mean     p50     max
+  probe                    6   3.500   4.000   6.000

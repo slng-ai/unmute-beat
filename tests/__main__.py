@@ -43,6 +43,9 @@ MODULES = (
     'tests.test_flow',    # guards and conflicts, enforced at execution
     'tests.test_budget',  # one allowance per caller turn
     'tests.test_bench',   # the measurement, measured
+    'tests.test_recovery', # live regressions and actual Pipecat queue cancellation
+    'tests.test_history', # C3 projections at each provider request and late playback
+    'tests.test_optimization', # local actions keep validation without provider requests
     'tests.test_core',    # the core and the Pipecat adapter agree
 )
 # fmt: on

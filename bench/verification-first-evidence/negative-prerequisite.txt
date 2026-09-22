@@ -1,0 +1,191 @@
+2026-09-21 21:29:20.560 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 21:29:20.650 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Book a haircut for Friday.)
+2026-09-21 21:29:20.664 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:29:20.681 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (Book a haircut for Friday.)
+2026-09-21 21:29:20.698 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Move my haircut to Saturday.)
+2026-09-21 21:29:20.711 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:29:20.728 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (Move my haircut to Saturday.)
+2026-09-21 21:29:20.743 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Cancel my haircut.)
+2026-09-21 21:29:20.756 | INFO     | voice.core:_hops:376 - handoff verify -> booking (the caller is identified)
+2026-09-21 21:29:20.771 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (Cancel my haircut.)
+2026-09-21 21:29:20.788 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (My haircut last week was uneven. I want a redo.)
+2026-09-21 21:29:20.794 | ERROR    | voice.core:_speak:608 - agent run failed
+Traceback (most recent call last):
+
+  File "<stdin>", line 9, in <module>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object service_requests_verify_first at 0x113d3f480>
+           │      └ <function Runner.run at 0x10827b320>
+           └ <asyncio.runners.Runner object at 0x113e1dfd0>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<service_requests_verify_first() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voic...
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x1082735e0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x113e1dfd0>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x108273530>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x1082796f0>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x1081f50c0>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/test_recovery.py", line 68, in service_requests_verify_first
+    await probe._turn(request)
+          │     │     └ 'My haircut last week was uneven. I want a redo.'
+          │     └ <function PydanticAgentProcessor._turn at 0x114469430>
+          └ <tests.test_recovery.Probe object at 0x11448e490>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 280, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <tests.test_recovery.Probe object at 0x11448e490>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │    │        │    │      │    │        │       └ <tests.test_recovery.Probe object at 0x11448e490>
+              │        │    │        │    │      │    │        └ 'My haircut last week was uneven. I want a redo.'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <tests.test_recovery.Probe object at 0x11448e490>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=False, customer_v...
+              │        │    │        └ <tests.test_recovery.Probe object at 0x11448e490>
+              │        │    └ <function run_turn at 0x114442b90>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='complaints')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 207, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x114443060>
+              └ RunStarted(step='complaints')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 294, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(input_tokens=50, output_tokens=15, requests=2)
+              │        │      │     │     │       └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │      │     │     └ None
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='complaints', end_strategy='graceful', model_settings={'service_tier': 'priority',...
+              │        │      └ SalonCall(state=SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=False, customer_v...
+              │        └ <function _speak at 0x114468250>
+              └ RunStarted(step='complaints')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 538, in _speak
+    async for event in events:
+                       └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x1145245d0>
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-132' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Do...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x1145245d0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x11453b950>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x11453a6c0>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x1145245d0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10a4a1c70>
+                 └ Agent(model=GoogleModel(), name='complaints', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_th...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x11453bd70>
+                 │         │                    └ ModelRequestNode(request=ModelRequest(parts=[ToolReturnPart(tool_name='hand_over', content='Final result processed.', tool_ca...
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10a47c040>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(input_tokens=50, output_tokens=15, requests=2)>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x11453bd70>
+                 │    │                 │            └ ModelRequestNode(request=ModelRequest(parts=[ToolReturnPart(tool_name='hand_over', content='Final result processed.', tool_ca...
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=F...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10a46be20>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(input_tokens=50, output_tokens=15, requests=2)>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ ModelRequestNode(request=ModelRequest(parts=[ToolReturnPart(tool_name='hand_over', content='Final result processed.', tool_ca...
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x11453bd70>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=F...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x11453b950>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 455, in _pull_shared
+    event = await anext(events_iterator)
+                        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x1144744c0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x1144f55d0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x1144f6980>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1144a68a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1144a6ce0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1144a6350>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1144a7de0>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object AgentStream._events_iter at 0x1144f7a60>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 486, in _events_iter
+    event = await anext(base_iter)
+                        └ <async_generator object _ContinuationStreamedResponse._iterator_with_cancel_guard at 0x1145b1460>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 325, in _iterator_with_cancel_guard
+    async for event in iterator:
+                       └ <async_generator object _ContinuationStreamedResponse._get_event_iterator at 0x113d3f8a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 418, in _get_event_iterator
+    async with self.model.request_stream(
+               │    │     └ <function FunctionModel.request_stream at 0x11442a1f0>
+               │    └ FunctionModel(function=None, stream_function=<function service_requests_verify_first.<locals>.stream at 0x1145752d0>)
+               └ _ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools=[], native_tools=[], output_mode...
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+                       │    └ <async_generator object FunctionModel.request_stream at 0x11448f380>
+                       └ <contextlib._AsyncGeneratorContextManager object at 0x1145a7310>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/function.py", line 213, in request_stream
+    first = await response_stream.peek()
+                  │               └ <function PeekableAsyncStream.peek at 0x109463270>
+                  └ <pydantic_ai._utils.PeekableAsyncStream object at 0x1145c0350>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_utils.py", line 658, in peek
+    self._buffer = await anext(self._source_iter)
+    │    │                     │    └ <async_generator object service_requests_verify_first.<locals>.stream at 0x114477640>
+    │    │                     └ <pydantic_ai._utils.PeekableAsyncStream object at 0x1145c0350>
+    │    └ <pydantic_ai._utils.Unset object at 0x1092f3e00>
+    └ <pydantic_ai._utils.PeekableAsyncStream object at 0x1145c0350>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/tests/test_recovery.py", line 56, in stream
+    assert call.state.agent == destination and call.state.customer_verified
+           │    │     │        │               │    │     └ ''
+           │    │     │        │               │    └ SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=False, customer_verified='', veri...
+           │    │     │        │               └ SalonCall(state=SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=False, customer_v...
+           │    │     │        └ 'complaints'
+           │    │     └ 'complaints'
+           │    └ SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=False, customer_verified='', veri...
+           └ SalonCall(state=SalonState(agent='complaints', pending=None, customer_phone='+34680840464', phone_confirmed=False, customer_v...
+
+AssertionError: assert call.state.agent == destination and call.state.customer_verified
+2026-09-21 21:29:20.810 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Probe#6 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+Expected failure: removing the complaint prerequisite allows its model to run before verification.

@@ -1,8 +1,10 @@
 """Run: uv run python -m tests.test_traces
 
-Two silent failures, neither of which breaks a call: a caller turn that starts a
-trace of its own instead of landing inside Pipecat's open turn span, and
-Pipecat's stt and tts spans reaching Langfuse in words it does not render.
+Three silent failures, none of which breaks a call: a caller turn that starts a
+trace of its own instead of landing inside Pipecat's open turn span, Pipecat's
+stt and tts spans reaching Langfuse in words it does not render, and a root
+observation that says nothing about the call while its children sit in a session
+of their own.
 
 Asserts, no pytest, no network.
 """
@@ -15,15 +17,16 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from utils.observability import _Speech
+from utils.observability import _CALL, _Speech
 
 spans = InMemorySpanExporter()
 """Installed before anything imports a tracer, or every module takes the no-op one.
 
 Same order as `observability.setup`: the translation runs before the exporter.
 """
+speech = _Speech()
 provider = TracerProvider()
-provider.add_span_processor(_Speech())
+provider.add_span_processor(speech)
 provider.add_span_processor(SimpleSpanProcessor(spans))
 trace.set_tracer_provider(provider)
 
@@ -186,9 +189,69 @@ def speech_reaches_langfuse():
     assert said['langfuse.observation.metadata.voice_id'].startswith('62ae83ad'), said
 
 
+def a_call_reads_as_a_call():
+    """The root observation says what the call was, and every span shares its session.
+
+    Langfuse v4 queries observations, so both failed silently and separately: a
+    root showing `input: null, output: undefined`, and the agency's spend in a
+    session of Pydantic AI's own invention while the call's own session held
+    nothing but Pipecat's spans.
+    """
+    _CALL.update({'session.id': 'sess-1', 'trace.name': 'salon call'})
+    speech._call.clear()
+    speech._turn.clear()
+
+    tracer = trace.get_tracer('pipecat.turn')
+    conversation = tracer.start_span('conversation')
+    context = TracingContext()
+    context.set_conversation_context(conversation.get_span_context(), 'sess-1')
+    turn = tracer.start_span('turn', context=context.get_conversation_context())
+    context.set_turn_context(turn.get_span_context())
+
+    heard = tracer.start_span('stt', context=context.get_turn_context())
+    add_stt_span_attributes(
+        span=heard,
+        service_name='SlngSTTService',
+        model='soniox/speech-ai:rt-v5',
+        transcript='is Tuesday free',
+    )
+    heard.end()
+    said = tracer.start_span('tts', context=context.get_turn_context())
+    add_tts_span_attributes(
+        span=said,
+        service_name='SlngTTSService',
+        model='cartesia/sonic:3.5',
+        voice_id='62ae83ad-4f6a-430b-af41-a9bede9286ca',
+        text='Ten or half four.',
+    )
+    said.end()
+
+    ours = trace.get_tracer('slng-voice-harness').start_span('agents')
+    ours.end()
+
+    turn.end()
+    conversation.end()
+
+    spoken = named('turn')[-1].attributes
+    assert spoken['langfuse.observation.input'] == 'is Tuesday free', spoken
+    assert spoken['langfuse.observation.output'] == 'Ten or half four.', spoken
+
+    whole = named('conversation')[-1].attributes
+    assert json.loads(whole['langfuse.observation.input']) == [
+        {'role': 'user', 'content': 'is Tuesday free'},
+        {'role': 'assistant', 'content': 'Ten or half four.'},
+    ], whole
+    assert whole['langfuse.observation.output'] == 'Ten or half four.', whole
+
+    for span in (whole, spoken, named('stt')[-1].attributes, named('agents')[-1].attributes):
+        assert span['langfuse.session.id'] == 'sess-1', span
+        assert span['langfuse.trace.name'] == 'salon call', span
+
+
 async def main():
     await one_trace_per_call()
     speech_reaches_langfuse()
+    a_call_reads_as_a_call()
     print('ok')
 
 

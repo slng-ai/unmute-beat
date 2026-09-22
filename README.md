@@ -115,7 +115,7 @@ belong to, so a handoff reads as two runs in one exchange rather than two
 unrelated traces.
 
 ```
-conversation                      conversation.id, session.id
+conversation                      the whole transcript in, the last line out
 ├── turn 1                        turn.was_interrupted, turn.user_bot_latency_seconds
 │   ├── stt
 │   ├── agents  agent=concierge hops=1 model_requests=1
@@ -129,14 +129,27 @@ conversation                      conversation.id, session.id
     └── tts
 ```
 
-Four things make this work, and all four are needed:
+Every observation carries the call's session and trace name, not just the root.
+Langfuse v4 queries observations rather than traces, so anything left on the root
+alone cannot filter or aggregate its children — and Pydantic AI writes a
+`gen_ai.conversation.id` of its own, which Langfuse reads as the session unless
+something says otherwise. Left alone it did: the whole agency's spend landed
+under an id nothing else in the call used.
+
+Input and output are on the observations too, the root included. Pipecat fills
+its `conversation` and `turn` spans from the LLM service, which is the one thing
+this harness replaced, so both arrived empty; the transcript is rebuilt from the
+`stt` and `tts` spans on their way out instead.
+
+Five things make this work, and all five are needed:
 
 | Where | What |
 |---|---|
 | `bot.py` | `enable_tracing=True` on the `PipelineWorker`, or Pipecat opens no spans at all |
 | `utils/observability.py` | a Langfuse client that exports non-GenAI spans; the default filter drops the conversation span everything hangs from |
 | `utils/observability.py` | a span processor translating Pipecat's attributes into the `langfuse.observation.*` keys Langfuse renders |
-| `core/processor.py` | each caller turn parented on Pipecat's open turn span, with `request_ttft`, `turn_first_word`, `speech_origins` and `status` on it |
+| `utils/observability.py` | the same processor stamping the session and trace name on every span, and rebuilding each turn's and the call's input and output from the speech going past |
+| `core/processor.py` | each caller turn parented on Pipecat's open turn span, with what it was asked and answered, `request_ttft`, `turn_first_word`, `speech_origins` and `status` on it |
 
 ## 6. Environment
 
@@ -145,6 +158,7 @@ Four things make this work, and all four are needed:
 | `GOOGLE_API_KEY` | yes | Vertex AI Express Mode key |
 | `SLNG_API_KEY` | yes | SLNG key, for both STT and TTS |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` | no | traces, one per call; one warning if unset |
+| `LANGFUSE_TRACING_ENVIRONMENT` | no | which Langfuse environment the traces land in; default `default` |
 | `CALLER_ID` | no | the number a phone call would arrive with; read back and confirmed before it is trusted |
 | `SMART_TURN_STOP_SECS` | no | how long a pause ends the caller's turn when the smart-turn model is unsure; default 1.5 |
 | `SLNG_BASE_URL` | no | `eu-north.api.slng.ai` |

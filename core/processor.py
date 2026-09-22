@@ -252,7 +252,9 @@ class PydanticAgentProcessor(FrameProcessor):
         is the model's first token and `turn_first_text_out` the first text of
         *any* kind handed to TTS, because a question going out quickly is not
         an answer going out quickly. `unbacked_claim` is on the span because a
-        latency table that cannot see it will reward inventing an outcome.
+        latency table that cannot see it will reward inventing an outcome. What
+        the turn was asked and what it answered go on it in Langfuse's own keys,
+        so the numbers can be read against the sentence that produced them.
 
         ponytail: a run of cancelled turns joins into one long carried prompt.
         Bound it if a real call ever carries more than a sentence or two.
@@ -263,6 +265,8 @@ class PydanticAgentProcessor(FrameProcessor):
             prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
             self._carried = ''
         with _tracer.start_as_current_span('agents', context=self._parent()) as span:
+            if prompt:
+                span.set_attribute('langfuse.observation.input', prompt)
             turn_started = time.perf_counter()
             spoke = False
             open_response = False
@@ -310,6 +314,8 @@ class PydanticAgentProcessor(FrameProcessor):
                             span.set_attribute('request_ttft', [ttft for ttft, _ in timed])
                             span.set_attribute('request_first_output', [kind for _, kind in timed])
                             spoken = self._call.spoken
+                            if said := ' '.join(s.text for s in spoken if s.text):
+                                span.set_attribute('langfuse.observation.output', said)
                             span.set_attribute('fixed_lines', sum(s.kind == 'fixed' for s in spoken))
                             span.set_attribute('speech_origins', [s.origin for s in spoken])
                             span.set_attribute('speech_segments', [s.id for s in spoken])

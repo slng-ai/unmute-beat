@@ -86,43 +86,95 @@ def _readable(final_result: str) -> str:
     return final_result
 
 
-def _said(messages_json: str) -> str:
-    """What one model request answered, as text and tool calls rather than a parts array."""
-    try:
-        messages = json.loads(messages_json)
-    except ValueError:
-        return ''
-    if not isinstance(messages, list):
-        return ''
+def _parts(parts: list) -> str:
+    """One message's parts as text: its words, `tool(args)` for a call, `tool -> result` for a return."""
     pieces: list[str] = []
-    for message in messages:
-        for part in message.get('parts', []) if isinstance(message, dict) else []:
-            kind = part.get('type')
-            if kind == 'text' and part.get('content'):
-                pieces.append(str(part['content']))
-            elif kind == 'tool_call':
-                arguments = part.get('arguments', part.get('args', {}))
-                rendered = arguments if isinstance(arguments, str) else json.dumps(arguments)
-                pieces.append(f'{part.get("name", "tool")}({rendered})')
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        kind = part.get('type')
+        if kind == 'text' and part.get('content'):
+            pieces.append(str(part['content']))
+        elif kind == 'tool_call':
+            arguments = part.get('arguments', part.get('args', {}))
+            rendered = arguments if isinstance(arguments, str) else json.dumps(arguments)
+            pieces.append(f'{part.get("name", "tool")}({rendered})')
+        elif kind == 'tool_call_response':
+            result = part.get('result', part.get('content', ''))
+            rendered = result if isinstance(result, str) else json.dumps(result)
+            pieces.append(f'{part.get("name", "tool")} -> {rendered}')
     return ' '.join(pieces)
 
 
-def _agent_words(span) -> dict:
-    """Pydantic AI's run and request spans, with an output somebody can read.
+def _messages(messages_json: str) -> list[dict]:
+    """Pydantic AI's OTel message array, parsed, or nothing."""
+    try:
+        messages = json.loads(messages_json)
+    except ValueError:
+        return []
+    return (
+        [message for message in messages if isinstance(message, dict)] if isinstance(messages, list) else []
+    )
 
-    The run span keeps its type explicit and gets `_readable` of its result;
-    the request span gets `_said` of its output messages. The originals stay in
-    the observation's metadata, so nothing is lost by saying it plainly.
+
+def _said(messages_json: str) -> str:
+    """What one model request answered, as text and tool calls rather than a parts array."""
+    return ' '.join(
+        said for message in _messages(messages_json) if (said := _parts(message.get('parts', [])))
+    )
+
+
+def _prompt(system_json: str, messages_json: str) -> str:
+    """What a model was given, as the chat transcript Langfuse renders: the system prompt first, then every message with its parts said plainly."""
+    lines = [{'role': 'system', 'content': _parts(_messages(system_json))}]
+    lines += [
+        {'role': message.get('role', ''), 'content': _parts(message.get('parts', []))}
+        for message in _messages(messages_json)
+    ]
+    return json.dumps([line for line in lines if line['content']])
+
+
+def _agent_words(span) -> dict:
+    """Pydantic AI's run and request spans, with an input and an output somebody can read.
+
+    Pydantic AI writes the prompt as `gen_ai.system_instructions` plus
+    `gen_ai.input.messages` on a request and `pydantic_ai.all_messages` on a
+    run, and Langfuse renders none of it: the request's input arrives as its
+    tool definitions alone and the run's as null. `langfuse.observation.input`
+    always wins, so both are said again as a transcript with the system prompt
+    first. The run's input stops at the message that started it, since what
+    followed is under its own request spans. The run span keeps its type
+    explicit and gets `_readable` of its result; the request span gets `_said`
+    of its output messages. The originals stay in the observation's metadata,
+    so nothing is lost by saying it plainly.
+
+    ponytail: the run's prompt is the history it was given, `all_messages` up
+    to `new_message_index`, plus the user message at that index when this run
+    had one of its own; one OTel message per Pydantic AI message. If a format
+    version ever splits a message by role, cut at the first assistant message
+    after the index instead.
     """
     attributes = span.attributes or {}
     operation = attributes.get('gen_ai.operation.name')
+    system = str(attributes.get('gen_ai.system_instructions') or '[]')
     if operation == 'invoke_agent':
         words = {'langfuse.observation.type': 'agent'}
         if (result := attributes.get('final_result')) is not None:
             words['langfuse.observation.output'] = _readable(str(result))
+        if history := _messages(str(attributes.get('pydantic_ai.all_messages') or '')):
+            index = int(attributes.get('pydantic_ai.new_message_index', 0))
+            asked = (
+                history[index : index + 1] if history[index:] and history[index].get('role') == 'user' else []
+            )
+            words['langfuse.observation.input'] = _prompt(system, json.dumps(history[:index] + asked))
         return words
-    if operation == 'chat' and (said := _said(str(attributes.get('gen_ai.output.messages') or ''))):
-        return {'langfuse.observation.output': said}
+    if operation == 'chat':
+        words = {}
+        if said := _said(str(attributes.get('gen_ai.output.messages') or '')):
+            words['langfuse.observation.output'] = said
+        if given := attributes.get('gen_ai.input.messages'):
+            words['langfuse.observation.input'] = _prompt(system, str(given))
+        return words
     return {}
 
 

@@ -17,7 +17,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from utils.observability import _CALL, _readable, _said, _Speech
+from utils.observability import _CALL, _prompt, _readable, _said, _Speech
 
 spans = InMemorySpanExporter()
 """Installed before anything imports a tracer, or every module takes the no-op one.
@@ -157,6 +157,19 @@ async def one_trace_per_call():
     assert any(out and out.startswith('hand_over(') for out in chats), chats
     assert 'There is metered parking on the road outside.' in chats, chats
 
+    prompts = {
+        (span.attributes['gen_ai.agent.name'], span.attributes['gen_ai.operation.name']): json.loads(
+            str(span.attributes.get('langfuse.observation.input'))
+        )
+        for span in runs
+        if span.attributes.get('gen_ai.operation.name') in ('invoke_agent', 'chat')
+    }
+    for (step, _operation), lines in prompts.items():
+        assert lines[0]['role'] == 'system' and 'Robin' in lines[0]['content'], (step, lines[0])
+        assert {'role': 'user', 'content': 'is there parking nearby?'} in lines, (step, lines)
+        assert lines[-1]['role'] == 'user', (step, lines[-1])
+    assert len(prompts) == 4, prompts.keys()
+
 
 def agent_output_is_readable():
     """A run's result and a request's answer, as sentences rather than dumps."""
@@ -200,6 +213,13 @@ def agent_output_is_readable():
     assert _said(call) == 'read_diary({"when": "Friday"})'
     assert _said(both) == 'One moment. hang_up({"goodbye": "Bye"})'
     assert _said('not json') == ''
+
+    system = json.dumps([{'type': 'text', 'content': 'You are Robin.'}])
+    assert json.loads(_prompt(system, call)) == [
+        {'role': 'system', 'content': 'You are Robin.'},
+        {'role': 'assistant', 'content': 'read_diary({"when": "Friday"})'},
+    ]
+    assert json.loads(_prompt('', 'not json')) == []
 
 
 def speech_reaches_langfuse():

@@ -432,9 +432,11 @@ Langfuse over OpenTelemetry. Pydantic AI's instrumentation emits the agent
 runs; Pipecat emits the conversation, the turn, stt and tts; the processor
 emits one span per caller turn, named after the step that answered and typed
 `agent`, parented on Pipecat's open turn span. Pydantic AI's own run and request
-spans get a readable output: the sentence a run produced, where it handed the
-caller, or the text and tool calls a request answered with; the raw messages stay
-in the observation's metadata.
+spans get a readable input and output: the input is the prompt as a transcript,
+system prompt first, and the output is the sentence a run produced, where it
+handed the caller, or the text and tool calls a request answered with. Langfuse
+renders neither from Pydantic AI's own attributes, so both are said again in
+`langfuse.observation.*`; the raw messages stay in the observation's metadata.
 `utils/observability.py` does the two things nothing else does: exports the
 non-GenAI spans Langfuse would otherwise drop, and translates Pipecat's
 attributes into `langfuse.observation.*` so a speech span arrives with its

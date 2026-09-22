@@ -176,14 +176,8 @@ class _Outcome:
     succeeded: set[str]
 
 
-async def run_turn(
-    call: CallContext,
-    agents: dict[str, Node[Any]],
-    prompt: str | None,
-    budget: TurnBudget,
-    barge: Barge | None = None,
-) -> AsyncIterator[TurnEvent]:
-    """Run agents until one answers the caller, and say what happened.
+class Turn:
+    """One accepted caller turn: agents run until one answers, within one budget.
 
     The whole turn spends one budget: one tally of provider requests, one
     tool-call allowance, a fixed number of step runs and a deadline over all of
@@ -193,208 +187,410 @@ async def run_turn(
     The turn's generation is read back before any move is committed, so a turn
     superseded while it was unwinding cannot still move the caller; it is also
     set on the context so a tool task that outlives the turn reports it to
-    `commit`.
-
-    An exhausted turn is told so in one fixed line, with no further model
-    request: there used to be one more run here, outside the budget that had
-    just been declared spent, so the budget bounded nothing. The unbacked-claim
-    check runs whatever else happened, because an exhausted or failed turn is
-    exactly when a model is most likely to have invented an outcome; not after
-    a barge-in, because then what the caller heard is not what was generated.
+    `commit`. `run_turn` is the function form of this class.
     """
-    barge = barge if barge is not None else Barge()
-    generation = call.begin_turn()
-    turn_generation.set((call.id, generation))
-    usage, limits = budget.account()
-    handoffs: list[str] = []
-    call._covered = False
-    call.turn_started(prompt or '')
 
-    spent = ''
-    failure = ''
-    try:
-        async with asyncio.timeout(budget.seconds):
-            async for event in _hops(
-                call, agents, prompt, budget, usage, limits, handoffs, barge, generation
-            ):
-                if isinstance(event, _Exhausted):
-                    spent = event.why
-                elif isinstance(event, _Failed):
-                    failure = event.why
+    def __init__(
+        self,
+        call: CallContext,
+        nodes: dict[str, Node[Any]],
+        budget: TurnBudget,
+        barge: Barge | None = None,
+    ) -> None:
+        self.call = call
+        self.nodes = nodes
+        self.budget = budget
+        self.barge = barge if barge is not None else Barge()
+        self.usage, self.limits = budget.account()
+        self.handoffs: list[str] = []
+        self.generation = 0
+
+    def _stale(self) -> bool:
+        """Whether this turn may no longer decide where the caller is."""
+        return self.barge.hit or not self.call.is_current(self.generation)
+
+    async def events(self, prompt: str | None) -> AsyncIterator[TurnEvent]:
+        """Run the turn, yielding what a runtime needs to voice it, and finish with how it ended.
+
+        An exhausted turn is told so in one fixed line, with no further model
+        request: there used to be one more run here, outside the budget that
+        had just been declared spent, so the budget bounded nothing. The
+        unbacked-claim check runs whatever else happened, because an exhausted
+        or failed turn is exactly when a model is most likely to have invented
+        an outcome; not after a barge-in, because then what the caller heard is
+        not what was generated.
+        """
+        call, barge = self.call, self.barge
+        self.generation = call.begin_turn()
+        turn_generation.set((call.id, self.generation))
+        call._covered = False
+        call.turn_started(prompt or '')
+
+        spent = ''
+        failure = ''
+        try:
+            async with asyncio.timeout(self.budget.seconds):
+                async for event in self._hops(prompt):
+                    if isinstance(event, _Exhausted):
+                        spent = event.why
+                    elif isinstance(event, _Failed):
+                        failure = event.why
+                    else:
+                        yield event  # ty: ignore[invalid-yield]
+        except TimeoutError:
+            spent = f'the {self.budget.seconds:g}s turn deadline'
+        except UsageLimitExceeded as over:
+            spent = str(over)
+
+        if failure:
+            call.note_said('fixed', STUMBLE, origin='error')
+            yield FixedSpeech(STUMBLE, reason='error')
+        elif spent and not barge.hit:
+            logger.warning('turn exhausted: {}', spent)
+            call.note_said('fixed', EXHAUSTED, origin='error')
+            yield FixedSpeech(EXHAUSTED, reason='exhausted')
+
+        if not barge.hit and (claim := call.unbacked_claim()):
+            logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
+            call.note_said('fixed', UNBACKED, origin='error')
+            yield FixedSpeech(UNBACKED, reason='unbacked')
+
+        status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
+        if failure:
+            status = 'failed'
+        elif barge.hit:
+            status = 'interrupted'
+        elif spent:
+            status = 'exhausted'
+        yield TurnFinished(
+            status=status,
+            agent=call.state.agent,
+            handoffs=tuple(self.handoffs),
+            requests=self.usage.requests,
+            detail=failure or spent,
+        )
+
+    async def _hops(self, prompt: str | None) -> AsyncIterator[object]:
+        """Run agents until one answers, yielding what each one says.
+
+        Before a step's agent runs, its `advance` may name a known next action:
+        one that needs no model because the caller's answer to a tracked
+        question already decides it. It spends the shared tool budget, retains
+        the caller's input and is bracketed by the same run events, and a
+        refusal from it is context for the model path that follows, never
+        permission to retry a write.
+
+        A `Question` output is a question the application worded, said by the
+        application and ending the turn like any other answer; what it records
+        is the one sentence the caller's next reply will be read as an answer
+        to.
+
+        A run that did not hand over may still have moved the caller by a
+        borrowed tool that *succeeded*; the move is committed after the run,
+        so the step that spoke is the step whose prompt wrote the words. Every
+        move and every handoff is fenced on the turn's generation and the
+        barge signal: a superseded or interrupted turn does not get to choose
+        who takes the caller next, though a tool's own effect stands and is
+        reconciled by its operation token.
+
+        A prerequisite step reporting `completed` or `unserved` restores the
+        owner's checkpoint and tells the receiving agent, through an
+        instruction part, what just happened. An ordinary handoff commits the
+        step and the pending slot together, because a caller moved into
+        `verify` with no record of where they were going has lost their
+        errand, and clears the prompt: the caller's turn is projected into the
+        receiving agent's instructions as `{{heard}}`, so it appears once
+        whichever steps the turn passes through.
+        """
+        call, nodes, barge = self.call, self.nodes, self.barge
+        for _ in range(self.budget.step_runs):
+            node = nodes[call.state.agent]
+            output = None
+            succeeded: set[str] = set()
+
+            action = node.advance(call) if node.advance else None
+            if action is not None:
+                if self._stale():
+                    return
+                if self.usage.tool_calls >= self.budget.tool_calls:
+                    yield _Exhausted(f'the {self.budget.tool_calls}-tool budget')
+                    return
+                call.retain_input()
+                prompt = None
+                call.attempt_started()
+                call._response = f'{call.turn}:{call.attempt}:application'
+                self.usage.tool_calls += 1
+                yield RunStarted(call.state.agent)
+                if self._stale():
+                    yield RunEnded(node.agent.name or call.state.agent)
+                    return
+                try:
+                    output = await action.run()
+                except ModelRetry as error:
+                    call.retain_action(action.name, {'refused': str(error)})
+                    call._return_status = f'Application action {action.name} refused: {error}'
+                except Exception as error:
+                    logger.exception('application action failed: {}', action.name)
+                    yield _Failed(f'{type(error).__name__}: {error}')
+                    return
+                yield RunEnded(node.agent.name or call.state.agent)
+            if action is None or output is None:
+                async for event in self._speak(node, prompt):
+                    if isinstance(event, _Outcome):
+                        output, succeeded = event.output, event.succeeded
+                    elif isinstance(event, _Failed):
+                        yield event
+                        return
+                    else:
+                        yield event
+
+            call._return_status = ''
+            if isinstance(output, Question) and not barge.hit:
+                await call.speak_now(output.put(call), origin='ask')
+            if not isinstance(output, Handoff):
+                landed = moved_by(call.state, node, nodes, succeeded)
+                if landed != call.state.agent:
+                    if self._stale():
+                        logger.info('fenced a move to {} from turn {}', landed, self.generation)
+                        return
+                    logger.info(
+                        'moved {} -> {} (via {})', call.state.agent, landed, ', '.join(sorted(succeeded))
+                    )
+                    self.handoffs.append(landed)
+                    call.commit(agent=landed)
+                return
+            if self._stale():
+                logger.info('fenced a handoff from turn {}', self.generation)
+                return
+            if output.status != 'handoff':
+                going_to, waiting = output.to, None
+                checkpoint = call._checkpoint
+                if checkpoint is not None:
+                    call._hidden_speech.update(
+                        s.id for s in call.all_spoken if s.id not in checkpoint.speech_ids
+                    )
+                    call.messages = checkpoint.messages
+                    call._return_status = (
+                        f'Application return: {call.state.agent} {output.status}. '
+                        f'Original caller request: {checkpoint.heard}'
+                    )
+                    if output.status == 'completed':
+                        going_to = checkpoint.owner
+                    else:
+                        call._return_status += ' The earlier request was abandoned; do not resume it.'
+                    call._checkpoint = None
+                    prompt = (
+                        call.heard if output.status == 'unserved' and call.heard != checkpoint.heard else None
+                    )
+            else:
+                going_to, waiting = route(call.state, nodes, output.to)
+                if waiting is not None and going_to != waiting and call._checkpoint is None:
+                    call._checkpoint = Checkpoint(
+                        waiting,
+                        deepcopy(call.messages),
+                        frozenset(s.id for s in call.all_spoken),
+                        call.heard,
+                    )
+                call._return_status = (
+                    f'Application handoff: {call.state.agent} -> {going_to}. '
+                    f'You are now {going_to}; handle the caller request here. '
+                    'The previous handoff finished routing, not the caller request.'
+                )
+            logger.info('handoff {} -> {} ({})', call.state.agent, going_to, output.because or '-')
+            self.handoffs.append(going_to)
+            call.commit(agent=going_to, pending=waiting)
+            if output.status == 'handoff':
+                prompt = None
+            if barge.hit:
+                return
+            if lines := nodes[going_to].enter:
+                await call.say(pick(f'enter:{output.to}', lines), origin='entry')
+        yield _Exhausted(f'the {self.budget.step_runs}-run hop budget')
+
+    async def _speak(self, node: Node, prompt: str | None) -> AsyncIterator[object]:
+        """Run one step's agent, streaming whatever it says.
+
+        `Node.outputs` builds the run's `output_type` from the live state; the
+        per-request narrowing that keeps it honest across several requests
+        inside one run is a capability on the agent itself.
+
+        On a step that can write, speech is released a clause at a time so
+        each clause can be read before the caller hears it, and a clause that
+        claims a change nothing has made is not said at all. The gate is off
+        once the step has written something, because the confirmation is then
+        the business's own words, and off entirely on a step that cannot write.
+
+        A `reset` step is asked the caller's own question outright and sent no
+        conversation: what it needs is projected into its instructions, and
+        what it does not need it cannot leak. An ordinary step gets the
+        caller's turn on the first hop and `None` afterwards, because by then
+        it is in the history. Every request's messages are projected through
+        `history.project` before they go out, and any application status is
+        appended as an instruction.
+
+        The run spends the turn's own tally, not one of its own, and `retries`
+        is semantic repair only: a provider's HTTP retries are a different
+        layer, and folding them together would let a flaky network buy extra
+        attempts at getting a tool call right.
+
+        Which tools *succeeded* is how a free edge is taken: the result, never
+        the call, because the call event fires before the tool runs.
+
+        Messages are retained across cancellation from the SDK's own
+        `new_messages()` boundary after teardown, never by slicing at the
+        original history length: SDK normalisation can merge old requests, and
+        a cancelled run still heard the caller and may have completed a tool.
+        """
+        call, barge = self.call, self.barge
+        agent: Agent = node.agent
+        output_type = node.outputs(call.state) if node.outputs is not None else None
+        step = call.state.agent
+        succeeded: set[str] = set()
+        output = None
+        spoke = False
+        gate: str | None = 'clause' if node.guarded and not call.wrote_this_turn() else None
+        held = ''
+
+        call.attempt_started()
+        caller_turn = call.turn
+        run_id = f'{caller_turn}:{call.attempt}'
+        accepted_prompt = call.heard if node.history == 'reset' else prompt
+        requested = 0
+        streamed = 0
+        excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'reset' else frozenset()
+        initial = [] if node.history == 'reset' else paired(project(call, call.messages))
+
+        async def prepare(ctx, request):
+            nonlocal requested
+            requested += 1
+            call._response = f'{run_id}:{requested}'
+            messages = project(call, request.messages, excluded=excluded)
+            parameters = request.model_request_parameters
+            if call._return_status:
+                parameters = replace(
+                    parameters,
+                    instruction_parts=[
+                        *(parameters.instruction_parts or []),
+                        InstructionPart(content=call._return_status),
+                    ],
+                )
+            return replace(request, messages=messages, model_request_parameters=parameters)
+
+        async def tag(ctx, *, request_context, response):
+            response.metadata = (response.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
+            return response
+
+        retained_run = False
+        events = None
+
+        def retain(new_messages):
+            nonlocal retained_run
+            retained_run = True
+            retained = deepcopy(new_messages)
+            for message in retained:
+                if isinstance(message, ModelRequest) and any(
+                    isinstance(p, UserPromptPart) for p in message.parts
+                ):
+                    message.metadata = (message.metadata or {}) | {'caller_turn': caller_turn}
+                    if accepted_prompt is not None and any(
+                        isinstance(p, UserPromptPart) and p.content == accepted_prompt for p in message.parts
+                    ):
+                        call._retained_turns.add(caller_turn)
+                if isinstance(message, ModelResponse) and not (message.metadata or {}).get('voice_response'):
+                    message.metadata = (message.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
+            call._protocol.extend(deepcopy(retained))
+            call.messages.extend(retained)
+
+        yield RunStarted(step)
+        try:
+            async with agent.run_stream_events(
+                accepted_prompt,
+                deps=call,
+                message_history=initial,
+                capabilities=[Hooks(before_model_request=prepare, after_model_request=tag)],
+                output_type=output_type,
+                usage=self.usage,
+                usage_limits=self.limits,
+                retries=self.budget.repair_retries,
+            ) as events:
+                barge.attach(events)
+                async for event in events:
+                    if isinstance(event, PartStartEvent):
+                        if event.index == 0:
+                            streamed += 1
+                        call._response = f'{run_id}:{streamed}'
+                        match event.part:
+                            case TextPart():
+                                call.note_first_output('text')
+                            case ToolCallPart():
+                                call.note_first_output('tool')
+                    if chunk := _speech(event):
+                        if not node.model_speech:
+                            continue
+                        if gate is not None:
+                            held += chunk
+                            if not (_CLAUSE.search(held) or len(held) >= _CLAUSE_MAX):
+                                continue
+                            text, held = held, ''
+                            if call.claims_completion(text):
+                                logger.error('withheld an unbacked claim: {!r}', text.strip())
+                                gate = 'blocked'
+                                break
+                        else:
+                            text = chunk
+                        call.note_model_text(text)
+                        if not spoke:
+                            spoke = True
+                            call._spoke = True
+                            call._covered = False
+                        yield TextDelta(text, step)
+                    elif isinstance(event, FunctionToolResultEvent):
+                        if not isinstance(event.part, RetryPromptPart):
+                            succeeded.add(event.part.tool_name)
+                    elif isinstance(event, AgentRunResultEvent):
+                        retain(event.result.new_messages())
+                        output = event.result.output
+        except UsageLimitExceeded, TimeoutError:
+            raise
+        except RunCancelled as cancelled:
+            retain(cancelled.new_messages())
+        except Exception as error:
+            logger.exception('agent run failed')
+            yield RunEnded(step)
+            yield _Failed(f'{type(error).__name__}: {error}')
+            return
+        finally:
+            if events is not None and not retained_run:
+                try:
+                    new_messages = events.new_messages()
+                except UserError:
+                    pass
                 else:
-                    yield event  # ty: ignore[invalid-yield]
-    except TimeoutError:
-        spent = f'the {budget.seconds:g}s turn deadline'
-    except UsageLimitExceeded as over:
-        spent = str(over)
+                    retain(new_messages)
+            barge.detach()
+            if held and gate != 'blocked':
+                call.note_model_text(held)
+                call._spoke = True
+                yield TextDelta(held, step)
+            call.close_model_text()
 
-    if failure:
-        call.note_said('fixed', STUMBLE, origin='error')
-        yield FixedSpeech(STUMBLE, reason='error')
-    elif spent and not barge.hit:
-        logger.warning('turn exhausted: {}', spent)
-        call.note_said('fixed', EXHAUSTED, origin='error')
-        yield FixedSpeech(EXHAUSTED, reason='exhausted')
-
-    if not barge.hit and (claim := call.unbacked_claim()):
-        logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
-        call.note_said('fixed', UNBACKED, origin='error')
-        yield FixedSpeech(UNBACKED, reason='unbacked')
-
-    status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
-    if failure:
-        status = 'failed'
-    elif barge.hit:
-        status = 'interrupted'
-    elif spent:
-        status = 'exhausted'
-    yield TurnFinished(
-        status=status,
-        agent=call.state.agent,
-        handoffs=tuple(handoffs),
-        requests=usage.requests,
-        detail=failure or spent,
-    )
+        if gate == 'blocked':
+            note_spoken(call, _delivered(call), interrupted=True)
+            call.note_said('fixed', WITHHELD, origin='error')
+            yield FixedSpeech(WITHHELD, reason='withheld')
+        yield RunEnded(step)
+        yield _Outcome(output, succeeded)
 
 
-async def _hops(
+def run_turn(
     call: CallContext,
     agents: dict[str, Node[Any]],
     prompt: str | None,
     budget: TurnBudget,
-    usage,
-    limits,
-    handoffs: list[str],
-    barge: Barge,
-    generation: int,
-) -> AsyncIterator[object]:
-    """Run agents until one answers, yielding what each one says.
-
-    Before a step's agent runs, its `advance` may name a known next action:
-    one that needs no model because the caller's answer to a tracked question
-    already decides it. It spends the shared tool budget, retains the caller's
-    input and is bracketed by the same run events, and a refusal from it is
-    context for the model path that follows, never permission to retry a write.
-
-    A `Question` output is a question the application worded, said by the
-    application and ending the turn like any other answer; what it records is
-    the one sentence the caller's next reply will be read as an answer to.
-
-    A run that did not hand over may still have moved the caller by a borrowed
-    tool that *succeeded*; the move is committed after the run, so the step
-    that spoke is the step whose prompt wrote the words. Every move and every
-    handoff is fenced on the turn's generation and the barge signal: a
-    superseded or interrupted turn does not get to choose who takes the caller
-    next, though a tool's own effect stands and is reconciled by its operation
-    token.
-
-    A prerequisite step reporting `completed` or `unserved` restores the
-    owner's checkpoint and tells the receiving agent, through an instruction
-    part, what just happened. An ordinary handoff commits the step and the
-    pending slot together, because a caller moved into `verify` with no record
-    of where they were going has lost their errand, and clears the prompt: the
-    caller's turn is projected into the receiving agent's instructions as
-    `{{heard}}`, so it appears once whichever steps the turn passes through.
-    """
-    for _ in range(budget.step_runs):
-        node = agents[call.state.agent]
-        output = None
-        succeeded: set[str] = set()
-
-        action = node.advance(call) if node.advance else None
-        if action is not None:
-            if barge.hit or not call.is_current(generation):
-                return
-            if usage.tool_calls >= budget.tool_calls:
-                yield _Exhausted(f'the {budget.tool_calls}-tool budget')
-                return
-            call.retain_input()
-            prompt = None
-            call.attempt_started()
-            call._response = f'{call.turn}:{call.attempt}:application'
-            usage.tool_calls += 1
-            yield RunStarted(call.state.agent)
-            if barge.hit or not call.is_current(generation):
-                yield RunEnded(node.agent.name or call.state.agent)
-                return
-            try:
-                output = await action.run()
-            except ModelRetry as error:
-                call.retain_action(action.name, {'refused': str(error)})
-                call._return_status = f'Application action {action.name} refused: {error}'
-            except Exception as error:
-                logger.exception('application action failed: {}', action.name)
-                yield _Failed(f'{type(error).__name__}: {error}')
-                return
-            yield RunEnded(node.agent.name or call.state.agent)
-        if action is None or output is None:
-            async for event in _speak(call, node, prompt, budget, usage, limits, barge):
-                if isinstance(event, _Outcome):
-                    output, succeeded = event.output, event.succeeded
-                elif isinstance(event, _Failed):
-                    yield event
-                    return
-                else:
-                    yield event
-
-        call._return_status = ''
-        if isinstance(output, Question) and not barge.hit:
-            await call.speak_now(output.put(call), origin='ask')
-        if not isinstance(output, Handoff):
-            landed = moved_by(call.state, node, agents, succeeded)
-            if landed != call.state.agent:
-                if not call.is_current(generation) or barge.hit:
-                    logger.info('fenced a move to {} from turn {}', landed, generation)
-                    return
-                logger.info('moved {} -> {} (via {})', call.state.agent, landed, ', '.join(sorted(succeeded)))
-                handoffs.append(landed)
-                call.commit(agent=landed)
-            return
-        if not call.is_current(generation) or barge.hit:
-            logger.info('fenced a handoff from turn {}', generation)
-            return
-        if output.status != 'handoff':
-            going_to, waiting = output.to, None
-            checkpoint = call._checkpoint
-            if checkpoint is not None:
-                call._hidden_speech.update(s.id for s in call.all_spoken if s.id not in checkpoint.speech_ids)
-                call.messages = checkpoint.messages
-                call._return_status = (
-                    f'Application return: {call.state.agent} {output.status}. '
-                    f'Original caller request: {checkpoint.heard}'
-                )
-                if output.status == 'completed':
-                    going_to = checkpoint.owner
-                else:
-                    call._return_status += ' The earlier request was abandoned; do not resume it.'
-                call._checkpoint = None
-                prompt = (
-                    call.heard if output.status == 'unserved' and call.heard != checkpoint.heard else None
-                )
-        else:
-            going_to, waiting = route(call.state, agents, output.to)
-            if waiting is not None and going_to != waiting and call._checkpoint is None:
-                call._checkpoint = Checkpoint(
-                    waiting,
-                    deepcopy(call.messages),
-                    frozenset(s.id for s in call.all_spoken),
-                    call.heard,
-                )
-            call._return_status = (
-                f'Application handoff: {call.state.agent} -> {going_to}. '
-                f'You are now {going_to}; handle the caller request here. '
-                'The previous handoff finished routing, not the caller request.'
-            )
-        logger.info('handoff {} -> {} ({})', call.state.agent, going_to, output.because or '-')
-        handoffs.append(going_to)
-        call.commit(agent=going_to, pending=waiting)
-        if output.status == 'handoff':
-            prompt = None
-        if barge.hit:
-            return
-        if lines := agents[going_to].enter:
-            await call.say(pick(f'enter:{output.to}', lines), origin='entry')
-    yield _Exhausted(f'the {budget.step_runs}-run hop budget')
+    barge: Barge | None = None,
+) -> AsyncIterator[TurnEvent]:
+    """Run agents until one answers the caller, and say what happened. The function form of `Turn`."""
+    return Turn(call, agents, budget, barge).events(prompt)
 
 
 def _speech(event) -> str:

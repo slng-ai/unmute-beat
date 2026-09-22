@@ -6,8 +6,19 @@ Pipecat owns the transport, VAD, turn taking, STT and TTS (through SLNG). The
 agents own the conversation: prompts, tools, typed state, and which step is
 running. The seam between them is one frame processor.
 
-```
-transport.input() -> SlngSTT -> user_aggregator -> PydanticAgentProcessor -> SlngTTS -> transport.output() -> assistant_aggregator
+```mermaid
+flowchart LR
+    mic((caller)) --> in[transport.input]
+    in --> stt[SlngSTT]
+    stt --> ua[user aggregator]
+    ua -- LLMContextFrame --> P[PydanticAgentProcessor]
+    P -- LLMTextFrame / TTSSpeakFrame --> tts[SlngTTS]
+    tts --> out[transport.output]
+    out --> aa[assistant aggregator]
+    aa -. what was heard .-> P
+    P <--> T[core.turn: one caller turn]
+    T <--> A[salon.agents: four Pydantic AI agents]
+    A <--> D[(Diary)]
 ```
 
 ---
@@ -16,8 +27,8 @@ transport.input() -> SlngSTT -> user_aggregator -> PydanticAgentProcessor -> Sln
 
 ## 1. What you need
 
-- **uv** — `brew install uv`, or see https://docs.astral.sh/uv/. It installs the
-  right Python itself; nothing else is needed. This project pins 3.14.
+- **uv**: `brew install uv`, or see https://docs.astral.sh/uv/. It installs the
+  right Python itself. This project pins 3.14.
 - **A Vertex AI Express Mode key** for `GOOGLE_API_KEY`. The model string is
   `google-cloud:gemini-3.5-flash-lite`, so a plain Gemini Developer API key is
   rejected.
@@ -34,48 +45,7 @@ uv sync                       # creates .venv and installs everything
 cp .env.example .env          # then fill in the two required keys
 ```
 
-`uv sync` pulls Pipecat, `pipecat-slng`, Pydantic AI and the Silero VAD model.
-The first run takes a minute or two; after that it is cached.
-
-## 3. Talk to it, with no audio
-
-Do this first. It is the fastest way to see the agency work, it needs no
-microphone and no browser, and it is the loop to use when changing prompts.
-
-```bash
-uv run --env-file .env python talk.py
-```
-
-Type a line, press enter, read the transcript. An empty line or Ctrl-D ends it.
-You can also script the whole call up front:
-
-```bash
-uv run --env-file .env python talk.py \
-  "Hi, can I book a haircut for Monday?" \
-  "Yes, that's right." \
-  "Ten thirty works." \
-  "That's all, thanks. Bye!"
-```
-
-```
-  [fixed] Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?
-
-CALLER: Hi, can I book a haircut for Monday?
-  [fixed] Let me confirm who I'm speaking to.
-  [model] Is that +34600111222?
-  -> agent='verify' customer_phone='+34600111222'  (1.6s)
-
-CALLER: Yes, that's right.
-  [fixed] Let me have a look at the diary.
-  [model] For that haircut on Monday, I have 9:00 AM, 9:30, or 10:00. Which one?
-  -> agent='booking' customer_verified='existing'  (2.2s)
-```
-
-`[fixed]` is a line this code speaks. `[model]` is the agent's own streamed
-speech. The arrow line is the typed state after the turn, and the handoffs are
-logged as they happen.
-
-## 4. Talk to it with your voice
+## 3. Talk to it
 
 ```bash
 uv run --env-file .env python bot.py
@@ -98,7 +68,15 @@ uv run --env-file .env python bot.py -t webrtc     # one transport only
 uv run --env-file .env python bot.py --help
 ```
 
-## 5. Run the tests
+A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
+hands the caller to booking; booking needs an identified caller, so the graph
+interposes verification, which reads the caller ID back. *"Yes, that's right."*
+The lookup runs with no model request, the graph resumes booking, and the
+diary's free times are offered. *"Three o'clock."* An unambiguous choice of an
+offered time is the authorisation, so the write lands and the confirmation is
+spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
+
+## 4. Run the tests
 
 No pytest and no network: they script the model, so they are fast and free.
 
@@ -106,73 +84,30 @@ No pytest and no network: they script the model, so they are fast and free.
 uv run python -m tests
 ```
 
-All 13 modules, with live model requests disabled rather than merely unused,
-so a missed override raises instead of billing. No `.env` needed. It prints
-`all 13 modules ok` and exits 0, or names what failed and exits 1.
+All twelve modules, with live model requests disabled rather than merely
+unused, so a missed override raises instead of billing. No `.env` needed. It
+prints `all 12 modules ok` and exits 0, or names what failed and exits 1.
 
-One at a time, which is what you want while working on one thing:
-
-```bash
-uv run --env-file .env python -m tests.test_graph   # the graph: routing, the waiting step, the schema
-uv run --env-file .env python -m tests.test_salon   # the salon agency
-uv run --env-file .env python -m tests.test_voice   # the processor itself
-uv run --env-file .env python -m tests.test_traces  # one call is one trace
-uv run --env-file .env python -m tests.test_state   # validated state, and the phone policy
-uv run --env-file .env python -m tests.test_diary   # the service oracle: can it say no
-uv run --env-file .env python -m tests.test_flow    # guards and conflicts, at execution
-uv run --env-file .env python -m tests.test_budget  # one allowance per caller turn
-uv run --env-file .env python -m tests.test_bench   # the measurement, measured
-uv run --env-file .env python -m tests.test_core    # the core and the adapter agree
-uv run --env-file .env python -m tests.test_history # projections and interrupted input/receipts
-uv run --env-file .env python -m tests.test_recovery # Pipecat queue and complaint approval
-```
-
-Each prints `ok` or raises on the first failure.
-
-Run singly they are safe by convention: every agent they touch is overridden
-with a scripted model. Run through `python -m tests` they are safe by
-enforcement. Prefer the latter before committing.
-
-The real-model recovery checks use fresh in-memory salon fixtures and no audio:
+One at a time, which is what you want while working on one thing. A single
+module needs a model key in the environment because building an agent does;
+any string will do:
 
 ```bash
-uv run --env-file .env python -m bench.recovery --repeats 3 --label recovery
-uv run --env-file .env python -m bench.continuations --repeats 3
+GOOGLE_API_KEY=x uv run python -m tests.test_graph        # the graph: routing, the waiting step, the schema
+GOOGLE_API_KEY=x uv run python -m tests.test_salon        # the salon agency end to end
+GOOGLE_API_KEY=x uv run python -m tests.test_consent      # the caller's own words, and what may act on them
+GOOGLE_API_KEY=x uv run python -m tests.test_traces       # one call is one trace
+GOOGLE_API_KEY=x uv run python -m tests.test_state        # validated state, and the phone policy
+GOOGLE_API_KEY=x uv run python -m tests.test_diary        # the service oracle: can it say no
+GOOGLE_API_KEY=x uv run python -m tests.test_flow         # guards and conflicts, enforced at execution
+GOOGLE_API_KEY=x uv run python -m tests.test_budget       # one allowance per caller turn
+GOOGLE_API_KEY=x uv run python -m tests.test_recovery     # consent through verification, Pipecat queue cancellation
+GOOGLE_API_KEY=x uv run python -m tests.test_history      # what each provider request is sent
+GOOGLE_API_KEY=x uv run python -m tests.test_optimization # approvals that run with no model request
+GOOGLE_API_KEY=x uv run python -m tests.test_core         # the engine and the Pipecat adapter agree
 ```
 
-The second command tests trace-derived complaint completion, a free-service
-request attached to an upcoming booking, and split phone input. Its prefix
-cancellations use a blocked scripted model; Gemini performs
-the final phone readback and verification. This does not measure microphone
-endpointing or client audio playout.
-
-The [current POC assessment](bench/poc-assessment-20260921.md) records the typed
-complaint/verification repair, native Pipecat comparison and latest voice acceptance.
-Complaints uses structured output functions; its guidance never offers
-a free redo, and a caller-requested remedy remains pending salon review.
-
-The [native comparison](bench/native-evidence/README.md) passed 100/100 POC versus
-82/100 native scripted calls, with mixed latency results. It uses a documented
-native overlay and different tool contracts; it does not isolate framework overhead.
-The [adoption assessment](bench/native-evidence/ADOPTION.md) explains which guarantees
-the typed POC adds while preserving both implementations. The later
-[“Go for it” repair](bench/approval-evidence/README.md) fixes the approval loop
-found in fresh microphone testing. Full POC acceptance remains open as documented.
-The [earlier Phase 01 report](bench/poc-status-20260921.md) retains historical evidence.
-The [complaint-stall follow-up](bench/complaint-stall-20260921.md) explains the
-discarded readback, acknowledgement continuation and subsequent prompt simplification.
-
-## 6. Switch agencies
-
-`salon` is the default. `voice` is a two-agent demo -- a concierge and a phone
-number intake, no external tool -- useful for checking the plumbing in isolation.
-
-```bash
-HARNESS=voice uv run --env-file .env python talk.py "my number is +34600111222"
-HARNESS=voice uv run --env-file .env python bot.py
-```
-
-## 7. Traces
+## 5. Traces
 
 With the Langfuse keys set, one call is one trace. Pipecat opens a span for the
 whole conversation and one per turn; the agents' runs go inside the turn they
@@ -183,7 +118,7 @@ unrelated traces.
 conversation                      conversation.id, session.id
 ├── turn 1                        turn.was_interrupted, turn.user_bot_latency_seconds
 │   ├── stt
-│   ├── agents  agent=concierge hops=1
+│   ├── agents  agent=concierge hops=1 model_requests=1
 │   │   └── concierge run
 │   └── tts
 └── turn 2
@@ -194,49 +129,38 @@ conversation                      conversation.id, session.id
     └── tts
 ```
 
-VAD has no span of its own. What it decides shows up on the turn:
-`turn.was_interrupted` when the caller barged in, and
-`turn.user_bot_latency_seconds` for the gap between them finishing and the bot
-starting.
-
-The `stt` and `tts` observations carry the transcript and the spoken text as
-their output and input, the SLNG route as the model, and everything else Pipecat
-measured — `metrics.ttfb`, the voice, the language, the character count — as
-metadata.
-
 Four things make this work, and all four are needed:
 
 | Where | What |
 |---|---|
 | `bot.py` | `enable_tracing=True` on the `PipelineWorker`, or Pipecat opens no spans at all |
 | `utils/observability.py` | a Langfuse client that exports non-GenAI spans; the default filter drops the conversation span everything hangs from |
-| `utils/observability.py` | a span processor translating Pipecat's attributes into the `langfuse.observation.*` keys Langfuse renders. Pipecat writes `transcript` / `text` / `metrics.*`; Langfuse reads neither, so untranslated every speech span arrives empty |
-| `voice/processor.py` | each caller turn parented on Pipecat's open turn span |
+| `utils/observability.py` | a span processor translating Pipecat's attributes into the `langfuse.observation.*` keys Langfuse renders |
+| `core/processor.py` | each caller turn parented on Pipecat's open turn span, with `request_ttft`, `turn_first_word`, `speech_origins` and `status` on it |
 
-`talk.py` has no pipeline and so no turn: it still emits one trace per agent run.
-
-## Environment
+## 6. Environment
 
 | Variable | Required | What it is |
 |---|---|---|
 | `GOOGLE_API_KEY` | yes | Vertex AI Express Mode key |
 | `SLNG_API_KEY` | yes | SLNG key, for both STT and TTS |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` | no | traces, one per call; one warning if unset |
-| `HARNESS` | no | `salon` (default) or `voice` |
-| `CALLER_ID` | no | the number a phone call would arrive with |
+| `CALLER_ID` | no | the number a phone call would arrive with; read back and confirmed before it is trusted |
+| `SMART_TURN_STOP_SECS` | no | how long a pause ends the caller's turn when the smart-turn model is unsure; default 1.5 |
 | `SLNG_BASE_URL` | no | `eu-north.api.slng.ai` |
 | `SLNG_STT_MODEL` / `SLNG_TTS_MODEL` / `SLNG_TTS_VOICE` | no | the SLNG routes and voice |
 
 `.env` is git-ignored; `.env.example` is the template.
 
-## When it does not work
+## 7. When it does not work
 
 | What you see | What it is |
 |---|---|
 | `KeyError: 'SLNG_API_KEY'` | no `.env`, or you ran `python bot.py` without `--env-file .env` |
+| `DefaultCredentialsError` at import | no `GOOGLE_API_KEY` in the environment; the agents are built at import |
 | `404` or `PermissionDenied` from the model | `GOOGLE_API_KEY` is a Gemini Developer key, not a Vertex Express Mode one |
 | `warning: LANGFUSE_PUBLIC_KEY unset` | expected; traces are off and everything else works |
-| `TemplateSchemaError: Field 'x' not found in schema` | a prompt uses `{{x}}` and `SalonState` has no field `x`. Deliberate: it fails at import, never mid-call |
+| `TemplateSchemaError: Field 'x' not found in schema` | a prompt uses `{{x}}` and `SalonCall` has no field `x`. Deliberate: it fails at import, never mid-call |
 | `Address already in use` | something else is on 7860; pass `--port` |
 | The browser connects but nobody speaks | check the terminal: a model or SLNG error is logged there |
 
@@ -245,172 +169,322 @@ Four things make this work, and all four are needed:
 # How it is built
 
 ```
-voice/harness.py     VoiceState, CallContext, Handoff, Node, TurnBudget  -- shared
-voice/core.py        one caller turn, as an event stream. No runtime imports.
-voice/processor.py   the Pipecat node: translates those events into frames
-voice/{state,agents}.py   the two-agent demo
-salon/state.py       shapes, SalonState, SalonCall, caller-ID prefetch
-salon/diary.py       customers, slots, bookings, complaints (in memory)
-salon/agents.py      the four agents, their tools, the AGENTS table
-prompts/salon/       one prompt per agent, plus the voice rules and documents they share
-knowledge/           the salon's own documents, substituted into the prompts at import
-bot.py               pipeline wiring
-talk.py              the no-audio transcript loop
-tests/               assert scripts, no pytest, no network
-bench/               latency and behaviour against the real model, and the trace reader
+bot.py                  the Pipecat pipeline, and nothing else
+core/
+  state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
+  graph.py              Node, Exit, LocalAction, route, moved_by
+  policies.py           TurnBudget, the hooks, pick, schema_tool
+  history.py            what each provider request is sent
+  turn.py               one caller turn as an event stream; imports no Pipecat
+  processor.py          the Pipecat adapter: events in, frames out
+salon/
+  models/               shapes, consent, receipts, state
+  tools/                identity, booking, complaints, desk, writes, asking, policy
+  diary.py              the salon's books, in memory
+  instructions.py       the prompts, compiled against the call at import
+  agents.py             the model, advance(), build(), the AGENTS table
+prompts/                one prompt per step, the shared rules, knowledge/
+utils/observability.py  Langfuse over OTel
+tests/                  twelve assert scripts
 ```
 
-## How a turn works
+`core` knows nothing about the salon, and nothing in `core` but the processor
+knows about Pipecat. `tests/test_core.py` reads the source and checks both.
 
-The user aggregator finishes the caller's turn and pushes an `LLMContextFrame`.
-The processor hands the transcript to `voice.core.run_turn`, which runs the
-current agent and yields an ordered stream of events; the processor turns
-`RunStarted` into `LLMFullResponseStartFrame`, each `TextDelta` into an
-`LLMTextFrame`, and `RunEnded` into `LLMFullResponseEndFrame`. TTS, the
+# Design choices
+
+Each choice below names what it decided, where it lives, and the document it
+rests on. The links are the primary references the design was checked against;
+public documentation changes, so behaviour was verified against the pinned
+versions in `uv.lock` (Pydantic AI 2.46, Pipecat 1.11).
+
+## 1. Pydantic AI as the LLM node of a Pipecat pipeline
+
+A Pipecat LLM node is a frame contract, not a class. On an `LLMContextFrame`
+it pushes `LLMFullResponseStartFrame`, then one `LLMTextFrame` per chunk of
+speech, then `LLMFullResponseEndFrame`. TTS, the assistant aggregator, the
 transcript and the interruption machinery are built on those three frames and
-nothing else, which is why a Pydantic AI agent can sit here at all.
+nothing else, so anything that speaks them can sit in that slot. That is what
+`PydanticAgentProcessor` in `core/processor.py` does, and it is the same shape
+Pipecat's own bridge to an external agent framework takes.
 
-Pipecat's own `LLMContext` still fills up beside the agents' history. No model
-reads it; it is the aggregators' record of what was actually *spoken*, and
-`note_spoken` reconciles identified speech segments with its playback estimate.
-Generated text and business receipts remain available separately.
+The agents keep their own history as `list[ModelMessage]` on the call.
+Pipecat's `LLMContext` still fills up beside it and is never sent to a model:
+it is the aggregators' record of what was actually *spoken*, which is how the
+processor learns what the caller heard when they talk over the bot.
 
-`Node.history='messages'` projects caller turns and fixed/model speech once by
-ID. `reset` hides earlier conversation for that run, preserves its active tool
-loop, and retains its conversation for subsequent steps. A prerequisite return
-restores the owner's checkpoint plus an application-owned completed/unserved
-status; its private conversation stays in the call transcript and audit history.
+- Pipecat's external-framework processor, the precedent for this seam:
+  https://github.com/pipecat-ai/pipecat/blob/main/src/pipecat/processors/frameworks/strands_agents.py
+- The frames: https://reference-server.pipecat.ai/en/stable/api/pipecat.frames.frames.html
 
-Typed `TemplateStr` instructions re-render named state values on every provider
-request. This controls saved-value injection, not redaction: a phone number
-already spoken remains in retained conversation. Playback callbacks use run and
-segment identities; ambiguous unframed TTS callbacks are ignored. Pipecat's text
-is a runtime estimate, not proof of client audio playout. `tests.test_history`
-checks these request boundaries through both core and adapter.
+## 2. How streaming works
 
-## Steps are agents
+`Turn._speak` in `core/turn.py` opens `Agent.run_stream_events` and reads the
+event stream Pydantic AI emits: a `PartStartEvent` whose part is a `TextPart`,
+then `PartDeltaEvent`s carrying `TextPartDelta`s, are speech; a `ToolCallPart`
+is not. Each piece of speech becomes a `TextDelta` event, and the processor
+turns it into an `LLMTextFrame` the moment it arrives. TTS aggregates by token
+rather than by sentence, so the first word is synthesised as soon as the model
+produces it.
 
-Each agent has its own prompt file, its own tools, and can have its own model.
-General salon questions stay at the front desk without verification. Booking
-requests (make, move or cancel) and complaints both require phone verification
-before their agent starts. The graph resumes the original request afterward;
-callers already verified in this call go straight to the requested step.
+```mermaid
+sequenceDiagram
+    participant UA as user aggregator
+    participant P as PydanticAgentProcessor
+    participant T as Turn (core.turn)
+    participant M as model
+    participant TTS as SlngTTS
+    UA->>P: LLMContextFrame
+    P->>T: run_turn(prompt)
+    T-->>P: RunStarted
+    P->>TTS: LLMFullResponseStartFrame
+    T->>M: run_stream_events
+    loop each TextPartDelta
+        M-->>T: PartDeltaEvent
+        T-->>P: TextDelta
+        P->>TTS: LLMTextFrame
+    end
+    M-->>T: AgentRunResultEvent
+    T-->>P: RunEnded
+    P->>TTS: LLMFullResponseEndFrame
+    T-->>P: TurnFinished(status, agent, handoffs, requests)
+```
 
-A run ends one of three ways:
+Three things ride on that stream:
 
-- **plain text** — streams to TTS, the turn is over, the agent stays current;
-- **a borrowed tool** — the step called a tool another step owns, so the caller
-  is now in that step. The request that did their work is the request that moved
-  them, and nothing was spent announcing it;
-- **`hand_over`** — names what the caller *wants*, and the graph works out where
-  that actually puts them. The edge that costs a request, kept for moves no tool
-  can stand for;
-- **a finisher** — `confirm_customer`, `save_booking`, `hang_up`: one model
-  request does the work, records it, and the graph works out who speaks next.
-  `save_booking` also says the confirmation itself, in the diary's own words, so
-  no second request exists to get it wrong. A failure raises `ModelRetry`
-  instead, so the step stays open with the real reason in front of the model.
+- **Fixed lines** are not generated. A question the application worded, a
+  booking confirmation in the diary's own phrasing, the greeting and the error
+  lines go straight to TTS as `TTSSpeakFrame`s through `CallContext.say` and
+  `speak_now`, and are recorded in the call's speech ledger with who wrote
+  them. A turn's delivered speech is therefore not one string, and a trace can
+  tell a question from an answer.
+- **The clause gate.** On a step that can write (`Node.guarded`), speech is
+  held back a clause at a time until the step has written something. Each
+  clause is checked by `SalonCall.claims_completion` before it goes out, and a
+  clause claiming a change nothing has made is replaced by a correction rather
+  than spoken. It costs one clause of latency on those steps only.
+- **Barge-in.** The processor fires a `Barge` when Pipecat interrupts; the
+  turn cancels the run in flight and stops before starting another. Whatever
+  the run completed is kept: messages are retained from the SDK's own
+  `new_messages()` boundary after teardown, so accepted input and a tool that
+  ran are still in the history, and the assistant aggregator's delivered
+  prefix is used to cut the record down to what the caller actually heard.
 
-`hand_over` is an action rather than a schema for a measured reason: given a
-`Handoff` model to fill in, the model wrote *"let me put you through to our
-complaints team"* and then did nothing.
+- Streaming events and output types: https://pydantic.dev/docs/ai/core-concepts/output/
+- Message history as an explicit input and output of a run: https://pydantic.dev/docs/ai/core-concepts/message-history/
 
-Adding a step is a prompt in `prompts/salon/`, an entry in `AGENTS`, and a name
-in `AgentName`. No node config, no snapshot and no restore.
+## 3. Nodes and edges: the graph, and where it lives
 
-## The graph is three fields and one function
-
-`AGENTS` declares, per step, where a caller may go and what has to be true first:
+A step is a `Node` (`core/graph.py`): the agent that runs it, the `Exit`s it
+may take, the state fields it `requires` and the step that `satisfied_by`
+fills them. The whole graph is the `AGENTS` table in `salon/agents.py`:
 
 ```python
-'booking': build('booking', tools=[read_diary], finishers=[save_booking],
-                 exits=(Exit('concierge'), Exit('complaints')),
-                 requires=('customer_verified',), satisfied_by='verify'),
+'booking': build(
+    'booking',
+    tools=[read_diary],
+    finishers=[save_booking],
+    asks=[ask_booking, offer_times, booking_guidance],
+    guarded=True,
+    exits=(Exit('concierge'), Exit('complaints')),
+    requires=('customer_verified',),
+    satisfied_by='verify',
+),
 ```
 
-and which of its edges cost nothing:
-
-```python
-'concierge': build('concierge', ...,
-                   exits=(Exit('booking'),                              # a hand_over
-                          Exit('booking', verified, via=(read_diary,)), # free
-                          ...)),
+```mermaid
+stateDiagram-v2
+    [*] --> concierge
+    concierge --> booking: hand_over, or read_diary once verified
+    concierge --> complaints: hand_over
+    concierge --> verify: hand_over, only once verified (a correction)
+    booking --> concierge: hand_over, or save_booking finishes
+    booking --> complaints: hand_over
+    complaints --> concierge: hand_over
+    verify --> concierge: stop_verifying, or hand_over once verified
+    note right of verify
+        Interposed by route() whenever booking or
+        complaints is entered unverified. confirm_customer
+        finishes it and resumes the pending step.
+    end note
 ```
 
-`voice.harness.route` is the whole graph, and it never runs a model:
+Two functions walk the graph and neither runs a model:
 
-- **A prerequisite is interposed.** The front desk asks for `booking` or `complaints`;
-  nobody is identified; the graph remembers that step, enters `verify`, and the finisher there
-  pops it back. No request decides that, and no prompt states the ordering.
-- **Each step's `hand_over` carries only its own exits**, as a narrowed
-  `Literal` rebuilt per turn from the live state. An illegal transition is not
-  refused at runtime — it is unrepresentable in the schema the model is sent.
-- **A borrowed tool is the move.** A step lends its neighbour's entry tool while
-  the guard holds — the front desk holds `read_diary` once somebody is
-  identified — and calling it puts the caller in the step that owns it. Shut,
-  the tool is not in the schema at all, so the model cannot call it and be
-  refused, which would cost the round trip the lending is there to save.
-- **A side question moves nothing.** A turn that only speaks takes no edge, so
-  `state.agent` does not move and there is nothing to suspend or resume.
+- **`route(state, nodes, to)`** decides where a handoff actually puts the
+  caller. If the destination has an unmet prerequisite, the graph records the
+  destination as `pending`, enters the step that satisfies it, and the
+  finisher there calls `resume` to go back. No request decides that, and no
+  prompt states the ordering.
+- **`moved_by(state, node, nodes, succeeded)`** decides where a *successful*
+  borrowed tool has put the caller. A step lends a neighbour's entry tool into
+  its own schema while an `Exit` guard holds (`Exit('booking', verified,
+  via=(read_diary,))`), and calling it *is* the move: the request that moved
+  the caller is the request that did their work. Only tools that returned
+  count; a refused tool is not a move.
 
-Six decisions that used to be the model's are now the application's; two
-semantic ones stay — what the caller wants, and which slot they picked.
+Illegal moves are unrepresentable rather than refused. Each step's `hand_over`
+is built by `hand_over_for` with a `Literal` of only that step's destinations,
+and two `prepare` hooks rebuild the offered tools before every provider
+request: `only_reachable` hides a borrowed tool while its guard does not hold,
+and `narrow` rewrites the `hand_over` enum to the exits that are open right
+now. Both are re-checked at execution, because a schema built before the tools
+in the same reply ran is a convenience for the model, never the enforcement.
 
-**Why the lending exists.** A live call on 2026-09-20 spent three of its
-twenty-four model requests on the front desk saying where the caller was going
-and nothing else: 0.85s of silence each, and the worst turn in that call — "can
-you move the appointment to Saturday" — cost four requests and 3.37s. Every
-request in that trace took 0.85s whatever it did, so a turn's latency is just
-how many of them it takes. An edge that costs a request is an edge the caller
-waits through.
+- Preparing tools and output tools per request: https://pydantic.dev/docs/ai/capabilities/prepare-tools/
+- Programmatic handoff, as distinct from delegation: https://pydantic.dev/docs/ai/guides/multi-agent-applications/
+- Function tools and their schemas: https://pydantic.dev/docs/ai/tools-toolsets/tools/
 
-## Measuring it
+## 4. Typed state, and how it is updated
 
-`bench/` answers the questions the design makes, on the real model, with no audio:
+`VoiceState` (`core/state.py`) is the business facts of a call and nothing
+else. `SalonState` (`salon/models/state.py`) adds the salon's: the caller's
+number, whether they confirmed it, what the lookup found, the appointment the
+diary holds, how many writes have been accepted, and the one write whose
+outcome is unknown. Every field is a validated shape from
+`salon/models/shapes.py`, so a state cannot hold a phone number that is not a
+Spanish number or a date that is not on the calendar.
 
-```bash
-uv run --env-file .env python -m bench.scenarios 3    # requests and seconds per turn
-uv run --env-file .env python -m bench.preamble 3     # does the model cover its own gaps?
-uv run python -m bench.turns --env .env --sessions    # per-turn numbers off Langfuse
-```
+Three Pydantic opt-ins are on, and none is on by default: `validate_default`,
+so an authored default that breaks its own type fails at import;
+`validate_assignment`; and `revalidate_instances='always'`, so a nested model
+handed in is revalidated rather than trusted. Each alone leaves a hole the
+other two do not cover.
 
-`BENCH_PINNED=1` pins the model to `gemini-3.1-flash-lite` with
-`thinking_level: MINIMAL`, which is what the `salon-concierge` package runs, so
-a comparison between the two measures the architecture rather than the model.
+State is never assigned field by field. `CallContext.commit(**updates)`
+builds one whole candidate from the current values plus the updates and
+validates it; on failure the previous state object is untouched. It is not
+`model_copy(update=...)`, which copies updates in without validating them, and
+a keyword naming no field is refused rather than dropped. A `model_validator`
+on `SalonState` runs on every commit and clears verification that does not
+belong to the number now on the call, so authorisation cannot survive a
+correction and a status nobody earned cannot be constructed.
 
-The reader normalises both arms onto one caller turn: this harness opens an
-`agents` span per accepted turn and the native one has only Pipecat's `turn`
-span, so it picks one or the other and never counts both. The greeting is the
-turn Pipecat records no `user_bot_latency_seconds` for. What a caller waited
-is that attribute; a turn span's own duration runs until the bot stops
-speaking and is three to fifteen seconds on the same call. `bench/review-20260921.md`
-is the ledger of what that reader used to get wrong, and what is still open
-before any latency claim is worth making.
+A commit from a turn the caller has moved on from keeps its business facts and
+loses its flow fields: a booking that landed is a fact whichever turn made it;
+where the caller *is* belongs to the current turn.
 
-If an agent's words should be heard, it is an agent in `AGENTS`. If they should
-not — a classifier, an extractor, a summariser — it is delegation:
-`await worker.run(..., deps=ctx.deps, usage=ctx.usage)` from inside a tool.
+- Model configuration, assignment validation: https://pydantic.dev/docs/validation/latest/api/pydantic/config/
+- Models and validation: https://pydantic.dev/docs/validation/latest/concepts/models/
+- `TypeAdapter`, used for tool arguments and the phone shape: https://pydantic.dev/docs/validation/latest/concepts/type_adapter/
+- Dependencies (`deps_type` is typed access, not a runtime validator): https://pydantic.dev/docs/ai/core-concepts/dependencies/
 
-## Two rules the salon agency is built on
+## 5. Typed flow
 
-**The prompt is already branched.** `prompts/salon/*.md` are Handlebars
-templates compiled against `SalonState`, so every `{{#if}}` resolves before the
-model reads it. An unverified caller's concierge prompt does not contain the
-"skip verification" branch at all.
+Typed values were never the hard part. A valid phone number does not establish
+that the caller confirmed it; a valid booking request does not establish
+approval; a successful lookup does not say which pending request to resume.
+The POC connects four contracts, and each has one place in the code:
 
-**Anything code can work out, code works out.** Which day "next Friday" is,
-whether a slot has already passed, what a booking sounds like said out loud,
-what to say when a booking lands. None of it is asked of a model, so none of it
-can be got wrong.
+| Contract | Question it answers | Where |
+|---|---|---|
+| Typed values | Is the value structurally valid? | `salon/models/shapes.py`: `Phone`, `SubmittedPhone`, `Date`, `Time`, `Id` |
+| Typed state | Do the facts remain consistent after an update? | `CallContext.commit`, the `SalonState` identity invariant |
+| Typed flow | Is this action allowed now, and where do we continue? | `route`, `moved_by`, `Exit.guard`, `Node.requires`, the prepare hooks |
+| Typed completion | What evidence is required before success is spoken? | `salon/models/receipts.py`, `salon/tools/writes.py` |
 
+Typed completion is the boundary most often skipped. `Diary` stands in for an
+HTTP service and hands back dicts; every one is parsed into a receipt model
+(`Slots`, `Saved`, `CustomerLookup`, `ComplaintRecord`) before a field is
+read, and a legal-looking receipt is then checked against the *request*: a
+`cancelled` result is not an answer to a `book` request however well-formed it
+is. Every write carries an operation token derived from what the action is,
+and a write whose answer was lost is recorded as `Unresolved` on the state,
+which blocks every other write until the token has been asked what happened.
 
-### Code-only optimization evidence
+## 6. The custom logic
 
-The salon agents share one provider client. Known readbacks and clear tracked
-approvals can advance without a model request, through the same validation and
-write-recovery handlers. Booking speech now uses typed availability, clarification
-and receipt outputs. Existing prompts and knowledge are unchanged by this work.
+Everything the model used to decide that the application now decides, and the
+mechanism for each:
 
-The current offline suite has 14 modules. See
-[the optimization evidence](bench/optimization-evidence/README.md) for live replay,
-matched comparison, retained failures and remaining audio acceptance conditions.
+- **One budget per caller turn.** `TurnBudget` (`core/policies.py`) is one
+  tally of provider requests, one tool-call allowance, a fixed number of step
+  runs and one deadline, threaded through every run in the turn. An exhausted
+  turn gets one fixed line and no further request.
+  https://pydantic.dev/docs/ai/api/pydantic-ai/usage/ ·
+  https://pydantic.dev/docs/ai/core-concepts/retries/ ·
+  https://pydantic.dev/docs/ai/core-concepts/timeouts/
+- **One action per model reply.** `one_action_per_reply` reads the whole
+  response in `after_model_request`, in emission order, and picks the one tool
+  call allowed to move the caller or write to the business; `claim_or_refuse`
+  is how an action checks it holds the claim, because `before_tool_execute`
+  does not fire for output tools.
+- **Speak by the third request.** `speak_by` empties the ordinary tool set
+  from a given request on, so a run cannot buy a fourth lookup; its output
+  tools stay, so it can still finish.
+- **A clock per request.** `request_clock` stamps each provider request on
+  the way out, so time to first token is per request and says whether the
+  first thing back was speech or a tool call.
+- **Consent is application-owned.** `CallContext.heard` is what the caller
+  said this turn, `Asked` (`salon/models/consent.py`) is the one question they
+  are answering, and an `Ask` output function words the question and records
+  it. Every consequential action checks the two against each other, and the
+  matchers `agrees`, `ends`, `move_or_add` and `times_named` are closed word
+  lists that fail towards asking again.
+- **Approvals with no model request.** `Node.advance` (`salon/agents.py`
+  `advance()`) runs before a step's agent. A clear yes to the pending question
+  runs the same executor the model tool runs (`lookup_customer`,
+  `write_booking`, `write_complaint`) as a `LocalAction`, spending the shared
+  budget and retaining its receipt, with zero provider requests.
+- **Deterministic continuation.** A finisher does its work and returns a
+  `Handoff` whose destination is `call.resume(...)`, which the graph already
+  knows. A prerequisite step reports `completed` or `unserved`, and the
+  engine restores the owner's checkpoint and tells the next agent what
+  happened through an instruction part.
+- **History is projected, not sent raw.** `core/history.py`'s `paired` drops
+  tool calls a cancellation left unanswered and `project` merges the speech
+  ledger into the protocol by segment id, so a model is told what the caller
+  heard and never an assistant message with nothing after it.
+  https://pydantic.dev/docs/ai/capabilities/process-history/
+- **Prompts are compiled against the call.** `salon/instructions.py` builds a
+  `TemplateStr[SalonCall]` per step from `prompts/*.md`, so a placeholder
+  naming no field fails at import, every `{{#if}}` is resolved before the model
+  reads it, and the salon's own documents are substituted in rather than
+  fetched by a retrieval tool. https://pydantic.dev/docs/ai/api/pydantic-ai/template/
+- **The diary computes what a model would guess.** Which day "next Friday"
+  is, whether a slot has already passed, whether two appointments overlap,
+  what a booking sounds like out loud: all `salon/diary.py`, none asked of a
+  model.
+
+## 7. Telemetry
+
+Langfuse over OpenTelemetry. Pydantic AI's instrumentation emits the agent
+runs; Pipecat emits the conversation, the turn, stt and tts; the processor
+emits one `agents` span per caller turn, parented on Pipecat's open turn span.
+`utils/observability.py` does the two things nothing else does: exports the
+non-GenAI spans Langfuse would otherwise drop, and translates Pipecat's
+attributes into `langfuse.observation.*` so a speech span arrives with its
+text and its model rather than empty. Counting provider requests means
+counting `model_requests` on the `agents` span, not every observation labelled
+a generation: speech services are generations too.
+
+- Langfuse trace structure and counting: https://langfuse.com/docs/observability/best-practices
+
+## 8. Testing without a network
+
+Every agent is overridden with a `FunctionModel` whose stream function scripts
+the model's reply, tool calls included, and `python -m tests` sets
+`ALLOW_MODEL_REQUESTS = False` before any module is imported so a forgotten
+override raises. The same scenarios run through the engine's `take_turn` and
+through the Pipecat processor, and `tests/test_core.py` compares them outcome
+by outcome. `tests/test_flow.py` and `tests/test_core.py` also read the source:
+anything that commits state must be an action or reachable only from one, and
+no runtime-neutral module may import Pipecat.
+
+- Scripted models: https://pydantic.dev/docs/ai/guides/testing/
+
+# What the POC measured
+
+The shape above was kept because of what a matched comparison against the
+native Pipecat build showed, on the same model, caller scripts, clock and
+business fixtures. Server-observed numbers; not a general audio speed-up claim.
+
+| Measure | Typed agency | Native |
+|---|---|---|
+| Scored scripted calls completed | 100 / 100 | 80 / 100 |
+| Provider requests over 200 caller turns | 240 | 519 |
+| Approval turns with zero model requests, four microphone calls | 4 | n/a |
+
+The four microphone calls ran at 1.15 s median and 2.58 s p90 from estimated
+caller silence to the server's bot-speaking marker. The comparison is between
+two implementations under matched inputs; it does not isolate any one library.

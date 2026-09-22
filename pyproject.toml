@@ -6,11 +6,9 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "langfuse>=4.15.4",
-    # `spec` pulls pydantic-handlebars: it is what compiles prompts/*.md into
-    # TemplateStr instructions that render against CallState.
+    # `spec` pulls pydantic-handlebars, which compiles prompts/*.md against SalonCall.
     "pydantic-ai-slim[google,openai,spec]>=2.46.0",
-    # `phonenumbers` is Google's libphonenumber. A regex cannot know that
-    # +348340464 is eight national digits short of a real Spanish number.
+    # Google's libphonenumber: a regex cannot know a Spanish number has nine national digits.
     "pydantic-extra-types[phonenumbers]>=2.11.1",
     "pipecat-ai[runner,silero,webrtc]>=1.11.0",
     "pipecat-slng>=0.5.2",
@@ -19,67 +17,39 @@ dependencies = [
 ]
 
 [dependency-groups]
-# No pytest: tests/ are assert scripts run as modules, no framework, no network.
+# No pytest: tests/ are assert scripts run as modules.
 dev = [
     "ruff>=0.14",
     "ty>=0.0.82",
 ]
 
 [tool.ruff]
-# The width this code was already hand-wrapped to. target-version is inferred
-# from requires-python.
 line-length = 110
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "B", "C4", "UP", "SIM", "RUF", "D"]
 ignore = [
-    "E501",          # Line too long -- the formatter owns wrapping.
-    "D1",            # undocumented-*: a docstring where one earns its place, not on every def.
-    "D203", "D213",  # Conflict with the google convention's D211/D212.
-    "D417",          # Every hit is `ctx`: pydantic-ai plumbing the model never sees.
-    "D205",          # Tool docstrings are prompt text the model reads; their opening
-                     # sentence is deliberately longer than one line.
-    "D415",          # Module docstrings here lead with a runnable command, where a
-                     # trailing period reads as part of the command.
-    "D210",          # Docstrings that open on a quoted phrase need the leading space,
-                     # or the opening `"""` runs into the quote as `""""`.
+    "E501",          # the formatter owns wrapping
+    "D1",            # a docstring where one earns its place, not on every def
+    "D203", "D213",  # conflict with the google convention's D211/D212
+    "D417",          # every hit is `ctx`: pydantic-ai plumbing the model never sees
+    "D205", "D415",  # tool docstrings are prompt text; their shape is the model's, not pydocstyle's
+    "D210",          # a docstring opening on a quoted phrase needs the leading space
 ]
-# `A` (flake8-builtins) is deliberately absent: its only hits are the variable
-# `exit`, which is this graph's own vocabulary (`Exit`, `exits`, `lent`).
+# `A` (flake8-builtins) is absent on purpose: `exit` is this graph's own vocabulary.
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.flake8-bugbear]
-# `TurnBudget` is a frozen dataclass, so calling it in a default argument is
-# safe -- there is no shared mutable instance for a caller to write through.
+# `TurnBudget` is a frozen dataclass, so a call in a default argument is safe.
 extend-immutable-calls = ["core.policies.TurnBudget"]
 
 [tool.ruff.format]
 quote-style = "single"
 
-[tool.ty.rules]
-# `invalid-argument-type` is **on**. It was off, globally, which meant ty
-# caught no new argument-type error anywhere -- the cost this note used to
-# name and pay. Measured with it on, on 2026-09-21: 39 diagnostics.
-#
-# Making `Node` generic over its state type cleared the largest group of
-# them, which is the upgrade path the note at the definition described. The
-# eight that were left in the application are individually marked with
-# `# ty: ignore[invalid-argument-type]` and a line saying why, and every one
-# of them is a place where an SDK's own annotation is narrower or looser than
-# what it accepts -- Pipecat's transport table, Google's thinking config,
-# pydantic-ai's `args_validator` return and its response-part union. The
-# scaffolding's are marked the same way, at the line rather than the file.
-#
-# The five this note used to say were reported inside `.venv` are gone with
-# the generics: they were the bare `Agent` field, and ty resolves the
-# explicit subscript once there is one to resolve.
-
 [[tool.ty.overrides]]
-# Scaffolding passes `None` for a model, a usage and an agent it never reads,
-# reads attributes off optionals it knows are set, and parametrises cases with
-# heterogeneous tuples ty widens to a union.
+# Scripted tests pass `None` for a model and a usage they never read.
 include = ["tests/**"]
 
 [tool.ty.overrides.rules]

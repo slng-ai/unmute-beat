@@ -7,168 +7,116 @@ transport, VAD, turn taking, STT and TTS; the agents own the conversation.
 transport.input() -> SlngSTT -> user_aggregator -> PydanticAgentProcessor -> SlngTTS -> transport.output()
 ```
 
-`README.md` is the long version — architecture, the graph, the trace shape, the
-measurements behind the design. Read it before changing how a turn works.
+`README.md` is the long version: how to run it and every design choice with
+its supporting link. Read it before changing how a turn works.
 
 ## Layout
 
 | Path | Owns |
 |---|---|
-| `voice/harness.py` | what every agency shares: `VoiceState`, `CallContext`, `TurnBudget`, `Node`, `Exit`, `route`, `moved_by`, the hooks |
-| `voice/core.py` | one caller turn, runtime-neutral. Yields an event stream (`RunStarted`, `TextDelta`, `FixedSpeech`, `RunEnded`, `TurnFinished`) and imports no Pipecat |
-| `voice/processor.py` | the Pipecat adapter: translates that event stream into `LLMTextFrame`s, supplies the open turn span |
-| `voice/{state,agents}.py` | the two-agent demo agency (`CallState`, `Call`) |
-| `salon/state.py` | `SalonState`, `SalonCall`, the validated shapes, caller-ID prefetch |
-| `salon/diary.py` | customers, slots, offers, bookings, complaints — in memory, and the oracle that says no |
-| `salon/agents.py` | the four agents, their tools, the validated service boundary, the `AGENTS` table |
-| `utils/observability.py` | Langfuse/OTel wiring; call `setup()` once, before any agent is built |
-| `prompts/<agency>/` | one Handlebars prompt per agent, plus the shared voice rules and the salon's own documents, substituted in at import |
-| `bench/` | latency and behaviour measurement against the real model |
-| `bench/baseline/` | the pre-Phase-01 snapshot, digests and evidence ledger — don't edit, except `after/` when the suite's output changes |
-| `bench/review-20260921.md` | the closure ledger: every defect a review reproduced, the check that now holds it, the message its negative control printed, and what is still open |
-| `bench/baseline/after/ledger.md` | the Phase-01 completion ledger: one row per requirement, `passed` / `blocked` / `not-run`, with the command and the retained output |
-| `tests/` | assert scripts — no pytest, no network. `test_consent.py` replays the five live conversation failures of 2026-09-21. `fixtures/trace_native.json` is the real native reference call and `trace_n{1..4}.json` are the four live ones, which is what keeps the trace reader honest about both arms. `test_recovery.py` covers approval through verification and Pipecat queue cancellation |
+| `bot.py` | the Pipecat pipeline: STT, VAD and smart-turn, TTS, transport, tracing worker, greeting. The only runnable entry point |
+| `core/state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question` |
+| `core/graph.py` | `Node`, `Exit`, `LocalAction`, `route`, `moved_by`, `lent`, `model_clients` |
+| `core/policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
+| `core/history.py` | `paired` and `project`: what each provider request is actually sent |
+| `core/turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
+| `core/processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
+| `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `agrees`, `ends`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
+| `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`) |
+| `salon/diary.py` | `Diary`: customers, slots, offers, bookings, complaints, in memory, and the oracle that says no |
+| `salon/instructions.py` | compiles `prompts/*.md` against `SalonCall` at import; `GREETING`; the salon's documents |
+| `salon/agents.py` | `MODEL`, `advance()`, `build()`, the `AGENTS` table |
+| `prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
+| `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
+| `tests/` | twelve assert-script modules, no pytest, no network |
 
-**The split that matters:** `voice/core.py` runs a turn and knows nothing about
-how it reaches a person; `voice/processor.py` is the Pipecat adapter over it.
-Anything about *running* a turn goes in `core`, anything about frames goes in
-`processor`. `tests/test_core.py` asserts the two agree.
+**The split that matters:** `core/turn.py` runs a turn and knows nothing about
+how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
+Anything about *running* a turn goes in `turn`, anything about frames goes in
+`processor`. `tests/test_core.py` asserts the two agree and that no `core`
+module but the processor imports Pipecat.
 
-Each agency supplies its own `VoiceState` subclass (validated, model-visible
-facts) and `CallContext` subclass (state + history + the line to the caller).
-`salon/` uses `SalonState`/`SalonCall`, `voice/` uses `CallState`/`Call`.
-State is replaced wholesale via `call.commit(**updates)` — one validated
-candidate or nothing, never field-by-field assignment.
+`core` imports nothing from `salon`. `salon.models` imports `core.state`;
+`salon.tools` imports models, the diary and `core.policies`; `salon.agents`
+imports everything; `bot.py` wires it to Pipecat.
 
-`voice/` is two things at once: the shared framework (`harness`, `core`,
-`processor`) **and** the demo agency (`agents`, `state`). That is why `salon/`
-imports from a package named after the other agency. Known, not accidental.
-
-Tools live with the agency whose state they bind to (`RunContext[SalonCall]`).
-There is no shared top-level `tools/` on purpose: it would couple the agencies.
+State is replaced wholesale via `call.commit(**updates)`: one validated
+candidate or nothing, never field-by-field assignment. Tools live with the step
+they belong to and bind to `RunContext[SalonCall]`. The model-facing tool has a
+`ctx` first parameter; the executor it shares with `advance()` takes `call`.
 
 ## Commands
 
-Everything needs `--env-file .env` — the model key is read at import.
+Everything that builds an agent needs a model key at import: `--env-file .env`,
+or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all 14 modules, offline, no .env
-uv run --env-file .env python talk.py                    # no audio, the fast loop
+uv run python -m tests                                   # all twelve modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 ```
 
-`uv run python -m tests` is the answer to "how do I test": it turns
-`ALLOW_MODEL_REQUESTS` off *before* any scenario module is imported, so a
-module that forgot to override an agent raises instead of billing. Running one
-module alone (`uv run python -m tests.test_salon`) is what you want while
-working on it, but it is only safe by convention.
-
-`HARNESS=voice` swaps the salon for the demo agency. `talk.py` takes the whole
-call as arguments, which is the quickest way to exercise a prompt change.
-
-`SALON_FIXTURE=fresh` empties the salon at the start of each call, which is
-what a scored benchmark run wants; `continue` (the default) leaves it alone,
-which is what a real salon does and what a two-call scenario needs. Pinning
-`SALON_CLOCK` does **not** reset anything: a clock makes two calls comparable
-and a reset makes the second destroy the first, and they are separate
-decisions.
+`uv run python -m tests` turns `ALLOW_MODEL_REQUESTS` off *before* any module
+is imported, so a test that forgot to override an agent raises instead of
+billing. One module alone needs a key in the environment:
+`GOOGLE_API_KEY=x uv run python -m tests.test_salon`.
 
 Before calling anything done: `ruff check`, `ty check` and `python -m tests`
 all clean. Paste the real output; don't round up.
 
 ## Conventions
 
-- **Docstrings carry the explanation**, not `#` comments. The exception is a
-  short `# ponytail:` marker naming a deliberate shortcut and its upgrade path.
-- Tool docstrings **are prompt text** — the model reads them. Editing one
-  changes behaviour; treat it as a prompt change, not a style fix. This is why
-  `D205`, `D210`, `D415` and `D417` are off in `pyproject.toml`.
+- **Every comment is a docstring.** Rationale goes on the function, class,
+  module or attribute it is about; a note on a field is a string literal on
+  the line after it. The only `#` lines are tool directives (`noqa`,
+  `ty: ignore`, `fmt:`). A deliberate shortcut is a `ponytail:` line inside a
+  docstring, naming its ceiling and upgrade path.
+- **Tool docstrings are prompt text.** The model reads them. Editing one is a
+  prompt change, not a style fix; that is why `D205`, `D210`, `D415` and `D417`
+  are off. Rationale for a tool goes on its executor or its module.
+- **Prompts are moved, not edited, without a live check.** `prompts/*.md` are
+  the versions the POC was measured on.
 - Single quotes, 110 columns, `ruff format` decides. `E501` is off.
 - No pytest. Tests are assert scripts run as modules, and stay that way.
 - No new dependency without asking. Stdlib first.
 
 ## Six things that bite
 
-1. **Prompts are compiled against state.** `prompts/<agency>/*.md` are
-   Handlebars templates typed against the agency's `CallContext`, so a
-   `{{state.x}}` naming no field raises `TemplateSchemaError` **at import**,
-   never mid-call. Deliberate. Add the field or fix the prompt.
-2. **A new step is three edits in lockstep**: a prompt file in
-   `prompts/<agency>/`, an entry in `AGENTS`, and a name in `AgentName`. Miss
-   one and it fails at import.
-3. **Anything a service returns is validated at the boundary.** `salon/agents.py`
-   parses every `diary` response into a model (`Slots`, `Saved`, `Held`,
-   `ComplaintRecord`) before a field is read. A return annotation is not
-   validation — Python doesn't check it.
-4. **One action per model reply.** `one_action_per_reply` picks the single tool
-   call in a response allowed to move the caller or write to the business;
-   `claim_or_refuse` is how an action checks it holds that claim.
+1. **Prompts are compiled against state.** `prompts/*.md` are Handlebars
+   templates typed against `SalonCall`, so a `{{state.x}}` naming no field
+   raises `TemplateSchemaError` **at import**, never mid-call. Add the field or
+   fix the prompt.
+2. **A new step is four edits in lockstep**: a prompt in `prompts/`, a module
+   in `salon/tools/` (or tools in an existing one), an entry in `AGENTS`, and
+   a name in `AgentName`. Miss one and it fails at import.
+3. **Anything a service returns is validated at the boundary.** Every `Diary`
+   response is parsed into a `salon.models.receipts` model before a field is
+   read. A return annotation is not validation.
+4. **One action per model reply.** `one_action_per_reply` picks the single
+   tool call in a response allowed to move the caller or write to the
+   business; `claim_or_refuse` is how an action checks it holds that claim.
+   `tests/test_flow.py` scans the tools package for anything that commits
+   state and is not an action.
 5. **Consent is application-owned.** Nothing a model writes establishes that
-   the caller agreed to anything. `CallContext.heard` is what they actually
-   said; `SalonCall._asked` is the one question they are answering, put to
-   them by an `Ask` output whose words this code chose. Every consequential
-   action checks the two against each other — and on a step that can write,
-   model speech goes out a clause at a time so a claim about a change nothing
-   made is never said. Five model-authored arguments used to carry this and
-   the live calls of 2026-09-21 forged all five.
-6. **A cancelled turn still heard something.** The core uses Pydantic AI's
-   `new_messages()` boundary after stream teardown to retain accepted input and
-   completed tool results even when Pipecat cancels the running task. Never slice
-   by the original history length: SDK normalization merges old messages.
-   The processor also carries input
-   that never entered an SDK run and consumes every unseen user message in the
-   aggregator's context, including queued context frames discarded by barge-in.
-   `tests.test_history` covers receipts across cancellation; `test_recovery`
-   exercises Pipecat's actual queue. Playback estimates alter speech projections,
-   not retained protocol or business receipts.
-
-General salon questions need no verification. Booking and complaint requests both
-declare `customer_verified` as a prerequisite satisfied by `verify`. The graph
-preserves the requested destination and resumes it after phone verification;
-already verified callers enter directly. Complaint readback and caller approval
-happen after identification, before recording. An ordinary spoken question about
-a redo cannot establish that approval.
-If a response pairs a handoff with a readback, the handoff is refused so the
-readback can finish the run. Verification uses output functions for tracked
-readback, missing-information questions, lookup and abandonment. Free model
-text cannot ask an untracked phone question or echo routing instructions into TTS.
-Complaints uses output functions only: guidance from
-`knowledge/complaint-guidance.json`, caller-excerpt readback, recording and fixed
-goodbye. `Node.model_speech=False` suppresses provider text before it reaches TTS.
-Readback strings must match caller speech, not model history or booking records.
-Ordinary handoffs inject an application-owned receiving-agent status through the
-same request-instruction mechanism as prerequisite returns. The short shared voice guide precedes each
-role's instructions; current call values and the latest caller speech follow.
-
-`bench/native-evidence/README.md` documents the native comparison overlay, shared
-POC knowledge/business service, verification-speech regression and measurement limits.
+   the caller agreed to anything. `CallContext.heard` is what they said;
+   `SalonCall._asked` is the one question they are answering, put to them by an
+   `Ask` output whose words this code chose. Every consequential action checks
+   the two against each other, and on a step that can write, model speech goes
+   out a clause at a time so a claim about a change nothing made is never said.
+6. **A cancelled turn still heard something.** The engine retains accepted
+   input and completed tool results from the SDK's `new_messages()` boundary
+   after stream teardown, even when Pipecat cancels the task. Never slice by
+   the original history length. The processor carries input that never entered
+   a run to the front of the next turn.
 
 ## Known debt
 
-The consent matchers in `salon/state.py` — `agrees`, `ends`, `move_or_add`,
-`times_named` in `salon/diary.py` and `_describes_nothing` in
-`salon/agents.py` — are closed word lists over the
-caller's accepted utterance, not language understanding. Every one of them
-fails towards *asking*, so a miss costs one clarifying turn and cannot cost a
-booking nobody wanted. Upgrade path, if the live runs show too many
-clarifications: a small model on the utterances they return nothing for, with
-these kept as the fast path. Marked at each definition.
-
-
-## Code optimization (22 September)
-
-`Node.advance` may select one application-owned next action before a model run.
-It uses the same validated salon executor as its model tool, spends the shared
-action budget, and retains input/receipts without inventing model exchanges.
-`tests.test_optimization` covers zero provider requests, stale consent/identity,
-cancellation around writes, speech suppression and shared-client cleanup.
-
-Booking, verification and complaints use typed speech outputs. Booking offers
-and clarification come from `offer_times`/`booking_guidance`; write confirmations
-still require the existing validated receipt. Existing prompt files and tool
-descriptions were held constant during this optimization. All salon agents share
-one model client; bot/talk close it through `model_clients`.
-
-Current measurement and acceptance limits: `bench/optimization-evidence/README.md`.
+The consent matchers in `salon/models/consent.py` (`agrees`, `ends`,
+`move_or_add`), `times_named` in `salon/diary.py` and the complaint word list
+in `salon/tools/complaints.py` are closed word lists over the caller's accepted
+utterance, not language understanding. Every one of them fails towards
+*asking*, so a miss costs one clarifying turn and cannot cost a booking nobody
+wanted. Upgrade path, if live runs show too many clarifications: a small model
+on the utterances they return nothing for, with these kept as the fast path.
+Marked `ponytail:` at each definition.

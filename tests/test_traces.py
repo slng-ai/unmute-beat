@@ -154,7 +154,7 @@ async def one_trace_per_call():
         for span in runs
         if span.attributes.get('gen_ai.operation.name') == 'chat'
     ]
-    assert any(out and out.startswith('hand_over(') for out in chats), chats
+    assert any('"hand_over"' in str(out) for out in chats), chats
     assert 'There is metered parking on the road outside.' in chats, chats
 
     prompts = {
@@ -210,14 +210,35 @@ def agent_output_is_readable():
         ]
     )
     assert _said(text) == 'Which day?'
-    assert _said(call) == 'read_diary({"when": "Friday"})'
-    assert _said(both) == 'One moment. hang_up({"goodbye": "Bye"})'
+    assert json.loads(_said(call)) == {
+        'role': 'assistant',
+        'content': '',
+        'tool_calls': [
+            {
+                'id': 'c1',
+                'type': 'function',
+                'function': {'name': 'read_diary', 'arguments': '{"when": "Friday"}'},
+            }
+        ],
+    }
+    said = json.loads(_said(both))
+    assert said['content'] == 'One moment.' and said['tool_calls'][0]['function']['name'] == 'hang_up', said
     assert _said('not json') == ''
 
     system = json.dumps([{'type': 'text', 'content': 'You are Robin.'}])
     assert json.loads(_prompt(system, call)) == [
         {'role': 'system', 'content': 'You are Robin.'},
-        {'role': 'assistant', 'content': 'read_diary({"when": "Friday"})'},
+        {
+            'role': 'assistant',
+            'content': '',
+            'tool_calls': [
+                {
+                    'id': 'c1',
+                    'type': 'function',
+                    'function': {'name': 'read_diary', 'arguments': '{"when": "Friday"}'},
+                }
+            ],
+        },
     ]
     assert json.loads(_prompt('', 'not json')) == []
 

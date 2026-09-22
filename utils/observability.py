@@ -86,24 +86,41 @@ def _readable(final_result: str) -> str:
     return final_result
 
 
-def _parts(parts: list) -> str:
-    """One message's parts as text: its words, `tool(args)` for a call, `tool -> result` for a return."""
-    pieces: list[str] = []
+def _line(role: str, parts: list) -> dict:
+    """One message in the shape Langfuse renders as chat: text and tool returns as `content`, calls as OpenAI-style `tool_calls`.
+
+    Langfuse marks a tool "called" only when it finds it in a `tool_calls`
+    array; a call written into the text reads fine but leaves every tool
+    listed as not called.
+    """
+    content: list[str] = []
+    calls: list[dict] = []
     for part in parts:
         if not isinstance(part, dict):
             continue
         kind = part.get('type')
         if kind == 'text' and part.get('content'):
-            pieces.append(str(part['content']))
+            content.append(str(part['content']))
         elif kind == 'tool_call':
             arguments = part.get('arguments', part.get('args', {}))
-            rendered = arguments if isinstance(arguments, str) else json.dumps(arguments)
-            pieces.append(f'{part.get("name", "tool")}({rendered})')
+            calls.append(
+                {
+                    'id': part.get('id', ''),
+                    'type': 'function',
+                    'function': {
+                        'name': part.get('name', 'tool'),
+                        'arguments': arguments if isinstance(arguments, str) else json.dumps(arguments),
+                    },
+                }
+            )
         elif kind == 'tool_call_response':
             result = part.get('result', part.get('content', ''))
             rendered = result if isinstance(result, str) else json.dumps(result)
-            pieces.append(f'{part.get("name", "tool")} -> {rendered}')
-    return ' '.join(pieces)
+            content.append(f'{part.get("name", "tool")} -> {rendered}')
+    line: dict = {'role': role, 'content': ' '.join(content)}
+    if calls:
+        line['tool_calls'] = calls
+    return line
 
 
 def _messages(messages_json: str) -> list[dict]:
@@ -118,20 +135,26 @@ def _messages(messages_json: str) -> list[dict]:
 
 
 def _said(messages_json: str) -> str:
-    """What one model request answered, as text and tool calls rather than a parts array."""
-    return ' '.join(
-        said for message in _messages(messages_json) if (said := _parts(message.get('parts', [])))
-    )
+    """What one model request answered: its text alone when that is all there was, otherwise the message with its tool calls."""
+    lines = [
+        _line(message.get('role', 'assistant'), message.get('parts', []))
+        for message in _messages(messages_json)
+    ]
+    lines = [line for line in lines if line['content'] or 'tool_calls' in line]
+    if not lines:
+        return ''
+    if len(lines) == 1 and 'tool_calls' not in lines[0]:
+        return lines[0]['content']
+    return json.dumps(lines[0] if len(lines) == 1 else lines)
 
 
 def _prompt(system_json: str, messages_json: str) -> str:
-    """What a model was given, as the chat transcript Langfuse renders: the system prompt first, then every message with its parts said plainly."""
-    lines = [{'role': 'system', 'content': _parts(_messages(system_json))}]
+    """What a model was given, as the chat transcript Langfuse renders: the system prompt first, then every message."""
+    lines = [_line('system', _messages(system_json))]
     lines += [
-        {'role': message.get('role', ''), 'content': _parts(message.get('parts', []))}
-        for message in _messages(messages_json)
+        _line(message.get('role', ''), message.get('parts', [])) for message in _messages(messages_json)
     ]
-    return json.dumps([line for line in lines if line['content']])
+    return json.dumps([line for line in lines if line['content'] or 'tool_calls' in line])
 
 
 def _agent_words(span) -> dict:

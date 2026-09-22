@@ -97,7 +97,7 @@ conversation                      the whole transcript in, the last line out
 │   ├── stt
 │   ├── concierge  (agent)  caller's words in, what was spoken out; hops=1 model_requests=1
 │   │   └── concierge run         output: the sentence it produced
-│   │       └── chat gemini       output: its text, or read_diary({...})
+│   │       └── chat gemini       output: its text, or its tool calls
 │   └── tts
 └── turn 2
     ├── stt

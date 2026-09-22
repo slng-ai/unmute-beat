@@ -11,6 +11,7 @@ from pydantic_ai import Agent, RunContext, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from salon import agents, diary
+from salon.diary import Diary
 from salon.state import open_call
 from voice.core import Barge, RunStarted, run_turn
 from voice.harness import Node, TurnBudget, model_clients
@@ -18,6 +19,10 @@ from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
+
+
+books = Diary()
+"""This module's salon, emptied by each case that writes to it."""
 
 
 class Counter(PydanticAgentProcessor):
@@ -52,16 +57,16 @@ def context(call):
 
 
 def fresh(agent='booking'):
-    diary.reset()
-    diary.set_clock(CLOCK)
-    call = open_call(PHONE)
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call(PHONE, diary=books)
     call.commit(agent=agent, customer_verified='existing', verified_phone=PHONE)
     return call
 
 
 async def offered():
     call = fresh()
-    slot = diary.find_slots(PHONE, 'Friday', 'haircut', CLOCK, offered_to=call.id)['slots'][0]
+    slot = books.find_slots(PHONE, 'Friday', 'haircut', CLOCK, offered_to=call.id)['slots'][0]
     (await agents.ask_booking(context(call), 'book', slot['slot_id'], '')).put(call)
     return call
 
@@ -72,7 +77,7 @@ async def approvals_and_receipts():
         probe = Counter(call, agents.AGENTS)
         await probe._turn(answer)
         assert probe._finished.status == 'answered' and probe.requests() == 0
-        assert len(diary.bookings_for(PHONE, CLOCK.date())) == 1 and call.state.writes == 1
+        assert len(books.bookings_for(PHONE, CLOCK.date())) == 1 and call.state.writes == 1
         assert call.requests == [] and len(call.spoken) == 1
         assert call.turn in call._retained_turns
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
@@ -129,12 +134,12 @@ async def cancellation_keeps_committed_receipt():
     task.cancel()
     with suppress(asyncio.CancelledError):
         await task
-    assert len(diary.complaints()) == 1 and call.state.writes == 1
+    assert len(books.complaints()) == 1 and call.state.writes == 1
     assert call.turn in call._retained_turns and not call._complaint
     receipt = [
         m for m in call._protocol if (m.metadata or {}).get('application_action') == 'record_complaint'
     ]
-    assert len(receipt) == 1 and diary.complaints()[0]['reference'] in str(receipt)
+    assert len(receipt) == 1 and books.complaints()[0]['reference'] in str(receipt)
     call.turn_started('Yes.')
     assert agents.advance(call) is None
     assert not call.requests
@@ -152,7 +157,7 @@ async def barge_before_execution():
             barge.fire()
         async for _ in stream:
             pass
-        assert call.state.writes == 0 and not diary.bookings_for(PHONE, CLOCK.date())
+        assert call.state.writes == 0 and not books.bookings_for(PHONE, CLOCK.date())
 
     call = await offered()
     events = [event async for event in run_turn(call, agents.AGENTS, 'Yes.', TurnBudget(tool_calls=0))]
@@ -181,7 +186,7 @@ async def unsupported_booking_speech():
 
 
 async def phone_and_lifecycle():
-    call = open_call(PHONE)
+    call = open_call(PHONE, diary=books)
     call.commit(agent='verify', pending='booking')
     call.turn_started('Book a haircut for Friday afternoon.')
     call._return_status = 'Application handoff: concierge -> verify.'
@@ -193,14 +198,14 @@ async def phone_and_lifecycle():
     assert action and action.name == 'confirm_customer'
     result = await action.run()
     assert result.to == 'booking' and call.state.verified_phone == PHONE
-    call = open_call(PHONE)
+    call = open_call(PHONE, diary=books)
     call.commit(agent='verify')
     (await agents.ask_number(context(call), PHONE)).put(call)
     call.commit(customer_phone='+34934567890')
     call.turn_started('Yes.')
     assert agents.advance(call) is None, 'phone approval survived an identity change'
     for words in ('My number ends in two two.', 'Use another number.', '+34 600 111', 'Actually, wait.'):
-        call = open_call(PHONE)
+        call = open_call(PHONE, diary=books)
         call.commit(agent='verify', pending='booking')
         call.turn_started(words)
         call._return_status = 'Application handoff: concierge -> verify.'

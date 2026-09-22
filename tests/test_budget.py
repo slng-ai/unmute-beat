@@ -25,13 +25,18 @@ from pydantic_ai import ModelRequest, ModelRetry, RetryPromptPart, RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
-from salon import agents, diary
+from salon import agents
 from salon.agents import AGENTS
+from salon.diary import Diary
 from salon.state import Asked, open_call
 from voice.harness import TurnBudget
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
 
 PHONE = '+34600111222'
+
+
+books = Diary()
+"""This module's salon, emptied by each case that writes to it."""
 
 
 class Probe(PydanticAgentProcessor):
@@ -120,8 +125,8 @@ async def exhaustion_makes_no_further_request():
     Exactly the runs it paid for, then a line this code speaks. The caller is
     never left in silence, and the model is never asked again.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=3))
 
@@ -140,8 +145,8 @@ async def the_fallback_does_no_business_work():
     -- but it still held every ordinary tool, so an exhausted turn could book
     an appointment on its way out.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     before = call.state
     probe = Probe(call, budget=TurnBudget(step_runs=2))
@@ -160,8 +165,8 @@ async def the_budget_is_not_refilled_by_exhausting_it():
     Which is the difference between a per-turn budget and a per-run one: the
     point is that the *turn* stops, not that each run gets a fresh start.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=2))
 
@@ -187,8 +192,8 @@ async def model_requests_are_counted_across_agents():
     Counted per run, a turn could hand the caller round the houses and each
     agent would start again from zero.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4))
 
@@ -216,8 +221,8 @@ async def the_request_limit_stops_a_turn_that_never_hops():
     retry prompt rather than a tool, and the request limit is the only thing
     that ends it.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=3, repair_retries=99))
     asked = []
@@ -240,8 +245,8 @@ async def the_tool_limit_is_its_own_number():
     tools and a run that does it twice has spent four. Which is the whole
     reason `tool_calls` is a separate number.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=20, tool_calls=2))
     ran = []
@@ -269,8 +274,8 @@ async def a_slow_tool_hits_the_turn_deadline():
     A tool that never returns used to hold the line open for as long as it
     liked, because nothing above it was counting.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(seconds=0.25))
 
@@ -296,8 +301,8 @@ async def a_permitted_repair_succeeds():
     Repair is the thing the budget must not forbid: this is the case where
     the second attempt is the right one.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(agent='verify')
     probe = Probe(call, budget=TurnBudget(repair_retries=2))
     # The readback of the right number went out last turn, so the repair has
@@ -323,8 +328,8 @@ async def a_permitted_repair_succeeds():
 
 async def repair_retries_are_bounded():
     """A model that never gets it right is stopped, and stopped politely."""
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(agent='verify')
     probe = Probe(call, budget=TurnBudget(step_runs=1, repair_retries=1))
     attempts = []
@@ -349,10 +354,10 @@ async def an_uncertain_write_is_reconciled_not_repeated():
     with two appointments; treating it as a failure is how a booking that
     really exists gets denied. The operation token lets the tool ask.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now(), offered_to=call.id)
+    read = books.find_slots(PHONE, 'tomorrow', 'haircut', books.now(), offered_to=call.id)
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])  # what `read_diary` would have written
     # And what `ask_booking` would have: the readback went out last turn, and
@@ -361,7 +366,7 @@ async def an_uncertain_write_is_reconciled_not_repeated():
     call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
     call.turn_started("yes, that's right")
 
-    real = diary.save_booking
+    real = books.save_booking
     attempts = []
 
     def commits_then_loses_the_response(
@@ -384,7 +389,7 @@ async def an_uncertain_write_is_reconciled_not_repeated():
 
     # A module-level `def` is its own type to ty, so no other function is assignable to it
     # however exactly the signature matches. Substituting the service is the point here.
-    diary.save_booking = commits_then_loses_the_response  # ty: ignore[invalid-assignment]
+    books.save_booking = commits_then_loses_the_response  # ty: ignore[invalid-assignment]
     try:
         saved = await agents.save_booking(
             RunContext(deps=call, model=None, usage=None),  # ty: ignore[invalid-argument-type]
@@ -393,20 +398,20 @@ async def an_uncertain_write_is_reconciled_not_repeated():
             '',
         )
     finally:
-        diary.save_booking = real
+        del books.save_booking
 
     assert attempts == [1], attempts
     assert 'booked' in saved, saved
-    assert len(diary.bookings_for(PHONE, diary.now().date())) == 1, 'exactly one booking'
+    assert len(books.bookings_for(PHONE, books.now().date())) == 1, 'exactly one booking'
     assert call.state.appointment is not None, 'and the caller was told about it'
 
 
 async def a_write_that_never_landed_is_reported_unresolved():
     """The other half: no outcome recorded, so nothing is claimed either way."""
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
-    read = diary.find_slots(PHONE, 'tomorrow', 'haircut', diary.now(), offered_to=call.id)
+    read = books.find_slots(PHONE, 'tomorrow', 'haircut', books.now(), offered_to=call.id)
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])  # what `read_diary` would have written
     call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
@@ -424,8 +429,7 @@ async def a_write_that_never_landed_is_reported_unresolved():
     ) -> dict:
         raise TimeoutError('no answer')
 
-    real = diary.save_booking
-    diary.save_booking = never_answers  # ty: ignore[invalid-assignment]
+    books.save_booking = never_answers  # ty: ignore[invalid-assignment]
     try:
         await agents.save_booking(
             RunContext(deps=call, model=None, usage=None),  # ty: ignore[invalid-argument-type]
@@ -438,9 +442,9 @@ async def a_write_that_never_landed_is_reported_unresolved():
     else:
         raise AssertionError('an unknown outcome must not be reported as either one')
     finally:
-        diary.save_booking = real
+        del books.save_booking
 
-    assert diary.bookings_for(PHONE, diary.now().date()) == []
+    assert books.bookings_for(PHONE, books.now().date()) == []
     assert call.state.appointment is None, 'nothing was claimed'
 
 
@@ -452,8 +456,8 @@ async def a_superseded_turn_cannot_move_the_caller():
     fenced -- while whatever the tool actually did stands, to be reconciled
     by its own operation token rather than pretended away.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 

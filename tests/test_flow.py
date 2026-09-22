@@ -26,8 +26,8 @@ from pydantic_ai.messages import ModelRequest
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
-from salon import diary
 from salon.agents import AGENTS
+from salon.diary import Diary
 from salon.state import SalonCall, SalonState, open_call
 from voice.harness import moved_by
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
@@ -36,6 +36,10 @@ PHONE = '+34600111222'
 # The same number, named for what it means where a state is built by hand:
 # a verification status with no identity attached is cleared on construction.
 VERIFIED = PHONE
+
+
+books = Diary()
+"""This module's salon, emptied by each case that writes to it."""
 
 
 class Probe(PydanticAgentProcessor):
@@ -192,8 +196,8 @@ async def a_stale_destination_is_refused_at_execution():
     Straight at the tool, past the schema, which is what a provider ignoring
     an enum amounts to. It must not move the caller.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)  # `verify` is open as an exit
     probe = Probe(call)
 
@@ -230,8 +234,8 @@ async def the_schema_is_rebuilt_between_requests_in_one_run():
     request in the *same run* must already see `read_diary` and the `verify`
     destination. Narrowed once per turn, it would not until the next turn.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     seen: list[dict] = []
 
     async def identify_then_answer(messages, info: AgentInfo):
@@ -276,8 +280,8 @@ async def a_second_action_is_refused_before_it_runs():
     the half the SDK cannot do: `before_tool_execute` never fires for one
     (checked against 2.46.0), so `hand_over` refuses itself on entry.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
@@ -314,8 +318,8 @@ async def an_ordinary_tool_is_refused_when_it_is_the_second():
     touched -- which is the point. Rejecting a transition after its service
     already ran is what the whole policy exists to avoid.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
     before = call.state.booking_day
@@ -350,8 +354,8 @@ async def the_winner_is_the_same_every_time():
     """
     outcomes = set()
     for _ in range(5):
-        diary.reset()
-        call = open_call(PHONE)
+        books.reset()
+        call = open_call(PHONE, diary=books)
         call.commit(customer_verified='existing', verified_phone=PHONE)
         probe = Probe(call)
 
@@ -389,8 +393,8 @@ async def a_split_destination_name_never_moves_anybody():
     and `complaints`, and a stream cut mid-name must not act on the prefix. No
     tool runs until the arguments validate whole.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
@@ -446,8 +450,8 @@ async def text_before_a_tool_streams_and_the_tool_still_runs():
     rather than assumed, because it decides whether a caller hears a sentence
     and then gets nothing done.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
@@ -486,8 +490,8 @@ async def a_run_speaks_by_its_third_request():
     Its **output** tools are untouched: a run that has read the diary can
     still hand over or save. Only what buys another request goes.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe_run = Probe(call)
     offered = []
@@ -528,8 +532,8 @@ async def the_loop_from_the_call_of_2026_09_21():
     ends in an answer. The diary read still moves the caller, and what it
     returned still reaches their ears.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe_run = Probe(call)
     requests = []
@@ -662,8 +666,8 @@ def a_borrowed_tool_cannot_skip_a_prerequisite():
 
 async def a_cancelled_tool_is_not_a_move():
     """Barge-in during a borrowed tool leaves the caller where they were."""
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 

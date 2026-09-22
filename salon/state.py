@@ -29,6 +29,7 @@ from pydantic import (
 from pydantic_extra_types.phone_numbers import PhoneNumberValidator
 
 from salon import diary
+from salon.diary import Diary
 from voice import harness
 
 AgentName = Literal['concierge', 'verify', 'booking', 'complaints']
@@ -460,6 +461,7 @@ class SalonCall(harness.CallContext):
     """This call's state, history and line. The agents' `deps`."""
 
     state: SalonState = Field(default_factory=SalonState)
+    _diary: Diary = PrivateAttr(default_factory=Diary)
     # What `writes` stood at when this turn began, so "did anything land in
     # this turn" is answerable without the turn having to carry it.
     _writes_before: int = PrivateAttr(default=0)
@@ -475,6 +477,11 @@ class SalonCall(harness.CallContext):
     # otherwise end up permitting all of them.
     _complaint: Asked | None = PrivateAttr(default=None)
     _day_words: list[str] = PrivateAttr(default_factory=list)
+
+    @property
+    def diary(self) -> Diary:
+        """The salon's books this call reads and writes."""
+        return self._diary
 
     def turn_started(self, heard: str = '') -> None:
         """Also age out a question nobody answered, and mark where the write count stood."""
@@ -586,7 +593,7 @@ class SalonCall(harness.CallContext):
         return ''
 
 
-def open_call(from_number: str = '') -> SalonCall:
+def open_call(from_number: str = '', diary: Diary | None = None) -> SalonCall:
     """A fresh call. Nothing here can fail it; a fact we cannot get is left unset.
 
     It does **not** reset the diary. It used to, and that made every new call
@@ -595,4 +602,7 @@ def open_call(from_number: str = '') -> SalonCall:
     only the conversation is per-call. Fixtures reset it explicitly in their own
     setup, which is the only place that should.
     """
-    return SalonCall(state=SalonState(customer_phone=prefetch_number(from_number)))
+    call = SalonCall(state=SalonState(customer_phone=prefetch_number(from_number)))
+    if diary is not None:
+        call._diary = diary
+    return call

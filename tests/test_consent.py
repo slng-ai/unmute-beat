@@ -26,7 +26,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon import agents, diary
 from salon.agents import AGENTS
-from salon.diary import times_named
+from salon.diary import Diary, times_named
 from salon.state import agrees, ends, move_or_add, open_call
 from voice.processor import PydanticAgentProcessor
 
@@ -36,6 +36,10 @@ from voice.processor import PydanticAgentProcessor
 # imported: that module runs its own suite at import, so importing it here
 # would run the salon tests twice and this module's failures would be reported
 # under its name.
+
+
+books = Diary()
+"""This module's salon, emptied by each case that writes to it."""
 
 
 def says(text, chunk=8):
@@ -128,9 +132,9 @@ assert diary.resolve_day('next friday', CLOCK.date()) == NEXT_FRIDAY
 
 def _salon(verified: bool = True):
     """A fresh salon on the pinned clock, and a call already past verification."""
-    diary.reset()
-    diary.set_clock(CLOCK)
-    call = open_call(PHONE)
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call(PHONE, diary=books)
     if verified:
         call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
     return call
@@ -138,7 +142,7 @@ def _salon(verified: bool = True):
 
 def _slot(call, when: str, service: str = 'haircut', at: str = ''):
     """Offer this call the day's slots and hand back one of them."""
-    found = diary.find_slots(PHONE, when, service, diary.now(), offered_to=call.id)
+    found = books.find_slots(PHONE, when, service, books.now(), offered_to=call.id)
     slots = found['slots']
     assert slots, found
     if at:
@@ -268,14 +272,14 @@ async def n1_the_move_it_asked_for_is_the_move_it_makes():
     call.turn_started('book me a haircut on Friday at nine')
     friday = _slot(call, 'friday', 'haircut', '09:00')
     await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
-    held = diary.bookings_for(PHONE, CLOCK.date())
+    held = books.bookings_for(PHONE, CLOCK.date())
     assert len(held) == 1 and held[0]['date'] == FRIDAY.isoformat(), held
 
     call.turn_started('Can you help me moving it to Saturday, the same time?')
     saturday = _slot(call, 'saturday', 'haircut', '09:00')
     moved = await agents.save_booking(_context(call), 'move', saturday['slot_id'], held[0]['booking_id'])
     assert 'moved' in moved, moved
-    after = diary.bookings_for(PHONE, CLOCK.date())
+    after = books.bookings_for(PHONE, CLOCK.date())
     assert len(after) == 1, after
     assert after[0]['date'] == SATURDAY.isoformat() and after[0]['time'] == '09:00', after[0]
 
@@ -287,24 +291,24 @@ async def go_for_it_approves_only_the_pending_move():
     call.turn_started('a haircut on Friday at ten please')
     friday = _slot(call, 'friday', at='10:00')
     await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
-    held = diary.bookings_for(PHONE, CLOCK.date())[0]
+    held = books.bookings_for(PHONE, CLOCK.date())[0]
     call.turn_started('Can we move it to next Monday?')
     monday = _slot(call, 'next Monday', at='10:00')
 
     call.turn_started('Go for it.')
     await _refuses(agents.save_booking, _context(call), 'move', monday['slot_id'], held['booking_id'])
-    assert diary.bookings_for(PHONE, CLOCK.date())[0] == held
+    assert books.bookings_for(PHONE, CLOCK.date())[0] == held
 
     question = await agents.ask_booking(_context(call), 'move', monday['slot_id'], held['booking_id'])
     question.put(call)
     call.turn_started('Go for it, but make it eleven instead')
     await _refuses(agents.save_booking, _context(call), 'move', monday['slot_id'], held['booking_id'])
-    assert diary.bookings_for(PHONE, CLOCK.date())[0] == held
+    assert books.bookings_for(PHONE, CLOCK.date())[0] == held
 
     question.put(call)
     call.turn_started('Go for it.')
     moved = await agents.save_booking(_context(call), 'move', monday['slot_id'], held['booking_id'])
-    after = diary.bookings_for(PHONE, CLOCK.date())
+    after = books.bookings_for(PHONE, CLOCK.date())
     assert 'moved' in moved.lower(), moved
     assert len(after) == 1 and after[0]['booking_id'] == held['booking_id'], after
     assert (after[0]['date'], after[0]['time']) == ('2026-09-28', '10:00'), after
@@ -330,7 +334,7 @@ async def n2_friday_is_not_next_friday():
     call.turn_started('I would like a haircut on Friday please')
     refusal = await _refuses(agents.read_diary, _context(call), 'next Friday', 'haircut')
     assert 'friday' in refusal.lower() and 'next friday' in refusal.lower(), refusal
-    assert diary.bookings_for(PHONE, CLOCK.date()) == [], 'nothing may be written'
+    assert books.bookings_for(PHONE, CLOCK.date()) == [], 'nothing may be written'
 
     # Their own words go through, and resolve to the day they named.
     found = await agents.read_diary(_context(call), 'Friday', 'haircut')
@@ -394,13 +398,13 @@ async def n3_a_flipped_flag_is_not_consent():
     # finding: there is no argument left to flip, and no second way in.
     again = await _refuses(agents.save_booking, _context(call), 'book', second['slot_id'], '')
     assert 'Nothing was saved' in again, again
-    assert len(diary.bookings_for(PHONE, CLOCK.date())) == 1, 'still the one they asked for'
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'still the one they asked for'
 
     # A different slot is not a different question, either.
     third = _slot(call, 'friday', 'haircut', '11:00')
     elsewhere = await _refuses(agents.save_booking, _context(call), 'book', third['slot_id'], '')
     assert 'move that one or add another' in elsewhere, elsewhere
-    assert len(diary.bookings_for(PHONE, CLOCK.date())) == 1
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
 
     # Nor is an unrelated next utterance an answer to it. The caller has
     # spoken, so the old "has the caller had a chance to answer" rule would
@@ -408,7 +412,7 @@ async def n3_a_flipped_flag_is_not_consent():
     call.turn_started('what do you charge for a blow dry?')
     unrelated = await _refuses(agents.save_booking, _context(call), 'book', second['slot_id'], '')
     assert 'Nothing was saved' in unrelated, unrelated
-    assert len(diary.bookings_for(PHONE, CLOCK.date())) == 1
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
 
 
 async def n3_an_answered_question_books_what_they_answered():
@@ -426,15 +430,15 @@ async def n3_an_answered_question_books_what_they_answered():
     call.turn_started('another one, on top of the nine o clock')
     saved = await agents.save_booking(_context(call), 'book', second['slot_id'], '')
     assert 'booked' in saved, saved
-    assert len(diary.bookings_for(PHONE, CLOCK.date())) == 2
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 2
 
     # And a caller who says "move it" moves it, rather than adding a third.
     call.turn_started('actually, move the afternoon one to four o clock')
-    held = diary.bookings_for(PHONE, CLOCK.date())
+    held = books.bookings_for(PHONE, CLOCK.date())
     afternoon = next(b for b in held if b['time'] == '15:00')
     later = _slot(call, 'friday', 'haircut', '16:00')
     await agents.save_booking(_context(call), 'move', later['slot_id'], afternoon['booking_id'])
-    after = diary.bookings_for(PHONE, CLOCK.date())
+    after = books.bookings_for(PHONE, CLOCK.date())
     assert len(after) == 2, after
     assert sorted(b['time'] for b in after) == ['09:00', '16:00'], after
 
@@ -526,7 +530,7 @@ async def earlier_b_a_cancellation_nobody_made_is_not_spoken():
     assert 'redo' not in said.lower(), said
     # And the caller is told plainly, rather than being left with silence.
     assert any('Sorry' in line for line in probe.fixed()), probe.fixed()
-    assert len(diary.bookings_for(PHONE, CLOCK.date())) == 1
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
 
 
 async def recounting_what_is_really_booked_still_streams():
@@ -558,7 +562,7 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     call.turn_started('a haircut on Friday at nine please')
     friday = _slot(call, 'friday', 'haircut', '09:00')
     await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
-    held = diary.bookings_for(PHONE, CLOCK.date())
+    held = books.bookings_for(PHONE, CLOCK.date())
     assert len(held) == 1
 
     call.commit(agent='complaints')
@@ -580,9 +584,9 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     assert agents.MANAGER_CALLS not in spoken[0], 'a redo is not a refund tier'
 
     # And the appointment they hold is exactly where it was.
-    after = diary.bookings_for(PHONE, CLOCK.date())
+    after = books.bookings_for(PHONE, CLOCK.date())
     assert after == held, after
-    assert len(diary.complaints()) == 1, diary.complaints()
+    assert len(books.complaints()) == 1, books.complaints()
 
     # A refund request does get the manager, because the policy says so.
     call.turn_started('actually I want a full refund')
@@ -592,7 +596,7 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     await agents._record_complaint(_context(call), refund, 'a full refund')
     latest = [seg.text for seg in call.spoken if seg.kind == 'fixed'][-1]
     assert agents.MANAGER_CALLS in latest, latest
-    assert diary.bookings_for(PHONE, CLOCK.date()) == held, 'still untouched'
+    assert books.bookings_for(PHONE, CLOCK.date()) == held, 'still untouched'
 
 
 async def a_complaint_is_written_in_the_words_they_agreed_to():
@@ -610,18 +614,18 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
     call.turn_started('the colour came out wrong, I want a refund')
     refusal = await _refuses(agents._record_complaint, _context(call), 'the colour was wrong', 'a refund')
     assert 'ask_complaint' in refusal, refusal
-    assert diary.complaints() == []
+    assert books.complaints() == []
 
     # One was, and then something else was written down.
     (await agents.ask_complaint(_context(call), 'the colour came out wrong', 'a refund')).put(call)
     call.turn_started("yes, that's right")
     other = await _refuses(agents._record_complaint, _context(call), 'the stylist was rude', 'a full refund')
     assert 'ask_complaint' in other, other
-    assert diary.complaints() == [], diary.complaints()
+    assert books.complaints() == [], books.complaints()
 
     # The one they agreed to goes through.
     record = await agents._record_complaint(_context(call), 'the colour came out wrong', 'a refund')
-    assert record.recorded and len(diary.complaints()) == 1
+    assert record.recorded and len(books.complaints()) == 1
 
 
 async def asking_to_complain_is_not_a_complaint():

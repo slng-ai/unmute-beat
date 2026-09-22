@@ -29,8 +29,8 @@ from pydantic_ai import RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
-from salon import diary
 from salon.agents import AGENTS
+from salon.diary import Diary
 from salon.state import Appointment, SalonCall, open_call
 from voice import core
 from voice.core import EXHAUSTED, UNBACKED, TurnBudget, take_turn
@@ -38,6 +38,10 @@ from voice.harness import _turn_generation
 from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34600111222'
+
+
+books = Diary()
+"""This module's salon, emptied by each case that writes to it."""
 
 
 class Probe(PydanticAgentProcessor):
@@ -189,8 +193,8 @@ SCENARIOS = {
 
 
 def _fresh(verified: bool):
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     if verified:
         call.commit(customer_verified='existing', verified_phone=PHONE)
     return call
@@ -671,8 +675,8 @@ async def a_turn_that_never_finished_says_so():
     mid-question, and a benchmark that reads a missing row as a pass will
     score a dropped transport the same way.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     probe_it = Probe(call)
 
     async def never_returns(messages, info: AgentInfo):
@@ -703,8 +707,8 @@ async def a_late_commit_cannot_move_a_caller_who_moved_on():
     holding something the call has no memory of -- so completed effects land
     and the routing that was going to follow them does not.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     first = call.begin_turn()
     _turn_generation.set((call.id, first))
     call.commit(agent='concierge')
@@ -735,8 +739,8 @@ async def a_reset_step_is_sent_none_of_the_conversation():
     the caller said to anybody else -- so what it does not need, it cannot
     leak. Both are declared on the step, not decided per request.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     seen: dict = {}
 
@@ -778,8 +782,8 @@ async def the_transcript_is_the_call_and_not_the_protocol():
     history at all, so a record built from it reports a turn that said three
     things as a turn that said one.
     """
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     probe_it = Probe(call)
     with scripted(concierge=says('Hello, how can I help?')):
         await probe_it._turn('hi there')
@@ -796,8 +800,8 @@ async def the_transcript_is_the_call_and_not_the_protocol():
 
 async def every_segment_says_where_it_came_from():
     """A tracked readback carries its origin and segment id into the TTS frame."""
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(agent='verify')
     probe_it = Probe(call)
 
@@ -828,8 +832,8 @@ async def the_processor_reports_no_metrics_of_its_own():
     """
     from pipecat.frames.frames import MetricsFrame
 
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     probe_it = Probe(call)
     assert probe_it.can_generate_metrics() is False
     with scripted(concierge=says('Hello there.')):

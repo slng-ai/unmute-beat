@@ -271,7 +271,7 @@ async def ask_booking(
     call = ctx.deps
     phone = call.state.customer_phone
     if action in ('book', 'move'):
-        offered = diary.offer_of(call.id, slot_id, phone)
+        offered = call.diary.offer_of(call.id, slot_id, phone)
         if not offered:
             raise ModelRetry(
                 'Nothing was asked. That slot is not one this caller is currently being offered; '
@@ -284,7 +284,7 @@ async def ask_booking(
             else f'So I will move you to {offered["spoken"]}. Shall I do that?'
         )
     else:
-        held = {b['booking_id']: b for b in diary.bookings_for(phone, diary.now().date())}
+        held = {b['booking_id']: b for b in call.diary.bookings_for(phone, call.diary.now().date())}
         if booking_id not in held:
             raise ModelRetry(
                 'Nothing was asked. That is not a booking this caller holds; read the diary to see '
@@ -455,7 +455,7 @@ def _answered[Result: BaseModel](
         # function's business: an answer, and a clear one.
         raise
     except Exception:
-        recovered = diary.outcome_of(pending.token)
+        recovered = call.diary.outcome_of(pending.token)
         if recovered is None:
             _unknown(call, pending, f'the {book} did not answer')
         raw = recovered
@@ -465,7 +465,7 @@ def _answered[Result: BaseModel](
         # The same question the lost-answer path asks, and for the same
         # reason: the service may have recorded a perfectly good outcome
         # under this token and merely told us about it badly.
-        recovered = diary.outcome_of(pending.token)
+        recovered = call.diary.outcome_of(pending.token)
         if recovered is None or recovered is raw:
             _unknown(call, pending, f'the {book} answered in a shape this cannot read')
         try:
@@ -495,7 +495,7 @@ async def _settle(call: SalonCall) -> str:
     """
     pending = call.state.unresolved
     assert pending is not None, 'only reached while a write is outstanding'
-    outcome = diary.outcome_of(pending.token)
+    outcome = call.diary.outcome_of(pending.token)
     if outcome is None:
         raise ModelRetry(OUTSTANDING)
     if pending.action == 'complaint':
@@ -769,7 +769,7 @@ async def _record_approved_complaint(
         call,
         pending,
         ComplaintRecord,
-        lambda: diary.record_complaint(phone, summary, requested_resolution, operation_token=token),
+        lambda: call.diary.record_complaint(phone, summary, requested_resolution, operation_token=token),
         'complaint book',
     )
     # Validated, then *read*. A well-formed `{'recorded': False}` is the
@@ -826,7 +826,7 @@ async def read_diary(
     # difference is a modifier the model added, so the check is on the words
     # and not on the date they resolve to.
     if (theirs := ctx.deps.day_words) and (mine := diary.day_phrases(when)):
-        today = diary.now().date()
+        today = ctx.deps.diary.now().date()
         wanted = {diary.resolve_day(words, today) for words in theirs} - {None}
         asked_for = diary.resolve_day(mine[-1], today)
         if wanted and asked_for not in wanted:
@@ -841,11 +841,11 @@ async def read_diary(
         # one conversation was never put in front of another, even from the
         # same phone. Asking again also withdraws whatever the last search
         # offered -- see `diary.find_slots`.
-        diary.find_slots(
+        ctx.deps.diary.find_slots(
             ctx.deps.state.customer_phone,
             when,
             service,
-            diary.now(),
+            ctx.deps.diary.now(),
             offered_to=ctx.deps.id,
             # Their words, resolved here rather than by the model. Applied
             # before the twelve-slot cap, so a preference is the answer and
@@ -906,7 +906,7 @@ async def booking_guidance(
     if topic == 'existing':
         held = [
             Held.model_validate(row)
-            for row in diary.bookings_for(ctx.deps.state.customer_phone, diary.now().date())
+            for row in ctx.deps.diary.bookings_for(ctx.deps.state.customer_phone, ctx.deps.diary.now().date())
         ]
         text = (
             'You have '
@@ -1087,7 +1087,7 @@ async def _confirm_customer(call: SalonCall, phone: SubmittedPhone) -> Handoff:
             'the new number back with `ask_number`; otherwise ask again.'
         )
     call.answered()
-    found = CustomerLookup.model_validate(diary.find_or_create_customer(phone))
+    found = CustomerLookup.model_validate(call.diary.find_or_create_customer(phone))
     # The lookup has to have been about the number we asked about. Ignored,
     # a customer service answering for somebody else verified this caller as
     # them: the status was legal, the phone was legal, and nothing compared
@@ -1172,7 +1172,7 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
     between. The flag was the model's own permission slip.
     """
     phone = call.state.customer_phone
-    held = diary.bookings_for(phone, diary.now().date()) if phone else []
+    held = call.diary.bookings_for(phone, call.diary.now().date()) if phone else []
 
     if question := call.pending('booking', value=slot_id, action=action, booking_id=booking_id):
         if question.owner and question.owner != phone:
@@ -1219,9 +1219,9 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
     # one slot on the table is at the time they named -- so "three" with a
     # haircut and a colour both free at three is two appointments and a
     # question, not a booking.
-    offered = diary.offer_of(call.id, slot_id, phone)
+    offered = call.diary.offer_of(call.id, slot_id, phone)
     named = diary.times_named(call.heard)
-    on_the_table = diary.offered_to(call.id, phone)
+    on_the_table = call.diary.offered_to(call.id, phone)
     at_that_time = [slot for slot in on_the_table if slot['time'] in named]
     picked = bool(offered) and offered['time'] in named and len(at_that_time) == 1
     if action == 'book' and picked and not held:
@@ -1235,7 +1235,7 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
         same = (
             bool(moving)
             and _SAME_TIME.search(call.heard)
-            and not diary._NEGATED_TIME.search(call.heard)
+            and not diary.NEGATED_TIME.search(call.heard)
             and offered['time'] == moving['time']
         )
         if moving and (picked or same):
@@ -1308,7 +1308,7 @@ async def _save_booking(
     # Asked under the caller's *current* identity as well as this call: a
     # number corrected mid-call makes the caller somebody else, and the slots
     # the previous identity was shown are not theirs to book.
-    offered = diary.offer_of(call.id, slot_id, call.state.customer_phone)
+    offered = call.diary.offer_of(call.id, slot_id, call.state.customer_phone)
     # One token per business action, not per attempt. Derived from what the
     # action *is*, so a retry after a lost response derives the same one and
     # the diary returns the outcome it already recorded rather than booking a
@@ -1347,13 +1347,13 @@ async def _save_booking(
             call,
             pending,
             Saved,
-            lambda: diary.save_booking(
+            lambda: call.diary.save_booking(
                 call.state.customer_phone,
                 action,
                 slot_id,
                 booking_id,
                 additional,
-                diary.now(),
+                call.diary.now(),
                 operation_token=token,
                 offered_to=call.id,
             ),

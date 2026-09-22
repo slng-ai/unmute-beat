@@ -14,10 +14,15 @@ from pydantic_ai import ModelRequest, ModelResponse, ModelRetry, RunContext, Tex
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from salon import agents, diary
+from salon.diary import Diary
 from salon.state import open_call
 from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34680840464'
+
+
+books = Diary()
+"""This module's salon, emptied by each case that writes to it."""
 
 
 def context(call):
@@ -33,8 +38,8 @@ async def service_requests_verify_first():
         ('complaints', 'My haircut last week was uneven. I want a redo.'),
     ):
         for known in (False, True):
-            diary.reset()
-            call = open_call(PHONE)
+            books.reset()
+            call = open_call(PHONE, diary=books)
             if known:
                 call.commit(customer_verified='existing', verified_phone=PHONE)
             visits = []
@@ -95,7 +100,7 @@ async def service_requests_verify_first():
 async def declining_verification_abandons_the_service():
     """A general question remains answerable after declining either prerequisite."""
     for destination in ('booking', 'complaints'):
-        call = open_call(PHONE)
+        call = open_call(PHONE, diary=books)
 
         async def stream(messages, info, destination=destination, call=call):
             if call.state.agent == 'concierge':
@@ -124,8 +129,8 @@ async def declining_verification_abandons_the_service():
 
 
 async def verified_complaint_uses_exact_approved_wording():
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
     call.turn_started('My haircut yesterday was uneven. I would like a redo.')
     (await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')).put(call)
@@ -137,7 +142,7 @@ async def verified_complaint_uses_exact_approved_wording():
     else:
         raise AssertionError('changed resolution reused consent')
     result = await agents.record_complaint(context(call))
-    assert result.recorded and len(diary.complaints()) == 1
+    assert result.recorded and len(books.complaints()) == 1
     try:
         await agents._record_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')
     except ModelRetry:
@@ -148,7 +153,7 @@ async def verified_complaint_uses_exact_approved_wording():
 
 async def complaint_cannot_skip_readback():
     """An identified caller's ordinary yes still cannot authorize recording."""
-    call = open_call(PHONE)
+    call = open_call(PHONE, diary=books)
     call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
     call.turn_started('Yes.')
     try:
@@ -189,8 +194,8 @@ async def complaint_cannot_skip_readback():
 async def readback_is_not_discarded_by_handoff():
     """The trace's two output calls must ask once, without leaving or another request."""
     for handoff_first, valid in ((True, True), (False, True), (True, False), (False, False)):
-        diary.reset()
-        call = open_call(PHONE)
+        books.reset()
+        call = open_call(PHONE, diary=books)
         call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
         requests = 0
 
@@ -241,7 +246,7 @@ async def apology_alone_needs_a_followup():
         "That's not okay, I'm sorry to hear that.",
         'Yes, we can book a free redo. Shall I set that up?',
     ):
-        call = open_call('')
+        call = open_call('', diary=books)
         call.commit(agent='complaints')
         requests = 0
 
@@ -267,7 +272,7 @@ async def verification_speech_must_establish_the_question():
         f'Is your number {PHONE}?',
         'Application handoff: booking -> verify. You are now verify.',
     ):
-        call = open_call(PHONE)
+        call = open_call(PHONE, diary=books)
         call.commit(agent='verify')
         requests = 0
         frames = []
@@ -296,7 +301,7 @@ async def verification_speech_must_establish_the_question():
         assert call.pending('phone'), 'one yes must approve the question actually spoken'
         assert not call.state.customer_verified, 'readback approval is not a customer lookup'
 
-    call = open_call('')
+    call = open_call('', diary=books)
     call.turn_started('600 111 222')
     text = await agents.verification_guidance(context(call), 'country')
     assert text == 'Which country is that phone number from?'
@@ -305,8 +310,8 @@ async def verification_speech_must_establish_the_question():
 
 async def approved_complaint_records_once():
     """With verification already complete, approval leads directly to one receipt."""
-    diary.reset()
-    call = open_call(PHONE)
+    books.reset()
+    call = open_call(PHONE, diary=books)
     call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
     call.turn_started('My haircut last week was uneven. I would like a redo.')
     (await agents.ask_complaint(context(call), 'My haircut last week was uneven', 'a redo')).put(call)
@@ -323,7 +328,7 @@ async def approved_complaint_records_once():
     with agents.AGENTS['complaints'].agent.override(model=FunctionModel(stream_function=stream)):
         await probe._turn('Yes.')
     assert not instructions and call.state.writes == 1
-    (record,) = diary.complaints()
+    (record,) = books.complaints()
     assert record['summary'] == 'My haircut last week was uneven'
     assert record['requested_resolution'] == 'a redo'
     assert sum(record['reference'] in s.generated for s in call.all_spoken) == 1
@@ -332,7 +337,7 @@ async def approved_complaint_records_once():
 
 async def complaint_readback_uses_caller_evidence():
     """The latest trace invented a past date and a remedy from model/booking context."""
-    call = open_call(PHONE)
+    call = open_call(PHONE, diary=books)
     call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
     call.turn_started('My last haircut was completely uneven.')
     call.messages = [ModelResponse(parts=[TextPart('Your haircut on Saturday was uneven. A free redo?')])]
@@ -359,7 +364,7 @@ async def complaint_readback_uses_caller_evidence():
 
 async def complaint_preamble_cannot_bypass_structured_speech():
     """Even text beside a valid output call must never become an LLMTextFrame."""
-    call = open_call(PHONE)
+    call = open_call(PHONE, diary=books)
     call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
 
     async def stream(messages, info):
@@ -391,7 +396,7 @@ async def complaint_preamble_cannot_bypass_structured_speech():
 async def complaint_approval_ends_with_its_intent():
     """Abandonment and a changed known identity cannot reuse approved wording."""
     for abandon in (True, False):
-        call = open_call(PHONE)
+        call = open_call(PHONE, diary=books)
         call.commit(agent='complaints')
         call.turn_started('My haircut yesterday was uneven. I want a redo.')
         (await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')).put(call)
@@ -419,9 +424,9 @@ class Probe(PydanticAgentProcessor):
 
 async def cancelled_queue_keeps_all_accepted_input(fragmented=False):
     """A phone context queued behind a running turn is flushed by Pipecat's interruption."""
-    diary.reset()
-    diary.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
-    call = open_call('')
+    books.reset()
+    books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
+    call = open_call('', diary=books)
     prior = ['Earlier A', 'Earlier B'] if fragmented else []
     call.messages = [ModelRequest(parts=[UserPromptPart(words)]) for words in prior]
     first, queued_words, last = (
@@ -493,11 +498,11 @@ async def cancelled_queue_keeps_all_accepted_input(fragmented=False):
 
 async def selected_time_needs_no_extra_confirmation():
     for words in ('01:00, please.', '1:00 PM', 'one, please.'):
-        diary.reset()
-        diary.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
-        call = open_call(PHONE)
+        books.reset()
+        books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
+        call = open_call(PHONE, diary=books)
         call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
-        slots = diary.find_slots(PHONE, 'Friday', 'haircut', diary.now(), offered_to=call.id)['slots']
+        slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)['slots']
         slot = next(s for s in slots if s['time'] == '13:00')
 
         async def stream(messages, info, slot=slot):
@@ -520,7 +525,7 @@ async def selected_time_needs_no_extra_confirmation():
 
 
 def consent_and_history_boundaries():
-    call = open_call(PHONE)
+    call = open_call(PHONE, diary=books)
     call.turn_started('No, thanks.')
     call.messages = [ModelResponse(parts=[TextPart(content='Would you like a redo?')])]
     assert not agents._can_end(call)

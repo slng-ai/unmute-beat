@@ -38,6 +38,7 @@ from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
 from salon.agents import AGENTS, GREETING
+from salon.diary import Diary
 from salon.state import open_call
 from utils.observability import setup
 from voice.harness import model_clients
@@ -46,6 +47,8 @@ from voice.processor import PydanticAgentProcessor
 load_dotenv(override=True)
 
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
+DIARY = Diary()
+"""One salon per process: a booking made on one call is there when the next one rings."""
 
 transport_params = {
     'webrtc': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
@@ -136,7 +139,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     """
     setup()
     stt, tts = speech_services()
-    call = open_call(os.getenv('CALLER_ID', ''))
+    call = open_call(os.getenv('CALLER_ID', ''), diary=DIARY)
     agents = PydanticAgentProcessor(call, AGENTS)
     user_aggregator, assistant_aggregator = aggregators(LLMContext())
     pipeline = Pipeline(

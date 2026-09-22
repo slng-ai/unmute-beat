@@ -64,7 +64,6 @@ from voice.harness import (
     LocalAction,
     Node,
     claim_or_refuse,
-    filler_hook,
     one_action_per_reply,
     request_clock,
     speak_by,
@@ -1494,22 +1493,12 @@ def advance(call: SalonCall) -> LocalAction | None:
 # --- the table ---------------------------------------------------------------
 
 
-# Spoken while a tool runs, by us rather than by the model. One line per
-# silence, so a handoff line already spoken suppresses these.
-FILLER: dict[str, tuple[str, ...]] = {
-    'read_diary': ("Let me see what's free.", 'One moment, checking the diary.'),
-    # No line for `record_complaint`: it speaks `NOTED` itself when it returns,
-    # which covers the same gap and is the only sentence the caller needs.
-}
-
-
 def build(
     name: AgentName,
     tools=(),
     finishers=(),
     asks=(),
     exits: tuple[Exit[SalonState], ...] = (),
-    enter: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
     satisfied_by: str = '',
     guarded: bool = False,
@@ -1651,7 +1640,6 @@ def build(
                 *(Tool(fn, sequential=fn.__name__ in ACTIONS) for exit in exits for fn in exit.via),
             ],
             capabilities=[
-                filler_hook(FILLER),
                 one_action_per_reply(ACTIONS),
                 Hooks(prepare_tools=only_reachable, prepare_output_tools=narrow),
                 # Last, so what it empties is the set the guards already narrowed.
@@ -1662,7 +1650,6 @@ def build(
             ],
             model_settings=SETTINGS,
         ),
-        enter=enter,
         exits=exits,
         requires=requires,
         satisfied_by=satisfied_by,
@@ -1726,11 +1713,6 @@ AGENTS: dict[str, Node[SalonState]] = {
         # they had already said +34. Two requests and two questions for nothing.
         # With no exit, its guidance output asks for the missing information.
         exits=(Exit('concierge', verified),),
-        enter=(
-            "Let me confirm who I'm speaking to.",
-            "One second, let me check who I've got.",
-            'Right, let me make sure I have you.',
-        ),
     ),
     'booking': build(
         'booking',
@@ -1744,11 +1726,6 @@ AGENTS: dict[str, Node[SalonState]] = {
         # The ordering rule, as a fact instead of a sentence in a prompt.
         requires=('customer_verified',),
         satisfied_by='verify',
-        enter=(
-            'Let me have a look at the diary.',
-            "One second, I'll check the diary.",
-            "Right, let me see what's free.",
-        ),
     ),
     'complaints': build(
         'complaints',

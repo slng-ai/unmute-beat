@@ -107,7 +107,7 @@ class PydanticAgentProcessor(FrameProcessor):
         emitted it, so this processor's time to first token was recorded as the
         TTS service's time to first audio. Nothing is lost: `request_ttft` is
         stamped per provider request by `request_clock` and `turn_first_word`
-        is stamped here, both on the `agents` span.
+        is stamped here, both on the turn span named after the step.
         """
         return False
 
@@ -231,7 +231,8 @@ class PydanticAgentProcessor(FrameProcessor):
     async def _turn(self, prompt: str | None) -> None:
         """One caller turn, translated from the engine's events into frames.
 
-        One span for the whole chain: `start_as_current_span` attaches it and
+        One span for the whole chain, named after the step the caller is with
+        and renamed to the one that answered: `start_as_current_span` attaches it and
         the agents run in this coroutine, so Pydantic AI's own run spans land
         underneath instead of each opening a trace of its own. The clock is
         the turn's, not the speaking hop's, so the silence a caller sits
@@ -264,7 +265,7 @@ class PydanticAgentProcessor(FrameProcessor):
         if self._carried:
             prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
             self._carried = ''
-        with _tracer.start_as_current_span('agents', context=self._parent()) as span:
+        with _tracer.start_as_current_span(self._call.state.agent, context=self._parent()) as span:
             if prompt:
                 span.set_attribute('langfuse.observation.input', prompt)
             turn_started = time.perf_counter()
@@ -325,6 +326,8 @@ class PydanticAgentProcessor(FrameProcessor):
                                     'turn_first_text_out',
                                     round(min(s.at for s in spoken) - turn_started, 3),
                                 )
+                            span.update_name(done.agent)
+                            span.set_attribute('langfuse.observation.type', 'agent')
                             span.set_attribute('agent', done.agent)
                             span.set_attribute('status', done.status)
                             span.set_attribute('hops', len(done.handoffs) + 1)

@@ -17,7 +17,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from utils.observability import _CALL, _Speech
+from utils.observability import _CALL, _readable, _said, _Speech
 
 spans = InMemorySpanExporter()
 """Installed before anything imports a tracer, or every module takes the no-op one.
@@ -118,9 +118,10 @@ async def one_trace_per_call():
     finished = spans.get_finished_spans()
     by_id = {span.context.span_id: span for span in finished}
 
-    agents = named('agents')
+    agents = named('concierge')
     assert len(agents) == 1, [span.name for span in finished]
     agents = agents[0]
+    assert agents.attributes['langfuse.observation.type'] == 'agent', agents.attributes
 
     assert agents.parent is not None, 'the agents span started its own trace'
     assert agents.parent.span_id == turn.get_span_context().span_id
@@ -140,6 +141,65 @@ async def one_trace_per_call():
         assert span.context.span_id == agents.context.span_id
 
     assert named('turn')[0].attributes['langfuse.observation.metadata.conversation.id'] == 'call-1'
+
+    outputs = {
+        span.attributes['gen_ai.agent.name']: span.attributes.get('langfuse.observation.output')
+        for span in runs
+        if span.attributes.get('gen_ai.operation.name') == 'invoke_agent'
+    }
+    assert outputs['booking'] == 'handed over to concierge: test', outputs
+    assert outputs['concierge'] == 'There is metered parking on the road outside.', outputs
+    chats = [
+        span.attributes.get('langfuse.observation.output')
+        for span in runs
+        if span.attributes.get('gen_ai.operation.name') == 'chat'
+    ]
+    assert any(out and out.startswith('hand_over(') for out in chats), chats
+    assert 'There is metered parking on the road outside.' in chats, chats
+
+
+def agent_output_is_readable():
+    """A run's result and a request's answer, as sentences rather than dumps."""
+    assert _readable('{"to": "booking", "because": "wants a haircut", "status": "handoff"}') == (
+        'handed over to booking: wants a haircut'
+    )
+    assert _readable('{"to": "booking", "because": "identified", "status": "completed"}') == (
+        'finished; back to booking'
+    )
+    assert _readable('{"about": "phone", "value": "+34600111222", "spoken": "Is that +34600111222?"}') == (
+        'Is that +34600111222?'
+    )
+    assert _readable('Have a great day!') == 'Have a great day!'
+    assert (
+        _readable('{"recorded": true, "reference": "CX0001"}') == '{"recorded": true, "reference": "CX0001"}'
+    )
+
+    text = json.dumps([{'role': 'assistant', 'parts': [{'type': 'text', 'content': 'Which day?'}]}])
+    call = json.dumps(
+        [
+            {
+                'role': 'assistant',
+                'parts': [
+                    {'type': 'tool_call', 'id': 'c1', 'name': 'read_diary', 'arguments': {'when': 'Friday'}}
+                ],
+            }
+        ]
+    )
+    both = json.dumps(
+        [
+            {
+                'role': 'assistant',
+                'parts': [
+                    {'type': 'text', 'content': 'One moment.'},
+                    {'type': 'tool_call', 'name': 'hang_up', 'arguments': {'goodbye': 'Bye'}},
+                ],
+            }
+        ]
+    )
+    assert _said(text) == 'Which day?'
+    assert _said(call) == 'read_diary({"when": "Friday"})'
+    assert _said(both) == 'One moment. hang_up({"goodbye": "Bye"})'
+    assert _said('not json') == ''
 
 
 def speech_reaches_langfuse():
@@ -250,6 +310,7 @@ def a_call_reads_as_a_call():
 
 async def main():
     await one_trace_per_call()
+    agent_output_is_readable()
     speech_reaches_langfuse()
     a_call_reads_as_a_call()
     print('ok')

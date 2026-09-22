@@ -1,11 +1,12 @@
 """Langfuse over OpenTelemetry. Call `setup()` once, before any agent is built.
 
-Pydantic AI emits OTel spans and Langfuse collects them. Three things have to be
-true for a call to arrive as one trace: Langfuse must export the non-GenAI
-spans everything hangs from, Pipecat's stt and tts spans must be said again in
-the attribute keys Langfuse renders, and the session and trace name must be on
-every span rather than the root alone. Credentials come from
-`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`.
+Pydantic AI emits OTel spans and Langfuse collects them. Four things have to be
+true for a call to read as one call: Langfuse must export the non-GenAI spans
+everything hangs from, Pipecat's stt and tts spans must be said again in the
+attribute keys Langfuse renders, the session and trace name must be on every
+span rather than the root alone, and what each agent run and model request
+produced must be readable at a glance rather than a dump of parts. Credentials
+come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`.
 """
 
 import json
@@ -61,13 +62,77 @@ def _langfuse_words(span) -> dict:
     return words
 
 
+def _readable(final_result: str) -> str:
+    """What an agent run produced, as one sentence.
+
+    Pydantic AI records a run's `final_result` as the output's JSON, which for
+    this agency is a `Handoff` or an `Ask` far more often than a sentence. A
+    question is best read as the words the caller heard; a handoff as where the
+    caller went. Anything else is left exactly as Pydantic AI wrote it.
+    """
+    try:
+        result = json.loads(final_result)
+    except ValueError:
+        return final_result
+    if not isinstance(result, dict):
+        return final_result
+    if spoken := result.get('spoken'):
+        return str(spoken)
+    if to := result.get('to'):
+        if result.get('status', 'handoff') != 'handoff':
+            return f'finished; back to {to}'
+        because = result.get('because') or ''
+        return f'handed over to {to}: {because}' if because else f'handed over to {to}'
+    return final_result
+
+
+def _said(messages_json: str) -> str:
+    """What one model request answered, as text and tool calls rather than a parts array."""
+    try:
+        messages = json.loads(messages_json)
+    except ValueError:
+        return ''
+    if not isinstance(messages, list):
+        return ''
+    pieces: list[str] = []
+    for message in messages:
+        for part in message.get('parts', []) if isinstance(message, dict) else []:
+            kind = part.get('type')
+            if kind == 'text' and part.get('content'):
+                pieces.append(str(part['content']))
+            elif kind == 'tool_call':
+                arguments = part.get('arguments', part.get('args', {}))
+                rendered = arguments if isinstance(arguments, str) else json.dumps(arguments)
+                pieces.append(f'{part.get("name", "tool")}({rendered})')
+    return ' '.join(pieces)
+
+
+def _agent_words(span) -> dict:
+    """Pydantic AI's run and request spans, with an output somebody can read.
+
+    The run span keeps its type explicit and gets `_readable` of its result;
+    the request span gets `_said` of its output messages. The originals stay in
+    the observation's metadata, so nothing is lost by saying it plainly.
+    """
+    attributes = span.attributes or {}
+    operation = attributes.get('gen_ai.operation.name')
+    if operation == 'invoke_agent':
+        words = {'langfuse.observation.type': 'agent'}
+        if (result := attributes.get('final_result')) is not None:
+            words['langfuse.observation.output'] = _readable(str(result))
+        return words
+    if operation == 'chat' and (said := _said(str(attributes.get('gen_ai.output.messages') or ''))):
+        return {'langfuse.observation.output': said}
+    return {}
+
+
 def _spoken(lines: list[dict[str, str]], role: str) -> str:
     """Everything one side of the conversation said, in order."""
     return ' '.join(line['content'] for line in lines if line['role'] == role)
 
 
 class _Speech(SpanProcessor):
-    """Translate Pipecat's spans on their way out, and stamp the call on every span.
+    """Translate Pipecat's and Pydantic AI's spans on their way out, and stamp the call on every span.
 
     Registered before Langfuse's own processor, so a span is already rewritten
     by the time Langfuse queues it for export.
@@ -87,6 +152,8 @@ class _Speech(SpanProcessor):
         scope = span.instrumentation_scope
         if scope is not None and scope.name.startswith('pipecat'):
             words |= _langfuse_words(span) | self._transcript(span)
+        elif scope is not None and scope.name.startswith('pydantic-ai'):
+            words |= _agent_words(span)
         if words:
             span._attributes = dict(span.attributes or {}) | words
 

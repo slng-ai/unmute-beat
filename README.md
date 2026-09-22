@@ -95,14 +95,15 @@ unrelated traces.
 conversation                      the whole transcript in, the last line out
 ├── turn 1                        turn.was_interrupted, turn.user_bot_latency_seconds
 │   ├── stt
-│   ├── agents  agent=concierge hops=1 model_requests=1
-│   │   └── concierge run
+│   ├── concierge  (agent)  caller's words in, what was spoken out; hops=1 model_requests=1
+│   │   └── concierge run         output: the sentence it produced
+│   │       └── chat gemini       output: its text, or read_diary({...})
 │   └── tts
 └── turn 2
     ├── stt
-    ├── agents  agent=verify hops=2 handoffs=verify
-    │   ├── concierge run         -- hands over
-    │   └── verify run
+    ├── verify  (agent)  hops=2 handoffs=verify
+    │   ├── concierge run         output: handed over to verify: wants to book
+    │   └── verify run            output: the readback question
     └── tts
 ```
 
@@ -429,12 +430,16 @@ mechanism for each:
 
 Langfuse over OpenTelemetry. Pydantic AI's instrumentation emits the agent
 runs; Pipecat emits the conversation, the turn, stt and tts; the processor
-emits one `agents` span per caller turn, parented on Pipecat's open turn span.
+emits one span per caller turn, named after the step that answered and typed
+`agent`, parented on Pipecat's open turn span. Pydantic AI's own run and request
+spans get a readable output: the sentence a run produced, where it handed the
+caller, or the text and tool calls a request answered with; the raw messages stay
+in the observation's metadata.
 `utils/observability.py` does the two things nothing else does: exports the
 non-GenAI spans Langfuse would otherwise drop, and translates Pipecat's
 attributes into `langfuse.observation.*` so a speech span arrives with its
 text and its model rather than empty. Counting provider requests means
-counting `model_requests` on the `agents` span, not every observation labelled
+counting `model_requests` on the turn span, not every observation labelled
 a generation: speech services are generations too.
 
 - Langfuse trace structure and counting: https://langfuse.com/docs/observability/best-practices

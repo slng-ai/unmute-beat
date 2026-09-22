@@ -1,1 +1,0 @@
-native business adapter ok: shared phone, slots, consent flag, diary and complaint receipt

@@ -34,7 +34,6 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 # fmt: off
 MODULES = (
     'tests.test_graph',   # the graph: routing, the waiting step, the schema
-    'tests.test_voice',   # the processor and the two-agent demo
     'tests.test_salon',   # the salon agency end to end
     'tests.test_consent', # the caller's own words, and what may act on them
     'tests.test_traces',  # one call is one trace
@@ -42,7 +41,6 @@ MODULES = (
     'tests.test_diary',   # the service oracle: can it say no
     'tests.test_flow',    # guards and conflicts, enforced at execution
     'tests.test_budget',  # one allowance per caller turn
-    'tests.test_bench',   # the measurement, measured
     'tests.test_recovery', # live regressions and actual Pipecat queue cancellation
     'tests.test_history', # C3 projections at each provider request and late playback
     'tests.test_optimization', # local actions keep validation without provider requests

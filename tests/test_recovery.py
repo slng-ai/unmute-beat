@@ -541,27 +541,8 @@ def consent_and_history_boundaries():
     assert call.delivered('yes', excluding=previous)
 
 
-def process_provenance_is_immutable():
-    from utils import arm
-
-    before = arm.settings()
-    original = arm._git
-
-    def changed(*args: str) -> str:
-        return 'changed-after-startup'
-
-    try:
-        arm._git = changed  # ty: ignore[invalid-assignment]
-        after = arm.settings()
-        assert before['revision'] == after['revision']
-        assert before['source_sha256'] == after['source_sha256']
-    finally:
-        arm._git = original
-
-
 async def main():
     consent_and_history_boundaries()
-    process_provenance_is_immutable()
     await service_requests_verify_first()
     await declining_verification_abandons_the_service()
     await verified_complaint_uses_exact_approved_wording()

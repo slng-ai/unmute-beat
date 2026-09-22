@@ -1,8 +1,0 @@
-2026-09-21 09:44:02.731 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-2026-09-21 09:44:03.231 | INFO     | voice.processor:_turn:234 - handoff concierge -> intake (test)
-2026-09-21 09:44:03.272 | INFO     | voice.processor:_turn:234 - handoff concierge -> intake (test)
-2026-09-21 09:44:03.315 | INFO     | voice.processor:_turn:234 - handoff concierge -> intake (test)
-2026-09-21 09:44:03.325 | INFO     | voice.processor:_turn:234 - handoff intake -> concierge (test)
-2026-09-21 09:44:03.334 | INFO     | voice.processor:_turn:234 - handoff concierge -> intake (test)
-2026-09-21 09:44:03.338 | WARNING  | voice.processor:_turn:261 - handoff budget of 3 spent, making intake answer
-ok

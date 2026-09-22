@@ -1,9 +1,0 @@
-
-=== usage ===
-  Cached input is a subset of input; '-' means unavailable. Counts are observations, not LLM requests.
-  span     obs    input  output   cached    total    mean     max  unit
-  chat gemini-3.5-flash-lite   1     3907      19     3480     3926    3926    3926  tokens
-
-=== span lifetime, seconds (p50: median; p90: nearest rank; not client playout) ===
-  span                     n    mean     p50     p90     max
-  probe                    6   3.500   3.500   6.000   6.000

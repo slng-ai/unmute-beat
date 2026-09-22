@@ -17,6 +17,3 @@ wheels/
 # Tooling
 .ruff_cache/
 
-# Benchmark output: raw per-turn rows, written per run. Evidence for one run,
-# not something to carry in the repository.
-bench/raw/

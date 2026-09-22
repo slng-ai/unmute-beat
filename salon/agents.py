@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 from collections.abc import Callable
 from copy import deepcopy
@@ -630,32 +629,6 @@ SETTINGS: object = GoogleModelSettings(
     google_thinking_config={'thinking_level': 'MINIMAL'},  # ty: ignore[invalid-argument-type]
 )
 
-if os.getenv('BENCH_PINNED'):
-    # ponytail: one env var, because only the benchmark needs this. It pins the
-    # POC to configuration A's exact binding, read off its own
-    # `build/pipecat/compile-report.json`: gemini-3.1-flash-lite, Vertex, the
-    # `eu` multi-region, thinking_level MINIMAL, and no service tier. A
-    # benchmark that runs two architectures on two different models measures
-    # the models -- 3.5 is the version that lost 18.5 s to
-    # MALFORMED_FUNCTION_CALL aborts on a live call, which on its own would
-    # decide the result.
-    from pydantic_ai.models.google import GoogleModel
-    from pydantic_ai.providers.google_cloud import GoogleCloudProvider
-
-    # ponytail: the region is pinned only when Application Default Credentials
-    # exist, because naming a `location` forces ADC and an Express-Mode
-    # `GOOGLE_API_KEY` has none -- it routes wherever Google sends it. With no
-    # project set the model and the thinking level are pinned and **the region
-    # is not**, which the write-up has to say out loud. To pin it too:
-    # `gcloud auth application-default login` and export GOOGLE_CLOUD_PROJECT.
-    project = os.getenv('GOOGLE_CLOUD_PROJECT')
-    MODEL = GoogleModel(
-        'gemini-3.1-flash-lite',
-        provider=GoogleCloudProvider(project=project, location='eu') if project else GoogleCloudProvider(),
-    )
-    SETTINGS = GoogleModelSettings(
-        google_thinking_config={'thinking_level': 'MINIMAL'}  # ty: ignore[invalid-argument-type]
-    )
 
 GREETING = "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
 

@@ -1,3 +1,0 @@
-2026-09-21 22:40:35.598 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-current verification boundary passes
-negative control failed as expected: enabling model speech leaked the untracked phone readback ['Is your number +34680840464?', 'Let me read that back to you: +34 680 840 464. Have I got that right?']

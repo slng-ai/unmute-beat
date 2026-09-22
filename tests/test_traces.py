@@ -1,11 +1,10 @@
-"""Run: uv run --env-file .env python -m tests.test_traces
+"""Run: uv run python -m tests.test_traces
 
-Asserts, no pytest, no network. Two things, both silent failures -- the call
-still works, the traces just come out useless:
+Two silent failures, neither of which breaks a call: a caller turn that starts a
+trace of its own instead of landing inside Pipecat's open turn span, and
+Pipecat's stt and tts spans reaching Langfuse in words it does not render.
 
-  * a caller turn lands inside Pipecat's open turn span instead of starting a
-    trace of its own;
-  * Pipecat's stt and tts spans reach Langfuse in words it reads.
+Asserts, no pytest, no network.
 """
 
 import asyncio
@@ -18,9 +17,11 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from utils.observability import _Speech
 
-# Before anything imports a tracer, or they all take the no-op one. Same order as
-# `observability.setup`: the translation runs before anything exports.
 spans = InMemorySpanExporter()
+"""Installed before anything imports a tracer, or every module takes the no-op one.
+
+Same order as `observability.setup`: the translation runs before the exporter.
+"""
 provider = TracerProvider()
 provider.add_span_processor(_Speech())
 provider.add_span_processor(SimpleSpanProcessor(spans))
@@ -36,9 +37,11 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel 
 
 Agent.instrument_all()
 
-from voice.agents import AGENTS  # noqa: E402
+from salon.agents import AGENTS  # noqa: E402
+from salon.state import open_call  # noqa: E402
 from voice.processor import PydanticAgentProcessor  # noqa: E402
-from voice.state import Call  # noqa: E402
+
+PHONE = '+34600111222'
 
 
 def named(name):
@@ -53,6 +56,8 @@ def says(text):
 
 
 def hands_to(name):
+    """A scripted `hand_over`: the first output tool a step declares is always its handoff."""
+
     async def stream(messages, info: AgentInfo):
         yield {
             0: DeltaToolCall(
@@ -82,26 +87,27 @@ def open_turn() -> tuple[TracingContext, trace.Span, trace.Span]:
     return context, conversation, turn
 
 
-# --- the agents run inside Pipecat's turn ------------------------------------
-
-
 async def one_trace_per_call():
+    """The agents' span hangs off Pipecat's turn, and both agent runs sit under it.
+
+    A verified caller in `booking` asks a general question; the step hands
+    them to `concierge`, the only step whose model speech streams, and that
+    step answers. Two runs, one turn, one tree.
+    """
     context, conversation, turn = open_turn()
 
-    call = Call()
+    call = open_call(PHONE)
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call, AGENTS)
-    # What `setup()` does on a real pipeline, from FrameProcessorSetup.
     probe._tracing = context
 
     with (
-        AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=hands_to('intake'))),
-        AGENTS['intake'].agent.override(
-            model=FunctionModel(
-                stream_function=says('Is that plus three four, six zero zero, one one one, two two two?')
-            )
+        AGENTS['booking'].agent.override(model=FunctionModel(stream_function=hands_to('concierge'))),
+        AGENTS['concierge'].agent.override(
+            model=FunctionModel(stream_function=says('There is metered parking on the road outside.'))
         ),
     ):
-        await probe._turn('my number is plus three four six zero zero one one one two two two')
+        await probe._turn('is there parking nearby?')
 
     turn.end()
     conversation.end()
@@ -113,17 +119,15 @@ async def one_trace_per_call():
     assert len(agents) == 1, [span.name for span in finished]
     agents = agents[0]
 
-    # The whole point: our span hangs off Pipecat's turn, not off nothing.
     assert agents.parent is not None, 'the agents span started its own trace'
     assert agents.parent.span_id == turn.get_span_context().span_id
     assert agents.context.trace_id == conversation.get_span_context().trace_id
 
-    assert agents.attributes['agent'] == 'intake', agents.attributes
+    assert agents.attributes['agent'] == 'concierge', agents.attributes
     assert agents.attributes['hops'] == 2, agents.attributes
-    assert agents.attributes['handoffs'] == 'intake', agents.attributes
+    assert agents.attributes['handoffs'] == 'concierge', agents.attributes
     assert agents.attributes['interrupted'] is False, agents.attributes
 
-    # Both agent runs are somewhere under it, so one call reads as one tree.
     runs = [span for span in finished if span.instrumentation_scope.name == 'pydantic-ai']
     assert runs, 'pydantic-ai emitted nothing; is instrument_all() still called?'
     for span in runs:
@@ -132,15 +136,15 @@ async def one_trace_per_call():
             assert span is not None, 'an agent span escaped the turn'
         assert span.context.span_id == agents.context.span_id
 
-    # A turn span is not a generation, but what it measured must still survive.
     assert named('turn')[0].attributes['langfuse.observation.metadata.conversation.id'] == 'call-1'
 
 
-# --- speech spans say something Langfuse renders -----------------------------
-
-
 def speech_reaches_langfuse():
-    """Built with Pipecat's own attribute helpers: a rename over there fails here."""
+    """Built with Pipecat's own attribute helpers, so a rename over there fails here.
+
+    The tts text is what the service was asked for, so it lands as the
+    observation's input; the stt transcript is what came out, so it is the output.
+    """
     tracer = trace.get_tracer('pipecat')
 
     heard = tracer.start_span('stt')
@@ -176,7 +180,6 @@ def speech_reaches_langfuse():
 
     said = named('tts')[0].attributes
     assert said['langfuse.observation.type'] == 'generation', said
-    # The text is what TTS was asked for, so it is the input, not the output.
     assert said['langfuse.observation.input'] == 'Of course, when suits you?', said
     assert said['langfuse.observation.model.name'] == 'cartesia/sonic:3.5', said
     assert said['langfuse.observation.metadata.metrics.character_count'] == 26, said
@@ -190,7 +193,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # `tests/__main__.py` runs each module with `run_name='__main__'`, so this
-    # still runs there -- and a debugging session can import one module
-    # without running every check in it.
     asyncio.run(main())

@@ -841,32 +841,6 @@ def speak_by(request: int) -> Hooks:
     return hooks
 
 
-def filler_hook(lines_by_tool: dict[str, tuple[str, ...]]) -> Hooks:
-    """Speak into the gap a tool leaves, before it runs.
-
-    The model is never asked to narrate: a generated "let me check" costs the
-    round trip it is meant to cover, and arrives after it. These go to TTS the
-    moment the call is validated, and `VoiceState.say` allows one per silence,
-    so a handoff line already spoken suppresses them.
-    """
-    hooks = Hooks()
-
-    @hooks.on.before_tool_execute
-    async def cover_the_wait(ctx, *, call, tool_def, args):
-        if lines := lines_by_tool.get(call.tool_name):
-            # The tool call it is covering travels with it, so the trace can
-            # say which wait this speech was for rather than leaving a TTS
-            # span hanging off the turn with nothing to attach it to.
-            await ctx.deps.say(
-                pick(f'tool:{call.tool_name}', lines),
-                origin='tool_filler',
-                tool_call_id=getattr(call, 'tool_call_id', ''),
-            )
-        return args
-
-    return hooks
-
-
 class Exit[S: VoiceState](NamedTuple):
     """One legal move out of a step, and the state it is legal in.
 

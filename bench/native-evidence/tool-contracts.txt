@@ -1,8 +1,0 @@
-2026-09-21 23:30:39.422 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-build_concierge_llm {"thinking_config": {"thinking_level": "MINIMAL"}, "http_options": {"headers": {"X-Vertex-AI-LLM-Shared-Request-Type": "priority"}}}
-build_complaint_specialist_llm {"thinking_config": {"thinking_level": "MINIMAL"}, "http_options": {"headers": {"X-Vertex-AI-LLM-Shared-Request-Type": "priority"}}}
-native settings ok: model, thinking, priority, no output cap; configured audio settings match the POC
-only_poc ['ask_booking', 'ask_complaint', 'ask_number', 'complaint_guidance', 'confirm_customer', 'hand_over', 'hang_up', 'read_diary', 'stop_verifying', 'verification_guidance']
-only_native ['book', 'end_call', 'find_or_create_customer', 'find_slots', 'finish_book_manage_booking', 'finish_book_verify_customer', 'finish_verify_customer_verify_customer', 'to_complaints', 'to_concierge', 'verify_customer']
-shared_names ['record_complaint', 'save_booking']
-Inventory: /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/native-evidence/tool-contracts.json

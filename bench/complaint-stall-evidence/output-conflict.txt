@@ -1,2 +1,0 @@
-2026-09-21 20:55:14.391 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-both orders, valid one-request readback and invalid readback refusal: ok

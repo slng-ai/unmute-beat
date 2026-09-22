@@ -5,18 +5,46 @@ from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime
 
+from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
 from pydantic import ValidationError
 from pydantic_ai import Agent, RunContext, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
-from bench.scenarios import Counter
 from salon import agents, diary
 from salon.state import open_call
 from voice.core import Barge, RunStarted, run_turn
 from voice.harness import Node, TurnBudget, model_clients
+from voice.processor import PydanticAgentProcessor
 
 PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
+
+
+class Counter(PydanticAgentProcessor):
+    """The processor with its downstream replaced by a tally."""
+
+    def __init__(self, call, agents):
+        super().__init__(call, agents)
+        self.ended = False
+        call._end = self._hang_up
+        self.reset()
+
+    async def _hang_up(self):
+        self.ended = True
+
+    def reset(self):
+        self.spoke = False
+        self.fixed = 0
+
+    async def push_frame(self, frame, direction=None):
+        if isinstance(frame, LLMTextFrame):
+            self.spoke = True
+        elif isinstance(frame, TTSSpeakFrame):
+            self.fixed += 1
+
+    def requests(self) -> int:
+        """Provider requests in the turn that just ran, off the turn's own shared `RunUsage` tally."""
+        return self._finished.requests if self._finished else 0
 
 
 def context(call):

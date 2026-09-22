@@ -1,0 +1,1101 @@
+{
+  "scope": "POC prepared first requests in seven states; native direct schemas and declared flow schemas. No tool handlers, model requests or audio executed.",
+  "hashes": {
+    "salon/agents.py": "54f4e08d49dffc0200739c1875c797ad817d417c532b8fa07e73f66071058f95",
+    "salon/state.py": "b87067d58cecdb12f6e195983790c588ead5addb15b2714e629938fc538d0165",
+    "bench/native_tools.py": "7d26534d421320053ae5cd3698c17b2bb5c7b716d936bf7f45600004cd1c7f7e",
+    "bench/raw/native-reference/examples/salon-concierge/build/pipecat/bot.py": "765f3828b15f972c9ac5bbe26cbcc435abeb166c4e206a6ae710b68437a7b24c"
+  },
+  "only_poc": [
+    "ask_booking",
+    "ask_complaint",
+    "ask_number",
+    "complaint_guidance",
+    "confirm_customer",
+    "hand_over",
+    "hang_up",
+    "read_diary",
+    "stop_verifying",
+    "verification_guidance"
+  ],
+  "only_native": [
+    "book",
+    "end_call",
+    "find_or_create_customer",
+    "find_slots",
+    "finish_book_manage_booking",
+    "finish_book_verify_customer",
+    "finish_verify_customer_verify_customer",
+    "to_complaints",
+    "to_concierge",
+    "verify_customer"
+  ],
+  "shared_names": [
+    "record_complaint",
+    "save_booking"
+  ],
+  "poc": {
+    "concierge:verified=False:complaint_approved=False": {
+      "allows_text": true,
+      "tools": [
+        {
+          "name": "hand_over",
+          "description": "Give the caller to another agent, right now, for something that is not yours to do.\n\nThis is the only way to move a caller. Writing a sentence about transferring\nthem does nothing at all: the caller hears you say it and then sits there,\nstill with you, while nobody does the thing. So do this instead of saying\nit, and say nothing about it afterwards -- they hear one short line and\ncarry straight on in the same conversation.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "description": "The agent that takes it from here.",
+                "enum": [
+                  "booking",
+                  "complaints"
+                ],
+                "type": "string"
+              },
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "hang_up",
+          "description": "End the call, once the caller's own words say it is over: \"no, that's all\", \"I'm good,\nthanks\", \"goodbye\". A question is never one of those, however tired it sounds: answer it and wait.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "goodbye": {
+                "description": "One short goodbye in your own words. It is the last thing they hear.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "goodbye"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        }
+      ]
+    },
+    "concierge:verified=True:complaint_approved=False": {
+      "allows_text": true,
+      "tools": [
+        {
+          "name": "read_diary",
+          "description": "Read the diary: what this caller already holds, and what is free on the day they named.\n\nOne call answers both, so you never need a second. It works the day and the\ntime out from the caller's own words, never returns a time that has already\ngone past, and never writes anything.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "description": "The day in the caller's own words -- \"tomorrow\", \"next Friday\",\n\"the 25th\" -- or an empty string if they have not named one.",
+                "type": "string"
+              },
+              "service": {
+                "description": "Narrow the free times to one service, or `any` to see them all.",
+                "enum": [
+                  "any",
+                  "haircut",
+                  "hair-color",
+                  "blowout"
+                ],
+                "type": "string"
+              },
+              "at": {
+                "default": "",
+                "description": "The time or part of day they asked for, in their own words --\n\"three\", \"half past two\", \"the afternoon\" -- or empty if they said\nnone. It decides which free times you are shown, so leaving it out\nwhen they named one is how a caller asking for the afternoon gets\nread the morning.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "when",
+              "service"
+            ],
+            "type": "object"
+          },
+          "kind": "function"
+        },
+        {
+          "name": "hand_over",
+          "description": "Give the caller to another agent, right now, for something that is not yours to do.\n\nThis is the only way to move a caller. Writing a sentence about transferring\nthem does nothing at all: the caller hears you say it and then sits there,\nstill with you, while nobody does the thing. So do this instead of saying\nit, and say nothing about it afterwards -- they hear one short line and\ncarry straight on in the same conversation.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "description": "The agent that takes it from here.",
+                "enum": [
+                  "booking",
+                  "complaints",
+                  "verify"
+                ],
+                "type": "string"
+              },
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "hang_up",
+          "description": "End the call, once the caller's own words say it is over: \"no, that's all\", \"I'm good,\nthanks\", \"goodbye\". A question is never one of those, however tired it sounds: answer it and wait.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "goodbye": {
+                "description": "One short goodbye in your own words. It is the last thing they hear.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "goodbye"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        }
+      ]
+    },
+    "verify:verified=False:complaint_approved=False": {
+      "allows_text": false,
+      "tools": [
+        {
+          "name": "confirm_customer",
+          "description": "Look the caller up by the number they have just agreed to, and finish this step.\n\nOnly after a clear yes to the digits you read back. A caller giving\ndifferent digits is correcting you, not agreeing.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "phone": {
+                "description": "A Spanish phone number in full international form, like +34600111222.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "phone"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "stop_verifying",
+          "description": "Give the caller back to the front desk without identifying them, and finish this step.\n\nFor a caller who will not confirm a number, or who asks about something\nelse entirely. Whatever they were waiting to do that needed identifying is\ngiven up with it, so use it when they have moved on and not while they are\nstill correcting the digits.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: why this stopped. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "ask_number",
+          "description": "Read a number back to the caller and wait. The only way to reach `confirm_customer`.\n\nNothing is looked up until they have agreed to these exact digits. Their\nanswer next turn is what decides it, so say nothing after calling this.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "phone": {
+                "description": "A Spanish phone number in full international form, like +34600111222.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "phone"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "verification_guidance",
+          "description": "Ask for missing phone information. For a complete number, use ask_number instead.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "topic": {
+                "enum": [
+                  "number",
+                  "country",
+                  "incomplete",
+                  "correction",
+                  "unsupported"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        }
+      ]
+    },
+    "verify:verified=True:complaint_approved=False": {
+      "allows_text": false,
+      "tools": [
+        {
+          "name": "hand_over",
+          "description": "Give the caller to another agent, right now, for something that is not yours to do.\n\nThis is the only way to move a caller. Writing a sentence about transferring\nthem does nothing at all: the caller hears you say it and then sits there,\nstill with you, while nobody does the thing. So do this instead of saying\nit, and say nothing about it afterwards -- they hear one short line and\ncarry straight on in the same conversation.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "description": "The agent that takes it from here.",
+                "type": "string",
+                "enum": [
+                  "concierge"
+                ]
+              },
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "confirm_customer",
+          "description": "Look the caller up by the number they have just agreed to, and finish this step.\n\nOnly after a clear yes to the digits you read back. A caller giving\ndifferent digits is correcting you, not agreeing.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "phone": {
+                "description": "A Spanish phone number in full international form, like +34600111222.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "phone"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "stop_verifying",
+          "description": "Give the caller back to the front desk without identifying them, and finish this step.\n\nFor a caller who will not confirm a number, or who asks about something\nelse entirely. Whatever they were waiting to do that needed identifying is\ngiven up with it, so use it when they have moved on and not while they are\nstill correcting the digits.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: why this stopped. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "ask_number",
+          "description": "Read a number back to the caller and wait. The only way to reach `confirm_customer`.\n\nNothing is looked up until they have agreed to these exact digits. Their\nanswer next turn is what decides it, so say nothing after calling this.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "phone": {
+                "description": "A Spanish phone number in full international form, like +34600111222.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "phone"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "verification_guidance",
+          "description": "Ask for missing phone information. For a complete number, use ask_number instead.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "topic": {
+                "enum": [
+                  "number",
+                  "country",
+                  "incomplete",
+                  "correction",
+                  "unsupported"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        }
+      ]
+    },
+    "booking:verified=True:complaint_approved=False": {
+      "allows_text": true,
+      "tools": [
+        {
+          "name": "read_diary",
+          "description": "Read the diary: what this caller already holds, and what is free on the day they named.\n\nOne call answers both, so you never need a second. It works the day and the\ntime out from the caller's own words, never returns a time that has already\ngone past, and never writes anything.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "description": "The day in the caller's own words -- \"tomorrow\", \"next Friday\",\n\"the 25th\" -- or an empty string if they have not named one.",
+                "type": "string"
+              },
+              "service": {
+                "description": "Narrow the free times to one service, or `any` to see them all.",
+                "enum": [
+                  "any",
+                  "haircut",
+                  "hair-color",
+                  "blowout"
+                ],
+                "type": "string"
+              },
+              "at": {
+                "default": "",
+                "description": "The time or part of day they asked for, in their own words --\n\"three\", \"half past two\", \"the afternoon\" -- or empty if they said\nnone. It decides which free times you are shown, so leaving it out\nwhen they named one is how a caller asking for the afternoon gets\nread the morning.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "when",
+              "service"
+            ],
+            "type": "object"
+          },
+          "kind": "function"
+        },
+        {
+          "name": "hand_over",
+          "description": "Give the caller to another agent, right now, for something that is not yours to do.\n\nThis is the only way to move a caller. Writing a sentence about transferring\nthem does nothing at all: the caller hears you say it and then sits there,\nstill with you, while nobody does the thing. So do this instead of saying\nit, and say nothing about it afterwards -- they hear one short line and\ncarry straight on in the same conversation.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "description": "The agent that takes it from here.",
+                "enum": [
+                  "concierge",
+                  "complaints"
+                ],
+                "type": "string"
+              },
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "save_booking",
+          "description": "Write the diary, and finish this step. Nothing is booked, moved or cancelled until this runs.\n\nOnly after the caller has authorised this exact appointment -- by naming\none of the times just offered to them, or by agreeing to an `ask_booking`\nreadback of it. It speaks the confirmation itself, so say nothing after\ncalling it.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "description": "book a new time, move an existing booking, or cancel one.",
+                "enum": [
+                  "book",
+                  "move",
+                  "cancel"
+                ],
+                "type": "string"
+              },
+              "slot_id": {
+                "description": "The slot exactly as the diary returned it. Empty when cancelling.",
+                "type": "string"
+              },
+              "booking_id": {
+                "description": "The booking exactly as the diary returned it. Empty when booking.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "slot_id",
+              "booking_id"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "ask_booking",
+          "description": "Say back what you are about to write, and wait for their yes. Nothing is saved by this.\n\nThe sentence is built here from the diary's own record of the slot, so it\ncannot describe a time the caller was never offered. Say nothing after\ncalling it: their next answer is what decides.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "description": "book a new time, move an existing booking, or cancel one.",
+                "enum": [
+                  "book",
+                  "move",
+                  "cancel"
+                ],
+                "type": "string"
+              },
+              "slot_id": {
+                "default": "",
+                "description": "The slot exactly as the diary returned it. Empty when cancelling.",
+                "type": "string"
+              },
+              "booking_id": {
+                "default": "",
+                "description": "The booking exactly as the diary returned it. Empty when booking.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        }
+      ]
+    },
+    "complaints:verified=True:complaint_approved=False": {
+      "allows_text": false,
+      "tools": [
+        {
+          "name": "hand_over",
+          "description": "Give the caller to another agent, right now, for something that is not yours to do.\n\nThis is the only way to move a caller. Writing a sentence about transferring\nthem does nothing at all: the caller hears you say it and then sits there,\nstill with you, while nobody does the thing. So do this instead of saying\nit, and say nothing about it afterwards -- they hear one short line and\ncarry straight on in the same conversation.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "description": "The agent that takes it from here.",
+                "type": "string",
+                "enum": [
+                  "concierge"
+                ]
+              },
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "hang_up",
+          "description": "End the call only when the caller is finished. Speaks a fixed goodbye.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "ask_complaint",
+          "description": "Ask for approval once the complaint details and requested outcome are known.\n\nUse this instead of asking whether to record their complaint in ordinary\nspeech. It speaks the readback and waits; nothing is recorded or approved yet.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "summary": {
+                "description": "The shortest complete excerpt of the caller's words describing the faulty service.\nExclude filler and the requested outcome. Do not paraphrase or add dates from an upcoming\nbooking. Punctuation and case may differ.",
+                "type": "string"
+              },
+              "requested_resolution": {
+                "description": "An exact excerpt of the caller's requested outcome, or empty if unspecified.\nNever infer a redo. Recording a request does not approve it.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "summary",
+              "requested_resolution"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "complaint_guidance",
+          "description": "Speak approved salon guidance and finish this turn. No booking or approval.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "topic": {
+                "description": "details asks what happened; resolution asks what outcome they want;\nreview explains that requested free services or booking conversions need salon review;\nrefunds explains approval tiers; products explains return conditions;\nfollowup explains the recorded complaint's response time.\nUse ask_complaint instead when their complaint and requested outcome are already known.",
+                "enum": [
+                  "details",
+                  "resolution",
+                  "review",
+                  "refunds",
+                  "products",
+                  "followup"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        }
+      ]
+    },
+    "complaints:verified=True:complaint_approved=True": {
+      "allows_text": false,
+      "tools": [
+        {
+          "name": "hand_over",
+          "description": "Give the caller to another agent, right now, for something that is not yours to do.\n\nThis is the only way to move a caller. Writing a sentence about transferring\nthem does nothing at all: the caller hears you say it and then sits there,\nstill with you, while nobody does the thing. So do this instead of saying\nit, and say nothing about it afterwards -- they hear one short line and\ncarry straight on in the same conversation.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "description": "The agent that takes it from here.",
+                "type": "string",
+                "enum": [
+                  "concierge"
+                ]
+              },
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "hang_up",
+          "description": "End the call only when the caller is finished. Speaks a fixed goodbye.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "record_complaint",
+          "description": "Record the exact complaint and resolution the caller already approved, then stop.\n\nIt speaks the receipt itself. Do not reword the approved complaint or say\nanother acknowledgement. It uses the approved wording without changes.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "ask_complaint",
+          "description": "Ask for approval once the complaint details and requested outcome are known.\n\nUse this instead of asking whether to record their complaint in ordinary\nspeech. It speaks the readback and waits; nothing is recorded or approved yet.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "summary": {
+                "description": "The shortest complete excerpt of the caller's words describing the faulty service.\nExclude filler and the requested outcome. Do not paraphrase or add dates from an upcoming\nbooking. Punctuation and case may differ.",
+                "type": "string"
+              },
+              "requested_resolution": {
+                "description": "An exact excerpt of the caller's requested outcome, or empty if unspecified.\nNever infer a redo. Recording a request does not approve it.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "summary",
+              "requested_resolution"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        },
+        {
+          "name": "complaint_guidance",
+          "description": "Speak approved salon guidance and finish this turn. No booking or approval.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "topic": {
+                "description": "details asks what happened; resolution asks what outcome they want;\nreview explains that requested free services or booking conversions need salon review;\nrefunds explains approval tiers; products explains return conditions;\nfollowup explains the recorded complaint's response time.\nUse ask_complaint instead when their complaint and requested outcome are already known.",
+                "enum": [
+                  "details",
+                  "resolution",
+                  "review",
+                  "refunds",
+                  "products",
+                  "followup"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic"
+            ],
+            "type": "object"
+          },
+          "kind": "output"
+        }
+      ]
+    }
+  },
+  "native": {
+    "ConciergeAgent": [
+      {
+        "name": "to_complaints",
+        "description": "The caller has a complaint or service problem.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "end_call",
+        "description": "End the call once the caller's own words say the call is over: \"no, that's all\", \"I'm good, thanks\", \"goodbye\". A question is never one of those, however tired it sounds. On a live call on 2026-09-16 the caller asked \"can we just recap when I have the next appointment?\" and this ended the call on them. Answer what they asked and wait for them to say they are done.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "verify_customer",
+        "description": "Before a complaint if not verified, or after a phone correction. The caller's words right above the status are what the step answered; it served the part it owns, so act only on what remains.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "book",
+        "description": "The caller wants to create, move or cancel a booking. Includes a change to an appointment just made. The caller's words right above the status are what the step answered; it served the part it owns, so act only on what remains.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    ],
+    "ComplaintSpecialistAgent": [
+      {
+        "name": "to_concierge",
+        "description": "The caller changes to a request owned by another specialist.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "record_complaint",
+        "description": "Record once, after the caller approves the complaint and resolution readback. Preserve that wording exactly; this does not approve the requested remedy.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "requested_resolution": {
+              "type": "string",
+              "description": "What the customer wants the salon to do, or an empty string"
+            },
+            "summary": {
+              "type": "string",
+              "description": "Short factual summary of the complaint"
+            }
+          },
+          "required": [
+            "requested_resolution",
+            "summary"
+          ]
+        }
+      },
+      {
+        "name": "end_call",
+        "description": "End the call once the caller's own words say the call is over: \"no, that's all\", \"I'm good, thanks\", \"goodbye\". A question is never one of those, however tired it sounds. On a live call on 2026-09-16 the caller asked \"can we just recap when I have the next appointment?\" and this ended the call on them. Answer what they asked and wait for them to say they are done.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "verify_customer",
+        "description": "Before a complaint if not verified, or after a phone correction. The caller's words right above the status are what the step answered; it served the part it owns, so act only on what remains.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    ],
+    "ComplaintSpecialistAgent._verify_customer_node_verify_customer": [
+      {
+        "name": "find_or_create_customer",
+        "description": "Look up or create one salon customer from the exact confirmed phone number. Use only after the digit readback got a clear yes. Reuse the record that already owns the number, or create one for a number that is new. Never guess a number or pass one the caller has not confirmed. A caller giving a replacement number is not confirmation. Ask the readback question first; call this tool only after a later caller message agrees to it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "phone": {
+              "description": "The approved Spanish number in full international form, +34 followed by nine digits. Never infer country or approval.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "phone"
+          ]
+        }
+      },
+      {
+        "name": "finish_verify_customer_verify_customer",
+        "description": "Record the result of this step and finish.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "unserved_request": {
+              "description": "Leave empty unless the caller asked for something this step cannot serve. Then put that request here in one short plain sentence, in the caller's own terms, so the agent that owns this step can take it.",
+              "type": "string"
+            },
+            "customer_phone": {
+              "anyOf": [
+                {
+                  "description": "a phone number in E.164, one leading plus and 7 to 15 digits, like +34600111222",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's phone number in E.164: a plus sign, then digits, with no spaces, brackets or dashes. One shape for every phone number in this package, the MANAGER_PHONE_NUMBER transfer destination included, so no prompt and no tool has to guess which shape it is holding.\nNo `source:` here on purpose. The prefetch block below reads the carrier's fact and this variable receives it, which leaves the per-route refusal for a variable naming a source its target cannot supply exactly as strict as it is: on a route with no caller ID the entry skips and this holds its default.\nOffered to the caller for a yes, never acted on unasked. Somebody may be ringing from a friend's phone, or may hold a second account, so until the verification step has heard them agree this value stays unconfirmed and appears in no prompt but that step's own."
+            },
+            "customer_status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Whether verification has already run on this call, and what it found. Set by the verification step as it ends, which only happens on a number the caller agreed to, so a value here means the number beside it is confirmed.\nIt exists for customer care, which has to decide whether to identify the caller before writing a complaint down and cannot read `customer_phone` to find out: an unconfirmed number renders in no prompt but the verification step's own, and a confirmed one must not be in front of an agent that might say it out loud. This carries the same fact with nothing sensitive in it.\nThe concierge does not read it. The `book` flow decides the same thing structurally with `skip_when_confirmed:`, off the confirmation itself rather than off a copy of it.\nEmpty means nobody has been verified yet on this call."
+            }
+          },
+          "required": []
+        }
+      }
+    ],
+    "ConciergeAgent._verify_customer_node_verify_customer": [
+      {
+        "name": "find_or_create_customer",
+        "description": "Look up or create one salon customer from the exact confirmed phone number. Use only after the digit readback got a clear yes. Reuse the record that already owns the number, or create one for a number that is new. Never guess a number or pass one the caller has not confirmed. A caller giving a replacement number is not confirmation. Ask the readback question first; call this tool only after a later caller message agrees to it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "phone": {
+              "description": "The approved Spanish number in full international form, +34 followed by nine digits. Never infer country or approval.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "phone"
+          ]
+        }
+      },
+      {
+        "name": "finish_verify_customer_verify_customer",
+        "description": "Record the result of this step and finish.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "unserved_request": {
+              "description": "Leave empty unless the caller asked for something this step cannot serve. Then put that request here in one short plain sentence, in the caller's own terms, so the agent that owns this step can take it.",
+              "type": "string"
+            },
+            "customer_phone": {
+              "anyOf": [
+                {
+                  "description": "a phone number in E.164, one leading plus and 7 to 15 digits, like +34600111222",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's phone number in E.164: a plus sign, then digits, with no spaces, brackets or dashes. One shape for every phone number in this package, the MANAGER_PHONE_NUMBER transfer destination included, so no prompt and no tool has to guess which shape it is holding.\nNo `source:` here on purpose. The prefetch block below reads the carrier's fact and this variable receives it, which leaves the per-route refusal for a variable naming a source its target cannot supply exactly as strict as it is: on a route with no caller ID the entry skips and this holds its default.\nOffered to the caller for a yes, never acted on unasked. Somebody may be ringing from a friend's phone, or may hold a second account, so until the verification step has heard them agree this value stays unconfirmed and appears in no prompt but that step's own."
+            },
+            "customer_status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Whether verification has already run on this call, and what it found. Set by the verification step as it ends, which only happens on a number the caller agreed to, so a value here means the number beside it is confirmed.\nIt exists for customer care, which has to decide whether to identify the caller before writing a complaint down and cannot read `customer_phone` to find out: an unconfirmed number renders in no prompt but the verification step's own, and a confirmed one must not be in front of an agent that might say it out loud. This carries the same fact with nothing sensitive in it.\nThe concierge does not read it. The `book` flow decides the same thing structurally with `skip_when_confirmed:`, off the confirmation itself rather than off a copy of it.\nEmpty means nobody has been verified yet on this call."
+            }
+          },
+          "required": []
+        }
+      }
+    ],
+    "ConciergeAgent._book_node_verify_customer": [
+      {
+        "name": "find_or_create_customer",
+        "description": "Look up or create one salon customer from the exact confirmed phone number. Use only after the digit readback got a clear yes. Reuse the record that already owns the number, or create one for a number that is new. Never guess a number or pass one the caller has not confirmed. A caller giving a replacement number is not confirmation. Ask the readback question first; call this tool only after a later caller message agrees to it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "phone": {
+              "description": "The approved Spanish number in full international form, +34 followed by nine digits. Never infer country or approval.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "phone"
+          ]
+        }
+      },
+      {
+        "name": "finish_book_verify_customer",
+        "description": "Record the result of this step and finish.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "unserved_request": {
+              "description": "Leave empty unless the caller asked for something this step cannot serve. Then put that request here in one short plain sentence, in the caller's own terms, so the agent that owns this step can take it.",
+              "type": "string"
+            },
+            "customer_phone": {
+              "anyOf": [
+                {
+                  "description": "a phone number in E.164, one leading plus and 7 to 15 digits, like +34600111222",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's phone number in E.164: a plus sign, then digits, with no spaces, brackets or dashes. One shape for every phone number in this package, the MANAGER_PHONE_NUMBER transfer destination included, so no prompt and no tool has to guess which shape it is holding.\nNo `source:` here on purpose. The prefetch block below reads the carrier's fact and this variable receives it, which leaves the per-route refusal for a variable naming a source its target cannot supply exactly as strict as it is: on a route with no caller ID the entry skips and this holds its default.\nOffered to the caller for a yes, never acted on unasked. Somebody may be ringing from a friend's phone, or may hold a second account, so until the verification step has heard them agree this value stays unconfirmed and appears in no prompt but that step's own."
+            },
+            "customer_status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Whether verification has already run on this call, and what it found. Set by the verification step as it ends, which only happens on a number the caller agreed to, so a value here means the number beside it is confirmed.\nIt exists for customer care, which has to decide whether to identify the caller before writing a complaint down and cannot read `customer_phone` to find out: an unconfirmed number renders in no prompt but the verification step's own, and a confirmed one must not be in front of an agent that might say it out loud. This carries the same fact with nothing sensitive in it.\nThe concierge does not read it. The `book` flow decides the same thing structurally with `skip_when_confirmed:`, off the confirmation itself rather than off a copy of it.\nEmpty means nobody has been verified yet on this call."
+            }
+          },
+          "required": []
+        }
+      }
+    ],
+    "ConciergeAgent._book_node_manage_booking": [
+      {
+        "name": "find_slots",
+        "description": "Read current bookings and availability using the caller's own day words.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "description": "Caller day words, or empty to read existing bookings.",
+              "type": "string"
+            },
+            "prefer": {
+              "description": "Time or part of day in the caller's words, such as three or afternoon. For same time, use the saved appointment's time.",
+              "type": "string"
+            },
+            "service": {
+              "description": "Narrow the free times to one service, or `any` to see all three. Use `any` when the caller has not said which service they want.",
+              "enum": [
+                "any",
+                "haircut",
+                "hair-color",
+                "blowout"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "date",
+            "service",
+            "prefer"
+          ]
+        }
+      },
+      {
+        "name": "save_booking",
+        "description": "Save an approved action using diary IDs. A clear offered-slot selection or explicit same-time move is approval. Cancellation needs a readback and yes.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "description": "book a new time, move an existing booking, or cancel one",
+              "enum": [
+                "book",
+                "move",
+                "cancel"
+              ],
+              "type": "string"
+            },
+            "additional": {
+              "description": "True only when the caller asked for a second appointment on top of one they already hold. A caller who holds a booking is changing it, so this is false for an ordinary booking and the tool refuses with has_booking.",
+              "type": "boolean"
+            },
+            "booking_id": {
+              "description": "The exact booking_id from find_slots when moving or cancelling. An empty string when booking, which has no booking yet.",
+              "type": "string"
+            },
+            "confirmed": {
+              "description": "True after a clear offered-slot selection, explicit same-time move, or approval of a readback.",
+              "type": "boolean"
+            },
+            "slot_id": {
+              "description": "The exact slot_id from find_slots when booking or moving. An empty string when cancelling, which needs no slot.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "slot_id",
+            "booking_id",
+            "confirmed",
+            "additional"
+          ]
+        }
+      },
+      {
+        "name": "to_complaints",
+        "description": "The caller has a complaint or service problem.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "finish_book_manage_booking",
+        "description": "Record the result of this step and finish.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "unserved_request": {
+              "description": "Leave empty unless the caller asked for something this step cannot serve. Then put that request here in one short plain sentence, in the caller's own terms, so the agent that owns this step can take it.",
+              "type": "string"
+            },
+            "appointment": {
+              "anyOf": [
+                {
+                  "description": "The latest booking successfully created, moved, or cancelled.",
+                  "properties": {
+                    "booking_id": {
+                      "description": "an identifier: letters, digits, and then any of dot, dash, underscore or colon",
+                      "title": "Booking Id",
+                      "type": "string"
+                    },
+                    "service": {
+                      "enum": [
+                        "haircut",
+                        "hair-color",
+                        "blowout"
+                      ],
+                      "title": "Service",
+                      "type": "string"
+                    },
+                    "date": {
+                      "description": "a day written year-month-day, like 2026-03-19",
+                      "title": "Date",
+                      "type": "string"
+                    },
+                    "spoken": {
+                      "title": "Spoken",
+                      "type": "string"
+                    },
+                    "time": {
+                      "description": "a time of day on the 24-hour clock, like 09:30 or 17:45",
+                      "title": "Time",
+                      "type": "string"
+                    },
+                    "action": {
+                      "enum": [
+                        "book",
+                        "move",
+                        "cancel"
+                      ],
+                      "title": "Action",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "booking_id",
+                    "service",
+                    "date",
+                    "spoken",
+                    "time",
+                    "action"
+                  ],
+                  "title": "Appointment",
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The latest successful booking action, saved only after the tool succeeds."
+            }
+          },
+          "required": []
+        }
+      }
+    ]
+  }
+}

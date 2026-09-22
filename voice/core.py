@@ -29,7 +29,8 @@ import asyncio
 import re
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from loguru import logger
@@ -37,6 +38,7 @@ from pydantic_ai import (
     Agent,
     AgentRunResultEvent,
     FunctionToolResultEvent,
+    ModelRetry,
     PartDeltaEvent,
     PartStartEvent,
     RetryPromptPart,
@@ -44,11 +46,15 @@ from pydantic_ai import (
     TextPart,
     TextPartDelta,
     ToolCallPart,
+    UserError,
 )
+from pydantic_ai.capabilities.hooks import Hooks
+from pydantic_ai.messages import InstructionPart, ModelRequest, ModelResponse, UserPromptPart
 from pydantic_ai.usage import UsageLimitExceeded
 
 from voice.harness import (
     CallContext,
+    Checkpoint,
     Handoff,
     Node,
     Question,
@@ -58,6 +64,7 @@ from voice.harness import (
 from voice.harness import moved_by as _moved_by
 from voice.harness import pick as _pick
 from voice.harness import route as _route
+from voice.history import paired, project
 
 STUMBLE = 'Sorry, I had a problem there. Could you say that again?'
 # Said when a turn runs out of budget: no further model request, no business
@@ -285,15 +292,44 @@ async def _hops(
         output = None
         succeeded: set[str] = set()
 
-        async for event in _speak(call, node, prompt, budget, usage, limits, barge):
-            if isinstance(event, _Outcome):
-                output, succeeded = event.output, event.succeeded
-            elif isinstance(event, _Failed):
-                yield event
+        action = node.advance(call) if node.advance else None
+        if action is not None:
+            if barge.hit or not call.is_current(generation):
                 return
-            else:
-                yield event
+            if usage.tool_calls >= budget.tool_calls:
+                yield _Exhausted(f'the {budget.tool_calls}-tool budget')
+                return
+            call.retain_input()
+            prompt = None
+            call.attempt_started()
+            call._response = f'{call.turn}:{call.attempt}:application'
+            usage.tool_calls += 1
+            yield RunStarted(call.state.agent)
+            if barge.hit or not call.is_current(generation):
+                yield RunEnded(node.agent.name or call.state.agent)
+                return
+            try:
+                output = await action.run()
+            except ModelRetry as error:
+                # A refusal is context for the ordinary model path, never permission to retry a write.
+                call.retain_action(action.name, {'refused': str(error)})
+                call._return_status = f'Application action {action.name} refused: {error}'
+            except Exception as error:
+                logger.exception('application action failed: {}', action.name)
+                yield _Failed(f'{type(error).__name__}: {error}')
+                return
+            yield RunEnded(node.agent.name or call.state.agent)
+        if action is None or output is None:
+            async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+                if isinstance(event, _Outcome):
+                    output, succeeded = event.output, event.succeeded
+                elif isinstance(event, _Failed):
+                    yield event
+                    return
+                else:
+                    yield event
 
+        call._return_status = ''
         if isinstance(output, Question) and not barge.hit:
             # A question the application worded, said by the application. It
             # ends the turn like any other answer, and what it records is the
@@ -338,7 +374,38 @@ async def _hops(
             # can hand them over again if it is still the right answer.
             logger.info('fenced a handoff from turn {}', generation)
             return
-        going_to, waiting = _route(call.state, agents, output.to)
+        if output.status != 'handoff':
+            going_to, waiting = output.to, None
+            checkpoint = call._checkpoint
+            if checkpoint is not None:
+                call._hidden_speech.update(s.id for s in call.all_spoken if s.id not in checkpoint.speech_ids)
+                call.messages = checkpoint.messages
+                call._return_status = (
+                    f'Application return: {call.state.agent} {output.status}. '
+                    f'Original caller request: {checkpoint.heard}'
+                )
+                if output.status == 'completed':
+                    going_to = checkpoint.owner
+                else:
+                    call._return_status += ' The earlier request was abandoned; do not resume it.'
+                call._checkpoint = None
+                prompt = (
+                    call.heard if output.status == 'unserved' and call.heard != checkpoint.heard else None
+                )
+        else:
+            going_to, waiting = _route(call.state, agents, output.to)
+            if waiting is not None and going_to != waiting and call._checkpoint is None:
+                call._checkpoint = Checkpoint(
+                    waiting,
+                    deepcopy(call.messages),
+                    frozenset(s.id for s in call.all_spoken),
+                    call.heard,
+                )
+            call._return_status = (
+                f'Application handoff: {call.state.agent} -> {going_to}. '
+                f'You are now {going_to}; handle the caller request here. '
+                'The previous handoff finished routing, not the caller request.'
+            )
         logger.info('handoff {} -> {} ({})', call.state.agent, going_to, output.because or '-')
         handoffs.append(going_to)
         # One commit: the step and what is waiting behind it are the same
@@ -359,7 +426,8 @@ async def _hops(
         # caller's exact words in its own instructions. One `UserPromptPart`
         # per turn, whichever steps the turn passes through, which is what
         # C3 asks for -- and the receiving run still has something to answer.
-        prompt = None
+        if output.status == 'handoff':
+            prompt = None
         if barge.hit:
             # Barged in during the hop. Starting the next agent now would
             # answer a question the caller has moved on from.
@@ -424,6 +492,55 @@ async def _speak(
     held = ''
 
     call.attempt_started()
+    caller_turn = call.turn
+    run_id = f'{caller_turn}:{call.attempt}'
+    accepted_prompt = call.heard if node.history == 'reset' else prompt
+    requested = 0
+    streamed = 0
+    excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'reset' else frozenset()
+    initial = [] if node.history == 'reset' else paired(project(call, call.messages))
+
+    async def prepare(ctx, request):
+        nonlocal requested
+        requested += 1
+        call._response = f'{run_id}:{requested}'
+        messages = project(call, request.messages, excluded=excluded)
+        parameters = request.model_request_parameters
+        if call._return_status:
+            parameters = replace(
+                parameters,
+                instruction_parts=[
+                    *(parameters.instruction_parts or []),
+                    InstructionPart(content=call._return_status),
+                ],
+            )
+        return replace(request, messages=messages, model_request_parameters=parameters)
+
+    async def tag(ctx, *, request_context, response):
+        response.metadata = (response.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
+        return response
+
+    retained_run = False
+    events = None
+
+    def retain(new_messages):
+        nonlocal retained_run
+        retained_run = True
+        retained = deepcopy(new_messages)
+        for message in retained:
+            if isinstance(message, ModelRequest) and any(
+                isinstance(p, UserPromptPart) for p in message.parts
+            ):
+                message.metadata = (message.metadata or {}) | {'caller_turn': caller_turn}
+                if accepted_prompt is not None and any(
+                    isinstance(p, UserPromptPart) and p.content == accepted_prompt for p in message.parts
+                ):
+                    call._retained_turns.add(caller_turn)
+            if isinstance(message, ModelResponse) and not (message.metadata or {}).get('voice_response'):
+                message.metadata = (message.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
+        call._protocol.extend(deepcopy(retained))
+        call.messages.extend(retained)
+
     yield RunStarted(step)
     try:
         async with agent.run_stream_events(
@@ -432,12 +549,13 @@ async def _speak(
             # run with neither has nothing to answer at all. On an ordinary
             # step this is the caller's turn on the first hop and `None`
             # afterwards, because by then it is in the history.
-            call.heard if node.history == 'reset' else prompt,
+            accepted_prompt,
             deps=call,
             # C3's two history modes. A `reset` step is sent none of the
             # conversation: what it needs is projected into its instructions,
             # and what it does not need it cannot leak.
-            message_history=[] if node.history == 'reset' else list(call.messages),
+            message_history=initial,
+            capabilities=[Hooks(before_model_request=prepare, after_model_request=tag)],
             output_type=output_type,
             # The turn's own tally, not this run's: a turn that hands the
             # caller between four agents spends one allowance between them.
@@ -452,6 +570,9 @@ async def _speak(
             barge.attach(events)
             async for event in events:
                 if isinstance(event, PartStartEvent):
+                    if event.index == 0:
+                        streamed += 1
+                    call._response = f'{run_id}:{streamed}'
                     # The first thing this provider request produced, and
                     # what kind of thing it was. A tool call closes the
                     # request's clock exactly as speech does -- the model
@@ -464,6 +585,8 @@ async def _speak(
                         case ToolCallPart():
                             call.note_first_output('tool')
                 if chunk := _speech(event):
+                    if not node.model_speech:
+                        continue
                     if gate is not None:
                         held += chunk
                         if not (_CLAUSE.search(held) or len(held) >= _CLAUSE_MAX):
@@ -504,7 +627,7 @@ async def _speak(
                     if not isinstance(event.part, RetryPromptPart):
                         succeeded.add(event.part.tool_name)
                 elif isinstance(event, AgentRunResultEvent):
-                    call.messages = event.result.all_messages()
+                    retain(event.result.new_messages())
                     output = event.result.output
     except UsageLimitExceeded, TimeoutError:
         # The turn's budget, not this run's problem. Straight up to
@@ -515,13 +638,25 @@ async def _speak(
     except RunCancelled as cancelled:
         # Barge-in. Keep what completed: a tool that ran and returned is a
         # thing that happened, and the next turn has to know about it.
-        call.messages = cancelled.all_messages()
+        retain(cancelled.new_messages())
     except Exception as error:
         logger.exception('agent run failed')
         yield RunEnded(step)
         yield _Failed(f'{type(error).__name__}: {error}')
         return
     finally:
+        if events is not None and not retained_run:
+            # SDK normalization can merge old requests, changing their count.
+            # Read its new-message boundary after teardown, including native
+            # task cancellation; slicing by len(initial) loses accepted input.
+            try:
+                new_messages = events.new_messages()
+            except UserError:
+                # Cancellation before the lazy SDK run starts: the adapter
+                # carries this input because no request has retained it.
+                pass
+            else:
+                retain(new_messages)
         barge.detach()
         # Whatever was still mid-clause when the run ended goes out: the model
         # stopped, so there is nothing more coming to complete it.
@@ -552,49 +687,13 @@ def _delivered(call: CallContext) -> str:
 # --- delivered-history reconciliation ----------------------------------------
 
 
-def note_spoken(call: CallContext, content: str, interrupted: bool) -> None:
-    """Cut the last answer down to what the caller actually heard.
-
-    Barge-in stops speech mid-sentence, but the run recorded every token the
-    model produced. Left alone the agent believes it said things nobody heard,
-    and says "as I mentioned" about them on the next turn.
-
-    The delivered prefix comes from the runtime, which is the only thing that
-    knows it: generated text is not heard text, and a core that assumed
-    otherwise would put the whole unheard suffix into the next request.
-    """
-    if not interrupted:
+def note_spoken(
+    call: CallContext, content: str, interrupted: bool, *, segment_ids: tuple[str, ...] = ()
+) -> None:
+    """Reconcile identified speech; never trim the last protocol response by position."""
+    if not interrupted and not segment_ids:
         return
-    call.note_heard(content)
-    if not call._spoke:
-        # Everything the caller heard this turn was a fixed line -- a
-        # confirmation, a filler, a goodbye -- and none of those are in the
-        # history. The newest response carrying text belongs to an *earlier*
-        # turn, so cutting it down to this turn's delivered prefix rewrites an
-        # answer the caller heard in full. Reproduced: an ordinary answer, then
-        # a turn whose computed "You're all set for..." was talked over, and
-        # the earlier answer became "Your booking is".
-        return
-    from pydantic_ai import ModelResponse  # local: keeps the import list honest
-
-    for index in range(len(call.messages) - 1, -1, -1):
-        message = call.messages[index]
-        if not isinstance(message, ModelResponse):
-            continue
-        if not any(isinstance(part, TextPart) for part in message.parts):
-            continue  # a tool-call-only response: nothing was ever spoken
-        kept = [part for part in message.parts if not isinstance(part, TextPart)]
-        if content:
-            # ty: the SDK types this list as tool parts only, though a
-            # `ModelResponse` holds text parts and that is what this is.
-            kept.append(TextPart(content=content))  # ty: ignore[invalid-argument-type]
-        if kept:
-            message.parts = kept
-        else:
-            # Nothing was heard and nothing else happened. An empty response
-            # is not a message any provider will take back.
-            del call.messages[index]
-        return
+    call.note_heard(content, segment_ids=segment_ids)
 
 
 # --- a runtime-free way to run one turn --------------------------------------

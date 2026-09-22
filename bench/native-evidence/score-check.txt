@@ -1,0 +1,1 @@
+score negative controls ok: missing readback, premature write, wrong booking and missing receipt fail

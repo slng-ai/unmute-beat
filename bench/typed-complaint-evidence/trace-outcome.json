@@ -1,0 +1,33 @@
+{
+  "trace": "051b9e25ee1c3ff97f136e4a3911f834",
+  "source_sha256": "58bec78b0e45811e66be6826b43d6399c07f7ac80e8ecd984be2be836be77b7e",
+  "retrieval": {
+    "pages": 4,
+    "fetchedItems": 180,
+    "truncated": false
+  },
+  "outcome": {
+    "bookings": [
+      {
+        "booking_id": "BK0001",
+        "service": "haircut",
+        "date": "2026-09-26",
+        "time": "10:00",
+        "spoken": "Saturday at 10:00 AM"
+      }
+    ],
+    "complaints": [
+      {
+        "reference": "CX0001",
+        "summary": "Your recent haircut on Saturday was completely uneven.",
+        "requested_resolution": "redo"
+      }
+    ]
+  },
+  "writes": 3,
+  "tested_build": {
+    "revision": "c6e8cfdb281c4186e98b125f62fd7b691e38cb06",
+    "source_sha256": "2987074e7eccef6b295f7fc28e036fa44f42a1d53c7f5a276cfc089eb0ca9aad",
+    "prompt_sha256": "4536a9da34de26c50cd04760768494e235ce94fef73ea613c540ea2dedf2b4b8"
+  }
+}

@@ -1,0 +1,186 @@
+{
+  "arm": "native",
+  "scenario": "move",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "Move my haircut to Saturday at the same time.",
+      "seconds": 2.219584249993204,
+      "requests": 4,
+      "ttft": [
+        0.5222145830048248,
+        0.44165049999719486,
+        0.544263707997743,
+        0.3275082499894779
+      ],
+      "first_speech_seconds": 0.715358749992447,
+      "speech": "I'll check the diary.I've moved your haircut to Saturday at 3:00 PM.",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "book",
+          "args": {}
+        },
+        {
+          "name": "find_slots",
+          "args": {
+            "service": "haircut",
+            "date": "Saturday",
+            "prefer": "15:00"
+          }
+        },
+        {
+          "name": "save_booking",
+          "args": {
+            "slot_id": "2026-09-26T1500|haircut",
+            "booking_id": "BK0001",
+            "action": "move",
+            "confirmed": true,
+            "additional": false
+          }
+        }
+      ],
+      "business": {
+        "bookings": [
+          {
+            "booking_id": "BK0001",
+            "service": "haircut",
+            "date": "2026-09-26",
+            "time": "15:00",
+            "spoken": "Saturday at 3:00 PM"
+          }
+        ],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.5222145830048248,
+          "tools": [
+            {
+              "name": "book",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}]",
+          "started": 111918.185938,
+          "usage": {
+            "candidates_token_count": 8,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 8
+              }
+            ],
+            "prompt_token_count": 1179,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1179
+              }
+            ],
+            "total_token_count": 1187,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.44165049999719486,
+          "tools": [
+            {
+              "name": "find_slots",
+              "args": {
+                "service": "haircut",
+                "date": "Saturday",
+                "prefer": "15:00"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}]",
+          "started": 111918.898802416,
+          "usage": {
+            "candidates_token_count": 33,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 33
+              }
+            ],
+            "prompt_token_count": 1489,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1489
+              }
+            ],
+            "total_token_count": 1522,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.544263707997743,
+          "tools": [
+            {
+              "name": "save_booking",
+              "args": {
+                "slot_id": "2026-09-26T1500|haircut",
+                "booking_id": "BK0001",
+                "action": "move",
+                "confirmed": true,
+                "additional": false
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xb9\\xba\\xa7\\xf2G\\x1eJ\\x8b4\"\\xda\\xb2\\xe8\\x95;Q\\xdc\\x08\\xe1\\xcb\\xe9\\xe3\\x11\\x8f\\x1ep\\xee\\xd6\\x15\\r\\xeb7\\xe3\\x8a\\x06\\xb7\\xd3T\\xab\\x08\\x94\\xe9d\\x9b\\x99\\xde\\x9e\\xd5\\xfb\\'4\\x87\\x169?\\x99\\x05c\\x15(a\\xfc\\xf9r\\xd9\\x8a\\xc3\\x01\\xecj?8yCJ29\\xee', 'bookmark': {'function_call': 'call_2951961'}}), {'role': 'assistant', 'content': \"I'll check the diary.\"}, {'role': 'assistant', 'tool_calls': [{'id': 'call_2951961', 'function': {'name': 'find_slots', 'arguments': '{\"service\": \"haircut\", \"date\": \"Saturday\", \"prefer\": \"15:00\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"ok\", \"day\": \"Saturday\", \"date\": \"2026-09-26\", \"bookings\": [{\"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-09-25\", \"time\": \"15:00\", \"spoken\": \"Friday at 3:00 PM\"}], \"slots\": [{\"slot_id\": \"2026-09-26T0930|haircut\", \"service\": \"haircut\", \"time\": \"09:30\", \"spoken\": \"Saturday at 9:30 AM\"}, {\"slot_id\": \"2026-09-26T1000|haircut\", \"service\": \"haircut\", \"time\": \"10:00\", \"spoken\": \"Saturday at 10:00 AM\"}, {\"slot_id\": \"2026-09-26T1030|haircut\", \"service\": \"haircut\", \"time\": \"10:30\", \"spoken\": \"Saturday at 10:30 AM\"}, {\"slot_id\": \"2026-09-26T1100|haircut\", \"service\": \"haircut\", \"time\": \"11:00\", \"spoken\": \"Saturday at 11:00 AM\"}, {\"slot_id\": \"2026-09-26T1130|haircut\", \"service\": \"haircut\", \"time\": \"11:30\", \"spoken\": \"Saturday at 11:30 AM\"}, {\"slot_id\": \"2026-09-26T1200|haircut\", \"service\": \"haircut\", \"time\": \"12:00\", \"spoken\": \"Saturday at 12:00 PM\"}, {\"slot_id\": \"2026-09-26T1230|haircut\", \"service\": \"haircut\", \"time\": \"12:30\", \"spoken\": \"Saturday at 12:30 PM\"}, {\"slot_id\": \"2026-09-26T1300|haircut\", \"service\": \"haircut\", \"time\": \"13:00\", \"spoken\": \"Saturday at 1:00 PM\"}, {\"slot_id\": \"2026-09-26T1330|haircut\", \"service\": \"haircut\", \"time\": \"13:30\", \"spoken\": \"Saturday at 1:30 PM\"}, {\"slot_id\": \"2026-09-26T1400|haircut\", \"service\": \"haircut\", \"time\": \"14:00\", \"spoken\": \"Saturday at 2:00 PM\"}, {\"slot_id\": \"2026-09-26T1430|haircut\", \"service\": \"haircut\", \"time\": \"14:30\", \"spoken\": \"Saturday at 2:30 PM\"}, {\"slot_id\": \"2026-09-26T1500|haircut\", \"service\": \"haircut\", \"time\": \"15:00\", \"spoken\": \"Saturday at 3:00 PM\"}], \"price_euros\": 28}', 'tool_call_id': 'call_2951961'}]",
+          "started": 111919.389655333,
+          "usage": {
+            "candidates_token_count": 61,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 61
+              }
+            ],
+            "prompt_token_count": 2053,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 2053
+              }
+            ],
+            "total_token_count": 2114,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.3275082499894779,
+          "tools": [],
+          "text": "I've moved your haircut to Saturday at 3:00 PM.",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd7\\x88\\xd0X\\xaf\\xda\\x99?[y\\xf9&g\\xc8\\x0b\\xc3\\xcf\\x05j\\x10\\xeaN\\xec\\x0fu\\xba\\x9cr\\xf6\\x90o\\t\\x1a\\xfbpiB\\xf1\\x90\\xda\\x81L\\xd1]\\xc9\\xa6\\x13\\x151\\x0fB\\x1c\\x14\\xc8^\\x7fi\\x17?\\xc4\\xa7\\x97Z\\xbe\\xee9\\xa9\\x1ev\\xad\\xc9D\\xa3\\xeb\\xf9+\\x99m', 'bookmark': {'function_call': 'call_4424611'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_4424611', 'function': {'name': 'book', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_4424611'}, {'role': 'developer', 'content': '{\"status\": \"completed\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_3854861\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}]",
+          "started": 111920.005026583,
+          "usage": {
+            "candidates_token_count": 16,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 16
+              }
+            ],
+            "prompt_token_count": 1376,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1376
+              }
+            ],
+            "total_token_count": 1392,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

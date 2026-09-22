@@ -1,0 +1,8 @@
+2026-09-21 20:30:06.881 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 20:30:08.096 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (The caller wants to move an existing appointment to Saturday.)
+1 move_same_time: ok
+2026-09-21 20:30:10.634 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (moving an existing appointment)
+2 move_same_time: did not move the existing booking to Saturday at 09:00
+2026-09-21 20:30:11.930 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (The caller wants to move an existing appointment to Saturday.)
+3 move_same_time: ok
+1 failures; evidence: bench/raw/pipecat-move-followup-20260921T183007Z.jsonl

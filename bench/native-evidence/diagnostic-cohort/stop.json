@@ -1,0 +1,5 @@
+{
+  "at": "2026-09-21T20:32:05.014293+00:00",
+  "calls": 127,
+  "reason": "Native GoogleLLMService implicitly sets max_tokens=4096; POC leaves max output unset. Stop at discovered configuration mismatch, retain every result. This is diagnostic evidence, not a matched latency experiment."
+}

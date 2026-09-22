@@ -1,0 +1,200 @@
+{"pair": 0, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": ["an unanswered turn"]}
+{"pair": 0, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "wrong booking count, date or time"]}
+{"pair": 0, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 1, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "wrong booking count, date or time"]}
+{"pair": 1, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 1, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 2, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 2, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 2, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 2, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 2, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "complete phone readback missing before verification", "expected one complaint and no booking"]}
+{"pair": 2, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": ["an unanswered turn", "complete phone readback missing before verification", "expected one complaint and no booking"]}
+{"pair": 2, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "wrong booking count, date or time"]}
+{"pair": 2, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 2, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "wrong booking count, date or time"]}
+{"pair": 2, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 3, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 3, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 3, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 3, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 3, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 3, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 3, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": ["an unanswered turn", "complete phone readback missing before verification", "wrong booking count, date or time"]}
+{"pair": 3, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "complete phone readback missing before verification", "wrong booking count, date or time"]}
+{"pair": 3, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 3, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 4, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 4, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 4, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 4, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 4, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 4, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 4, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "complete phone readback missing before verification", "wrong booking count, date or time"]}
+{"pair": 4, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 4, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 4, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 5, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["an unanswered turn", "expected one complaint and no booking"]}
+{"pair": 5, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 5, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 6, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 6, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 6, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 7, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 7, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 8, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 8, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 8, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 9, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 10, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 10, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 10, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 10, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 10, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 10, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 10, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 10, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 10, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 10, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 11, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 12, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 12, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 12, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 13, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 14, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 14, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 14, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 14, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 14, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 14, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 14, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 14, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 14, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 14, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 15, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 15, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 16, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 16, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 16, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 17, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 18, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 18, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}
+{"pair": 18, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "hours", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "hours", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "complaint", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "complaint", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "complaint_verify", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "complaint_verify", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "booking", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "booking", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "move", "model": "gemini-3.5-flash-lite", "exit": 0, "errors": []}
+{"pair": 19, "scenario": "move", "model": "gemini-3.1-flash-lite", "exit": 0, "errors": ["wrong booking count, date or time"]}

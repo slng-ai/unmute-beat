@@ -1,0 +1,35 @@
+2026-09-21 19:25:27.829 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+1 select_01: ok
+1 select_pm: ok
+1 select_word: ok
+2026-09-21 19:25:31.135 | INFO     | voice.core:_hops:371 - handoff concierge -> booking (Moving an existing appointment)
+1 move_same_time: ok
+2026-09-21 19:25:35.851 | INFO     | voice.core:_hops:371 - handoff complaints -> verify (verify phone number for complaint record)
+2026-09-21 19:25:37.583 | INFO     | voice.core:_hops:371 - handoff verify -> complaints (the caller is identified)
+1 complaint_verify: ok
+1 complaint_verified: ok
+1 no_thanks: ok
+1 goodbye_with_a_request: ok
+2 select_01: ok
+2 select_pm: ok
+2 select_word: ok
+2026-09-21 19:25:43.929 | INFO     | voice.core:_hops:371 - handoff concierge -> booking (moving an existing appointment)
+2 move_same_time: ok
+2026-09-21 19:25:48.202 | INFO     | voice.core:_hops:371 - handoff complaints -> verify (record the complaint)
+2026-09-21 19:25:49.900 | INFO     | voice.core:_hops:371 - handoff verify -> complaints (the caller is identified)
+2 complaint_verify: ok
+2 complaint_verified: ok
+2 no_thanks: ok
+2 goodbye_with_a_request: ok
+3 select_01: ok
+3 select_pm: ok
+3 select_word: ok
+2026-09-21 19:25:55.679 | INFO     | voice.core:_hops:371 - handoff concierge -> booking (The caller wants to move an existing appointment to Saturday at the same time.)
+3 move_same_time: ok
+2026-09-21 19:25:59.899 | INFO     | voice.core:_hops:371 - handoff complaints -> verify (record the complaint and get verification)
+2026-09-21 19:26:01.602 | INFO     | voice.core:_hops:371 - handoff verify -> complaints (the caller is identified)
+3 complaint_verify: ok
+3 complaint_verified: ok
+3 no_thanks: ok
+3 goodbye_with_a_request: ok
+0 failures; evidence: bench/raw/c3-corrected-20260921T172528Z.jsonl

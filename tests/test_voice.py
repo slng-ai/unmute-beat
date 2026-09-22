@@ -22,6 +22,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from voice.agents import AGENTS
 from voice.harness import TurnBudget
+from voice.history import project
 from voice.processor import EXHAUSTED, PydanticAgentProcessor
 from voice.state import Call, CallState, Phone
 
@@ -256,25 +257,23 @@ async def truncation():
     with scripted(concierge=says('Friday at nine, Saturday at ten, or Sunday at noon.')):
         await probe._turn('when are you free?')
 
+    original = str(call.messages)
     probe.note_spoken('Friday at nine, Sat', interrupted=True)
     text = [
         p.content
-        for m in call.messages
+        for m in project(call, call.messages)
         if isinstance(m, ModelResponse)
         for p in m.parts
         if isinstance(p, TextPart)
     ]
     assert text == ['Friday at nine, Sat'], text
+    assert str(call.messages) == original, 'playback must not rewrite the protocol'
 
-    # Nothing heard at all: the response goes, rather than staying as an empty
-    # message no provider will take back.
-    before = len(call.messages)
+    before = len(project(call, call.messages))
     probe.note_spoken('', interrupted=True)
-    assert len(call.messages) == before - 1
-
-    # Not interrupted: history is left exactly as the run recorded it.
+    assert len(project(call, call.messages)) == before - 1
     probe.note_spoken('anything', interrupted=False)
-    assert len(call.messages) == before - 1
+    assert len(project(call, call.messages)) == before - 1
 
 
 # --- barge-in ----------------------------------------------------------------
@@ -345,7 +344,7 @@ async def a_cancelled_turn_carries_what_the_caller_said():
     probe = Probe(call)
     with scripted(concierge=_slowly):
         await _cut_off(probe, 'I wanted to book a haircut appointment.', barge=True)
-        assert not call.messages, 'nothing was committed, which is the whole problem'
+        assert call.messages, 'native cancellation must retain the accepted caller input'
         await probe._turn('For Friday.')
 
     asked = [
@@ -355,7 +354,7 @@ async def a_cancelled_turn_carries_what_the_caller_said():
         for part in message.parts
         if isinstance(part, UserPromptPart)
     ]
-    assert asked == ['I wanted to book a haircut appointment. For Friday.'], asked
+    assert asked == ['I wanted to book a haircut appointment.', 'For Friday.'], asked
 
 
 async def a_barge_is_not_a_disconnect():

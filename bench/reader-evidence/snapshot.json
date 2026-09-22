@@ -1,0 +1,8 @@
+{
+  "repository": "/Users/nicoferdi/.codex/worktrees/a809/unmute_cli",
+  "revision": "71304830c04614dacd0f6336e568b1162dfd1ed7",
+  "before_sha256": "b55b3f85d61dcff7cf7f9aaa316c08308288ee4b0b843645f861eb4cf93a3fa7",
+  "after_sha256": "b2a0d6ee1f9aca98a81098b5df0252522115697e892d3dfbe2642525b392aa11",
+  "test_sha256": "4396f7620b74fc129f7850f3b500a675844a60aca41cd6c95b7a8f84d1054f60",
+  "scope": "Only offline trace reader and its checks; no agent/runtime/compiler/example changes."
+}

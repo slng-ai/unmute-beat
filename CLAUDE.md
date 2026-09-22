@@ -27,7 +27,7 @@ measurements behind the design. Read it before changing how a turn works.
 | `bench/baseline/` | the pre-Phase-01 snapshot, digests and evidence ledger — don't edit, except `after/` when the suite's output changes |
 | `bench/review-20260921.md` | the closure ledger: every defect a review reproduced, the check that now holds it, the message its negative control printed, and what is still open |
 | `bench/baseline/after/ledger.md` | the Phase-01 completion ledger: one row per requirement, `passed` / `blocked` / `not-run`, with the command and the retained output |
-| `tests/` | assert scripts — no pytest, no network. `test_consent.py` replays the five live conversation failures of 2026-09-21. `fixtures/trace_native.json` is the real native reference call and `trace_n{1..4}.json` are the four live ones, which is what keeps the trace reader honest about both arms |
+| `tests/` | assert scripts — no pytest, no network. `test_consent.py` replays the five live conversation failures of 2026-09-21. `fixtures/trace_native.json` is the real native reference call and `trace_n{1..4}.json` are the four live ones, which is what keeps the trace reader honest about both arms. `test_recovery.py` covers approval through verification and Pipecat queue cancellation |
 
 **The split that matters:** `voice/core.py` runs a turn and knows nothing about
 how it reaches a person; `voice/processor.py` is the Pipecat adapter over it.
@@ -53,7 +53,7 @@ Everything needs `--env-file .env` — the model key is read at import.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all ten modules, offline, no .env
+uv run python -m tests                                   # all 14 modules, offline, no .env
 uv run --env-file .env python talk.py                    # no audio, the fast loop
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
@@ -113,13 +113,37 @@ all clean. Paste the real output; don't round up.
    model speech goes out a clause at a time so a claim about a change nothing
    made is never said. Five model-authored arguments used to carry this and
    the live calls of 2026-09-21 forged all five.
-6. **A cancelled turn still heard something.** Pipecat interrupts by
-   cancelling the task running `process_frame`, so a barged turn unwinds on a
-   bare `CancelledError` and the `InterruptionFrame` reaches our own branch
-   too late: the core's graceful path never runs, and the utterance is in no
-   history at all. `PydanticAgentProcessor` takes Pipecat's own
-   `_start_interruption` hook, and carries a prompt no model read into the
-   next turn rather than losing what the caller said.
+6. **A cancelled turn still heard something.** The core uses Pydantic AI's
+   `new_messages()` boundary after stream teardown to retain accepted input and
+   completed tool results even when Pipecat cancels the running task. Never slice
+   by the original history length: SDK normalization merges old messages.
+   The processor also carries input
+   that never entered an SDK run and consumes every unseen user message in the
+   aggregator's context, including queued context frames discarded by barge-in.
+   `tests.test_history` covers receipts across cancellation; `test_recovery`
+   exercises Pipecat's actual queue. Playback estimates alter speech projections,
+   not retained protocol or business receipts.
+
+General salon questions need no verification. Booking and complaint requests both
+declare `customer_verified` as a prerequisite satisfied by `verify`. The graph
+preserves the requested destination and resumes it after phone verification;
+already verified callers enter directly. Complaint readback and caller approval
+happen after identification, before recording. An ordinary spoken question about
+a redo cannot establish that approval.
+If a response pairs a handoff with a readback, the handoff is refused so the
+readback can finish the run. Verification uses output functions for tracked
+readback, missing-information questions, lookup and abandonment. Free model
+text cannot ask an untracked phone question or echo routing instructions into TTS.
+Complaints uses output functions only: guidance from
+`knowledge/complaint-guidance.json`, caller-excerpt readback, recording and fixed
+goodbye. `Node.model_speech=False` suppresses provider text before it reaches TTS.
+Readback strings must match caller speech, not model history or booking records.
+Ordinary handoffs inject an application-owned receiving-agent status through the
+same request-instruction mechanism as prerequisite returns. The short shared voice guide precedes each
+role's instructions; current call values and the latest caller speech follow.
+
+`bench/native-evidence/README.md` documents the native comparison overlay, shared
+POC knowledge/business service, verification-speech regression and measurement limits.
 
 ## Known debt
 
@@ -131,3 +155,20 @@ fails towards *asking*, so a miss costs one clarifying turn and cannot cost a
 booking nobody wanted. Upgrade path, if the live runs show too many
 clarifications: a small model on the utterances they return nothing for, with
 these kept as the fast path. Marked at each definition.
+
+
+## Code optimization (22 September)
+
+`Node.advance` may select one application-owned next action before a model run.
+It uses the same validated salon executor as its model tool, spends the shared
+action budget, and retains input/receipts without inventing model exchanges.
+`tests.test_optimization` covers zero provider requests, stale consent/identity,
+cancellation around writes, speech suppression and shared-client cleanup.
+
+Booking, verification and complaints use typed speech outputs. Booking offers
+and clarification come from `offer_times`/`booking_guidance`; write confirmations
+still require the existing validated receipt. Existing prompt files and tool
+descriptions were held constant during this optimization. All salon agents share
+one model client; bot/talk close it through `model_clients`.
+
+Current measurement and acceptance limits: `bench/optimization-evidence/README.md`.

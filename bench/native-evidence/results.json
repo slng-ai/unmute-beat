@@ -1,0 +1,550 @@
+{
+  "source_changes_since_freeze": [],
+  "native_build_changes_since_freeze": [],
+  "scenarios": {
+    "hours": {
+      "successful_pairs": 20,
+      "full_turn_difference_ci": {
+        "p50_poc_minus_native": {
+          "low_95": 0.002963124992675148,
+          "high_95": 0.09373035399767105
+        },
+        "p90_poc_minus_native": {
+          "low_95": -0.09527637501014397,
+          "high_95": 0.14849145700281952
+        }
+      },
+      "native": {
+        "passed": 20,
+        "failed": 0,
+        "failure_reasons": {},
+        "all_calls": {
+          "calls": 20,
+          "turns": 20,
+          "requests": 20,
+          "requests_per_turn": 1.0,
+          "full_turn_seconds": {
+            "n": 20,
+            "p50": 0.6257610835018568,
+            "p90_nearest_rank": 0.7440697080019163
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 20,
+            "p50": 0.5178524374932749,
+            "p90_nearest_rank": 0.6371458750072634
+          },
+          "request_first_output_seconds": {
+            "n": 20,
+            "p50": 0.5135380209976574,
+            "p90_nearest_rank": 0.6327326250029728
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 20,
+          "turns": 20,
+          "requests": 20,
+          "requests_per_turn": 1.0,
+          "full_turn_seconds": {
+            "n": 20,
+            "p50": 0.6257610835018568,
+            "p90_nearest_rank": 0.7440697080019163
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 20,
+            "p50": 0.5178524374932749,
+            "p90_nearest_rank": 0.6371458750072634
+          },
+          "request_first_output_seconds": {
+            "n": 20,
+            "p50": 0.5135380209976574,
+            "p90_nearest_rank": 0.6327326250029728
+          }
+        }
+      },
+      "poc": {
+        "passed": 20,
+        "failed": 0,
+        "failure_reasons": {},
+        "all_calls": {
+          "calls": 20,
+          "turns": 20,
+          "requests": 20,
+          "requests_per_turn": 1.0,
+          "full_turn_seconds": {
+            "n": 20,
+            "p50": 0.6556879374984419,
+            "p90_nearest_rank": 0.7424519579944899
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 20,
+            "p50": 0.5600844789951225,
+            "p90_nearest_rank": 0.6553468750062166
+          },
+          "request_first_output_seconds": {
+            "n": 20,
+            "p50": 0.5535000000000001,
+            "p90_nearest_rank": 0.649
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 20,
+          "turns": 20,
+          "requests": 20,
+          "requests_per_turn": 1.0,
+          "full_turn_seconds": {
+            "n": 20,
+            "p50": 0.6556879374984419,
+            "p90_nearest_rank": 0.7424519579944899
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 20,
+            "p50": 0.5600844789951225,
+            "p90_nearest_rank": 0.6553468750062166
+          },
+          "request_first_output_seconds": {
+            "n": 20,
+            "p50": 0.5535000000000001,
+            "p90_nearest_rank": 0.649
+          }
+        }
+      }
+    },
+    "complaint": {
+      "successful_pairs": 17,
+      "full_turn_difference_ci": {
+        "p50_poc_minus_native": {
+          "low_95": -0.39793322900368366,
+          "high_95": -0.19713795850111637
+        },
+        "p90_poc_minus_native": {
+          "low_95": -0.14180383400525898,
+          "high_95": 0.05083683299017139
+        }
+      },
+      "native": {
+        "passed": 17,
+        "failed": 3,
+        "failure_reasons": {
+          "expected one complaint and no booking": 3
+        },
+        "all_calls": {
+          "calls": 20,
+          "turns": 40,
+          "requests": 80,
+          "requests_per_turn": 2.0,
+          "full_turn_seconds": {
+            "n": 40,
+            "p50": 1.1879196250010864,
+            "p90_nearest_rank": 1.4138537499966333
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 40,
+            "p50": 0.7560973340005148,
+            "p90_nearest_rank": 1.1612839160079602
+          },
+          "request_first_output_seconds": {
+            "n": 80,
+            "p50": 0.47706470800039824,
+            "p90_nearest_rank": 0.599633999998332
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 17,
+          "turns": 34,
+          "requests": 68,
+          "requests_per_turn": 2.0,
+          "full_turn_seconds": {
+            "n": 34,
+            "p50": 1.2136459795074188,
+            "p90_nearest_rank": 1.4138537499966333
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 34,
+            "p50": 0.7560973340005148,
+            "p90_nearest_rank": 1.1862838750093943
+          },
+          "request_first_output_seconds": {
+            "n": 68,
+            "p50": 0.47975470799428876,
+            "p90_nearest_rank": 0.603485500003444
+          }
+        }
+      },
+      "poc": {
+        "passed": 20,
+        "failed": 0,
+        "failure_reasons": {},
+        "all_calls": {
+          "calls": 20,
+          "turns": 40,
+          "requests": 60,
+          "requests_per_turn": 1.5,
+          "full_turn_seconds": {
+            "n": 40,
+            "p50": 0.8756380204940797,
+            "p90_nearest_rank": 1.4181012920016656
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 40,
+            "p50": 0.8744306664957548,
+            "p90_nearest_rank": 1.4179319999966538
+          },
+          "request_first_output_seconds": {
+            "n": 60,
+            "p50": 0.581,
+            "p90_nearest_rank": 0.696
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 17,
+          "turns": 34,
+          "requests": 51,
+          "requests_per_turn": 1.5,
+          "full_turn_seconds": {
+            "n": 34,
+            "p50": 0.8749144159955904,
+            "p90_nearest_rank": 1.4194484580075368
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 34,
+            "p50": 0.8741480204917025,
+            "p90_nearest_rank": 1.4192895000014687
+          },
+          "request_first_output_seconds": {
+            "n": 51,
+            "p50": 0.591,
+            "p90_nearest_rank": 0.696
+          }
+        }
+      }
+    },
+    "complaint_verify": {
+      "successful_pairs": 9,
+      "full_turn_difference_ci": {
+        "p50_poc_minus_native": {
+          "low_95": -0.09906924999086186,
+          "high_95": 0.11506999999983236
+        },
+        "p90_poc_minus_native": {
+          "low_95": -1.5885557909932686,
+          "high_95": -0.33118295899475925
+        }
+      },
+      "native": {
+        "passed": 9,
+        "failed": 11,
+        "failure_reasons": {
+          "complete phone readback missing before verification": 10,
+          "expected one complaint and no booking": 2
+        },
+        "all_calls": {
+          "calls": 20,
+          "turns": 60,
+          "requests": 186,
+          "requests_per_turn": 3.1,
+          "full_turn_seconds": {
+            "n": 60,
+            "p50": 1.3281077080027899,
+            "p90_nearest_rank": 3.3418454159982502
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 60,
+            "p50": 0.5189037085074233,
+            "p90_nearest_rank": 0.9014552920125425
+          },
+          "request_first_output_seconds": {
+            "n": 186,
+            "p50": 0.4482163339998806,
+            "p90_nearest_rank": 0.5947726250014966
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 9,
+          "turns": 27,
+          "requests": 69,
+          "requests_per_turn": 2.5555555555555554,
+          "full_turn_seconds": {
+            "n": 27,
+            "p50": 1.192786415995215,
+            "p90_nearest_rank": 2.7444293329899665
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 27,
+            "p50": 0.6202371660037898,
+            "p90_nearest_rank": 1.5842869589978363
+          },
+          "request_first_output_seconds": {
+            "n": 69,
+            "p50": 0.4476367089955602,
+            "p90_nearest_rank": 0.5881309999967925
+          }
+        }
+      },
+      "poc": {
+        "passed": 20,
+        "failed": 0,
+        "failure_reasons": {},
+        "all_calls": {
+          "calls": 20,
+          "turns": 60,
+          "requests": 100,
+          "requests_per_turn": 1.6666666666666667,
+          "full_turn_seconds": {
+            "n": 60,
+            "p50": 1.2242372285036254,
+            "p90_nearest_rank": 1.4371019579994027
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 60,
+            "p50": 0.6992968749982538,
+            "p90_nearest_rank": 1.2766445000015665
+          },
+          "request_first_output_seconds": {
+            "n": 100,
+            "p50": 0.5615000000000001,
+            "p90_nearest_rank": 0.712
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 9,
+          "turns": 27,
+          "requests": 45,
+          "requests_per_turn": 1.6666666666666667,
+          "full_turn_seconds": {
+            "n": 27,
+            "p50": 1.2321419999934733,
+            "p90_nearest_rank": 1.4371019579994027
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 27,
+            "p50": 0.7007471249962691,
+            "p90_nearest_rank": 1.2876470829942264
+          },
+          "request_first_output_seconds": {
+            "n": 45,
+            "p50": 0.558,
+            "p90_nearest_rank": 0.729
+          }
+        }
+      }
+    },
+    "booking": {
+      "successful_pairs": 18,
+      "full_turn_difference_ci": {
+        "p50_poc_minus_native": {
+          "low_95": 0.12127847898955224,
+          "high_95": 0.270416417006345
+        },
+        "p90_poc_minus_native": {
+          "low_95": 0.159120583004551,
+          "high_95": 0.3887407509901095
+        }
+      },
+      "native": {
+        "passed": 18,
+        "failed": 2,
+        "failure_reasons": {
+          "complete phone readback missing before verification": 2
+        },
+        "all_calls": {
+          "calls": 20,
+          "turns": 60,
+          "requests": 142,
+          "requests_per_turn": 2.3666666666666667,
+          "full_turn_seconds": {
+            "n": 60,
+            "p50": 1.1477227914947434,
+            "p90_nearest_rank": 1.5893712090037297
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 60,
+            "p50": 0.6084847499951138,
+            "p90_nearest_rank": 1.004219957991154
+          },
+          "request_first_output_seconds": {
+            "n": 142,
+            "p50": 0.4517768334990251,
+            "p90_nearest_rank": 0.5554223749932135
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 18,
+          "turns": 54,
+          "requests": 128,
+          "requests_per_turn": 2.3703703703703702,
+          "full_turn_seconds": {
+            "n": 54,
+            "p50": 1.147531374997925,
+            "p90_nearest_rank": 1.5893712090037297
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 54,
+            "p50": 0.6125188334990526,
+            "p90_nearest_rank": 1.0313206249993527
+          },
+          "request_first_output_seconds": {
+            "n": 128,
+            "p50": 0.44701893749879673,
+            "p90_nearest_rank": 0.5554223749932135
+          }
+        }
+      },
+      "poc": {
+        "passed": 20,
+        "failed": 0,
+        "failure_reasons": {},
+        "all_calls": {
+          "calls": 20,
+          "turns": 60,
+          "requests": 120,
+          "requests_per_turn": 2.0,
+          "full_turn_seconds": {
+            "n": 60,
+            "p50": 1.3598525835041073,
+            "p90_nearest_rank": 1.8834372499986785
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 60,
+            "p50": 0.5990957289977814,
+            "p90_nearest_rank": 0.7071288330043899
+          },
+          "request_first_output_seconds": {
+            "n": 120,
+            "p50": 0.5685,
+            "p90_nearest_rank": 0.683
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 18,
+          "turns": 54,
+          "requests": 108,
+          "requests_per_turn": 2.0,
+          "full_turn_seconds": {
+            "n": 54,
+            "p50": 1.3599427090084646,
+            "p90_nearest_rank": 1.8988632499967935
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 54,
+            "p50": 0.5984834585033241,
+            "p90_nearest_rank": 0.6998328329937067
+          },
+          "request_first_output_seconds": {
+            "n": 108,
+            "p50": 0.5685,
+            "p90_nearest_rank": 0.683
+          }
+        }
+      }
+    },
+    "move": {
+      "successful_pairs": 18,
+      "full_turn_difference_ci": {
+        "p50_poc_minus_native": {
+          "low_95": -0.4273968955021701,
+          "high_95": -0.20343256300111534
+        },
+        "p90_poc_minus_native": {
+          "low_95": -0.8761127489997307,
+          "high_95": 0.2596910409920383
+        }
+      },
+      "native": {
+        "passed": 18,
+        "failed": 2,
+        "failure_reasons": {
+          "wrong booking count, date or time": 2
+        },
+        "all_calls": {
+          "calls": 20,
+          "turns": 20,
+          "requests": 81,
+          "requests_per_turn": 4.05,
+          "full_turn_seconds": {
+            "n": 20,
+            "p50": 2.19309835400054,
+            "p90_nearest_rank": 2.42748916700657
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 20,
+            "p50": 0.5807234999956563,
+            "p90_nearest_rank": 0.6696532920032041
+          },
+          "request_first_output_seconds": {
+            "n": 81,
+            "p50": 0.500395541996113,
+            "p90_nearest_rank": 0.6068076670053415
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 18,
+          "turns": 18,
+          "requests": 73,
+          "requests_per_turn": 4.055555555555555,
+          "full_turn_seconds": {
+            "n": 18,
+            "p50": 2.1764681874992675,
+            "p90_nearest_rank": 2.5355785409919918
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 18,
+            "p50": 0.5820265415022732,
+            "p90_nearest_rank": 0.6707997089979472
+          },
+          "request_first_output_seconds": {
+            "n": 73,
+            "p50": 0.5010472499998286,
+            "p90_nearest_rank": 0.6153400420007529
+          }
+        }
+      },
+      "poc": {
+        "passed": 20,
+        "failed": 0,
+        "failure_reasons": {},
+        "all_calls": {
+          "calls": 20,
+          "turns": 20,
+          "requests": 60,
+          "requests_per_turn": 3.0,
+          "full_turn_seconds": {
+            "n": 20,
+            "p50": 1.9129366665001726,
+            "p90_nearest_rank": 2.09599495799921
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 20,
+            "p50": 0.6752592295015347,
+            "p90_nearest_rank": 0.724684458997217
+          },
+          "request_first_output_seconds": {
+            "n": 60,
+            "p50": 0.6085,
+            "p90_nearest_rank": 0.726
+          }
+        },
+        "successful_pairs_only": {
+          "calls": 18,
+          "turns": 18,
+          "requests": 54,
+          "requests_per_turn": 3.0,
+          "full_turn_seconds": {
+            "n": 18,
+            "p50": 1.9129366665001726,
+            "p90_nearest_rank": 2.258227625003201
+          },
+          "first_speech_seconds_including_filler": {
+            "n": 18,
+            "p50": 0.6752592295015347,
+            "p90_nearest_rank": 0.7825304159923689
+          },
+          "request_first_output_seconds": {
+            "n": 54,
+            "p50": 0.6085,
+            "p90_nearest_rank": 0.726
+          }
+        }
+      }
+    }
+  }
+}

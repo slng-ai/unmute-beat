@@ -1,0 +1,31 @@
+2026-09-21 21:29:57.231 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-21 21:29:58.795 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+1 split_phone: ok
+2026-09-21 21:30:00.011 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (caller wants to make a complaint about a past service)
+2026-09-21 21:30:01.751 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+1 complaint_live: ok
+2026-09-21 21:30:04.498 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is requesting a free booking due to a previous service problem.)
+1 complaint_booked: AssertionError: no question about the missing visit date: i am so sorry your haircut was uneven. since it's been within fourteen days, we'd love to fix that for you at no charge as a redo.
+2026-09-21 21:30:05.779 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is asking for a free booking due to a previous service problem.)
+1 complaint_booked_dated: AssertionError: known complaint details did not reach structured readback
+2026-09-21 21:30:07.644 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+2 split_phone: ok
+2026-09-21 21:30:08.908 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Caller wants to raise a complaint about a past appointment.)
+2026-09-21 21:30:10.480 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+2 complaint_live: ok
+2026-09-21 21:30:12.751 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (Caller is asking for a future booking to be free because of a past service problem.)
+2 complaint_booked: AssertionError: no question about the missing visit date: i'm so sorry your last haircut was uneven. since it's been within fourteen days, we'd love to fix that for you at no charge as a redo. would you like me to record this as a complaint and request that redo for your saturday appointment?
+2026-09-21 21:30:14.120 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (Caller is asking for a free future booking because of a past service problem.)
+2 complaint_booked_dated: AssertionError: known complaint details did not reach structured readback
+2026-09-21 21:30:16.029 | INFO     | voice.core:_hops:376 - handoff verify -> concierge (the caller is identified)
+3 split_phone: ok
+2026-09-21 21:30:17.107 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (The caller is raising a complaint about a past service.)
+2026-09-21 21:30:18.654 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+3 complaint_live: ok
+2026-09-21 21:30:20.936 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is asking for a free booking due to a past service problem.)
+3 complaint_booked: AssertionError: no question about the missing visit date: i'm so sorry your haircut came out uneven. since that happened here, our policy is to offer a free redo within fourteen days, so that upcoming appointment on saturday at 10:00 am won't cost you a thing. 
+
+would you like me to record this complaint for you now?
+2026-09-21 21:30:22.321 | INFO     | voice.core:_hops:376 - handoff concierge -> complaints (The caller is asking for a free booking due to a previous service problem.)
+3 complaint_booked_dated: AssertionError: known complaint details did not reach structured readback
+6 failures; evidence: bench/raw/verification-first-20260921T192957Z.jsonl

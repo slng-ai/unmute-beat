@@ -1,0 +1,45 @@
+{
+  "measured_parent": "../native-evidence/snapshot-v2.json",
+  "later_change": "Only salon/state.py changes production behavior: recognizes a complete Go for it reply. Tests and evidence added after the comparison completed.",
+  "hashes": {
+    "salon/state.py": "b87067d58cecdb12f6e195983790c588ead5addb15b2714e629938fc538d0165",
+    "tests/test_consent.py": "7cc42e3224bbf0a037a8d029fd719743453d8edfb21961fa3721d91432be601b",
+    "bench/approval-evidence/replay.py": "03b392a1f9920be63b66f15a699fafdb424dfe97ff90a7ceb04aa05678f927d9"
+  },
+  "replay_provenance": {
+    "settings": {
+      "revision": "c6e8cfdb281c4186e98b125f62fd7b691e38cb06",
+      "uncommitted_changes": true,
+      "python": "3.14.5",
+      "pydantic_ai": "2.46.0",
+      "model": "google-cloud:gemini-3.5-flash-lite",
+      "model_pinned": false,
+      "region": "unpinned",
+      "model_settings": "{'service_tier': 'priority', 'google_thinking_config': {'thinking_level': 'MINIMAL'}}",
+      "budget": "TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)",
+      "speak_by": 3,
+      "prompt_sha256": "f4467e62759e6e2784c61057b4864129b3ad43ca8bbaa8ee1ae6cc71729ed34b",
+      "source_sha256": "268906ad9e8be0f535ea1218e8e06889a2de72b99e5b98b3128fc848f0f76a87",
+      "lock_sha256": "970eff87411eebb328677a92dd566c133c96f74749007357d79b5b36e15a7558",
+      "timezone": "Europe/Madrid",
+      "salon_clock": "2026-09-21T23:03:55.792423+02:00",
+      "fixture": "continue",
+      "process_started_at": "2026-09-21T21:03:55.460226+00:00",
+      "captured_at": "2026-09-21T21:03:55.792425+00:00",
+      "endpointing_stop_secs": 1.5,
+      "seed_customers": [
+        "+34600111222"
+      ],
+      "confirmation_policy": "books on an unambiguous selection; no separate readback turn",
+      "unknown": [
+        "provider endpoint",
+        "stt/tts route and voice",
+        "transport",
+        "audio settings"
+      ]
+    },
+    "audio": false,
+    "scenario_clock": "2026-09-21T10:00:00+02:00",
+    "scenario_fixture": "fresh per repeat"
+  }
+}

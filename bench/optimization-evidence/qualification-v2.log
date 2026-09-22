@@ -1,0 +1,10 @@
+{"pair": 0, "scenario": "hours", "arm": "poc", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "hours", "arm": "native", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint", "arm": "poc", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint", "arm": "native", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint_verify", "arm": "poc", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "complaint_verify", "arm": "native", "exit": 0, "errors": ["expected one complaint and no booking"]}
+{"pair": 0, "scenario": "booking", "arm": "poc", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "booking", "arm": "native", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "move", "arm": "poc", "exit": 0, "errors": []}
+{"pair": 0, "scenario": "move", "arm": "native", "exit": 0, "errors": []}

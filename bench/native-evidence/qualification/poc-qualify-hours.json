@@ -1,0 +1,24 @@
+{
+  "arm": "poc",
+  "scenario": "hours",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "What are your opening hours on weekdays and Saturdays? Are you open on Sunday?",
+      "seconds": 0.7335457909939578,
+      "requests": 1,
+      "ttft": [
+        0.61
+      ],
+      "speech": "We're open Monday through Friday from nine to six, and Saturdays from nine to four. We're closed on Sundays.",
+      "status": "answered",
+      "tools": [],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      }
+    }
+  ],
+  "errors": []
+}

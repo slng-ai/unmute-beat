@@ -11,7 +11,7 @@ Asserts, no pytest, no fixtures, same as the rest.
 import asyncio
 from contextlib import ExitStack
 
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from salon.agents import AGENTS
 from salon.state import SalonCall, SalonState
@@ -29,6 +29,14 @@ VERIFIED = '+34600111222'
 _ALL_TOOLS = {t.name for node in AGENTS.values() for t in node.agent._function_toolset.tools.values()}
 
 
+def _guidance(info):
+    if any(tool.name == 'booking_guidance' for tool in info.output_tools):
+        return {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"day"}')}
+    if any(tool.name == 'verification_guidance' for tool in info.output_tools):
+        return {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"number"}')}
+    return {0: DeltaToolCall(name='complaint_guidance', json_args='{"topic":"details"}')}
+
+
 async def _reachable_tools(node, state) -> set[str]:
     """The tool names this step really sends the model, in this state.
 
@@ -42,7 +50,10 @@ async def _reachable_tools(node, state) -> set[str]:
 
     async def probe(messages, info: AgentInfo):
         seen.update(tool.name for tool in info.function_tools)
-        yield 'ok'
+        if info.allow_text_output:
+            yield 'What can I help you with?'
+        else:
+            yield _guidance(info)
 
     with node.agent.override(model=FunctionModel(stream_function=probe)):
         async with node.agent.run_stream_events(
@@ -94,9 +105,10 @@ def prerequisite_interposed():
     state = SalonState()
     # `route` decides and writes nothing: the step to enter and what is left
     # waiting come back together, so its caller commits them as one.
-    assert route(state, AGENTS, 'booking') == ('verify', 'booking'), (
-        'nobody is identified, so verify runs first'
-    )
+    for destination in ('booking', 'complaints'):
+        assert route(state, AGENTS, destination) == ('verify', destination), (
+            'nobody is identified, so verify runs first'
+        )
     assert state.pending is None, 'and route itself changed nothing'
     # And the model was never asked: the front desk said "booking" and the
     # graph, not a request, worked out that verification comes first.
@@ -105,8 +117,8 @@ def prerequisite_interposed():
 def no_interpose_when_met():
     state = SalonState(customer_phone=VERIFIED, customer_verified='existing', verified_phone=VERIFIED)
     assert route(state, AGENTS, 'booking') == ('booking', None), 'a met prerequisite leaves nothing waiting'
-    # A step with no prerequisites at all is never interposed either way.
     assert route(state, AGENTS, 'complaints') == ('complaints', None)
+    assert route(SalonState(), AGENTS, 'concierge') == ('concierge', None)
 
 
 def the_pending_slot_clears():
@@ -219,7 +231,10 @@ async def offered_exits(node, state) -> tuple[str, ...]:
 
     async def probe(messages, info: AgentInfo):
         seen['tools'] = [tool.parameters_json_schema for tool in info.output_tools]
-        yield 'ok'
+        if info.allow_text_output:
+            yield 'What can I help you with?'
+        else:
+            yield _guidance(info)
 
     with node.agent.override(model=FunctionModel(stream_function=probe)):
         async with node.agent.run_stream_events(
@@ -264,7 +279,9 @@ async def no_illegal_edge_offered():
     assert 'verify' in await offered_exits(AGENTS['concierge'], known), (
         'once identified, verify is how a caller corrects their number'
     )
-    assert 'verify' in await offered_exits(AGENTS['complaints'], fresh)
+    assert 'verify' not in await offered_exits(AGENTS['complaints'], fresh), (
+        'verification is a prerequisite, not a complaint-agent decision'
+    )
     assert 'verify' not in await offered_exits(AGENTS['complaints'], known), (
         'already identified, so there is nothing for complaints to send them there for'
     )
@@ -336,7 +353,10 @@ async def a_finisher_keeps_its_name():
 
             async def probe(messages, info: AgentInfo, _seen=offered):
                 _seen.update(tool.name for tool in info.output_tools)
-                yield 'ok'
+                if info.allow_text_output:
+                    yield 'What can I help you with?'
+                else:
+                    yield _guidance(info)
 
             with node.agent.override(model=FunctionModel(stream_function=probe)):
                 async with node.agent.run_stream_events(

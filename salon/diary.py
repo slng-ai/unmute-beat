@@ -405,43 +405,44 @@ _HOURS = {
     'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12,
 }  # fmt: skip
 _HOUR_WORD = '|'.join(_HOURS)
-_EXACT = re.compile(r'\b([01]?\d|2[0-3]):([0-5]\d)\b')
 _OCLOCK_WORD = r"o\s?'?\s?clock"
-_TWELVE = re.compile(rf'\b(1[0-2]|[1-9])\s*(?:{_OCLOCK_WORD}\s*)?([ap])\.?m\.?\b', re.IGNORECASE)
-_HALF = re.compile(rf'\bhalf past\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
-_OCLOCK = re.compile(rf'\b(1[0-2]|[1-9]|{_HOUR_WORD})\s*{_OCLOCK_WORD}\b', re.IGNORECASE)
-# A bare number is only a time when the caller put it after "at" or "around":
-# "Friday the 25th" is a number and not a time. "for" is deliberately not in
-# here -- "for 2 people" would name 14:00, and this set is intersected with
-# what the diary is actually offering, so a wrong reading books something.
-_BARE = re.compile(rf'\b(?:at|around|about)\s+(1[0-2]|[1-9]|{_HOUR_WORD})\b', re.IGNORECASE)
+_CLOCK = re.compile(
+    rf'\b(2[0-3]|1[0-9]|0?[1-9]|0|{_HOUR_WORD})'
+    rf'(?::([0-5]\d)|\s*{_OCLOCK_WORD})?\s*([ap]\.?m\.?)?\b',
+    re.IGNORECASE,
+)
+_NEGATED_TIME = re.compile(r"\b(?:not|no|don't|instead|or|maybe|either|except)\b", re.IGNORECASE)
 
 
 def times_named(heard: str) -> set[str]:
-    """Every `HH:MM` this utterance could be naming.
+    """Read an explicit time or a short selection; offers resolve AM/PM ambiguity.
 
-    Both readings of an unqualified hour, because "three" is 15:00 in a salon
-    and 03:00 in a clock, and it is the diary's offers that decide which of
-    them the caller can have meant. Intersected with what is actually on the
-    table, an utterance naming exactly one of them is an unambiguous choice.
-
-    ponytail: English, digits and the twelve hour words. A caller saying
-    "quarter past" is not understood and gets asked, which is the right
-    failure.
+    Reject negative or alternative selections. Bare hours must be the whole
+    answer (possibly with 'please') or follow a time preposition, so dates and
+    party sizes cannot authorize a booking.
     """
+    if _NEGATED_TIME.search(heard):
+        return set()
     found: set[str] = set()
-    for hour, minute in _EXACT.findall(heard):
-        found.add(f'{int(hour):02d}:{minute}')
-    for hour, half in _TWELVE.findall(heard):
-        h = int(hour) % 12 + (12 if half.lower() == 'p' else 0)
-        found.add(f'{h:02d}:00')
-    for pattern, minute in ((_HALF, '30'), (_OCLOCK, '00'), (_BARE, '00')):
-        for word in pattern.findall(heard):
-            hour = _HOURS.get(str(word).lower()) or (int(word) if str(word).isdigit() else None)
-            if hour is None:
+    for hit in _CLOCK.finditer(heard):
+        word, minute, period = hit.groups()
+        hour = _HOURS.get(word.lower(), int(word) if word.isdigit() else 0)
+        prefix, suffix = heard[: hit.start()].strip(), heard[hit.end() :].strip(' .,!?')
+        explicit = ':' in hit.group() or 'clock' in hit.group().lower() or period
+        half = bool(re.search(r'half past$', prefix, re.IGNORECASE))
+        bare = (not prefix and suffix.lower() in ('', 'please', 'works', 'works for me')) or bool(
+            re.search(r'\b(?:at|around|about)$', prefix, re.IGNORECASE)
+        )
+        if not (explicit or half or bare):
+            continue
+        minute = minute or ('30' if half else '00')
+        if period:
+            if not 1 <= hour <= 12:
                 continue
-            found.add(f'{hour % 12:02d}:{minute}')
-            found.add(f'{hour % 12 + 12:02d}:{minute}')
+            hours = [hour % 12 + (12 if period.lower().startswith('p') else 0)]
+        else:
+            hours = [hour % 12, hour % 12 + 12] if 1 <= hour <= 12 else [hour]
+        found.update(f'{h:02d}:{minute}' for h in hours)
     return found
 
 
@@ -464,7 +465,7 @@ def resolve_time(words: str) -> str:
     # without "at" in front of it. That caution is for authorising a booking,
     # where a wrong reading books something; here the worst a wrong reading
     # does is order a list of free times badly.
-    found = times_named(text) | times_named(f'at {text}')
+    found = times_named(text)
     named = sorted(t for t in found if _EARLIEST <= t <= _LATEST)
     return named[0] if len(named) == 1 else ''
 

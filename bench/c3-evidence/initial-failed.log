@@ -1,0 +1,1652 @@
+2026-09-21 19:22:35.919 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+1 select_01: ok
+1 select_pm: ok
+1 select_word: ok
+2026-09-21 19:22:39.407 | INFO     | voice.core:_hops:371 - handoff concierge -> booking (The caller wants to move an existing appointment.)
+2026-09-21 19:22:39.543 | ERROR    | voice.core:_speak:593 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1128, in _process_streamed_response
+    first_chunk = await peekable_response.peek()
+                        │                 └ <function PeekableAsyncStream.peek at 0x10b353e20>
+                        └ <pydantic_ai._utils.PeekableAsyncStream object at 0x10ed675c0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_utils.py", line 658, in peek
+    self._buffer = await anext(self._source_iter)
+    │    │                     │    └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7cd60>
+    │    │                     └ <pydantic_ai._utils.PeekableAsyncStream object at 0x10ed675c0>
+    │    └ <pydantic_ai._utils.Unset object at 0x10b3542f0>
+    └ <pydantic_ai._utils.PeekableAsyncStream object at 0x10ed675c0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 8664, in stream_generator
+    response = await self._generate_content_stream(
+                     │    └ <function AsyncModels._generate_content_stream at 0x10e672770>
+                     └ <google.genai.models.AsyncModels object at 0x10eb3df90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 7024, in _generate_content_stream
+    response_stream = await self._api_client.async_request_streamed(
+                            │    │           └ <function BaseApiClient.async_request_streamed at 0x10e58b110>
+                            │    └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+                            └ <google.genai.models.AsyncModels object at 0x10eb3df90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1813, in async_request_streamed
+    response = await self._async_request(
+                     │    └ <function BaseApiClient._async_request at 0x10e58aa30>
+                     └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1729, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+                 │    └ <AsyncRetrying object at 0x10eb3dd10 (stop=<tenacity.stop.stop_after_attempt object at 0x10eb3da90>, wait=<tenacity.wait.wait...
+                 └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+               │    │                └ <RetryCallState 4543897088: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+               │    └ <function AsyncRetrying.iter at 0x10e4cbed0>
+               └ <AsyncRetrying object at 0x10eb3dd10 (stop=<tenacity.stop.stop_after_attempt object at 0x10eb3da90>, wait=<tenacity.wait.wait...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+                   │      └ <RetryCallState 4543897088: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+                   └ <function wrap_to_async_func.<locals>.inner at 0x10ec60250>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           │     │       └ {}
+           │     └ (<RetryCallState 4543897088: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'co...
+           └ <function BaseRetrying._post_stop_check_actions.<locals>.exc_check at 0x10ec60bf0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          │         └ <function RetryError.reraise at 0x10e4ba770>
+          └ RetryError(<Future at 0x10ed668b0 state=finished raised ClientError>)
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          │    │            └ <function Future.result at 0x10a04d590>
+          │    └ <Future at 0x10ed668b0 state=finished raised ClientError>
+          └ RetryError(<Future at 0x10ed668b0 state=finished raised ClientError>)
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 443, in result
+    return self.__get_result()
+           └ None
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 395, in __get_result
+    raise self._exception
+          └ None
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+                   │   │       └ {}
+                   │   └ (HttpRequest(headers={'Content-Type': 'application/json', 'x-goog-api-key': 'AQ.Ab8RN6KemcFFHoxC9Ltsl3x6ghPVI5EBY7oqi0jT8Z_sS...
+                   └ <bound method BaseApiClient._async_request_once of <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1630, in _async_request_once
+    await errors.APIError.raise_for_async_response(client_response)
+          │      │        │                        └ <Response [400 Bad Request]>
+          │      │        └ <classmethod(<function APIError.raise_for_async_response at 0x10e4dd220>)>
+          │      └ <class 'google.genai.errors.APIError'>
+          └ <module 'google.genai.errors' from '/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/g...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+          │   │                 │            │              └ <Response [400 Bad Request]>
+          │   │                 │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │   │                 └ 400
+          │   └ <classmethod(<function APIError.raise_error_async at 0x10e4dd380>)>
+          └ <class 'google.genai.errors.APIError'>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+          │           │            │              └ <Response [400 Bad Request]>
+          │           │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │           └ 400
+          └ <class 'google.genai.errors.ClientError'>
+
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 158, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     │       │   └ <function main at 0x10eaafab0>
+                     │       └ <function run at 0x10a1ccca0>
+                     └ <module 'asyncio' from '/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/__in...
+
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object main at 0x7b9c598010>
+           │      └ <function Runner.run at 0x10a1cd220>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<main() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery....
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x10a1c14e0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x10a1c1430>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x10a1c3530>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x10a12ef00>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 136, in main
+    await processor._turn(words)
+          │         │     └ 'Can you move my haircut to Saturday, the same— time?'
+          │         └ <function PydanticAgentProcessor._turn at 0x10d552fb0>
+          └ <bench.scenarios.Counter object at 0x10ec5df90>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 276, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <bench.scenarios.Counter object at 0x10ec5df90>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │    │        │    │      │    │        │       └ <bench.scenarios.Counter object at 0x10ec5df90>
+              │        │    │        │    │      │    │        └ 'Can you move my haircut to Saturday, the same— time?'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <bench.scenarios.Counter object at 0x10ec5df90>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_veri...
+              │        │    │        └ <bench.scenarios.Counter object at 0x10ec5df90>
+              │        │    └ <function run_turn at 0x10d5507d0>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='booking')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 206, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x10d550ca0>
+              └ RunStarted(step='booking')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 293, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(cost=Decimal('0.0011928'), details={'text_prompt_tokens': 3726, 'text_candidates_tokens': 30}, input_text_tokens=372...
+              │        │      │     │     │       └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │      │     │     └ None
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='booking', end_strategy='graceful', model_settings={'service_tier': 'priority', 'g...
+              │        │      └ SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_veri...
+              │        └ <function _speak at 0x10d551dd0>
+              └ RunStarted(step='booking')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 523, in _speak
+    async for event in events:
+                       └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x10ebfb6f0>
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-22' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Doc...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x10ebfb6f0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x10ed4e140>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x10ed29850>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x10ebfb6f0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10c39a6c0>
+                 └ Agent(model=GoogleModel(), name='booking', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_think...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x10ec61430>
+                 │         │                    └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 39, 416189, tzinfo=datetime....
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10c378a90>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0011928'), details={'text_prompt_tokens': 3726, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x10ec61430>
+                 │    │                 │            └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 39, 416189, tzinfo=datetime....
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=Fals...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10c378930>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0011928'), details={'text_prompt_tokens': 3726, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 39, 416189, tzinfo=datetime....
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x10ec61430>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=Fals...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x10ed4e140>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 455, in _pull_shared
+    event = await anext(events_iterator)
+                        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x10ed78dc0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x10ecd3a60>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x10ecd3010>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf7ef0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf7340>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf7450>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf7780>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object AgentStream._events_iter at 0x10ecd3100>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 486, in _events_iter
+    event = await anext(base_iter)
+                        └ <async_generator object _ContinuationStreamedResponse._iterator_with_cancel_guard at 0x10ed75d20>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 325, in _iterator_with_cancel_guard
+    async for event in iterator:
+                       └ <async_generator object _ContinuationStreamedResponse._get_event_iterator at 0x10ebb2ae0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 418, in _get_event_iterator
+    async with self.model.request_stream(
+               │    │     └ <function GoogleModel.request_stream at 0x10e6fefb0>
+               │    └ GoogleModel()
+               └ _ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools=[ToolDefinition(name='read_diary...
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+                       │    └ <async_generator object GoogleModel.request_stream at 0x10ed78700>
+                       └ <contextlib._AsyncGeneratorContextManager object at 0x10ec72270>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 710, in request_stream
+    yield await self._process_streamed_response(response, model_request_parameters)  # pyright: ignore[reportArgumentType]
+                │    │                          │         └ ModelRequestParameters(function_tools=[ToolDefinition(name='read_diary', parameters_json_schema={'additionalProperties': Fals...
+                │    │                          └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7cd60>
+                │    └ <function GoogleModel._process_streamed_response at 0x10e6ffd70>
+                └ GoogleModel()
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1130, in _process_streamed_response
+    raise _map_api_error(e, self._model_name, self._provider.model_id_namespace) from e
+          │                 │    │            │    │         └ <property object at 0x10c0305e0>
+          │                 │    │            │    └ GoogleCloudProvider(name=google-cloud, base_url=https://aiplatform.googleapis.com/)
+          │                 │    │            └ GoogleModel()
+          │                 │    └ 'gemini-3.5-flash-lite'
+          │                 └ GoogleModel()
+          └ <function _map_api_error at 0x10e6fd7a0>
+
+pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: gemini-3.5-flash-lite, body: {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+2026-09-21 19:22:39.599 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Counter#3 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+1 move_same_time: a turn did not complete
+2026-09-21 19:22:42.389 | INFO     | voice.core:_hops:371 - handoff complaints -> verify (Need to verify the customer's phone number before recording the complaint.)
+2026-09-21 19:22:42.651 | ERROR    | voice.core:_speak:593 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1128, in _process_streamed_response
+    first_chunk = await peekable_response.peek()
+                        │                 └ <function PeekableAsyncStream.peek at 0x10b353e20>
+                        └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118c08850>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_utils.py", line 658, in peek
+    self._buffer = await anext(self._source_iter)
+    │    │                     │    └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7dc60>
+    │    │                     └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118c08850>
+    │    └ <pydantic_ai._utils.Unset object at 0x10b3542f0>
+    └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118c08850>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 8664, in stream_generator
+    response = await self._generate_content_stream(
+                     │    └ <function AsyncModels._generate_content_stream at 0x10e672770>
+                     └ <google.genai.models.AsyncModels object at 0x10eafda90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 7024, in _generate_content_stream
+    response_stream = await self._api_client.async_request_streamed(
+                            │    │           └ <function BaseApiClient.async_request_streamed at 0x10e58b110>
+                            │    └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+                            └ <google.genai.models.AsyncModels object at 0x10eafda90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1813, in async_request_streamed
+    response = await self._async_request(
+                     │    └ <function BaseApiClient._async_request at 0x10e58aa30>
+                     └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1729, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+                 │    └ <AsyncRetrying object at 0x10eafd810 (stop=<tenacity.stop.stop_after_attempt object at 0x10eafd590>, wait=<tenacity.wait.wait...
+                 └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+               │    │                └ <RetryCallState 4710240336: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+               │    └ <function AsyncRetrying.iter at 0x10e4cbed0>
+               └ <AsyncRetrying object at 0x10eafd810 (stop=<tenacity.stop.stop_after_attempt object at 0x10eafd590>, wait=<tenacity.wait.wait...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+                   │      └ <RetryCallState 4710240336: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+                   └ <function wrap_to_async_func.<locals>.inner at 0x118bc5640>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           │     │       └ {}
+           │     └ (<RetryCallState 4710240336: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'co...
+           └ <function BaseRetrying._post_stop_check_actions.<locals>.exc_check at 0x118bc4670>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          │         └ <function RetryError.reraise at 0x10e4ba770>
+          └ RetryError(<Future at 0x118c09150 state=finished raised ClientError>)
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          │    │            └ <function Future.result at 0x10a04d590>
+          │    └ <Future at 0x118c09150 state=finished raised ClientError>
+          └ RetryError(<Future at 0x118c09150 state=finished raised ClientError>)
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 443, in result
+    return self.__get_result()
+           └ None
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 395, in __get_result
+    raise self._exception
+          └ None
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+                   │   │       └ {}
+                   │   └ (HttpRequest(headers={'Content-Type': 'application/json', 'x-goog-api-key': 'AQ.Ab8RN6KemcFFHoxC9Ltsl3x6ghPVI5EBY7oqi0jT8Z_sS...
+                   └ <bound method BaseApiClient._async_request_once of <google.genai._api_client.BaseApiClient object at 0x10eafc910>>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1630, in _async_request_once
+    await errors.APIError.raise_for_async_response(client_response)
+          │      │        │                        └ <Response [400 Bad Request]>
+          │      │        └ <classmethod(<function APIError.raise_for_async_response at 0x10e4dd220>)>
+          │      └ <class 'google.genai.errors.APIError'>
+          └ <module 'google.genai.errors' from '/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/g...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+          │   │                 │            │              └ <Response [400 Bad Request]>
+          │   │                 │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │   │                 └ 400
+          │   └ <classmethod(<function APIError.raise_error_async at 0x10e4dd380>)>
+          └ <class 'google.genai.errors.APIError'>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+          │           │            │              └ <Response [400 Bad Request]>
+          │           │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │           └ 400
+          └ <class 'google.genai.errors.ClientError'>
+
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 158, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     │       │   └ <function main at 0x10eaafab0>
+                     │       └ <function run at 0x10a1ccca0>
+                     └ <module 'asyncio' from '/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/__in...
+
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object main at 0x7b9c598010>
+           │      └ <function Runner.run at 0x10a1cd220>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<main() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery....
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x10a1c14e0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x10a1c1430>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x10a1c3530>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x10a12ef00>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 136, in main
+    await processor._turn(words)
+          │         │     └ 'Yes, that is right.'
+          │         └ <function PydanticAgentProcessor._turn at 0x10d552fb0>
+          └ <bench.scenarios.Counter object at 0x10ed50910>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 276, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <bench.scenarios.Counter object at 0x10ed50910>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │    │        │    │      │    │        │       └ <bench.scenarios.Counter object at 0x10ed50910>
+              │        │    │        │    │      │    │        └ 'Yes, that is right.'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <bench.scenarios.Counter object at 0x10ed50910>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, customer_verified=...
+              │        │    │        └ <bench.scenarios.Counter object at 0x10ed50910>
+              │        │    └ <function run_turn at 0x10d5507d0>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 206, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x10d550ca0>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 293, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(cost=Decimal('0.0010361'), details={'text_prompt_tokens': 3162, 'text_candidates_tokens': 35}, input_text_tokens=316...
+              │        │      │     │     │       └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │      │     │     └ None
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'go...
+              │        │      └ SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, customer_verified=...
+              │        └ <function _speak at 0x10d551dd0>
+              └ RunStarted(step='verify')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 523, in _speak
+    async for event in events:
+                       └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x10edbfe50>
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-48' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Doc...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x10edbfe50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118bc4bf0>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x118bc6140>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x10edbfe50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10c39a6c0>
+                 └ Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_thinki...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118c3d7a0>
+                 │         │                    └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 42, 398931, tzinfo=datetime....
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10c378a90>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0010361'), details={'text_prompt_tokens': 3162, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118c3d7a0>
+                 │    │                 │            └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 42, 398931, tzinfo=datetime....
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, cu...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10c378930>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0010361'), details={'text_prompt_tokens': 3162, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 42, 398931, tzinfo=datetime....
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118c3d7a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, cu...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118bc4bf0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 455, in _pull_shared
+    event = await anext(events_iterator)
+                        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x10ed79240>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118be5a80>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118be6110>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bff450>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bfc6a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bfdf10>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bfd7a0>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object AgentStream._events_iter at 0x118be4f40>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 486, in _events_iter
+    event = await anext(base_iter)
+                        └ <async_generator object _ContinuationStreamedResponse._iterator_with_cancel_guard at 0x118c21380>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 325, in _iterator_with_cancel_guard
+    async for event in iterator:
+                       └ <async_generator object _ContinuationStreamedResponse._get_event_iterator at 0x10ebb2820>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 418, in _get_event_iterator
+    async with self.model.request_stream(
+               │    │     └ <function GoogleModel.request_stream at 0x10e6fefb0>
+               │    └ GoogleModel()
+               └ _ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools=[], native_tools=[], output_mode...
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+                       │    └ <async_generator object GoogleModel.request_stream at 0x10ed79c60>
+                       └ <contextlib._AsyncGeneratorContextManager object at 0x118c44360>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 710, in request_stream
+    yield await self._process_streamed_response(response, model_request_parameters)  # pyright: ignore[reportArgumentType]
+                │    │                          │         └ ModelRequestParameters(function_tools=[], native_tools=[], tool_visibility={}, output_mode='tool', output_tools=[ToolDefiniti...
+                │    │                          └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7dc60>
+                │    └ <function GoogleModel._process_streamed_response at 0x10e6ffd70>
+                └ GoogleModel()
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1130, in _process_streamed_response
+    raise _map_api_error(e, self._model_name, self._provider.model_id_namespace) from e
+          │                 │    │            │    │         └ <property object at 0x10c0305e0>
+          │                 │    │            │    └ GoogleCloudProvider(name=google-cloud, base_url=https://aiplatform.googleapis.com/)
+          │                 │    │            └ GoogleModel()
+          │                 │    └ 'gemini-3.5-flash-lite'
+          │                 └ GoogleModel()
+          └ <function _map_api_error at 0x10e6fd7a0>
+
+pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: gemini-3.5-flash-lite, body: {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+2026-09-21 19:22:42.685 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Counter#4 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+1 complaint_verify: a turn did not complete
+1 complaint_verified: ok
+1 no_thanks: ok
+1 goodbye_with_a_request: ok
+2 select_01: ok
+2 select_pm: ok
+2 select_word: ok
+2026-09-21 19:22:49.799 | INFO     | voice.core:_hops:371 - handoff concierge -> booking (move existing appointment to Saturday)
+2026-09-21 19:22:49.921 | ERROR    | voice.core:_speak:593 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1128, in _process_streamed_response
+    first_chunk = await peekable_response.peek()
+                        │                 └ <function PeekableAsyncStream.peek at 0x10b353e20>
+                        └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118c379b0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_utils.py", line 658, in peek
+    self._buffer = await anext(self._source_iter)
+    │    │                     │    └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7c7c0>
+    │    │                     └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118c379b0>
+    │    └ <pydantic_ai._utils.Unset object at 0x10b3542f0>
+    └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118c379b0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 8664, in stream_generator
+    response = await self._generate_content_stream(
+                     │    └ <function AsyncModels._generate_content_stream at 0x10e672770>
+                     └ <google.genai.models.AsyncModels object at 0x10eb3df90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 7024, in _generate_content_stream
+    response_stream = await self._api_client.async_request_streamed(
+                            │    │           └ <function BaseApiClient.async_request_streamed at 0x10e58b110>
+                            │    └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+                            └ <google.genai.models.AsyncModels object at 0x10eb3df90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1813, in async_request_streamed
+    response = await self._async_request(
+                     │    └ <function BaseApiClient._async_request at 0x10e58aa30>
+                     └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1729, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+                 │    └ <AsyncRetrying object at 0x10eb3dd10 (stop=<tenacity.stop.stop_after_attempt object at 0x10eb3da90>, wait=<tenacity.wait.wait...
+                 └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+               │    │                └ <RetryCallState 4542725328: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+               │    └ <function AsyncRetrying.iter at 0x10e4cbed0>
+               └ <AsyncRetrying object at 0x10eb3dd10 (stop=<tenacity.stop.stop_after_attempt object at 0x10eb3da90>, wait=<tenacity.wait.wait...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+                   │      └ <RetryCallState 4542725328: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+                   └ <function wrap_to_async_func.<locals>.inner at 0x10ed4d590>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           │     │       └ {}
+           │     └ (<RetryCallState 4542725328: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'co...
+           └ <function BaseRetrying._post_stop_check_actions.<locals>.exc_check at 0x10ed4c670>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          │         └ <function RetryError.reraise at 0x10e4ba770>
+          └ RetryError(<Future at 0x118c37ec0 state=finished raised ClientError>)
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          │    │            └ <function Future.result at 0x10a04d590>
+          │    └ <Future at 0x118c37ec0 state=finished raised ClientError>
+          └ RetryError(<Future at 0x118c37ec0 state=finished raised ClientError>)
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 443, in result
+    return self.__get_result()
+           └ None
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 395, in __get_result
+    raise self._exception
+          └ None
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+                   │   │       └ {}
+                   │   └ (HttpRequest(headers={'Content-Type': 'application/json', 'x-goog-api-key': 'AQ.Ab8RN6KemcFFHoxC9Ltsl3x6ghPVI5EBY7oqi0jT8Z_sS...
+                   └ <bound method BaseApiClient._async_request_once of <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1630, in _async_request_once
+    await errors.APIError.raise_for_async_response(client_response)
+          │      │        │                        └ <Response [400 Bad Request]>
+          │      │        └ <classmethod(<function APIError.raise_for_async_response at 0x10e4dd220>)>
+          │      └ <class 'google.genai.errors.APIError'>
+          └ <module 'google.genai.errors' from '/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/g...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+          │   │                 │            │              └ <Response [400 Bad Request]>
+          │   │                 │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │   │                 └ 400
+          │   └ <classmethod(<function APIError.raise_error_async at 0x10e4dd380>)>
+          └ <class 'google.genai.errors.APIError'>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+          │           │            │              └ <Response [400 Bad Request]>
+          │           │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │           └ 400
+          └ <class 'google.genai.errors.ClientError'>
+
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 158, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     │       │   └ <function main at 0x10eaafab0>
+                     │       └ <function run at 0x10a1ccca0>
+                     └ <module 'asyncio' from '/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/__in...
+
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object main at 0x7b9c598010>
+           │      └ <function Runner.run at 0x10a1cd220>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<main() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery....
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x10a1c14e0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x10a1c1430>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x10a1c3530>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x10a12ef00>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 136, in main
+    await processor._turn(words)
+          │         │     └ 'Can you move my haircut to Saturday, the same— time?'
+          │         └ <function PydanticAgentProcessor._turn at 0x10d552fb0>
+          └ <bench.scenarios.Counter object at 0x10eda4910>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 276, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <bench.scenarios.Counter object at 0x10eda4910>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │    │        │    │      │    │        │       └ <bench.scenarios.Counter object at 0x10eda4910>
+              │        │    │        │    │      │    │        └ 'Can you move my haircut to Saturday, the same— time?'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <bench.scenarios.Counter object at 0x10eda4910>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_veri...
+              │        │    │        └ <bench.scenarios.Counter object at 0x10eda4910>
+              │        │    └ <function run_turn at 0x10d5507d0>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='booking')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 206, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x10d550ca0>
+              └ RunStarted(step='booking')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 293, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(cache_read_tokens=3673, cache_text_read_tokens=3673, cost=Decimal('0.00019109'), details={'cached_content_tokens': 3...
+              │        │      │     │     │       └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │      │     │     └ None
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='booking', end_strategy='graceful', model_settings={'service_tier': 'priority', 'g...
+              │        │      └ SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_veri...
+              │        └ <function _speak at 0x10d551dd0>
+              └ RunStarted(step='booking')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 523, in _speak
+    async for event in events:
+                       └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118c35130>
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-109' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Do...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118c35130>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb2e50>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x118c3fab0>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118c35130>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10c39a6c0>
+                 └ Agent(model=GoogleModel(), name='booking', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_think...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118c81c70>
+                 │         │                    └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 49, 808593, tzinfo=datetime....
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10c378a90>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cache_read_tokens=3673, cache_text_read_tokens=3673, cost=Decimal('0.00019...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118c81c70>
+                 │    │                 │            └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 49, 808593, tzinfo=datetime....
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=Fals...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10c378930>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cache_read_tokens=3673, cache_text_read_tokens=3673, cost=Decimal('0.00019...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 49, 808593, tzinfo=datetime....
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118c81c70>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=Fals...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb2e50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 455, in _pull_shared
+    event = await anext(events_iterator)
+                        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x10ed7a7a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118c7f970>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118c7ee30>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf7670>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf7890>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf7ab0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x10ebf69b0>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object AgentStream._events_iter at 0x118c7eb60>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 486, in _events_iter
+    event = await anext(base_iter)
+                        └ <async_generator object _ContinuationStreamedResponse._iterator_with_cancel_guard at 0x118c74900>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 325, in _iterator_with_cancel_guard
+    async for event in iterator:
+                       └ <async_generator object _ContinuationStreamedResponse._get_event_iterator at 0x10ebb3060>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 418, in _get_event_iterator
+    async with self.model.request_stream(
+               │    │     └ <function GoogleModel.request_stream at 0x10e6fefb0>
+               │    └ GoogleModel()
+               └ _ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools=[ToolDefinition(name='read_diary...
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+                       │    └ <async_generator object GoogleModel.request_stream at 0x10ed795a0>
+                       └ <contextlib._AsyncGeneratorContextManager object at 0x118cb4c90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 710, in request_stream
+    yield await self._process_streamed_response(response, model_request_parameters)  # pyright: ignore[reportArgumentType]
+                │    │                          │         └ ModelRequestParameters(function_tools=[ToolDefinition(name='read_diary', parameters_json_schema={'additionalProperties': Fals...
+                │    │                          └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7c7c0>
+                │    └ <function GoogleModel._process_streamed_response at 0x10e6ffd70>
+                └ GoogleModel()
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1130, in _process_streamed_response
+    raise _map_api_error(e, self._model_name, self._provider.model_id_namespace) from e
+          │                 │    │            │    │         └ <property object at 0x10c0305e0>
+          │                 │    │            │    └ GoogleCloudProvider(name=google-cloud, base_url=https://aiplatform.googleapis.com/)
+          │                 │    │            └ GoogleModel()
+          │                 │    └ 'gemini-3.5-flash-lite'
+          │                 └ GoogleModel()
+          └ <function _map_api_error at 0x10e6fd7a0>
+
+pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: gemini-3.5-flash-lite, body: {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+2026-09-21 19:22:49.968 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Counter#11 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+2 move_same_time: a turn did not complete
+2026-09-21 19:22:52.425 | INFO     | voice.core:_hops:371 - handoff complaints -> verify (verify phone number for complaint record)
+2026-09-21 19:22:52.677 | ERROR    | voice.core:_speak:593 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1128, in _process_streamed_response
+    first_chunk = await peekable_response.peek()
+                        │                 └ <function PeekableAsyncStream.peek at 0x10b353e20>
+                        └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118d1ac50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_utils.py", line 658, in peek
+    self._buffer = await anext(self._source_iter)
+    │    │                     │    └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7ef20>
+    │    │                     └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118d1ac50>
+    │    └ <pydantic_ai._utils.Unset object at 0x10b3542f0>
+    └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118d1ac50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 8664, in stream_generator
+    response = await self._generate_content_stream(
+                     │    └ <function AsyncModels._generate_content_stream at 0x10e672770>
+                     └ <google.genai.models.AsyncModels object at 0x10eafda90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 7024, in _generate_content_stream
+    response_stream = await self._api_client.async_request_streamed(
+                            │    │           └ <function BaseApiClient.async_request_streamed at 0x10e58b110>
+                            │    └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+                            └ <google.genai.models.AsyncModels object at 0x10eafda90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1813, in async_request_streamed
+    response = await self._async_request(
+                     │    └ <function BaseApiClient._async_request at 0x10e58aa30>
+                     └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1729, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+                 │    └ <AsyncRetrying object at 0x10eafd810 (stop=<tenacity.stop.stop_after_attempt object at 0x10eafd590>, wait=<tenacity.wait.wait...
+                 └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+               │    │                └ <RetryCallState 4710929472: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+               │    └ <function AsyncRetrying.iter at 0x10e4cbed0>
+               └ <AsyncRetrying object at 0x10eafd810 (stop=<tenacity.stop.stop_after_attempt object at 0x10eafd590>, wait=<tenacity.wait.wait...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+                   │      └ <RetryCallState 4710929472: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+                   └ <function wrap_to_async_func.<locals>.inner at 0x118cb19b0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           │     │       └ {}
+           │     └ (<RetryCallState 4710929472: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'co...
+           └ <function BaseRetrying._post_stop_check_actions.<locals>.exc_check at 0x118cb3cc0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          │         └ <function RetryError.reraise at 0x10e4ba770>
+          └ RetryError(<Future at 0x118d31550 state=finished raised ClientError>)
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          │    │            └ <function Future.result at 0x10a04d590>
+          │    └ <Future at 0x118d31550 state=finished raised ClientError>
+          └ RetryError(<Future at 0x118d31550 state=finished raised ClientError>)
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 443, in result
+    return self.__get_result()
+           └ None
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 395, in __get_result
+    raise self._exception
+          └ None
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+                   │   │       └ {}
+                   │   └ (HttpRequest(headers={'Content-Type': 'application/json', 'x-goog-api-key': 'AQ.Ab8RN6KemcFFHoxC9Ltsl3x6ghPVI5EBY7oqi0jT8Z_sS...
+                   └ <bound method BaseApiClient._async_request_once of <google.genai._api_client.BaseApiClient object at 0x10eafc910>>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1630, in _async_request_once
+    await errors.APIError.raise_for_async_response(client_response)
+          │      │        │                        └ <Response [400 Bad Request]>
+          │      │        └ <classmethod(<function APIError.raise_for_async_response at 0x10e4dd220>)>
+          │      └ <class 'google.genai.errors.APIError'>
+          └ <module 'google.genai.errors' from '/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/g...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+          │   │                 │            │              └ <Response [400 Bad Request]>
+          │   │                 │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │   │                 └ 400
+          │   └ <classmethod(<function APIError.raise_error_async at 0x10e4dd380>)>
+          └ <class 'google.genai.errors.APIError'>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+          │           │            │              └ <Response [400 Bad Request]>
+          │           │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │           └ 400
+          └ <class 'google.genai.errors.ClientError'>
+
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 158, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     │       │   └ <function main at 0x10eaafab0>
+                     │       └ <function run at 0x10a1ccca0>
+                     └ <module 'asyncio' from '/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/__in...
+
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object main at 0x7b9c598010>
+           │      └ <function Runner.run at 0x10a1cd220>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<main() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery....
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x10a1c14e0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x10a1c1430>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x10a1c3530>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x10a12ef00>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 136, in main
+    await processor._turn(words)
+          │         │     └ 'Yes, that is right.'
+          │         └ <function PydanticAgentProcessor._turn at 0x10d552fb0>
+          └ <bench.scenarios.Counter object at 0x10ed52490>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 276, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <bench.scenarios.Counter object at 0x10ed52490>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │    │        │    │      │    │        │       └ <bench.scenarios.Counter object at 0x10ed52490>
+              │        │    │        │    │      │    │        └ 'Yes, that is right.'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <bench.scenarios.Counter object at 0x10ed52490>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, customer_verified=...
+              │        │    │        └ <bench.scenarios.Counter object at 0x10ed52490>
+              │        │    └ <function run_turn at 0x10d5507d0>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 206, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x10d550ca0>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 293, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(cost=Decimal('0.0010203'), details={'text_prompt_tokens': 3176, 'text_candidates_tokens': 27}, input_text_tokens=317...
+              │        │      │     │     │       └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │      │     │     └ None
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'go...
+              │        │      └ SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, customer_verified=...
+              │        └ <function _speak at 0x10d551dd0>
+              └ RunStarted(step='verify')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 523, in _speak
+    async for event in events:
+                       └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118cd6650>
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-135' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Do...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118cd6650>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb2da0>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x118cb1bc0>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118cd6650>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10c39a6c0>
+                 └ Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_thinki...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118cbaf00>
+                 │         │                    └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 52, 434605, tzinfo=datetime....
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10c378a90>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0010203'), details={'text_prompt_tokens': 3176, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118cbaf00>
+                 │    │                 │            └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 52, 434605, tzinfo=datetime....
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, cu...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10c378930>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0010203'), details={'text_prompt_tokens': 3176, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 52, 434605, tzinfo=datetime....
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118cbaf00>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, cu...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb2da0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 455, in _pull_shared
+    event = await anext(events_iterator)
+                        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x10ed7bd00>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118cf6020>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118cf5a80>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d34590>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d34480>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d34370>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d34260>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object AgentStream._events_iter at 0x118cf5030>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 486, in _events_iter
+    event = await anext(base_iter)
+                        └ <async_generator object _ContinuationStreamedResponse._iterator_with_cancel_guard at 0x118cfa960>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 325, in _iterator_with_cancel_guard
+    async for event in iterator:
+                       └ <async_generator object _ContinuationStreamedResponse._get_event_iterator at 0x10ebb22a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 418, in _get_event_iterator
+    async with self.model.request_stream(
+               │    │     └ <function GoogleModel.request_stream at 0x10e6fefb0>
+               │    └ GoogleModel()
+               └ _ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools=[], native_tools=[], output_mode...
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+                       │    └ <async_generator object GoogleModel.request_stream at 0x10ed7ac20>
+                       └ <contextlib._AsyncGeneratorContextManager object at 0x118cff540>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 710, in request_stream
+    yield await self._process_streamed_response(response, model_request_parameters)  # pyright: ignore[reportArgumentType]
+                │    │                          │         └ ModelRequestParameters(function_tools=[], native_tools=[], tool_visibility={}, output_mode='tool', output_tools=[ToolDefiniti...
+                │    │                          └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7ef20>
+                │    └ <function GoogleModel._process_streamed_response at 0x10e6ffd70>
+                └ GoogleModel()
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1130, in _process_streamed_response
+    raise _map_api_error(e, self._model_name, self._provider.model_id_namespace) from e
+          │                 │    │            │    │         └ <property object at 0x10c0305e0>
+          │                 │    │            │    └ GoogleCloudProvider(name=google-cloud, base_url=https://aiplatform.googleapis.com/)
+          │                 │    │            └ GoogleModel()
+          │                 │    └ 'gemini-3.5-flash-lite'
+          │                 └ GoogleModel()
+          └ <function _map_api_error at 0x10e6fd7a0>
+
+pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: gemini-3.5-flash-lite, body: {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+2026-09-21 19:22:52.711 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Counter#12 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+2 complaint_verify: a turn did not complete
+2 complaint_verified: ok
+2 no_thanks: ok
+2 goodbye_with_a_request: ok
+3 select_01: ok
+3 select_pm: ok
+3 select_word: ok
+2026-09-21 19:22:59.408 | INFO     | voice.core:_hops:371 - handoff concierge -> booking (moving an existing appointment)
+2026-09-21 19:22:59.505 | ERROR    | voice.core:_speak:593 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1128, in _process_streamed_response
+    first_chunk = await peekable_response.peek()
+                        │                 └ <function PeekableAsyncStream.peek at 0x10b353e20>
+                        └ <pydantic_ai._utils.PeekableAsyncStream object at 0x10ed36050>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_utils.py", line 658, in peek
+    self._buffer = await anext(self._source_iter)
+    │    │                     │    └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7cf40>
+    │    │                     └ <pydantic_ai._utils.PeekableAsyncStream object at 0x10ed36050>
+    │    └ <pydantic_ai._utils.Unset object at 0x10b3542f0>
+    └ <pydantic_ai._utils.PeekableAsyncStream object at 0x10ed36050>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 8664, in stream_generator
+    response = await self._generate_content_stream(
+                     │    └ <function AsyncModels._generate_content_stream at 0x10e672770>
+                     └ <google.genai.models.AsyncModels object at 0x10eb3df90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 7024, in _generate_content_stream
+    response_stream = await self._api_client.async_request_streamed(
+                            │    │           └ <function BaseApiClient.async_request_streamed at 0x10e58b110>
+                            │    └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+                            └ <google.genai.models.AsyncModels object at 0x10eb3df90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1813, in async_request_streamed
+    response = await self._async_request(
+                     │    └ <function BaseApiClient._async_request at 0x10e58aa30>
+                     └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1729, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+                 │    └ <AsyncRetrying object at 0x10eb3dd10 (stop=<tenacity.stop.stop_after_attempt object at 0x10eb3da90>, wait=<tenacity.wait.wait...
+                 └ <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+               │    │                └ <RetryCallState 4543653936: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+               │    └ <function AsyncRetrying.iter at 0x10e4cbed0>
+               └ <AsyncRetrying object at 0x10eb3dd10 (stop=<tenacity.stop.stop_after_attempt object at 0x10eb3da90>, wait=<tenacity.wait.wait...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+                   │      └ <RetryCallState 4543653936: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+                   └ <function wrap_to_async_func.<locals>.inner at 0x118d4ecf0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           │     │       └ {}
+           │     └ (<RetryCallState 4543653936: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'co...
+           └ <function BaseRetrying._post_stop_check_actions.<locals>.exc_check at 0x118d4ca90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          │         └ <function RetryError.reraise at 0x10e4ba770>
+          └ RetryError(<Future at 0x118c2e950 state=finished raised ClientError>)
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          │    │            └ <function Future.result at 0x10a04d590>
+          │    └ <Future at 0x118c2e950 state=finished raised ClientError>
+          └ RetryError(<Future at 0x118c2e950 state=finished raised ClientError>)
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 443, in result
+    return self.__get_result()
+           └ None
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 395, in __get_result
+    raise self._exception
+          └ None
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+                   │   │       └ {}
+                   │   └ (HttpRequest(headers={'Content-Type': 'application/json', 'x-goog-api-key': 'AQ.Ab8RN6KemcFFHoxC9Ltsl3x6ghPVI5EBY7oqi0jT8Z_sS...
+                   └ <bound method BaseApiClient._async_request_once of <google.genai._api_client.BaseApiClient object at 0x10eb3cf50>>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1630, in _async_request_once
+    await errors.APIError.raise_for_async_response(client_response)
+          │      │        │                        └ <Response [400 Bad Request]>
+          │      │        └ <classmethod(<function APIError.raise_for_async_response at 0x10e4dd220>)>
+          │      └ <class 'google.genai.errors.APIError'>
+          └ <module 'google.genai.errors' from '/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/g...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+          │   │                 │            │              └ <Response [400 Bad Request]>
+          │   │                 │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │   │                 └ 400
+          │   └ <classmethod(<function APIError.raise_error_async at 0x10e4dd380>)>
+          └ <class 'google.genai.errors.APIError'>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+          │           │            │              └ <Response [400 Bad Request]>
+          │           │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │           └ 400
+          └ <class 'google.genai.errors.ClientError'>
+
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 158, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     │       │   └ <function main at 0x10eaafab0>
+                     │       └ <function run at 0x10a1ccca0>
+                     └ <module 'asyncio' from '/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/__in...
+
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object main at 0x7b9c598010>
+           │      └ <function Runner.run at 0x10a1cd220>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<main() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery....
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x10a1c14e0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x10a1c1430>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x10a1c3530>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x10a12ef00>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 136, in main
+    await processor._turn(words)
+          │         │     └ 'Can you move my haircut to Saturday, the same— time?'
+          │         └ <function PydanticAgentProcessor._turn at 0x10d552fb0>
+          └ <bench.scenarios.Counter object at 0x10ec5d1d0>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 276, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <bench.scenarios.Counter object at 0x10ec5d1d0>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │    │        │    │      │    │        │       └ <bench.scenarios.Counter object at 0x10ec5d1d0>
+              │        │    │        │    │      │    │        └ 'Can you move my haircut to Saturday, the same— time?'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <bench.scenarios.Counter object at 0x10ec5d1d0>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_veri...
+              │        │    │        └ <bench.scenarios.Counter object at 0x10ec5d1d0>
+              │        │    └ <function run_turn at 0x10d5507d0>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='booking')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 206, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x10d550ca0>
+              └ RunStarted(step='booking')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 293, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(cache_read_tokens=3673, cache_text_read_tokens=3673, cost=Decimal('0.00018859'), details={'cached_content_tokens': 3...
+              │        │      │     │     │       └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │      │     │     └ None
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='booking', end_strategy='graceful', model_settings={'service_tier': 'priority', 'g...
+              │        │      └ SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=False, customer_veri...
+              │        └ <function _speak at 0x10d551dd0>
+              └ RunStarted(step='booking')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 523, in _speak
+    async for event in events:
+                       └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118d9e750>
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-196' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Do...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118d9e750>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb31c0>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x118cb2cf0>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118d9e750>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10c39a6c0>
+                 └ Agent(model=GoogleModel(), name='booking', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_think...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x10ed28670>
+                 │         │                    └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 59, 414356, tzinfo=datetime....
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10c378a90>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cache_read_tokens=3673, cache_text_read_tokens=3673, cost=Decimal('0.00018...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x10ed28670>
+                 │    │                 │            └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 59, 414356, tzinfo=datetime....
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=Fals...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10c378930>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cache_read_tokens=3673, cache_text_read_tokens=3673, cost=Decimal('0.00018...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 22, 59, 414356, tzinfo=datetime....
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x10ed28670>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='booking', pending=None, customer_phone='+34600111222', phone_confirmed=Fals...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb31c0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 455, in _pull_shared
+    event = await anext(events_iterator)
+                        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x10ebca440>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118db1030>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118db0d60>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bfce10>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bfc480>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bff890>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118bfd470>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object AgentStream._events_iter at 0x118db09a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 486, in _events_iter
+    event = await anext(base_iter)
+                        └ <async_generator object _ContinuationStreamedResponse._iterator_with_cancel_guard at 0x118c23e60>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 325, in _iterator_with_cancel_guard
+    async for event in iterator:
+                       └ <async_generator object _ContinuationStreamedResponse._get_event_iterator at 0x10ebb31c0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 418, in _get_event_iterator
+    async with self.model.request_stream(
+               │    │     └ <function GoogleModel.request_stream at 0x10e6fefb0>
+               │    └ GoogleModel()
+               └ _ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools=[ToolDefinition(name='read_diary...
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+                       │    └ <async_generator object GoogleModel.request_stream at 0x10ebcb520>
+                       └ <contextlib._AsyncGeneratorContextManager object at 0x10e962a50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 710, in request_stream
+    yield await self._process_streamed_response(response, model_request_parameters)  # pyright: ignore[reportArgumentType]
+                │    │                          │         └ ModelRequestParameters(function_tools=[ToolDefinition(name='read_diary', parameters_json_schema={'additionalProperties': Fals...
+                │    │                          └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7cf40>
+                │    └ <function GoogleModel._process_streamed_response at 0x10e6ffd70>
+                └ GoogleModel()
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1130, in _process_streamed_response
+    raise _map_api_error(e, self._model_name, self._provider.model_id_namespace) from e
+          │                 │    │            │    │         └ <property object at 0x10c0305e0>
+          │                 │    │            │    └ GoogleCloudProvider(name=google-cloud, base_url=https://aiplatform.googleapis.com/)
+          │                 │    │            └ GoogleModel()
+          │                 │    └ 'gemini-3.5-flash-lite'
+          │                 └ GoogleModel()
+          └ <function _map_api_error at 0x10e6fd7a0>
+
+pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: gemini-3.5-flash-lite, body: {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+2026-09-21 19:22:59.543 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Counter#19 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+3 move_same_time: a turn did not complete
+2026-09-21 19:23:02.029 | INFO     | voice.core:_hops:371 - handoff complaints -> verify (verify phone number for complaint record)
+2026-09-21 19:23:02.223 | ERROR    | voice.core:_speak:593 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1128, in _process_streamed_response
+    first_chunk = await peekable_response.peek()
+                        │                 └ <function PeekableAsyncStream.peek at 0x10b353e20>
+                        └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118d9da50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_utils.py", line 658, in peek
+    self._buffer = await anext(self._source_iter)
+    │    │                     │    └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7f880>
+    │    │                     └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118d9da50>
+    │    └ <pydantic_ai._utils.Unset object at 0x10b3542f0>
+    └ <pydantic_ai._utils.PeekableAsyncStream object at 0x118d9da50>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 8664, in stream_generator
+    response = await self._generate_content_stream(
+                     │    └ <function AsyncModels._generate_content_stream at 0x10e672770>
+                     └ <google.genai.models.AsyncModels object at 0x10eafda90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/models.py", line 7024, in _generate_content_stream
+    response_stream = await self._api_client.async_request_streamed(
+                            │    │           └ <function BaseApiClient.async_request_streamed at 0x10e58b110>
+                            │    └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+                            └ <google.genai.models.AsyncModels object at 0x10eafda90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1813, in async_request_streamed
+    response = await self._async_request(
+                     │    └ <function BaseApiClient._async_request at 0x10e58aa30>
+                     └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1729, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+                 │    └ <AsyncRetrying object at 0x10eafd810 (stop=<tenacity.stop.stop_after_attempt object at 0x10eafd590>, wait=<tenacity.wait.wait...
+                 └ <google.genai._api_client.BaseApiClient object at 0x10eafc910>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+               │    │                └ <RetryCallState 4542723920: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+               │    └ <function AsyncRetrying.iter at 0x10e4cbed0>
+               └ <AsyncRetrying object at 0x10eafd810 (stop=<tenacity.stop.stop_after_attempt object at 0x10eafd590>, wait=<tenacity.wait.wait...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+                   │      └ <RetryCallState 4542723920: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'cod...
+                   └ <function wrap_to_async_func.<locals>.inner at 0x118d4ef00>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           │     │       └ {}
+           │     └ (<RetryCallState 4542723920: attempt #1; slept for 0.0; last result: failed (ClientError 400 INVALID_ARGUMENT. {'error': {'co...
+           └ <function BaseRetrying._post_stop_check_actions.<locals>.exc_check at 0x118d4df30>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          │         └ <function RetryError.reraise at 0x10e4ba770>
+          └ RetryError(<Future at 0x118c90c50 state=finished raised ClientError>)
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          │    │            └ <function Future.result at 0x10a04d590>
+          │    └ <Future at 0x118c90c50 state=finished raised ClientError>
+          └ RetryError(<Future at 0x118c90c50 state=finished raised ClientError>)
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 443, in result
+    return self.__get_result()
+           └ None
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/concurrent/futures/_base.py", line 395, in __get_result
+    raise self._exception
+          └ None
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+                   │   │       └ {}
+                   │   └ (HttpRequest(headers={'Content-Type': 'application/json', 'x-goog-api-key': 'AQ.Ab8RN6KemcFFHoxC9Ltsl3x6ghPVI5EBY7oqi0jT8Z_sS...
+                   └ <bound method BaseApiClient._async_request_once of <google.genai._api_client.BaseApiClient object at 0x10eafc910>>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/_api_client.py", line 1630, in _async_request_once
+    await errors.APIError.raise_for_async_response(client_response)
+          │      │        │                        └ <Response [400 Bad Request]>
+          │      │        └ <classmethod(<function APIError.raise_for_async_response at 0x10e4dd220>)>
+          │      └ <class 'google.genai.errors.APIError'>
+          └ <module 'google.genai.errors' from '/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/g...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 265, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+          │   │                 │            │              └ <Response [400 Bad Request]>
+          │   │                 │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │   │                 └ 400
+          │   └ <classmethod(<function APIError.raise_error_async at 0x10e4dd380>)>
+          └ <class 'google.genai.errors.APIError'>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/google/genai/errors.py", line 287, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+          │           │            │              └ <Response [400 Bad Request]>
+          │           │            └ {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+          │           └ 400
+          └ <class 'google.genai.errors.ClientError'>
+
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 158, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     │       │   └ <function main at 0x10eaafab0>
+                     │       └ <function run at 0x10a1ccca0>
+                     └ <module 'asyncio' from '/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/__in...
+
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object main at 0x7b9c598010>
+           │      └ <function Runner.run at 0x10a1cd220>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<main() running at /Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery....
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x10a1c14e0>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x10d11b770>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x10a1c1430>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 677, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x10a1c3530>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py", line 2057, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x10a12ef00>
+    └ <Handle Task.task_wakeup()>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle Task.task_wakeup()>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle Task.task_wakeup()>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle Task.task_wakeup()>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/bench/recovery.py", line 136, in main
+    await processor._turn(words)
+          │         │     └ 'Yes, that is right.'
+          │         └ <function PydanticAgentProcessor._turn at 0x10d552fb0>
+          └ <bench.scenarios.Counter object at 0x10ed52710>
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/processor.py", line 276, in _turn
+    async for event in core.run_turn(self._call, self._agents, prompt, self._budget, self._barge):
+              │        │    │        │    │      │    │        │       │    │        │    └ Barge(hit=False)
+              │        │    │        │    │      │    │        │       │    │        └ <bench.scenarios.Counter object at 0x10ed52710>
+              │        │    │        │    │      │    │        │       │    └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │    │        │    │      │    │        │       └ <bench.scenarios.Counter object at 0x10ed52710>
+              │        │    │        │    │      │    │        └ 'Yes, that is right.'
+              │        │    │        │    │      │    └ {'concierge': Node(agent=Agent(model=GoogleModel(), name='concierge', end_strategy='graceful', model_settings={'service_tier'...
+              │        │    │        │    │      └ <bench.scenarios.Counter object at 0x10ed52710>
+              │        │    │        │    └ SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, customer_verified=...
+              │        │    │        └ <bench.scenarios.Counter object at 0x10ed52710>
+              │        │    └ <function run_turn at 0x10d5507d0>
+              │        └ <module 'voice.core' from '/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py'>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 206, in run_turn
+    async for event in _hops(
+              │        └ <function _hops at 0x10d550ca0>
+              └ RunStarted(step='verify')
+
+  File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 293, in _hops
+    async for event in _speak(call, node, prompt, budget, usage, limits, barge):
+              │        │      │     │     │       │       │      │       └ Barge(hit=False)
+              │        │      │     │     │       │       │      └ UsageLimits(request_limit=8, tool_calls_limit=8)
+              │        │      │     │     │       │       └ RunUsage(cost=Decimal('0.0010182'), details={'text_prompt_tokens': 3169, 'text_candidates_tokens': 27}, input_text_tokens=316...
+              │        │      │     │     │       └ TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)
+              │        │      │     │     └ None
+              │        │      │     └ Node(agent=Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'go...
+              │        │      └ SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, customer_verified=...
+              │        └ <function _speak at 0x10d551dd0>
+              └ RunStarted(step='verify')
+
+> File "/Users/nicoferdi/.codex/worktrees/517a/slng_voice_harness/voice/core.py", line 523, in _speak
+    async for event in events:
+                       └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118d7d9d0>
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-222' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Do...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118d7d9d0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb9900>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x118bc7b60>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x118d7d9d0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10c39a6c0>
+                 └ Agent(model=GoogleModel(), name='verify', end_strategy='graceful', model_settings={'service_tier': 'priority', 'google_thinki...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118d577f0>
+                 │         │                    └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 23, 2, 38114, tzinfo=datetime.ti...
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10c378a90>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0010182'), details={'text_prompt_tokens': 3169, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118d577f0>
+                 │    │                 │            └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 23, 2, 38114, tzinfo=datetime.ti...
+                 │    │                 └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, cu...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10c378930>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(cost=Decimal('0.0010182'), details={'text_prompt_tokens': 3169, 'text_cand...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ ModelRequestNode(request=ModelRequest(parts=[], timestamp=datetime.datetime(2026, 9, 21, 17, 23, 2, 38114, tzinfo=datetime.ti...
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x118d577f0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+          │        └ RunContext(deps=SalonCall(state=SalonState(agent='verify', pending='complaints', customer_phone='', phone_confirmed=False, cu...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x118cb9900>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ AgentStream(_raw_stream_response=_ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 455, in _pull_shared
+    event = await anext(events_iterator)
+                        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x118bf1120>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118db3f10>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x118db35b0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d37ef0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d37bc0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d37cd0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x118d37890>
+  [Previous line repeated 3 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object AgentStream._events_iter at 0x118db3100>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/result.py", line 486, in _events_iter
+    event = await anext(base_iter)
+                        └ <async_generator object _ContinuationStreamedResponse._iterator_with_cancel_guard at 0x118db4ba0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 325, in _iterator_with_cancel_guard
+    async for event in iterator:
+                       └ <async_generator object _ContinuationStreamedResponse._get_event_iterator at 0x10ebb2da0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/_continuation.py", line 418, in _get_event_iterator
+    async with self.model.request_stream(
+               │    │     └ <function GoogleModel.request_stream at 0x10e6fefb0>
+               │    └ GoogleModel()
+               └ _ContinuationStreamedResponse(model_request_parameters=ModelRequestParameters(function_tools=[], native_tools=[], output_mode...
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+                       │    └ <async_generator object GoogleModel.request_stream at 0x118bf0b80>
+                       └ <contextlib._AsyncGeneratorContextManager object at 0x118dcda90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 710, in request_stream
+    yield await self._process_streamed_response(response, model_request_parameters)  # pyright: ignore[reportArgumentType]
+                │    │                          │         └ ModelRequestParameters(function_tools=[], native_tools=[], tool_visibility={}, output_mode='tool', output_tools=[ToolDefiniti...
+                │    │                          └ <async_generator object AsyncModels.generate_content_stream.<locals>.stream_generator at 0x10eb7f880>
+                │    └ <function GoogleModel._process_streamed_response at 0x10e6ffd70>
+                └ GoogleModel()
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.venv/lib/python3.14/site-packages/pydantic_ai/models/google.py", line 1130, in _process_streamed_response
+    raise _map_api_error(e, self._model_name, self._provider.model_id_namespace) from e
+          │                 │    │            │    │         └ <property object at 0x10c0305e0>
+          │                 │    │            │    └ GoogleCloudProvider(name=google-cloud, base_url=https://aiplatform.googleapis.com/)
+          │                 │    │            └ GoogleModel()
+          │                 │    └ 'gemini-3.5-flash-lite'
+          │                 └ GoogleModel()
+          └ <function _map_api_error at 0x10e6fd7a0>
+
+pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: gemini-3.5-flash-lite, body: {'error': {'code': 400, 'message': 'Requests ending with a model turn are not supported.', 'status': 'INVALID_ARGUMENT'}}
+2026-09-21 19:23:02.251 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - Counter#20 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+3 complaint_verify: a turn did not complete
+3 complaint_verified: ok
+3 no_thanks: ok
+3 goodbye_with_a_request: ok
+6 failures; evidence: bench/raw/c3-final-20260921T172236Z.jsonl

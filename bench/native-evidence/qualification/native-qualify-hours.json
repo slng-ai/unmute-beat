@@ -1,0 +1,51 @@
+{
+  "arm": "native",
+  "scenario": "hours",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "What are your opening hours on weekdays and Saturdays? Are you open on Sunday?",
+      "seconds": 0.7946865840058308,
+      "requests": 1,
+      "ttft": [
+        0.6024631659965962
+      ],
+      "speech": "We're open Monday to Friday from nine in the morning until six in the evening, and Saturday from nine until four. We're closed on Sunday.",
+      "status": "answered",
+      "tools": [],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.6024631659965962,
+          "tools": [],
+          "text": "We're open Monday to Friday from nine in the morning until six in the evening, and Saturday from nine until four. We're closed on Sunday.",
+          "prompt": "[{'role': 'user', 'content': 'What are your opening hours on weekdays and Saturdays? Are you open on Sunday?'}]",
+          "started": 110882.976404625,
+          "usage": {
+            "candidates_token_count": 32,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 32
+              }
+            ],
+            "prompt_token_count": 1138,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1138
+              }
+            ],
+            "total_token_count": 1170,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

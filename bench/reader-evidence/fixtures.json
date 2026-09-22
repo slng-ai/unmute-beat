@@ -1,0 +1,36 @@
+{
+  "fixtures": {
+    "n1": {
+      "caller_turns": 5,
+      "requests": 9,
+      "usage_checked": 9
+    },
+    "n2": {
+      "caller_turns": 7,
+      "requests": 12,
+      "usage_checked": 11
+    },
+    "n3": {
+      "caller_turns": 9,
+      "requests": 15,
+      "usage_checked": 15
+    },
+    "n4": {
+      "caller_turns": 9,
+      "requests": 17,
+      "usage_checked": 15
+    },
+    "native": {
+      "caller_turns": 5,
+      "requests": 10,
+      "usage_checked": 0
+    }
+  },
+  "n4_request": {
+    "input": 3907,
+    "output": 19,
+    "cached": 3480,
+    "total": 3926,
+    "unit": "tokens"
+  }
+}

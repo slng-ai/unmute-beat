@@ -1,0 +1,456 @@
+{
+  "arm": "native",
+  "scenario": "complaint_verify",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "My haircut was uneven yesterday. I want a full refund.",
+      "seconds": 3.2498211249912856,
+      "requests": 6,
+      "ttft": [
+        0.5090514170005918,
+        0.5622560839983635,
+        0.4010667920083506,
+        0.4201865840004757,
+        0.5356367500062333,
+        0.4073890419967938
+      ],
+      "first_speech_seconds": 0.6193492089951178,
+      "speech": "Let me confirm who I'm speaking to.Let me confirm who I'm speaking to.I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "verify_customer",
+          "args": {}
+        },
+        {
+          "name": "finish_verify_customer_verify_customer",
+          "args": {
+            "customer_phone": "+34600111222",
+            "unserved_request": "I want a full refund because my haircut was uneven yesterday.",
+            "customer_status": "none recorded yet."
+          }
+        },
+        {
+          "name": "to_complaints",
+          "args": {}
+        },
+        {
+          "name": "verify_customer",
+          "args": {}
+        },
+        {
+          "name": "finish_verify_customer_verify_customer",
+          "args": {
+            "customer_status": "none recorded yet.",
+            "customer_phone": "+34600111222",
+            "unserved_request": "The caller wants a full refund because their haircut yesterday was uneven."
+          }
+        }
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.5090514170005918,
+          "tools": [
+            {
+              "name": "verify_customer",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}]",
+          "started": 111918.185937041,
+          "usage": {
+            "candidates_token_count": 10,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 10
+              }
+            ],
+            "prompt_token_count": 1134,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1134
+              }
+            ],
+            "total_token_count": 1144,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.5622560839983635,
+          "tools": [
+            {
+              "name": "finish_verify_customer_verify_customer",
+              "args": {
+                "customer_phone": "+34600111222",
+                "unserved_request": "I want a full refund because my haircut was uneven yesterday.",
+                "customer_status": "none recorded yet."
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'developer', 'content': 'Begin this step.'}]",
+          "started": 111918.802742291,
+          "usage": {
+            "candidates_token_count": 66,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 66
+              }
+            ],
+            "prompt_token_count": 1390,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1390
+              }
+            ],
+            "total_token_count": 1456,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.4010667920083506,
+          "tools": [
+            {
+              "name": "to_complaints",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_A\\x06Rm\\x9e\\xf3;E\\xee\\tb\\x81\\xc2\\x9e\\r\\x7f\\x1a2}G\\xda\\x1aV\\xb4\\x96/b\\xd99\\xef\\xdb\\x17\\xf2c\\xba\\xc8\\xd7\\xb5\\xf1\\x19\\x18\\xfc\\x8a3\\x8a\\xc7\\xabvz\\x9b]/\\xdf\\xb2\\xf2\\x97=\\x964\\xe2\\xd5]\\x83S\\xbe=\\x89\\x13~\\xc7\\xf1}R\\xa9>\\xb2\\xb7J', 'bookmark': {'function_call': 'call_248598'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_248598', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"unserved\"}', 'tool_call_id': 'call_248598'}, {'role': 'developer', 'content': '{\"status\": \"unserved\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_214039\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}]",
+          "started": 111919.399821541,
+          "usage": {
+            "candidates_token_count": 11,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 11
+              }
+            ],
+            "prompt_token_count": 1336,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1336
+              }
+            ],
+            "total_token_count": 1347,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.4201865840004757,
+          "tools": [
+            {
+              "name": "verify_customer",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5053342', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_5053342'}]",
+          "started": 111919.839513916,
+          "usage": {
+            "candidates_token_count": 10,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 10
+              }
+            ],
+            "prompt_token_count": 1058,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1058
+              }
+            ],
+            "total_token_count": 1068,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.5356367500062333,
+          "tools": [
+            {
+              "name": "finish_verify_customer_verify_customer",
+              "args": {
+                "customer_status": "none recorded yet.",
+                "customer_phone": "+34600111222",
+                "unserved_request": "The caller wants a full refund because their haircut yesterday was uneven."
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'developer', 'content': 'Begin this step.'}]",
+          "started": 111920.322874458,
+          "usage": {
+            "candidates_token_count": 67,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 67
+              }
+            ],
+            "prompt_token_count": 1390,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1390
+              }
+            ],
+            "total_token_count": 1457,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.4073890419967938,
+          "tools": [],
+          "text": "I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5053342', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_5053342'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd987\\xc8\\xca\\xacc\\xbfn\\x13\\xda\\xec\\xbe\\x9f\\xf3 \\xbbF\\xcc\\xd4\\x85r_K\\xab\\x05\\xa9\\xe3>l\\xb9\\xcd{X+_H\\x86<#\\x18zc\\xca\\xab+a8\\xa2c\\xd0cFp\\x0e\\x83n\\xf2C\\xbd\\xd9\\xdaLP\\xc8_5~\\xa4I\\x96\\x86K\\xfb\\xbc\\xb7/\\x1b', 'bookmark': {'function_call': 'call_219015'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_219015', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"unserved\"}', 'tool_call_id': 'call_219015'}, {'role': 'developer', 'content': '{\"status\": \"unserved\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_2934135\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}]",
+          "started": 111920.883790791,
+          "usage": {
+            "candidates_token_count": 27,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 27
+              }
+            ],
+            "prompt_token_count": 1261,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1261
+              }
+            ],
+            "total_token_count": 1288,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    },
+    {
+      "said": "Yes, that is my number.",
+      "seconds": 1.6840588750055758,
+      "requests": 3,
+      "ttft": [
+        0.4359473340009572,
+        0.4097055409947643,
+        0.46728879200236406
+      ],
+      "first_speech_seconds": 0.47867666601086967,
+      "speech": "Let me confirm who I'm speaking to.Thanks for confirming that. I'm so sorry your haircut was uneven yesterday. \n\nJust to make sure I have this right: your summary is that your haircut was uneven, and you're requesting a full refund. Should I record that for you?",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "verify_customer",
+          "args": {}
+        },
+        {
+          "name": "find_or_create_customer",
+          "args": {
+            "phone": "+34600111222"
+          }
+        }
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.4359473340009572,
+          "tools": [
+            {
+              "name": "verify_customer",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5053342', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_5053342'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd987\\xc8\\xca\\xacc\\xbfn\\x13\\xda\\xec\\xbe\\x9f\\xf3 \\xbbF\\xcc\\xd4\\x85r_K\\xab\\x05\\xa9\\xe3>l\\xb9\\xcd{X+_H\\x86<#\\x18zc\\xca\\xab+a8\\xa2c\\xd0cFp\\x0e\\x83n\\xf2C\\xbd\\xd9\\xdaLP\\xc8_5~\\xa4I\\x96\\x86K\\xfb\\xbc\\xb7/\\x1b', 'bookmark': {'function_call': 'call_219015'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_219015', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"unserved\"}', 'tool_call_id': 'call_219015'}, {'role': 'developer', 'content': '{\"status\": \"unserved\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_2934135\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd2\\xd8\\x03\\xc0\\xe4)&\\xed\\xb1\\xafs\\xd0g\\xf0\\x8ff&\\x08@\\xaaX\\xd6\\xd07p\\xb55\\xf9~\\xd6\\xc4n\\x1b\\x8a\\x86\\x80T\\x97\\x17\\x8a\\x14,\\x05\\x1fo\\xab\\x99sT\\x0f\\x9b\\x8d\\x0f\\r1B}\\xb7\\x1dE{\\xeaJ\\x93|\\xcb\\xfb@\\xe9\\t\\x8fn\\x89\\x07\\xbc\\x91\\xb6\\xcb', 'bookmark': {'text': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}}), {'role': 'assistant', 'content': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}]",
+          "started": 111921.440099166,
+          "usage": {
+            "candidates_token_count": 10,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 10
+              }
+            ],
+            "prompt_token_count": 1295,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1295
+              }
+            ],
+            "total_token_count": 1305,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.4097055409947643,
+          "tools": [
+            {
+              "name": "find_or_create_customer",
+              "args": {
+                "phone": "+34600111222"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'content': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}, {'role': 'developer', 'content': 'Begin this step.'}]",
+          "started": 111921.9184865,
+          "usage": {
+            "candidates_token_count": 31,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 31
+              }
+            ],
+            "prompt_token_count": 1424,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1424
+              }
+            ],
+            "total_token_count": 1455,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.46728879200236406,
+          "tools": [],
+          "text": "Thanks for confirming that. I'm so sorry your haircut was uneven yesterday. \n\nJust to make sure I have this right: your summary is that your haircut was uneven, and you're requesting a full refund. Should I record that for you?",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5053342', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_5053342'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd987\\xc8\\xca\\xacc\\xbfn\\x13\\xda\\xec\\xbe\\x9f\\xf3 \\xbbF\\xcc\\xd4\\x85r_K\\xab\\x05\\xa9\\xe3>l\\xb9\\xcd{X+_H\\x86<#\\x18zc\\xca\\xab+a8\\xa2c\\xd0cFp\\x0e\\x83n\\xf2C\\xbd\\xd9\\xdaLP\\xc8_5~\\xa4I\\x96\\x86K\\xfb\\xbc\\xb7/\\x1b', 'bookmark': {'function_call': 'call_219015'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_219015', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"unserved\"}', 'tool_call_id': 'call_219015'}, {'role': 'developer', 'content': '{\"status\": \"unserved\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_2934135\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd2\\xd8\\x03\\xc0\\xe4)&\\xed\\xb1\\xafs\\xd0g\\xf0\\x8ff&\\x08@\\xaaX\\xd6\\xd07p\\xb55\\xf9~\\xd6\\xc4n\\x1b\\x8a\\x86\\x80T\\x97\\x17\\x8a\\x14,\\x05\\x1fo\\xab\\x99sT\\x0f\\x9b\\x8d\\x0f\\r1B}\\xb7\\x1dE{\\xeaJ\\x93|\\xcb\\xfb@\\xe9\\t\\x8fn\\x89\\x07\\xbc\\x91\\xb6\\xcb', 'bookmark': {'text': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}}), {'role': 'assistant', 'content': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_2)\\xe7~\\xc9\\xa6\\xa6\\xe5@v\\x89\\xd0\\x02\\x0e\\xec~\\xdb\\xcd\\xffD\\xc7m+\\x00\\x1c\\n\\x93\\x9b\\r\\xdb\\xca\\xc2\\xa3t`\\x8a\\x88\\x11\\xc4O\\xd0\\xcd\\xe9\\xd0\\x15\\x8b\\x82D\\x95\\x1d\\x0b\\x83\\xd9\\x87_\\xea\\xf9\\x02\\x99\\x17\\r`d\\xf0e\\xfc\\xcb$\\xfe\\xb8\\x8b\\xbfMu~\\xb2\\xcd\\xbc', 'bookmark': {'function_call': 'call_4478784'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_4478784', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_4478784'}, {'role': 'developer', 'content': '{\"status\": \"completed\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_3849642\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}]",
+          "started": 111922.390492083,
+          "usage": {
+            "candidates_token_count": 52,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 52
+              }
+            ],
+            "prompt_token_count": 1494,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1494
+              }
+            ],
+            "total_token_count": 1546,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    },
+    {
+      "said": "Yes, that is right.",
+      "seconds": 1.084613792001619,
+      "requests": 2,
+      "ttft": [
+        0.4421487090003211,
+        0.3738550410052994
+      ],
+      "first_speech_seconds": 0.4756338750012219,
+      "speech": "I'll record that complaint.I've recorded that under reference CX0001. The salon will reply within two working days, and since you requested a full refund, a manager will be in touch. Please note that the requested resolution remains pending approval. \n\nIs there anything else I can help you with today?",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "record_complaint",
+          "args": {
+            "requested_resolution": "full refund",
+            "summary": "haircut was uneven yesterday"
+          }
+        }
+      ],
+      "business": {
+        "bookings": [],
+        "complaints": [
+          {
+            "reference": "CX0001",
+            "phone": "+34600111222",
+            "summary": "haircut was uneven yesterday",
+            "requested_resolution": "full refund"
+          }
+        ]
+      },
+      "protocol": [
+        {
+          "ttft": 0.4421487090003211,
+          "tools": [
+            {
+              "name": "record_complaint",
+              "args": {
+                "requested_resolution": "full refund",
+                "summary": "haircut was uneven yesterday"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5053342', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_5053342'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd987\\xc8\\xca\\xacc\\xbfn\\x13\\xda\\xec\\xbe\\x9f\\xf3 \\xbbF\\xcc\\xd4\\x85r_K\\xab\\x05\\xa9\\xe3>l\\xb9\\xcd{X+_H\\x86<#\\x18zc\\xca\\xab+a8\\xa2c\\xd0cFp\\x0e\\x83n\\xf2C\\xbd\\xd9\\xdaLP\\xc8_5~\\xa4I\\x96\\x86K\\xfb\\xbc\\xb7/\\x1b', 'bookmark': {'function_call': 'call_219015'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_219015', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"unserved\"}', 'tool_call_id': 'call_219015'}, {'role': 'developer', 'content': '{\"status\": \"unserved\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_2934135\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd2\\xd8\\x03\\xc0\\xe4)&\\xed\\xb1\\xafs\\xd0g\\xf0\\x8ff&\\x08@\\xaaX\\xd6\\xd07p\\xb55\\xf9~\\xd6\\xc4n\\x1b\\x8a\\x86\\x80T\\x97\\x17\\x8a\\x14,\\x05\\x1fo\\xab\\x99sT\\x0f\\x9b\\x8d\\x0f\\r1B}\\xb7\\x1dE{\\xeaJ\\x93|\\xcb\\xfb@\\xe9\\t\\x8fn\\x89\\x07\\xbc\\x91\\xb6\\xcb', 'bookmark': {'text': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}}), {'role': 'assistant', 'content': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_2)\\xe7~\\xc9\\xa6\\xa6\\xe5@v\\x89\\xd0\\x02\\x0e\\xec~\\xdb\\xcd\\xffD\\xc7m+\\x00\\x1c\\n\\x93\\x9b\\r\\xdb\\xca\\xc2\\xa3t`\\x8a\\x88\\x11\\xc4O\\xd0\\xcd\\xe9\\xd0\\x15\\x8b\\x82D\\x95\\x1d\\x0b\\x83\\xd9\\x87_\\xea\\xf9\\x02\\x99\\x17\\r`d\\xf0e\\xfc\\xcb$\\xfe\\xb8\\x8b\\xbfMu~\\xb2\\xcd\\xbc', 'bookmark': {'function_call': 'call_4478784'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_4478784', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_4478784'}, {'role': 'developer', 'content': '{\"status\": \"completed\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_3849642\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xfe\\n\\x8d\\\\G\\x02a\\xc5\\xd1\\xb2\\xdc\\x83}He\\x7fF\\xc1271\\xf7Cx\\xa8\"\\xa1!\\xfa\\x1b,W\\x9a\\xdb\\x96\\xe6!\\x82\\xec\\x93\\xcd\\xb7\\xf5\\xcf{\\xbe\\xf3\\xd7\\x8aW\\xb5\\xf1N5\\x1c\\x1ff\\x9f{6.q\\x84\\xa2\\xfd\\x1d[O \\x89;\\xc1L\\x08\\xcf\\xe7\\x04q', 'bookmark': {'text': \"Thanks for confirming that. I'm so sorry your haircut was uneven yesterday. \\n\\nJust to make sure I have this right: your summary is that your haircut was uneven, and you're requesting a full refund. Should I record that for you?\"}}), {'role': 'assistant', 'content': \"Thanks for confirming that. I'm so sorry your haircut was uneven yesterday. \\n\\nJust to make sure I have this right: your summary is that your haircut was uneven, and you're requesting a full refund. Should I record that for you?\"}, {'role': 'user', 'content': 'Yes, that is right.'}]",
+          "started": 111923.128772541,
+          "usage": {
+            "candidates_token_count": 30,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 30
+              }
+            ],
+            "prompt_token_count": 1552,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1552
+              }
+            ],
+            "total_token_count": 1582,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.3738550410052994,
+          "tools": [],
+          "text": "I've recorded that under reference CX0001. The salon will reply within two working days, and since you requested a full refund, a manager will be in touch. Please note that the requested resolution remains pending approval. \n\nIs there anything else I can help you with today?",
+          "prompt": "[{'role': 'user', 'content': 'My haircut was uneven yesterday. I want a full refund.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_5053342', 'function': {'name': 'to_complaints', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': 'COMPLETED', 'tool_call_id': 'call_5053342'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd987\\xc8\\xca\\xacc\\xbfn\\x13\\xda\\xec\\xbe\\x9f\\xf3 \\xbbF\\xcc\\xd4\\x85r_K\\xab\\x05\\xa9\\xe3>l\\xb9\\xcd{X+_H\\x86<#\\x18zc\\xca\\xab+a8\\xa2c\\xd0cFp\\x0e\\x83n\\xf2C\\xbd\\xd9\\xdaLP\\xc8_5~\\xa4I\\x96\\x86K\\xfb\\xbc\\xb7/\\x1b', 'bookmark': {'function_call': 'call_219015'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_219015', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"unserved\"}', 'tool_call_id': 'call_219015'}, {'role': 'developer', 'content': '{\"status\": \"unserved\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_2934135\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xd2\\xd8\\x03\\xc0\\xe4)&\\xed\\xb1\\xafs\\xd0g\\xf0\\x8ff&\\x08@\\xaaX\\xd6\\xd07p\\xb55\\xf9~\\xd6\\xc4n\\x1b\\x8a\\x86\\x80T\\x97\\x17\\x8a\\x14,\\x05\\x1fo\\xab\\x99sT\\x0f\\x9b\\x8d\\x0f\\r1B}\\xb7\\x1dE{\\xeaJ\\x93|\\xcb\\xfb@\\xe9\\t\\x8fn\\x89\\x07\\xbc\\x91\\xb6\\xcb', 'bookmark': {'text': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}}), {'role': 'assistant', 'content': \"I'm sorry, before we record this, could I please get your name and phone number so I can pull up your account?\"}, {'role': 'user', 'content': 'Yes, that is my number.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_2)\\xe7~\\xc9\\xa6\\xa6\\xe5@v\\x89\\xd0\\x02\\x0e\\xec~\\xdb\\xcd\\xffD\\xc7m+\\x00\\x1c\\n\\x93\\x9b\\r\\xdb\\xca\\xc2\\xa3t`\\x8a\\x88\\x11\\xc4O\\xd0\\xcd\\xe9\\xd0\\x15\\x8b\\x82D\\x95\\x1d\\x0b\\x83\\xd9\\x87_\\xea\\xf9\\x02\\x99\\x17\\r`d\\xf0e\\xfc\\xcb$\\xfe\\xb8\\x8b\\xbfMu~\\xb2\\xcd\\xbc', 'bookmark': {'function_call': 'call_4478784'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_4478784', 'function': {'name': 'verify_customer', 'arguments': '{}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"completed\"}', 'tool_call_id': 'call_4478784'}, {'role': 'developer', 'content': '{\"status\": \"completed\"}'}, {'role': 'developer', 'content': '{\"type\": \"async_tool\", \"status\": \"finished\", \"tool_call_id\": \"call_3849642\", \"description\": \"This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id. You must convey this result to the user, even if the conversation has moved on. Never leave it unsaid. First finish responding to whatever the user is talking about now, then deliver the result at the end of your response. How you deliver it depends on its size: if the result is short, simply state it; if it is long or complex, name what has come back and offer the details. Convey it once; do not repeat it in later responses.\", \"result\": \"{\\\\\"status\\\\\": \\\\\"ok\\\\\"}\"}'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xfe\\n\\x8d\\\\G\\x02a\\xc5\\xd1\\xb2\\xdc\\x83}He\\x7fF\\xc1271\\xf7Cx\\xa8\"\\xa1!\\xfa\\x1b,W\\x9a\\xdb\\x96\\xe6!\\x82\\xec\\x93\\xcd\\xb7\\xf5\\xcf{\\xbe\\xf3\\xd7\\x8aW\\xb5\\xf1N5\\x1c\\x1ff\\x9f{6.q\\x84\\xa2\\xfd\\x1d[O \\x89;\\xc1L\\x08\\xcf\\xe7\\x04q', 'bookmark': {'text': \"Thanks for confirming that. I'm so sorry your haircut was uneven yesterday. \\n\\nJust to make sure I have this right: your summary is that your haircut was uneven, and you're requesting a full refund. Should I record that for you?\"}}), {'role': 'assistant', 'content': \"Thanks for confirming that. I'm so sorry your haircut was uneven yesterday. \\n\\nJust to make sure I have this right: your summary is that your haircut was uneven, and you're requesting a full refund. Should I record that for you?\"}, {'role': 'user', 'content': 'Yes, that is right.'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\x0b`\\x1b\\xbf\\xc2l\\x12\\xfa\\xa0x0\\xb6\\xd6\\xc3\\xe6W\\xc4\\xf3\\xb1\\xb9dB\\xdf\\x94\\xc28w(\\xf3L\\x80\\xcb\\x9aZ\\x0f\\x01\\xe0\\x0f}\\x0eE~>\\x9b\\x1a\\xe4\\xf4\\x1bb\\xbb\\xb9\\x8d\".\\xbe\\xe7(\\xfa5\\xe4\\xe7\\xb1\\x93\\x01\\xeeT%F\\x13\\x08\\xcd\\x968h\\xb9\\xa4\\xd3\\x9a', 'bookmark': {'function_call': 'call_2840976'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_2840976', 'function': {'name': 'record_complaint', 'arguments': '{\"requested_resolution\": \"full refund\", \"summary\": \"haircut was uneven yesterday\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"complaint_id\": \"CX0001\", \"status\": \"recorded\", \"complaint\": {\"complaint_id\": \"CX0001\", \"summary\": \"haircut was uneven yesterday\", \"requested_resolution\": \"full refund\"}}', 'tool_call_id': 'call_2840976'}]",
+          "started": 111923.606754375,
+          "usage": {
+            "candidates_token_count": 60,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 60
+              }
+            ],
+            "prompt_token_count": 1612,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1612
+              }
+            ],
+            "total_token_count": 1672,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [
+    "complete phone readback missing before verification"
+  ]
+}

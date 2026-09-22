@@ -1,0 +1,12 @@
+unformatted: File would be reformatted
+   --> bench/continuations.py:128:27
+    |
+127 |             assert any(
+    -                 re.search(r'\b(?:when|how (?:long|many days)|what (?:day|date)|which (?:day|date))\b', question)
+128 +                 re.search(
+129 +                     r'\b(?:when|how (?:long|many days)|what (?:day|date)|which (?:day|date))\b', question
+130 +                 )
+131 |                 for question in questions
+    |
+
+1 file would be reformatted, 72 files already formatted

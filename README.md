@@ -106,9 +106,9 @@ No pytest and no network: they script the model, so they are fast and free.
 uv run python -m tests
 ```
 
-All ten modules, with live model requests disabled rather than merely unused,
+All 13 modules, with live model requests disabled rather than merely unused,
 so a missed override raises instead of billing. No `.env` needed. It prints
-`all 10 modules ok` and exits 0, or names what failed and exits 1.
+`all 13 modules ok` and exits 0, or names what failed and exits 1.
 
 One at a time, which is what you want while working on one thing:
 
@@ -123,6 +123,8 @@ uv run --env-file .env python -m tests.test_flow    # guards and conflicts, at e
 uv run --env-file .env python -m tests.test_budget  # one allowance per caller turn
 uv run --env-file .env python -m tests.test_bench   # the measurement, measured
 uv run --env-file .env python -m tests.test_core    # the core and the adapter agree
+uv run --env-file .env python -m tests.test_history # projections and interrupted input/receipts
+uv run --env-file .env python -m tests.test_recovery # Pipecat queue and complaint approval
 ```
 
 Each prints `ok` or raises on the first failure.
@@ -130,6 +132,35 @@ Each prints `ok` or raises on the first failure.
 Run singly they are safe by convention: every agent they touch is overridden
 with a scripted model. Run through `python -m tests` they are safe by
 enforcement. Prefer the latter before committing.
+
+The real-model recovery checks use fresh in-memory salon fixtures and no audio:
+
+```bash
+uv run --env-file .env python -m bench.recovery --repeats 3 --label recovery
+uv run --env-file .env python -m bench.continuations --repeats 3
+```
+
+The second command tests trace-derived complaint completion, a free-service
+request attached to an upcoming booking, and split phone input. Its prefix
+cancellations use a blocked scripted model; Gemini performs
+the final phone readback and verification. This does not measure microphone
+endpointing or client audio playout.
+
+The [current POC assessment](bench/poc-assessment-20260921.md) records the typed
+complaint/verification repair, native Pipecat comparison and latest voice acceptance.
+Complaints uses structured output functions; its guidance never offers
+a free redo, and a caller-requested remedy remains pending salon review.
+
+The [native comparison](bench/native-evidence/README.md) passed 100/100 POC versus
+82/100 native scripted calls, with mixed latency results. It uses a documented
+native overlay and different tool contracts; it does not isolate framework overhead.
+The [adoption assessment](bench/native-evidence/ADOPTION.md) explains which guarantees
+the typed POC adds while preserving both implementations. The later
+[“Go for it” repair](bench/approval-evidence/README.md) fixes the approval loop
+found in fresh microphone testing. Full POC acceptance remains open as documented.
+The [earlier Phase 01 report](bench/poc-status-20260921.md) retains historical evidence.
+The [complaint-stall follow-up](bench/complaint-stall-20260921.md) explains the
+discarded readback, acknowledgement continuation and subsequent prompt simplification.
 
 ## 6. Switch agencies
 
@@ -241,12 +272,30 @@ nothing else, which is why a Pydantic AI agent can sit here at all.
 
 Pipecat's own `LLMContext` still fills up beside the agents' history. No model
 reads it; it is the aggregators' record of what was actually *spoken*, and
-`note_spoken` uses it to cut the agents' history down to what the caller heard
-when they talk over the bot.
+`note_spoken` reconciles identified speech segments with its playback estimate.
+Generated text and business receipts remain available separately.
+
+`Node.history='messages'` projects caller turns and fixed/model speech once by
+ID. `reset` hides earlier conversation for that run, preserves its active tool
+loop, and retains its conversation for subsequent steps. A prerequisite return
+restores the owner's checkpoint plus an application-owned completed/unserved
+status; its private conversation stays in the call transcript and audit history.
+
+Typed `TemplateStr` instructions re-render named state values on every provider
+request. This controls saved-value injection, not redaction: a phone number
+already spoken remains in retained conversation. Playback callbacks use run and
+segment identities; ambiguous unframed TTS callbacks are ignored. Pipecat's text
+is a runtime estimate, not proof of client audio playout. `tests.test_history`
+checks these request boundaries through both core and adapter.
 
 ## Steps are agents
 
 Each agent has its own prompt file, its own tools, and can have its own model.
+General salon questions stay at the front desk without verification. Booking
+requests (make, move or cancel) and complaints both require phone verification
+before their agent starts. The graph resumes the original request afterward;
+callers already verified in this call go straight to the requested step.
+
 A run ends one of three ways:
 
 - **plain text** — streams to TTS, the turn is over, the agent stays current;
@@ -290,8 +339,8 @@ and which of its edges cost nothing:
 
 `voice.harness.route` is the whole graph, and it never runs a model:
 
-- **A prerequisite is interposed.** The front desk asks for `booking`; nobody is
-  identified; the graph pushes `booking`, enters `verify`, and the finisher there
+- **A prerequisite is interposed.** The front desk asks for `booking` or `complaints`;
+  nobody is identified; the graph remembers that step, enters `verify`, and the finisher there
   pops it back. No request decides that, and no prompt states the ordering.
 - **Each step's `hand_over` carries only its own exits**, as a narrowed
   `Literal` rebuilt per turn from the live state. An illegal transition is not
@@ -353,3 +402,15 @@ model reads it. An unverified caller's concierge prompt does not contain the
 whether a slot has already passed, what a booking sounds like said out loud,
 what to say when a booking lands. None of it is asked of a model, so none of it
 can be got wrong.
+
+
+### Code-only optimization evidence
+
+The salon agents share one provider client. Known readbacks and clear tracked
+approvals can advance without a model request, through the same validation and
+write-recovery handlers. Booking speech now uses typed availability, clarification
+and receipt outputs. Existing prompts and knowledge are unchanged by this work.
+
+The current offline suite has 14 modules. See
+[the optimization evidence](bench/optimization-evidence/README.md) for live replay,
+matched comparison, retained failures and remaining audio acceptance conditions.

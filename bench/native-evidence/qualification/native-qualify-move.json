@@ -1,0 +1,187 @@
+{
+  "arm": "native",
+  "scenario": "move",
+  "clock": "2026-09-21T10:00:00+02:00",
+  "mode": "transcript",
+  "rows": [
+    {
+      "said": "Move my haircut to Saturday at the same time.",
+      "seconds": 2.39208254100231,
+      "requests": 4,
+      "ttft": [
+        0.5665510830003768,
+        0.4917973749979865,
+        0.6832168340042699,
+        0.40430258300330024
+      ],
+      "speech": "I'll check the diary.That exact time isn't available on Saturday, but I have 2:00 PM and 2:30 PM. Would either of those work for your haircut?",
+      "status": "answered",
+      "tools": [
+        {
+          "name": "book",
+          "args": {}
+        },
+        {
+          "name": "find_slots",
+          "args": {
+            "prefer": "same time",
+            "service": "haircut",
+            "date": "Saturday"
+          }
+        },
+        {
+          "name": "save_booking",
+          "args": {
+            "slot_id": "2026-09-26T1500|haircut",
+            "booking_id": "BK0001",
+            "action": "move",
+            "additional": false,
+            "confirmed": true
+          }
+        }
+      ],
+      "business": {
+        "bookings": [
+          {
+            "booking_id": "BK0001",
+            "service": "haircut",
+            "date": "2026-09-25",
+            "time": "15:00",
+            "spoken": "Friday at 3:00 PM"
+          }
+        ],
+        "complaints": []
+      },
+      "protocol": [
+        {
+          "ttft": 0.5665510830003768,
+          "tools": [
+            {
+              "name": "book",
+              "args": {}
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}]",
+          "started": 110953.568057,
+          "usage": {
+            "candidates_token_count": 8,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 8
+              }
+            ],
+            "prompt_token_count": 1179,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1179
+              }
+            ],
+            "total_token_count": 1187,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.4917973749979865,
+          "tools": [
+            {
+              "name": "find_slots",
+              "args": {
+                "prefer": "same time",
+                "service": "haircut",
+                "date": "Saturday"
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}]",
+          "started": 110954.235206166,
+          "usage": {
+            "candidates_token_count": 30,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 30
+              }
+            ],
+            "prompt_token_count": 1469,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 1469
+              }
+            ],
+            "total_token_count": 1499,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.6832168340042699,
+          "tools": [
+            {
+              "name": "save_booking",
+              "args": {
+                "slot_id": "2026-09-26T1500|haircut",
+                "booking_id": "BK0001",
+                "action": "move",
+                "additional": false,
+                "confirmed": true
+              }
+            }
+          ],
+          "text": "",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xdf\\x03\\xde\\xc13\\xc3tFw\\xd1\\xf9\\x16\\x99\\xd6a&S0\\x12\\xf8\\xcf\\xbdVH\\x94\\xc4\\xb1J\\x7f \\x9a\\x15\\xa0\\xed\\xd6\\xa3\\x9eu\\x87\\x8bMt\\xe0e\\x86\\xa0\\xe4\\xe5\\x1f\\xa0\\xd6\\x0fH\\x03\\xd8e\\xf6^J\\x93\\x97w\\xa0<\\x94\\xe7\\x99\\xdev\\x18:>!\\x7fb\\xe2s\\xcf', 'bookmark': {'function_call': 'call_3759600'}}), {'role': 'assistant', 'content': \"I'll check the diary.\"}, {'role': 'assistant', 'tool_calls': [{'id': 'call_3759600', 'function': {'name': 'find_slots', 'arguments': '{\"prefer\": \"same time\", \"service\": \"haircut\", \"date\": \"Saturday\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"ok\", \"day\": \"Saturday\", \"date\": \"2026-09-26\", \"bookings\": [{\"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-09-25\", \"time\": \"15:00\", \"spoken\": \"Friday at 3:00 PM\"}], \"slots\": [{\"slot_id\": \"2026-09-26T0900|haircut\", \"service\": \"haircut\", \"time\": \"09:00\", \"spoken\": \"Saturday at 9:00 AM\"}, {\"slot_id\": \"2026-09-26T0930|haircut\", \"service\": \"haircut\", \"time\": \"09:30\", \"spoken\": \"Saturday at 9:30 AM\"}, {\"slot_id\": \"2026-09-26T1000|haircut\", \"service\": \"haircut\", \"time\": \"10:00\", \"spoken\": \"Saturday at 10:00 AM\"}, {\"slot_id\": \"2026-09-26T1030|haircut\", \"service\": \"haircut\", \"time\": \"10:30\", \"spoken\": \"Saturday at 10:30 AM\"}, {\"slot_id\": \"2026-09-26T1100|haircut\", \"service\": \"haircut\", \"time\": \"11:00\", \"spoken\": \"Saturday at 11:00 AM\"}, {\"slot_id\": \"2026-09-26T1130|haircut\", \"service\": \"haircut\", \"time\": \"11:30\", \"spoken\": \"Saturday at 11:30 AM\"}, {\"slot_id\": \"2026-09-26T1200|haircut\", \"service\": \"haircut\", \"time\": \"12:00\", \"spoken\": \"Saturday at 12:00 PM\"}, {\"slot_id\": \"2026-09-26T1230|haircut\", \"service\": \"haircut\", \"time\": \"12:30\", \"spoken\": \"Saturday at 12:30 PM\"}, {\"slot_id\": \"2026-09-26T1300|haircut\", \"service\": \"haircut\", \"time\": \"13:00\", \"spoken\": \"Saturday at 1:00 PM\"}, {\"slot_id\": \"2026-09-26T1330|haircut\", \"service\": \"haircut\", \"time\": \"13:30\", \"spoken\": \"Saturday at 1:30 PM\"}, {\"slot_id\": \"2026-09-26T1400|haircut\", \"service\": \"haircut\", \"time\": \"14:00\", \"spoken\": \"Saturday at 2:00 PM\"}, {\"slot_id\": \"2026-09-26T1430|haircut\", \"service\": \"haircut\", \"time\": \"14:30\", \"spoken\": \"Saturday at 2:30 PM\"}], \"price_euros\": 28}', 'tool_call_id': 'call_3759600'}]",
+          "started": 110954.734148416,
+          "usage": {
+            "candidates_token_count": 61,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 61
+              }
+            ],
+            "prompt_token_count": 2030,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 2030
+              }
+            ],
+            "total_token_count": 2091,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        },
+        {
+          "ttft": 0.40430258300330024,
+          "tools": [],
+          "text": "That exact time isn't available on Saturday, but I have 2:00 PM and 2:30 PM. Would either of those work for your haircut?",
+          "prompt": "[{'role': 'user', 'content': 'Move my haircut to Saturday at the same time.'}, {'role': 'developer', 'content': 'Begin this step.'}, {'role': 'assistant', 'content': \"I'll check the diary.\"}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_\\xdf\\x03\\xde\\xc13\\xc3tFw\\xd1\\xf9\\x16\\x99\\xd6a&S0\\x12\\xf8\\xcf\\xbdVH\\x94\\xc4\\xb1J\\x7f \\x9a\\x15\\xa0\\xed\\xd6\\xa3\\x9eu\\x87\\x8bMt\\xe0e\\x86\\xa0\\xe4\\xe5\\x1f\\xa0\\xd6\\x0fH\\x03\\xd8e\\xf6^J\\x93\\x97w\\xa0<\\x94\\xe7\\x99\\xdev\\x18:>!\\x7fb\\xe2s\\xcf', 'bookmark': {'function_call': 'call_3759600'}}), {'role': 'assistant', 'content': \"I'll check the diary.\"}, {'role': 'assistant', 'tool_calls': [{'id': 'call_3759600', 'function': {'name': 'find_slots', 'arguments': '{\"prefer\": \"same time\", \"service\": \"haircut\", \"date\": \"Saturday\"}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"ok\", \"day\": \"Saturday\", \"date\": \"2026-09-26\", \"bookings\": [{\"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-09-25\", \"time\": \"15:00\", \"spoken\": \"Friday at 3:00 PM\"}], \"slots\": [{\"slot_id\": \"2026-09-26T0900|haircut\", \"service\": \"haircut\", \"time\": \"09:00\", \"spoken\": \"Saturday at 9:00 AM\"}, {\"slot_id\": \"2026-09-26T0930|haircut\", \"service\": \"haircut\", \"time\": \"09:30\", \"spoken\": \"Saturday at 9:30 AM\"}, {\"slot_id\": \"2026-09-26T1000|haircut\", \"service\": \"haircut\", \"time\": \"10:00\", \"spoken\": \"Saturday at 10:00 AM\"}, {\"slot_id\": \"2026-09-26T1030|haircut\", \"service\": \"haircut\", \"time\": \"10:30\", \"spoken\": \"Saturday at 10:30 AM\"}, {\"slot_id\": \"2026-09-26T1100|haircut\", \"service\": \"haircut\", \"time\": \"11:00\", \"spoken\": \"Saturday at 11:00 AM\"}, {\"slot_id\": \"2026-09-26T1130|haircut\", \"service\": \"haircut\", \"time\": \"11:30\", \"spoken\": \"Saturday at 11:30 AM\"}, {\"slot_id\": \"2026-09-26T1200|haircut\", \"service\": \"haircut\", \"time\": \"12:00\", \"spoken\": \"Saturday at 12:00 PM\"}, {\"slot_id\": \"2026-09-26T1230|haircut\", \"service\": \"haircut\", \"time\": \"12:30\", \"spoken\": \"Saturday at 12:30 PM\"}, {\"slot_id\": \"2026-09-26T1300|haircut\", \"service\": \"haircut\", \"time\": \"13:00\", \"spoken\": \"Saturday at 1:00 PM\"}, {\"slot_id\": \"2026-09-26T1330|haircut\", \"service\": \"haircut\", \"time\": \"13:30\", \"spoken\": \"Saturday at 1:30 PM\"}, {\"slot_id\": \"2026-09-26T1400|haircut\", \"service\": \"haircut\", \"time\": \"14:00\", \"spoken\": \"Saturday at 2:00 PM\"}, {\"slot_id\": \"2026-09-26T1430|haircut\", \"service\": \"haircut\", \"time\": \"14:30\", \"spoken\": \"Saturday at 2:30 PM\"}], \"price_euros\": 28}', 'tool_call_id': 'call_3759600'}, LLMSpecificMessage(llm='google', message={'type': 'thought_signature', 'signature': b'\\x01\\x8f=k_b\\xe8\\xcbAz_&\\x07\\x93\\xbcF\\x1b:k\\xf6`\\xccq\\xa5\\xb8_\\x99\\x8e7\\xe1DD|\\xc2W\\xc7\\x12\\x92\\x94\\x8e\\xdc\\xfbQ\\x88\\xd7\\x17)\\xde(|d\\x90\\xe0?z\\xacV\\xa4\\xee\\xa8\\xabT)W\\xb3|p\\xa5\\x80y\\x11\\xa6\\x95OD\\xec}\\xd8wA\\x98d\\x92', 'bookmark': {'function_call': 'call_3662755'}}), {'role': 'assistant', 'tool_calls': [{'id': 'call_3662755', 'function': {'name': 'save_booking', 'arguments': '{\"slot_id\": \"2026-09-26T1500|haircut\", \"booking_id\": \"BK0001\", \"action\": \"move\", \"additional\": false, \"confirmed\": true}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{\"status\": \"invalid\", \"summary\": \"That is not a slot this diary is currently offering this caller. Read the diary again and use one of the slots it returns now.\"}', 'tool_call_id': 'call_3662755'}]",
+          "started": 110955.439978875,
+          "usage": {
+            "candidates_token_count": 36,
+            "candidates_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 36
+              }
+            ],
+            "prompt_token_count": 2109,
+            "prompt_tokens_details": [
+              {
+                "modality": "TEXT",
+                "token_count": 2109
+              }
+            ],
+            "total_token_count": 2145,
+            "traffic_type": "ON_DEMAND_PRIORITY"
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [
+    "wrong booking count, date or time"
+  ]
+}

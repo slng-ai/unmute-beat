@@ -8,9 +8,12 @@ processor knows only what is here.
 from __future__ import annotations
 
 import contextvars
+import json
 import random
 import time
 from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack, asynccontextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal, NamedTuple, Protocol, runtime_checkable
 from uuid import uuid4
@@ -19,7 +22,8 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, TypeAdapter, create_model
 from pydantic_ai import Agent, ModelRetry, Tool
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.messages import ModelMessage, ToolCallPart, UserPromptPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models import Model
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 SayFn = Callable[[str], Awaitable[None]]
@@ -141,6 +145,10 @@ class Spoken:
     at: float = field(default_factory=time.perf_counter)
     # Cut down to what the caller actually heard, once the runtime says so.
     interrupted: bool = False
+    turn: int = 0
+    response: str = ''
+    generated: str = ''
+    delivery: Literal['submitted', 'runtime-estimate'] = 'submitted'
 
 
 @dataclass
@@ -187,11 +195,22 @@ def request_clock() -> Hooks:
     return hooks
 
 
+@dataclass(frozen=True)
+class Checkpoint:
+    """One prerequisite owner; nested prerequisites are forbidden by the graph."""
+
+    owner: str
+    messages: list[ModelMessage]
+    speech_ids: frozenset[str]
+    heard: str
+
+
 class Handoff(BaseModel):
     """Where the caller goes next. Agencies return this from their `hand_over` action."""
 
     to: str
     because: str = Field(default='', description='One short sentence: what the caller wants. Never spoken.')
+    status: Literal['handoff', 'completed', 'unserved'] = 'handoff'
 
 
 @runtime_checkable
@@ -317,15 +336,49 @@ class CallContext(BaseModel):
     # Why this call ended, set by whoever established it. Empty while it has
     # not: an absent reason is not "the caller rang off".
     _ended: str = PrivateAttr(default='')
-    # Every turn before this one, as the caller experienced it. See
-    # `transcript`, which adds the turn still running.
-    _record: list[dict[str, str]] = PrivateAttr(default_factory=list)
     # Every stretch of speech gets a number, so the ledger entry and the
     # audio context that synthesised it can be matched up afterwards.
     _segments: int = PrivateAttr(default=0)
     # Which run of the agency is going on inside this turn. More than one
     # when a caller speaks again before the agency answers.
     _attempt: int = PrivateAttr(default=0)
+    _speech_history: list[Spoken] = PrivateAttr(default_factory=list)
+    _inputs: dict[int, str] = PrivateAttr(default_factory=dict)
+    _response: str = PrivateAttr(default='')
+    _protocol: list[ModelMessage] = PrivateAttr(default_factory=list)
+    _hidden_speech: set[str] = PrivateAttr(default_factory=set)
+    _checkpoint: Checkpoint | None = PrivateAttr(default=None)
+    _return_status: str = PrivateAttr(default='')
+    _retained_turns: set[int] = PrivateAttr(default_factory=set)
+
+    def retain_input(self) -> None:
+        """Accept a model-free turn once, without inventing a provider exchange."""
+        if self.turn in self._retained_turns:
+            return
+        message = ModelRequest(parts=[UserPromptPart(self.heard)], metadata={'caller_turn': self.turn})
+        self.messages.append(message)
+        self._protocol.append(deepcopy(message))
+        self._retained_turns.add(self.turn)
+
+    def retain_action(self, name: str, receipt: dict) -> None:
+        """Retain a validated application result before speech can be cancelled.
+
+        Model tools already retain their SDK exchanges. A local action has no
+        model tool call, so its receipt is explicitly an application instruction.
+        """
+        if not self._response.endswith(':application'):
+            return
+        message = ModelRequest(
+            parts=[SystemPromptPart(content=f'Application result {name}: {json.dumps(receipt)}')],
+            metadata={'application_action': name, 'caller_turn': self.turn},
+        )
+        self.messages.append(message)
+        self._protocol.append(deepcopy(message))
+
+    @property
+    def all_spoken(self) -> list[Spoken]:
+        """Canonical segments, including old turns that can receive late playback."""
+        return [*self._speech_history, *self.spoken]
 
     @property
     def id(self) -> str:
@@ -386,6 +439,9 @@ class CallContext(BaseModel):
                     origin=origin or ('model' if kind == 'model' else 'confirmation'),  # ty: ignore[invalid-argument-type]
                     id=self.next_segment(),
                     attempt=self._attempt,
+                    turn=self._turn,
+                    response=self._response,
+                    generated=text,
                     tool_call_id=tool_call_id,
                 )
             )
@@ -416,9 +472,19 @@ class CallContext(BaseModel):
         """
         if not text:
             return
+        if self._open is not None and self._open.response != self._response:
+            self.close_model_text()
         if self._open is None:
-            self._open = Spoken('model', '', id=self.next_segment(), attempt=self._attempt)
+            self._open = Spoken(
+                'model',
+                '',
+                id=self.next_segment(),
+                attempt=self._attempt,
+                turn=self._turn,
+                response=self._response,
+            )
         self._open.text += text
+        self._open.generated += text
 
     def close_model_text(self) -> None:
         """End the model segment now streaming, if there is one."""
@@ -426,20 +492,43 @@ class CallContext(BaseModel):
             self._spoken.append(self._open)
         self._open = None
 
-    def note_heard(self, delivered: str) -> None:
-        """Cut this turn's last model segment down to what was actually heard.
-
-        Generated text is not heard text. The runtime is the only thing that
-        knows where speech stopped, so it says, and the ledger stops claiming
-        the rest of the sentence.
-        """
-        # The open segment first: an interruption lands while the model is
-        # still mid-sentence, which is exactly when it is the one being cut.
-        self.close_model_text()
-        for segment in reversed(self._spoken):
-            if segment.kind == 'model':
-                segment.text, segment.interrupted = delivered, True
-                return
+    def note_heard(self, delivered: str, *, segment_ids: tuple[str, ...] = ()) -> bool:
+        """Apply a runtime-estimated prefix only to the identified speech segments."""
+        if not segment_ids:
+            segment_ids = tuple(s.id for s in self.spoken[-1:])
+        by_id = {s.id: s for s in self.all_spoken}
+        if not segment_ids or any(i not in by_id for i in segment_ids):
+            return False
+        selected = [by_id[i] for i in segment_ids]
+        if len(set(segment_ids)) != len(segment_ids):
+            return False
+        remaining = delivered.strip()
+        updates = []
+        for segment in selected:
+            text = segment.generated or segment.text
+            stripped = text.strip()
+            if remaining.startswith(stripped):
+                updates.append(text)
+                remaining = remaining[len(stripped) :].lstrip()
+            elif stripped.startswith(remaining):
+                updates.append(remaining)
+                remaining = ''
+            else:
+                return False
+        if remaining:
+            return False
+        if any(
+            s.delivery == 'runtime-estimate' and not s.text.strip().startswith(text.strip())
+            for s, text in zip(selected, updates, strict=True)
+        ):
+            return False
+        if self._open is not None and self._open.id in segment_ids:
+            self.close_model_text()
+        for segment, text in zip(selected, updates, strict=True):
+            segment.text = text
+            segment.interrupted = text != segment.generated
+            segment.delivery = 'runtime-estimate'
+        return True
 
     def unbacked_claim(self) -> str:
         """Model speech this turn asserting something only the business can assert. '' when clean.
@@ -456,18 +545,16 @@ class CallContext(BaseModel):
         """Whether this turn has already changed the business. Base: it has no business."""
         return False
 
-    def delivered(self, heard: str) -> bool:
+    def delivered(self, heard: str, excluding: frozenset[int] = frozenset()) -> bool:
         """Whether this utterance reached a model and is in the history it keeps.
 
-        A turn the runtime cancels outright leaves no trace of what the
-        caller said: the task carrying the run is cancelled, so the core's
-        own barge-in path -- which keeps `all_messages()` -- never runs. On
-        the live call of 2026-09-21 14:59 "I wanted to book a haircut
-        appointment" was lost exactly that way, and two agents later the
-        caller was asked which service they wanted.
+        The core retains SDK messages across native cancellation. Input that
+        never entered an SDK run still needs carrying into the next turn;
+        identity checks distinguish a newly accepted repeated utterance from
+        the same words in an older turn.
         """
         return any(
-            isinstance(part, UserPromptPart) and part.content == heard
+            isinstance(part, UserPromptPart) and part.content == heard and id(part) not in excluding
             for message in self.messages
             for part in message.parts
         )
@@ -483,14 +570,14 @@ class CallContext(BaseModel):
         segment that went out to them, fixed lines and model speech alike,
         cut down to what they heard where the runtime could tell us.
         """
-        return [*self._record, *self._this_turn()]
-
-    def _this_turn(self) -> list[dict[str, str]]:
-        """The current turn's half of the transcript, which the ledger still holds."""
-        caller = [{'said': 'caller', 'text': self.heard}] if self.heard.strip() else []
-        return caller + [
-            {'said': segment.kind, 'text': segment.text} for segment in self.spoken if segment.text.strip()
-        ]
+        result = []
+        for turn in sorted(set(self._inputs) | {s.turn for s in self.all_spoken}):
+            if text := self._inputs.get(turn):
+                result.append({'said': 'caller', 'text': text})
+            result.extend(
+                {'said': s.kind, 'text': s.text} for s in self.all_spoken if s.turn == turn and s.text
+            )
+        return result
 
     def claims_completion(self, clause: str) -> bool:
         """Whether this clause, on its own, tells the caller the business has changed.
@@ -621,10 +708,13 @@ class CallContext(BaseModel):
         # to make room for this one's. The ledger is per turn because that is
         # what a turn's own speech is; the record is per call because that is
         # what somebody reading the call back wants.
-        self._record.extend(self._this_turn())
+        self.close_model_text()
+        self._speech_history.extend(self._spoken)
         self.heard = heard
         self._turn += 1
+        self._inputs[self._turn] = heard
         self._attempt = 0
+        self._response = ''
         self._requests.clear()
         self._spoken.clear()
         self._open = None
@@ -803,6 +893,14 @@ class Exit[S: VoiceState](NamedTuple):
 
 
 @dataclass(frozen=True)
+class LocalAction:
+    """An application-decided action using the agency's normal validated executor."""
+
+    name: str
+    run: Callable[[], Awaitable[object]]
+
+
+@dataclass(frozen=True)
 class Node[S: VoiceState]:
     """One step: the agent that runs it, where it may send the caller, and what
     has to be true before it runs at all.
@@ -834,6 +932,8 @@ class Node[S: VoiceState]:
     # `CallContext.claims_completion`. Costs one clause of streaming latency,
     # on these steps only, and only until something is actually written.
     guarded: bool = False
+    # Structured-only steps speak through output functions, never provider preambles.
+    model_speech: bool = True
     # What conversation this step is sent. `messages` is the delivered
     # conversation so far, which is what an agency whose steps are one
     # continuous call wants. `reset` sends none of it: the step gets its own
@@ -841,6 +941,20 @@ class Node[S: VoiceState]:
     # caller said to anybody else. Contract C3's two modes, and the only two
     # this harness implements -- anything finer is a policy nobody has needed.
     history: Literal['messages', 'reset'] = 'messages'
+    advance: Callable[[Any], LocalAction | None] | None = None
+
+
+@asynccontextmanager
+async def model_clients(nodes: dict[str, Node[Any]]):
+    """Own each distinct provider once per active session; SDK reference counts overlapping sessions."""
+    seen = set()
+    async with AsyncExitStack() as stack:
+        for node in nodes.values():
+            model = node.agent.model
+            if isinstance(model, Model) and id(model) not in seen:
+                seen.add(id(model))
+                await stack.enter_async_context(model)
+        yield
 
 
 def route[S: VoiceState](state: S, nodes: dict[str, Node[S]], to: str) -> tuple[str, str | None]:

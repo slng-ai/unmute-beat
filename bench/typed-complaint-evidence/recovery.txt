@@ -1,0 +1,38 @@
+2026-09-21 21:50:52.260 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+1 select_01: ok
+1 select_pm: ok
+1 select_word: ok
+2026-09-21 21:50:55.615 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (The caller wants to move an existing booking.)
+1 move_same_time: ok
+2026-09-21 21:50:57.455 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (The caller is complaining about a bad haircut.)
+2026-09-21 21:50:59.351 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+1 complaint_verify: ok
+2026-09-21 21:51:04.394 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (The caller has a general question or wants another service.)
+1 complaint_verified: ok
+1 no_thanks: ok
+1 goodbye_with_a_request: ok
+2 select_01: ok
+2 select_pm: ok
+2 select_word: ok
+2026-09-21 21:51:08.787 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (The caller wants to move an existing appointment to Saturday.)
+2 move_same_time: ok
+2026-09-21 21:51:11.186 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Caller is complaining about an uneven haircut.)
+2026-09-21 21:51:13.208 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+2 complaint_verify: ok
+2026-09-21 21:51:17.717 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (The caller wants to ask about something else unrelated to the complaint.)
+2 complaint_verified: ok
+2 no_thanks: ok
+2 goodbye_with_a_request: ok
+3 select_01: ok
+3 select_pm: ok
+3 select_word: ok
+2026-09-21 21:51:21.972 | INFO     | voice.core:_hops:376 - handoff concierge -> booking (The caller wants to move an existing appointment to Saturday.)
+3 move_same_time: did not move the existing booking to Saturday at 09:00
+2026-09-21 21:51:23.279 | INFO     | voice.core:_hops:376 - handoff concierge -> verify (Customer is complaining about an uneven haircut.)
+2026-09-21 21:51:24.950 | INFO     | voice.core:_hops:376 - handoff verify -> complaints (the caller is identified)
+3 complaint_verify: ok
+2026-09-21 21:51:29.792 | INFO     | voice.core:_hops:376 - handoff complaints -> concierge (The caller wants help with a separate salon question.)
+3 complaint_verified: ok
+3 no_thanks: ok
+3 goodbye_with_a_request: ok
+1 failures; evidence: bench/raw/typed-complaint-recovery-20260921T195052Z.jsonl

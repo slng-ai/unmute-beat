@@ -18,7 +18,9 @@ import os
 import pathlib
 import subprocess
 import sys
+from copy import deepcopy
 from datetime import UTC, datetime
+from functools import cache
 from importlib.metadata import version
 
 from salon import diary
@@ -44,7 +46,8 @@ def _git(*args: str) -> str:
     return subprocess.run(['git', *args], capture_output=True, text=True, check=False).stdout.strip()
 
 
-def settings() -> dict:
+@cache
+def _process_settings() -> dict:
     """This arm, as far as this process can see it."""
     from salon import agents
 
@@ -68,7 +71,15 @@ def settings() -> dict:
         # whose prompt digests differ are not the same arm, however alike
         # their settings read.
         'prompt_sha256': _digest(
-            sorted(_ROOT.glob('prompts/**/*.md')) + sorted(_ROOT.glob('knowledge/*.md'))
+            sorted(_ROOT.glob('prompts/**/*.md'))
+            + sorted(_ROOT.glob('knowledge/*.md'))
+            + sorted(_ROOT.glob('knowledge/*.json'))
+        ),
+        'source_sha256': _digest(
+            sorted(_ROOT.glob('salon/*.py'))
+            + sorted(_ROOT.glob('voice/*.py'))
+            + sorted(_ROOT.glob('utils/*.py'))
+            + [_ROOT / 'bot.py']
         ),
         'lock_sha256': _digest([_ROOT / 'uv.lock']) if (_ROOT / 'uv.lock').exists() else '',
         'timezone': str(diary.TZ),
@@ -99,6 +110,18 @@ def settings() -> dict:
         # a match.
         'unknown': ['provider endpoint', 'stt/tts route and voice', 'transport', 'audio settings'],
     }
+
+
+def settings() -> dict:
+    """Immutable loaded-process configuration plus this call's starting fixture."""
+    result = deepcopy(_process_settings())
+    result.update(
+        salon_clock=diary.now().isoformat(),
+        fixture=os.getenv('SALON_FIXTURE', 'continue'),
+        seed_customers=sorted(diary._customers),
+        captured_at=datetime.now(UTC).isoformat(),
+    )
+    return result
 
 
 def outcome(phone: str) -> dict:

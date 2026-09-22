@@ -1,0 +1,1 @@
+16 prepared tool sets and Gemini wire schemas/configurations match exactly; third-request tool cutoff matches; invalid input/injected overrides invoke zero handlers; malformed results leave state unchanged; readback approval remains required.

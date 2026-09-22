@@ -1,0 +1,8 @@
+test_median_and_nearest_rank_tail (test_read_langfuse_trace.ReaderTest.test_median_and_nearest_rank_tail) ... ok
+test_n4_aliases_and_missing_values (test_read_langfuse_trace.ReaderTest.test_n4_aliases_and_missing_values) ... ok
+test_speech_units_and_duplicate_observation (test_read_langfuse_trace.ReaderTest.test_speech_units_and_duplicate_observation) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+OK

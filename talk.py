@@ -22,6 +22,7 @@ import time
 from dotenv import load_dotenv
 from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
 
+from voice.harness import model_clients
 from voice.processor import PydanticAgentProcessor
 
 load_dotenv(override=True)
@@ -86,6 +87,11 @@ def turns():
 
 async def main():
     call, agents, greeting = agency()
+    async with model_clients(agents):
+        await converse(call, agents, greeting)
+
+
+async def converse(call, agents, greeting):
     transcript = Transcript(call, agents)
     print(f'  [fixed] {greeting}')
     for said in turns():

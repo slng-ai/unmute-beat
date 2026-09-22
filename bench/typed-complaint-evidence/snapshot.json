@@ -1,0 +1,61 @@
+{
+  "settings": {
+    "revision": "c6e8cfdb281c4186e98b125f62fd7b691e38cb06",
+    "uncommitted_changes": true,
+    "python": "3.14.5",
+    "pydantic_ai": "2.46.0",
+    "model": "google-cloud:gemini-3.5-flash-lite",
+    "model_pinned": false,
+    "region": "unpinned",
+    "model_settings": "{'service_tier': 'priority', 'google_thinking_config': {'thinking_level': 'MINIMAL'}}",
+    "budget": "TurnBudget(step_runs=4, model_requests=8, tool_calls=8, seconds=20.0, repair_retries=2)",
+    "speak_by": 3,
+    "prompt_sha256": "c53a5dcf0000c979ee4cf5e48ff700cdc60e71299083abc9bc106b1a8935b8e4",
+    "source_sha256": "f0a001fbd6a2069b0532f6751cd2b2653a97070625bf14a25a3ecb169b39ec4b",
+    "lock_sha256": "970eff87411eebb328677a92dd566c133c96f74749007357d79b5b36e15a7558",
+    "timezone": "Europe/Madrid",
+    "salon_clock": "2026-09-21T21:58:57.088670+02:00",
+    "fixture": "continue",
+    "process_started_at": "2026-09-21T19:58:56.729198+00:00",
+    "captured_at": "2026-09-21T19:58:57.088672+00:00",
+    "endpointing_stop_secs": 1.5,
+    "seed_customers": [
+      "+34600111222"
+    ],
+    "confirmation_policy": "books on an unambiguous selection; no separate readback turn",
+    "unknown": [
+      "provider endpoint",
+      "stt/tts route and voice",
+      "transport",
+      "audio settings"
+    ]
+  },
+  "files": {
+    "bench/continuations.py": "79cff86bd3063a7fac673745f6d2a9b4e34ec9a1ac5e55f329a15d5fd7e651ac",
+    "bench/recovery.py": "423ae14cc1391539c2ed38e7e4c9bb23bb1e1b9b54172c435c422a8e5b7ebabc",
+    "knowledge/complaint-guidance.json": "104e4cdb2f946114fd9848588dd90c1029390813847dc93dc79a8dcc89c19b89",
+    "knowledge/refunds.md": "3fc2476597e2fd680d7b6a115f89216cac66a3c797d6501bee3bb7e668cca6b8",
+    "knowledge/services.md": "f105535d8dd2b31ea94fcf674e70099f41c2079e23db488311844890a387589b",
+    "prompts/salon/_diary.md": "9831511fe71c8d758ec629ac9292972013c20c791de259ed37c7135eaaa1e7fb",
+    "prompts/salon/_voice.md": "2d433f4d392b4dfd77ffacd07eeac8dbb5eae5e4918707669d57c90c32a1a9c1",
+    "prompts/salon/booking.md": "53611262a27fce4fc770c4ae9895244dd04deda4320c534d4b8f516b65b0ba6c",
+    "prompts/salon/complaints.md": "06e8c8ab27804f23ff461d380e74390c94505f534cba7815e928f705a83b45a9",
+    "prompts/salon/concierge.md": "3013a8fee3b4e5c05004bb81512deba77f98b328dd349abf4609b3f679bad338",
+    "prompts/salon/verify.md": "ee9fae2e2e8b0b757de7fd0729d288e51304ec7cd1fb128f38274f9a9bf9470b",
+    "salon/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "salon/agents.py": "d0ced411d03854e65dc4f16f27823f3f379c1ccff8953e3eade07cbb597257b0",
+    "salon/diary.py": "e4345e6c8b3d626deb2f969702e1a130e58a9302db79764d78c9879dba0a41ea",
+    "salon/state.py": "bcd93b662f6391599fe316b5cd097ba4b1ab5dbced01e4b00a3308361cb5063d",
+    "tests/test_recovery.py": "c1f209e61e210583fea7a21edc6d0d48f9cb4872770025eb9fb9afc75ee3917f",
+    "utils/arm.py": "f623013e3ff110def6ea9421cbbbbc0282138db7b8819621ea16c240a8ee6a3a",
+    "utils/observability.py": "af375539ea462b5f75bb577c0f2313174cbb6fbddf552889444d56e33a2757ca",
+    "uv.lock": "970eff87411eebb328677a92dd566c133c96f74749007357d79b5b36e15a7558",
+    "voice/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "voice/agents.py": "fb531ef38950fee9f3760447ac1d74b0951888ed964129c055ee6c847d5e51cc",
+    "voice/core.py": "52e90ff92965b674252095b37f686f9ce89a7d1d745f76b80941a41d1e59c532",
+    "voice/harness.py": "ce7a707f8dfd61447012973999f3f8a96665c6f3bcdf437f5006d57162cf1d67",
+    "voice/history.py": "655264a7a91f2c186673f0296b2c8a453d36d4acb2c1f2526be90941d044843e",
+    "voice/processor.py": "d9cec714fcdac2eefa18b85875a4d6f8294570152c59fd4e07df4ea91ad07bac",
+    "voice/state.py": "afbf9e8adcf8865c669eb7319f6c9adc2ae26135fd900c58d02b6ab687965163"
+  }
+}

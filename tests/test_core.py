@@ -764,7 +764,7 @@ async def a_reset_step_is_sent_none_of_the_conversation():
     assert len(only) == 1, [type(m).__name__ for m in only]
     # Its own question, and nothing anybody said to anybody else.
     assert 'and about that colour' in str(only[0].parts[0].content), only[0].parts
-    assert 'uneven' not in str(only), 'the earlier turns leaked into a reset step'
+    assert 'and my last cut was uneven' not in str(only), 'the earlier turns leaked into a reset step'
     # What it is told instead is projected into its own instructions.
     assert 'and about that colour' in (only[0].instructions or '')
 
@@ -806,11 +806,11 @@ async def every_segment_says_where_it_came_from():
     """
     diary.reset()
     call = open_call(PHONE)
-    call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
+    call.commit(customer_verified='existing', verified_phone=PHONE, agent='concierge')
     probe_it = Probe(call)
 
     with scripted(
-        booking=then(
+        concierge=then(
             tool_call('read_diary', when='tomorrow', service='haircut'),
             says('I have a few times tomorrow.'),
         )

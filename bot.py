@@ -116,8 +116,9 @@ def pipeline_worker(pipeline: Pipeline, session_id: str) -> PipelineWorker:
 
     `enable_tracing` is what makes Pipecat open the conversation and turn spans
     the agents' own spans hang from; without it the only spans in Langfuse are
-    Pydantic AI's, one loose trace per agent run. Langfuse reads `session.id`
-    and the trace name off the root span.
+    Pydantic AI's, one loose trace per agent run. The session and the trace name
+    are `setup()`'s to place, because Pipecat would put them on the root span
+    alone and Langfuse v4 queries observations.
     """
     return PipelineWorker(
         pipeline,
@@ -125,7 +126,6 @@ def pipeline_worker(pipeline: Pipeline, session_id: str) -> PipelineWorker:
         conversation_id=session_id or None,
         enable_tracing=True,
         enable_turn_tracking=True,
-        additional_span_attributes={'session.id': session_id, 'langfuse.trace.name': 'salon call'},
     )
 
 
@@ -137,7 +137,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     the bot managed to say. `note_spoken` is its only consumer. The caller ID
     is the carrier's on a phone route and a guess until the caller agrees.
     """
-    setup()
+    session_id = runner_args.session_id or ''
+    setup(session=session_id, trace_name='salon call')
     stt, tts = speech_services()
     call = open_call(os.getenv('CALLER_ID', ''), diary=DIARY)
     agents = PydanticAgentProcessor(call, AGENTS)
@@ -145,7 +146,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     pipeline = Pipeline(
         [transport.input(), stt, user_aggregator, agents, tts, transport.output(), assistant_aggregator]
     )
-    worker = pipeline_worker(pipeline, runner_args.session_id or '')
+    worker = pipeline_worker(pipeline, session_id)
     playback_run: tuple[int, int] | None = None
 
     @assistant_aggregator.event_handler('on_before_process_frame')

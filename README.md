@@ -7,7 +7,7 @@ agents own the conversation: prompts, tools, typed state, and which step is
 running. The seam between them is one frame processor.
 
 ```mermaid
-flowchart LR
+flowchart TD
     mic((caller)) --> in[transport.input]
     in --> stt[SlngSTT]
     stt --> ua[user aggregator]
@@ -78,34 +78,11 @@ spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
 
 ## 4. Run the tests
 
-No pytest and no network: they script the model, so they are fast and free.
-
 ```bash
 uv run python -m tests
 ```
 
-All twelve modules, with live model requests disabled rather than merely
-unused, so a missed override raises instead of billing. No `.env` needed. It
-prints `all 12 modules ok` and exits 0, or names what failed and exits 1.
-
-One at a time, which is what you want while working on one thing. A single
-module needs a model key in the environment because building an agent does;
-any string will do:
-
-```bash
-GOOGLE_API_KEY=x uv run python -m tests.test_graph        # the graph: routing, the waiting step, the schema
-GOOGLE_API_KEY=x uv run python -m tests.test_salon        # the salon agency end to end
-GOOGLE_API_KEY=x uv run python -m tests.test_consent      # the caller's own words, and what may act on them
-GOOGLE_API_KEY=x uv run python -m tests.test_traces       # one call is one trace
-GOOGLE_API_KEY=x uv run python -m tests.test_state        # validated state, and the phone policy
-GOOGLE_API_KEY=x uv run python -m tests.test_diary        # the service oracle: can it say no
-GOOGLE_API_KEY=x uv run python -m tests.test_flow         # guards and conflicts, enforced at execution
-GOOGLE_API_KEY=x uv run python -m tests.test_budget       # one allowance per caller turn
-GOOGLE_API_KEY=x uv run python -m tests.test_recovery     # consent through verification, Pipecat queue cancellation
-GOOGLE_API_KEY=x uv run python -m tests.test_history      # what each provider request is sent
-GOOGLE_API_KEY=x uv run python -m tests.test_optimization # approvals that run with no model request
-GOOGLE_API_KEY=x uv run python -m tests.test_core         # the engine and the Pipecat adapter agree
-```
+Offline, no `.env`, no network. It prints `all 12 modules ok` or names what failed.
 
 ## 5. Traces
 
@@ -151,18 +128,6 @@ Four things make this work, and all four are needed:
 | `SLNG_STT_MODEL` / `SLNG_TTS_MODEL` / `SLNG_TTS_VOICE` | no | the SLNG routes and voice |
 
 `.env` is git-ignored; `.env.example` is the template.
-
-## 7. When it does not work
-
-| What you see | What it is |
-|---|---|
-| `KeyError: 'SLNG_API_KEY'` | no `.env`, or you ran `python bot.py` without `--env-file .env` |
-| `DefaultCredentialsError` at import | no `GOOGLE_API_KEY` in the environment; the agents are built at import |
-| `404` or `PermissionDenied` from the model | `GOOGLE_API_KEY` is a Gemini Developer key, not a Vertex Express Mode one |
-| `warning: LANGFUSE_PUBLIC_KEY unset` | expected; traces are off and everything else works |
-| `TemplateSchemaError: Field 'x' not found in schema` | a prompt uses `{{x}}` and `SalonCall` has no field `x`. Deliberate: it fails at import, never mid-call |
-| `Address already in use` | something else is on 7860; pass `--port` |
-| The browser connects but nobody speaks | check the terminal: a model or SLNG error is logged there |
 
 ---
 
@@ -459,32 +424,3 @@ counting `model_requests` on the `agents` span, not every observation labelled
 a generation: speech services are generations too.
 
 - Langfuse trace structure and counting: https://langfuse.com/docs/observability/best-practices
-
-## 8. Testing without a network
-
-Every agent is overridden with a `FunctionModel` whose stream function scripts
-the model's reply, tool calls included, and `python -m tests` sets
-`ALLOW_MODEL_REQUESTS = False` before any module is imported so a forgotten
-override raises. The same scenarios run through the engine's `take_turn` and
-through the Pipecat processor, and `tests/test_core.py` compares them outcome
-by outcome. `tests/test_flow.py` and `tests/test_core.py` also read the source:
-anything that commits state must be an action or reachable only from one, and
-no runtime-neutral module may import Pipecat.
-
-- Scripted models: https://pydantic.dev/docs/ai/guides/testing/
-
-# What the POC measured
-
-The shape above was kept because of what a matched comparison against the
-native Pipecat build showed, on the same model, caller scripts, clock and
-business fixtures. Server-observed numbers; not a general audio speed-up claim.
-
-| Measure | Typed agency | Native |
-|---|---|---|
-| Scored scripted calls completed | 100 / 100 | 80 / 100 |
-| Provider requests over 200 caller turns | 240 | 519 |
-| Approval turns with zero model requests, four microphone calls | 4 | n/a |
-
-The four microphone calls ran at 1.15 s median and 2.58 s p90 from estimated
-caller silence to the server's bot-speaking marker. The comparison is between
-two implementations under matched inputs; it does not isolate any one library.

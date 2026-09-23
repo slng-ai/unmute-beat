@@ -61,8 +61,8 @@ measuring.
 A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
 hands the caller to booking; booking needs an identified caller, so the graph
 interposes verification, which reads the caller ID back. *"Yes, that's right."*
-One classifier request approves the lookup, the graph resumes booking, and the
-diary's free times are offered. *"Three o'clock."* An unambiguous choice of an
+One classifier request interprets the approval; application guards authorize
+the lookup, the graph resumes booking, and the diary's free times are offered. *"Three o'clock."* An unambiguous choice of an
 offered time is the authorisation, so the write lands and the confirmation is
 spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
 
@@ -77,6 +77,7 @@ bot.py                  the Pipecat pipeline, and nothing else
 core/
   state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
   graph.py              Node, Exit, LocalAction, route, moved_by
+  classifiers.py        generic Pydantic input/output classification in one request
   policies.py           TurnBudget, the hooks, pick, schema_tool
   history.py            what each provider request is sent
   turn.py               one caller turn as an event stream; imports no Pipecat
@@ -91,6 +92,7 @@ salon/
 prompts/                one prompt per step, the shared rules, knowledge/
 utils/observability.py  Langfuse over OTel
 tests/                  thirteen assert scripts
+evals/consent.py        explicitly invoked live classifier evaluation
 ```
 
 `core` knows nothing about the salon, and nothing in `core` but the processor
@@ -320,25 +322,10 @@ mechanism for each:
 - **A clock per request.** `request_clock` stamps each provider request on
   the way out, so time to first token is per request and says whether the
   first thing back was speech or a tool call.
-- **Interpretation is typed; authorization is application-owned.**
-  `core/classifiers.py` sends one direct native structured-output request.
-  Its one-line prompt refers to class descriptions in the Pydantic output
-  schema; salon definitions live in `salon/models/consent.py`. Shape validation
-  cannot guarantee semantic accuracy. Guards still check identity, freshness,
-  the exact proposal, valid options and one-time consumption.
-- **Classification replaces conversation at known decisions.** Async
-  `advance()` classifies pending confirmations, move/add and recorded closing
-  questions. A resolved decision invokes the existing executor with one
-  classifier request. Ordinary turns skip it; tools can request interpretation
-  on demand. Ambiguity or provider failure permits conversational fallback
-  within the shared budget. One cached interpretation per turn prevents retries
-  from repeatedly classifying. Cancellation retains caller input, excludes
-  classification JSON from history and discards late results.
-- **Measure the tradeoff.** Turn traces include classifier duration, count and
-  fallback alongside existing voice latency. Resolved decisions use one request;
-  fallback or tool-triggered checks can use two. Subsequent workflow steps may
-  still require conversation. Native structured output must be supported by the
-  injected model. No latency improvement is assumed.
+- **Typed interpretation, guarded execution.** The classifier interprets a
+  reply to a pending question; application guards authorize the exact action.
+  Resolved decisions replace the conversational request. See
+  [the classifier flow and evolution path](#7-typed-classification-and-its-evolution).
 - **Deterministic continuation.** A finisher does its work and returns a
   `Handoff` whose destination is `call.resume(...)`, which the graph already
   knows. A prerequisite step reports `completed` or `unserved`, and the
@@ -359,7 +346,108 @@ mechanism for each:
   what a booking sounds like out loud: all `salon/diary.py`, none asked of a
   model.
 
-## 7. Telemetry
+## 7. Typed classification and its evolution
+
+The classifier answers a narrow question: how does the caller's reply relate
+to the question they just heard? Today it uses the same Gemini model as the
+conversational agents, through one asynchronous
+[Pydantic AI direct model request](https://pydantic.dev/docs/ai/core-concepts/direct/).
+It has no agent loop, business tools, conversation history or repair requests.
+
+[Classifier](core/classifiers.py) is an ordinary generic Python class:
+`Classifier[InputT, OutputT]`, with both contracts defined by Pydantic models.
+It validates the input, sends its JSON with the output model's JSON Schema,
+and validates the returned answer. The default prompt is just:
+
+> Classify the input using the class descriptions in the output schema.
+
+Class keys and their meanings live together in the output model, using
+`Annotated[Literal[...], Field(description=...)]`. A new use case supplies its
+own input model and output classes. There are no salon rules in `core`.
+
+The salon wiring is in [salon/classification.py](salon/classification.py),
+and its contracts are in [salon/models/consent.py](salon/models/consent.py):
+
+| Contract | Contents |
+|---|---|
+| `ConsentInput` | Accepted utterance, preceding delivered speech, caller identity, pending proposal and any retained complaint approval. |
+| `ReplyClassification` | Confirmation (`accept`, `reject`, `revise`, `conditional`, `unclear`, `not_applicable`), appointment choice (`move`, `add`, `unclear`, `not_applicable`), conversation status and whether retained complaint approval still applies. |
+
+```mermaid
+flowchart LR
+    reply[Caller reply] --> pending{Pending decision?}
+    pending -- Yes --> classify[Typed classifier]
+    pending -- No --> agent[Conversational agent]
+    classify -- Clear decision --> guards[Application guards]
+    guards -- Authorized --> execute[Existing executor]
+    classify -- Unresolved or failed --> agent
+```
+
+Async `advance()` classifies pending confirmations, move/add questions and
+recorded closing questions before the conversational agent runs. Clear
+answers take one classifier request to resolve that decision. Ordinary turns
+skip upfront classification; a tool can request it on demand. Ambiguous
+answers, questions or provider failures can require a second, conversational
+request. Subsequent workflow steps may still need conversation.
+
+Only explicit acceptance can approve a confirmation. Code checks identity,
+freshness, the exact proposal and valid options, then consumes approval once.
+The interpretation is cached within the caller turn and bound to its input
+and proposal. Both paths share request limits and the turn deadline.
+Cancellation retains accepted input, excludes classifier JSON from dialogue
+history and discards superseded results. Pydantic validates the shape of the
+answer; semantic accuracy still needs evaluation.
+
+### Next: change the inference engine, preserve the contract
+
+The following are proposed evolutions; this repository currently runs the
+Gemini implementation only. Keep `classify(value, *, usage, usage_limits)`
+and the domain models as the consumer contract. Keep authorization in the
+existing application guards. Changing the classifier must not give a model
+new authority to execute actions.
+
+| Candidate | Integration path | What to establish before using it |
+|---|---|---|
+| A smaller hosted LLM | Inject a different Pydantic AI model and its settings into `Classifier`. | Native JSON Schema support and adequate multilingual classification accuracy. |
+| TypeSafe AI's Jev | Add a focused adapter for typed choice requests, mapping the schema's class keys and descriptions to questions and validating answers back into `OutputT`. | Supported schema mappings, confidence handling, usage accounting and the same cancellation behavior. |
+| A small model running locally | Inject a model connected to a local inference server that supports native JSON Schema output, such as self-hosted Ollama. Use provider-appropriate settings instead of the Google settings. | Accuracy on the target languages, memory requirements and response times on the actual hardware under concurrent calls. |
+
+**Jev has a different response contract.** Pydantic AI's
+[TypeSafe integration](https://pydantic.dev/docs/ai/models/typesafe/) maps
+supported output fields to typed questions and exposes confidence. It does
+not support native text/JSON output, which the current `Classifier` requires.
+That makes this a future adapter change rather than just a model-name change.
+The pinned SDK includes `TypeSafeModel`, but this project does not install its
+optional `typesafe` dependency. The adapter should reuse the schema definitions,
+preserve one request with no business tools, and map insufficient confidence
+to an unresolved result using thresholds chosen from evaluation data.
+
+**Local inference can keep the current request path.** Pydantic AI documents
+[native structured output for self-hosted Ollama](https://pydantic.dev/docs/ai/models/ollama/).
+The selected server and model must accept our actual schema, including nested
+models and descriptions. Local classification could avoid a remote round trip;
+whether it improves voice latency depends on model speed, cold starts and
+contention with other workloads. Moving classification locally leaves the
+conversational model and speech services as separate deployment choices.
+
+### Evaluate before switching
+
+Start with the existing Gemini classifier as the baseline. Explicitly run
+`uv run --env-file .env python -m evals.consent` to make live requests. It
+reports English, Spanish and mixed-language accuracy, false acceptances and
+classifier p50/p95 duration separately from offline flow tests. It currently
+uses the configured salon classifier; it is not yet a multi-provider benchmark.
+
+For each candidate, run the same labeled cases, then expand them with real
+corrections, conditions, ambiguous replies and contextual goodbyes. Compare
+false acceptances and fallback rates as well as overall accuracy. Measure
+end-to-end voice latency under representative load; for local models include
+both cold and warm runs. A possible later step is evaluating candidates beside
+the current classifier without executing their decisions, then selecting one
+once the accuracy and latency results justify it. No Jev or local-model
+measurements have been made in this repository.
+
+## 8. Telemetry
 
 Langfuse over OpenTelemetry. Pydantic AI's instrumentation emits the agent
 runs; Pipecat emits the conversation, the turn, stt and tts; the processor
@@ -379,12 +467,9 @@ a generation: speech services are generations too.
 
 - Langfuse trace structure and counting: https://langfuse.com/docs/observability/best-practices
 
-### Live classifier evaluation
-
-Explicitly run `uv run --env-file .env python -m evals.consent` to make live
-requests. It reports English, Spanish and mixed-language semantic accuracy,
-false acceptances and classifier p50/p95 duration separately from offline flow
-tests. These are classifier timings, not end-to-end voice measurements.
+Classifier request count, duration and fallback are recorded on the turn span
+alongside existing voice latency. Compare complete caller turns, including
+fallback, when evaluating a change of model.
 
 ---
 

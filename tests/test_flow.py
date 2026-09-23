@@ -583,9 +583,33 @@ def every_tool_that_writes_is_an_action():
 
     root = pathlib.Path(agents.__file__).parent
     functions: dict[str, ast.AST] = {}
+    operations: dict[str, list[str]] = {}
+    """An `Operation` subclass's methods, by qualified name: they are reached through its `run`."""
+    instances: dict[str, str] = {}
+    """A module-level operation instance, and its class, so `LOOKUP.run(...)` counts as calling its methods."""
     for path in [root / 'agents.py', *sorted((root / 'tools').glob('*.py'))]:
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        tree = ast.parse(path.read_text())
+        methods = set()
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and any(
+                'Operation' in ast.unparse(base) for base in node.bases
+            ):
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                        functions[f'{node.name}.{item.name}'] = item
+                        operations.setdefault(node.name, []).append(f'{node.name}.{item.name}')
+                        methods.add(id(item))
+            elif (
+                isinstance(node, ast.Assign)
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id in operations
+            ):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        instances[target.id] = node.value.func.id
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and id(node) not in methods:
                 functions.setdefault(node.name, node)
 
     def commits(node: ast.AST) -> bool:
@@ -615,9 +639,15 @@ def every_tool_that_writes_is_an_action():
     called_by: dict[str, set[str]] = {}
     for name, node in functions.items():
         for inner in ast.walk(node):
-            callee = getattr(getattr(inner, 'func', None), 'id', None)
-            if isinstance(inner, ast.Call) and callee in functions:
+            if not isinstance(inner, ast.Call):
+                continue
+            callee = getattr(inner.func, 'id', None)
+            if callee in functions:
                 called_by.setdefault(callee, set()).add(name)
+            owner = getattr(getattr(inner.func, 'value', None), 'id', None)
+            if isinstance(inner.func, ast.Attribute) and inner.func.attr == 'run' and owner in instances:
+                for method in operations[instances[owner]]:
+                    called_by.setdefault(method, set()).add(name)
     openings = {o.run.__name__ for node in agents.AGENTS.values() for o in node.openings}
     terminal = tools | {'advance'} | openings
 
@@ -639,6 +669,9 @@ def every_tool_that_writes_is_an_action():
 
     missing = (writes & tools) - ACTIONS
     assert not missing, f'these write to state and are not in ACTIONS: {sorted(missing)}'
+    assert any('.' in name for name in writes), (
+        'no Operation method was scanned, so the class path is unchecked'
+    )
 
 
 def a_refused_tool_does_not_move_the_caller():

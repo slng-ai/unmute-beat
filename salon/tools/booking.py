@@ -20,6 +20,7 @@ from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.graph import Opening
+from core.operations import Operation
 from core.policies import claim_or_refuse, pick
 from core.state import present
 from salon.classification import classify_reply
@@ -395,16 +396,8 @@ async def save_booking(
     )
 
 
-async def write_booking(
-    call: SalonCall,
-    action: Literal['book', 'move', 'cancel'],
-    slot_id: str,
-    booking_id: str,
-    *,
-    usage: RunUsage | None = None,
-    usage_limits: UsageLimits | None = None,
-) -> str:
-    """The write itself, once the caller has authorised it. Shared by the tool and by `advance`.
+class WriteBooking(Operation[SalonCall, BookingCommand, Saved, str]):
+    """Book, move or cancel in the diary, once the caller has authorised it.
 
     An outstanding earlier write is settled first, because until it is every
     other write is a second appointment waiting to be made. The slot is asked
@@ -427,75 +420,112 @@ async def write_booking(
     lands in commit together, and the confirmation is spoken here in the
     diary's own words rather than handed to a model to say.
     """
-    command = BookingCommand(action=action, slot_id=slot_id, booking_id=booking_id)
-    action, slot_id, booking_id = command.action, command.slot_id, command.booking_id
-    if call.state.unresolved:
-        return await _settle(call)
-    if call.pending('booking') or call.pending('move_or_add') or action == 'move':
-        await classify_reply(call, usage=usage, usage_limits=usage_limits)
-    additional = _authorised(call, action, slot_id, booking_id)
-    if not present(call.state.customer_verified):
-        raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
-    offered = call.diary.offer_of(call.id, slot_id, call.state.customer_phone)
-    token = operation_token(
-        call.id,
-        call.state.writes,
-        call.state.customer_phone,
-        action,
-        slot_id,
-        booking_id,
-        additional,
-    )
-    pending = Unresolved(token=token, action=action, booking_id=booking_id, offered=offered)
-    try:
-        written = _answered(
-            call,
-            pending,
-            Saved,
-            lambda: call.diary.save_booking(
-                call.state.customer_phone,
-                action,
-                slot_id,
-                booking_id,
-                additional,
-                call.diary.now(),
-                operation_token=token,
-                offered_to=call.id,
-            ),
-            'diary',
+
+    name = 'save_booking'
+    args_type = BookingCommand
+    receipt_type = Saved
+
+    async def _before(self, call: SalonCall, args: BookingCommand) -> str | None:
+        return await _settle(call) if call.state.unresolved else None
+
+    async def _authorise(
+        self,
+        call: SalonCall,
+        args: BookingCommand,
+        *,
+        usage: RunUsage | None,
+        usage_limits: UsageLimits | None,
+    ) -> bool:
+        """The three ways a caller authorises a write (see `_authorised`); the answer is whether it is an extra booking."""
+        if call.pending('booking') or call.pending('move_or_add') or args.action == 'move':
+            await classify_reply(call, usage=usage, usage_limits=usage_limits)
+        additional = _authorised(call, args.action, args.slot_id, args.booking_id)
+        if not present(call.state.customer_verified):
+            raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
+        return additional
+
+    async def _execute(self, call: SalonCall, args: BookingCommand, grant: bool) -> Saved:
+        action, slot_id, booking_id = args.action, args.slot_id, args.booking_id
+        offered = call.diary.offer_of(call.id, slot_id, call.state.customer_phone)
+        token = operation_token(
+            call.id,
+            call.state.writes,
+            call.state.customer_phone,
+            action,
+            slot_id,
+            booking_id,
+            grant,
         )
-    except AlreadyHoldsError as refused:
-        call.ask(Asked(about='move_or_add', value=slot_id, action='move'))
-        raise ModelRetry(str(refused)) from None
-    except RefusedError as refused:
-        raise ModelRetry(str(refused)) from None
-    if why := _disagrees(action, booking_id, offered, written):
-        _unknown(call, pending, why)
-    appointment = Appointment(
-        booking_id=written.booking_id,
-        service=written.service,
-        date=written.date,
-        time=written.time,
-        spoken=written.spoken,
-        action=action,
-    )
-    going_back_to = call.resume('concierge')
-    call.commit(
-        appointment=appointment,
-        agent=going_back_to,
-        writes=call.state.writes + 1,
-        unresolved=None,
-        offered=[],
-    )
-    call.retain_action('save_booking', written.model_dump(mode='json'))
-    await close_with(
-        call,
-        pick(f'saved:{written.status}', SAVED[written.status]).format(
-            spoken=written.spoken,
-            service=spoken_service(written.service),
-        ),
-    )
-    return f'{written.status}: {written.spoken}'
+        pending = Unresolved(token=token, action=action, booking_id=booking_id, offered=offered)
+        try:
+            written = _answered(
+                call,
+                pending,
+                Saved,
+                lambda: call.diary.save_booking(
+                    call.state.customer_phone,
+                    action,
+                    slot_id,
+                    booking_id,
+                    grant,
+                    call.diary.now(),
+                    operation_token=token,
+                    offered_to=call.id,
+                ),
+                'diary',
+            )
+        except AlreadyHoldsError as refused:
+            call.ask(Asked(about='move_or_add', value=slot_id, action='move'))
+            raise ModelRetry(str(refused)) from None
+        except RefusedError as refused:
+            raise ModelRetry(str(refused)) from None
+        if why := _disagrees(action, booking_id, offered, written):
+            _unknown(call, pending, why)
+        return written
+
+    async def _record(self, call: SalonCall, args: BookingCommand, receipt: Saved) -> str:
+        appointment = Appointment(
+            booking_id=receipt.booking_id,
+            service=receipt.service,
+            date=receipt.date,
+            time=receipt.time,
+            spoken=receipt.spoken,
+            action=args.action,
+        )
+        going_back_to = call.resume('concierge')
+        call.commit(
+            appointment=appointment,
+            agent=going_back_to,
+            writes=call.state.writes + 1,
+            unresolved=None,
+            offered=[],
+        )
+        call.retain_action('save_booking', receipt.model_dump(mode='json'))
+        await close_with(
+            call,
+            pick(f'saved:{receipt.status}', SAVED[receipt.status]).format(
+                spoken=receipt.spoken,
+                service=spoken_service(receipt.service),
+            ),
+        )
+        return f'{receipt.status}: {receipt.spoken}'
+
+
+WRITE_BOOKING = WriteBooking()
+
+
+async def write_booking(
+    call: SalonCall,
+    action: Literal['book', 'move', 'cancel'],
+    slot_id: str,
+    booking_id: str,
+    *,
+    usage: RunUsage | None = None,
+    usage_limits: UsageLimits | None = None,
+) -> str:
+    """The write itself, once the caller has authorised it. Shared by the tool and by `advance`."""
+    command = BookingCommand(action=action, slot_id=slot_id, booking_id=booking_id)
+    return await WRITE_BOOKING.run(call, command, usage=usage, usage_limits=usage_limits)
 
 
 def _resuming_a_request(call: SalonCall) -> bool:

@@ -11,10 +11,12 @@ import hashlib
 import re
 from typing import Literal
 
+from pydantic import BaseModel
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from core.operations import Operation
 from core.policies import claim_or_refuse
 from core.state import present
 from salon.classification import classify_reply
@@ -156,6 +158,92 @@ async def _record_complaint(
     )
 
 
+class ComplaintArgs(BaseModel):
+    """The exact wording the caller approved: what went wrong, and what they asked for."""
+
+    summary: str
+    requested_resolution: str
+
+
+class WriteComplaint(Operation[SalonCall, ComplaintArgs, ComplaintRecord, ComplaintRecord]):
+    """Write the complaint into the book, once the caller has approved these exact words.
+
+    The wording has to be the wording that was read back and approved, under
+    the identity it was approved for. One token per complaint, derived like a
+    booking's, so an attempt that lost its answer and is retried leaves one
+    entry in the book rather than two, and the write goes through the same
+    boundary a booking does. The receipt is validated and then *read*: a
+    well-formed `recorded: False` is the book saying it did not take it. The
+    acknowledgement, reference included, is spoken here before the next
+    request rather than by the model after it.
+    """
+
+    name = 'record_complaint'
+    args_type = ComplaintArgs
+    receipt_type = ComplaintRecord
+
+    async def _authorise(
+        self,
+        call: SalonCall,
+        args: ComplaintArgs,
+        *,
+        usage: RunUsage | None,
+        usage_limits: UsageLimits | None,
+    ) -> None:
+        if call.state.unresolved:
+            raise ModelRetry(OUTSTANDING)
+        if not present(call.state.customer_verified):
+            raise ModelRetry(
+                'Nobody is identified yet. Return to concierge so verification can run before complaints.'
+            )
+        await classify_reply(call, usage=usage, usage_limits=usage_limits)
+        approved = call._complaint
+        if (
+            approved is None
+            or approved.value != _gist(args.summary)
+            or approved.resolution != _gist(args.requested_resolution)
+        ):
+            raise ModelRetry(
+                'Nothing was written down. Read this summary and requested resolution back with '
+                '`ask_complaint` and wait for their answer. Use the exact wording they approved.'
+            )
+        if approved.owner and approved.owner != call.state.customer_phone:
+            call._complaint = None
+            raise ModelRetry('The caller identity changed. Confirm the complaint again with ask_complaint.')
+        call._complaint = None
+        call.answered()
+
+    async def _execute(self, call: SalonCall, args: ComplaintArgs, grant: None) -> ComplaintRecord:
+        phone = call.state.customer_phone
+        token = operation_token(call.id, call.state.writes, phone, args.summary, args.requested_resolution)
+        pending = Unresolved(token=token, action='complaint', wanted=args.requested_resolution)
+        return _answered(
+            call,
+            pending,
+            ComplaintRecord,
+            lambda: call.diary.record_complaint(
+                phone, args.summary, args.requested_resolution, operation_token=token
+            ),
+            'complaint book',
+        )
+
+    async def _record(
+        self, call: SalonCall, args: ComplaintArgs, receipt: ComplaintRecord
+    ) -> ComplaintRecord:
+        if not receipt.recorded:
+            raise ModelRetry(
+                'The complaint book refused it and nothing is on record. Tell the caller you could '
+                'not log it. Do not promise a callback or call this again.'
+            )
+        call.commit(writes=call.state.writes + 1)
+        call.retain_action('record_complaint', receipt.model_dump(mode='json'))
+        await close_with(call, acknowledgement(receipt.reference, args.requested_resolution))
+        return receipt
+
+
+WRITE_COMPLAINT = WriteComplaint()
+
+
 async def write_complaint(
     call: SalonCall,
     summary: str,
@@ -164,59 +252,9 @@ async def write_complaint(
     usage: RunUsage | None = None,
     usage_limits: UsageLimits | None = None,
 ) -> ComplaintRecord:
-    """The write itself, once the caller has approved these exact words. Shared by the tool and by `advance`.
-
-    The wording has to be the wording that was read back and approved, under
-    the identity it was approved for. One token per complaint, derived like a
-    booking's, so an attempt that lost its answer and is retried leaves one
-    entry in the book rather than two, and the write goes through the same
-    boundary a booking does. The receipt is validated and then *read*: a
-    well-formed `recorded: False` is the book saying it did not take it. The
-    acknowledgement,
-    acknowledgement, reference included, is spoken here before the next
-    request rather than by the model after it.
-    """
-    phone = call.state.customer_phone
-    if call.state.unresolved:
-        raise ModelRetry(OUTSTANDING)
-    if not present(call.state.customer_verified):
-        raise ModelRetry(
-            'Nobody is identified yet. Return to concierge so verification can run before complaints.'
-        )
-    await classify_reply(call, usage=usage, usage_limits=usage_limits)
-    approved = call._complaint
-    if (
-        approved is None
-        or approved.value != _gist(summary)
-        or approved.resolution != _gist(requested_resolution)
-    ):
-        raise ModelRetry(
-            'Nothing was written down. Read this summary and requested resolution back with '
-            '`ask_complaint` and wait for their answer. Use the exact wording they approved.'
-        )
-    if approved.owner and approved.owner != phone:
-        call._complaint = None
-        raise ModelRetry('The caller identity changed. Confirm the complaint again with ask_complaint.')
-    call._complaint = None
-    call.answered()
-    token = operation_token(call.id, call.state.writes, phone, summary, requested_resolution)
-    pending = Unresolved(token=token, action='complaint', wanted=requested_resolution)
-    recorded = _answered(
-        call,
-        pending,
-        ComplaintRecord,
-        lambda: call.diary.record_complaint(phone, summary, requested_resolution, operation_token=token),
-        'complaint book',
-    )
-    if not recorded.recorded:
-        raise ModelRetry(
-            'The complaint book refused it and nothing is on record. Tell the caller you could '
-            'not log it. Do not promise a callback or call this again.'
-        )
-    call.commit(writes=call.state.writes + 1)
-    call.retain_action('record_complaint', recorded.model_dump(mode='json'))
-    await close_with(call, acknowledgement(recorded.reference, requested_resolution))
-    return recorded
+    """The write itself, once the caller has approved these exact words. Shared by the tool and by `advance`."""
+    args = ComplaintArgs(summary=summary, requested_resolution=requested_resolution)
+    return await WRITE_COMPLAINT.run(call, args, usage=usage, usage_limits=usage_limits)
 
 
 async def complaint_goodbye(ctx: RunContext[SalonCall]) -> str:

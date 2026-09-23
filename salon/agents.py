@@ -23,6 +23,7 @@ What the salon does differently from the same agency built on a node graph:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import replace
 
@@ -180,9 +181,18 @@ def build(
     satisfied_by: str = '',
     guarded: bool = False,
     openings: tuple[Opening[SalonCall], ...] = (),
+    structured_speech: bool = False,
+    offered_when: Mapping[str, Callable[[SalonCall], bool]] | None = None,
+    stand_ins: Mapping[Callable, Callable] | None = None,
     model=MODEL,
 ) -> Node[SalonState]:
     """One step: its agent, its legal exits, and what has to hold before it runs.
+
+    Everything that differs between steps is an argument, so this function
+    names no step and no tool: `structured_speech` for a step that speaks only
+    through its outputs, `offered_when` for an output offered only while a
+    fact holds, and `stand_ins` for an output whose name the model knows but
+    whose implementation is this step's own.
 
     Every output tool is named explicitly. Pydantic AI calls a lone output
     function `final_result` and renames a bare `hand_over` to
@@ -206,7 +216,7 @@ def build(
     borrowed = lent(exits)
     named = [
         ToolOutput(
-            complaint_goodbye if name == 'complaints' and fn is hang_up else fn,
+            (stand_ins or {}).get(fn, fn),
             name=fn.__name__,
             sequential=fn.__name__ in ACTIONS,
         )
@@ -222,7 +232,7 @@ def build(
         if exits
         else []
     )
-    structured_speech = name in ('verify', 'booking', 'complaints')
+    offered_when = offered_when or {}
     declared = [*([str] if not structured_speech else []), *handoff, *named, *questions]
 
     def outputs(state: SalonState) -> list:
@@ -247,16 +257,14 @@ def build(
         Pydantic AI prepares ordinary and output tools through different ones.
         An exit whose guard has stopped holding leaves the enum the model is
         sent, so it cannot be chosen rather than being refused after it was;
-        with none left, `hand_over` goes entirely. `record_complaint` is
-        offered only once a readback has been approved.
+        with none left, `hand_over` goes entirely. An output with an
+        `offered_when` fact is offered only while it holds.
         """
         legal = [e.to for e in exits if e.guard(ctx.deps.state)]
         legal = list(dict.fromkeys(legal))
         kept = []
         for tool_def in defs:
-            if tool_def.name == 'record_complaint' and (
-                not ctx.deps.state.customer_verified or not ctx.deps.complaint_approved
-            ):
+            if (offered := offered_when.get(tool_def.name)) is not None and not offered(ctx.deps):
                 continue
             if tool_def.name != 'hand_over':
                 kept.append(tool_def)
@@ -303,6 +311,11 @@ def build(
     )
 
 
+def complaint_ready(call: SalonCall) -> bool:
+    """`record_complaint` is offered only once an identified caller has approved a readback."""
+    return bool(call.state.customer_verified) and call.complaint_approved
+
+
 def verified(state: SalonState) -> bool:
     """Identified already, so `verify` is a correction rather than a first pass.
 
@@ -329,6 +342,7 @@ AGENTS: dict[str, Node[SalonState]] = {
         asks=[ask_number, verification_guidance],
         exits=(Exit('concierge', verified),),
         openings=VERIFY_OPENINGS,
+        structured_speech=True,
     ),
     'booking': build(
         'booking',
@@ -340,6 +354,7 @@ AGENTS: dict[str, Node[SalonState]] = {
         requires=('customer_verified',),
         satisfied_by='verify',
         openings=BOOKING_OPENINGS,
+        structured_speech=True,
     ),
     'complaints': build(
         'complaints',
@@ -349,6 +364,9 @@ AGENTS: dict[str, Node[SalonState]] = {
         exits=(Exit('concierge'),),
         requires=('customer_verified',),
         satisfied_by='verify',
+        structured_speech=True,
+        offered_when={'record_complaint': complaint_ready},
+        stand_ins={hang_up: complaint_goodbye},
     ),
 }
 """The graph. If an agent's words should be heard, it is a step in here; if not, it is a delegation from inside a tool.

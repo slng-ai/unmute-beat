@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_validator
 
 from core import state as core
+from core.proposals import Proposal
 from salon.diary import Diary, day_phrases
 from salon.models.consent import Asked, ConsentInput, ReplyClassification
 from salon.models.receipts import Slot
@@ -219,7 +220,6 @@ class SalonCall(core.CallContext):
     """The salon's books. A private attribute because the prompt templates are compiled against this model's schema."""
     _writes_before: int = PrivateAttr(default=0)
     """What `writes` stood at when this turn began, so "did anything land in this turn" is answerable."""
-    _asked: Asked | None = PrivateAttr(default=None)
     _classified_turn: int = PrivateAttr(default=-1)
     _classification_input: ConsentInput | None = PrivateAttr(default=None)
     _classification: ReplyClassification = PrivateAttr(default_factory=ReplyClassification)
@@ -256,31 +256,32 @@ class SalonCall(core.CallContext):
             self._complaint = None
         if self._complaint and self._complaint.owner and self._complaint.owner != self.state.customer_phone:
             self._complaint = None
-        if self._asked is not None and self._asked.turn < self._turn - 1:
-            self._asked = None
         for words in day_phrases(heard):
             if words not in self._day_words:
                 self._day_words = [*self._day_words, words][-_DAYS_REMEMBERED:]
 
-    def ask(self, question: Asked) -> None:
-        """Record that this question has gone out to the caller, on this turn."""
+    def identity(self) -> str:
+        """The caller is whoever the number on the call says, until corrected."""
+        return self.state.customer_phone
+
+    def ask(self, proposal: Proposal) -> None:
+        """Record a salon question: validated as `Asked`, and a new complaint readback forgets an approved one."""
+        question = Asked.model_validate(proposal.model_dump())
         if question.about == 'complaint':
             self._complaint = None
-        self._asked = Asked.model_validate({**question.model_dump(), 'turn': self._turn})
+        super().ask(question)
 
     def pending_question(self) -> Asked | None:
         """The current proposal, excluding stale identities and interrupted readbacks."""
-        question = self._asked
-        if question is None or question.turn != self.turn - 1:
-            return None
-        if question.owner and question.owner != self.state.customer_phone:
-            return None
-        if question.spoken and any(
-            segment.turn == question.turn and segment.generated == question.spoken and segment.interrupted
-            for segment in self.all_spoken
-        ):
-            return None
-        return question
+        return super().pending_question()
+
+    def pending(self, about: str, **fields: str) -> Asked | None:
+        """The question the caller is answering right now, if it is this one.
+
+        Only the turn after it was asked: a question put two turns ago has
+        been overtaken by whatever the caller said in between.
+        """
+        return super().pending(about, **fields)
 
     def last_proposal(self) -> tuple[Asked, bool] | None:
         """Last turn's question under this identity, and whether the caller heard it in full.
@@ -289,12 +290,7 @@ class SalonCall(core.CallContext):
         caller spoke over can still be corrected or abandoned, but it can never
         be accepted, so nothing that authorises an action reads this.
         """
-        question = self._asked
-        if question is None or question.turn != self.turn - 1:
-            return None
-        if question.owner and question.owner != self.state.customer_phone:
-            return None
-        return question, self.pending_question() is not None
+        return super().last_proposal()
 
     def consent_snapshot(self) -> ConsentInput:
         """The application-owned context a consent answer is an answer to, as of now."""
@@ -327,21 +323,6 @@ class SalonCall(core.CallContext):
         ):
             return ReplyClassification()
         return self._classification
-
-    def pending(self, about: str, **fields: str) -> Asked | None:
-        """The question the caller is answering right now, if it is this one.
-
-        Only the turn after it was asked: a question put two turns ago has
-        been overtaken by whatever the caller said in between.
-        """
-        asked = self.pending_question()
-        if asked is None or asked.about != about:
-            return None
-        return asked if all(getattr(asked, name) == value for name, value in fields.items()) else None
-
-    def answered(self) -> None:
-        """Consume the pending question. One answer authorises one action."""
-        self._asked = None
 
     @computed_field
     @property

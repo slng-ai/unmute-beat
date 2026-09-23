@@ -29,6 +29,7 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
 MODULES = (
     'tests.test_graph',
+    'tests.test_classes',
     'tests.test_salon',
     'tests.test_consent',
     'tests.test_classifiers',

@@ -436,6 +436,35 @@ and finish `core/decisions.py` and `core/interpreters.py` from phase 2.
 - `tests/test_flow.py` keeps scanning for anything that commits state and is
   not an action, now including `Operation` subclasses.
 
+### Status (2026-09-23)
+
+Done, with every existing test unchanged and passing:
+
+- `core/proposals.py`: `ProposalLedger` now owns the one pending question
+  for every call (`ask`, `pending_question`, `pending`, `last_proposal`,
+  `answered` live on `CallContext`); `SalonCall` only adds its identity and
+  the complaint side effect.
+- `core/operations.py`: `Operation` with a `@final run`. The salon's three
+  writes are `LookupCustomer`, `WriteBooking`, `WriteComplaint`; the old
+  functions are one-line wrappers, so tools and their docstrings are the same.
+  `tests/test_flow.py`'s write scan now follows `INSTANCE.run(...)` into the
+  class's methods.
+- `salon.agents.build` names no step or tool any more: `structured_speech`,
+  `offered_when` and `stand_ins` are arguments set in `AGENTS`.
+- `tests/test_classes.py` proves the base classes on a made-up library desk
+  with no salon import, and that no subclass anywhere overrides a `@final`
+  method.
+
+Changed from the plan, and why:
+
+- `Proposal` is a structural `Protocol`, and `Asked` stays one model instead
+  of five subclasses. Splitting it would reorder the fields of the JSON the
+  classifier is sent, which is a prompt change that needs a live check.
+  `BaseProposal` is the ready-made model for a new business.
+- `Completion` moves to phase 5, where the first step that uses it is built.
+- `build` stays in `salon/agents.py` until phase 5 gives it a generic home
+  (`AgentStep`).
+
 ---
 
 ## Phase 5: pydantic graph trial

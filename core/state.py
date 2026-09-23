@@ -14,12 +14,15 @@ import time
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
+
+if TYPE_CHECKING:
+    from core.proposals import Proposal, ProposalLedger
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
@@ -285,6 +288,8 @@ class CallContext(BaseModel):
     read by every action that could be the second one. `None` means this
     response proposed no such action.
     """
+    _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
+    """The one question this call is waiting on an answer to. See `core.proposals`."""
     _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
     """Each interpreter's answer for this turn, by interpreter name. See `core.interpreters`."""
     _requests: list[Request] = PrivateAttr(default_factory=list)
@@ -373,6 +378,35 @@ class CallContext(BaseModel):
     def turn(self) -> int:
         """Which accepted caller turn this is, counting from one."""
         return self._turn
+
+    def identity(self) -> str:
+        """Who the caller is taken to be right now. A question put to one identity is not answered by another."""
+        return ''
+
+    def ask(self, proposal: Proposal) -> None:
+        """Record that this question has gone out to the caller, on this turn."""
+        self._proposals.ask(self, proposal)
+
+    def pending_question(self) -> Any:
+        """The question this turn's reply can answer: last turn's, same identity, heard in full."""
+        return self._proposals.pending(self)
+
+    def pending(self, about: str, **fields: str) -> Any:
+        """The question the caller is answering right now, if it is this one."""
+        return self._proposals.pending_about(self, about, **fields)
+
+    def last_proposal(self) -> tuple[Any, bool] | None:
+        """Last turn's question and whether it was heard in full. For interpretation only, never authorisation."""
+        return self._proposals.last(self)
+
+    def answered(self) -> None:
+        """Consume the pending question. One answer authorises one action."""
+        self._proposals.consume()
+
+    @property
+    def _asked(self) -> Any:
+        """The recorded question, whatever its age. Read-only: record one with `ask`."""
+        return self._proposals.asked
 
     @property
     def requests(self) -> list[Request]:
@@ -668,6 +702,7 @@ class CallContext(BaseModel):
         self._response = ''
         self._entered = ''
         self._interpretations.clear()
+        self._proposals.age(self)
         self._requests.clear()
         self._spoken.clear()
         self._open = None
@@ -699,3 +734,10 @@ class CallContext(BaseModel):
             self._ended = 'caller'
         if self._end is not None:
             await self._end()
+
+
+def _ledger() -> ProposalLedger[Any]:
+    """A fresh ledger. Imported here because `core.proposals` builds on this module."""
+    from core.proposals import ProposalLedger
+
+    return ProposalLedger()

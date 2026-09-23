@@ -15,11 +15,12 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.graph import Opening
+from core.operations import Operation
 from core.policies import claim_or_refuse
 from salon.classification import classify_reply
 from salon.models.receipts import CustomerLookup
@@ -99,10 +100,14 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
     return await lookup_customer(ctx.deps, phone, usage=ctx.usage, usage_limits=ctx.usage_limits)
 
 
-async def lookup_customer(
-    call: SalonCall, phone: str, *, usage: RunUsage | None = None, usage_limits: UsageLimits | None = None
-) -> Handoff:
-    """The lookup, once the caller has agreed to these digits. Shared by the tool and by `advance`.
+class PhoneArgs(BaseModel):
+    """The one argument a lookup takes: the number the caller agreed to."""
+
+    phone: SubmittedPhone
+
+
+class LookupCustomer(Operation[SalonCall, PhoneArgs, CustomerLookup, Handoff]):
+    """Identify the caller by the number they have just agreed to, and finish the verify step.
 
     The caller has to have agreed to *these digits*, last turn, in answer to a
     readback this code put to them; a yes to some other question is not that,
@@ -116,36 +121,57 @@ async def lookup_customer(
     enough". The graph already knows where the caller was heading, so the
     finisher does not ask the model.
     """
-    phone = _PHONE.validate_python(phone)
-    question = call.pending('phone', value=phone)
-    if question is None or (question.owner and question.owner != call.state.customer_phone):
-        raise ModelRetry(
-            'Nothing was looked up: those digits have not been read back to this caller and agreed '
-            f'to. Call `ask_number` with {phone} and wait for their answer.'
+
+    name = 'confirm_customer'
+    args_type = PhoneArgs
+    receipt_type = CustomerLookup
+
+    async def _authorise(
+        self, call: SalonCall, args: PhoneArgs, *, usage: RunUsage | None, usage_limits: UsageLimits | None
+    ) -> None:
+        question = call.pending('phone', value=args.phone)
+        if question is None or (question.owner and question.owner != call.state.customer_phone):
+            raise ModelRetry(
+                'Nothing was looked up: those digits have not been read back to this caller and agreed '
+                f'to. Call `ask_number` with {args.phone} and wait for their answer.'
+            )
+        reply = await classify_reply(call, usage=usage, usage_limits=usage_limits)
+        if reply.confirmation != 'accept':
+            raise ModelRetry(
+                'Nothing was looked up: the caller did not agree to the number that was read back. '
+                f'They said "{call.heard}". If those are different digits it is a correction -- read '
+                'the new number back with `ask_number`; otherwise ask again.'
+            )
+        call.answered()
+
+    async def _execute(self, call: SalonCall, args: PhoneArgs, grant: None) -> dict:
+        return call.diary.find_or_create_customer(args.phone)
+
+    async def _record(self, call: SalonCall, args: PhoneArgs, receipt: CustomerLookup) -> Handoff:
+        if receipt.customer_phone != args.phone:
+            raise ModelRetry(
+                'The customer lookup came back about a different number, so nobody was identified '
+                'and nothing was saved. Tell the caller you cannot check who they are just now, and '
+                'do not call this again.'
+            )
+        call.commit(
+            customer_phone=args.phone,
+            phone_confirmed=True,
+            customer_verified=receipt.customer_status,
+            verified_phone=args.phone,
         )
-    reply = await classify_reply(call, usage=usage, usage_limits=usage_limits)
-    if reply.confirmation != 'accept':
-        raise ModelRetry(
-            'Nothing was looked up: the caller did not agree to the number that was read back. '
-            f'They said "{call.heard}". If those are different digits it is a correction -- read '
-            'the new number back with `ask_number`; otherwise ask again.'
-        )
-    call.answered()
-    found = CustomerLookup.model_validate(call.diary.find_or_create_customer(phone))
-    if found.customer_phone != phone:
-        raise ModelRetry(
-            'The customer lookup came back about a different number, so nobody was identified '
-            'and nothing was saved. Tell the caller you cannot check who they are just now, and '
-            'do not call this again.'
-        )
-    call.commit(
-        customer_phone=phone,
-        phone_confirmed=True,
-        customer_verified=found.customer_status,
-        verified_phone=phone,
-    )
-    call.retain_action('confirm_customer', found.model_dump(mode='json'))
-    return Handoff(to=call.resume('concierge'), because='the caller is identified', status='completed')  # ty: ignore[invalid-argument-type]
+        call.retain_action('confirm_customer', receipt.model_dump(mode='json'))
+        return Handoff(to=call.resume('concierge'), because='the caller is identified', status='completed')  # ty: ignore[invalid-argument-type]
+
+
+LOOKUP = LookupCustomer()
+
+
+async def lookup_customer(
+    call: SalonCall, phone: str, *, usage: RunUsage | None = None, usage_limits: UsageLimits | None = None
+) -> Handoff:
+    """The lookup, once the caller has agreed to these digits. Shared by the tool and by `advance`."""
+    return await LOOKUP.run(call, PhoneArgs(phone=phone), usage=usage, usage_limits=usage_limits)
 
 
 async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:

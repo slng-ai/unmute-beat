@@ -308,7 +308,27 @@ class Turn:
             output = None
             succeeded: set[str] = set()
 
-            action = node.advance(call) if node.advance else None
+            if self._stale():
+                return
+            retained_before = call.turn in call._retained_turns
+            action = None
+            if node.advance:
+                task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
+                barge.attach(task)
+                try:
+                    action = await task
+                except asyncio.CancelledError:
+                    if not barge.hit:
+                        raise
+                    return
+                finally:
+                    barge.detach()
+            if self._stale():
+                return
+            if not retained_before and call.turn in call._retained_turns:
+                prompt = None
+            if call.requests and call.requests[-1].kind == 'classifier':
+                call.requests[-1].fallback = action is None
             if action is not None:
                 if self._stale():
                     return

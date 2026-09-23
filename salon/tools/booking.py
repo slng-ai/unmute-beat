@@ -13,9 +13,11 @@ import re
 from typing import Literal
 
 from pydantic_ai import ModelRetry, RunContext
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.policies import claim_or_refuse, pick
 from core.state import present
+from salon.classification import classify_reply
 from salon.diary import (
     NEGATED_TIME,
     AlreadyHoldsError,
@@ -25,7 +27,7 @@ from salon.diary import (
     resolve_time,
     times_named,
 )
-from salon.models.consent import Asked, agrees, move_or_add
+from salon.models.consent import Asked
 from salon.models.receipts import BookingCommand, Held, Saved, Slots
 from salon.models.shapes import Service
 from salon.models.state import Appointment, SalonCall, Unresolved
@@ -37,6 +39,7 @@ from salon.tools.writes import (
     _disagrees,
     _settle,
     _unknown,
+    close_with,
     operation_token,
     spoken_service,
 )
@@ -178,8 +181,8 @@ async def booking_guidance(
             raise ModelRetry(
                 'Attempt the requested save first; its refusal identifies the booking and choice.'
             )
-        call.ask(question)
         text = 'Would you like to move the appointment you already have, or add another one?'
+        call.ask(question.model_copy(update={'spoken': text, 'owner': call.state.customer_phone}))
     else:
         text = {
             'day': 'Which day would you like?',
@@ -243,7 +246,7 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
     """Whether the caller authorised this exact write, and whether it is a second appointment.
 
     Refuses by raising, so a write that reaches past here has caller evidence
-    behind it. Three ways in, and the model supplies none of them:
+    behind it. Three paths, checked against application state:
 
     * They agreed to an `ask_booking` readback of this same action, slot and
       booking, on the turn before this one.
@@ -266,13 +269,14 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
     if question := call.pending('booking', value=slot_id, action=action, booking_id=booking_id):
         if question.owner and question.owner != phone:
             raise ModelRetry('The caller identity changed. Ask for approval again under this number.')
-        if not agrees(call.heard):
+        if call.classification.confirmation != 'accept':
             raise ModelRetry(
                 'Nothing was saved: the caller did not agree to what was read back to them. They '
                 f'said "{call.heard}". Answer what they actually asked.'
             )
+        additional = action == 'book' and call.classification.appointment_choice == 'add'
         call.answered()
-        return action == 'book' and move_or_add(call.heard) == 'add'
+        return additional
 
     if action == 'cancel':
         raise ModelRetry(
@@ -281,13 +285,17 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
         )
 
     if (decision := call.pending('move_or_add', value=slot_id)) is not None:
-        match move_or_add(call.heard):
+        if decision.owner and decision.owner != phone:
+            raise ModelRetry('The caller identity changed. Ask again.')
+        match call.classification.appointment_choice:
             case 'add':
+                if action != 'book':
+                    raise ModelRetry('The caller chose an additional booking. Ask again before moving one.')
                 call.answered()
                 return True
             case 'move':
                 call.answered()
-                if action != 'move' or not booking_id:
+                if action != 'move' or not booking_id or booking_id != decision.booking_id:
                     raise ModelRetry(
                         'The caller asked to move the booking they already have, not to add one. '
                         f"Call this again with action='move' and booking_id={decision.booking_id!r}."
@@ -307,7 +315,7 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
     picked = bool(offered) and offered['time'] in named and len(at_that_time) == 1
     if action == 'book' and picked and not held:
         return False
-    if action == 'move' and offered and move_or_add(call.heard) == 'move' and booking_id:
+    if action == 'move' and offered and call.classification.appointment_choice == 'move' and booking_id:
         moving = next((b for b in held if b['booking_id'] == booking_id), None)
         same = (
             bool(moving)
@@ -351,11 +359,19 @@ async def save_booking(
         booking_id: The booking exactly as the diary returned it. Empty when booking.
     """
     claim_or_refuse(ctx, ACTIONS)
-    return await write_booking(ctx.deps, action, slot_id, booking_id)
+    return await write_booking(
+        ctx.deps, action, slot_id, booking_id, usage=ctx.usage, usage_limits=ctx.usage_limits
+    )
 
 
 async def write_booking(
-    call: SalonCall, action: Literal['book', 'move', 'cancel'], slot_id: str, booking_id: str
+    call: SalonCall,
+    action: Literal['book', 'move', 'cancel'],
+    slot_id: str,
+    booking_id: str,
+    *,
+    usage: RunUsage | None = None,
+    usage_limits: UsageLimits | None = None,
 ) -> str:
     """The write itself, once the caller has authorised it. Shared by the tool and by `advance`.
 
@@ -384,6 +400,8 @@ async def write_booking(
     action, slot_id, booking_id = command.action, command.slot_id, command.booking_id
     if call.state.unresolved:
         return await _settle(call)
+    if call.pending('booking') or call.pending('move_or_add') or action == 'move':
+        await classify_reply(call, usage=usage, usage_limits=usage_limits)
     additional = _authorised(call, action, slot_id, booking_id)
     if not present(call.state.customer_verified):
         raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
@@ -433,10 +451,11 @@ async def write_booking(
     going_back_to = call.resume('concierge')
     call.commit(appointment=appointment, agent=going_back_to, writes=call.state.writes + 1, unresolved=None)
     call.retain_action('save_booking', written.model_dump(mode='json'))
-    await call.speak_now(
+    await close_with(
+        call,
         pick(f'saved:{written.status}', SAVED[written.status]).format(
             spoken=written.spoken,
             service=spoken_service(written.service),
-        )
+        ),
     )
     return f'{written.status}: {written.spoken}'

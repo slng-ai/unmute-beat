@@ -13,16 +13,18 @@ from typing import Literal
 
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import UserPromptPart
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.policies import claim_or_refuse
 from core.state import present
+from salon.classification import classify_reply
 from salon.instructions import COMPLAINT_GUIDANCE
 from salon.models.receipts import ComplaintRecord
 from salon.models.state import SalonCall, Unresolved
 from salon.tools.asking import Ask
 from salon.tools.desk import hang_up
 from salon.tools.policy import ACTIONS
-from salon.tools.writes import OUTSTANDING, _answered, acknowledgement, operation_token
+from salon.tools.writes import OUTSTANDING, _answered, acknowledgement, close_with, operation_token
 
 _COMPLAINT_REQUEST_WORDS = (
     'a about an are be been caller can client complain complaining complaint complaints could customer '
@@ -37,7 +39,7 @@ _ASKING_TO_COMPLAIN = frozenset(_COMPLAINT_REQUEST_WORDS.split())
 A summary made only of these describes wanting to complain, not what went
 wrong, and reading it back asks the caller to confirm their own request.
 
-ponytail: a closed word list, like the consent matchers, and it fails the same
+ponytail: a closed word list and it fails the same
 way: towards asking what happened. Upgrade it with them.
 """
 
@@ -137,6 +139,7 @@ async def record_complaint(ctx: RunContext[SalonCall]) -> ComplaintRecord:
     It speaks the receipt itself. Do not reword the approved complaint or say
     another acknowledgement. It uses the approved wording without changes.
     """
+    await classify_reply(ctx.deps, usage=ctx.usage, usage_limits=ctx.usage_limits)
     approved = ctx.deps._complaint
     if approved is None:
         raise ModelRetry('Use ask_complaint and wait for approval before recording anything.')
@@ -148,10 +151,19 @@ async def _record_complaint(
 ) -> ComplaintRecord:
     """The tool's body with explicit wording: claim the action, then write."""
     claim_or_refuse(ctx, ACTIONS)
-    return await write_complaint(ctx.deps, summary, requested_resolution)
+    return await write_complaint(
+        ctx.deps, summary, requested_resolution, usage=ctx.usage, usage_limits=ctx.usage_limits
+    )
 
 
-async def write_complaint(call: SalonCall, summary: str, requested_resolution: str) -> ComplaintRecord:
+async def write_complaint(
+    call: SalonCall,
+    summary: str,
+    requested_resolution: str,
+    *,
+    usage: RunUsage | None = None,
+    usage_limits: UsageLimits | None = None,
+) -> ComplaintRecord:
     """The write itself, once the caller has approved these exact words. Shared by the tool and by `advance`.
 
     The wording has to be the wording that was read back and approved, under
@@ -160,6 +172,7 @@ async def write_complaint(call: SalonCall, summary: str, requested_resolution: s
     entry in the book rather than two, and the write goes through the same
     boundary a booking does. The receipt is validated and then *read*: a
     well-formed `recorded: False` is the book saying it did not take it. The
+    acknowledgement,
     acknowledgement, reference included, is spoken here before the next
     request rather than by the model after it.
     """
@@ -170,6 +183,7 @@ async def write_complaint(call: SalonCall, summary: str, requested_resolution: s
         raise ModelRetry(
             'Nobody is identified yet. Return to concierge so verification can run before complaints.'
         )
+    await classify_reply(call, usage=usage, usage_limits=usage_limits)
     approved = call._complaint
     if (
         approved is None
@@ -201,7 +215,7 @@ async def write_complaint(call: SalonCall, summary: str, requested_resolution: s
         )
     call.commit(writes=call.state.writes + 1)
     call.retain_action('record_complaint', recorded.model_dump(mode='json'))
-    await call.speak_now(acknowledgement(recorded.reference, requested_resolution))
+    await close_with(call, acknowledgement(recorded.reference, requested_resolution))
     return recorded
 
 

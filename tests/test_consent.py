@@ -32,9 +32,9 @@ from core.processor import PydanticAgentProcessor
 from salon import agents, diary
 from salon.agents import AGENTS
 from salon.diary import Diary, times_named
-from salon.models.consent import agrees, ends, move_or_add
 from salon.models.state import open_call
 from salon.tools import complaints, writes
+from tests.classifier_model import classifier_model
 
 books = Diary()
 """This module's salon, emptied by each case that writes to it."""
@@ -151,62 +151,8 @@ def _slot(call, when: str, service: str = 'haircut', at: str = ''):
     return slots[0]
 
 
-def the_matchers_refuse_rather_than_guess():
-    """Every one of them fails towards asking. That is the property, not the word lists.
-
-    N4's yes is a perfectly good yes. That is the point: the wording is not what was wrong with it.
-    It answered "are you calling from Spain?", and nothing compared it against the question that had
-    actually been asked, so it became agreement to a phone number instead. What stops it is the
-    pending question, not the word list -- see `n4_a_yes_about_spain_...`.
-
-    N1, word for word.
-
-    Both, or neither, is a question and not a decision.
-
-    Both readings of an unqualified hour, so the diary's own offers decide.
-
-    Not a time. Intersected with real offers, a wrong reading books something.
-    """
-    for yes in (
-        'yes',
-        "yeah, that's right",
-        'Sounds good',
-        'perfect',
-        'go ahead',
-        'Go for it.',
-        'GO FOR IT!',
-    ):
-        assert agrees(yes), yes
-    for other in (
-        '',
-        'no',
-        'Yes, but can you make it 3pm instead',
-        'Actually, Friday',
-        "I'd rather have the afternoon",
-        'Go for it, but make it eleven instead',
-        'Go for it at eleven',
-        'Should I go for it?',
-        "Don't go for it",
-    ):
-        assert not agrees(other), other
-
-    assert agrees('Yes, from Spain')
-
-    for bye in ("no, that's all thanks", "I'm good, thanks", 'goodbye', "that's everything, thank you"):
-        assert ends(bye), bye
-    for still in (
-        'Can you help me moving it to Saturday, the same time?',
-        "that's all -- oh, can you also book Friday?",
-        'no',
-        '',
-    ):
-        assert not ends(still), still
-
-    assert move_or_add('move it to Saturday') == 'move'
-    assert move_or_add("I'd like another one as well") == 'add'
-    assert move_or_add('change it and add another') == ''
-    assert move_or_add('three o clock') == ''
-
+def time_parsing_stays_deterministic():
+    """Date/time parsing is separate from semantic consent."""
     assert times_named("three o'clock") == {'03:00', '15:00'}
     assert times_named('3 pm') == {'15:00'}
     assert times_named('half past two') == {'02:30', '14:30'}
@@ -218,9 +164,6 @@ def the_matchers_refuse_rather_than_guess():
     assert diary.resolve_time('10:30 AM') == '10:30'
     for words in ('not 10 oclock', 'one or two', 'maybe at one'):
         assert not times_named(words), words
-    assert agrees('That would be great.') and agrees('Absolutely.')
-    assert ends('No, thanks.')
-    assert not ends('No thanks, but can you book Friday?')
 
 
 async def n1_a_move_question_cannot_hang_up():
@@ -670,7 +613,7 @@ async def asking_to_complain_is_not_a_complaint():
 
 
 async def main():
-    the_matchers_refuse_rather_than_guess()
+    time_parsing_stays_deterministic()
     await n1_a_move_question_cannot_hang_up()
     await n1_the_move_it_asked_for_is_the_move_it_makes()
     await go_for_it_approves_only_the_pending_move()
@@ -689,4 +632,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    with classifier_model():
+        asyncio.run(main())

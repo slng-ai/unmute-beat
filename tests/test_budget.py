@@ -21,6 +21,7 @@ debugging session can import one module without running every check in it.
 import asyncio
 import json
 from contextlib import ExitStack
+from dataclasses import replace
 from datetime import datetime
 
 from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
@@ -35,6 +36,7 @@ from salon.agents import AGENTS
 from salon.diary import Diary
 from salon.models.consent import Asked
 from salon.models.state import open_call
+from tests.classifier_model import classifier_model
 
 PHONE = '+34600111222'
 
@@ -301,6 +303,7 @@ async def a_permitted_repair_succeeds():
     call = open_call(PHONE, diary=books)
     call.commit(agent='verify')
     probe = Probe(call, budget=TurnBudget(repair_retries=2))
+    probe._agents = {**AGENTS, 'verify': replace(AGENTS['verify'], advance=None)}
     call.ask(Asked(about='phone', value=PHONE))
     attempts = []
 
@@ -511,4 +514,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    with classifier_model():
+        asyncio.run(main())

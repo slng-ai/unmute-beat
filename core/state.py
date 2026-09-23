@@ -110,7 +110,9 @@ class Request:
 
     started: float
     first_output: float | None = None
-    kind: Literal['', 'text', 'tool'] = ''
+    kind: Literal['', 'text', 'tool', 'classifier'] = ''
+    duration: float | None = None
+    fallback: bool = False
 
     @property
     def ttft(self) -> float | None:

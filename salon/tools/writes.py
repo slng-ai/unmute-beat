@@ -24,6 +24,7 @@ from pydantic_ai import ModelRetry
 
 from core.policies import pick
 from salon.diary import RefusedError
+from salon.models.consent import Asked
 from salon.models.receipts import ComplaintRecord, Saved
 from salon.models.state import Appointment, SalonCall, Unresolved
 
@@ -98,6 +99,12 @@ def acknowledgement(reference: str, requested_resolution: str) -> str:
     step = MANAGER_CALLS if _WANTS_MONEY.search(requested_resolution) else REPLY_SOON
     pending = ' Your requested resolution is pending approval.' if requested_resolution else ''
     return NOTED.format(reference=reference, next_step=step) + pending + ' Anything else I can help with?'
+
+
+async def close_with(call: SalonCall, text: str) -> None:
+    """Speak a receipt and record its offer of further help as a decision point."""
+    call.ask(Asked(about='closing', spoken=text, owner=call.state.customer_phone))
+    await call.speak_now(text)
 
 
 def spoken_service(service: str) -> str:
@@ -206,7 +213,7 @@ async def _settle(call: SalonCall) -> str:
             )
         call.commit(writes=call.state.writes + 1, unresolved=None)
         call.retain_action('record_complaint', record.model_dump(mode='json'))
-        await call.speak_now(acknowledgement(record.reference, pending.wanted))
+        await close_with(call, acknowledgement(record.reference, pending.wanted))
         return f'complaint recorded: {record.reference}'
     try:
         written = Saved.model_validate(outcome)
@@ -229,9 +236,10 @@ async def _settle(call: SalonCall) -> str:
         unresolved=None,
     )
     call.retain_action('save_booking', written.model_dump(mode='json'))
-    await call.speak_now(
+    await close_with(
+        call,
         pick(f'saved:{written.status}', SAVED[written.status]).format(
             spoken=written.spoken, service=spoken_service(written.service)
-        )
+        ),
     )
     return f'{written.status}: {written.spoken}'

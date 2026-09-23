@@ -2,43 +2,33 @@
 
 from __future__ import annotations
 
-import re
 from functools import lru_cache
 from typing import Literal
 
 from pydantic_ai import ModelRetry, RunContext
-from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart
 
 from core.graph import Exit
 from core.policies import claim_or_refuse
-from salon.models.consent import ends
+from salon.classification import classify_reply
 from salon.models.state import Handoff, SalonCall
 from salon.tools.policy import ACTIONS
 
 
 def _can_end(call: SalonCall) -> bool:
-    """Whether the caller's own words say the call is over.
+    """Only a bound semantic interpretation can establish an end-of-call request."""
+    return call.classification.conversation == 'end'
 
-    A bare "no thanks" declines the last offer, not necessarily the whole
-    call: it ends the call only when the last thing said to them was an offer
-    of anything else.
-    """
-    if not ends(call.heard):
-        return False
-    if not re.fullmatch(r'no[ ,]*(?:thanks|thank you)[.! ]*', call.heard.strip(), re.IGNORECASE):
-        return True
-    previous = [r['text'] for r in call.transcript() if r['said'] != 'caller']
-    if not previous and not call.all_spoken:
-        previous = [
-            p.content
-            for m in call.messages
-            if isinstance(m, ModelResponse)
-            for p in m.parts
-            if isinstance(p, TextPart)
-        ]
-    return bool(
-        previous and re.search(r'anything else|anything more|something else', previous[-1], re.IGNORECASE)
-    )
+
+async def end_conversation(call: SalonCall, goodbye: str) -> str:
+    """Shared executor for a classified closing reply and the model-facing tool."""
+    if not _can_end(call):
+        raise ModelRetry('The caller has not clearly ended the call. Answer their request or clarify.')
+    call.answered()
+    call.end_requested('caller')
+    await call.speak_now(goodbye, origin='goodbye')
+    await call.end_call()
+    return goodbye
 
 
 async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
@@ -49,15 +39,8 @@ async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
         goodbye: One short goodbye in your own words. It is the last thing they hear.
     """
     claim_or_refuse(ctx, ACTIONS)
-    if not _can_end(ctx.deps):
-        raise ModelRetry(
-            f'The line is still open: the caller said "{ctx.deps.heard}", which is not them ending '
-            'the call. Answer what they asked. Hang up only on their own goodbye.'
-        )
-    ctx.deps.end_requested('caller')
-    await ctx.deps.speak_now(goodbye, origin='goodbye')
-    await ctx.deps.end_call()
-    return goodbye
+    await classify_reply(ctx.deps, usage=ctx.usage, usage_limits=ctx.usage_limits)
+    return await end_conversation(ctx.deps, goodbye)
 
 
 @lru_cache

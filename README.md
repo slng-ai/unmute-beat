@@ -91,7 +91,9 @@ salon/
   agents.py             advance(), build(), the AGENTS table
 prompts/                one prompt per step, the shared rules, knowledge/
 utils/observability.py  Langfuse over OTel
-tests/                  thirteen assert scripts
+tests/                  fourteen assert scripts
+evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
+evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
 ```
 

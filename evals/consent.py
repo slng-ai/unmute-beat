@@ -1,69 +1,71 @@
 """Explicit live semantic evaluation: uv run --env-file .env python -m evals.consent.
 
-Makes billable model requests. Reports classifier latency, not voice latency.
+Makes billable model requests, one per case in `evals.cases`. Reports, per
+kind of reply, how often the current classifier gave the reviewed answer, how
+often it accepted something the caller did not agree to, and how long its
+request took. Classifier latency, not voice latency.
+
+The application only asks the classifier about a question the caller heard in
+full, on the turn after it went out; for an interrupted or stale case it is
+sent no pending question, exactly as `advance` would send it.
 """
 
 import asyncio
-import json
-import math
 import time
 
 from pydantic_ai.usage import RunUsage
 
+from evals.cases import CASES, Case, Meaning
+from evals.report import Report, Result
 from salon.classification import CLASSIFIER
-from salon.models.consent import Asked, ConsentInput
+from salon.models.consent import Asked, ConsentInput, ReplyClassification
+
+OWNER = '+34600111222'
+
+
+def classifier_meaning(case: Case, result: ReplyClassification) -> Meaning:
+    """Read the four labels back as one meaning, the way `advance` acts on them."""
+    if result.conversation == 'end':
+        return 'end'
+    if case.about == 'closing':
+        return 'continue'
+    if case.about == 'move_or_add':
+        return result.appointment_choice if result.appointment_choice in ('move', 'add') else 'unclear'
+    if result.confirmation in ('accept', 'reject', 'revise', 'conditional'):
+        return result.confirmation
+    return 'unclear'
+
+
+def legacy_classification(meaning: Meaning, retained: bool = False) -> ReplyClassification:
+    """The four labels a correct classifier gives for this meaning. The inverse of `classifier_meaning`."""
+    fields: dict[str, str] = {'retained_approval': 'keep' if retained else 'unclear'}
+    if meaning in ('accept', 'reject', 'revise', 'conditional', 'unclear'):
+        fields |= {'confirmation': meaning, 'conversation': 'continue'}
+    elif meaning in ('move', 'add'):
+        fields |= {'appointment_choice': meaning, 'conversation': 'continue'}
+    elif meaning == 'end':
+        fields |= {'conversation': 'end'}
+    elif meaning == 'continue':
+        fields |= {'conversation': 'continue'}
+    return ReplyClassification.model_validate(fields)
+
+
+def consent_input(case: Case) -> ConsentInput:
+    """What `classify_reply` would send for this case."""
+    heard = case.delivered and not case.stale
+    pending = Asked(about=case.about, spoken=case.spoken, owner=OWNER) if heard else None
+    return ConsentInput(utterance=case.utterance, previous_speech=case.spoken, owner=OWNER, pending=pending)
 
 
 async def main() -> None:
-    booking = Asked(about='booking', spoken='Shall I book Friday at three?', action='book')
-    closing = Asked(about='closing', spoken='Do you need anything else?')
-    choice = Asked(about='move_or_add', spoken='Move your existing booking or add another?')
-    cases = [
-        (booking, 'Yes, please.', 'confirmation', 'accept'),
-        (booking, 'Sí, resérvalo.', 'confirmation', 'accept'),
-        (booking, 'Sí, book it please.', 'confirmation', 'accept'),
-        (booking, 'Yes, if it costs less than twenty.', 'confirmation', 'conditional'),
-        (booking, 'Sí, pero solo si cuesta menos de veinte.', 'confirmation', 'conditional'),
-        (booking, 'Actually, make it Saturday.', 'confirmation', 'revise'),
-        (booking, 'Mejor el sábado.', 'confirmation', 'revise'),
-        (booking, 'Yes, how much will it cost?', 'confirmation', 'unclear'),
-        (booking, 'No, thanks.', 'conversation', 'continue'),
-        (closing, 'No, thanks.', 'conversation', 'end'),
-        (closing, 'No, gracias. Eso es todo.', 'conversation', 'end'),
-        (closing, 'Bye, pero antes, ¿cuánto cuesta?', 'conversation', 'continue'),
-        (choice, 'Keep that one and add another.', 'appointment_choice', 'add'),
-        (choice, 'Cambia la que ya tengo.', 'appointment_choice', 'move'),
-        (choice, 'Yes.', 'appointment_choice', 'unclear'),
-    ]
     usage = RunUsage()
-    durations, results = [], []
-    for question, utterance, field, expected in cases:
+    results = []
+    for case in CASES:
         started = time.perf_counter()
-        output = await CLASSIFIER.classify(
-            ConsentInput(utterance=utterance, previous_speech=question.spoken, owner='', pending=question),
-            usage=usage,
-        )
-        durations.append(time.perf_counter() - started)
-        actual = getattr(output, field)
-        results.append({'utterance': utterance, 'field': field, 'expected': expected, 'actual': actual})
-    durations.sort()
-    print(
-        json.dumps(
-            {
-                'results': results,
-                'accuracy': sum(r['actual'] == r['expected'] for r in results) / len(results),
-                'false_acceptances': sum(
-                    r['field'] == 'confirmation' and r['expected'] != 'accept' and r['actual'] == 'accept'
-                    for r in results
-                ),
-                'requests': usage.requests,
-                'classifier_seconds_p50': durations[math.ceil(len(durations) * 0.5) - 1],
-                'classifier_seconds_p95': durations[math.ceil(len(durations) * 0.95) - 1],
-            },
-            indent=2,
-            ensure_ascii=False,
-        )
-    )
+        output = await CLASSIFIER.classify(consent_input(case), usage=usage)
+        actual = classifier_meaning(case, output)
+        results.append(Result.of(case, case.legacy_meaning, actual, time.perf_counter() - started))
+    print(Report(interpreter='classifier', results=results).model_dump_json(indent=2))
 
 
 if __name__ == '__main__':

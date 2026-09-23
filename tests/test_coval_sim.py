@@ -10,7 +10,16 @@ from pathlib import Path
 
 from utils.coval_sim.__main__ import ReleaseCheck, Repository
 from utils.coval_sim.coval import CovalClient
-from utils.coval_sim.models import Agent, Message, MetricResult, MetricValue, Run, RunResults, Simulation
+from utils.coval_sim.models import (
+    FALLBACKS,
+    Agent,
+    Message,
+    MetricResult,
+    MetricValue,
+    Run,
+    RunResults,
+    Simulation,
+)
 
 
 class FakeCoval(CovalClient):
@@ -84,7 +93,33 @@ def test_problems() -> None:
     assert run().problems([]) == ['the run has no simulated calls']
 
 
+def test_fallbacks() -> None:
+    """Each fragment is still in its fixed line, and a call that said one fails, however Coval heard it."""
+    from core import turn
+
+    lines = [turn.STUMBLE, turn.EXHAUSTED, turn.UNBACKED, turn.WITHHELD]
+    assert all(fragment in line.lower() for fragment, line in zip(FALLBACKS.values(), lines, strict=True))
+
+    heard = [
+        'Sorry.',
+        'Had a problem there.',
+        'Sorry. Me correct myself.',
+        "I haven't actually made that change.",
+    ]
+    sim = Simulation(
+        simulation_id='c',
+        status='COMPLETED',
+        transcript=[Message(role='assistant', content=c) for c in heard],
+    )
+    assert run().problems([sim]) == [
+        'call c: the harness said its STUMBLE (a turn failed) line',
+        'call c: the harness said its UNBACKED (claimed a change nothing made) line',
+    ]
+    assert spoke('a').fallbacks == []
+
+
 if __name__ == '__main__':
     test_plan()
     test_problems()
+    test_fallbacks()
     print('ok')

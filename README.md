@@ -77,13 +77,14 @@ grades each one. Run it before a release, or after a change to what the agent
 says or does.
 
 ```bash
-uv run python -m utils.coval_sim run VkpkmRMV     # the salon release set, 18 calls
+uv run python -m utils.coval_sim run 8YK67zzr     # the core set: 5 calls aimed at known harness failures
+uv run python -m utils.coval_sim run VkpkmRMV     # the full salon release set, 18 calls
 uv run python -m utils.coval_sim run 9CN3Djw2     # the one-call smoke set
 ```
 
 ```
 FAIL  salon  test set VkpkmRMV  run Ab12Cd34Ef56Gh78
-      call XdjHhNEhaG6TLBraQTFnfk: No Change Claimed Without Consent answered NO
+      call XdjHhNEhaG6TLBraQTFnfk: Changes Match What The Caller Agreed answered NO
       call 5pU9frjpwHPFjNvzR2xH5E: Harness: expected behaviors scored 0.60
       log: /var/folders/.../coval-sim-rq0wjtjr/salon-bot.log
 ```
@@ -106,9 +107,10 @@ Each simulated call has no caller ID, so the agent has to ask for the number,
 and gets a fresh diary (`DIARY_PER_CALL`), so calls running side by side cannot
 see each other's bookings. The simulated caller always gives +34 611 111 111.
 
-A row fails when a call did not finish, the agent never spoke, a yes/no metric
-answered NO, or the composite metric (`Harness: expected behaviors`) scored
-below 1. Latency numbers are reported by Coval but never fail a row. Read the
+A row fails when a call did not finish, the agent never spoke, the agent said
+one of the harness's recovery lines (`STUMBLE`, `EXHAUSTED`, `UNBACKED`,
+`WITHHELD` in `core/turn.py`), a yes/no metric answered NO, or the composite
+metric (`Harness: expected behaviors`) scored below 1. Latency numbers are reported by Coval but never fail a row. Read the
 transcript before you trust a failure: `coval --format json simulations get <call id>`.
 
 | Option | What it does |

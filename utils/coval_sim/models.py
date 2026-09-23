@@ -15,6 +15,13 @@ AGENT_NAME = re.compile(r'^voice-harness-(?P<agency>[a-z]+)-pipecat$')
 The name is the whole link between the repository and Coval, so nothing here holds a Coval ID.
 The agency is what `bot.py` reads from `VOICE_AGENCY`."""
 FINISHED = {'COMPLETED', 'FAILED', 'CANCELLED', 'ERROR'}
+FALLBACKS = {
+    'STUMBLE (a turn failed)': 'problem there',
+    'EXHAUSTED (a turn ran out of budget)': 'round in circles',
+    'UNBACKED (claimed a change nothing made)': 'actually made that change',
+    'WITHHELD (held back a claim)': 'nothing has been changed',
+}
+"""The fixed recovery lines of `core/turn.py`, by a fragment Coval's transcription keeps."""
 
 
 class Agent(BaseModel):
@@ -65,6 +72,19 @@ class Simulation(BaseModel):
     def agent_spoke(self) -> bool:
         """Whether the agent said anything at all during the call."""
         return any(m.role not in ('user', 'system', 'tool') and m.content for m in self.transcript)
+
+    @property
+    def fallbacks(self) -> list[str]:
+        """The harness's own recovery lines the agent said: each one is a turn that went wrong.
+
+        Matched on a fragment of each fixed line in `core/turn.py` (`STUMBLE`,
+        `EXHAUSTED`, `UNBACKED`, `WITHHELD`), because Coval's transcript is its
+        own transcription of the audio and rarely matches the text word for word.
+        """
+        spoken = ' '.join(
+            m.content or '' for m in self.transcript if m.role not in ('user', 'system', 'tool')
+        )
+        return [line for line, fragment in FALLBACKS.items() if fragment in spoken.lower()]
 
 
 class MetricValue(BaseModel):
@@ -134,6 +154,9 @@ class Run(BaseModel):
                 )
             elif not sim.agent_spoke:
                 problems.append(f'call {sim.simulation_id}: the agent never spoke')
+            problems += [
+                f'call {sim.simulation_id}: the harness said its {line} line' for line in sim.fallbacks
+            ]
         metrics = self.results.metrics.items() if self.results else ()
         for metric_id, metric in metrics:
             for answer in metric.values:

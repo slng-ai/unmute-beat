@@ -138,8 +138,12 @@ all clean. Paste the real output; don't round up.
 
 ## Known debt
 
-`times_named` in `salon/diary.py` and the complaint word list in
-`salon/tools/complaints.py` remain language-specific heuristics. Consent,
-move/add and closing interpretation use the typed classifier. Structured
-output validates shape, not semantic accuracy; run the explicit live evaluation
+No word list authorises a write any more: consent, move/add, closing, the
+pick of a time on the table (`chosen_offer`) and taking back a booking
+(`last_change`) are all read by the typed classifier and checked by
+application guards. `times_named` in `salon/diary.py` still only steers which
+times a diary read prefers. The complaint word list in
+`salon/tools/complaints.py` and the unbacked-claim patterns in
+`salon/models/state.py` remain language-specific heuristics. Structured output
+validates shape, not semantic accuracy; run the explicit live evaluation
 before making accuracy or latency claims.

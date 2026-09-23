@@ -34,7 +34,7 @@ from salon.classification import CLASSIFIER
 from salon.diary import Diary
 from salon.models.consent import ConsentInput, ReplyClassification
 from salon.models.state import open_call
-from salon.tools.booking import ask_booking
+from salon.tools.booking import ask_booking, offer
 
 PHONE = '+34611111111'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -302,12 +302,14 @@ async def a_booking_taken_back_is_offered_for_cancelling():
     """
     call = booking_call()
     probe = Probe(call)
-    slot = next(
-        s
-        for s in books.find_slots(PHONE, 'Friday', 'hair-color', books.now(), offered_to=call.id)['slots']
-        if s['time'] == '09:00'
-    )
+    call.turn_started('A hair colour on Friday.')
+    await offer(call, 'Friday', 'hair-color')
+    call.note_reached()
+    call.note_drained()
+    call.turn_ended(interrupted=False)
+    slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
     readings = {
+        "Nine o'clock works.": {'chosen_offer': slot.slot_id},
         "Oh, that's too much for me. Leave it, thanks. Goodbye.": {
             'last_change': 'withdraw',
             'conversation': 'end',
@@ -324,13 +326,15 @@ async def a_booking_taken_back_is_offered_for_cancelling():
             fields.pop('last_change', None)
         if data.pending is None or data.pending.about != 'booking':
             fields.pop('confirmation', None)
+        if data.pending is None or data.pending.about != 'offer':
+            fields.pop('chosen_offer', None)
         return ModelResponse(parts=[TextPart(ReplyClassification.model_validate(fields).model_dump_json())])
 
     async def booking(messages, info):
         yield {
             0: DeltaToolCall(
                 name='save_booking',
-                json_args=f'{{"action":"book","slot_id":"{slot["slot_id"]}","booking_id":""}}',
+                json_args=f'{{"action":"book","slot_id":"{slot.slot_id}","booking_id":""}}',
             )
         }
 
@@ -360,6 +364,46 @@ async def a_booking_taken_back_is_offered_for_cancelling():
         await probe._turn('Yes, cancel it. Bye.')
     assert call.state.writes == 2, 'the agreed cancel was dropped for the goodbye'
     assert books.bookings_for(PHONE, CLOCK.date()) == [], books.bookings_for(PHONE, CLOCK.date())
+
+
+async def only_a_slot_on_the_table_can_be_picked():
+    """A pick is the classifier's reading checked against the table, never a word list and never a free slot id.
+
+    "Nine, but only if it costs less than thirty" named a time and used to
+    book on the time alone. And a reading naming a real slot that was never
+    offered to this caller authorises nothing, whoever produced it.
+    """
+    for reading, books_it in (
+        ('offered', True),
+        ('conditional', False),
+        ('elsewhere', False),
+    ):
+        call = booking_call()
+        probe = Probe(call)
+        call.turn_started('A hair colour on Friday.')
+        await offer(call, 'Friday', 'hair-color')
+        call.note_reached()
+        call.note_drained()
+        call.turn_ended(interrupted=False)
+        nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
+        saturday = books.find_slots(PHONE, 'Saturday', 'hair-color', books.now(), offered_to='someone else')
+        chosen = {'offered': nine, 'conditional': '', 'elsewhere': saturday['slots'][0]['slot_id']}[reading]
+
+        async def classify(messages, info, chosen=chosen):
+            return ModelResponse(parts=[TextPart(ReplyClassification(chosen_offer=chosen).model_dump_json())])
+
+        async def booking(messages, info):
+            yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
+
+        with (
+            patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)),
+            agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking)),
+        ):
+            probe.interrupt()
+            await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
+        assert (call.state.writes == 1) is books_it, (reading, call.state.writes)
+        if books_it:
+            assert [r.kind for r in call.requests] == ['classifier'], 'a plain pick needs no model'
 
 
 async def a_missing_barge_never_merges_turns():
@@ -424,6 +468,7 @@ async def main():
     await the_next_reply_is_told_what_was_not_heard()
     await a_number_talked_over_arrives_whole()
     await a_booking_taken_back_is_offered_for_cancelling()
+    await only_a_slot_on_the_table_can_be_picked()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

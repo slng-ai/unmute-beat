@@ -2,9 +2,9 @@
 
 Two interpreters read a caller's reply, and one of them is live at a time:
 
-* `CONSENT`, the default: five narrow labels (confirmation, appointment
-  choice, end of call, retained complaint approval, and whether the reply
-  takes back the booking just made). A correction or a change of task is not
+* `CONSENT`, the default: six narrow labels (confirmation, appointment
+  choice, end of call, retained complaint approval, whether the reply takes
+  back the booking just made, and which time on the table it picks). A correction or a change of task is not
   something it can say, so those fall through to an agent.
 * `SOLVER`, behind `SALON_INTERPRETER=solver`: one decision per reply from a
   wider set (accept, correct the number, switch task, clarify, ...), so a
@@ -114,11 +114,30 @@ class ConsentInterpreter(ClassifierInterpreter['SalonCall', ConsentInput, ReplyC
         return call.consent_snapshot()
 
     def _still_valid(self, call: SalonCall, value: ConsentInput) -> bool:
+        """The same reply, under the same identity, to the same question, with the same times on the table.
+
+        Field by field, not the whole snapshot: `_settle` itself changes the
+        retained complaint, and a reading must not go stale by being recorded.
+        """
+        now = call.consent_snapshot()
         return (
-            value.utterance == call.heard
-            and value.owner == call.state.customer_phone
-            and value.pending == call.pending_question()
+            value.utterance == now.utterance
+            and value.owner == now.owner
+            and value.pending == now.pending
+            and value.offered == now.offered
+            and value.holding == now.holding
         )
+
+    def _rereadable(self, call: SalonCall, value: ConsentInput) -> bool:
+        """Only the times on the table or the caller's holdings moved: the same reply, to a wider question.
+
+        A diary read inside the turn is what does this, and without a new
+        reading a caller who named a time ("Friday at nine") could never be
+        matched to the slot the read just found. Identity, question and words
+        must all be unchanged, or the stale reading stays the safe default.
+        """
+        now = call.consent_snapshot()
+        return value.utterance == now.utterance and value.owner == now.owner and value.pending == now.pending
 
     def _settle(
         self, call: SalonCall, value: ConsentInput, result: ReplyClassification

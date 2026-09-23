@@ -261,8 +261,9 @@ async def openings_skip_the_model():
     The trace of 2026-09-23 spent two on each of three turns: verify was run
     only to ask for a number, booking only to offer times for a request the
     caller had already made, and again only to find the id of a time it had
-    just offered. Each is now an opening or a rendered fact, and each is
-    counted here.
+    just offered. Each is now an opening or the consent reading, and each is
+    counted here: a plain pick of an offered time is written from the reading
+    alone, with no model request at all.
     """
     books.reset()
     books.set_clock(CLOCK)
@@ -297,12 +298,10 @@ async def openings_skip_the_model():
     assert call.state.wanted is None and len(call.state.offered) == 3, call.state
     assert call.spoken[-1].text.startswith('For a haircut on Friday, I have 9:00 AM'), call.spoken
 
-    nine = call.state.offered[0].slot_id
-    booking_model, prompts = scripted(('save_booking', {'action': 'book', 'slot_id': nine, 'booking_id': ''}))
-    with agents.AGENTS['booking'].agent.override(model=booking_model):
+    with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn('9:00 AM, please.')
-    assert f'`{nine}`' in prompts[0], 'the offered ids are in the prompt, so no diary read is needed'
-    assert probe.requests() == 1 and call.state.writes == 1, (probe.requests(), call.state)
+    assert probe.requests() == 1 and call.requests[0].kind == 'classifier', 'a plain pick needs no model'
+    assert call.state.writes == 1, call.state
     assert call.state.offered == [], 'a save takes the offer off the table'
 
 

@@ -1,7 +1,8 @@
 """Turning a caller's words into typed data, at most once per turn.
 
 `Interpreter` owns what every interpretation must do whatever does the
-interpreting: ask at most once per accepted turn, spend the shared budget,
+interpreting: ask at most once per accepted turn (unless the application
+itself widened the question, see `_rereadable`), spend the shared budget,
 retain the caller's input before the request can be cancelled, time and trace
 the request, turn a failure into the safe default, and never publish an answer
 to a turn the caller has moved on from. A subclass supplies only the input it
@@ -52,12 +53,25 @@ class Interpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](ABC):
     ) -> OutputT:
         """This turn's interpretation, requested now if it has not been yet.
 
-        Failures are cached too, so a tool retry cannot turn uncertainty into
-        repeated guesses. The budget is checked before anything changes, so an
-        exhausted turn leaves no trace of having tried.
+        At most once per turn, with one exception. Failures are cached too, so
+        a tool retry cannot turn uncertainty into repeated guesses, and a
+        reading gone stale because the caller's identity, the question or the
+        words changed is never asked again in that turn: it reads as the safe
+        default. The exception is `_rereadable`: the only change since is
+        application-owned context that widens the question (a diary read put
+        new times on the table), which gets a new reading within the turn's
+        budget. The budget is checked before anything changes, so an exhausted
+        turn leaves no trace of having tried.
         """
         cached = call._interpretations.get(self.name)
-        if (cached is not None and cached.turn == call.turn) or not call.heard.strip():
+        if not call.heard.strip() or (
+            cached is not None
+            and cached.turn == call.turn
+            and (
+                self._still_valid(call, cast(InputT, cached.input))
+                or not self._rereadable(call, cast(InputT, cached.input))
+            )
+        ):
             return self.current(call)
         value = self._input(call)
         turn, generation = call.turn, call._generation
@@ -109,6 +123,10 @@ class Interpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](ABC):
     def _still_valid(self, call: C, value: InputT) -> bool:
         """Whether an interpretation of `value` still describes this call. Override to compare what matters."""
         return True
+
+    def _rereadable(self, call: C, value: InputT) -> bool:
+        """Whether a stale reading of `value` may be asked again this turn. Never, unless a subclass says why."""
+        return False
 
     def _settle(self, call: C, value: InputT, result: OutputT) -> OutputT:
         """Adjust or record a fresh result before it is cached. Only runs for the current turn."""

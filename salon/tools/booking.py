@@ -2,9 +2,10 @@
 
 `save_booking` is the only thing that changes an appointment, and it will not
 run on the model's say-so. `_authorised` is what stands between the two: the
-caller either agreed to a readback of this exact write, named exactly one of
-the times just offered to them, or answered the move-or-add question in their
-own words. The model supplies none of those.
+caller either agreed to a readback of this exact write, picked one of the
+times the pending offer put to them, or answered the move-or-add question in
+their own words. The model supplies none of those; the consent reading
+interprets the reply, and this code checks it against what was on the table.
 
 The step's opening is here too: resumed after verification with the
 request the caller made at the front desk, it offers times for it without a
@@ -13,7 +14,6 @@ model re-reading that request, because the words are already typed.
 
 from __future__ import annotations
 
-import re
 from typing import Literal
 
 from pydantic_ai import ModelRetry, RunContext
@@ -25,13 +25,11 @@ from core.policies import claim_or_refuse, pick
 from core.state import present
 from salon.classification import classify_reply
 from salon.diary import (
-    NEGATED_TIME,
     AlreadyHoldsError,
     RefusedError,
     day_phrases,
     resolve_day,
     resolve_time,
-    times_named,
 )
 from salon.models.consent import Asked
 from salon.models.receipts import BookingCommand, Held, Saved, Slots
@@ -49,9 +47,6 @@ from salon.tools.writes import (
     operation_token,
     spoken_service,
 )
-
-_SAME_TIME = re.compile(r'\b(?:same|usual)[\s\u2014\u2013-]+time\b', re.IGNORECASE)
-""" "The same time" names a time exactly, without naming any digits: the one the caller already holds."""
 
 
 async def read_diary(
@@ -161,13 +156,16 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
 
     What was spoken is recorded, ids and all, so the turn the caller picks one
     can go straight to `save_booking` rather than re-reading the diary to find
-    the id of a time they have already been told.
+    the id of a time they have already been told. The offer is also the
+    question the caller's next reply answers: the consent reading names which
+    of these ids they picked, and only an id offered here can count.
     """
     found = await find_times(call, when, service, at)
     spoken = found.slots[:_OFFERED]
     if spoken:
         times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in spoken)
-        text = f'For a {spoken_service(service)} on {found.day}, I have {times}. Which time works for you?'
+        day = found.day if found.day in ('today', 'tomorrow') else f'on {found.day}'
+        text = f'For a {spoken_service(service)} {day}, I have {times}. Which time works for you?'
     else:
         text = {
             'need_day': 'Which day would you like?',
@@ -175,8 +173,18 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
             'closed': 'The salon is closed that day. Which other day works for you?',
         }.get(found.status, 'There are no available times for that request. Which other day works for you?')
     call.commit(offered=spoken)
-    call.answered()
-    await call.speak_now(text, origin='guidance')
+    if spoken:
+        call.ask(
+            Asked(
+                about='offer',
+                spoken=text,
+                value=','.join(slot.slot_id for slot in spoken),
+                owner=call.state.customer_phone,
+            )
+        )
+    else:
+        call.answered()
+    await call.speak_now(text, origin='ask' if spoken else 'guidance')
     return text
 
 
@@ -265,6 +273,23 @@ async def ask_booking(
     return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)
 
 
+async def offer_cancel(ctx: RunContext[SalonCall]) -> Ask:
+    """Offer to cancel the appointment booked earlier in this call, when the caller takes it back.
+
+    For "leave it", "I don't want it after all", "cancel that one". It reads
+    the cancellation back and waits for their yes; nothing is cancelled by this.
+    """
+    call = ctx.deps
+    if not (booking_id := call.undo_booking):
+        raise ModelRetry('Nothing was asked: nothing booked in this call is still held by this caller.')
+    return cancel_question(call, booking_id)
+
+
+def undo_ready(call: SalonCall) -> bool:
+    """`offer_cancel` is offered only while a booking made in this call is still held."""
+    return bool(call.undo_booking)
+
+
 def cancel_question(call: SalonCall, booking_id: str) -> Ask:
     """The read-back for cancelling one booking this caller holds, worded from the diary's own record.
 
@@ -294,12 +319,15 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
 
     * They agreed to an `ask_booking` readback of this same action, slot and
       booking, on the turn before this one.
-    * They named a time, and exactly one of the times currently on the table
-      is that time. This is the fast path the booking policy is built on: an
-      unambiguous choice of an offered slot authorises that slot. Not
-      available while they already hold something, because then the
-      unanswered question is whether this replaces it. "The same time" names
-      one time exactly without naming digits: the one they already hold.
+    * They picked one of the times the pending offer put to them. This is the
+      fast path the booking policy is built on: a plain choice of an offered
+      slot authorises that slot. The consent reading names the slot and the
+      application checks it was on the table (`SalonCall.picked_offer`); a
+      pick with a condition attached names none. Not available for a new
+      booking while they already hold one, because then the unanswered
+      question is whether this replaces it. A move needs the booking it moves
+      and the reading that the caller asked to move it, not to add one: the
+      action is the model's argument, and it is not the caller's word.
     * They answered the move-or-add question in their own words.
 
     The boolean it returns is the *second appointment* decision, and it comes
@@ -353,22 +381,19 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
                 )
 
     offered = call.diary.offer_of(call.id, slot_id, phone)
-    named = times_named(call.heard)
-    on_the_table = call.diary.offered_to(call.id, phone)
-    at_that_time = [slot for slot in on_the_table if slot['time'] in named]
-    picked = bool(offered) and offered['time'] in named and len(at_that_time) == 1
+    picked = bool(offered) and call.picked_offer() == slot_id
     if action == 'book' and picked and not held:
+        call.answered()
         return False
-    if action == 'move' and offered and call.classification.appointment_choice == 'move' and booking_id:
-        moving = next((b for b in held if b['booking_id'] == booking_id), None)
-        same = (
-            bool(moving)
-            and _SAME_TIME.search(call.heard)
-            and not NEGATED_TIME.search(call.heard)
-            and offered['time'] == moving['time']
-        )
-        if moving and (picked or same):
-            return False
+    if (
+        action == 'move'
+        and picked
+        and call.classification.appointment_choice == 'move'
+        and booking_id
+        and any(b['booking_id'] == booking_id for b in held)
+    ):
+        call.answered()
+        return False
 
     if held and action == 'book':
         one = held[0]
@@ -448,8 +473,14 @@ class WriteBooking(Operation[SalonCall, BookingCommand, Saved, str]):
         usage: RunUsage | None,
         usage_limits: UsageLimits | None,
     ) -> bool:
-        """The three ways a caller authorises a write (see `_authorised`); the answer is whether it is an extra booking."""
-        if call.pending('booking') or call.pending('move_or_add') or args.action == 'move':
+        """The three ways a caller authorises a write (see `_authorised`); the answer is whether it is an extra booking.
+
+        The reply is read first whenever it could be the authority: a pending
+        read-back or move-or-add question, or a time picked from what is on
+        the table. The reading is cached per snapshot, so a turn that already
+        read the same reply does not pay for it twice.
+        """
+        if args.action in ('book', 'move') or call.pending('booking') or call.pending('move_or_add'):
             await classify_reply(call, usage=usage, usage_limits=usage_limits)
         additional = _authorised(call, args.action, args.slot_id, args.booking_id)
         if not present(call.state.customer_verified):

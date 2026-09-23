@@ -11,6 +11,7 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
 from salon.classification import CLASSIFIER
+from salon.diary import times_named
 from salon.models.consent import ConsentInput, ReplyClassification
 
 LABELS = {
@@ -48,6 +49,25 @@ LABELS = {
 }
 
 
+def _chosen(data: ConsentInput) -> str:
+    """The slot on the table a scripted reply picks: the one whose time it names, if exactly one, and no condition.
+
+    What the real classifier is asked to do, done by rule for scripted tests:
+    a named time, or "the same time" as one the caller holds, read against the
+    table. The application still checks the answer against the table.
+    """
+    if not data.offered or (data.pending is not None and data.pending.about not in ('offer', 'closing')):
+        return ''
+    if 'only if' in data.utterance:
+        return ''
+    named = set(times_named(data.utterance))
+    if 'same time' in data.utterance.casefold():
+        named |= {time for held in data.holding for time in times_named(held)}
+    wanted = {time.replace(':', '') for time in named}
+    matches = [o.slot_id for o in data.offered if o.slot_id.split('T')[1][:4] in wanted]
+    return matches[0] if len(matches) == 1 else ''
+
+
 def classify(messages, info):
     data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
     key = data.utterance.casefold().strip().rstrip('.! ')
@@ -66,6 +86,7 @@ def classify(messages, info):
             'appointment_choice': choice,
             'conversation': conversation,
             'retained_approval': 'keep' if data.retained_complaint else 'unclear',
+            'chosen_offer': _chosen(data),
         }
     )
     return ModelResponse(parts=[TextPart(result.model_dump_json())])

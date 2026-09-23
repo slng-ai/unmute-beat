@@ -4,6 +4,7 @@ from core.graph import Node
 from core.steps import AgentStep
 from salon.models.state import SalonState
 from salon.nodes import build, complaint_ready
+from salon.tools.booking import offer_cancel, undo_ready
 from salon.tools.complaints import ask_complaint, complaint_goodbye, complaint_guidance, record_complaint
 from salon.tools.desk import hang_up
 
@@ -15,8 +16,8 @@ def node(step: AgentStep) -> Node[SalonState]:
     return build(
         step,
         finishers=[hang_up, record_complaint],
-        asks=[ask_complaint, complaint_guidance],
+        asks=[ask_complaint, complaint_guidance, offer_cancel],
         structured_speech=True,
-        offered_when={'record_complaint': complaint_ready},
+        offered_when={'record_complaint': complaint_ready, 'offer_cancel': undo_ready},
         stand_ins={hang_up: complaint_goodbye},
     )

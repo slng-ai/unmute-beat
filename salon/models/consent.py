@@ -30,7 +30,7 @@ class Asked(BaseModel):
 
     model_config = STRICT
 
-    about: Literal['phone', 'booking', 'move_or_add', 'complaint', 'closing']
+    about: Literal['phone', 'booking', 'move_or_add', 'complaint', 'closing', 'offer']
     spoken: str = ''
     value: str = ''
     """The exact thing agreement would be agreement *to*: the number read back, the slot offered, or the complaint summary's digest."""
@@ -45,6 +45,14 @@ class Asked(BaseModel):
     """The caller turn it went out on. Set by `SalonCall.ask`, never by a tool."""
 
 
+class OfferedTime(BaseModel):
+    """One time the salon has just offered this caller, with the id a pick must name."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+    slot_id: str
+    spoken: str
+
+
 class ConsentInput(BaseModel):
     """A snapshot of the accepted reply and its application-owned context."""
 
@@ -56,6 +64,10 @@ class ConsentInput(BaseModel):
     retained_complaint: Asked | None = None
     just_changed: str = ''
     """What the salon told the caller it had just changed, in its own words, on the turn before this reply. Empty when nothing changed."""
+    offered: tuple[OfferedTime, ...] = ()
+    """The times on the table: the pending offer's, or else those the diary has just offered this call."""
+    holding: tuple[str, ...] = ()
+    """The appointments the caller already holds, as the salon says them, so "the same time" can be read."""
 
 
 type Confirmation = (
@@ -142,6 +154,13 @@ class ReplyClassification(BaseModel):
     retained_approval: RetainedApproval = 'unclear'
     last_change: LastChange = 'unclear'
     """Whether the reply takes back the change the salon confirmed on the turn before. Read only against `just_changed`."""
+    chosen_offer: str = Field(
+        default='',
+        description='The slot_id of the one time in `offered` the caller plainly picks or asks for (a time they '
+        'name, or "the same time" as one in `holding`), copied exactly from `offered`. Empty if they pick none, '
+        'attach a condition, ask a question first, or it is unclear which one.',
+    )
+    """Checked against the pending offer by the application: a slot that was not on the table authorises nothing."""
 
 
 class CorrectPhone(Decision):

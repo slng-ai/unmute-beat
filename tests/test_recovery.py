@@ -19,7 +19,7 @@ from salon.classification import classify_reply
 from salon.diary import Diary
 from salon.instructions import COMPLAINT_GUIDANCE
 from salon.models.state import open_call
-from salon.tools import complaints, desk
+from salon.tools import booking, complaints, desk
 from tests.classifier_model import classifier_model
 
 PHONE = '+34680840464'
@@ -503,13 +503,15 @@ async def cancelled_queue_keeps_all_accepted_input(fragmented=False):
 
 
 async def selected_time_needs_no_extra_confirmation():
-    for words in ('01:00, please.', '1:00 PM', 'one, please.'):
+    for words in ('09:30, please.', '9:30 AM', 'half past nine, please.'):
         books.reset()
         books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
         call = open_call(PHONE, diary=books)
         call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
-        slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)['slots']
-        slot = next(s for s in slots if s['time'] == '13:00')
+        call.turn_started('A haircut on Friday.')
+        await booking.offer(call, 'Friday', 'haircut')
+        call.turn_ended(interrupted=False)
+        slot = next(s.model_dump() for s in call.state.offered if (s.time.hour, s.time.minute) == (9, 30))
 
         async def stream(messages, info, slot=slot):
             yield {
@@ -525,9 +527,15 @@ async def selected_time_needs_no_extra_confirmation():
                 )
             }
 
-        with agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=stream)):
+        with (
+            classifier_model(),
+            agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=stream)),
+        ):
             await Probe(call, agents.AGENTS)._turn(words)
         assert call.state.writes == 1 and len(call.requests) == 1, words
+        assert [r.kind for r in call.requests] == ['classifier'], (
+            'a plain pick of an offered time needs no model'
+        )
 
 
 async def consent_and_history_boundaries():

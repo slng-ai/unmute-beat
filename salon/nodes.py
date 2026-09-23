@@ -81,8 +81,10 @@ def decided(call: SalonCall) -> LocalAction | None:
     """The action this turn's consent reading decides on its own, or None to let the step's agent answer.
 
     In order of what the caller would lose if it were missed: a booking they
-    have just taken back is offered for cancelling, an answer that agrees to
-    something runs it, and only then does a goodbye end the call. "Yes, go
+    have just taken back is offered for cancelling, a plain pick of an offered
+    time books it (the write's own guard still checks the slot was on the
+    table, and asks move-or-add if they already hold one), an answer that
+    agrees to something runs it, and only then does a goodbye end the call. "Yes, go
     ahead, bye" used to hang up on the yes, and "Leave it, thanks, goodbye"
     used to hang up on the booking.
     """
@@ -90,6 +92,8 @@ def decided(call: SalonCall) -> LocalAction | None:
     reply = call.classification
     if (undo := call.undoable) and reply.last_change == 'withdraw':
         return LocalAction('ask_booking', lambda: _cancel_question(call, undo))
+    if (slot := call.picked_offer()) and call.state.customer_verified:
+        return LocalAction('save_booking', lambda: write_booking(call, 'book', slot, ''))
     if question is not None and question.about == 'move_or_add' and call.state.customer_verified:
         choice_question = question
         if reply.appointment_choice == 'add':

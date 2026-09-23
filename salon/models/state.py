@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_valida
 from core import state as core
 from core.proposals import Proposal
 from salon.diary import Diary, day_phrases
-from salon.models.consent import Asked, ConsentInput, ReplyClassification
+from salon.models.consent import Asked, ConsentInput, OfferedTime, ReplyClassification
 from salon.models.receipts import Slot
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
 
@@ -226,12 +226,13 @@ class SalonCall(core.CallContext):
     _complaint: Asked | None = PrivateAttr(default=None)
     """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
     _undo: tuple[str, str, int] | None = PrivateAttr(default=None)
-    """The booking just made, as (booking id, what the caller was told, turn), so their next reply can take it back.
+    """The booking just made, as (booking id, what the caller was told, turn), so the caller can take it back.
 
     A pick of an offered time books at once, with no read-back. The caller
     who then hears the price and says "leave it" was told goodbye with the
-    booking still in the diary. For one caller turn after a booking, their
-    reply is read against it too (`ReplyClassification.last_change`).
+    booking still in the diary. The very next reply is read against it by the
+    consent classifier (`undoable`); after that, each step's model can offer
+    to cancel it (`offer_cancel`) for as long as the caller still holds it.
     """
     _day_words: list[str] = PrivateAttr(default_factory=list)
     """Every day the caller has named, in their own words, from whichever turn.
@@ -262,8 +263,6 @@ class SalonCall(core.CallContext):
         super().turn_started(heard)
         if not self.continuing:
             self._writes_before = self.state.writes
-        if self._undo is not None and self._undo[2] < self.turn - 1:
-            self._undo = None
         self._classified_turn = -1
         self._classification_input = None
         self._classification = ReplyClassification()
@@ -318,16 +317,68 @@ class SalonCall(core.CallContext):
             pending=self.pending_question(),
             retained_complaint=self._complaint,
             just_changed=self._undo[1] if self._undo is not None and self.undoable else '',
+            offered=self._table(),
+            holding=tuple(
+                f'{b["service"]} {b["spoken"]}'
+                for b in self._diary.bookings_for(self.state.customer_phone, self._diary.now().date())
+            )
+            if self.state.customer_phone
+            else (),
         ).model_copy(deep=True)
+
+    def _table(self) -> tuple[OfferedTime, ...]:
+        """The times the caller can pick from right now.
+
+        The pending offer's, when the question is an offer. Otherwise the ones
+        the diary has on the table for this call, so a caller who names a time
+        before anything was offered ("Friday at nine") is read against real
+        slots too. Either way only slots the diary offered this call are here.
+        """
+        question = self.pending('offer')
+        if question is not None and question.value:
+            ids = question.value.split(',')
+            return tuple(
+                OfferedTime(slot_id=slot.slot_id, spoken=slot.spoken)
+                for slot in self.state.offered
+                if slot.slot_id in ids
+            )
+        phone = self.state.customer_phone
+        return tuple(
+            OfferedTime(slot_id=row['slot_id'], spoken=row['spoken'])
+            for row in self._diary.offered_to(self.id, phone)
+        )
+
+    def picked_offer(self) -> str:
+        """The slot on the table this reply picks or asks for, or ''.
+
+        The classifier names it; the application decides whether it counts:
+        only an id on the table for this call, so no reading of the reply can
+        authorise a time that was never offered.
+        """
+        chosen = self.classification.chosen_offer
+        return chosen if chosen and chosen in {o.slot_id for o in self._table()} else ''
 
     def offer_undo(self, booking_id: str, told: str) -> None:
         """A booking was just made and confirmed in these words: the caller's next reply may take it back."""
         self._undo = (booking_id, told, self.turn)
 
     @property
+    def undo_booking(self) -> str:
+        """The booking made in this call that the caller could still take back, while they still hold it, or ''."""
+        if self._undo is None:
+            return ''
+        held = self._diary.bookings_for(self.state.customer_phone, self._diary.now().date())
+        return self._undo[0] if any(b['booking_id'] == self._undo[0] for b in held) else ''
+
+    @property
     def undoable(self) -> str:
-        """The booking this reply could take back: made on the caller turn before this one, or ''."""
-        return self._undo[0] if self._undo is not None and self._undo[2] == self.turn - 1 else ''
+        """The booking this reply could take back without a model: made on the caller turn before this one, or ''.
+
+        Only the very next reply is read against it, because only then is a
+        question already pending and its classification already paid for.
+        Later on, the step's own model offers the undo (`offer_cancel`).
+        """
+        return self.undo_booking if self._undo is not None and self._undo[2] == self.turn - 1 else ''
 
     def record_classification(self, snapshot: ConsentInput, result: ReplyClassification) -> None:
         """Keep this turn's consent reading, bound to the snapshot it read. Only an interpreter calls this."""
@@ -339,12 +390,15 @@ class SalonCall(core.CallContext):
     def classification(self) -> ReplyClassification:
         """Only an interpretation of this input, identity and still-current proposal."""
         snapshot = self._classification_input
+        if self._classified_turn != self.turn or snapshot is None:
+            return ReplyClassification()
+        now = self.consent_snapshot()
         if (
-            self._classified_turn != self.turn
-            or snapshot is None
-            or snapshot.utterance != self.heard
-            or snapshot.owner != self.state.customer_phone
-            or snapshot.pending != self.pending_question()
+            snapshot.utterance != now.utterance
+            or snapshot.owner != now.owner
+            or snapshot.pending != now.pending
+            or snapshot.offered != now.offered
+            or snapshot.holding != now.holding
         ):
             return ReplyClassification()
         return self._classification

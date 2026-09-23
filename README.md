@@ -96,10 +96,13 @@ salon/
   models/               shapes, consent, receipts, state
   tools/                identity, booking, complaints, desk, writes, asking, policy
   diary.py              the salon's books, in memory
-  instructions.py       the prompts, compiled against the call at import
+  flow.yaml             the four steps: prompt, module, exits, requirements
+  prompts/              one prompt per step, the shared rules, knowledge/
+  steps/                one module per step, each giving node(step)
+  nodes.py              build(), advance(): what every step is built from
+  instructions.py       loads flow.yaml; each step's compiled prompt
   classification.py     the consent classifier and the state solver, one live at a time
-  agents.py             advance(), build(), the AGENTS table
-prompts/                one prompt per step, the shared rules, knowledge/
+  agents.py             the AGENTS table, compiled from flow.yaml
 utils/observability.py  Langfuse over OTel
 tests/                  eighteen assert scripts
 examples/               access (ten steps) and help (one step), on core alone; VOICE_AGENCY=access|help
@@ -200,19 +203,31 @@ Three things ride on that stream:
 
 A step is a `Node` (`core/graph.py`): the agent that runs it, the `Exit`s it
 may take, the state fields it `requires` and the step that `satisfied_by`
-fills them. The whole graph is the `AGENTS` table in `salon/agents.py`:
+fills them. The whole graph is `salon/flow.yaml`, compiled into the `AGENTS`
+table in `salon/agents.py`. Each step is an entry in the file and a module in
+`salon/steps/`:
+
+```yaml
+  - id: booking
+    kind: agent
+    prompt: prompts/booking.md
+    code: steps/booking.py
+    guarded: true
+    requires: [customer_verified]
+    satisfied_by: verify
+    exits: [concierge, complaints]
+```
 
 ```python
-'booking': build(
-    'booking',
-    tools=[read_diary],
-    finishers=[save_booking],
-    asks=[ask_booking, offer_times, booking_guidance],
-    guarded=True,
-    exits=(Exit('concierge'), Exit('complaints')),
-    requires=('customer_verified',),
-    satisfied_by='verify',
-),
+def node(step: AgentStep) -> Node[SalonState]:
+    return build(
+        step,
+        tools=[read_diary],
+        finishers=[save_booking],
+        asks=[ask_booking, offer_times, booking_guidance],
+        openings=OPENINGS,
+        structured_speech=True,
+    )
 ```
 
 ```mermaid
@@ -457,40 +472,52 @@ in `docs/plans/portable-typed-flows.md`.
 
 ### Flow files
 
-A flow file is versioned YAML. It lists steps by `kind` and may only *name*
-things a developer registered in code, so a file can never run code:
+A flow lives in its own folder. The YAML file lists the steps; each step
+names its own prompt file and, if it runs code, its own Python module:
+
+```
+examples/access/
+  flow.yaml          the steps, in order, and where each one can go
+  voice.md           tone and persona, added to the top of every prompt
+  prompts/           one prompt per step that talks: employee.md, team.md, ...
+  steps/             one module per step that runs code: identify.py, submit.py, ...
+  backend.py         the systems the modules call
+```
 
 ```yaml
 version: 1
 id: access_request
+greeting: Access desk, this is Sam. What is your employee ID?
+voice: voice.md
 steps:
   - id: employee
     kind: collect
-    model: employee
+    prompt: prompts/employee.md
+    model: steps/fields.py:Employee
     question: What is your employee ID?
 
   - id: identify
     kind: action
-    operation: identify
-    accepts: matched
+    code: steps/identify.py
     on_error: stranger
 
   - id: reason
     kind: collect
+    prompt: prompts/reason.md
     question: What do you need it for?
     fields:
       reason: {type: string, min_length: 5}
 
   - id: confirm
     kind: confirm
-    operation: submit
+    code: steps/submit.py
     then: submit
     on_reject: cancelled
     on_revise: level
 
   - id: submit
     kind: action
-    operation: submit
+    code: steps/submit.py
     on_error: failed
     on_unknown: unconfirmed
 
@@ -500,10 +527,46 @@ steps:
     say: 'Done: request {submit[request_id]} is submitted.'
 ```
 
-(Shortened; the full file is `examples/access/flow.yaml`.) The `Registry`
-beside it says what `employee`, `identify`, `submit` and `matched` are: a
-Pydantic model, two `Operation` classes and a receipt check. Simple fields can
-be written inline (`string`, `integer`, `date`, `choice`, with plain limits).
+(Shortened; the full file is `examples/access/flow.yaml`.) Four rules:
+
+1. **Steps that talk have a prompt; steps that only act do not.** `collect`,
+   `conversation` and `agent` steps need `prompt:`. `confirm`, `action` and
+   `end` steps speak fixed lines chosen by code, so a `prompt:` there is
+   refused.
+2. **One prompt per step.** Two steps naming the same file is refused. Text
+   every step shares goes in `voice:`; text a few steps share goes in
+   `includes:` and is pasted in wherever a prompt says `<!--name-->`.
+3. **Code comes only from the folder.** `code:` and `model:` are file paths
+   inside the flow folder (`steps/submit.py`, or `steps/fields.py:Employee`
+   for one class). A path outside it is refused, so a file cannot reach into
+   the rest of the codebase. An action or confirm module provides
+   `OPERATION` (the `Operation` class) and, if it wants, `accepts(receipt)`;
+   an agent module provides `node(step)`.
+4. **Everything is checked at load.** Every prompt is compiled against the
+   call class (`call:`, default `FlowCall`), so a `{{state.x}}` naming no
+   field stops the flow before any call starts.
+
+Step kinds: `collect` (ask for typed facts), `confirm` (read back and ask
+yes or no), `action` (run an `Operation`), `conversation` (a free chat,
+optionally with a `knowledge:` file), `end` (a fixed goodbye), and `agent`, a
+step whose module builds its whole agent by hand. The salon is four `agent`
+steps (`salon/flow.yaml`):
+
+```yaml
+  - id: booking
+    kind: agent
+    prompt: prompts/booking.md
+    code: steps/booking.py
+    guarded: true
+    requires: [customer_verified]
+    satisfied_by: verify
+    exits: [concierge, complaints]
+```
+
+The file says where the step can send the caller and what must hold before it
+runs; `salon/steps/booking.py` says which tools and outputs it has. An exit
+can also name a guard and borrowed tools from the step's module:
+`{to: booking, when: verified, via: [read_diary]}`.
 
 Files are read with `yaml.safe_load`, which only ever builds plain data, and
 JSON is valid YAML, so a `.json` file loads too (`load_file(path)`). Two YAML
@@ -511,17 +574,21 @@ habits to know: an unquoted `no`, `yes`, `on` or `off` becomes true or false,
 and a line containing `: ` must be quoted (the `say` above). A value that
 YAML turned into the wrong type is refused with the step and field named.
 
-`FlowSpec.compile` refuses a broken file and lists **every** problem at once:
+`FlowSpec.compile` refuses a broken flow and lists **every** problem at once:
 
 - an unknown step kind or field, or a version it does not know (at load);
 - a step id used twice;
 - a destination that is not a step;
-- an operation, field model, knowledge source or check nobody registered;
+- a prompt or module that does not exist, sits outside the folder, is shared
+  by two steps, or does not fit the call;
+- a module without the `OPERATION` or `node` its step needs;
 - a fact in `after` that no earlier step collects;
 - an action that needs approval with no confirm step for it, or one that can
   be reached without going through that confirm step.
 
-Then it builds the `StepFlow` and its graph once; every call shares them.
+Then it builds the `StepFlow` and its graph once; every call shares them. A
+`Registry` is still accepted for things a platform wants to name rather than
+ship as files (`operation: submit`, `knowledge: library`).
 
 ### Running the examples
 
@@ -576,8 +643,8 @@ mechanism for each:
   ledger into the protocol by segment id, so a model is told what the caller
   heard and never an assistant message with nothing after it.
   https://pydantic.dev/docs/ai/capabilities/process-history/
-- **Prompts are compiled against the call.** `salon/instructions.py` builds a
-  `TemplateStr[SalonCall]` per step from `prompts/*.md`, so a placeholder
+- **Prompts are compiled against the call.** `salon/flow.yaml` names a
+  `TemplateStr[SalonCall]` per step from `salon/prompts/*.md`, so a placeholder
   naming no field fails at import, every `{{#if}}` is resolved before the model
   reads it, and the salon's own documents are substituted in rather than
   fetched by a retrieval tool. https://pydantic.dev/docs/ai/api/pydantic-ai/template/
@@ -655,7 +722,7 @@ history and discards superseded results. Pydantic validates the shape of the
 answer; semantic accuracy still needs evaluation.
 
 When `advance()` declines, a step that was just entered can still open
-without a model. Each step declares its `openings` in the `AGENTS` table.
+without a model. Each step declares its `openings` in its module in `salon/steps/`.
 An opening names the entry it answers (a handoff, or a prerequisite's
 return), a guard over the call, and the executor the model's tool uses.
 

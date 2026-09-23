@@ -25,19 +25,22 @@ its supporting link. Read it before changing how a turn works.
 | `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `ConsentInput`, `ReplyClassification`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
 | `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`). Each write is an `Operation`: `LOOKUP`, `WRITE_BOOKING`, `WRITE_COMPLAINT` |
 | `salon/diary.py` | `Diary`: customers, slots, offers, bookings, complaints, in memory, and the oracle that says no |
-| `salon/instructions.py` | compiles `prompts/*.md` against `SalonCall` at import; `GREETING`; the salon's documents |
+| `salon/flow.yaml` | the salon as four `agent` steps: each one's prompt, module, exits and requirements |
+| `salon/steps/` | one module per step, each giving `node(step)`: its tools, outputs and openings |
+| `salon/nodes.py` | `build()`, `advance()`, `decided()`, `solve()`, the guards: what every step is built from |
+| `salon/instructions.py` | loads `flow.yaml` as `SPEC`; `instructions(name)` is a step's compiled prompt; `GREETING`; `COMPLAINT_GUIDANCE` |
 | `salon/classification.py` | `CONSENT` (four labels, default) and `SOLVER` (one decision, `SALON_INTERPRETER=solver`); `classify_reply` |
 | `core/classifiers.py` | generic Pydantic input/output classifier using one direct model request |
 | `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
 | `core/proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
 | `core/operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record |
 | `core/completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
-| `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
-| `core/flowspec.py` | flow files: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), `Registry` of what a file may name, `FlowSpecError` listing every problem |
+| `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
+| `core/flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
-| `salon/agents.py` | `advance()`, `build()`, the `AGENTS` table |
-| `prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
-| `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each also as `flow.yaml`; `VOICE_AGENCY=access` runs one in `bot.py` |
+| `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
+| `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
+| `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`); `VOICE_AGENCY=access` runs one in `bot.py` |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
 | `tests/` | eighteen assert-script modules, no pytest, no network |
 
@@ -86,7 +89,7 @@ all clean. Paste the real output; don't round up.
 - **Tool docstrings are prompt text.** The model reads them. Editing one is a
   prompt change, not a style fix; that is why `D205`, `D210`, `D415` and `D417`
   are off. Rationale for a tool goes on its executor or its module.
-- **Prompts are moved, not edited, without a live check.** `prompts/*.md` are
+- **Prompts are moved, not edited, without a live check.** `salon/prompts/*.md` are
   the versions the POC was measured on.
 - Single quotes, 110 columns, `ruff format` decides. `E501` is off.
 - No pytest. Tests are assert scripts run as modules, and stay that way.
@@ -94,13 +97,14 @@ all clean. Paste the real output; don't round up.
 
 ## Six things that bite
 
-1. **Prompts are compiled against state.** `prompts/*.md` are Handlebars
+1. **Prompts are compiled against state.** `salon/prompts/*.md` are Handlebars
    templates typed against `SalonCall`, so a `{{state.x}}` naming no field
    raises `TemplateSchemaError` **at import**, never mid-call. Add the field or
    fix the prompt.
-2. **A new step is four edits in lockstep**: a prompt in `prompts/`, a module
-   in `salon/tools/` (or tools in an existing one), an entry in `AGENTS`, and
-   a name in `AgentName`. Miss one and it fails at import.
+2. **A new step is four edits in lockstep**: a prompt in `salon/prompts/`, a
+   module in `salon/steps/` (with its tools in `salon/tools/`), an entry in
+   `salon/flow.yaml`, and a name in `AgentName`. Miss one and it fails at
+   import: the flow file checks its prompt and module exist and fit.
 3. **Anything a service returns is validated at the boundary.** Every `Diary`
    response is parsed into a `salon.models.receipts` model before a field is
    read. A return annotation is not validation.

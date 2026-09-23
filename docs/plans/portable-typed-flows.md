@@ -669,6 +669,35 @@ loads; the examples are `flow.yaml`.
 
 ---
 
+## Phase 8: flow folders
+
+**Why:** a flow file that only names things registered in code still needs a
+developer to edit Python for every new flow. Putting each step's prompt and
+code next to the YAML makes a flow one folder you can read top to bottom.
+
+**What:** each flow is a folder with `flow.yaml`, `voice.md`, `prompts/` and
+`steps/`. Each step in the YAML names its own prompt file and, if it runs
+code, its own module by path. A new `agent` step kind covers hand-built steps
+like the salon's.
+
+Rules:
+
+1. `collect`, `conversation` and `agent` steps need a prompt; `action`,
+   `confirm` and `end` have none.
+2. One prompt per step; shared text goes in `voice.md` or `includes`.
+3. `code:` only from inside the flow folder, as file paths.
+4. Everything is checked at load: files exist, prompts fit the call class,
+   modules provide what their step needs.
+
+**Done when:**
+
+- [x] the loader reads prompt files and step modules, and refuses each broken
+  case with its own reason (`tests/test_flowspec.py`);
+- [x] `examples/access` and `examples/help` are flow folders, and each still
+  behaves exactly like its code-built twin;
+- [x] the salon is `salon/flow.yaml` with four `agent` steps, its prompts moved
+  to `salon/prompts/` byte-for-byte unchanged, and all 18 test modules pass.
+
 ## Out of scope for this plan
 
 - Pipecat Flows as the engine.

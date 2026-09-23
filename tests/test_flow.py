@@ -594,8 +594,8 @@ def every_tool_that_writes_is_an_action():
 
     Source inspection rather than a registry, because the registry is the
     thing being checked: a tool added tomorrow is covered without anybody
-    remembering this test exists. Every module the salon's tools live in is
-    scanned.
+    remembering this test exists. Every module the salon's tools and steps
+    live in is scanned.
 
     A model-callable tool is a public function whose first parameter is
     `ctx`. Anything else that commits is an executor or a helper, and is
@@ -617,7 +617,12 @@ def every_tool_that_writes_is_an_action():
     """An `Operation` subclass's methods, by qualified name: they are reached through its `run`."""
     instances: dict[str, str] = {}
     """A module-level operation instance, and its class, so `LOOKUP.run(...)` counts as calling its methods."""
-    for path in [root / 'agents.py', *sorted((root / 'tools').glob('*.py'))]:
+    for path in [
+        root / 'agents.py',
+        root / 'nodes.py',
+        *sorted((root / 'tools').glob('*.py')),
+        *sorted((root / 'steps').glob('*.py')),
+    ]:
         tree = ast.parse(path.read_text())
         methods = set()
         for node in tree.body:

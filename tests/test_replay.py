@@ -41,8 +41,8 @@ def verified(agent: str) -> tuple[SalonCall, diary.Diary]:
     return call, books
 
 
-async def pending(case: Case) -> SalonCall:
-    """A call whose last turn put this case's question to the caller, as the application would have."""
+async def pending(case: Case, answered: bool = True) -> SalonCall:
+    """A call whose last turn put this case's question to the caller, and, if `answered`, this turn's reply."""
     if case.about == 'phone':
         call = open_call(PHONE)
         call.commit(agent='verify')
@@ -81,7 +81,8 @@ async def pending(case: Case) -> SalonCall:
         call.note_heard(case.spoken[:12])
     if case.stale:
         call.turn_started('One moment.')
-    call.turn_started(case.utterance)
+    if answered:
+        call.turn_started(case.utterance)
     return call
 
 

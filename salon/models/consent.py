@@ -4,6 +4,18 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.decisions import (
+    Accept,
+    Clarify,
+    Conditional,
+    Decision,
+    DecisionResult,
+    EndCall,
+    NoDecision,
+    Reject,
+    Revise,
+    SwitchTask,
+)
 from core.state import STRICT
 
 
@@ -107,3 +119,79 @@ class ReplyClassification(BaseModel):
     appointment_choice: AppointmentChoice = 'unclear'
     conversation: Conversation = 'unclear'
     retained_approval: RetainedApproval = 'unclear'
+
+
+class CorrectPhone(Decision):
+    """Gives different digits for the number that was read back. Only for a phone readback."""
+
+    kind: Literal['correct_phone'] = 'correct_phone'
+    digits: str = Field(
+        description=(
+            'The whole corrected number in E.164, e.g. +34600111234. Keep the read-back digits the caller did '
+            'not change. If you cannot tell which digits change, use clarify instead.'
+        )
+    )
+
+
+class ChooseAppointment(Decision):
+    """Chooses between moving the existing appointment and adding another. A bare yes cannot choose."""
+
+    kind: Literal['choose_appointment'] = 'choose_appointment'
+    choice: Literal['move', 'add']
+
+
+class SalonSwitch(SwitchTask):
+    """Abandons the current task, without finishing it, to do a different one of the listed destinations."""
+
+    target: Literal['booking', 'complaints', 'concierge']
+
+
+type SalonDecision = Annotated[
+    Accept
+    | Reject
+    | Revise
+    | Conditional
+    | Clarify
+    | CorrectPhone
+    | ChooseAppointment
+    | SalonSwitch
+    | EndCall
+    | NoDecision,
+    Field(discriminator='kind'),
+]
+"""Every meaning the salon's solver may return. The application maps each one to its own executor."""
+
+
+class SalonSolution(DecisionResult):
+    """The caller's reply read as one decision, with a short reply only when switching task."""
+
+    decision: SalonDecision
+
+
+class Destination(BaseModel):
+    """A task the caller may switch to, and what it needs before it can start."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+    name: Literal['booking', 'complaints', 'concierge']
+    purpose: str
+    needs: str = ''
+
+
+class SolverInput(BaseModel):
+    """A snapshot of the reply and every application-owned fact needed to read it as one decision.
+
+    `delivered` is False when the caller spoke over the proposal, so it may be
+    corrected or abandoned but never accepted. Destinations are what the
+    caller could switch to; whether a switch is legal right now is checked
+    again when it is applied.
+    """
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+    utterance: str
+    previous_speech: str
+    step: Literal['concierge', 'verify', 'booking', 'complaints']
+    owner: str
+    proposal: Asked | None = None
+    delivered: bool = False
+    retained_complaint: Asked | None = None
+    destinations: tuple[Destination, ...] = ()

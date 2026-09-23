@@ -282,6 +282,38 @@ class SalonCall(core.CallContext):
             return None
         return question
 
+    def last_proposal(self) -> tuple[Asked, bool] | None:
+        """Last turn's question under this identity, and whether the caller heard it in full.
+
+        Wider than `pending_question`, for interpretation only: a readback the
+        caller spoke over can still be corrected or abandoned, but it can never
+        be accepted, so nothing that authorises an action reads this.
+        """
+        question = self._asked
+        if question is None or question.turn != self.turn - 1:
+            return None
+        if question.owner and question.owner != self.state.customer_phone:
+            return None
+        return question, self.pending_question() is not None
+
+    def consent_snapshot(self) -> ConsentInput:
+        """The application-owned context a consent answer is an answer to, as of now."""
+        previous = [segment for segment in self.all_spoken if segment.turn < self.turn]
+        last_turn = max((segment.turn for segment in previous), default=-1)
+        return ConsentInput(
+            utterance=self.heard,
+            previous_speech=' '.join(s.text for s in previous if s.turn == last_turn).strip(),
+            owner=self.state.customer_phone,
+            pending=self.pending_question(),
+            retained_complaint=self._complaint,
+        ).model_copy(deep=True)
+
+    def record_classification(self, snapshot: ConsentInput, result: ReplyClassification) -> None:
+        """Keep this turn's consent reading, bound to the snapshot it read. Only an interpreter calls this."""
+        self._classified_turn = self.turn
+        self._classification_input = snapshot
+        self._classification = result
+
     @property
     def classification(self) -> ReplyClassification:
         """Only an interpretation of this input, identity and still-current proposal."""

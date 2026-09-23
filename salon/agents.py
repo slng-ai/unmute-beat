@@ -26,17 +26,21 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 
+from pydantic import TypeAdapter, ValidationError
 from pydantic_ai import Agent, RunContext, Tool, ToolOutput
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from core.decisions import Clarify
 from core.graph import Exit, LocalAction, Node, Opening, lent
 from core.policies import one_action_per_reply, request_clock, speak_by
-from salon.classification import MODEL, SETTINGS, classify_reply
+from salon import classification
+from salon.classification import MODEL, SETTINGS, SOLVER, classify_reply
 from salon.instructions import GREETING, instructions
+from salon.models.consent import CorrectPhone, SalonSwitch
 from salon.models.receipts import BookingCommand
-from salon.models.shapes import AgentName
+from salon.models.shapes import AgentName, SubmittedPhone
 from salon.models.state import SalonCall, SalonState
 from salon.tools.booking import OPENINGS as BOOKING_OPENINGS
 from salon.tools.booking import (
@@ -54,18 +58,19 @@ from salon.tools.complaints import (
     record_complaint,
     write_complaint,
 )
-from salon.tools.desk import end_conversation, hand_over_for, hang_up
+from salon.tools.desk import clarify, end_conversation, hand_over_for, hang_up, switch_task
 from salon.tools.identity import OPENINGS as VERIFY_OPENINGS
 from salon.tools.identity import (
     ask_number,
     confirm_customer,
     lookup_customer,
+    readback_number,
     stop_verifying,
     verification_guidance,
 )
 from salon.tools.policy import ACTIONS, SPEAK_BY
 
-__all__ = ['AGENTS', 'GREETING', 'MODEL', 'SETTINGS', 'advance', 'build']
+__all__ = ['AGENTS', 'GREETING', 'MODEL', 'SETTINGS', 'advance', 'build', 'decided', 'solve']
 
 
 async def advance(
@@ -75,10 +80,20 @@ async def advance(
 
     Classification is shared with the tool guards. An unresolved answer falls
     through to conversation, while application guards still own every write.
+    With the solver live, `solve` reads the reply instead and can also answer
+    a correction or a change of task.
     """
+    if classification.INTERPRETER == 'solver':
+        return await solve(call, usage, usage_limits)
     question = call.pending_question()
     if question is not None or call._complaint is not None:
         await classify_reply(call, usage=usage, usage_limits=usage_limits)
+    return decided(call)
+
+
+def decided(call: SalonCall) -> LocalAction | None:
+    """The action this turn's consent reading decides on its own, or None to let the step's agent answer."""
+    question = call.pending_question()
     reply = call.classification
     if question is not None and reply.conversation == 'end':
         return LocalAction('hang_up', lambda: end_conversation(call, 'Thanks for calling. Goodbye.'))
@@ -113,6 +128,46 @@ async def advance(
                 lambda: write_complaint(call, approved.summary, approved.requested_resolution),
             )
     return None
+
+
+async def solve(
+    call: SalonCall, usage: RunUsage | None = None, usage_limits: UsageLimits | None = None
+) -> LocalAction | None:
+    """Read the reply as one decision and map it to the executor that owns it.
+
+    Only where there is something to decide: last turn's proposal, heard in
+    full or spoken over, or a complaint approval kept through verification.
+    Every other turn goes straight to the step's agent with no request here.
+
+    The three kinds the four-label classifier cannot say are dispatched here;
+    everything else is the consent reading the solver already recorded, so
+    `decided` and every tool guard treat it exactly as they treat the
+    classifier's. A clarifying question is only asked about a readback: for
+    anything else the step's own agent, which has the salon's knowledge,
+    answers better than a one-line question would.
+    """
+    last = call.last_proposal()
+    if last is None and call._complaint is None:
+        return None
+    solution = await SOLVER.interpret(call, usage=usage, usage_limits=usage_limits)
+    proposal = last[0] if last else None
+    readback = proposal is not None and proposal.about == 'phone' and call.state.agent == 'verify'
+    match solution.decision:
+        case CorrectPhone(digits=digits) if readback:
+            try:
+                phone = _PHONE.validate_python(digits)
+            except ValidationError:
+                return None
+            return LocalAction('ask_number', lambda: readback_number(call, phone))
+        case SalonSwitch(target=target, details=details):
+            exits = AGENTS[call.state.agent].exits
+            return LocalAction('hand_over', lambda: switch_task(call, exits, target, details, solution.reply))
+        case Clarify(question=words) if readback:
+            return LocalAction('clarify', lambda: clarify(call, words))
+    return decided(call)
+
+
+_PHONE = TypeAdapter(SubmittedPhone)
 
 
 def build(

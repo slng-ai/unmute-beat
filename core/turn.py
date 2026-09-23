@@ -438,6 +438,15 @@ class Turn:
                 prompt = None
             if barge.hit:
                 return
+            if (
+                output.ends_turn
+                and output.reply
+                and nodes[going_to].opening(call) is None
+                and not call.claims_completion(output.reply)
+            ):
+                call._return_status, call._entered = '', ''
+                await call.speak_now(output.reply, origin='switch')
+                return
             if lines := nodes[going_to].enter:
                 await call.say(pick(f'enter:{output.to}', lines), origin='entry')
         yield _Exhausted(f'the {self.budget.step_runs}-run hop budget')

@@ -78,6 +78,8 @@ core/
   state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
   graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
   classifiers.py        generic Pydantic input/output classification in one request
+  decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
+  interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
   policies.py           TurnBudget, the hooks, pick, schema_tool
   history.py            what each provider request is sent
   turn.py               one caller turn as an event stream; imports no Pipecat
@@ -87,14 +89,15 @@ salon/
   tools/                identity, booking, complaints, desk, writes, asking, policy
   diary.py              the salon's books, in memory
   instructions.py       the prompts, compiled against the call at import
-  classification.py     shared model and cached typed interpretation
+  classification.py     the consent classifier and the state solver, one live at a time
   agents.py             advance(), build(), the AGENTS table
 prompts/                one prompt per step, the shared rules, knowledge/
 utils/observability.py  Langfuse over OTel
-tests/                  fourteen assert scripts
+tests/                  fifteen assert scripts
 evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
 evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
+evals/solver.py         explicitly invoked live state-solver evaluation
 ```
 
 `core` knows nothing about the salon, and nothing in `core` but the processor
@@ -374,6 +377,22 @@ and its contracts are in [salon/models/consent.py](salon/models/consent.py):
 |---|---|
 | `ConsentInput` | Accepted utterance, preceding delivered speech, caller identity, pending proposal and any retained complaint approval. |
 | `ReplyClassification` | Confirmation (`accept`, `reject`, `revise`, `conditional`, `unclear`, `not_applicable`), appointment choice (`move`, `add`, `unclear`, `not_applicable`), conversation status and whether retained complaint approval still applies. |
+
+### The state solver (opt-in)
+
+`SALON_INTERPRETER=solver` swaps the four-label classifier for a
+[state solver](salon/classification.py): one structured request that reads the
+reply as exactly one [decision](core/decisions.py) (accept, reject, revise,
+conditional, clarify, correct the number, choose move or add, switch task,
+end the call, or nothing). The three the classifier cannot say are applied
+by existing executors: a corrected number is read back with `readback_number`,
+a switch moves the caller through the same routing and prerequisites as any
+handoff and ends the turn, and a clarifying question is only asked about a
+readback. Everything else is written into the same consent reading the
+classifier produces, so every tool guard reads the solver unchanged. An
+interrupted proposal is shown to the solver so it can be corrected or
+abandoned, and can never be accepted. It stays opt-in until it has been
+compared live on `evals/cases.py`; see `docs/plans/portable-typed-flows.md`.
 
 ```mermaid
 flowchart LR

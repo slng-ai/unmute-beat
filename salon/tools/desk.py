@@ -32,6 +32,54 @@ async def end_conversation(call: SalonCall, goodbye: str) -> str:
     return goodbye
 
 
+async def switch_task(
+    call: SalonCall, exits: tuple[Exit, ...], target: str, details: str, reply: str
+) -> Handoff:
+    """Abandon the unfinished proposal and move the caller to another task: one application action.
+
+    The executor behind the solver's `SwitchTask`. The edge has to be open from
+    this step right now, exactly as `hand_over` checks it, so a switch the
+    graph does not allow is refused and the step's own agent answers instead.
+    Nothing that already happened is undone: a booking made earlier stands.
+    A write whose outcome is unknown blocks the switch, because moving on would
+    let the caller believe nothing was booked when nobody knows that.
+
+    The details travel as an application result, so the next step reads what
+    the caller already said instead of asking again. The move ends the turn:
+    the destination's opening speaks if it has one, else `reply` does.
+    """
+    if call.state.unresolved is not None:
+        raise ModelRetry(
+            'Nothing was switched: a booking change is still waiting on the diary. Resolve that first.'
+        )
+    if target == call.state.agent or not any(exit.to == target and exit.guard(call.state) for exit in exits):
+        raise ModelRetry(
+            f'Nothing was switched: {target} is not somewhere this caller can go from here right now.'
+        )
+    call.answered()
+    call.retain_action('hand_over', {'to': target, 'details': details})
+    return Handoff(
+        to=target,  # ty: ignore[invalid-argument-type]
+        because=details or f'the caller switched to {target}',
+        ends_turn=True,
+        reply=reply,
+    )
+
+
+async def clarify(call: SalonCall, question: str) -> str:
+    """Ask the one short question that settles an unclear reply.
+
+    The proposal is consumed, not kept: whatever the caller says next is not an
+    answer to a readback they have not heard again, so a yes after this never
+    authorises anything until the proposal is put to them afresh.
+    """
+    if not question.strip() or call.claims_completion(question):
+        raise ModelRetry('Nothing was asked: that question was empty or claimed a change nothing made.')
+    call.answered()
+    await call.speak_now(question, origin='clarify')
+    return question
+
+
 async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
     """End the call, once the caller's own words say it is over: "no, that's all", "I'm good,
     thanks", "goodbye". A question is never one of those, however tired it sounds: answer it and wait.

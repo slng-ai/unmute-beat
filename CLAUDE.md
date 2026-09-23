@@ -25,12 +25,14 @@ its supporting link. Read it before changing how a turn works.
 | `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`) |
 | `salon/diary.py` | `Diary`: customers, slots, offers, bookings, complaints, in memory, and the oracle that says no |
 | `salon/instructions.py` | compiles `prompts/*.md` against `SalonCall` at import; `GREETING`; the salon's documents |
-| `salon/classification.py` | shared model and cached salon interpretation |
+| `salon/classification.py` | `CONSENT` (four labels, default) and `SOLVER` (one decision, `SALON_INTERPRETER=solver`); `classify_reply` |
 | `core/classifiers.py` | generic Pydantic input/output classifier using one direct model request |
+| `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
+| `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | `advance()`, `build()`, the `AGENTS` table |
 | `prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `tests/` | fourteen assert-script modules, no pytest, no network |
+| `tests/` | fifteen assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -54,7 +56,7 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all fourteen modules, offline, no .env
+uv run python -m tests                                   # all fifteen modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 ```

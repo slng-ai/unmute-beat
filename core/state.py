@@ -76,7 +76,16 @@ class Spoken:
     kind: Literal['fixed', 'model']
     text: str
     origin: Literal[
-        'entry', 'tool_filler', 'ask', 'confirmation', 'model', 'goodbye', 'error', 'guidance'
+        'entry',
+        'tool_filler',
+        'ask',
+        'confirmation',
+        'model',
+        'goodbye',
+        'error',
+        'guidance',
+        'clarify',
+        'switch',
     ] = 'model'
     """Where this segment came from, so a trace can tell a question from a confirmation."""
     id: str = ''
@@ -134,6 +143,15 @@ class Request:
 
 
 @dataclass(frozen=True)
+class Interpretation:
+    """One interpreter's answer for one turn, and the snapshot it answered. Held on the call, cleared each turn."""
+
+    turn: int
+    input: BaseModel
+    output: BaseModel
+
+
+@dataclass(frozen=True)
 class Checkpoint:
     """Where a step that needed a prerequisite was, so it can be resumed when the prerequisite is met.
 
@@ -154,6 +172,16 @@ class Handoff(BaseModel):
     because: str = Field(default='', description='One short sentence: what the caller wants. Never spoken.')
     status: Literal['handoff', 'completed', 'unserved'] = 'handoff'
     """A plain handoff, or a prerequisite step reporting that it finished, or that it gave up."""
+    ends_turn: bool = False
+    """Whether the move itself answers the caller, so the destination does not run a model this turn.
+
+    Routing, prerequisites and the checkpoint are exactly those of any
+    handoff. The destination's opening still wins when it has one, because
+    those words are the application's and cost nothing; with no opening and
+    no `reply`, the destination runs as usual.
+    """
+    reply: str = ''
+    """What to say when the move ends the turn. Held back if it claims a change nothing made."""
 
 
 @runtime_checkable
@@ -257,6 +285,8 @@ class CallContext(BaseModel):
     read by every action that could be the second one. `None` means this
     response proposed no such action.
     """
+    _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
+    """Each interpreter's answer for this turn, by interpreter name. See `core.interpreters`."""
     _requests: list[Request] = PrivateAttr(default_factory=list)
     """Every provider request of the turn now running, timed at the model boundary by `request_clock`."""
     _spoken: list[Spoken] = PrivateAttr(default_factory=list)
@@ -637,6 +667,7 @@ class CallContext(BaseModel):
         self._attempt = 0
         self._response = ''
         self._entered = ''
+        self._interpretations.clear()
         self._requests.clear()
         self._spoken.clear()
         self._open = None

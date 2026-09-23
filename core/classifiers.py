@@ -1,5 +1,7 @@
 """Single-request classification between arbitrary Pydantic input and output models."""
 
+from typing import Any
+
 from pydantic import BaseModel
 from pydantic_ai import ModelRequest, UnexpectedModelBehavior
 from pydantic_ai.direct import model_request
@@ -31,6 +33,45 @@ class Classifier[InputT: BaseModel, OutputT: BaseModel]:
         self.instructions = instructions
         self.model_settings = model_settings
 
+    def json_schema(self) -> dict[str, Any]:
+        """The output schema exactly as it is sent: object-shaped, with every union as `anyOf`.
+
+        A discriminated union renders as `oneOf` plus a `discriminator`, and
+        Gemini rejects `oneOf`. Its members are disjoint by their tag, so
+        `anyOf` means the same; the tag is made required in every member, so an
+        answer that leaves it out fails validation instead of matching a
+        member by its default. Validation still uses the model itself.
+        """
+        schema = self.output_type.model_json_schema()
+        if schema.get('type') != 'object':
+            raise ValueError('Native classification requires an object-shaped output model.')
+        definitions = schema.get('$defs', {})
+
+        def member(node: dict[str, Any]) -> dict[str, Any]:
+            reference = node.get('$ref', '')
+            return definitions[reference.rsplit('/', 1)[-1]] if reference.startswith('#/$defs/') else node
+
+        def rewrite(node: object) -> None:
+            if isinstance(node, list):
+                for item in node:
+                    rewrite(item)
+                return
+            if not isinstance(node, dict):
+                return
+            if 'oneOf' in node:
+                node['anyOf'] = node.pop('oneOf')
+                if (discriminator := node.pop('discriminator', None)) is not None:
+                    tag = discriminator['propertyName']
+                    for option in node['anyOf']:
+                        required = member(option).setdefault('required', [])
+                        if tag not in required:
+                            required.insert(0, tag)
+            for child in node.values():
+                rewrite(child)
+
+        rewrite(schema)
+        return schema
+
     async def classify(
         self,
         value: InputT,
@@ -44,9 +85,7 @@ class Classifier[InputT: BaseModel, OutputT: BaseModel]:
         cancellation and budget exhaustion retain their original exceptions.
         """
         value = self.input_type.model_validate(value.model_dump())
-        schema = self.output_type.model_json_schema()
-        if schema.get('type') != 'object':
-            raise ValueError('Native classification requires an object-shaped output model.')
+        schema = self.json_schema()
         account = usage if usage is not None else RunUsage()
         if usage_limits is not None:
             usage_limits.check_before_request(account)

@@ -1,19 +1,40 @@
-"""The salon's semantic decision boundary, independent of its conversational agents."""
+"""The salon's semantic decision boundary, independent of its conversational agents.
 
-import time
-from typing import TYPE_CHECKING
+Two interpreters read a caller's reply, and one of them is live at a time:
 
-from httpx import HTTPError
-from loguru import logger
-from pydantic import ValidationError
-from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior
+* `CONSENT`, the default: four narrow labels (confirmation, appointment
+  choice, end of call, retained complaint approval). A correction or a change
+  of task is not something it can say, so those fall through to an agent.
+* `SOLVER`, behind `SALON_INTERPRETER=solver`: one decision per reply from a
+  wider set (accept, correct the number, switch task, clarify, ...), so a
+  correction or a switch can be answered without a second request.
+
+Whichever is live, the tool guards read the same thing: `SalonCall.classification`,
+the consent reading bound to the proposal it answers. The solver writes its
+decision into that reading too, so no guard changes and no write path is new.
+"""
+
+import os
+from typing import TYPE_CHECKING, Literal
+
 from pydantic_ai.models import infer_model
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.classifiers import Classifier
-from core.state import Request
-from salon.models.consent import ConsentInput, ReplyClassification
+from core.decisions import Accept, Conditional, EndCall, NoDecision, Reject, Revise
+from core.interpreters import ClassifierInterpreter
+from salon.models.consent import (
+    Asked,
+    ChooseAppointment,
+    ConsentInput,
+    CorrectPhone,
+    Destination,
+    ReplyClassification,
+    SalonSolution,
+    SalonSwitch,
+    SolverInput,
+)
 
 if TYPE_CHECKING:
     from salon.models.state import SalonCall
@@ -32,8 +53,138 @@ this model to is what a call gets, a setting that can change under us on the
 one dimension a voice turn cannot absorb.
 """
 
+INTERPRETER: Literal['classifier', 'solver'] = (
+    'solver' if os.environ.get('SALON_INTERPRETER') == 'solver' else 'classifier'
+)
+"""Which interpreter reads replies. Read at call time, so a test can switch it with `patch.object`.
+
+ponytail: the solver stays opt-in until `evals/compare.py` has run live on
+the reviewed cases and its false acceptances are no worse than the
+classifier's. Flip the default here once they are.
+"""
+
 
 CLASSIFIER = Classifier(MODEL, ConsentInput, ReplyClassification, model_settings=SETTINGS)
+
+SOLVER_INSTRUCTIONS = (
+    'Read the caller utterance as exactly one decision about the pending proposal, using the class '
+    'descriptions in the output schema. Accept only when delivered is true and the caller clearly '
+    'approves that exact proposal. Use switch_task only for one of the listed destinations. '
+    'Never invent digits.'
+)
+"""The solver's whole prompt. The decisions' own descriptions carry the rest, in the schema.
+
+ponytail: a new prompt, checked only offline. It must pass the live
+comparison before `INTERPRETER` defaults to the solver.
+"""
+
+SOLVER_CLASSIFIER = Classifier(
+    MODEL, SolverInput, SalonSolution, instructions=SOLVER_INSTRUCTIONS, model_settings=SETTINGS
+)
+
+DESTINATIONS = (
+    Destination(
+        name='booking',
+        purpose='Book, move or cancel an appointment.',
+        needs='The caller is identified by phone number first.',
+    ),
+    Destination(
+        name='complaints',
+        purpose='Record a complaint about a past visit.',
+        needs='The caller is identified by phone number first.',
+    ),
+    Destination(name='concierge', purpose='General questions: opening hours, prices, services, location.'),
+)
+"""Where a caller can switch to, as the solver is told. Legality right now is checked again when a switch is applied."""
+
+
+def _retain_complaint(call: SalonCall, reading: ReplyClassification) -> None:
+    """Keep an approved complaint only while the caller has not withdrawn it, and bind a new approval to its owner."""
+    if call._complaint is not None and reading.retained_approval != 'keep':
+        call._complaint = None
+    if (question := call.pending('complaint')) and reading.confirmation == 'accept':
+        call._complaint = question.model_copy(update={'owner': call.state.customer_phone})
+
+
+class ConsentInterpreter(ClassifierInterpreter['SalonCall', ConsentInput, ReplyClassification]):
+    """The four-label consent classifier: what the caller agreed to, chose, or ended."""
+
+    def _input(self, call: SalonCall) -> ConsentInput:
+        return call.consent_snapshot()
+
+    def _still_valid(self, call: SalonCall, value: ConsentInput) -> bool:
+        return (
+            value.utterance == call.heard
+            and value.owner == call.state.customer_phone
+            and value.pending == call.pending_question()
+        )
+
+    def _settle(
+        self, call: SalonCall, value: ConsentInput, result: ReplyClassification
+    ) -> ReplyClassification:
+        call.record_classification(value, result)
+        _retain_complaint(call, call.classification)
+        return result
+
+
+def consent_of(solution: SalonSolution, retained: bool) -> ReplyClassification:
+    """The consent reading a decision amounts to, so every existing guard reads the solver unchanged."""
+    decision = solution.decision
+    confirmation = {
+        Accept: 'accept',
+        Reject: 'reject',
+        Revise: 'revise',
+        CorrectPhone: 'revise',
+        Conditional: 'conditional',
+    }.get(type(decision), 'unclear')
+    withdrawn = isinstance(decision, SalonSwitch | EndCall)
+    return ReplyClassification.model_validate(
+        {
+            'confirmation': confirmation,
+            'appointment_choice': decision.choice if isinstance(decision, ChooseAppointment) else 'unclear',
+            'conversation': 'end' if isinstance(decision, EndCall) else 'continue',
+            'retained_approval': ('withdraw' if withdrawn else 'keep') if retained else 'unclear',
+        }
+    )
+
+
+class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]):
+    """One decision per reply, from the proposal, the step, and where the caller could go instead."""
+
+    def _input(self, call: SalonCall) -> SolverInput:
+        last = call.last_proposal()
+        return SolverInput(
+            utterance=call.heard,
+            previous_speech=call.consent_snapshot().previous_speech,
+            step=call.state.agent,
+            owner=call.state.customer_phone,
+            proposal=last[0] if last else None,
+            delivered=bool(last and last[1]),
+            retained_complaint=call._complaint,
+            destinations=tuple(d for d in DESTINATIONS if d.name != call.state.agent),
+        ).model_copy(deep=True)
+
+    def _still_valid(self, call: SalonCall, value: SolverInput) -> bool:
+        last = call.last_proposal()
+        proposal: Asked | None = last[0] if last else None
+        return (
+            value.utterance == call.heard
+            and value.owner == call.state.customer_phone
+            and value.step == call.state.agent
+            and value.proposal == proposal
+        )
+
+    def _settle(self, call: SalonCall, value: SolverInput, result: SalonSolution) -> SalonSolution:
+        """An undelivered proposal cannot be agreed to, whatever the model read; then record the consent reading."""
+        if not value.delivered and isinstance(result.decision, Accept | ChooseAppointment):
+            result = SalonSolution(decision=NoDecision())
+        call.record_classification(call.consent_snapshot(), consent_of(result, call._complaint is not None))
+        _retain_complaint(call, call.classification)
+        return result
+
+
+CONSENT = ConsentInterpreter('consent', CLASSIFIER, ReplyClassification())
+SOLVER = SalonSolver('solver', SOLVER_CLASSIFIER, SalonSolution(decision=NoDecision()))
 
 
 async def classify_reply(
@@ -42,47 +193,11 @@ async def classify_reply(
     usage: RunUsage | None = None,
     usage_limits: UsageLimits | None = None,
 ) -> ReplyClassification:
-    """Classify at most once per accepted turn, never publishing a late or rebound answer.
+    """This turn's consent reading, from whichever interpreter is live. At most one request per turn.
 
-    Consumers recheck the snapshot against the live call. Failed interpretations
-    are cached too, so a tool retry cannot turn uncertainty into repeated guesses.
+    Consumers recheck the reading against the live call through
+    `SalonCall.classification`; a late or rebound answer is never published.
     """
-    if call._classified_turn == call.turn or not call.heard.strip():
-        return call.classification
-    turn, generation = call.turn, call._generation
-    if usage is not None and usage_limits is not None:
-        usage_limits.check_before_request(usage)
-    previous = [segment for segment in call.all_spoken if segment.turn < call.turn]
-    last_turn = max((segment.turn for segment in previous), default=-1)
-    previous_speech = ' '.join(segment.text for segment in previous if segment.turn == last_turn).strip()
-    snapshot = ConsentInput(
-        utterance=call.heard,
-        previous_speech=previous_speech,
-        owner=call.state.customer_phone,
-        pending=call.pending_question(),
-        retained_complaint=call._complaint,
-    ).model_copy(deep=True)
-    call._classified_turn = turn
-    call._classification_input = snapshot
-    if call.attempt == 0:
-        call.retain_input()
-    request = Request(started=time.perf_counter(), kind='classifier')
-    call.requests.append(request)
-    try:
-        result = await CLASSIFIER.classify(snapshot, usage=usage, usage_limits=usage_limits)
-    except (ValidationError, UnexpectedModelBehavior, ModelHTTPError, HTTPError) as error:
-        logger.warning('consent classification failed: {}', type(error).__name__)
-        result = ReplyClassification()
-        request.fallback = True
-    finally:
-        request.duration = time.perf_counter() - request.started
-    request.labels = result.model_dump_json()
-    if call.turn != turn or not call.is_current(generation):
-        return ReplyClassification()
-    call._classification = result
-    result = call.classification
-    if call._complaint is not None and result.retained_approval != 'keep':
-        call._complaint = None
-    if (question := call.pending('complaint')) and result.confirmation == 'accept':
-        call._complaint = question.model_copy(update={'owner': call.state.customer_phone})
-    return result
+    live = SOLVER if INTERPRETER == 'solver' else CONSENT
+    await live.interpret(call, usage=usage, usage_limits=usage_limits)
+    return call.classification

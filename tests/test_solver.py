@@ -20,6 +20,7 @@ from core.decisions import Accept, Clarify, EndCall, NoDecision
 from core.state import Handoff
 from core.turn import Barge, take_turn
 from evals.cases import CASES, Case
+from evals.compare import projected_requests, resolves, rules_report, table
 from evals.solver import solution_for, solver_input, solver_meaning
 from salon import agents, classification
 from salon.classification import MODEL, SOLVER_CLASSIFIER
@@ -309,8 +310,40 @@ async def must_never():
     assert call.requests[0].fallback and not call.state.writes
 
 
+def projected_requests_follow_the_plan():
+    """With every reading right, the solver's turns cost what the plan's table says, and never more."""
+    for which, classifier, solver_ in (
+        ('booking-yes', 1, 1),
+        ('phone-full-correction', 2, 1),
+        ('booking-switch-complaint', 3, 1),
+        ('booking-interrupted-switch', 2, 1),
+    ):
+        c = case(which)
+        assert projected_requests(c, c.legacy_meaning, 'classifier') == classifier, which
+        assert projected_requests(c, c.expect, 'solver') == solver_, which
+    dearer = []
+    for c in CASES:
+        more = projected_requests(c, c.expect, 'solver') - projected_requests(
+            c, c.legacy_meaning, 'classifier'
+        )
+        if more > 0:
+            dearer.append(c.id)
+            assert more == 1 and not c.delivered and not resolves(c, c.expect, solver=True), c.id
+    assert sorted(dearer) == [
+        'booking-interrupted-yes',
+        'complaint-interrupted-yes',
+        'phone-interrupted-yes',
+    ], 'the known cost: a spoken-over proposal is read even when nothing can come of it'
+    total = sum(projected_requests(c, c.expect, 'solver') for c in CASES)
+    assert total < sum(projected_requests(c, c.legacy_meaning, 'classifier') for c in CASES)
+    floor = rules_report()
+    assert floor.false_accepts == 0 and floor.requests <= len(CASES)
+    assert 'rules' in table([floor])
+
+
 async def main():
     schema_reaches_gemini_as_anyof()
+    projected_requests_follow_the_plan()
     mappings_round_trip()
     solver_input(CASES[0])
     await every_case_reaches_its_executor()

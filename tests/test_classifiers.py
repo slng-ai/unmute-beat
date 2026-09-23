@@ -13,12 +13,13 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimitExceeded, UsageLimits
 
 from core.classifiers import Classifier
+from core.interpreters import RuleInterpreter
 from core.policies import TurnBudget
 from core.turn import Barge, take_turn
 from salon import agents, diary
 from salon.classification import CLASSIFIER, classify_reply
 from salon.models.consent import Asked, ReplyClassification
-from salon.models.state import open_call
+from salon.models.state import SalonCall, open_call
 from salon.tools.asking import Ask
 from tests.classifier_model import classifier_model
 
@@ -319,6 +320,31 @@ async def limits_and_barge():
     assert call.turn in call._retained_turns
 
 
+async def rule_interpreters_spend_nothing():
+    """A code-only interpreter keeps the once-per-turn contract and costs no request or budget."""
+    decided = []
+
+    class Words(RuleInterpreter[SalonCall, Input, Output]):
+        def _input(self, call):
+            return Input(text=call.heard)
+
+        def _rule(self, value):
+            decided.append(value.text)
+            return Output(label='one' if 'one' in value.text else 'two')
+
+    words = Words('words', Output(label='two'))
+    call = open_call(PHONE)
+    call.turn_started('one please')
+    usage = RunUsage()
+    limits = UsageLimits(request_limit=0)
+    assert (await words.interpret(call, usage=usage, usage_limits=limits)).label == 'one'
+    assert (await words.interpret(call)).label == 'one' and decided == ['one please']
+    assert not call.requests and usage.requests == 0
+    call.turn_started('two')
+    assert words.current(call).label == 'two' and decided == ['one please']
+    assert (await words.interpret(call)).label == 'two' and decided == ['one please', 'two']
+
+
 def classes_live_in_schema():
     schema = ReplyClassification.model_json_schema()
     for definition in schema['$defs'].values():
@@ -336,6 +362,7 @@ async def main():
     await outcome_is_not_fallback()
     await binding_failures_and_late_results()
     await limits_and_barge()
+    await rule_interpreters_spend_nothing()
     print('classifiers ok: schemas, validation, accounting, fallback, binding, cancellation')
 
 

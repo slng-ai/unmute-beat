@@ -98,6 +98,8 @@ evals/cases.py          reviewed reply cases, shared by the live evaluation and 
 evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
 evals/solver.py         explicitly invoked live state-solver evaluation
+evals/compare.py        every interpreter side by side; the rule floor offline, the rest with --live
+evals/rules.py          the no-model floor the others must beat
 ```
 
 `core` knows nothing about the salon, and nothing in `core` but the processor

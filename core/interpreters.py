@@ -38,6 +38,9 @@ class Interpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](ABC):
     serves every concurrent call.
     """
 
+    requests_model: bool = True
+    """Whether deciding costs a provider request, so the budget is checked and the request traced."""
+
     def __init__(self, name: str, fallback: OutputT) -> None:
         self.name = name
         self.fallback = fallback
@@ -58,13 +61,14 @@ class Interpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](ABC):
             return self.current(call)
         value = self._input(call)
         turn, generation = call.turn, call._generation
-        if usage is not None and usage_limits is not None:
+        if self.requests_model and usage is not None and usage_limits is not None:
             usage_limits.check_before_request(usage)
         call._interpretations[self.name] = Interpretation(turn, value, self.fallback)
         if call.attempt == 0:
             call.retain_input()
         request = Request(started=time.perf_counter(), kind='classifier')
-        call.requests.append(request)
+        if self.requests_model:
+            call.requests.append(request)
         try:
             result = await self._decide(value, usage=usage, usage_limits=usage_limits)
         except FAILURES as error:
@@ -124,3 +128,22 @@ class ClassifierInterpreter[C: CallContext, InputT: BaseModel, OutputT: BaseMode
         self, value: InputT, *, usage: RunUsage | None, usage_limits: UsageLimits | None
     ) -> OutputT:
         return await self.classifier.classify(value, usage=usage, usage_limits=usage_limits)
+
+
+class RuleInterpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](Interpreter[C, InputT, OutputT]):
+    """An interpreter that decides in code, with no model: keypad input, buttons, or a baseline to beat.
+
+    It still gets everything `Interpreter.interpret` guarantees except a
+    request: no budget is spent and nothing is traced as a model request.
+    """
+
+    requests_model = False
+
+    async def _decide(
+        self, value: InputT, *, usage: RunUsage | None, usage_limits: UsageLimits | None
+    ) -> OutputT:
+        return self._rule(value)
+
+    @abstractmethod
+    def _rule(self, value: InputT) -> OutputT:
+        """Decide from the snapshot alone. Return the fallback rather than guess."""

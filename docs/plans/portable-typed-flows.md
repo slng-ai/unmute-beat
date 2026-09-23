@@ -378,6 +378,31 @@ the median. Otherwise the current classifier stays the default. Either way
 the other one stays available as a class. Write the real numbers into this
 file.
 
+### Status (2026-09-23)
+
+Built: `evals/compare.py` runs the rule floor offline and, with `--live`, the
+classifier and the solver on the same 53 cases, and prints one line per
+interpreter plus accuracy per kind of reply. `--out` saves the full reports.
+**Not yet run live**: this container has no Gemini key, and the run is
+billable, so it waits for someone to run
+`uv run --env-file .env python -m evals.compare --live --out evals/results/<date>.json`.
+Until then `SALON_INTERPRETER` defaults to the classifier.
+
+What is known offline, with every reading assumed correct (projected from
+the control flow, not measured):
+
+| | Projected requests over the 53 cases |
+|---|---|
+| Classifier | 88 |
+| Solver | 75 |
+| Rule floor (no model; 0.45 accuracy, 0 false accepts) | 44 |
+
+One cost the plan did not predict: when the caller talks over a proposal and
+says nothing the solver can act on ("yes" to a readback they did not hear in
+full), the solver path costs one request more than today, because today's
+classifier is skipped for an interrupted proposal. Three of the 53 cases.
+`tests/test_solver.py` pins this, so a change that makes it worse fails.
+
 ---
 
 ## Phase 4: reusable base classes in `core`

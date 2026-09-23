@@ -105,7 +105,7 @@ flowchart LR
 
 Each simulated call has no caller ID, so the agent has to ask for the number,
 and gets a fresh diary (`DIARY_PER_CALL`), so calls running side by side cannot
-see each other's bookings. The simulated caller always gives +34 611 111 111.
+see each other's bookings. The simulated caller always gives +34 671 273 454.
 
 A row fails when a call did not finish, the agent never spoke, the agent said
 one of the harness's recovery lines (`STUMBLE`, `EXHAUSTED`, `UNBACKED`,

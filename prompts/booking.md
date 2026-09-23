@@ -28,3 +28,11 @@ The latest appointment record: {{state.appointment.service}},
 No appointment has been saved in this call yet. The diary can still hold an
 earlier booking under the caller's number.
 {{/if}}
+{{#if state.offered}}
+Times just offered to the caller, with their slot ids:
+{{#each state.offered}}
+- {{spoken}}: `{{slot_id}}`
+{{/each}}
+If they pick one of these, call `save_booking` with its slot id. The diary
+has already been read for them.
+{{/if}}

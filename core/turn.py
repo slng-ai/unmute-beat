@@ -275,7 +275,9 @@ class Turn:
 
         Before a step's agent runs, its `advance` may name a known next action:
         one that needs no model because the caller's answer to a tracked
-        question already decides it. It spends the shared tool budget, retains
+        question already decides it. If it declines, a step just entered may
+        still open with a known action of its own (`Node.openings`). Either
+        way the action spends the shared tool budget, retains
         the caller's input and is bracketed by the same run events, and a
         refusal from it is context for the model path that follows, never
         permission to retry a write.
@@ -327,6 +329,8 @@ class Turn:
                 return
             if not retained_before and call.turn in call._retained_turns:
                 prompt = None
+            if action is None:
+                action = node.opening(call)
             if call.requests and call.requests[-1].kind == 'classifier':
                 call.requests[-1].fallback = action is None
             if action is not None:
@@ -348,7 +352,9 @@ class Turn:
                     output = await action.run()
                 except ModelRetry as error:
                     call.retain_action(action.name, {'refused': str(error)})
-                    call._return_status = f'Application action {action.name} refused: {error}'
+                    call._return_status = (
+                        f'{call._return_status} Application action {action.name} refused: {error}'.lstrip()
+                    )
                 except Exception as error:
                     logger.exception('application action failed: {}', action.name)
                     yield _Failed(f'{type(error).__name__}: {error}')
@@ -364,7 +370,7 @@ class Turn:
                     else:
                         yield event
 
-            call._return_status = ''
+            call._return_status, call._entered = '', ''
             if isinstance(output, Question) and not barge.hit:
                 await call.speak_now(output.put(call), origin='ask')
             if not isinstance(output, Handoff):
@@ -386,6 +392,7 @@ class Turn:
                 going_to, waiting = output.to, None
                 checkpoint = call._checkpoint
                 if checkpoint is not None:
+                    call._entered = output.status
                     call._hidden_speech.update(
                         s.id for s in call.all_spoken if s.id not in checkpoint.speech_ids
                     )
@@ -411,6 +418,7 @@ class Turn:
                         frozenset(s.id for s in call.all_spoken),
                         call.heard,
                     )
+                call._entered = 'handoff'
                 call._return_status = (
                     f'Application handoff: {call.state.agent} -> {going_to}. '
                     f'You are now {going_to}; handle the caller request here. '

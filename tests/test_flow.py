@@ -569,7 +569,8 @@ def every_tool_that_writes_is_an_action():
 
     A model-callable tool is a public function whose first parameter is
     `ctx`. Anything else that commits is an executor or a helper, and is
-    exempt only while every path to it starts at an action or at `advance`:
+    exempt only while every path to it starts at an action, at `advance`, or
+    at a step's opening, the three ways the turn engine runs one:
     otherwise a helper becomes the way to write to state without a claim.
     Transitively, because `_unknown` commits and is reached through
     `_answered`, which is not a tool either.
@@ -588,12 +589,20 @@ def every_tool_that_writes_is_an_action():
                 functions.setdefault(node.name, node)
 
     def commits(node: ast.AST) -> bool:
-        return any(
-            isinstance(inner, ast.Call)
-            and isinstance(inner.func, ast.Attribute)
-            and inner.func.attr == 'commit'
-            for inner in ast.walk(node)
-        )
+        """A direct commit in this function's own body. A nested function is scanned as itself, not as its factory."""
+        body = list(ast.iter_child_nodes(node))
+        while body:
+            inner = body.pop()
+            if isinstance(inner, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr == 'commit'
+            ):
+                return True
+            body.extend(ast.iter_child_nodes(inner))
+        return False
 
     writes = {name for name, node in functions.items() if commits(node)}
     assert writes, 'found no tools that commit, so this check is not checking anything'
@@ -609,7 +618,8 @@ def every_tool_that_writes_is_an_action():
             callee = getattr(getattr(inner, 'func', None), 'id', None)
             if isinstance(inner, ast.Call) and callee in functions:
                 called_by.setdefault(callee, set()).add(name)
-    terminal = tools | {'advance'}
+    openings = {o.run.__name__ for node in agents.AGENTS.values() for o in node.openings}
+    terminal = tools | {'advance'} | openings
 
     def reaches(helper: str, seen: set[str]) -> set[str]:
         out: set[str] = set()
@@ -622,7 +632,7 @@ def every_tool_that_writes_is_an_action():
 
     for helper in writes - tools:
         callers = reaches(helper, {helper})
-        assert callers and callers <= ACTIONS | {'advance'}, (
+        assert callers and callers <= ACTIONS | {'advance'} | openings, (
             f'{helper} writes to state and is reachable from {sorted(callers) or "nowhere"}, '
             'which is not an action that can claim the write'
         )

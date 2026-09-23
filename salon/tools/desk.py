@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from functools import lru_cache
 from typing import Literal
 
@@ -11,7 +12,7 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 from core.graph import Exit
 from core.policies import claim_or_refuse
 from salon.classification import classify_reply
-from salon.models.state import Handoff, SalonCall
+from salon.models.state import BookingRequest, Handoff, SalonCall
 from salon.tools.policy import ACTIONS
 
 
@@ -62,10 +63,18 @@ def hand_over_for(exits: tuple[Exit, ...], questions: tuple[str, ...] = ()):
     The annotations are built from values, so they cannot be written as
     annotations: under deferred annotation evaluation `Literal[names]` would be
     resolved in a scope where `names` is gone.
+
+    A step that can send the caller to `booking` also gets `booking`, the
+    request typed while the caller's words are in front of the model. When
+    `booking` interposes verification, that is what lets the booking step
+    offer times on its return without a request of its own. Every other step's
+    `hand_over` has no such parameter: its signature is trimmed, so the schema
+    the model is sent is exactly what it was.
     """
     names = tuple(dict.fromkeys(exit.to for exit in exits))
+    carries = 'booking' in names
 
-    async def hand_over(ctx, to, because) -> Handoff:
+    async def hand_over(ctx, to, because, booking=None) -> Handoff:
         """Give the caller to another agent, right now, for something that is not yours to do.
 
         This is the only way to move a caller. Writing a sentence about transferring
@@ -90,12 +99,31 @@ def hand_over_for(exits: tuple[Exit, ...], questions: tuple[str, ...] = ()):
                 f'{to} is not somewhere this caller can go from here right now. '
                 'Nothing was done. Answer them yourself, or pick a destination that is open.'
             )
+        if to == 'booking' and booking is not None:
+            ctx.deps.commit(wanted=booking)
         return Handoff(to=to, because=because)
 
     hand_over.__annotations__ = {
         'ctx': RunContext[SalonCall],
         'to': Literal[names],  # ty: ignore[invalid-type-form]
         'because': str,
+        **({'booking': BookingRequest | None} if carries else {}),
         'return': Handoff,
     }
+    if carries:
+        hand_over.__doc__ = f'{inspect.cleandoc(hand_over.__doc__ or "")}\n{_BOOKING_ARG}'
+    else:
+        signature = inspect.signature(hand_over)
+        hand_over.__signature__ = signature.replace(  # ty: ignore[unresolved-attribute]
+            parameters=[p for p in signature.parameters.values() if p.name != 'booking']
+        )
     return hand_over
+
+
+_BOOKING_ARG = (
+    '    booking: Only with to="booking", for a new appointment the caller\n'
+    '        has asked for: the service, their own day words, and their\n'
+    '        time words if they gave any. Leave it out if they named no\n'
+    '        service or no day.'
+)
+"""The `booking` argument's description, appended to `hand_over`'s Args only where the argument exists."""

@@ -188,7 +188,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
-    async with model_clients(AGENTS):
+    async with model_clients(AGENTS, warm=True):
         await runner.run()
 
 

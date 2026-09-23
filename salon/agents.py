@@ -23,7 +23,6 @@ What the salon does differently from the same agency built on a node graph:
 
 from __future__ import annotations
 
-import re
 from copy import deepcopy
 from dataclasses import replace
 
@@ -32,13 +31,14 @@ from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.graph import Exit, LocalAction, Node, lent
+from core.graph import Exit, LocalAction, Node, Opening, lent
 from core.policies import one_action_per_reply, request_clock, speak_by
 from salon.classification import MODEL, SETTINGS, classify_reply
 from salon.instructions import GREETING, instructions
 from salon.models.receipts import BookingCommand
 from salon.models.shapes import AgentName
 from salon.models.state import SalonCall, SalonState
+from salon.tools.booking import OPENINGS as BOOKING_OPENINGS
 from salon.tools.booking import (
     ask_booking,
     booking_guidance,
@@ -55,24 +55,17 @@ from salon.tools.complaints import (
     write_complaint,
 )
 from salon.tools.desk import end_conversation, hand_over_for, hang_up
+from salon.tools.identity import OPENINGS as VERIFY_OPENINGS
 from salon.tools.identity import (
     ask_number,
     confirm_customer,
     lookup_customer,
-    readback_number,
     stop_verifying,
     verification_guidance,
 )
 from salon.tools.policy import ACTIONS, SPEAK_BY
 
 __all__ = ['AGENTS', 'GREETING', 'MODEL', 'SETTINGS', 'advance', 'build']
-
-_PHONE_CONTENT = re.compile(
-    r'[+\d]|\b(?:phone|number|digits?|zero|one|two|three|four|five|six|seven|eight|nine|'
-    r'actually|instead|correction|wrong|wait)\b',
-    re.IGNORECASE,
-)
-"""Anything in an utterance that might be a number or a correction to one."""
 
 
 async def advance(
@@ -119,16 +112,6 @@ async def advance(
                 'record_complaint',
                 lambda: write_complaint(call, approved.summary, approved.requested_resolution),
             )
-    if (
-        call.state.agent == 'verify'
-        and call.state.pending
-        and call.pending('phone') is None
-        and not call.state.customer_verified
-        and call.state.customer_phone
-        and call._return_status.startswith('Application handoff:')
-        and not any(_PHONE_CONTENT.search(words) for words in call._inputs.values())
-    ):
-        return LocalAction('ask_number', lambda: readback_number(call, call.state.customer_phone))
     return None
 
 
@@ -141,6 +124,7 @@ def build(
     requires: tuple[str, ...] = (),
     satisfied_by: str = '',
     guarded: bool = False,
+    openings: tuple[Opening[SalonCall], ...] = (),
     model=MODEL,
 ) -> Node[SalonState]:
     """One step: its agent, its legal exits, and what has to hold before it runs.
@@ -260,6 +244,7 @@ def build(
         guarded=guarded,
         model_speech=not structured_speech,
         advance=advance,
+        openings=openings,
     )
 
 
@@ -288,6 +273,7 @@ AGENTS: dict[str, Node[SalonState]] = {
         finishers=[confirm_customer, stop_verifying],
         asks=[ask_number, verification_guidance],
         exits=(Exit('concierge', verified),),
+        openings=VERIFY_OPENINGS,
     ),
     'booking': build(
         'booking',
@@ -298,6 +284,7 @@ AGENTS: dict[str, Node[SalonState]] = {
         exits=(Exit('concierge'), Exit('complaints')),
         requires=('customer_verified',),
         satisfied_by='verify',
+        openings=BOOKING_OPENINGS,
     ),
     'complaints': build(
         'complaints',

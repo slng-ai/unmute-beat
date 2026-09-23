@@ -23,6 +23,8 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, U
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
+type Entry = Literal['', 'handoff', 'completed', 'unserved']
+"""How a step was reached within a turn. '' means it was already running when the turn began."""
 
 turn_generation: contextvars.ContextVar[tuple[str, int] | None] = contextvars.ContextVar(
     'turn_generation', default=None
@@ -283,7 +285,14 @@ class CallContext(BaseModel):
     _hidden_speech: set[str] = PrivateAttr(default_factory=set)
     _checkpoint: Checkpoint | None = PrivateAttr(default=None)
     _return_status: str = PrivateAttr(default='')
+    _entered: Entry = PrivateAttr(default='')
+    """How the step now running was reached within this turn. Set with `_return_status`, cleared with it."""
     _retained_turns: set[int] = PrivateAttr(default_factory=set)
+
+    @property
+    def entered(self) -> Entry:
+        """How the current step was reached in this turn: by a handoff, by a prerequisite's return, or not at all."""
+        return self._entered
 
     def retain_input(self) -> None:
         """Accept a model-free turn once, without inventing a provider exchange."""
@@ -616,6 +625,7 @@ class CallContext(BaseModel):
         self._inputs[self._turn] = heard
         self._attempt = 0
         self._response = ''
+        self._entered = ''
         self._requests.clear()
         self._spoken.clear()
         self._open = None

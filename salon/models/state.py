@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_valida
 from core import state as core
 from salon.diary import Diary, day_phrases
 from salon.models.consent import Asked, ConsentInput, ReplyClassification
+from salon.models.receipts import Slot
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
 
 
@@ -60,6 +61,22 @@ class Unresolved(BaseModel):
     """What a complaint asked the salon to do, because it decides what the caller is told happens next."""
 
 
+class BookingRequest(BaseModel):
+    """What the caller asked to book before anyone knew who they were, in their own words.
+
+    Carried by the front desk's handoff so that, once verification completes,
+    the booking step can offer times without a model request to re-read a
+    sentence the caller said a turn ago. The words stay the caller's: the diary
+    still resolves the day, and still refuses a day they never named.
+    """
+
+    model_config = core.STRICT
+
+    service: Service
+    when: str = Field(min_length=1)
+    at: str = ''
+
+
 class Handoff(core.Handoff):
     to: AgentName
 
@@ -101,7 +118,7 @@ class SalonState(core.VoiceState):
         with no matching `verified_phone` is not a verified caller; and
         authorisation surviving a correction, since a caller verified as one
         number who then gives a different one is a different person until the
-        new number is looked up.
+        new number is looked up. Times offered to the old number go with it.
 
         Runs on every commit, because `commit` rebuilds the whole model, so
         there is no write path that can skip it. Writes go through `__dict__`
@@ -112,10 +129,22 @@ class SalonState(core.VoiceState):
             self.__dict__['customer_verified'] = ''
             self.__dict__['verified_phone'] = ''
             self.__dict__['phone_confirmed'] = False
+            self.__dict__['offered'] = []
         return self
 
     booking_day: Date | None = None
     """The day the diary was last read for, written by the read and never by the model."""
+    offered: list[Slot] = Field(default_factory=list)
+    """The times just spoken to the caller, with the diary's ids, written by the offer and never by the model.
+
+    `offer_times` ends its run, so its result reaches history as a bare
+    acknowledgement and the ids it offered were invisible: the model re-read
+    the diary to find one before it could save, a whole extra request on the
+    turn the caller picks a time. The booking prompt renders these instead.
+    Emptied by the next read, a save, or a change of identity.
+    """
+    wanted: BookingRequest | None = None
+    """The booking the caller asked for at the front desk, until the diary is read for it."""
     appointment: Appointment | None = None
     writes: int = 0
     """How many business writes this call has had accepted.

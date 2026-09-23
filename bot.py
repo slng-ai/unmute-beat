@@ -5,6 +5,9 @@ conversation: prompts, tools, typed state and which step is running. This file
 only wires the pipeline; the seam between the two is one frame processor,
 `PydanticAgentProcessor`.
 
+Load .env before importing the services and agents: they construct clients
+at import time, and those clients must see the configured credentials.
+
     uv run --env-file .env python bot.py
 
 Then open http://localhost:7860 and talk.
@@ -12,9 +15,13 @@ Then open http://localhost:7860 and talk.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import os
 
 from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 from loguru import logger
 from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
@@ -43,8 +50,6 @@ from salon.agents import AGENTS, GREETING
 from salon.diary import Diary
 from salon.models.state import open_call
 from utils.observability import setup
-
-load_dotenv(override=True)
 
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
 DIARY = Diary()

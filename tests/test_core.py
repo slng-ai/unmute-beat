@@ -18,9 +18,13 @@ debugging session can import one module without running every check in it.
 import asyncio
 import contextlib
 import json
+import os
 import pathlib
+import subprocess
+import sys
 from contextlib import ExitStack
 from dataclasses import replace
+from tempfile import TemporaryDirectory
 
 from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
@@ -865,7 +869,49 @@ async def the_processor_reports_no_metrics_of_its_own():
     assert [r.ttft for r in call.requests if r.ttft is not None], call.requests
 
 
+def startup_loads_dotenv_before_models():
+    """The plain bot.py entry point must read its .env before creating a Google client."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(('GOOGLE_', 'GEMINI_', 'LANGFUSE_', 'SLNG_', 'PYTHON_DOTENV_'))
+    }
+    with TemporaryDirectory() as folder:
+        entry = pathlib.Path(folder) / 'bot.py'
+        entry.write_text((root / 'bot.py').read_text())
+        entry.with_name('.env').write_text('GOOGLE_API_KEY=offline-startup-test\n')
+        result = subprocess.run(
+            [
+                sys.executable,
+                '-c',
+                """
+import os
+import runpy
+import sys
+from unittest.mock import patch
+import pydantic_ai.models
+
+pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
+sys.path.insert(0, sys.argv[2])
+with patch('google.auth.default', side_effect=AssertionError('Startup attempted ADC before reading .env')):
+    runpy.run_path(sys.argv[1], run_name='startup_probe')
+assert os.environ['GOOGLE_API_KEY'] == 'offline-startup-test'
+""",
+                str(entry),
+                str(root),
+            ],
+            cwd=folder,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr
+
+
 async def main():
+    startup_loads_dotenv_before_models()
     await the_same_scenarios_both_ways()
     await the_processor_still_speaks_pipecat()
     await a_fixed_line_is_still_a_tts_frame()

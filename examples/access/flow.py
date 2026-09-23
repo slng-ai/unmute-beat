@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pydantic_ai.models import infer_model
 
-from core.flowspec import Registry, load
+from core.flowspec import Registry, load_file
 from core.operations import OutcomeUnknownError
 from core.proposals import BaseProposal
 from core.steps import (
@@ -258,12 +258,12 @@ REGISTRY = Registry(
     operations={'identify': LookupEmployee, 'eligibility': CheckEligibility, 'submit': SubmitRequest},
     checks={'matched': lambda receipt: receipt['match'], 'eligible': lambda receipt: receipt['eligible']},
 )
-"""What `flow.json` may name. The file says the order; these say the rules."""
-SPEC = load((Path(__file__).parent / 'flow.json').read_text())
+"""What `flow.yaml` may name. The file says the order; these say the rules."""
+SPEC = load_file(Path(__file__).parent / 'flow.yaml')
 
 
 def from_file(model=MODEL) -> StepFlow:
-    """The same flow, compiled from `flow.json`."""
+    """The same flow, compiled from `flow.yaml`."""
     return SPEC.compile(REGISTRY, model=model)
 
 

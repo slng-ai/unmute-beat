@@ -2286,6 +2286,7 @@ dependencies = [
     { name = "pydantic-ai-slim", extra = ["google", "openai", "spec"] },
     { name = "pydantic-extra-types", extra = ["phonenumbers"] },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "websockets" },
 ]
 
@@ -2303,6 +2304,7 @@ requires-dist = [
     { name = "pydantic-ai-slim", extras = ["google", "openai", "spec"], specifier = ">=2.46.0" },
     { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "websockets", specifier = ">=16.1.1" },
 ]
 

@@ -1,4 +1,4 @@
-"""Flow files: the examples written as JSON behave like the code, and every broken file is refused before it runs.
+"""Flow files: the examples written as YAML behave like the code, and every broken file is refused before it runs.
 
 Each publish check has one broken file, and each broken file must be refused
 for its own reason, with every problem listed at once, so the person editing
@@ -9,16 +9,17 @@ import asyncio
 import json
 from pathlib import Path
 
+import yaml
 from pydantic import ValidationError
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
-from core.flowspec import FlowSpecError, Registry, load
+from core.flowspec import FlowSpecError, Registry, load, load_file
 from examples.access import flow as access
 from examples.access.backend import DIRECTORY
 from examples.help import flow as help_line
 from tests.test_examples import TO_CONFIRM, Line, extracts, heard, reads, turns
 
-ACCESS = json.loads((Path(access.__file__).parent / 'flow.json').read_text())
+ACCESS = yaml.safe_load((Path(access.__file__).parent / 'flow.yaml').read_text())
 
 
 def scripted(flow):
@@ -140,9 +141,30 @@ def every_publish_check():
         raise AssertionError('compiled against a registry missing its knowledge')
 
 
+def yaml_and_json_are_the_same_flow():
+    """JSON is YAML, so either loads; plain YAML's surprises are refused with the field named, not guessed."""
+    path = Path(access.__file__).parent / 'flow.yaml'
+    assert load(json.dumps(ACCESS)) == load_file(path) == access.SPEC
+    surprise = path.read_text().replace('on_reject: cancelled', 'on_reject: no')
+    try:
+        load(surprise)
+    except ValidationError as error:
+        assert any(e['loc'][-1] == 'on_reject' for e in error.errors()), error
+    else:
+        raise AssertionError('an unquoted no was read as a step id')
+    for text in ('', '- just\n- a list\n'):
+        try:
+            load(text)
+        except FlowSpecError:
+            pass
+        else:
+            raise AssertionError(f'read {text!r} as a flow')
+
+
 async def main():
     await the_file_and_the_code_agree()
     every_publish_check()
+    yaml_and_json_are_the_same_flow()
     print('flowspec ok: files behave like code, and every broken file is refused')
 
 

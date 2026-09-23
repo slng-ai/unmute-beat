@@ -22,7 +22,6 @@ ordering that awaiting the callback already has.
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import time
 from collections.abc import AsyncIterator
@@ -71,13 +70,6 @@ WITHHELD = 'Sorry -- nothing has been changed yet. Let me check where we are.'
 
 Unlike `UNBACKED`, these words were caught before they reached TTS, so nothing
 has to be taken back.
-"""
-GRAPH = os.environ.get('VOICE_FLOW') == 'graph'
-"""Whether turns walk the steps through the Pydantic graph (`core.flow`) instead of the plain loop.
-
-ponytail: the phase 5 trial switch. Both drive the same `Turn._hop`; the
-graph adds a checked set of legal moves and a diagram. Whichever the trial
-keeps, the other goes.
 """
 _CLAUSE = re.compile(r'[.!?,;:]')
 _CLAUSE_MAX = 60
@@ -222,7 +214,8 @@ class Turn:
         self.usage, self.limits = budget.account()
         self.handoffs: list[str] = []
         self.generation = 0
-        self.flow = flow
+        self.flow = flow if flow is not None else Flow.of(nodes)
+        """The steps table as a Pydantic graph: it walks the hops and refuses a move the table does not allow."""
         self._hops_run = 0
         self._channel: asyncio.Queue[tuple[object, asyncio.Future[None] | None]] = asyncio.Queue()
 
@@ -324,26 +317,17 @@ class Turn:
         errand, and clears the prompt: the caller's turn is projected into the
         receiving agent's instructions as `{{heard}}`, so it appears once
         whichever steps the turn passes through.
+
+        The hops are walked by the flow's Pydantic graph (`core.flow`): each
+        graph step runs one `_hop`, and the decision after it sends the caller
+        on only along a move the steps table allows. The hop budget is counted
+        in `hop`.
         """
-        if self.flow is not None:
-            async for event in self._through_graph(prompt):
-                yield event
-            return
-        prompt_now: str | None = prompt
-        for _ in range(self.budget.step_runs):
-            carried: _Continue | None = None
-            async for event in self._hop(prompt_now):
-                if isinstance(event, _Continue):
-                    carried = event
-                else:
-                    yield event
-            if carried is None:
-                return
-            prompt_now = carried.prompt
-        yield _Exhausted(f'the {self.budget.step_runs}-run hop budget')
+        async for event in self._through_graph(prompt):
+            yield event
 
     async def _through_graph(self, prompt: str | None) -> AsyncIterator[object]:
-        """The same hops, walked by the flow's graph, with each event passed out in lockstep.
+        """Walk the hops through the flow's graph, passing each event out in lockstep.
 
         The graph runs in its own task, so what a hop yields crosses a channel.
         Each event waits for its acknowledgement, which comes only when this
@@ -352,7 +336,6 @@ class Turn:
         this generator is cancelled or closed, the graph task is cancelled and
         awaited, so a hop's own clean-up still runs before the turn is over.
         """
-        assert self.flow is not None
         task = asyncio.ensure_future(self.flow.run(self, self.call.state.agent, prompt))
         task.add_done_callback(lambda _: self._channel.put_nowait((None, None)))
         try:
@@ -744,7 +727,7 @@ def run_turn(
     barge: Barge | None = None,
 ) -> AsyncIterator[TurnEvent]:
     """Run agents until one answers the caller, and say what happened. The function form of `Turn`."""
-    return Turn(call, agents, budget, barge, Flow.of(agents) if GRAPH else None).events(prompt)
+    return Turn(call, agents, budget, barge).events(prompt)
 
 
 def _speech(event) -> str:

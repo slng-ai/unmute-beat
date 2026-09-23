@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pydantic_ai.models import infer_model
 
-from core.flowspec import Registry, load
+from core.flowspec import Registry, load_file
 from core.steps import ConversationStep, FlowCall, StepFlow
 
 NAME = 'library help'
@@ -37,11 +37,11 @@ def build(model=MODEL) -> StepFlow:
 
 
 REGISTRY = Registry(knowledge={'library': KNOWLEDGE})
-SPEC = load((Path(__file__).parent / 'flow.json').read_text())
+SPEC = load_file(Path(__file__).parent / 'flow.yaml')
 
 
 def from_file(model=MODEL) -> StepFlow:
-    """The same flow, compiled from `flow.json`."""
+    """The same flow, compiled from `flow.yaml`."""
     return SPEC.compile(REGISTRY, model=model)
 
 

@@ -539,7 +539,11 @@ so the history later gained a duplicate handoff at an arbitrary moment. Both
 halves are fixed in `core/turn.py` and pinned by
 `tests/test_flow.py::a_failed_run_is_retained_once`.
 
-**Decision needed.** The plan's rule says drop the graph when it fails a
+**Decided (2026-09-23): keep the graph.** The team chose the checked moves
+and the diagram over the extra lines, so the plain loop and the
+`VOICE_FLOW` switch are gone: every turn is walked by its table's graph.
+
+*(Before the decision:)* The plan's rule says drop the graph when it fails a
 pass mark. The loop stays the default and the graph stays behind
 `VOICE_FLOW=graph` until the team chooses between the checked moves and
 diagram and the extra 200 lines. `Flow.render()` and `legal_moves` are
@@ -657,6 +661,11 @@ fifth kind, `agent`, naming a registered node, is the way in if the salon
 should be editable as a file. Per-call version pinning is not built: a
 compiled `StepFlow` is immutable, so a caller already holds the version they
 started with, but nothing stores versions yet.
+
+**Decided (2026-09-23): YAML.** `pyyaml` is now a direct dependency (it was
+already locked as an indirect one, 6.0.3, so the lock only gained the direct
+entry). `core/flowspec.py` reads files with `yaml.safe_load`, so JSON still
+loads; the examples are `flow.yaml`.
 
 ---
 

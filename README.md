@@ -53,7 +53,6 @@ browser client, so there is nothing else to start.
 | `-t webrtc` | one transport instead of all of them |
 | `--host` / `--port` | Pipecat's runner flags. `uv run bot.py --help` for the rest |
 | `VOICE_AGENCY` | which flow answers: `salon` (default), `access` or `help`. See section 6 |
-| `VOICE_FLOW` | `graph` walks the steps through the Pydantic graph instead of the plain loop. See section 6 |
 | `SALON_INTERPRETER` | `solver` reads replies with the state solver instead of the four-label classifier. See section 8 |
 
 All of these are optional: `uv run bot.py` on its own is a live-clock
@@ -80,13 +79,13 @@ bot.py                  the Pipecat pipeline, and nothing else
 core/
   state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
   graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
-  flow.py               the steps as a Pydantic graph: legal moves, a diagram, VOICE_FLOW=graph
+  flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
   classifiers.py        generic Pydantic input/output classification in one request
   decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
   proposals.py          the one question a call waits on, and when it can be answered
   completion.py         when a step is done: evidence in the facts, never a flag
   steps.py              typed steps (collect, confirm, action, conversation, end) and StepFlow
-  flowspec.py           flow files as JSON, checked before they run
+  flowspec.py           flow files as YAML (or JSON), checked before they run
   operations.py         Operation: one business action with its checks in a fixed order
   interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
   policies.py           TurnBudget, the hooks, pick, schema_tool
@@ -320,7 +319,7 @@ which blocks every other write until the token has been asked what happened.
 
 The salon's four steps are written by hand. Any other business can describe
 its flow as a short, ordered list of **typed steps** instead, in Python or in
-a JSON file, and run it on the same engine. The Pydantic graph then checks,
+a YAML file, and run it on the same engine. The Pydantic graph then checks,
 while the call runs, that every move from one step to the next is one the
 flow allows.
 
@@ -328,18 +327,18 @@ flow allows.
 
 ```mermaid
 flowchart LR
-    file[flow.json] --> spec[FlowSpec]
+    file[flow.yaml] --> spec[FlowSpec]
     reg[Registry: field models, operations, knowledge, checks] --> spec
     code[Python list of steps] --> sf
     spec -- compile, refuse if broken --> sf[StepFlow]
     sf --> nodes[nodes table: one Node per step]
     nodes --> graph[Flow: Pydantic graph of legal moves]
     nodes --> turn[Turn: one caller turn]
-    graph -. VOICE_FLOW=graph .-> turn
+    graph -- walks every turn --> turn
 ```
 
 1. **Write the steps.** Either as Python (`examples/access/flow.py`,
-   `build()`) or as a flow file (`examples/access/flow.json`).
+   `build()`) or as a flow file (`examples/access/flow.yaml`).
 2. **Compile.** `StepFlow` (`core/steps.py`) turns each step into the same
    `Node` the salon hand-writes: an agent, openings, and the steps it can
    hand the caller to. A flow file first goes through `FlowSpec.compile`
@@ -441,47 +440,76 @@ rejection and revision targets.
 Speech from inside a graph step has to reach the caller as it streams, while
 the graph waits for the step to finish. So the engine passes each event out
 through a small lockstep channel: a step's next action waits until its last
-event has been handed on, which keeps the order exactly what the plain loop
-produces.
+event has been handed on, so speech, fixed lines and commits happen in exactly
+the order the step produced them.
 
 **What the graph does not do.** Where a handoff *really* lands still depends
 on the call's state: the prerequisite check, the resume point, a borrowed
 tool that moves the caller, an edge's guard. Those stay in `route` and
 `moved_by` (`core/graph.py`), because a graph's shape cannot express them.
 
-**Is it on?** Not by default. `VOICE_FLOW=graph` turns it on for every turn;
-without it, the same `Turn.hop` is driven by a plain loop. The trial result:
-all 18 test modules pass both ways, barge-in included, but the graph path is
-about 200 lines more than the loop. Whether its checked moves and diagram are
-worth that is an open decision, written up in
-`docs/plans/portable-typed-flows.md`.
+**It runs every turn.** There is no other engine: every turn, for the salon
+and for every typed flow, is walked by its table's graph. It was tried
+behind a switch first; all 18 test modules passed both ways, barge-in
+included, and the graph was kept for its checked moves and its diagram at
+the cost of about 200 more lines than a plain loop. The trial is written up
+in `docs/plans/portable-typed-flows.md`.
 
 ### Flow files
 
-A flow file is versioned JSON. It lists steps by `kind` and may only *name*
+A flow file is versioned YAML. It lists steps by `kind` and may only *name*
 things a developer registered in code, so a file can never run code:
 
-```json
-{
-  "version": 1,
-  "id": "access_request",
-  "steps": [
-    {"id": "employee", "kind": "collect", "model": "employee", "question": "What is your employee ID?"},
-    {"id": "identify", "kind": "action", "operation": "identify", "accepts": "matched", "on_error": "stranger"},
-    {"id": "reason", "kind": "collect", "question": "What do you need it for?",
-     "fields": {"reason": {"type": "string", "min_length": 5}}},
-    {"id": "confirm", "kind": "confirm", "operation": "submit", "then": "submit",
-     "on_reject": "cancelled", "on_revise": "level"},
-    {"id": "submit", "kind": "action", "operation": "submit", "on_error": "failed", "on_unknown": "unconfirmed"},
-    {"id": "submitted", "kind": "end", "outcome": "completed", "say": "Done: request {submit[request_id]} is submitted."}
-  ]
-}
+```yaml
+version: 1
+id: access_request
+steps:
+  - id: employee
+    kind: collect
+    model: employee
+    question: What is your employee ID?
+
+  - id: identify
+    kind: action
+    operation: identify
+    accepts: matched
+    on_error: stranger
+
+  - id: reason
+    kind: collect
+    question: What do you need it for?
+    fields:
+      reason: {type: string, min_length: 5}
+
+  - id: confirm
+    kind: confirm
+    operation: submit
+    then: submit
+    on_reject: cancelled
+    on_revise: level
+
+  - id: submit
+    kind: action
+    operation: submit
+    on_error: failed
+    on_unknown: unconfirmed
+
+  - id: submitted
+    kind: end
+    outcome: completed
+    say: 'Done: request {submit[request_id]} is submitted.'
 ```
 
-(Shortened; the full file is `examples/access/flow.json`.) The `Registry`
+(Shortened; the full file is `examples/access/flow.yaml`.) The `Registry`
 beside it says what `employee`, `identify`, `submit` and `matched` are: a
 Pydantic model, two `Operation` classes and a receipt check. Simple fields can
 be written inline (`string`, `integer`, `date`, `choice`, with plain limits).
+
+Files are read with `yaml.safe_load`, which only ever builds plain data, and
+JSON is valid YAML, so a `.json` file loads too (`load_file(path)`). Two YAML
+habits to know: an unquoted `no`, `yes`, `on` or `off` becomes true or false,
+and a line containing `: ` must be quoted (the `say` above). A value that
+YAML turned into the wrong type is refused with the step and field named.
 
 `FlowSpec.compile` refuses a broken file and lists **every** problem at once:
 
@@ -500,13 +528,12 @@ Then it builds the `StepFlow` and its graph once; every call shares them.
 ```bash
 VOICE_AGENCY=access uv run bot.py -t webrtc   # the ten-step access request
 VOICE_AGENCY=help uv run bot.py -t webrtc     # the library help line
-VOICE_FLOW=graph uv run bot.py -t webrtc      # any flow, walked by the Pydantic graph
 ```
 
 Both examples import nothing from the salon. `tests/test_examples.py` walks
 them through the real engine; `tests/test_flowspec.py` checks that each flow
-file behaves exactly like its Python version and that every broken file is
-refused.
+file behaves exactly like its Python version, that YAML and JSON load to the
+same flow, and that every broken file is refused.
 
 - Pydantic graph: https://pydantic.dev/docs/ai/graph/graph/
 - Discriminated unions, for step kinds: https://pydantic.dev/docs/validation/latest/concepts/unions/#discriminated-unions

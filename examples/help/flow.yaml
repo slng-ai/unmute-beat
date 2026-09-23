@@ -1,0 +1,10 @@
+# The library help line: one conversation step. `library` is registered in examples/help/flow.py.
+version: 1
+id: library_help
+steps:
+  - id: answer
+    kind: conversation
+    knowledge: library
+    instructions: >-
+      You answer questions about Harbour Library on the phone, in one or two short sentences,
+      only from the knowledge below. If it does not say, say you do not know and suggest the front desk.

@@ -17,7 +17,7 @@ its supporting link. Read it before changing how a turn works.
 | `bot.py` | the Pipecat pipeline: STT, VAD and smart-turn, TTS, transport, tracing worker, greeting. The only runnable entry point |
 | `core/state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question` |
 | `core/graph.py` | `Node`, `Exit`, `LocalAction`, `Opening`, `route`, `moved_by`, `lent`, `model_clients` |
-| `core/flow.py` | `Flow`: the steps table as a `pydantic_graph` graph with each step's legal moves; `render()` draws it; runs turns with `VOICE_FLOW=graph` |
+| `core/flow.py` | `Flow`: the steps table as a `pydantic_graph` graph with each step's legal moves; it walks every turn and refuses an undeclared move; `render()` draws it |
 | `core/policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
 | `core/history.py` | `paired` and `project`: what each provider request is actually sent |
 | `core/turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
@@ -33,11 +33,11 @@ its supporting link. Read it before changing how a turn works.
 | `core/operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record |
 | `core/completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
 | `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
-| `core/flowspec.py` | flow files: `FlowSpec` (JSON, one spec class per step kind), `Registry` of what a file may name, `FlowSpecError` listing every problem |
+| `core/flowspec.py` | flow files: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), `Registry` of what a file may name, `FlowSpecError` listing every problem |
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | `advance()`, `build()`, the `AGENTS` table |
 | `prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
-| `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each also as `flow.json`; `VOICE_AGENCY=access` runs one in `bot.py` |
+| `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each also as `flow.yaml`; `VOICE_AGENCY=access` runs one in `bot.py` |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
 | `tests/` | eighteen assert-script modules, no pytest, no network |
 

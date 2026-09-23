@@ -1,4 +1,4 @@
-"""Flow files: a versioned JSON description of a flow, checked before it can run.
+"""Flow files: a versioned YAML (or JSON) description of a flow, checked before it can run.
 
 A person edits the file; a developer registers what it may name. The file
 lists steps by kind (`collect`, `confirm`, `action`, `conversation`, `end`)
@@ -13,9 +13,11 @@ an action that needs approval but can be reached without its confirmation.
 Each step kind is one spec class with one `to_step`, so a new kind is one new
 pair of classes, not a new branch in a compiler.
 
-ponytail: JSON, because Pydantic reads it with no new dependency. YAML is
-nicer to write; `pyyaml` is only an indirect dependency today, so reading
-YAML waits on the team agreeing to depend on it directly.
+Files are read with `yaml.safe_load`, which builds only plain data (never
+Python objects), and JSON is valid YAML, so either format loads. Plain YAML
+turns an unquoted `no`, `yes`, `on` or `off` into a boolean and an unquoted
+`2026-10-01` into a date; a text field given one of those fails validation
+with the step and field named, so quote such values.
 """
 
 from __future__ import annotations
@@ -25,8 +27,10 @@ from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
@@ -336,5 +340,13 @@ class FlowSpec(BaseModel):
 
 
 def load(text: str) -> FlowSpec:
-    """Read a flow file. Unknown kinds and fields fail here, with Pydantic's own account of where."""
-    return FlowSpec.model_validate_json(text)
+    """Read a flow file's text, YAML or JSON. Unknown kinds and fields fail here, with Pydantic's account of where."""
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise FlowSpecError(['a flow file must be a mapping with version, id and steps'])
+    return FlowSpec.model_validate(data)
+
+
+def load_file(path: str | Path) -> FlowSpec:
+    """Read a flow file from disk."""
+    return load(Path(path).read_text())

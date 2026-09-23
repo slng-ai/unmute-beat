@@ -83,6 +83,7 @@ core/
   proposals.py          the one question a call waits on, and when it can be answered
   completion.py         when a step is done: evidence in the facts, never a flag
   steps.py              typed steps (collect, confirm, action, conversation, end) and StepFlow
+  flowspec.py           flow files as JSON, checked before they run
   operations.py         Operation: one business action with its checks in a fixed order
   interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
   policies.py           TurnBudget, the hooks, pick, schema_tool
@@ -98,7 +99,7 @@ salon/
   agents.py             advance(), build(), the AGENTS table
 prompts/                one prompt per step, the shared rules, knowledge/
 utils/observability.py  Langfuse over OTel
-tests/                  seventeen assert scripts
+tests/                  eighteen assert scripts
 examples/               access (ten steps) and help (one step), on core alone; VOICE_AGENCY=access|help
 evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
 evals/report.py         one result and report shape for every interpreter

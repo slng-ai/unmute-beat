@@ -633,6 +633,31 @@ the version it started on.
 behaves the same as the code-built flow on the phase 1 and phase 6 cases. One
 test per publish check, with a broken spec.
 
+### Status (2026-09-23)
+
+Done. `core/flowspec.py` reads a versioned JSON flow file into `FlowSpec`,
+whose steps are a discriminated union of five spec classes, each with one
+`to_step`. A `Registry` holds what a file may name: field models,
+operation classes, knowledge, receipt checks. `FlowSpec.compile` refuses a
+broken file with every problem listed: unknown kind or field (at load),
+repeated id, missing destination, unregistered name, a field no earlier step
+collects, an approval-needing action with no confirm step, and an action
+reachable without its confirmation. It then builds the `StepFlow` and its
+Pydantic graph once.
+
+`examples/access/flow.json` and `examples/help/flow.json` compile to flows
+that say and do exactly what the code-built ones do on the same scripted
+calls (`tests/test_flowspec.py`), and each publish check has its own broken
+file.
+
+Not done, and why: the salon is not a flow file. Its steps are hand-written
+agents with their own prompts, tools and openings, which the five step kinds
+do not describe; a file listing four registered agents would add nothing. A
+fifth kind, `agent`, naming a registered node, is the way in if the salon
+should be editable as a file. Per-call version pinning is not built: a
+compiled `StepFlow` is immutable, so a caller already holds the version they
+started with, but nothing stores versions yet.
+
 ---
 
 ## Out of scope for this plan

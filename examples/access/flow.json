@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "access_request",
+  "steps": [
+    {"id": "employee", "kind": "collect", "model": "employee", "question": "What is your employee ID?"},
+    {"id": "identify", "kind": "action", "operation": "identify", "accepts": "matched", "on_error": "stranger"},
+    {"id": "team", "kind": "collect", "model": "team", "question": "Which team are you on?"},
+    {"id": "system", "kind": "collect", "model": "system", "question": "Which system do you need?", "after": ["team"]},
+    {"id": "level", "kind": "collect", "model": "level", "question": "What access level do you need?", "after": ["system"]},
+    {
+      "id": "reason",
+      "kind": "collect",
+      "question": "What do you need it for?",
+      "fields": {"reason": {"type": "string", "min_length": 5, "description": "Why they need it, in their own words."}}
+    },
+    {"id": "start", "kind": "collect", "model": "start", "question": "From what date?"},
+    {"id": "end", "kind": "collect", "model": "end", "question": "Until what date?", "after": ["start"]},
+    {"id": "eligibility", "kind": "action", "operation": "eligibility", "accepts": "eligible", "on_error": "refused"},
+    {"id": "confirm", "kind": "confirm", "operation": "submit", "then": "submit", "on_reject": "cancelled", "on_revise": "level"},
+    {"id": "submit", "kind": "action", "operation": "submit", "on_error": "failed", "on_unknown": "unconfirmed"},
+    {
+      "id": "submitted",
+      "kind": "end",
+      "outcome": "completed",
+      "say": "Done: request {submit[request_id]} is submitted. It still needs approval; you will get an email."
+    },
+    {"id": "cancelled", "kind": "end", "outcome": "cancelled", "say": "Okay, I haven't submitted anything."},
+    {"id": "refused", "kind": "end", "outcome": "failed", "say": "The access policy does not allow that request, so nothing was filed."},
+    {"id": "stranger", "kind": "end", "outcome": "failed", "say": "I can't find that employee ID, so I can't file a request."},
+    {"id": "failed", "kind": "end", "outcome": "failed", "say": "The ticketing system refused the request, so nothing was filed."},
+    {
+      "id": "unconfirmed",
+      "kind": "end",
+      "outcome": "pending",
+      "say": "I couldn't confirm whether it went through. Please don't submit it again; we'll email you."
+    }
+  ]
+}

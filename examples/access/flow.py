@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from hashlib import sha256
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pydantic_ai.models import infer_model
 
+from core.flowspec import Registry, load
 from core.operations import OutcomeUnknownError
 from core.proposals import BaseProposal
 from core.steps import (
@@ -242,6 +244,27 @@ def build(model=MODEL) -> StepFlow:
         ),
     ]
     return StepFlow(steps, model=model, interpreter=interpreter)
+
+
+REGISTRY = Registry(
+    fields={
+        'employee': Employee,
+        'team': Team,
+        'system': System,
+        'level': Level,
+        'start': Start,
+        'end': Finish,
+    },
+    operations={'identify': LookupEmployee, 'eligibility': CheckEligibility, 'submit': SubmitRequest},
+    checks={'matched': lambda receipt: receipt['match'], 'eligible': lambda receipt: receipt['eligible']},
+)
+"""What `flow.json` may name. The file says the order; these say the rules."""
+SPEC = load((Path(__file__).parent / 'flow.json').read_text())
+
+
+def from_file(model=MODEL) -> StepFlow:
+    """The same flow, compiled from `flow.json`."""
+    return SPEC.compile(REGISTRY, model=model)
 
 
 FLOW = build()

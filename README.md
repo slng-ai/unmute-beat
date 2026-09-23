@@ -70,6 +70,59 @@ spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
 
 Tests: `uv run python -m tests`. Offline, no `.env`, no network.
 
+## Coval simulations
+
+Coval places simulated phone calls to the bot, running on your laptop, and
+grades each one. Run it before a release, or after a change to what the agent
+says or does.
+
+```bash
+uv run python -m utils.coval_sim run VkpkmRMV     # the salon release set, 18 calls
+uv run python -m utils.coval_sim run 9CN3Djw2     # the one-call smoke set
+```
+
+```
+FAIL  salon  test set VkpkmRMV  run Ab12Cd34Ef56Gh78
+      call XdjHhNEhaG6TLBraQTFnfk: No Change Claimed Without Consent answered NO
+      call 5pU9frjpwHPFjNvzR2xH5E: Harness: expected behaviors scored 0.60
+      log: /var/folders/.../coval-sim-rq0wjtjr/salon-bot.log
+```
+
+```mermaid
+flowchart LR
+  tool[coval_sim] -->|starts| bot[bot.py -t twilio]
+  tool -->|opens| tunnel[cloudflared tunnel]
+  tool -->|writes tunnel URL| agent[Coval agent]
+  coval[Coval] -->|calls via tunnel| bot
+```
+
+1. The tool asks Coval which test sets are attached to agents named
+   `voice-harness-<agency>-pipecat`. `salon` is the `VOICE_AGENCY` the bot runs.
+2. It opens a cloudflared tunnel and starts `bot.py` on Pipecat's Twilio route.
+3. It writes the tunnel address into the Coval agent, then launches one run per test set.
+4. It waits, reads every call back, prints one row per run, and stops everything it started.
+
+Each simulated call has no caller ID, so the agent has to ask for the number,
+and gets a fresh diary (`DIARY_PER_CALL`), so calls running side by side cannot
+see each other's bookings. The simulated caller always gives +34 611 111 111.
+
+A row fails when a call did not finish, the agent never spoke, a yes/no metric
+answered NO, or the composite metric (`Harness: expected behaviors`) scored
+below 1. Latency numbers are reported by Coval but never fail a row. Read the
+transcript before you trust a failure: `coval --format json simulations get <call id>`.
+
+| Option | What it does |
+|---|---|
+| `--iterations 3` | runs each case three times |
+| `--concurrency 3` | calls in flight at once (default 3) |
+| `--persona "Interruptive Speaker"` | another Coval caller (default `Standard Customer`) |
+| `add <agency>` | creates the `voice-harness-<agency>-pipecat` Coval agent |
+
+It needs `coval`, `cloudflared` and `uv` on your PATH, and `COVAL_API_KEY`
+with the model and speech keys in `.env`. It does not run in CI. Traces go to
+Langfuse as usual. They are not linked to their Coval call, because the Twilio
+route carries no simulation ID.
+
 ---
 
 # How it is built

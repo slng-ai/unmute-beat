@@ -36,11 +36,12 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.runner.types import RunnerArguments
+from pipecat.runner.types import RunnerArguments, WebSocketRunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.tts_service import TextAggregationMode
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
@@ -58,6 +59,9 @@ from utils.observability import setup
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
 DIARY = Diary()
 """One salon per process: a booking made on one call is there when the next one rings."""
+DIARY_PER_CALL = bool(os.getenv('DIARY_PER_CALL'))
+"""Give every call a fresh diary instead. Coval's simulated calls run side by side with one
+phone number, so a shared diary lets one test case's booking change the next case's path."""
 AGENCY = os.getenv('VOICE_AGENCY', 'salon')
 """Which flow answers: `salon`, or an example under `examples/` (`access`, `help`)."""
 
@@ -65,7 +69,12 @@ AGENCY = os.getenv('VOICE_AGENCY', 'salon')
 def agency() -> tuple[str, dict, str, Callable[[str], CallContext]]:
     """The chosen flow's trace name, steps table, greeting and call factory."""
     if AGENCY == 'salon':
-        return 'salon call', SALON_AGENTS, SALON_GREETING, lambda caller: open_salon_call(caller, diary=DIARY)
+        return (
+            'salon call',
+            SALON_AGENTS,
+            SALON_GREETING,
+            lambda caller: open_salon_call(caller, diary=Diary() if DIARY_PER_CALL else DIARY),
+        )
     example = importlib.import_module(f'examples.{AGENCY}')
     return f'{example.NAME} call', example.AGENTS, example.GREETING, example.open_call
 
@@ -75,7 +84,9 @@ NAME, AGENTS, GREETING, OPEN_CALL = agency()
 transport_params = {
     'webrtc': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
     'daily': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
+    'twilio': lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
 }
+"""`twilio` is the route Coval's simulated calls take (`utils/coval_sim`); the runner adds the serializer."""
 
 
 def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
@@ -196,7 +207,10 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     @transport.event_handler('on_client_connected')
     async def on_client_connected(transport, client):
+        """A phone websocket has no RTVI client to say it is ready, so the greeting goes out here."""
         logger.info('client connected')
+        if isinstance(runner_args, WebSocketRunnerArguments):
+            await agents.greet(GREETING)
 
     @transport.event_handler('on_client_disconnected')
     async def on_client_disconnected(transport, client):

@@ -42,7 +42,8 @@ its supporting link. Read it before changing how a turn works.
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
 | `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`); `VOICE_AGENCY=access` runs one in `bot.py` |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `tests/` | eighteen assert-script modules, no pytest, no network |
+| `utils/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI |
+| `tests/` | nineteen assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -66,9 +67,10 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all eighteen modules, offline, no .env
+uv run python -m tests                                   # all nineteen modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
+uv run python -m utils.coval_sim run VkpkmRMV            # Coval release check, 18 real calls, billable
 ```
 
 `uv run python -m tests` turns `ALLOW_MODEL_REQUESTS` off *before* any module

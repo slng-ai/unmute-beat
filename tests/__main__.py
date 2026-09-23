@@ -43,6 +43,7 @@ MODULES = (
     'tests.test_flow',
     'tests.test_budget',
     'tests.test_recovery',
+    'tests.test_continuation',
     'tests.test_history',
     'tests.test_optimization',
     'tests.test_core',

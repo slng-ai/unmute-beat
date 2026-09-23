@@ -116,7 +116,9 @@ def _one_time(value: object) -> _time:
 Phone = Annotated[
     str,
     AfterValidator(_spanish_or_absent),
-    Field(description='A Spanish phone number in full international form, like +34600111222.'),
+    Field(
+        description='A Spanish phone number the caller said, in full international form: +34 then nine digits.'
+    ),
 ]
 """A state field: a Spanish number, or '' before anybody has given one.
 
@@ -124,6 +126,9 @@ An `AfterValidator` over a plain `str`, never the `PhoneNumber` type itself and
 never a `pattern=` constraint: both put a keyword in the schema the model is
 sent and some providers reject it. The description is how the shape reaches
 the model instead; it travels as prose, so no schema converter can strip it.
+
+It states the format and gives no example number: a model with no digits from
+the caller copied the example, which was also the diary's seeded customer.
 """
 Date = Annotated[_date, BeforeValidator(_one_day)]
 Time = Annotated[_time, BeforeValidator(_one_time)]
@@ -132,7 +137,9 @@ Id = Annotated[str, _shape(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', 'expected an i
 SubmittedPhone = Annotated[
     str,
     AfterValidator(_spanish_and_present),
-    Field(description='A Spanish phone number in full international form, like +34600111222.'),
+    Field(
+        description='A Spanish phone number the caller said, in full international form: +34 then nine digits.'
+    ),
 ]
 """A tool argument: a number being submitted for a lookup. Never for state; see `_spanish_and_present`."""
 

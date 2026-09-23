@@ -239,6 +239,8 @@ class Turn:
         turn_generation.set((call.id, self.generation))
         call._covered = False
         call.turn_started(prompt or '')
+        if prompt is not None:
+            prompt = call.fresh or None
 
         spent = ''
         failure = ''
@@ -269,6 +271,7 @@ class Turn:
             call.note_said('fixed', UNBACKED, origin='error')
             yield FixedSpeech(UNBACKED, reason='unbacked')
 
+        call.turn_ended(interrupted=barge.hit)
         status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
         if failure:
             status = 'failed'
@@ -388,7 +391,7 @@ class Turn:
 
         if self._stale():
             return
-        retained_before = call.turn in call._retained_turns
+        retained_before = call.input_retained
         requests_before = len(call.requests)
         action = None
         if node.advance:
@@ -404,7 +407,7 @@ class Turn:
                 barge.detach()
         if self._stale():
             return
-        if not retained_before and call.turn in call._retained_turns:
+        if not retained_before and call.input_retained:
             prompt = None
         classified = next((r for r in call.requests[requests_before:] if r.kind == 'classifier'), None)
         if classified is not None and action is None:
@@ -629,10 +632,15 @@ class Turn:
                     isinstance(p, UserPromptPart) for p in message.parts
                 ):
                     message.metadata = (message.metadata or {}) | {'caller_turn': caller_turn}
-                    if accepted_prompt is not None and any(
-                        isinstance(p, UserPromptPart) and p.content == accepted_prompt for p in message.parts
+                    if (
+                        accepted_prompt is not None
+                        and caller_turn == call.turn
+                        and any(
+                            isinstance(p, UserPromptPart) and p.content == accepted_prompt
+                            for p in message.parts
+                        )
                     ):
-                        call._retained_turns.add(caller_turn)
+                        call.mark_retained()
                 if isinstance(message, ModelResponse) and not (message.metadata or {}).get('voice_response'):
                     message.metadata = (message.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
             call._protocol.extend(deepcopy(retained))
@@ -744,187 +752,6 @@ def _speech(event) -> str:
     return ''
 
 
-async def _speak(
-    call: CallContext,
-    node: Node,
-    prompt: str | None,
-    budget: TurnBudget,
-    usage,
-    limits,
-    barge: Barge,
-) -> AsyncIterator[object]:
-    """Run one step's agent, streaming whatever it says.
-
-    `Node.outputs` builds the run's `output_type` from the live state; the
-    per-request narrowing that keeps it honest across several requests inside
-    one run is a capability on the agent itself.
-
-    On a step that can write, speech is released a clause at a time so each
-    clause can be read before the caller hears it, and a clause that claims a
-    change nothing has made is not said at all. The gate is off once the step
-    has written something, because the confirmation is then the business's
-    own words, and off entirely on a step that cannot write.
-
-    A `reset` step is asked the caller's own question outright and sent no
-    conversation: what it needs is projected into its instructions, and what
-    it does not need it cannot leak. An ordinary step gets the caller's turn on
-    the first hop and `None` afterwards, because by then it is in the history.
-    Every request's messages are projected through `history.project` before
-    they go out, and any application status is appended as an instruction.
-
-    The run spends the turn's own tally, not one of its own, and `retries` is
-    semantic repair only: a provider's HTTP retries are a different layer, and
-    folding them together would let a flaky network buy extra attempts at
-    getting a tool call right.
-
-    Which tools *succeeded* is how a free edge is taken: the result, never the
-    call, because the call event fires before the tool runs.
-
-    Messages are retained across cancellation from the SDK's own
-    `new_messages()` boundary after teardown, never by slicing at the original
-    history length: SDK normalisation can merge old requests, and a cancelled
-    run still heard the caller and may have completed a tool.
-    """
-    agent: Agent = node.agent
-    output_type = node.outputs(call.state) if node.outputs is not None else None
-    step = call.state.agent
-    succeeded: set[str] = set()
-    output = None
-    spoke = False
-    gate: str | None = 'clause' if node.guarded and not call.wrote_this_turn() else None
-    held = ''
-
-    call.attempt_started()
-    caller_turn = call.turn
-    run_id = f'{caller_turn}:{call.attempt}'
-    accepted_prompt = call.heard if node.history == 'reset' else prompt
-    requested = 0
-    streamed = 0
-    excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'reset' else frozenset()
-    initial = [] if node.history == 'reset' else paired(project(call, call.messages))
-
-    async def prepare(ctx, request):
-        nonlocal requested
-        requested += 1
-        call._response = f'{run_id}:{requested}'
-        messages = project(call, request.messages, excluded=excluded)
-        parameters = request.model_request_parameters
-        if call._return_status:
-            parameters = replace(
-                parameters,
-                instruction_parts=[
-                    *(parameters.instruction_parts or []),
-                    InstructionPart(content=call._return_status),
-                ],
-            )
-        return replace(request, messages=messages, model_request_parameters=parameters)
-
-    async def tag(ctx, *, request_context, response):
-        response.metadata = (response.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
-        return response
-
-    retained_run = False
-    events = None
-
-    def retain(new_messages):
-        nonlocal retained_run
-        retained_run = True
-        retained = deepcopy(new_messages)
-        for message in retained:
-            if isinstance(message, ModelRequest) and any(
-                isinstance(p, UserPromptPart) for p in message.parts
-            ):
-                message.metadata = (message.metadata or {}) | {'caller_turn': caller_turn}
-                if accepted_prompt is not None and any(
-                    isinstance(p, UserPromptPart) and p.content == accepted_prompt for p in message.parts
-                ):
-                    call._retained_turns.add(caller_turn)
-            if isinstance(message, ModelResponse) and not (message.metadata or {}).get('voice_response'):
-                message.metadata = (message.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
-        call._protocol.extend(deepcopy(retained))
-        call.messages.extend(retained)
-
-    yield RunStarted(step)
-    try:
-        async with agent.run_stream_events(
-            accepted_prompt,
-            deps=call,
-            message_history=initial,
-            capabilities=[Hooks(before_model_request=prepare, after_model_request=tag)],
-            output_type=output_type,
-            usage=usage,
-            usage_limits=limits,
-            retries=budget.repair_retries,
-        ) as events:
-            barge.attach(events)
-            async for event in events:
-                if isinstance(event, PartStartEvent):
-                    if event.index == 0:
-                        streamed += 1
-                    call._response = f'{run_id}:{streamed}'
-                    match event.part:
-                        case TextPart():
-                            call.note_first_output('text')
-                        case ToolCallPart():
-                            call.note_first_output('tool')
-                if chunk := _speech(event):
-                    if not node.model_speech:
-                        continue
-                    if gate is not None:
-                        held += chunk
-                        if not (_CLAUSE.search(held) or len(held) >= _CLAUSE_MAX):
-                            continue
-                        text, held = held, ''
-                        if call.claims_completion(text):
-                            logger.error('withheld an unbacked claim: {!r}', text.strip())
-                            gate = 'blocked'
-                            break
-                    else:
-                        text = chunk
-                    call.note_model_text(text)
-                    if not spoke:
-                        spoke = True
-                        call._spoke = True
-                        call._covered = False
-                    yield TextDelta(text, step)
-                elif isinstance(event, FunctionToolResultEvent):
-                    if not isinstance(event.part, RetryPromptPart):
-                        succeeded.add(event.part.tool_name)
-                elif isinstance(event, AgentRunResultEvent):
-                    retain(event.result.new_messages())
-                    output = event.result.output
-    except UsageLimitExceeded, TimeoutError:
-        raise
-    except RunCancelled as cancelled:
-        retain(cancelled.new_messages())
-    except Exception as error:
-        logger.exception('agent run failed')
-        yield RunEnded(step)
-        yield _Failed(f'{type(error).__name__}: {error}')
-        return
-    finally:
-        if events is not None and not retained_run:
-            try:
-                new_messages = events.new_messages()
-            except UserError:
-                pass
-            else:
-                retain(new_messages)
-        barge.detach()
-        if held and gate != 'blocked':
-            call.note_model_text(held)
-            call._spoke = True
-            yield TextDelta(held, step)
-        call.close_model_text()
-
-    if gate == 'blocked':
-        note_spoken(call, _delivered(call), interrupted=True)
-        call.note_said('fixed', WITHHELD, origin='error')
-        yield FixedSpeech(WITHHELD, reason='withheld')
-    yield RunEnded(step)
-    yield _Outcome(output, succeeded)
-
-
 def _delivered(call: CallContext) -> str:
     """What the caller actually heard of the model's current segment."""
     segments = [s for s in call.spoken if s.kind == 'model']
@@ -943,7 +770,7 @@ def note_spoken(
     """
     if not interrupted and not segment_ids:
         return
-    call.note_heard(content, segment_ids=segment_ids)
+    call.note_heard(content, segment_ids=segment_ids, interrupted=interrupted)
 
 
 async def take_turn(

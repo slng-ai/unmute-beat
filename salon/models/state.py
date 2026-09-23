@@ -242,13 +242,18 @@ class SalonCall(core.CallContext):
     def turn_started(self, heard: str = '') -> None:
         """Also age out a question nobody answered, and mark where the write count stood.
 
+        The count is marked when a caller turn begins, not again for a later
+        piece of the same turn: a booking written on its first piece is still
+        this turn's write, and its confirmation is not an unbacked claim.
+
         A question is answerable on the turn after it was asked and no later;
         left standing, a "yes" to something else entirely three turns on would
         still find it. An approved complaint survives only while the caller is
         being verified for it and only under the identity it was approved for.
         """
         super().turn_started(heard)
-        self._writes_before = self.state.writes
+        if not self.continuing:
+            self._writes_before = self.state.writes
         self._classified_turn = -1
         self._classification_input = None
         self._classification = ReplyClassification()

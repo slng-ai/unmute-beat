@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import re
 import time
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
@@ -62,6 +63,30 @@ def present(value: object) -> bool:
     waiting on it should not be interposed a second time.
     """
     return value is not None and value != ''
+
+
+_WORD = re.compile(r"[\w']+")
+
+
+def _words(text: str) -> list[str]:
+    """The words of a stretch of speech, for comparing what was sent with what the runtime says went out."""
+    return [word.casefold() for word in _WORD.findall(text)]
+
+
+def _first_words(text: str, count: int) -> str:
+    """The leading part of `text` that holds its first `count` words, in its own spelling and punctuation.
+
+    Punctuation stuck to the last word stays with it: "nine," was heard as "nine,".
+    """
+    if count <= 0:
+        return ''
+    found = list(_WORD.finditer(text))
+    if count >= len(found):
+        return text
+    end = found[count - 1].end()
+    while end < len(text) and not text[end].isspace() and not _WORD.match(text[end]):
+        end += 1
+    return text[:end]
 
 
 @dataclass
@@ -333,21 +358,102 @@ class CallContext(BaseModel):
     _return_status: str = PrivateAttr(default='')
     _entered: Entry = PrivateAttr(default='')
     """How the step now running was reached within this turn. Set with `_return_status`, cleared with it."""
-    _retained_turns: set[int] = PrivateAttr(default_factory=set)
+    _pieces: list[str] = PrivateAttr(default_factory=list)
+    """What the caller said in this turn, in the pieces the runtime delivered it. `heard` is them joined.
+
+    One utterance often arrives as several: the runtime closes the caller's
+    turn on every pause, and a long sentence has several. A piece that arrives
+    before any of the agent's answer reached the caller continues the same
+    turn rather than opening a new one. See `continues_turn`.
+    """
+    _retained: set[tuple[int, int]] = PrivateAttr(default_factory=set)
+    """Which pieces, as (turn, index), are already in the model history. The rest still have to be sent."""
+    _acted: bool = PrivateAttr(default=False)
+    """Whether a business action was attempted in this caller turn, in any of its pieces."""
+    _interrupted: bool = PrivateAttr(default=False)
+    """Whether the last run of this turn was cut off by the caller speaking again."""
+    _reached: bool = PrivateAttr(default=False)
+    """Whether any of this turn's speech started playing to the caller. Only meaningful when `_playback_known`."""
+    _playback_known: bool = PrivateAttr(default=False)
+    """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
 
     @property
     def entered(self) -> Entry:
         """How the current step was reached in this turn: by a handoff, by a prerequisite's return, or not at all."""
         return self._entered
 
+    @property
+    def fresh(self) -> str:
+        """The words of this turn that are not in the model history yet, in order. What a run is sent."""
+        return ' '.join(p for i, p in enumerate(self._pieces) if (self._turn, i) not in self._retained and p)
+
+    @property
+    def input_retained(self) -> bool:
+        """Whether everything the caller said in this turn is already in the model history."""
+        return not self.fresh
+
+    def mark_retained(self) -> None:
+        """Every piece of this turn so far is now in the model history."""
+        self._retained.update((self._turn, i) for i in range(len(self._pieces)))
+
+    @property
+    def continuing(self) -> bool:
+        """Whether this turn has had more than one piece: the caller carried on before the agent's answer reached them."""
+        return len(self._pieces) > 1
+
+    @property
+    def acted_this_turn(self) -> bool:
+        """Whether a business action was attempted in this caller turn. Its answer is then spent."""
+        return self._acted
+
+    def note_business_attempt(self) -> None:
+        """A business action is about to execute. Called by `Operation.run`, whether it then succeeds or not."""
+        self._acted = True
+
+    def note_reached(self) -> None:
+        """The runtime has started playing speech to the caller. Wired to the transport's own signal."""
+        self._playback_known = True
+        self._reached = True
+
+    def turn_ended(self, *, interrupted: bool) -> None:
+        """The run for this piece is over. `interrupted` is whether the caller cut it off by speaking again."""
+        self._interrupted = self._interrupted or interrupted
+
+    def note_barge(self) -> None:
+        """The caller started speaking again, while this turn ran or after it, before the next one began."""
+        self._interrupted = True
+
+    def continues_turn(self) -> bool:
+        """Whether the caller's next words continue this turn, because nothing of the agent's answer reached them yet.
+
+        A turn is over when the caller has heard the agent answer it. Until
+        then, whatever the caller says next is more of the same utterance:
+        "Yes, please." and "That sounds perfect." cut apart by a pause are one
+        reply to the question before them, not a reply and then a remark.
+
+        Both halves are required: the caller must have started speaking again
+        (`note_barge`, or a run cut off), and the answer must not have reached
+        them. With a runtime that reports playback, it reached them when its
+        audio started and something other than a filler had been said.
+        Without one, anything handed to TTS counts as heard, so only a piece
+        cut off before it said anything continues. Either way a missing signal
+        errs towards a new turn, which is how every turn was counted before.
+        """
+        if self._turn == 0 or not self._pieces or not self._interrupted:
+            return False
+        said = [s for s in self.spoken if s.text]
+        if self._playback_known:
+            return not (self._reached and any(s.origin not in ('entry', 'tool_filler') for s in said))
+        return not said
+
     def retain_input(self) -> None:
         """Accept a model-free turn once, without inventing a provider exchange."""
-        if self.turn in self._retained_turns:
+        if self.input_retained:
             return
-        message = ModelRequest(parts=[UserPromptPart(self.heard)], metadata={'caller_turn': self.turn})
+        message = ModelRequest(parts=[UserPromptPart(self.fresh)], metadata={'caller_turn': self.turn})
         self.messages.append(message)
         self._protocol.append(deepcopy(message))
-        self._retained_turns.add(self.turn)
+        self.mark_retained()
 
     def retain_action(self, name: str, receipt: dict) -> None:
         """Retain a validated application result before speech can be cancelled.
@@ -502,11 +608,19 @@ class CallContext(BaseModel):
             self._spoken.append(self._open)
         self._open = None
 
-    def note_heard(self, delivered: str, *, segment_ids: tuple[str, ...] = ()) -> bool:
+    def note_heard(
+        self, delivered: str, *, segment_ids: tuple[str, ...] = (), interrupted: bool = False
+    ) -> bool:
         """Apply a runtime-estimated delivered prefix to the identified speech segments only.
 
-        Returns False, and changes nothing, when the segments cannot be matched
-        against the text: an estimate that does not line up is not evidence.
+        Matched word by word, not character by character: the runtime's text
+        comes back from TTS with its own spacing and punctuation. When the
+        words do not line up at all, a plain report changes nothing, because an
+        estimate that does not line up is not evidence. An *interrupted* one
+        still is: the caller certainly did not hear everything, so the
+        segments are cut to as many words as the runtime says went out, rather
+        than left looking as if every word was heard. Returns whether anything
+        was applied.
         """
         if not segment_ids:
             segment_ids = tuple(s.id for s in self.spoken[-1:])
@@ -516,21 +630,29 @@ class CallContext(BaseModel):
         selected = [by_id[i] for i in segment_ids]
         if len(set(segment_ids)) != len(segment_ids):
             return False
-        remaining = delivered.strip()
-        updates = []
+        heard = _words(delivered)
+        remaining = heard
+        updates: list[str] | None = []
         for segment in selected:
             text = segment.generated or segment.text
-            stripped = text.strip()
-            if remaining.startswith(stripped):
+            words = _words(text)
+            if remaining[: len(words)] == words:
                 updates.append(text)
-                remaining = remaining[len(stripped) :].lstrip()
-            elif stripped.startswith(remaining):
-                updates.append(remaining)
-                remaining = ''
+                remaining = remaining[len(words) :]
+            elif words[: len(remaining)] == remaining:
+                updates.append(_first_words(text, len(remaining)))
+                remaining = []
             else:
+                updates = None
+                break
+        if updates is None or remaining:
+            if not interrupted:
                 return False
-        if remaining:
-            return False
+            count, updates = len(heard), []
+            for segment in selected:
+                text = segment.generated or segment.text
+                updates.append(_first_words(text, count))
+                count = max(0, count - len(_words(text)))
         if any(
             s.delivery == 'runtime-estimate' and not s.text.strip().startswith(text.strip())
             for s, text in zip(selected, updates, strict=True)
@@ -686,23 +808,50 @@ class CallContext(BaseModel):
         return step if step is not None and step != self.state.agent else fallback
 
     def turn_started(self, heard: str = '') -> None:
-        """The caller has said something new. Age out anything that was only news.
+        """The caller has said something. Either a new turn, or more of the one the agent has not answered yet.
 
         Last turn's speech moves from the per-turn ledger to the per-call
         record first. `heard` is kept for the whole turn, because an action
         three hops later still has to be able to ask what the caller actually
         asked for rather than take the model's word for it.
+
+        A continuation (`continues_turn`) keeps the turn's number, so the
+        question the caller is answering is still the one before it, and joins
+        the words, so everything that reads `heard` reads the whole reply. The
+        speech the cut-off piece produced never reached the caller, so it is
+        recorded as heard by nobody (its generated text is kept for audit), and
+        the question ledger is rewound to where the turn began. Nothing the
+        caller said is dropped: every piece is in `_pieces`, and `fresh` is
+        what the model has not been sent yet.
         """
+        continuing = self.continues_turn()
         self.close_model_text()
+        if continuing:
+            for segment in self._spoken:
+                segment.text, segment.interrupted, segment.delivery = '', True, 'runtime-estimate'
         self._speech_history.extend(self._spoken)
-        self.heard = heard
-        self._turn += 1
-        self._inputs[self._turn] = heard
-        self._attempt = 0
+        if continuing:
+            logger.info(
+                'turn {} continues with piece {}: nothing of its answer reached the caller',
+                self._turn,
+                len(self._pieces) + 1,
+            )
+            self._pieces.append(heard)
+            self._proposals.rewind(self)
+        else:
+            self._turn += 1
+            self._pieces = [heard]
+            self._attempt = 0
+            self._acted = False
+            self._proposals.age(self)
+            self._proposals.open_turn()
+        self.heard = ' '.join(p for p in self._pieces if p)
+        self._inputs[self._turn] = self.heard
+        self._interrupted = False
+        self._reached = False
         self._response = ''
         self._entered = ''
         self._interpretations.clear()
-        self._proposals.age(self)
         self._requests.clear()
         self._spoken.clear()
         self._open = None

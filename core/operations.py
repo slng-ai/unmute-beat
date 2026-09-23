@@ -7,7 +7,8 @@ reorder or skip them:
 1. validate the arguments at the boundary, whoever built them;
 2. settle anything outstanding that must be resolved first (`_before`);
 3. check the caller authorised *these* arguments (`_authorise`);
-4. execute, once (`_execute`);
+4. execute, once (`_execute`), noted on the call first, so an answer that
+   authorised an attempt is never restored and spent a second time;
 5. validate the service's answer into the receipt model before a field is read;
 6. record the result: commit state, retain the receipt, speak (`_record`).
 
@@ -65,6 +66,7 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         if (early := await self._before(call, checked)) is not None:
             return early
         grant = await self._authorise(call, checked, usage=usage, usage_limits=usage_limits)
+        call.note_business_attempt()
         raw = await self._execute(call, checked, grant)
         receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
         return await self._record(call, checked, receipt)

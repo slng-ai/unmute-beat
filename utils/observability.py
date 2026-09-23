@@ -12,6 +12,7 @@ come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`.
 import json
 import os
 import sys
+from contextvars import ContextVar
 
 from dotenv import load_dotenv
 from langfuse import Langfuse
@@ -25,8 +26,8 @@ load_dotenv()
 _SPEECH = {'stt': ('output', 'user'), 'tts': ('input', 'assistant')}
 """STT turns audio into text and TTS the reverse, so the one string each span carries belongs on the opposite side, and to the opposite speaker in the transcript."""
 
-_CALL: dict[str, str] = {}
-"""The call every span in this process belongs to, in Langfuse's own keys minus the prefix.
+_CALL: ContextVar[dict[str, str] | None] = ContextVar('langfuse_call', default=None)
+"""The call the code running now belongs to, in Langfuse's own keys minus the prefix.
 
 Langfuse v4 queries observations, not traces, so anything needed to filter or
 aggregate has to be on every span rather than only the root. Left on the root
@@ -35,10 +36,14 @@ writes a `gen_ai.conversation.id` of its own, Langfuse read that as the session,
 and the whole agency's spend landed under an id nothing else used. `langfuse.*`
 wins over the generic conventions, which is what pulls them back.
 
-ponytail: one call per process. `trace.set_tracer_provider` already refuses a
-second registration, so the assumption is older than this dict; key it by
-`span.context.trace_id` if a runner ever serves two calls at once.
+A context variable, not a module dict, because one runner serves many calls at
+once: `setup` runs at the top of each call's own task, every task the call
+starts inherits it, and `_Speech` binds it to the span's trace when the span
+starts. A process-wide dict gave every span the session of whichever call
+started last.
 """
+_PROVIDER: list[TracerProvider] = []
+"""The one tracer provider, built by the first `setup`. OpenTelemetry refuses a second registration."""
 
 
 def _langfuse_words(span) -> dict:
@@ -219,20 +224,34 @@ class _Speech(SpanProcessor):
     """
 
     def __init__(self) -> None:
-        self._call: list[dict[str, str]] = []
-        self._turn: list[dict[str, str]] = []
+        self._calls: dict[int, dict[str, str]] = {}
+        """Each open trace's call, bound when its first span started in that call's context."""
+        self._lines: dict[int, list[dict[str, str]]] = {}
+        """Each open trace's conversation so far, from the turns that have closed."""
+        self._turns: dict[int, list[dict[str, str]]] = {}
+        """Each open trace's current turn, from its stt and tts spans."""
+
+    def on_start(self, span, parent_context=None) -> None:
+        if (call := _CALL.get()) is not None:
+            self._calls.setdefault(span.context.trace_id, call)
 
     def on_end(self, span) -> None:
-        words = {f'langfuse.{key}': value for key, value in _CALL.items()}
+        trace_id = span.context.trace_id
+        call = self._calls.get(trace_id) or _CALL.get() or {}
+        words = {f'langfuse.{key}': value for key, value in call.items()}
         scope = span.instrumentation_scope
         if scope is not None and scope.name.startswith('pipecat'):
-            words |= _langfuse_words(span) | self._transcript(span)
+            words |= _langfuse_words(span) | self._transcript(span, trace_id)
         elif scope is not None and scope.name.startswith('pydantic-ai'):
             words |= _agent_words(span)
         if words:
             span._attributes = dict(span.attributes or {}) | words
+        if span.name == 'conversation' or span.parent is None:
+            self._calls.pop(trace_id, None)
+            self._lines.pop(trace_id, None)
+            self._turns.pop(trace_id, None)
 
-    def _transcript(self, span) -> dict:
+    def _transcript(self, span, trace_id: int) -> dict:
         """The conversation, read back off the spans already carrying it.
 
         Pipecat's `conversation` and `turn` spans have no input or output of
@@ -246,16 +265,19 @@ class _Speech(SpanProcessor):
         the open turn first. So collect them in order and spend them on the way
         up. Whatever a last, unclosed turn left behind goes on the conversation
         too: a call that ends mid-turn still has to read as the call it was.
+
+        Collected per trace, because calls running side by side share this
+        processor and their spans end interleaved.
         """
         attributes = span.attributes or {}
         if speech := _SPEECH.get(attributes.get('gen_ai.operation.name')):
             _side, role = speech
             if said := attributes.get('transcript') or attributes.get('text'):
-                self._turn.append({'role': role, 'content': said})
+                self._turns.setdefault(trace_id, []).append({'role': role, 'content': said})
             return {}
         if span.name == 'turn':
-            lines, self._turn = self._turn, []
-            self._call += lines
+            lines = self._turns.pop(trace_id, [])
+            self._lines.setdefault(trace_id, []).extend(lines)
             words = {}
             if caller := _spoken(lines, 'user'):
                 words['langfuse.observation.input'] = caller
@@ -263,7 +285,7 @@ class _Speech(SpanProcessor):
                 words['langfuse.observation.output'] = bot
             return words
         if span.name == 'conversation':
-            lines = self._call + self._turn
+            lines = self._lines.get(trace_id, []) + self._turns.get(trace_id, [])
             if not lines:
                 return {}
             words = {'langfuse.observation.input': json.dumps(lines)}
@@ -274,11 +296,13 @@ class _Speech(SpanProcessor):
 
 
 def setup(session: str = '', trace_name: str = '') -> None:
-    """Instrument every agent and point the process's tracer at Langfuse.
+    """Name the call this task is running, and on first use point the process's tracer at Langfuse.
 
     `session` groups the call's observations and `trace_name` is what its trace
     is listed by; both are stamped on every span rather than the root alone, for
-    the reason `_CALL` gives.
+    the reason `_CALL` gives. Call it at the top of each call's own task, before
+    anything that call traces starts: the provider is built once, the call's
+    names are set every time.
 
     Langfuse drops spans silently when unconfigured, so the absence of a key
     is said once on stderr rather than pretended away. Its default filter keeps
@@ -293,10 +317,14 @@ def setup(session: str = '', trace_name: str = '') -> None:
     gets instrumented. No atexit flush of our own: Langfuse registers one.
     """
     Agent.instrument_all()
+    call = {}
     if session:
-        _CALL['session.id'] = session
+        call['session.id'] = session
     if trace_name:
-        _CALL['trace.name'] = trace_name
+        call['trace.name'] = trace_name
+    _CALL.set(call)
+    if _PROVIDER:
+        return
     if not os.getenv('LANGFUSE_PUBLIC_KEY'):
         print('warning: LANGFUSE_PUBLIC_KEY unset, traces are going nowhere', file=sys.stderr)
         return
@@ -307,4 +335,5 @@ def setup(session: str = '', trace_name: str = '') -> None:
     provider = TracerProvider(resource=Resource.create(attributes))
     provider.add_span_processor(_Speech())
     trace.set_tracer_provider(provider)
+    _PROVIDER.append(provider)
     Langfuse(should_export_span=lambda _span: True)

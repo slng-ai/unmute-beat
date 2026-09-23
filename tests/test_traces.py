@@ -10,6 +10,7 @@ Asserts, no pytest, no network.
 """
 
 import asyncio
+import contextvars
 import json
 
 from opentelemetry import trace
@@ -300,9 +301,7 @@ def a_call_reads_as_a_call():
     session of Pydantic AI's own invention while the call's own session held
     nothing but Pipecat's spans.
     """
-    _CALL.update({'session.id': 'sess-1', 'trace.name': 'salon call'})
-    speech._call.clear()
-    speech._turn.clear()
+    _CALL.set({'session.id': 'sess-1', 'trace.name': 'salon call'})
 
     tracer = trace.get_tracer('pipecat.turn')
     conversation = tracer.start_span('conversation')
@@ -351,11 +350,56 @@ def a_call_reads_as_a_call():
         assert span['langfuse.trace.name'] == 'salon call', span
 
 
+def two_calls_at_once_stay_apart():
+    """Two calls served side by side keep their own session and their own transcript.
+
+    One runner serves many calls, and their spans end interleaved. The call
+    used to be one process-wide dict, so every span took the session of
+    whichever call started last, and the rolled-up transcript mixed both.
+    """
+    tracer = trace.get_tracer('pipecat.turn')
+
+    def begin(session: str):
+        _CALL.set({'session.id': session, 'trace.name': 'salon call'})
+        conversation = tracer.start_span('conversation')
+        context = TracingContext()
+        context.set_conversation_context(conversation.get_span_context(), session)
+        turn = tracer.start_span('turn', context=context.get_conversation_context())
+        context.set_turn_context(turn.get_span_context())
+        return conversation, turn, context
+
+    def heard(context, words: str):
+        span = tracer.start_span('stt', context=context.get_turn_context())
+        add_stt_span_attributes(span=span, service_name='SlngSTTService', model='m', transcript=words)
+        span.end()
+
+    first_call, second_call = contextvars.copy_context(), contextvars.copy_context()
+    a_conversation, a_turn, a = first_call.run(begin, 'call-a')
+    b_conversation, b_turn, b = second_call.run(begin, 'call-b')
+    first_call.run(heard, a, 'yes please')
+    second_call.run(heard, b, 'cancel it')
+    first_call.run(a_turn.end)
+    second_call.run(b_turn.end)
+    second_call.run(b_conversation.end)
+    first_call.run(a_conversation.end)
+
+    turns = {t.attributes['langfuse.session.id']: t.attributes for t in named('turn')[-2:]}
+    assert turns['call-a']['langfuse.observation.input'] == 'yes please', turns
+    assert turns['call-b']['langfuse.observation.input'] == 'cancel it', turns
+    for span in named('stt')[-2:]:
+        words = span.attributes['langfuse.observation.output']
+        assert span.attributes['langfuse.session.id'] == ('call-a' if words == 'yes please' else 'call-b'), (
+            span
+        )
+    assert not speech._calls and not speech._lines and not speech._turns, 'a finished call left state behind'
+
+
 async def main():
     await one_trace_per_call()
     agent_output_is_readable()
     speech_reaches_langfuse()
     a_call_reads_as_a_call()
+    two_calls_at_once_stay_apart()
     print('ok')
 
 

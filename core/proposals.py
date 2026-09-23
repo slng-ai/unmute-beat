@@ -82,6 +82,22 @@ class ProposalLedger[P: Proposal]:
 
     def __init__(self) -> None:
         self.asked: P | None = None
+        self._answering: P | None = None
+        """The question as it stood when this caller turn began: the one their words are an answer to."""
+
+    def open_turn(self) -> None:
+        """A new caller turn begins: remember which question it can answer, in case the turn has to be taken back."""
+        self._answering = self.asked
+
+    def rewind(self, call: CallContext) -> None:
+        """The last piece of this turn reached nobody, so the caller is still answering the same question.
+
+        Whatever that piece asked was never heard, and whatever it consumed
+        was consumed on half a sentence, so the question the turn opened with
+        is put back. Unless a business action was attempted on it: that answer
+        is spent, and restoring it could authorise the same write twice.
+        """
+        self.asked = None if call.acted_this_turn else self._answering
 
     def ask(self, call: CallContext, proposal: P) -> None:
         """Record that this question has gone out to the caller, on this turn."""

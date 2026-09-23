@@ -43,7 +43,7 @@ its supporting link. Read it before changing how a turn works.
 | `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`); `VOICE_AGENCY=access` runs one in `bot.py` |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
 | `utils/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI |
-| `tests/` | nineteen assert-script modules, no pytest, no network |
+| `tests/` | twenty assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -67,7 +67,7 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all nineteen modules, offline, no .env
+uv run python -m tests                                   # all twenty modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 uv run python -m utils.coval_sim run VkpkmRMV            # Coval release check, 18 real calls, billable
@@ -97,7 +97,7 @@ all clean. Paste the real output; don't round up.
 - No pytest. Tests are assert scripts run as modules, and stay that way.
 - No new dependency without asking. Stdlib first.
 
-## Six things that bite
+## Seven things that bite
 
 1. **Prompts are compiled against state.** `salon/prompts/*.md` are Handlebars
    templates typed against `SalonCall`, so a `{{state.x}}` naming no field
@@ -126,6 +126,13 @@ all clean. Paste the real output; don't round up.
    after stream teardown, even when Pipecat cancels the task. Never slice by
    the original history length. The processor carries input that never entered
    a run to the front of the next turn.
+7. **A caller turn lasts until the agent's answer reaches them.** The runtime
+   closes a turn on every pause, so one sentence often arrives in pieces. A
+   piece that arrives after the caller cut in and before any answer played
+   continues the same turn (`CallContext.continues_turn`): same turn number,
+   `heard` joined, the question ledger rewound, unplayed speech recorded as
+   unheard. `BotStartedSpeakingFrame` is the playback signal; without it the
+   engine errs towards a new turn.
 
 ## Known debt
 

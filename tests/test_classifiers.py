@@ -317,7 +317,7 @@ async def limits_and_barge():
         barge.fire()
         _, finished = await asyncio.wait_for(task, 1)
     assert finished.status == 'interrupted' and not call.state.writes
-    assert call.turn in call._retained_turns
+    assert call.input_retained
 
 
 async def rule_interpreters_spend_nothing():

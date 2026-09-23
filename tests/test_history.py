@@ -284,7 +284,7 @@ async def cancelled_fragments(native=True, streaming=False, fragments=('+34.', '
             _, finished = await asyncio.wait_for(task, 2)
             assert finished.status == 'interrupted'
         assert fragment in text(call._protocol), (fragment, call._protocol)
-        assert call.turn in call._retained_turns
+        assert call.input_retained
         assert not adapter._carried
     await adapter._turn(fragments[-1])
     actual = [p.content for m in seen[-1] for p in m.parts if isinstance(p, UserPromptPart)]
@@ -313,7 +313,7 @@ async def cancellation_before_sdk_start():
     task.cancel()
     with suppress(asyncio.CancelledError):
         await task
-    assert not seen and call.turn not in call._retained_turns
+    assert not seen and not call.input_retained
     assert adapter._carried == '+34.'
     await adapter._turn('680 830 464.')
     assert text(seen[-1]) == '+34. 680 830 464.'

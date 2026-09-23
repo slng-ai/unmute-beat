@@ -29,6 +29,7 @@ from typing import Any
 
 from opentelemetry import trace
 from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
     EndWorkerFrame,
     Frame,
     InterruptionFrame,
@@ -98,6 +99,7 @@ class PydanticAgentProcessor(FrameProcessor):
         self._active_playback: list[str] | None = None
         call._say = self.say
         call._end = self.hang_up
+        call._playback_known = True
 
     def can_generate_metrics(self) -> bool:
         """No. This processor's own timings go on its span, not into Pipecat's metrics.
@@ -190,6 +192,9 @@ class PydanticAgentProcessor(FrameProcessor):
         if isinstance(frame, InterruptionFrame):
             self.interrupt()
             await self.push_frame(frame, direction)
+        elif isinstance(frame, BotStartedSpeakingFrame):
+            self._call.note_reached()
+            await self.push_frame(frame, direction)
         elif isinstance(frame, LLMContextFrame):
             users = [
                 m for m in frame.context.get_messages() if isinstance(m, dict) and m.get('role') == 'user'
@@ -214,8 +219,13 @@ class PydanticAgentProcessor(FrameProcessor):
         await super()._start_interruption()
 
     def interrupt(self) -> None:
-        """The caller spoke over us. Stop the run instead of finishing into a void."""
+        """The caller spoke over us. Stop the run instead of finishing into a void.
+
+        Told to the call as well, even with no run going: a caller who starts
+        again before the last answer played is still in the same turn.
+        """
         self._interrupted = True
+        self._call.note_barge()
         self._barge.fire()
 
     def _parent(self):
@@ -257,13 +267,16 @@ class PydanticAgentProcessor(FrameProcessor):
         the turn was asked and what it answered go on it in Langfuse's own keys,
         so the numbers can be read against the sentence that produced them.
 
+        Words the last turn never got into the history are carried to the front
+        of this one, unless this is more of the same turn, in which case the
+        call already holds them as that turn's unsent pieces (`CallContext.fresh`).
+
         ponytail: a run of cancelled turns joins into one long carried prompt.
         Bound it if a real call ever carries more than a sentence or two.
         """
-        previous_messages = tuple(self._call.messages)
-        previous_parts = frozenset(id(p) for m in previous_messages for p in m.parts)
         if self._carried:
-            prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
+            if not self._call.continues_turn():
+                prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
             self._carried = ''
         with _tracer.start_as_current_span(self._call.state.agent, context=self._parent()) as span:
             if prompt:
@@ -332,6 +345,7 @@ class PydanticAgentProcessor(FrameProcessor):
                             span.set_attribute('speech_origins', [s.origin for s in spoken])
                             span.set_attribute('speech_segments', [s.id for s in spoken])
                             span.set_attribute('attempt', self._call.attempt)
+                            span.set_attribute('turn_pieces', len(self._call._pieces))
                             if spoken:
                                 span.set_attribute(
                                     'turn_first_text_out',
@@ -368,12 +382,9 @@ class PydanticAgentProcessor(FrameProcessor):
                     span.set_attribute('detail', self._finished.detail)
                 if self._call.ended:
                     span.set_attribute('ended', self._call.ended)
-                if (
-                    prompt
-                    and self._call.turn not in self._call._retained_turns
-                    and not self._call.delivered(prompt, excluding=previous_parts)
-                ):
-                    self._carried = prompt
+                self._call.turn_ended(interrupted=self._interrupted)
+                if prompt and not self._call.input_retained:
+                    self._carried = self._call.fresh
                 self._active_playback = None
                 if open_response:
                     await self.push_frame(LLMFullResponseEndFrame())

@@ -83,7 +83,7 @@ async def approvals_and_receipts():
         assert probe._finished.status == 'answered' and probe.requests() == 1
         assert len(books.bookings_for(PHONE, CLOCK.date())) == 1 and call.state.writes == 1
         assert len(call.requests) == 1 and call.requests[0].kind == 'classifier' and len(call.spoken) == 1
-        assert call.turn in call._retained_turns
+        assert call.input_retained
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
         receipt = [
             m for m in call._protocol if (m.metadata or {}).get('application_action') == 'save_booking'
@@ -139,7 +139,7 @@ async def cancellation_keeps_committed_receipt():
     with suppress(asyncio.CancelledError):
         await task
     assert len(books.complaints()) == 1 and call.state.writes == 1
-    assert call.turn in call._retained_turns and not call._complaint
+    assert call.input_retained and not call._complaint
     receipt = [
         m for m in call._protocol if (m.metadata or {}).get('application_action') == 'record_complaint'
     ]

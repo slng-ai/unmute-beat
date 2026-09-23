@@ -463,12 +463,71 @@ on the call's state: the prerequisite check, the resume point, a borrowed
 tool that moves the caller, an edge's guard. Those stay in `route` and
 `moved_by` (`core/graph.py`), because a graph's shape cannot express them.
 
-**It runs every turn.** There is no other engine: every turn, for the salon
-and for every typed flow, is walked by its table's graph. It was tried
-behind a switch first; all 18 test modules passed both ways, barge-in
-included, and the graph was kept for its checked moves and its diagram at
-the cost of about 200 more lines than a plain loop. The trial is written up
-in `docs/plans/portable-typed-flows.md`.
+### Why a graph
+
+The engine's job between steps is small: after a step runs, send the caller
+to the next step, or end the turn. A plain loop could do that in fewer lines.
+A graph was chosen because it adds four things a loop does not:
+
+1. **Every move is checked against a declared map.** In a loop, the next
+   step is whatever the code returns, and nothing compares it to what the
+   flow allows. In the graph, each step's legal next steps are branches of
+   its decision point. A move with no branch is refused, so a bug or a
+   confused model shows up as a failed turn, not as a caller standing
+   somewhere nobody designed.
+2. **The diagram is the code.** `Flow.render()` draws the same graph that
+   runs, so the picture of a flow can never drift from what it does. That
+   matters most for flows written by people who do not read the engine.
+3. **One engine for every flow.** The salon's four hand-built steps and
+   every typed flow compile to the same nodes table and the same kind of
+   graph. A new business adds steps, not engine code.
+4. **Built once, shared by every call.** The graph and its legal moves are
+   worked out when the flow loads. A call only carries its own facts.
+
+What it costs:
+
+- about 200 more lines than a loop;
+- a small lockstep channel, so speech streams to the caller while the graph
+  waits for the step to finish;
+- one short graph run per turn, because pydantic-graph 2.46 cannot save and
+  resume a run, and the call already knows which step the caller is in;
+- routing that depends on the call's state (a missing prerequisite, a
+  resume point, a guard) still lives in `route` and `moved_by`, because a
+  graph's shape cannot express it. The graph checks the result; it does not
+  choose it.
+
+Every turn, for the salon and for every typed flow, is walked by its flow's
+graph. There is no second engine.
+
+### The graph and the classifier: two different jobs
+
+It is easy to read the graph as the thing that "understands" the call. It
+is not. The two parts answer different questions, and a turn usually needs
+both:
+
+| | The graph | The classifier (or the solver) |
+|---|---|---|
+| Question it answers | Where may the caller go next? | What did the caller mean? |
+| Looks at | step names and legal moves | the caller's words and the question they were asked |
+| Uses a model | never | one small request, only when a question is waiting |
+| Lives in | `core/flow.py` | `core/classifiers.py`, `salon/classification.py`, and the confirm step in `core/steps.py` |
+
+A turn where the caller answers a question:
+
+```mermaid
+flowchart TD
+    heard[Caller: yes, three o'clock is fine] --> read[Classifier: this is an accept of the pending booking]
+    read --> guard[App code: right question, still fresh, right caller]
+    guard --> write[Booking is written]
+    write --> move[Step finishes: back to the front desk]
+    move --> check[Graph: is booking to concierge a legal move? yes]
+```
+
+When no question is waiting, the classifier does not run, and the step's
+agent simply answers. The graph never reads the caller's words, and the
+classifier never decides where the caller goes. Changing one does not
+remove the need for the other: `SALON_INTERPRETER=solver` swaps the
+classifier for the solver (section 8), and the graph stays exactly the same.
 
 ### Flow files
 
@@ -656,7 +715,9 @@ mechanism for each:
 ## 8. Typed classification and its evolution
 
 The classifier answers a narrow question: how does the caller's reply relate
-to the question they just heard? Today it uses the same Gemini model as the
+to the question they just heard? It does not decide where the caller goes; that is
+the graph's job (see "The graph and the classifier: two different jobs" in
+section 6). Today it uses the same Gemini model as the
 conversational agents, through one asynchronous
 [Pydantic AI direct model request](https://pydantic.dev/docs/ai/core-concepts/direct/).
 It has no agent loop, business tools, conversation history or repair requests.

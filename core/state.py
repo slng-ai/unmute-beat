@@ -216,6 +216,8 @@ class Checkpoint:
     messages: list[ModelMessage]
     speech_ids: frozenset[str]
     heard: str
+    turn: int = 0
+    """The caller turn the detour began on. Everything the caller said after it was said to the prerequisite."""
 
 
 class Handoff(BaseModel):
@@ -540,6 +542,35 @@ class CallContext(BaseModel):
         self.messages.append(message)
         self._protocol.append(deepcopy(message))
         self.mark_retained()
+
+    def keep_detour_words(self, checkpoint: Checkpoint, step: str, *, sent: str = '') -> str:
+        """Keep what the caller said during a prerequisite's detour, when the waiting step's history is restored.
+
+        The restore puts back the history from before the detour, so the
+        prerequisite's own exchanges stay out of the waiting step's view. The
+        caller's words must not go with them: "and make it at ten instead",
+        said while the number was being checked, was gone by the time the
+        booking step ran. They are kept as one application note, in order, in
+        the restored history (so a model-free opening cannot lose them for a
+        later run) and returned for this hop's status. `sent` is left out,
+        because it is about to reach the model as the caller's own prompt.
+        """
+        said = [
+            words
+            for turn in range(checkpoint.turn + 1, self.turn + 1)
+            if (words := self._inputs.get(turn, '').strip()) and words != sent
+        ]
+        if not said:
+            return ''
+        note = (
+            f'While {step} ran, the caller said, in order: ' + '; '.join(f'"{words}"' for words in said) + '.'
+        )
+        message = ModelRequest(
+            parts=[SystemPromptPart(content=note)], metadata={'application_note': 'detour'}
+        )
+        self.messages.append(message)
+        self._protocol.append(deepcopy(message))
+        return note
 
     def retain_action(self, name: str, receipt: dict) -> None:
         """Retain a validated application result before speech can be cancelled.

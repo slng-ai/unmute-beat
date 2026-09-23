@@ -10,6 +10,7 @@ from pydantic_ai import Agent, RunContext, TemplateStr, Tool, ToolOutput
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
+    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -149,8 +150,12 @@ async def resets():
     assert len(call.transcript()) == 6
 
 
-async def returns(unserved=False):
-    """A prerequisite returns an application status and saved owner context, not its conversation."""
+async def returns(unserved=False, shares=False):
+    """A prerequisite returns an application status and saved owner context, not its conversation.
+
+    Unless it declares `shares_detour` and completes: then the caller's own words from the
+    detour reach the owner, and still nothing the prerequisite itself said.
+    """
     seen = []
 
     async def delegate() -> Handoff:
@@ -189,7 +194,8 @@ async def returns(unserved=False):
                 FunctionModel(stream_function=child),
                 deps_type=Call,
                 output_type=[str, ToolOutput(finish, name='finish')],
-            )
+            ),
+            shares_detour=shares,
         ),
     }
     call = Call(state=State())
@@ -198,7 +204,13 @@ async def returns(unserved=False):
     await take_turn(call, nodes, 'Forget the errand.' if unserved else 'Yes child-secret.')
     messages, instructions = seen[1]
     assert text(messages).count('Original errand.') == 1
-    assert 'child-secret' not in text(messages)
+    assert 'Confirm child-secret?' not in text(messages), "the prerequisite's own words leaked"
+    shared = shares and not unserved
+    assert ('"Yes child-secret."' in instructions) == shared, instructions
+    notes = [p.content for m in call.messages for p in m.parts if isinstance(p, SystemPromptPart)]
+    assert any('Yes child-secret.' in n for n in notes) == shared, notes
+    if not shared:
+        assert 'child-secret' not in text(messages)
     assert ('unserved' if unserved else 'completed') in instructions
     assert ('Forget the errand.' in text(messages)) == unserved
     assert call._checkpoint is None and call.state.pending is None
@@ -354,6 +366,8 @@ async def main():
     await resets()
     await returns()
     await returns(unserved=True)
+    await returns(shares=True)
+    await returns(unserved=True, shares=True)
     await cancellation_keeps_receipts()
     for native in (True, False):
         for streaming in (False, True):

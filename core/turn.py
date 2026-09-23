@@ -496,6 +496,12 @@ class Turn:
                 prompt = (
                     call.heard if output.status == 'unserved' and call.heard != checkpoint.heard else None
                 )
+                if (
+                    output.status == 'completed'
+                    and node.shares_detour
+                    and (note := call.keep_detour_words(checkpoint, call.state.agent, sent=prompt or ''))
+                ):
+                    call._return_status += f' {note}'
         else:
             going_to, waiting = route(call.state, nodes, output.to)
             if waiting is not None and going_to != waiting and call._checkpoint is None:
@@ -504,6 +510,7 @@ class Turn:
                     deepcopy(call.messages),
                     frozenset(s.id for s in call.all_spoken),
                     call.heard,
+                    call.turn,
                 )
             call._entered = 'handoff'
             call._return_status = (

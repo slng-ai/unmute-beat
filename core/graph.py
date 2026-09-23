@@ -124,6 +124,17 @@ class Node[S: VoiceState]:
     """Resolve a decision within the shared budget, or return None to run the conversational agent."""
     openings: tuple[Opening[Any], ...] = ()
     """What this step does on arrival without a model, tried in order after `advance` declines."""
+    shares_detour: bool = False
+    """Whether, as a prerequisite, this step hands the caller's words on to the step it was serving.
+
+    Off by default: a prerequisite's conversation is its own, and the step
+    that waited gets back its saved history and a status, nothing the caller
+    told the prerequisite. A step turns it on when nothing it hears is secret
+    from the step it serves, and it is honoured only on a `completed` return.
+    Then everything the caller said during the detour is kept for the waiting
+    step (`CallContext.keep_detour_words`), so a request changed mid-detour
+    is not lost.
+    """
 
     def opening(self, call: CallContext) -> LocalAction | None:
         """The first opening that applies to this call on this entry, or None to run the agent."""

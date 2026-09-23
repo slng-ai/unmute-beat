@@ -185,6 +185,7 @@ def build(
     offered_when: Mapping[str, Callable[[SalonCall], bool]] | None = None,
     stand_ins: Mapping[Callable, Callable] | None = None,
     model=MODEL,
+    shares_detour: bool = False,
 ) -> Node[SalonState]:
     """One step: its agent, its legal exits, and what has to hold before it runs.
 
@@ -309,6 +310,7 @@ def build(
         satisfied_by=step.satisfied_by,
         outputs=outputs,
         guarded=step.guarded,
+        shares_detour=shares_detour,
         model_speech=not structured_speech,
         advance=advance,
         openings=openings,

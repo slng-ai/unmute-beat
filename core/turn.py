@@ -590,12 +590,13 @@ class Turn:
             call._response = f'{run_id}:{requested}'
             messages = project(call, request.messages, excluded=excluded)
             parameters = request.model_request_parameters
-            if call._return_status:
+            notes = [note for note in (call.spoken_over, call._return_status) if note]
+            if notes:
                 parameters = replace(
                     parameters,
                     instruction_parts=[
                         *(parameters.instruction_parts or []),
-                        InstructionPart(content=call._return_status),
+                        *(InstructionPart(content=note) for note in notes),
                     ],
                 )
             return replace(request, messages=messages, model_request_parameters=parameters)

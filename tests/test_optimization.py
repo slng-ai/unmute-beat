@@ -283,7 +283,7 @@ async def openings_skip_the_model():
     assert probe.requests() == 1, probe.requests()
     assert call.state.agent == 'verify' and call.state.pending == 'booking', call.state
     assert call.state.wanted and call.state.wanted.when == 'Friday', call.state.wanted
-    assert 'What phone number should I use' in call.spoken[-1].text, call.spoken
+    assert 'Which phone number should I use' in call.spoken[-1].text, call.spoken
 
     verify, _ = scripted(('ask_number', {'phone': PHONE}))
     with agents.AGENTS['verify'].agent.override(model=verify):

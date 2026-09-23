@@ -89,6 +89,21 @@ def _first_words(text: str, count: int) -> str:
     return text[:end]
 
 
+def _missed(segments: list[Spoken]) -> str:
+    """The note for speech the caller cut off: what they heard of it and what they did not."""
+    cut = [s for s in segments if s.interrupted and s.generated]
+    if not cut:
+        return ''
+    heard = ' '.join(s.text for s in cut if s.text).strip()
+    generated = ' '.join(s.generated for s in cut).strip()
+    if heard and generated.startswith(heard) and heard != generated:
+        missed = generated[len(heard) :].strip()
+        return f'The caller spoke over your last reply. They heard: "{heard}". They did not hear: "{missed}".'
+    if not heard:
+        return f'The caller spoke before your last reply reached them. They did not hear: "{generated}".'
+    return f'The caller spoke over your last reply while it was playing: "{generated}". They may not have heard all of it.'
+
+
 @dataclass
 class Spoken:
     """One segment of speech the caller was actually sent, and who wrote it.
@@ -135,6 +150,14 @@ class Spoken:
     response: str = ''
     generated: str = ''
     delivery: Literal['submitted', 'runtime-estimate'] = 'submitted'
+    playback: Literal['queued', 'playing', 'played'] = 'queued'
+    """How far its audio got, from the runtime's own start and stop signals. Only read when the runtime reports playback.
+
+    `played` means the audio ran out after this segment began playing and
+    before the caller cut in: the only case in which the caller heard all of
+    it. A segment still `queued` or `playing` when the caller cuts in was not
+    heard in full, however the runtime's later text report lines up.
+    """
 
 
 @dataclass
@@ -374,7 +397,11 @@ class CallContext(BaseModel):
     """Whether the last run of this turn was cut off by the caller speaking again."""
     _reached: bool = PrivateAttr(default=False)
     """Whether any of this turn's speech started playing to the caller. Only meaningful when `_playback_known`."""
+    _burst: float = PrivateAttr(default=float('inf'))
+    """When the audio now going out started, on the segments' clock. Infinite while nothing is playing."""
     _playback_known: bool = PrivateAttr(default=False)
+    _spoken_over: str = PrivateAttr(default='')
+    """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
     """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
 
     @property
@@ -397,6 +424,17 @@ class CallContext(BaseModel):
         self._retained.update((self._turn, i) for i in range(len(self._pieces)))
 
     @property
+    def spoken_over(self) -> str:
+        """What the caller did not hear of the agent's last turn, as an application note, or ''.
+
+        The history already holds only what was heard, but "We do" on its own
+        reads like an answer given, and the model moved on without the
+        balayage answer the caller never got. Said as a fact, nothing more:
+        what to do about it is the step's prompt's business.
+        """
+        return self._spoken_over
+
+    @property
     def continuing(self) -> bool:
         """Whether this turn has had more than one piece: the caller carried on before the agent's answer reached them."""
         return len(self._pieces) > 1
@@ -411,17 +449,60 @@ class CallContext(BaseModel):
         self._acted = True
 
     def note_reached(self) -> None:
-        """The runtime has started playing speech to the caller. Wired to the transport's own signal."""
+        """The runtime has started playing speech to the caller. Wired to the transport's own signal.
+
+        Whatever was queued is now playing: audio goes out in the order it was
+        handed to TTS, so the segments already submitted are the ones this
+        burst of sound is made of.
+        """
         self._playback_known = True
         self._reached = True
+        self._burst = time.perf_counter()
+        for segment in self.all_spoken:
+            if segment.playback == 'queued' and segment.text:
+                segment.playback = 'playing'
+
+    def note_drained(self) -> None:
+        """The runtime's audio ran out: everything that was playing, or joined the sound while it played, was heard.
+
+        Speech handed to TTS while audio was already going out never gets a
+        start signal of its own, because the sound never stopped; it counts
+        as part of the stretch it joined.
+
+        ponytail: a segment submitted in the moment between the audio running
+        out and the runtime saying so is counted as played. The ceiling is the
+        runtime's stop delay; the upgrade path is per-segment playout events.
+        """
+        for segment in self.all_spoken:
+            if segment.playback == 'playing' or (
+                segment.playback == 'queued' and segment.text and segment.at >= self._burst
+            ):
+                segment.playback = 'played'
+        self._burst = float('inf')
 
     def turn_ended(self, *, interrupted: bool) -> None:
         """The run for this piece is over. `interrupted` is whether the caller cut it off by speaking again."""
         self._interrupted = self._interrupted or interrupted
 
     def note_barge(self) -> None:
-        """The caller started speaking again, while this turn ran or after it, before the next one began."""
+        """The caller started speaking again, while this turn ran or after it, before the next one began.
+
+        With a runtime that reports playback, nothing that had not played to
+        its end was heard in full, so it is marked interrupted now rather than
+        left to a text report that may never be matched to it: a read-back cut
+        off 200 ms in used to stay "heard", and the caller's next words were
+        read as agreement to a question they never heard. What never started
+        is recorded as heard by nobody; what was playing keeps its text until
+        the runtime says how much of it went out.
+        """
         self._interrupted = True
+        if not self._playback_known:
+            return
+        for segment in self.all_spoken:
+            if segment.playback == 'queued' and segment.text:
+                segment.text, segment.interrupted, segment.delivery = '', True, 'runtime-estimate'
+            elif segment.playback == 'playing':
+                segment.interrupted = True
 
     def continues_turn(self) -> bool:
         """Whether the caller's next words continue this turn, because nothing of the agent's answer reached them yet.
@@ -839,6 +920,7 @@ class CallContext(BaseModel):
             self._pieces.append(heard)
             self._proposals.rewind(self)
         else:
+            self._spoken_over = _missed([*self._spoken, *([self._open] if self._open else [])])
             self._turn += 1
             self._pieces = [heard]
             self._attempt = 0

@@ -862,7 +862,7 @@ async def an_empty_number_identifies_nobody():
     assert call.state.phone_confirmed is False, call.state
     assert call.state.verified_phone == '' and call.state.customer_phone == ''
     assert call.state.agent == 'verify', 'nobody was identified, so nobody moved'
-    assert probe.fixed() == ['What phone number should I use, including the country code?']
+    assert probe.fixed() == ['Which phone number should I use? Please say it with the country code.']
     assert books.find_or_create_customer('')['customer_status'] == 'created'
 
 

@@ -30,6 +30,7 @@ from typing import Any
 from opentelemetry import trace
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
+    BotStoppedSpeakingFrame,
     EndWorkerFrame,
     Frame,
     InterruptionFrame,
@@ -194,6 +195,9 @@ class PydanticAgentProcessor(FrameProcessor):
             await self.push_frame(frame, direction)
         elif isinstance(frame, BotStartedSpeakingFrame):
             self._call.note_reached()
+            await self.push_frame(frame, direction)
+        elif isinstance(frame, BotStoppedSpeakingFrame):
+            self._call.note_drained()
             await self.push_frame(frame, direction)
         elif isinstance(frame, LLMContextFrame):
             users = [

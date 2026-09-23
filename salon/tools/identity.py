@@ -12,6 +12,7 @@ which of the two it is.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Literal
 
@@ -79,12 +80,18 @@ async def guide(
 
 
 _GUIDANCE = {
-    'number': 'What phone number should I use, including the country code?',
+    'number': 'Which phone number should I use? Please say it with the country code.',
     'country': 'Which country is that phone number from?',
-    'incomplete': 'Could you give me the remaining digits?',
-    'correction': 'Could you repeat the full number, including the country code?',
+    'incomplete': 'Please give me the rest of the digits.',
+    'correction': 'Please say the full number again, with the country code.',
     'unsupported': 'I can look up Spanish phone numbers. Do you have a Spanish number I can use?',
 }
+"""The fixed lines for a missing piece of the number.
+
+A request for digits is worded as a request, never as a yes/no question: asked
+"What phone number should I use, including the country code?", four callers in
+five answered "Yes." first, and that yes cost a turn every time.
+"""
 
 
 async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) -> Handoff:
@@ -197,6 +204,43 @@ _PHONE_CONTENT = re.compile(
     re.IGNORECASE,
 )
 """Anything in an utterance that might be a number or a correction to one."""
+
+
+_NUMBER_DIGITS = 11
+"""+34 and nine digits: how many digits a Spanish number in full international form has."""
+UNFINISHED_WAIT = 1.5
+"""Seconds to wait, before answering, for the rest of a number the caller stopped in the middle of."""
+_ENDS_ON_A_DIGIT = re.compile(r'\d[\s.,;:!?-]*$')
+
+
+def number_unfinished(call: SalonCall) -> bool:
+    """Whether the caller has stopped in the middle of giving a number.
+
+    In verify, already running when the turn began (so these words answer its
+    request, and are not the errand a handoff just brought in), with no
+    read-back out, and their words so far end on a digit without holding a
+    whole number's worth of them. The runtime closes the
+    caller's turn on every pause, and people pause between digit groups: "+34
+    ... 611 ... 111 111" arrived as three turns, and an agent that answered
+    each group with "the rest of the digits, please" talked over the rest.
+    """
+    if call.state.agent != 'verify' or call.entered or call.pending('phone') is not None:
+        return False
+    digits = sum(character.isdigit() for character in call.heard)
+    return 0 < digits < _NUMBER_DIGITS and bool(_ENDS_ON_A_DIGIT.search(call.heard))
+
+
+async def wait_for_the_rest(call: SalonCall) -> None:
+    """Give a caller who stopped mid-number a moment to go on, the way a person at a desk would.
+
+    Called before any reply is decided, inside the part of the turn the
+    caller's speech cancels. If they go on, the turn is cut off with nothing
+    said, and their next words continue it (`CallContext.continues_turn`), so
+    the whole number arrives as one reply. If they do not, the step answers as
+    it would have, `UNFINISHED_WAIT` later.
+    """
+    if number_unfinished(call):
+        await asyncio.sleep(UNFINISHED_WAIT)
 
 
 def _waiting_for_a_number(call: SalonCall) -> bool:

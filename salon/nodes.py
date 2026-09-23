@@ -49,7 +49,7 @@ from salon.models.state import SalonCall, SalonState
 from salon.tools.booking import write_booking
 from salon.tools.complaints import write_complaint
 from salon.tools.desk import clarify, end_conversation, hand_over_for, switch_task
-from salon.tools.identity import lookup_customer, readback_number
+from salon.tools.identity import lookup_customer, readback_number, wait_for_the_rest
 from salon.tools.policy import ACTIONS, SPEAK_BY
 
 __all__ = ['EXITS', 'advance', 'build', 'complaint_ready', 'decided', 'solve', 'verified']
@@ -67,7 +67,11 @@ async def advance(
     through to conversation, while application guards still own every write.
     With the solver live, `solve` reads the reply instead and can also answer
     a correction or a change of task.
+
+    A caller who stopped in the middle of a number is given a moment to go on
+    first (`wait_for_the_rest`), before anything is decided or spent.
     """
+    await wait_for_the_rest(call)
     if classification.INTERPRETER == 'solver':
         return await solve(call, usage, usage_limits)
     question = call.pending_question()

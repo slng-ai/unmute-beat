@@ -2,9 +2,10 @@
 
 Two interpreters read a caller's reply, and one of them is live at a time:
 
-* `CONSENT`, the default: four narrow labels (confirmation, appointment
-  choice, end of call, retained complaint approval). A correction or a change
-  of task is not something it can say, so those fall through to an agent.
+* `CONSENT`, the default: five narrow labels (confirmation, appointment
+  choice, end of call, retained complaint approval, and whether the reply
+  takes back the booking just made). A correction or a change of task is not
+  something it can say, so those fall through to an agent.
 * `SOLVER`, behind `SALON_INTERPRETER=solver`: one decision per reply from a
   wider set (accept, correct the number, switch task, clarify, ...), so a
   correction or a switch can be answered without a second request.

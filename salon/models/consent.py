@@ -54,6 +54,8 @@ class ConsentInput(BaseModel):
     owner: str
     pending: Asked | None = None
     retained_complaint: Asked | None = None
+    just_changed: str = ''
+    """What the salon told the caller it had just changed, in its own words, on the turn before this reply. Empty when nothing changed."""
 
 
 type Confirmation = (
@@ -111,6 +113,25 @@ type RetainedApproval = (
 )
 
 
+type LastChange = (
+    Annotated[
+        Literal['keep'],
+        Field(description='Keeps the change the salon just confirmed, or does not take it back.'),
+    ]
+    | Annotated[
+        Literal['withdraw'],
+        Field(
+            description='Takes back the change the salon just confirmed: asks to undo or cancel it, or says '
+            'to leave it or that they no longer want it.'
+        ),
+    ]
+    | Annotated[
+        Literal['unclear'],
+        Field(description='Nothing was just changed, or whether they take it back is unclear.'),
+    ]
+)
+
+
 class ReplyClassification(BaseModel):
     """Interpretation only: these labels cannot name or execute a business action."""
 
@@ -119,6 +140,8 @@ class ReplyClassification(BaseModel):
     appointment_choice: AppointmentChoice = 'unclear'
     conversation: Conversation = 'unclear'
     retained_approval: RetainedApproval = 'unclear'
+    last_change: LastChange = 'unclear'
+    """Whether the reply takes back the change the salon confirmed on the turn before. Read only against `just_changed`."""
 
 
 class CorrectPhone(Decision):

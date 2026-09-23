@@ -261,17 +261,29 @@ async def ask_booking(
             else f'So I will move you to {offered["spoken"]}. Shall I do that?'
         )
     else:
-        held = {b['booking_id']: b for b in call.diary.bookings_for(phone, call.diary.now().date())}
-        if booking_id not in held:
-            raise ModelRetry(
-                'Nothing was asked. That is not a booking this caller holds; read the diary to see '
-                'what they actually have.'
-            )
-        one = held[booking_id]
-        words = (
-            f'So that is your {spoken_service(one["service"])} {one["spoken"]} cancelled. Shall I go ahead?'
-        )
+        return cancel_question(call, booking_id)
     return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)
+
+
+def cancel_question(call: SalonCall, booking_id: str) -> Ask:
+    """The read-back for cancelling one booking this caller holds, worded from the diary's own record.
+
+    Shared by `ask_booking` and by the undo of a booking the caller has just
+    taken back, so both put the same question and the same guard answers it.
+
+    Raises:
+        ModelRetry: If the caller holds no such booking.
+    """
+    phone = call.state.customer_phone
+    held = {b['booking_id']: b for b in call.diary.bookings_for(phone, call.diary.now().date())}
+    if booking_id not in held:
+        raise ModelRetry(
+            'Nothing was asked. That is not a booking this caller holds; read the diary to see '
+            'what they actually have.'
+        )
+    one = held[booking_id]
+    words = f'So that is your {spoken_service(one["service"])} {one["spoken"]} cancelled. Shall I go ahead?'
+    return Ask(about='booking', value='', action='cancel', booking_id=booking_id, spoken=words)
 
 
 def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> bool:
@@ -501,13 +513,13 @@ class WriteBooking(Operation[SalonCall, BookingCommand, Saved, str]):
             offered=[],
         )
         call.retain_action('save_booking', receipt.model_dump(mode='json'))
-        await close_with(
-            call,
-            pick(f'saved:{receipt.status}', SAVED[receipt.status]).format(
-                spoken=receipt.spoken,
-                service=spoken_service(receipt.service),
-            ),
+        told = pick(f'saved:{receipt.status}', SAVED[receipt.status]).format(
+            spoken=receipt.spoken,
+            service=spoken_service(receipt.service),
         )
+        if args.action == 'book':
+            call.offer_undo(receipt.booking_id, told)
+        await close_with(call, told)
         return f'{receipt.status}: {receipt.spoken}'
 
 

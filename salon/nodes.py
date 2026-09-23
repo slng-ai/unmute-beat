@@ -46,7 +46,8 @@ from salon.models.consent import CorrectPhone, SalonSwitch
 from salon.models.receipts import BookingCommand
 from salon.models.shapes import SubmittedPhone
 from salon.models.state import SalonCall, SalonState
-from salon.tools.booking import write_booking
+from salon.tools.asking import Ask
+from salon.tools.booking import cancel_question, write_booking
 from salon.tools.complaints import write_complaint
 from salon.tools.desk import clarify, end_conversation, hand_over_for, switch_task
 from salon.tools.identity import lookup_customer, readback_number
@@ -77,11 +78,18 @@ async def advance(
 
 
 def decided(call: SalonCall) -> LocalAction | None:
-    """The action this turn's consent reading decides on its own, or None to let the step's agent answer."""
+    """The action this turn's consent reading decides on its own, or None to let the step's agent answer.
+
+    In order of what the caller would lose if it were missed: a booking they
+    have just taken back is offered for cancelling, an answer that agrees to
+    something runs it, and only then does a goodbye end the call. "Yes, go
+    ahead, bye" used to hang up on the yes, and "Leave it, thanks, goodbye"
+    used to hang up on the booking.
+    """
     question = call.pending_question()
     reply = call.classification
-    if question is not None and reply.conversation == 'end':
-        return LocalAction('hang_up', lambda: end_conversation(call, 'Thanks for calling. Goodbye.'))
+    if (undo := call.undoable) and reply.last_change == 'withdraw':
+        return LocalAction('ask_booking', lambda: _cancel_question(call, undo))
     if question is not None and question.about == 'move_or_add' and call.state.customer_verified:
         choice_question = question
         if reply.appointment_choice == 'add':
@@ -97,9 +105,9 @@ def decided(call: SalonCall) -> LocalAction | None:
             return LocalAction('confirm_customer', lambda: lookup_customer(call, phone))
         if (
             call.state.customer_verified
-            and call.state.agent == 'booking'
             and (question := call.pending('booking'))
             and question.action in ('book', 'move', 'cancel')
+            and (call.state.agent == 'booking' or question.action == 'cancel')
         ):
             command = BookingCommand.model_validate(
                 {'action': question.action, 'slot_id': question.value, 'booking_id': question.booking_id}
@@ -112,7 +120,19 @@ def decided(call: SalonCall) -> LocalAction | None:
                 'record_complaint',
                 lambda: write_complaint(call, approved.summary, approved.requested_resolution),
             )
+    if question is not None and reply.conversation == 'end':
+        return LocalAction('hang_up', lambda: end_conversation(call, 'Thanks for calling. Goodbye.'))
     return None
+
+
+async def _cancel_question(call: SalonCall, booking_id: str) -> Ask:
+    """The application's own cancel read-back for a booking the caller has just taken back.
+
+    A cancel question can be answered from whichever step the caller is in,
+    because the question is the authority and the write's own guard checks it:
+    the caller who took back a picked time is back at the front desk by then.
+    """
+    return cancel_question(call, booking_id)
 
 
 async def solve(

@@ -294,6 +294,74 @@ async def a_number_talked_over_arrives_whole():
     assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 111 111. Have I got that right?'
 
 
+async def a_booking_taken_back_is_offered_for_cancelling():
+    """The K2 failure: a picked time books at once; "leave it" must not end the call with it still booked.
+
+    And a reply that agrees and says goodbye in one breath runs what it agreed
+    to: "Yes, cancel it. Bye." used to hang up on the yes.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    slot = next(
+        s
+        for s in books.find_slots(PHONE, 'Friday', 'hair-color', books.now(), offered_to=call.id)['slots']
+        if s['time'] == '09:00'
+    )
+    readings = {
+        "Oh, that's too much for me. Leave it, thanks. Goodbye.": {
+            'last_change': 'withdraw',
+            'conversation': 'end',
+        },
+        'Yes, cancel it. Bye.': {'confirmation': 'accept', 'conversation': 'end'},
+    }
+    given: list[ConsentInput] = []
+
+    async def classify(messages, info):
+        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
+        given.append(data)
+        fields = dict(readings.get(data.utterance, {}))
+        if not data.just_changed:
+            fields.pop('last_change', None)
+        if data.pending is None or data.pending.about != 'booking':
+            fields.pop('confirmation', None)
+        return ModelResponse(parts=[TextPart(ReplyClassification.model_validate(fields).model_dump_json())])
+
+    async def booking(messages, info):
+        yield {
+            0: DeltaToolCall(
+                name='save_booking',
+                json_args=f'{{"action":"book","slot_id":"{slot["slot_id"]}","booking_id":""}}',
+            )
+        }
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=booking if name == 'booking' else other)
+            stack.enter_context(node.agent.override(model=model))
+        await probe._turn("Nine o'clock works.")
+        assert call.state.writes == 1 and len(books.bookings_for(PHONE, CLOCK.date())) == 1
+        call.note_reached()
+        call.note_drained()
+        probe.interrupt()
+        await probe._turn("Oh, that's too much for me. Leave it, thanks. Goodbye.")
+        assert given[-1].just_changed, 'the classifier was not told what had just been booked'
+        assert call.ended == '', 'hung up with the booking still in the diary'
+        cancel = probe.fixed()[-1]
+        assert cancel.startswith('So that is your hair colour') and cancel.endswith(
+            'cancelled. Shall I go ahead?'
+        )
+        call.note_reached()
+        call.note_drained()
+        probe.interrupt()
+        await probe._turn('Yes, cancel it. Bye.')
+    assert call.state.writes == 2, 'the agreed cancel was dropped for the goodbye'
+    assert books.bookings_for(PHONE, CLOCK.date()) == [], books.bookings_for(PHONE, CLOCK.date())
+
+
 async def a_missing_barge_never_merges_turns():
     """Without the caller cutting in, a silent turn is still over: a missing signal errs towards a new turn."""
     call = booking_call()
@@ -355,6 +423,7 @@ async def main():
     await a_missing_barge_never_merges_turns()
     await the_next_reply_is_told_what_was_not_heard()
     await a_number_talked_over_arrives_whole()
+    await a_booking_taken_back_is_offered_for_cancelling()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

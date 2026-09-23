@@ -225,6 +225,14 @@ class SalonCall(core.CallContext):
     _classification: ReplyClassification = PrivateAttr(default_factory=ReplyClassification)
     _complaint: Asked | None = PrivateAttr(default=None)
     """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
+    _undo: tuple[str, str, int] | None = PrivateAttr(default=None)
+    """The booking just made, as (booking id, what the caller was told, turn), so their next reply can take it back.
+
+    A pick of an offered time books at once, with no read-back. The caller
+    who then hears the price and says "leave it" was told goodbye with the
+    booking still in the diary. For one caller turn after a booking, their
+    reply is read against it too (`ReplyClassification.last_change`).
+    """
     _day_words: list[str] = PrivateAttr(default_factory=list)
     """Every day the caller has named, in their own words, from whichever turn.
 
@@ -254,6 +262,8 @@ class SalonCall(core.CallContext):
         super().turn_started(heard)
         if not self.continuing:
             self._writes_before = self.state.writes
+        if self._undo is not None and self._undo[2] < self.turn - 1:
+            self._undo = None
         self._classified_turn = -1
         self._classification_input = None
         self._classification = ReplyClassification()
@@ -307,7 +317,17 @@ class SalonCall(core.CallContext):
             owner=self.state.customer_phone,
             pending=self.pending_question(),
             retained_complaint=self._complaint,
+            just_changed=self._undo[1] if self._undo is not None and self.undoable else '',
         ).model_copy(deep=True)
+
+    def offer_undo(self, booking_id: str, told: str) -> None:
+        """A booking was just made and confirmed in these words: the caller's next reply may take it back."""
+        self._undo = (booking_id, told, self.turn)
+
+    @property
+    def undoable(self) -> str:
+        """The booking this reply could take back: made on the caller turn before this one, or ''."""
+        return self._undo[0] if self._undo is not None and self._undo[2] == self.turn - 1 else ''
 
     def record_classification(self, snapshot: ConsentInput, result: ReplyClassification) -> None:
         """Keep this turn's consent reading, bound to the snapshot it read. Only an interpreter calls this."""

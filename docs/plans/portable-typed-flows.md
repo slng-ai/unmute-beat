@@ -505,6 +505,46 @@ step loop in `_hops`; the per-step voice work in `_speak` stays in
 If all three pass, delete `core/graph.py` and the old hop loop. If not, keep
 the phase 4 classes, drop the graph, and write down why.
 
+### Result (2026-09-23)
+
+Built: `core/flow.py` compiles a steps table into a `pydantic_graph` graph,
+one graph step per table step, and after each a decision with a branch for
+every move that step can legally make. `Turn._hops` was split into
+`Turn._hop` (one step), driven either by the plain loop or, with
+`VOICE_FLOW=graph`, by the graph; speech crosses a lockstep channel so the
+order of events is identical.
+
+| Pass mark | Result |
+|---|---|
+| 1. All tests pass, assertions unchanged | **Pass.** All 16 modules pass in both modes (`VOICE_FLOW=graph uv run python -m tests`). |
+| 2. Barge-in unchanged | **Pass.** The cancellation, retention and barge tests pass in graph mode. |
+| 3. Less code than `core/graph.py` + the old hop loop | **Fail.** 406 lines before; about 610 with the graph, even without the loop. |
+
+Why it fails the third mark: the graph can sequence steps, but it cannot
+absorb our routing rules. Prerequisite interposition, the resume checkpoint,
+borrowed tools that move the caller, and edge guards are all decided from
+the call's state, not the graph's shape, so `route`, `moved_by`, `Node` and
+`Exit` stay. An output function can also return any `Handoff`, so the table
+does not fully declare the edges; `legal_moves` has to infer them. And
+streaming speech out of a graph step needs a channel the loop does not.
+
+What the graph does add: each step's legal moves are checked while the call
+runs (an undeclared move fails the turn instead of wandering), a Mermaid
+diagram of the flow (`Flow.of(AGENTS).render()`), and a span per step.
+
+The trial also found a bug that was already there: when an agent run
+failed, its stream was left for the garbage collector, and the SDK's "new
+messages" for a failed run repeated the tail of the history it was given,
+so the history later gained a duplicate handoff at an arbitrary moment. Both
+halves are fixed in `core/turn.py` and pinned by
+`tests/test_flow.py::a_failed_run_is_retained_once`.
+
+**Decision needed.** The plan's rule says drop the graph when it fails a
+pass mark. The loop stays the default and the graph stays behind
+`VOICE_FLOW=graph` until the team chooses between the checked moves and
+diagram and the extra 200 lines. `Flow.render()` and `legal_moves` are
+worth keeping either way: they do not need the graph runner.
+
 ---
 
 ## Phase 6: prove it on two very different flows

@@ -31,6 +31,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from core.graph import moved_by
 from core.processor import EXHAUSTED, PydanticAgentProcessor
+from core.turn import take_turn
 from salon.agents import AGENTS
 from salon.diary import Diary
 from salon.models.state import SalonCall, SalonState, open_call
@@ -385,6 +386,35 @@ async def the_winner_is_the_same_every_time():
             await probe._turn('hello?')
         outcomes.add((call.state.agent, bool(call.state.booking_day)))
     assert len(outcomes) == 1, outcomes
+
+
+async def a_failed_run_is_retained_once():
+    """A run that fails after a handoff keeps what it added, once, and before the turn is over.
+
+    When a run fails, the SDK can report the tail of the history it was given
+    as new, and the engine used to abandon the failed stream to the garbage
+    collector: the handoff landed in the history a second time, at some later
+    and arbitrary moment. The next model request would have seen it twice.
+    """
+    import gc
+
+    books.reset()
+    call = open_call(PHONE, diary=books)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+
+    async def hands(messages, info: AgentInfo):
+        yield {0: DeltaToolCall(name='hand_over', json_args='{"to": "complaints", "because": "a refund"}')}
+
+    with scripted(concierge=hands, complaints=_says('Words where only a tool is allowed.')):
+        _, finished = await take_turn(call, AGENTS, 'I want a refund')
+    assert finished.status == 'failed', finished
+    held = len(call.messages)
+    assert _calls(call) == ['hand_over'], _calls(call)
+    gc.collect()
+    await asyncio.sleep(0)
+    assert _calls(call) == ['hand_over'] and len(call.messages) == held, (
+        'the failed run was retained again, later'
+    )
 
 
 async def a_split_destination_name_never_moves_anybody():
@@ -742,6 +772,7 @@ async def main():
     await a_second_action_is_refused_before_it_runs()
     await an_ordinary_tool_is_refused_when_it_is_the_second()
     await the_winner_is_the_same_every_time()
+    await a_failed_run_is_retained_once()
     await a_split_destination_name_never_moves_anybody()
     await a_name_that_prefixes_another_is_not_acted_on_early()
     await text_before_a_tool_streams_and_the_tool_still_runs()

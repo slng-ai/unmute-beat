@@ -77,6 +77,7 @@ bot.py                  the Pipecat pipeline, and nothing else
 core/
   state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
   graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
+  flow.py               the steps as a Pydantic graph: legal moves, a diagram, VOICE_FLOW=graph
   classifiers.py        generic Pydantic input/output classification in one request
   decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
   proposals.py          the one question a call waits on, and when it can be answered

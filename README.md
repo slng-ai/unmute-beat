@@ -52,8 +52,11 @@ browser client, so there is nothing else to start.
 | `SALON_CLOCK` | pins the salon's idea of now, so "tomorrow" resolves to the same day on every run. No offset means the salon's own timezone |
 | `-t webrtc` | one transport instead of all of them |
 | `--host` / `--port` | Pipecat's runner flags. `uv run bot.py --help` for the rest |
+| `VOICE_AGENCY` | which flow answers: `salon` (default), `access` or `help`. See section 6 |
+| `VOICE_FLOW` | `graph` walks the steps through the Pydantic graph instead of the plain loop. See section 6 |
+| `SALON_INTERPRETER` | `solver` reads replies with the state solver instead of the four-label classifier. See section 8 |
 
-All three variables are optional: `uv run bot.py` on its own is a live-clock
+All of these are optional: `uv run bot.py` on its own is a live-clock
 call, from an anonymous number, into the salon as the last call left it. The
 remaining dials are in `.env.example`; `SMART_TURN_STOP_SECS` is the one worth
 measuring.
@@ -313,7 +316,203 @@ is. Every write carries an operation token derived from what the action is,
 and a write whose answer was lost is recorded as `Unresolved` on the state,
 which blocks every other write until the token has been asked what happened.
 
-## 6. The custom logic
+## 6. Typed flows for any business, and the graph that runs them
+
+The salon's four steps are written by hand. Any other business can describe
+its flow as a short, ordered list of **typed steps** instead, in Python or in
+a JSON file, and run it on the same engine. The Pydantic graph then checks,
+while the call runs, that every move from one step to the next is one the
+flow allows.
+
+### From a list of steps to a running call
+
+```mermaid
+flowchart LR
+    file[flow.json] --> spec[FlowSpec]
+    reg[Registry: field models, operations, knowledge, checks] --> spec
+    code[Python list of steps] --> sf
+    spec -- compile, refuse if broken --> sf[StepFlow]
+    sf --> nodes[nodes table: one Node per step]
+    nodes --> graph[Flow: Pydantic graph of legal moves]
+    nodes --> turn[Turn: one caller turn]
+    graph -. VOICE_FLOW=graph .-> turn
+```
+
+1. **Write the steps.** Either as Python (`examples/access/flow.py`,
+   `build()`) or as a flow file (`examples/access/flow.json`).
+2. **Compile.** `StepFlow` (`core/steps.py`) turns each step into the same
+   `Node` the salon hand-writes: an agent, openings, and the steps it can
+   hand the caller to. A flow file first goes through `FlowSpec.compile`
+   (`core/flowspec.py`), which refuses it if anything is wrong (see below).
+3. **Build the graph.** `Flow.of(nodes)` (`core/flow.py`) compiles the nodes
+   table into one `pydantic_graph` graph, once per flow, shared by every call.
+4. **Run.** The turn engine (`core/turn.py`) runs one caller turn at a time,
+   with the same budget, barge-in handling, history and tracing as the salon.
+
+### The five step kinds
+
+| Kind | What it does | Done when |
+|---|---|---|
+| `CollectStep` | Asks one question and records typed fields. Values are checked by a Pydantic model, with the facts collected so far as context (a system must belong to the team). A caller may answer a later question early; that answer is kept and the later step is skipped. | every required field has a valid value |
+| `ConfirmStep` | Reads back the exact request an operation would carry out, in words the code wrote, and waits. Yes goes on; no and "change it" go where the step says; anything unclear gets the readback again. | the action after it has a receipt |
+| `ActionStep` | Runs one `Operation` (`core/operations.py`) with the collected facts and files its receipt. A refusal goes to `on_error`; an answer that never came back goes to `on_unknown` (pending), never to success. | the receipt says what the step needed (`accepts`) |
+| `ConversationStep` | Answers from its instructions and knowledge. Stays active every turn until the caller says goodbye. | never: it is a place to stay |
+| `End` | Says one closing line and records how the flow ended: `completed`, `cancelled`, `failed` or `pending`. | on arrival |
+
+Two rules hold for every kind:
+
+- **"Done" is worked out from the facts, never stored as a flag.**
+  `core/completion.py` has `FieldsPresent` and `ReceiptMatched`. The next step
+  is simply the first later step that is not done yet, so a step answered
+  early is passed over without a model request.
+- **Changing an answer forgets what was built on it.** Each step says which
+  facts it rests on (`after`). When the caller changes the system,
+  `StepFlow.record` drops the level (it rested on the system) and the
+  eligibility check (it rested on the level), so both are asked and run again.
+
+Consent works exactly as in the salon: the readback is a recorded question
+(`core/proposals.py`), a spoken-over readback can never be accepted, and the
+operation checks that the yes was to *these* arguments before it runs.
+
+### What the Pydantic graph adds
+
+`Flow` makes one graph step per flow step. After each step sits a decision
+point with one branch for every step the caller may legally go to next, and
+one branch to the end of the turn:
+
+```mermaid
+stateDiagram-v2
+  state after_turn_start <<choice>>
+  state after_booking <<choice>>
+  state after_complaints <<choice>>
+  state after_concierge <<choice>>
+  state after_verify <<choice>>
+  [*] --> after_turn_start
+  after_turn_start --> concierge
+  after_turn_start --> booking
+  after_turn_start --> complaints
+  after_turn_start --> verify
+  concierge --> after_concierge
+  booking --> after_booking
+  complaints --> after_complaints
+  verify --> after_verify
+  after_concierge --> booking
+  after_concierge --> complaints
+  after_concierge --> verify
+  after_concierge --> [*]
+  after_booking --> concierge
+  after_booking --> complaints
+  after_booking --> verify
+  after_booking --> [*]
+  after_complaints --> concierge
+  after_complaints --> verify
+  after_complaints --> [*]
+  after_verify --> concierge
+  after_verify --> booking
+  after_verify --> complaints
+  after_verify --> [*]
+```
+
+That is the salon, drawn by the code itself:
+`uv run python -c "from core.flow import Flow; from salon.agents import AGENTS; print(Flow.of(AGENTS).render())"`.
+Swap in `examples.access` to draw the access request.
+
+How one caller turn goes through it:
+
+1. The graph starts at the step the caller is in (`call.state.agent`).
+   pydantic-graph 2.46 has no save-and-resume, and the call already knows
+   where the caller is, so every turn is one short graph run.
+2. The graph step asks the turn engine to run that step once (`Turn.hop`).
+   The engine does all the voice work: openings, the agent, streaming speech,
+   barge-in.
+3. The engine answers `Moved(to)` (the caller was handed on, run the next
+   step now) or `Answered()` (the turn is over).
+4. The decision point sends `Moved(to)` to that step, or ends the run. **A
+   move the flow does not allow matches no branch, so the graph refuses it**
+   and the turn fails, instead of the caller ending up somewhere nobody
+   designed.
+
+The legal moves come from the table (`legal_moves`): a step's exits, the step
+that fills a missing prerequisite (the salon's `verify`), and for that step,
+every step that could be waiting on it. For a typed flow they are: every
+later step (a done step can be skipped), plus each step's own failure,
+rejection and revision targets.
+
+Speech from inside a graph step has to reach the caller as it streams, while
+the graph waits for the step to finish. So the engine passes each event out
+through a small lockstep channel: a step's next action waits until its last
+event has been handed on, which keeps the order exactly what the plain loop
+produces.
+
+**What the graph does not do.** Where a handoff *really* lands still depends
+on the call's state: the prerequisite check, the resume point, a borrowed
+tool that moves the caller, an edge's guard. Those stay in `route` and
+`moved_by` (`core/graph.py`), because a graph's shape cannot express them.
+
+**Is it on?** Not by default. `VOICE_FLOW=graph` turns it on for every turn;
+without it, the same `Turn.hop` is driven by a plain loop. The trial result:
+all 18 test modules pass both ways, barge-in included, but the graph path is
+about 200 lines more than the loop. Whether its checked moves and diagram are
+worth that is an open decision, written up in
+`docs/plans/portable-typed-flows.md`.
+
+### Flow files
+
+A flow file is versioned JSON. It lists steps by `kind` and may only *name*
+things a developer registered in code, so a file can never run code:
+
+```json
+{
+  "version": 1,
+  "id": "access_request",
+  "steps": [
+    {"id": "employee", "kind": "collect", "model": "employee", "question": "What is your employee ID?"},
+    {"id": "identify", "kind": "action", "operation": "identify", "accepts": "matched", "on_error": "stranger"},
+    {"id": "reason", "kind": "collect", "question": "What do you need it for?",
+     "fields": {"reason": {"type": "string", "min_length": 5}}},
+    {"id": "confirm", "kind": "confirm", "operation": "submit", "then": "submit",
+     "on_reject": "cancelled", "on_revise": "level"},
+    {"id": "submit", "kind": "action", "operation": "submit", "on_error": "failed", "on_unknown": "unconfirmed"},
+    {"id": "submitted", "kind": "end", "outcome": "completed", "say": "Done: request {submit[request_id]} is submitted."}
+  ]
+}
+```
+
+(Shortened; the full file is `examples/access/flow.json`.) The `Registry`
+beside it says what `employee`, `identify`, `submit` and `matched` are: a
+Pydantic model, two `Operation` classes and a receipt check. Simple fields can
+be written inline (`string`, `integer`, `date`, `choice`, with plain limits).
+
+`FlowSpec.compile` refuses a broken file and lists **every** problem at once:
+
+- an unknown step kind or field, or a version it does not know (at load);
+- a step id used twice;
+- a destination that is not a step;
+- an operation, field model, knowledge source or check nobody registered;
+- a fact in `after` that no earlier step collects;
+- an action that needs approval with no confirm step for it, or one that can
+  be reached without going through that confirm step.
+
+Then it builds the `StepFlow` and its graph once; every call shares them.
+
+### Running the examples
+
+```bash
+VOICE_AGENCY=access uv run bot.py -t webrtc   # the ten-step access request
+VOICE_AGENCY=help uv run bot.py -t webrtc     # the library help line
+VOICE_FLOW=graph uv run bot.py -t webrtc      # any flow, walked by the Pydantic graph
+```
+
+Both examples import nothing from the salon. `tests/test_examples.py` walks
+them through the real engine; `tests/test_flowspec.py` checks that each flow
+file behaves exactly like its Python version and that every broken file is
+refused.
+
+- Pydantic graph: https://pydantic.dev/docs/ai/graph/graph/
+- Discriminated unions, for step kinds: https://pydantic.dev/docs/validation/latest/concepts/unions/#discriminated-unions
+- Validation context, for checks that read other facts: https://pydantic.dev/docs/validation/latest/concepts/validators/
+
+## 7. The custom logic
 
 Everything the model used to decide that the application now decides, and the
 mechanism for each:
@@ -360,7 +559,7 @@ mechanism for each:
   what a booking sounds like out loud: all `salon/diary.py`, none asked of a
   model.
 
-## 7. Typed classification and its evolution
+## 8. Typed classification and its evolution
 
 The classifier answers a narrow question: how does the caller's reply relate
 to the question they just heard? Today it uses the same Gemini model as the
@@ -492,7 +691,7 @@ the current classifier without executing their decisions, then selecting one
 once the accuracy and latency results justify it. No Jev or local-model
 measurements have been made in this repository.
 
-## 8. Telemetry
+## 9. Telemetry
 
 Langfuse over OpenTelemetry. Pydantic AI's instrumentation emits the agent
 runs; Pipecat emits the conversation, the turn, stt and tts; the processor

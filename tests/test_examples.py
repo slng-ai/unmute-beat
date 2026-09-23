@@ -216,6 +216,10 @@ def flows_are_graphs_too():
     assert moves['confirm'] == {'submit', 'cancelled', 'level', 'submitted'}
     assert 'employee' not in moves['team'], 'a flow only moves forward, or where a step says'
     assert Flow.of(help_line.AGENTS).moves == {'answer': frozenset()}
+    diagram = Flow.of(access.AGENTS).render()
+    assert 'after_start' in diagram and 'after_turn_start' in diagram, (
+        'a step named start keeps its own label'
+    )
     assert date(2026, 10, 1) >= DIRECTORY.today
 
 

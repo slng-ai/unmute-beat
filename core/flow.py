@@ -94,8 +94,17 @@ class Flow:
         )
         steps = {name: g.step(_runner(name), node_id=name) for name in self.nodes}
 
-        def branches(to: frozenset[str] | set[str]):
-            decision = g.decision()
+        taken = set(self.nodes)
+
+        def label(wanted: str) -> str:
+            """A decision id for the diagram that no step already uses."""
+            while wanted in taken:
+                wanted += '_'
+            taken.add(wanted)
+            return wanted
+
+        def branches(to: frozenset[str] | set[str], after: str):
+            decision = g.decision(node_id=label(f'after_{after}'))
             for target in sorted(to):
                 decision = decision.branch(
                     g.match(Moved, matches=lambda o, t=target: isinstance(o, Moved) and o.to == t).to(
@@ -104,9 +113,9 @@ class Flow:
                 )
             return decision.branch(g.match(Answered).to(g.end_node))
 
-        g.add(g.edge_from(g.start_node).to(branches(set(self.nodes))))
+        g.add(g.edge_from(g.start_node).to(branches(set(self.nodes), 'turn_start')))
         for name, step in steps.items():
-            g.add(g.edge_from(step).to(branches(self.moves[name])))  # ty: ignore[invalid-argument-type]
+            g.add(g.edge_from(step).to(branches(self.moves[name], name)))  # ty: ignore[invalid-argument-type]
         return g.build()
 
     async def run(self, driver: Hopper, start: str, prompt: str | None) -> Answered:

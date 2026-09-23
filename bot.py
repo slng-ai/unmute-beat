@@ -169,8 +169,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     aggregators use it to work out the caller's turn and, on a barge-in, what
     the bot managed to say. `note_spoken` is its only consumer. The caller ID
     is the carrier's on a phone route and a guess until the caller agrees.
+
+    On a phone route the session is the carrier's call id (Twilio's
+    `callSid`), so a call and its trace share one key: Coval records the same
+    id as the simulation's `call_sid`, and one Langfuse session is one call.
     """
-    session_id = runner_args.session_id or ''
+    call_data = getattr(runner_args, 'call_data', None)
+    session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''
     setup(session=session_id, trace_name=NAME)
     stt, tts = speech_services()
     call = OPEN_CALL(os.getenv('CALLER_ID', ''))

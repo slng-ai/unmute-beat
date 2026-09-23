@@ -122,8 +122,10 @@ transcript before you trust a failure: `coval --format json simulations get <cal
 
 It needs `coval`, `cloudflared` and `uv` on your PATH, and `COVAL_API_KEY`
 with the model and speech keys in `.env`. It does not run in CI. Traces go to
-Langfuse as usual. They are not linked to their Coval call, because the Twilio
-route carries no simulation ID.
+Langfuse as usual, and each call's Langfuse session is its Twilio call id.
+Coval records the same id as the simulation's `call_sid`, so to open a call's
+trace, filter Langfuse sessions by the `call_sid` of
+`coval --format json simulations get <call id>`.
 
 ---
 

@@ -1,205 +1,42 @@
-"""The access request as steps: who you are, what you need, why and when, a policy check, your yes, the ticket.
+"""The access request, loaded from its folder, and the same flow written in Python for comparison.
 
-Every rule lives on a Pydantic model or an operation: a system must belong
-to the team, a level to the system, the end must follow the start. The steps
-only say in which order they are asked. Changing the team forgets the
-system, which forgets the level, which forgets the eligibility check.
+`flow.yaml` is the flow. Each step names its own prompt in `prompts/` or its
+own module in `steps/`; `voice.md` is added to the top of every prompt.
+`build()` is the same flow written as Python steps, kept so a test can show
+the two behave alike.
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-from hashlib import sha256
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pydantic_ai.models import infer_model
 
-from core.flowspec import Registry, load_file
-from core.operations import OutcomeUnknownError
-from core.proposals import BaseProposal
-from core.steps import (
-    ActionStep,
-    CollectStep,
-    ConfirmedOperation,
-    ConfirmStep,
-    End,
-    FlowCall,
-    StepFlow,
-    confirm_interpreter,
-)
-from examples.access.backend import CATALOG, DIRECTORY
+from core.flowspec import load_file
+from core.steps import ActionStep, CollectStep, ConfirmStep, End, FlowCall, StepFlow, confirm_interpreter
+from examples.access.steps import eligibility, identify, submit
+from examples.access.steps.fields import Employee, Finish, Level, Reason, Start, System, Team
 
 NAME = 'access request'
 MODEL = infer_model('google-cloud:gemini-3.5-flash-lite')
+SPEC = load_file(Path(__file__).parent / 'flow.yaml')
 
 
-def _facts(info: ValidationInfo) -> dict:
-    return (info.context or {}).get('facts', {})
-
-
-class Employee(BaseModel):
-    employee_id: str = Field(pattern=r'^E-\d{3}$', description='Their employee ID, like E-100.')
-
-
-class Team(BaseModel):
-    team: str = Field(description='Their team: engineering or finance.')
-
-    @field_validator('team')
-    @classmethod
-    def supported(cls, team: str) -> str:
-        team = team.strip().lower()
-        if team not in CATALOG:
-            raise ValueError(f'{team!r} is not a team we handle; choose {", ".join(CATALOG)}')
-        return team
-
-
-class System(BaseModel):
-    system: str = Field(description='The system they need access to, e.g. github, aws or ledger.')
-
-    @field_validator('system')
-    @classmethod
-    def belongs_to_team(cls, system: str, info: ValidationInfo) -> str:
-        system, team = system.strip().lower(), _facts(info).get('team', '')
-        if system not in CATALOG.get(team, {}):
-            raise ValueError(f'{system!r} is not available to {team or "that"} team')
-        return system
-
-
-class Level(BaseModel):
-    level: str = Field(description='The access level: read, write or admin.')
-
-    @field_validator('level')
-    @classmethod
-    def offered_for_system(cls, level: str, info: ValidationInfo) -> str:
-        facts = _facts(info)
-        level = level.strip().lower()
-        if level not in CATALOG.get(facts.get('team', ''), {}).get(facts.get('system', ''), ()):
-            raise ValueError(f'{level!r} is not a level offered on {facts.get("system") or "that system"}')
-        return level
-
-
-class Reason(BaseModel):
-    reason: str = Field(min_length=5, description='Why they need it, in their own words.')
-
-
-class Start(BaseModel):
-    start: date = Field(description='The first day they need access, as a date.')
-
-    @field_validator('start')
-    @classmethod
-    def not_in_the_past(cls, start: date) -> date:
-        if start < DIRECTORY.today:
-            raise ValueError('the start date is in the past')
-        return start
-
-
-class Finish(BaseModel):
-    end: date = Field(description='The last day they need access, as a date.')
-
-    @field_validator('end')
-    @classmethod
-    def after_start(cls, end: date, info: ValidationInfo) -> date:
-        start = _facts(info).get('start')
-        if start and end <= date.fromisoformat(str(start)):
-            raise ValueError('the end date must be after the start date')
-        if start and end - date.fromisoformat(str(start)) > timedelta(days=90):
-            raise ValueError('access can be requested for at most 90 days')
-        return end
-
-
-class Lookup(BaseModel):
-    employee_id: str
-
-
-class Identified(BaseModel):
-    employee_id: str
-    name: str
-    match: bool
-
-
-class Request(BaseModel):
-    employee_id: str
-    team: str
-    system: str
-    level: str
-    reason: str
-    start: date
-    end: date
-
-
-class Eligibility(BaseModel):
-    eligible: bool
-    reason: str
-
-
-class Submitted(BaseModel):
-    request_id: str
-    status: Literal['submitted']
-    """Filed, not approved: the receipt says only what happened."""
-
-
-class LookupEmployee(ConfirmedOperation[Lookup, Identified]):
-    """Identify the requester. Reading a directory needs no approval."""
-
-    name = 'identify'
-    args_type = Lookup
-    receipt_type = Identified
-    needs_approval = False
-
-    async def _execute(self, call: FlowCall, args: Lookup, grant: None) -> dict:
-        return DIRECTORY.lookup(args.employee_id)
-
-
-class CheckEligibility(ConfirmedOperation[Request, Eligibility]):
-    """Ask the policy whether this exact request is allowed. A check, not a change."""
-
-    name = 'eligibility'
-    args_type = Request
-    receipt_type = Eligibility
-    needs_approval = False
-
-    async def _execute(self, call: FlowCall, args: Request, grant: None) -> dict:
-        return DIRECTORY.check(args.team, args.system, args.level, args.start, args.end)
-
-
-class SubmitRequest(ConfirmedOperation[Request, Submitted]):
-    """File the request, once the caller agreed to this exact readback of it."""
-
-    name = 'submit'
-    args_type = Request
-    receipt_type = Submitted
-    proposal_about = 'submit'
-
-    def proposal(self, args: Request) -> BaseProposal:
-        digest = sha256(args.model_dump_json().encode()).hexdigest()[:12]
-        return BaseProposal(
-            about='submit',
-            value=digest,
-            spoken=(
-                f'To confirm: {args.level} access to {args.system} for the {args.team} team, '
-                f'from {args.start:%d %B} to {args.end:%d %B}, because {args.reason}. Shall I submit it?'
-            ),
-        )
-
-    async def _execute(self, call: FlowCall, args: Request, grant: object) -> dict:
-        try:
-            return DIRECTORY.submit(args.model_dump(mode='json'))
-        except TimeoutError as lost:
-            raise OutcomeUnknownError(str(lost)) from None
+def from_file(model=MODEL) -> StepFlow:
+    """The flow compiled from its folder. Tests pass a scripted model."""
+    return SPEC.compile(model=model)
 
 
 def build(model=MODEL) -> StepFlow:
-    """The flow, for a model. Tests build their own with a scripted one."""
+    """The same flow as Python steps, with prompts written from the fields instead of read from files."""
     interpreter = confirm_interpreter(model)
-    submit = SubmitRequest(interpreter)
+    submitting = submit.OPERATION(interpreter)
     steps = [
         CollectStep(id='employee', fields=Employee, question='What is your employee ID?'),
         ActionStep(
             id='identify',
-            operation=LookupEmployee(interpreter),
-            accepts=lambda r: r['match'],
+            operation=identify.OPERATION(interpreter),
+            accepts=identify.accepts,
             on_error='stranger',
         ),
         CollectStep(id='team', fields=Team, question='Which team are you on?'),
@@ -214,12 +51,14 @@ def build(model=MODEL) -> StepFlow:
         CollectStep(id='end', fields=Finish, question='Until what date?', after=frozenset({'start'})),
         ActionStep(
             id='eligibility',
-            operation=CheckEligibility(interpreter),
-            accepts=lambda r: r['eligible'],
+            operation=eligibility.OPERATION(interpreter),
+            accepts=eligibility.accepts,
             on_error='refused',
         ),
-        ConfirmStep(id='confirm', operation=submit, then='submit', on_reject='cancelled', on_revise='level'),
-        ActionStep(id='submit', operation=submit, on_error='failed', on_unknown='unconfirmed'),
+        ConfirmStep(
+            id='confirm', operation=submitting, then='submit', on_reject='cancelled', on_revise='level'
+        ),
+        ActionStep(id='submit', operation=submitting, on_error='failed', on_unknown='unconfirmed'),
         End(
             id='submitted',
             outcome='completed',
@@ -246,30 +85,9 @@ def build(model=MODEL) -> StepFlow:
     return StepFlow(steps, model=model, interpreter=interpreter)
 
 
-REGISTRY = Registry(
-    fields={
-        'employee': Employee,
-        'team': Team,
-        'system': System,
-        'level': Level,
-        'start': Start,
-        'end': Finish,
-    },
-    operations={'identify': LookupEmployee, 'eligibility': CheckEligibility, 'submit': SubmitRequest},
-    checks={'matched': lambda receipt: receipt['match'], 'eligible': lambda receipt: receipt['eligible']},
-)
-"""What `flow.yaml` may name. The file says the order; these say the rules."""
-SPEC = load_file(Path(__file__).parent / 'flow.yaml')
-
-
-def from_file(model=MODEL) -> StepFlow:
-    """The same flow, compiled from `flow.yaml`."""
-    return SPEC.compile(REGISTRY, model=model)
-
-
-FLOW = build()
+FLOW = from_file()
 AGENTS = FLOW.nodes
-GREETING = 'Hi, I can help you request access to a system. What is your employee ID?'
+GREETING = SPEC.greeting
 
 
 def open_call(caller_id: str = '') -> FlowCall:

@@ -175,18 +175,18 @@ class Step(ABC):
         """This step as a node the turn engine runs."""
 
 
-def _agent(flow: StepFlow, step: Step, instructions: str, outputs: list) -> Agent[FlowCall, object]:
-    return Agent[FlowCall, object](
+def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list) -> Agent[Any, object]:
+    return Agent[Any, object](
         flow.model,
         name=step.id,
-        deps_type=FlowCall,
+        deps_type=flow.call_type,
         output_type=outputs,  # type: ignore[arg-type]
         instructions=instructions,
         model_settings=flow.settings,
     )
 
 
-def _node(flow: StepFlow, step: Step, agent: Agent[FlowCall, object], **node: Any) -> Node[FlowState]:
+def _node(flow: StepFlow, step: Step, agent: Agent[Any, object], **node: Any) -> Node[FlowState]:
     return Node(agent, exits=tuple(Exit(to) for to in flow.destinations(step)), **node)
 
 
@@ -209,6 +209,8 @@ class CollectStep(Step):
     after: frozenset[str] = frozenset()
     lookahead: bool = True
     """Whether a caller may answer later collect steps early, in the same breath."""
+    prompt: Any = None
+    """This step's own instructions (text or a compiled template), from its prompt file. None writes them from the fields."""
 
     @property
     def produces(self) -> frozenset[str]:
@@ -252,7 +254,7 @@ class CollectStep(Step):
         wanted = '; '.join(
             f'{name}: {info.description or name}' for name, info in self.fields.model_fields.items()
         )
-        instructions = (
+        instructions = self.prompt or (
             f'You are on the phone, collecting: {wanted}. When the caller gives any value, call `collect` '
             'with only what they said. If they ask something else, answer in one short sentence and ask again.'
         )
@@ -432,7 +434,8 @@ class ActionStep(Step):
 class ConversationStep(Step):
     """Answer from instructions and knowledge; stays active every turn until the caller says goodbye."""
 
-    instructions: str
+    instructions: Any
+    """Text, or a compiled template from a prompt file (which already carries any knowledge)."""
     knowledge: str = ''
 
     def node(self, flow: StepFlow) -> Node[FlowState]:
@@ -447,7 +450,9 @@ class ConversationStep(Step):
             await ctx.deps.end_call()
             return words
 
-        text = self.instructions + (f'\n\nKnowledge:\n{self.knowledge}' if self.knowledge else '')
+        text = self.instructions
+        if self.knowledge and isinstance(text, str):
+            text += f'\n\nKnowledge:\n{self.knowledge}'
         agent = _agent(flow, self, text, [str, ToolOutput(goodbye, name='goodbye')])
         return _node(flow, self, agent)
 
@@ -469,6 +474,37 @@ class End(Step):
 
         agent = _agent(flow, self, 'The request is finished. Answer briefly; do not start a new one.', [str])
         return _node(flow, self, agent, openings=(Opening('close', 'handoff', _entered, close),))
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentStep(Step):
+    """A hand-built step: its own prompt, and a module that builds its agent, tools and openings.
+
+    What a flow file says about the step (its prompt, its exits, what it
+    needs first, whether it can write) arrives here; the module's `node`
+    function turns it into a `Node`, with whatever tools the business wrote.
+    This is how the salon's four steps sit in a flow file.
+    """
+
+    instructions: Any
+    """The step's compiled prompt."""
+    build: Callable[[AgentStep], Node[Any]]
+    """The step module's `node` function."""
+    exits: tuple[Exit[Any], ...] = ()
+    requires: tuple[str, ...] = ()
+    satisfied_by: str = ''
+    guarded: bool = False
+
+    @property
+    def elsewhere(self) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                [*(exit.to for exit in self.exits), *([self.satisfied_by] if self.satisfied_by else [])]
+            )
+        )
+
+    def node(self, flow: StepFlow) -> Node[Any]:
+        return self.build(self)
 
 
 class _Facts(dict):
@@ -495,13 +531,16 @@ class StepFlow:
         model: Model | str,
         interpreter: Interpreter[FlowCall, Any, ConfirmReading] | None = None,
         settings: ModelSettings | None = None,
+        call_type: type[CallContext] = FlowCall,
     ) -> None:
+        self.call_type = call_type
+        """The call every step's agent is given, and what prompt templates are checked against."""
         self.steps = tuple(steps)
         self.by_id = {step.id: step for step in self.steps}
         if len(self.by_id) != len(self.steps):
             raise ValueError('step ids must be unique')
         finished = [s for s in self.steps if isinstance(s, End) and s.outcome == 'completed']
-        if any(not isinstance(s, End | ConversationStep) for s in self.steps) and not finished:
+        if any(isinstance(s, CollectStep | ConfirmStep | ActionStep) for s in self.steps) and not finished:
             raise ValueError('a flow with business steps needs an End with outcome completed')
         self.finish = finished[0].id if finished else ''
         for step in self.steps:
@@ -522,8 +561,8 @@ class StepFlow:
         return FlowCall(state=FlowState(agent=self.start))
 
     def sequence(self) -> list[Step]:
-        """The business steps in order, without the endings."""
-        return [s for s in self.steps if not isinstance(s, End)]
+        """The steps walked in order, without the endings and without hand-built steps, which move by their exits."""
+        return [s for s in self.steps if not isinstance(s, End | AgentStep)]
 
     def collects_after(self, step: Step) -> list[CollectStep]:
         order = self.sequence()
@@ -531,6 +570,8 @@ class StepFlow:
 
     def destinations(self, step: Step) -> tuple[str, ...]:
         """Every step this one can hand the caller to: onward (skipping done steps), or elsewhere."""
+        if isinstance(step, AgentStep):
+            return step.elsewhere
         if isinstance(step, End | ConversationStep):
             return ()
         order = self.sequence()

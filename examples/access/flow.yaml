@@ -1,38 +1,45 @@
-# The access request, as a person edits it. The rules live in code:
-# examples/access/flow.py registers every model, operation and check named here.
+# The access request. Each step's whole definition is here: its kind, its prompt file (steps that
+# run a model), its module (steps that run code), and where it goes when it does not go on.
 version: 1
 id: access_request
+greeting: Hi, I can help you request access to a system. What is your employee ID?
+voice: voice.md
+
 steps:
   - id: employee
     kind: collect
-    model: employee
+    prompt: prompts/employee.md
+    model: steps/fields.py:Employee
     question: What is your employee ID?
 
   - id: identify
     kind: action
-    operation: identify
-    accepts: matched
+    code: steps/identify.py
     on_error: stranger
 
   - id: team
     kind: collect
-    model: team
+    prompt: prompts/team.md
+    model: steps/fields.py:Team
     question: Which team are you on?
 
   - id: system
     kind: collect
-    model: system
+    prompt: prompts/system.md
+    model: steps/fields.py:System
     question: Which system do you need?
     after: [team]
 
   - id: level
     kind: collect
-    model: level
+    prompt: prompts/level.md
+    model: steps/fields.py:Level
     question: What access level do you need?
     after: [system]
 
   - id: reason
     kind: collect
+    prompt: prompts/reason.md
     question: What do you need it for?
     fields:
       reason:
@@ -42,31 +49,32 @@ steps:
 
   - id: start
     kind: collect
-    model: start
+    prompt: prompts/start.md
+    model: steps/fields.py:Start
     question: From what date?
 
   - id: end
     kind: collect
-    model: end
+    prompt: prompts/end.md
+    model: steps/fields.py:Finish
     question: Until what date?
     after: [start]
 
   - id: eligibility
     kind: action
-    operation: eligibility
-    accepts: eligible
+    code: steps/eligibility.py
     on_error: refused
 
   - id: confirm
     kind: confirm
-    operation: submit
+    code: steps/submit.py
     then: submit
     on_reject: cancelled
     on_revise: level
 
   - id: submit
     kind: action
-    operation: submit
+    code: steps/submit.py
     on_error: failed
     on_unknown: unconfirmed
 

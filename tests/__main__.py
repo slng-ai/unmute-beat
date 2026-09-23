@@ -35,6 +35,7 @@ MODULES = (
     'tests.test_classifiers',
     'tests.test_replay',
     'tests.test_solver',
+    'tests.test_examples',
     'tests.test_traces',
     'tests.test_state',
     'tests.test_diary',

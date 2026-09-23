@@ -31,11 +31,14 @@ its supporting link. Read it before changing how a turn works.
 | `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
 | `core/proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
 | `core/operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record |
+| `core/completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
+| `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | `advance()`, `build()`, the `AGENTS` table |
 | `prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
+| `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone; `VOICE_AGENCY=access` runs one in `bot.py` |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `tests/` | sixteen assert-script modules, no pytest, no network |
+| `tests/` | seventeen assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -59,7 +62,7 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all sixteen modules, offline, no .env
+uv run python -m tests                                   # all seventeen modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 ```

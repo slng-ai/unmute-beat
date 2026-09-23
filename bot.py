@@ -16,7 +16,9 @@ Then open http://localhost:7860 and talk.
 from __future__ import annotations
 
 # ruff: noqa: E402
+import importlib
 import os
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 
@@ -46,14 +48,29 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 
 from core.graph import model_clients
 from core.processor import PydanticAgentProcessor
-from salon.agents import AGENTS, GREETING
+from core.state import CallContext
+from salon.agents import AGENTS as SALON_AGENTS
+from salon.agents import GREETING as SALON_GREETING
 from salon.diary import Diary
-from salon.models.state import open_call
+from salon.models.state import open_call as open_salon_call
 from utils.observability import setup
 
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
 DIARY = Diary()
 """One salon per process: a booking made on one call is there when the next one rings."""
+AGENCY = os.getenv('VOICE_AGENCY', 'salon')
+"""Which flow answers: `salon`, or an example under `examples/` (`access`, `help`)."""
+
+
+def agency() -> tuple[str, dict, str, Callable[[str], CallContext]]:
+    """The chosen flow's trace name, steps table, greeting and call factory."""
+    if AGENCY == 'salon':
+        return 'salon call', SALON_AGENTS, SALON_GREETING, lambda caller: open_salon_call(caller, diary=DIARY)
+    example = importlib.import_module(f'examples.{AGENCY}')
+    return f'{example.NAME} call', example.AGENTS, example.GREETING, example.open_call
+
+
+NAME, AGENTS, GREETING, OPEN_CALL = agency()
 
 transport_params = {
     'webrtc': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
@@ -143,9 +160,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     is the carrier's on a phone route and a guess until the caller agrees.
     """
     session_id = runner_args.session_id or ''
-    setup(session=session_id, trace_name='salon call')
+    setup(session=session_id, trace_name=NAME)
     stt, tts = speech_services()
-    call = open_call(os.getenv('CALLER_ID', ''), diary=DIARY)
+    call = OPEN_CALL(os.getenv('CALLER_ID', ''))
     agents = PydanticAgentProcessor(call, AGENTS)
     user_aggregator, assistant_aggregator = aggregators(LLMContext())
     pipeline = Pipeline(

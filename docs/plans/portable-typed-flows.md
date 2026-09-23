@@ -570,6 +570,31 @@ with an in-memory fake backend and offline tests:
 **Done when.** All three flows run on the same `core` with no `core` change
 made just for one of them. Anything special-cased is listed here as debt.
 
+### Status (2026-09-23)
+
+Done. `core/steps.py` compiles an ordered list of typed steps (`CollectStep`,
+`ConfirmStep`, `ActionStep`, `ConversationStep`, `End`) into the same node
+table the salon hand-writes, so the same engine, budget, barge-in handling
+and Pydantic graph run it. `core/completion.py` decides "done" from the
+facts only. `examples/access` and `examples/help` import nothing from the
+salon; `bot.py` runs either with `VOICE_AGENCY=access|help`.
+
+`tests/test_examples.py` checks the plan's list: two fields in one sentence
+fill two steps; a yes before the readback, or to a readback spoken over,
+submits nothing; changing the system forgets the level and the eligibility
+check; the receipt says "submitted" and the caller is told it still needs
+approval; a lost answer ends as pending, and the request is really on file;
+the help line answers, stays, makes no interpreter request, and ends on
+goodbye. Every turn of the access request costs one model request.
+
+`core` changes made for the examples, all generic: `OutcomeUnknownError` in
+`core/operations.py`. Nothing was special-cased for one flow.
+
+Debt found: collect steps with more than one required field keep nothing
+until all of them validate together (fine for the one-field steps here); a
+revision goes back to one named step (`on_revise`) rather than to whichever
+fact the caller wants to change.
+
 ---
 
 ## Phase 7: flow files and publish checks

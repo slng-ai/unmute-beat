@@ -190,7 +190,7 @@ def nothing_overrides_a_final_method():
         for sub in found:
             overridden = final & set(vars(sub))
             assert not overridden, f'{sub.__name__} overrides {overridden}'
-            assert not inspect.isabstract(sub) or sub.__name__ in ('ClassifierInterpreter', 'RuleInterpreter')
+            assert not inspect.isabstract(sub) or sub.__module__.startswith('core.'), sub
     assert issubclass(Accept, Decision)
 
 

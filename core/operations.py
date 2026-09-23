@@ -31,6 +31,10 @@ from core.proposals import Proposal
 from core.state import CallContext
 
 
+class OutcomeUnknownError(Exception):
+    """The service may or may not have done it. Never reported as success or as failure; reconcile first."""
+
+
 class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](ABC):
     """A business action: authorised by the caller's answer, executed once, answered with a validated receipt.
 

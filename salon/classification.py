@@ -76,6 +76,7 @@ async def classify_reply(
         request.fallback = True
     finally:
         request.duration = time.perf_counter() - request.started
+    request.labels = result.model_dump_json()
     if call.turn != turn or not call.is_current(generation):
         return ReplyClassification()
     call._classification = result

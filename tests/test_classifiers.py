@@ -19,6 +19,7 @@ from salon import agents, diary
 from salon.classification import CLASSIFIER, classify_reply
 from salon.models.consent import Asked, ReplyClassification
 from salon.models.state import open_call
+from salon.tools.asking import Ask
 from tests.classifier_model import classifier_model
 
 
@@ -160,6 +161,7 @@ async def decisions_and_fallback():
         assert finished.requests == 1 and call.state.writes == 1
         assert call._asked.about == 'closing'
         assert call.requests[0].duration is not None and not call.requests[0].fallback
+        assert call.requests[0].outcome == 'action' and '"confirmation":"accept"' in call.requests[0].labels
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
         assert 'appointment_choice' not in str(call.messages)
         _, finished = await take_turn(call, agents.AGENTS, 'No, thanks.')
@@ -175,7 +177,9 @@ async def decisions_and_fallback():
         with agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=clarify)):
             _, finished = await take_turn(call, agents.AGENTS, 'Yes, if it is free.')
         assert len(seen) == 1 and finished.requests == 2 and not call.state.writes
-        assert call.requests[0].fallback
+        assert not call.requests[0].fallback and call.requests[0].outcome == 'none', (
+            'a conditional answer was understood; the agent carrying on is not a failure'
+        )
         assert sum(isinstance(p, UserPromptPart) for m in seen[0] for p in m.parts) == 1
 
         call = open_call(PHONE)
@@ -186,6 +190,61 @@ async def decisions_and_fallback():
         with agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=answer)):
             _, finished = await take_turn(call, agents.AGENTS, 'When do you open?')
         assert finished.requests == 1 and all(r.kind != 'classifier' for r in call.requests)
+
+
+def pending_readback():
+    call = open_call(PHONE)
+    call.commit(agent='verify')
+    Ask(about='phone', value=PHONE, spoken='Is that right?').put(call)
+    call.note_said('fixed', 'Is that right?', origin='ask')
+    return call
+
+
+async def outcome_is_not_fallback():
+    """The complaint trace: an accepted readback, then a step with no opening, is an action and not a fallback."""
+
+    async def answer(messages, info):
+        yield 'How can I help?'
+
+    concierge = agents.AGENTS['concierge'].agent
+    with classifier_model(), concierge.override(model=FunctionModel(stream_function=answer)):
+        call = pending_readback()
+        _, finished = await take_turn(call, agents.AGENTS, 'Yes.')
+        assert call.state.customer_verified and call.state.agent == 'concierge' and finished.requests == 2
+        classified = call.requests[0]
+        assert classified.kind == 'classifier' and not classified.fallback and classified.outcome == 'action'
+
+        call = pending_readback()
+
+        def elsewhere(phone):
+            return {'customer_phone': '+34600999888', 'customer_status': 'existing'}
+
+        async def guidance(messages, info):
+            yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"correction"}')}
+
+        verify = agents.AGENTS['verify'].agent
+        with (
+            patch.object(call.diary, 'find_or_create_customer', elsewhere),
+            verify.override(model=FunctionModel(stream_function=guidance)),
+        ):
+            await take_turn(call, agents.AGENTS, 'Yes.')
+        assert not call.state.customer_verified
+        assert not call.requests[0].fallback and call.requests[0].outcome == 'refused'
+
+    call = pending_readback()
+
+    def broken(messages, info):
+        return ModelResponse(parts=[TextPart('broken')])
+
+    async def guidance(messages, info):
+        yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"correction"}')}
+
+    with (
+        patch.object(CLASSIFIER, 'model', FunctionModel(broken)),
+        agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=guidance)),
+    ):
+        await take_turn(call, agents.AGENTS, 'Yes.')
+    assert call.requests[0].fallback and call.requests[0].outcome == 'none'
 
 
 async def binding_failures_and_late_results():
@@ -274,6 +333,7 @@ async def main():
     await generic_contracts()
     await invalid_answers_and_cancellation()
     await decisions_and_fallback()
+    await outcome_is_not_fallback()
     await binding_failures_and_late_results()
     await limits_and_barge()
     print('classifiers ok: schemas, validation, accounting, fallback, binding, cancellation')

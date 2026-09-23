@@ -313,6 +313,7 @@ class Turn:
             if self._stale():
                 return
             retained_before = call.turn in call._retained_turns
+            requests_before = len(call.requests)
             action = None
             if node.advance:
                 task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
@@ -329,10 +330,11 @@ class Turn:
                 return
             if not retained_before and call.turn in call._retained_turns:
                 prompt = None
+            classified = next((r for r in call.requests[requests_before:] if r.kind == 'classifier'), None)
+            if classified is not None and action is None:
+                classified.outcome = 'none'
             if action is None:
                 action = node.opening(call)
-            if call.requests and call.requests[-1].kind == 'classifier':
-                call.requests[-1].fallback = action is None
             if action is not None:
                 if self._stale():
                     return
@@ -348,9 +350,14 @@ class Turn:
                 if self._stale():
                     yield RunEnded(node.agent.name or call.state.agent)
                     return
+                decided = classified if classified is not None and not classified.outcome else None
                 try:
                     output = await action.run()
+                    if decided is not None:
+                        decided.outcome = 'action'
                 except ModelRetry as error:
+                    if decided is not None:
+                        decided.outcome = 'refused'
                     call.retain_action(action.name, {'refused': str(error)})
                     call._return_status = (
                         f'{call._return_status} Application action {action.name} refused: {error}'.lstrip()

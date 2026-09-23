@@ -131,6 +131,8 @@ async def one_trace_per_call():
     assert agents.attributes['hops'] == 2, agents.attributes
     assert agents.attributes['handoffs'] == 'concierge', agents.attributes
     assert agents.attributes['interrupted'] is False, agents.attributes
+    assert tuple(agents.attributes['classifier_outcome']) == (), agents.attributes
+    assert agents.attributes['classifier_fallback'] is False, agents.attributes
 
     runs = [span for span in finished if span.instrumentation_scope.name == 'pydantic-ai']
     assert runs, 'pydantic-ai emitted nothing; is instrument_all() still called?'

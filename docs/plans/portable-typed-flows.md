@@ -203,10 +203,12 @@ step had to talk".
 1. `core/state.py`, `Request`: keep `fallback` meaning only "the classifier
    request failed or returned nothing usable" (set in
    `salon/classification.py`). Add
-   `outcome: Literal['', 'action', 'refused', 'conversation'] = ''`.
-2. `core/turn.py` `_hops`: stop writing `fallback`. Write `outcome` instead:
-   `action` when a `LocalAction` ran and returned, `refused` when it raised
-   `ModelRetry`, `conversation` when no action applied and an agent ran.
+   `outcome: Literal['', 'action', 'refused', 'none'] = ''` and `labels`
+   (the validated answer as JSON).
+2. `core/turn.py` `_hops`: stop writing `fallback`. Write `outcome` instead,
+   only on the hop that made the request: `action` when the chosen action ran
+   and returned, `refused` when it raised `ModelRetry`, `none` when the
+   interpretation chose nothing and the step carried on.
 3. `core/processor.py:321`: feed `classifier_fallback` from the real fallback
    only. Add `classifier_outcome`.
 4. Put the interpretation labels (not the caller's words) on the span, so a

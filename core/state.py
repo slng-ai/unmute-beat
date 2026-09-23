@@ -115,6 +115,17 @@ class Request:
     kind: Literal['', 'text', 'tool', 'classifier'] = ''
     duration: float | None = None
     fallback: bool = False
+    """The interpretation request failed or its answer was invalid, so nothing was understood."""
+    outcome: Literal['', 'action', 'refused', 'none'] = ''
+    """What the interpretation led to, set by the turn engine on the hop that asked for it.
+
+    `action` ran the application action it chose, `refused` chose one the
+    executor refused, `none` chose nothing and the step carried on. Kept apart
+    from `fallback` so a correct answer followed by ordinary conversation is
+    never counted as a failure to understand.
+    """
+    labels: str = ''
+    """The validated interpretation as JSON, for traces. Never the caller's words."""
 
     @property
     def ttft(self) -> float | None:

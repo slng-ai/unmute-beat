@@ -320,6 +320,8 @@ class PydanticAgentProcessor(FrameProcessor):
                             span.set_attribute(
                                 'classifier_fallback', any(r.fallback for r in classifications)
                             )
+                            span.set_attribute('classifier_outcome', [r.outcome for r in classifications])
+                            span.set_attribute('classifier_labels', [r.labels for r in classifications])
                             timed = [(r.ttft, r.kind) for r in self._call.requests if r.ttft is not None]
                             span.set_attribute('request_ttft', [ttft for ttft, _ in timed])
                             span.set_attribute('request_first_output', [kind for _, kind in timed])

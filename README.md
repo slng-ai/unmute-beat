@@ -76,7 +76,7 @@ Tests: `uv run python -m tests`. Offline, no `.env`, no network.
 bot.py                  the Pipecat pipeline, and nothing else
 core/
   state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
-  graph.py              Node, Exit, LocalAction, route, moved_by
+  graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
   classifiers.py        generic Pydantic input/output classification in one request
   policies.py           TurnBudget, the hooks, pick, schema_tool
   history.py            what each provider request is sent
@@ -397,6 +397,21 @@ and proposal. Both paths share request limits and the turn deadline.
 Cancellation retains accepted input, excludes classifier JSON from dialogue
 history and discards superseded results. Pydantic validates the shape of the
 answer; semantic accuracy still needs evaluation.
+
+When `advance()` declines, a step that was just entered can still open
+without a model. Each step declares its `openings` in the `AGENTS` table.
+An opening names the entry it answers (a handoff, or a prerequisite's
+return), a guard over the call, and the executor the model's tool uses.
+
+- `verify`, entered by a handoff: read back the carrier's number, or ask
+  for one when there is none.
+- `booking`, back from verification: offer times for the request the front
+  desk typed into `hand_over(booking=...)`.
+
+The booking prompt also shows the times just offered, with their slot ids.
+So a caller picking one costs one request (`save_booking`), not a diary
+re-read first. One model round trip costs about 0.8s on this setup, so a
+turn only stays under 1.1s with one request at most.
 
 ### Next: change the inference engine, preserve the contract
 

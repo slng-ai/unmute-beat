@@ -5,6 +5,10 @@ run on the model's say-so. `_authorised` is what stands between the two: the
 caller either agreed to a readback of this exact write, named exactly one of
 the times just offered to them, or answered the move-or-add question in their
 own words. The model supplies none of those.
+
+The step's opening is here too: resumed after verification with the
+request the caller made at the front desk, it offers times for it without a
+model re-reading that request, because the words are already typed.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from typing import Literal
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from core.graph import Opening
 from core.policies import claim_or_refuse, pick
 from core.state import present
 from salon.classification import classify_reply
@@ -71,7 +76,16 @@ async def read_diary(
             read the morning.
     """
     claim_or_refuse(ctx, ACTIONS)
-    call = ctx.deps
+    return await find_times(ctx.deps, when, service, at)
+
+
+async def find_times(call: SalonCall, when: str, service: Service | Literal['any'], at: str = '') -> Slots:
+    """The read itself. Shared by `read_diary`, `offer_times` and the booking step's opening.
+
+    A new read replaces whatever was on the table, so it empties `offered`,
+    and it is what the front desk's carried request was waiting for, so it
+    consumes `wanted`.
+    """
     if not present(call.state.customer_verified):
         raise ModelRetry(
             'The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.'
@@ -87,7 +101,7 @@ async def read_diary(
             prefer=resolve_time(at or call.heard),
         )
     )
-    call.commit(booking_day=found.date)
+    call.commit(booking_day=found.date, offered=[], wanted=None)
     return found
 
 
@@ -133,9 +147,25 @@ async def offer_times(
         service: The requested service.
         at: The caller's time or daypart, if given.
     """
-    found = await read_diary(ctx, when, service, at)
-    if found.slots:
-        times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in found.slots[:3])
+    claim_or_refuse(ctx, ACTIONS)
+    return await offer(ctx.deps, when, service, at)
+
+
+_OFFERED = 3
+"""How many times one offer speaks. More is a list nobody on a phone remembers."""
+
+
+async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> str:
+    """Read the diary and speak the first few free times. Shared by `offer_times` and the booking step's opening.
+
+    What was spoken is recorded, ids and all, so the turn the caller picks one
+    can go straight to `save_booking` rather than re-reading the diary to find
+    the id of a time they have already been told.
+    """
+    found = await find_times(call, when, service, at)
+    spoken = found.slots[:_OFFERED]
+    if spoken:
+        times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in spoken)
         text = f'For a {spoken_service(service)} on {found.day}, I have {times}. Which time works for you?'
     else:
         text = {
@@ -143,8 +173,9 @@ async def offer_times(
             'past': 'That date has already passed. Which future day would you like?',
             'closed': 'The salon is closed that day. Which other day works for you?',
         }.get(found.status, 'There are no available times for that request. Which other day works for you?')
-    ctx.deps.answered()
-    await ctx.deps.speak_now(text, origin='guidance')
+    call.commit(offered=spoken)
+    call.answered()
+    await call.speak_now(text, origin='guidance')
     return text
 
 
@@ -449,7 +480,13 @@ async def write_booking(
         action=action,
     )
     going_back_to = call.resume('concierge')
-    call.commit(appointment=appointment, agent=going_back_to, writes=call.state.writes + 1, unresolved=None)
+    call.commit(
+        appointment=appointment,
+        agent=going_back_to,
+        writes=call.state.writes + 1,
+        unresolved=None,
+        offered=[],
+    )
     call.retain_action('save_booking', written.model_dump(mode='json'))
     await close_with(
         call,
@@ -459,3 +496,23 @@ async def write_booking(
         ),
     )
     return f'{written.status}: {written.spoken}'
+
+
+def _resuming_a_request(call: SalonCall) -> bool:
+    """Verified just now, for a booking request the front desk typed, with no question waiting on an answer."""
+    return (
+        present(call.state.customer_verified)
+        and call.state.wanted is not None
+        and call.pending_question() is None
+    )
+
+
+async def offer_wanted(call: SalonCall) -> str:
+    """Offer times for the request the caller made before they were verified."""
+    wanted = call.state.wanted
+    assert wanted is not None
+    return await offer(call, wanted.when, wanted.service, wanted.at)
+
+
+OPENINGS = (Opening('offer_times', 'completed', _resuming_a_request, offer_wanted),)
+"""The booking step's arrival back from verification: offer times for what the caller already asked for."""

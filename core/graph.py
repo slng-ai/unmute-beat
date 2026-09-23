@@ -9,16 +9,20 @@ a model.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
 
-from pydantic_ai import Agent
+from loguru import logger
+from pydantic_ai import Agent, ModelRequest
+from pydantic_ai.direct import model_request
 from pydantic_ai.models import Model
+from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.state import VoiceState, present
+from core.state import CallContext, Entry, VoiceState, present
 
 
 class Exit[S: VoiceState](NamedTuple):
@@ -50,6 +54,37 @@ class LocalAction:
 
     name: str
     run: Callable[[], Awaitable[object]]
+
+
+@dataclass(frozen=True)
+class Opening[C: CallContext]:
+    """What a step does first on arrival when the application already knows it.
+
+    A step entered by a handoff or a prerequisite's return usually opens with
+    one predictable output: ask for the number nobody has given, read back the
+    one the carrier supplied, offer times for the request the caller made
+    before being verified. Running a model to choose that output costs a full
+    round trip, about 0.8s, and decides nothing.
+
+    An opening names the entry it answers, a guard over the call, and the same
+    executor the model-facing tool uses, so the fast path and the model path
+    share every check. It is tried only after `advance` has declined, so an
+    answer to a pending question always wins; a refusal from the executor is
+    context for the model run that follows, never a second attempt.
+    """
+
+    name: str
+    """The action's name in traces and budgets: the tool it stands in for."""
+    after: Entry
+    """The entry this answers. A step already running at the start of the turn has entry '' and no opening."""
+    applies: Callable[[C], bool]
+    run: Callable[[C], Awaitable[object]]
+
+    def action(self, call: C) -> LocalAction | None:
+        """This opening as the turn's next action, or None when it does not apply to this call now."""
+        if not self.after or call.entered != self.after or not self.applies(call):
+            return None
+        return LocalAction(self.name, lambda: self.run(call))
 
 
 @dataclass(frozen=True)
@@ -87,19 +122,55 @@ class Node[S: VoiceState]:
     """
     advance: Callable[[Any, RunUsage, UsageLimits], Awaitable[LocalAction | None]] | None = None
     """Resolve a decision within the shared budget, or return None to run the conversational agent."""
+    openings: tuple[Opening[Any], ...] = ()
+    """What this step does on arrival without a model, tried in order after `advance` declines."""
+
+    def opening(self, call: CallContext) -> LocalAction | None:
+        """The first opening that applies to this call on this entry, or None to run the agent."""
+        return next((action for o in self.openings if (action := o.action(call)) is not None), None)
 
 
 @asynccontextmanager
-async def model_clients(nodes: dict[str, Node[Any]]):
-    """Own each distinct provider client once for the session; the SDK reference-counts overlapping sessions."""
+async def model_clients(nodes: dict[str, Node[Any]], warm: bool = False):
+    """Own each distinct provider client once for the session; the SDK reference-counts overlapping sessions.
+
+    `warm` sends each client one single-token request in the background as the
+    session opens. The HTTP connection opens lazily, so without it the first
+    real request of a call pays TCP, TLS and HTTP/2 setup inside its time to
+    first token: measured at 1.05s cold against 0.78s warm on 2026-09-23. The
+    greeting is playing while it runs, so nobody waits on it. It is not traced
+    and not counted: it is not a turn's request.
+    """
     seen = set()
     async with AsyncExitStack() as stack:
+        warming: list[asyncio.Task[None]] = []
         for node in nodes.values():
             model = node.agent.model
             if isinstance(model, Model) and id(model) not in seen:
                 seen.add(id(model))
                 await stack.enter_async_context(model)
-        yield
+                if warm:
+                    settings = node.agent.model_settings
+                    fixed = None if callable(settings) else settings
+                    warming.append(asyncio.create_task(_warm(model, fixed)))
+        try:
+            yield
+        finally:
+            for task in warming:
+                task.cancel()
+
+
+async def _warm(model: Model, settings: ModelSettings | None) -> None:
+    """Open the client's connection with the cheapest request it accepts. A failure only means a cold first turn."""
+    try:
+        await model_request(
+            model,
+            [ModelRequest.user_text_prompt('ok')],
+            model_settings={**(settings or {}), 'max_tokens': 1},
+            instrument=False,
+        )
+    except Exception as error:
+        logger.info('model warm-up failed, the first turn will be cold: {}', type(error).__name__)
 
 
 def route[S: VoiceState](state: S, nodes: dict[str, Node[S]], to: str) -> tuple[str, str | None]:

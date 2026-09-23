@@ -16,7 +16,7 @@ its supporting link. Read it before changing how a turn works.
 |---|---|
 | `bot.py` | the Pipecat pipeline: STT, VAD and smart-turn, TTS, transport, tracing worker, greeting. The only runnable entry point |
 | `core/state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question` |
-| `core/graph.py` | `Node`, `Exit`, `LocalAction`, `route`, `moved_by`, `lent`, `model_clients` |
+| `core/graph.py` | `Node`, `Exit`, `LocalAction`, `Opening`, `route`, `moved_by`, `lent`, `model_clients` |
 | `core/policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
 | `core/history.py` | `paired` and `project`: what each provider request is actually sent |
 | `core/turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |

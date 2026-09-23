@@ -3,16 +3,23 @@
 Two of them are output functions that finish the step: `confirm_customer`
 does the lookup and the graph works out who takes the caller next, and
 `stop_verifying` hands them back unidentified. The others are questions.
+
+The step's two openings are here too: entered to verify somebody for a
+waiting request, it reads back the carrier's number or asks for one without
+a model deciding to, because nothing the caller has said yet could change
+which of the two it is.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import TypeAdapter
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from core.graph import Opening
 from core.policies import claim_or_refuse
 from salon.classification import classify_reply
 from salon.models.receipts import CustomerLookup
@@ -57,16 +64,26 @@ async def verification_guidance(
     topic: Literal['number', 'country', 'incomplete', 'correction', 'unsupported'],
 ) -> str:
     """Ask for missing phone information. For a complete number, use ask_number instead."""
-    text = {
-        'number': 'What phone number should I use, including the country code?',
-        'country': 'Which country is that phone number from?',
-        'incomplete': 'Could you give me the remaining digits?',
-        'correction': 'Could you repeat the full number, including the country code?',
-        'unsupported': 'I can look up Spanish phone numbers. Do you have a Spanish number I can use?',
-    }[topic]
-    ctx.deps.answered()
-    await ctx.deps.speak_now(text, origin='guidance')
+    return await guide(ctx.deps, topic)
+
+
+async def guide(
+    call: SalonCall, topic: Literal['number', 'country', 'incomplete', 'correction', 'unsupported']
+) -> str:
+    """Say the fixed question for a missing piece of the number. Shared by the tool and the step's opening."""
+    text = _GUIDANCE[topic]
+    call.answered()
+    await call.speak_now(text, origin='guidance')
     return text
+
+
+_GUIDANCE = {
+    'number': 'What phone number should I use, including the country code?',
+    'country': 'Which country is that phone number from?',
+    'incomplete': 'Could you give me the remaining digits?',
+    'correction': 'Could you repeat the full number, including the country code?',
+    'unsupported': 'I can look up Spanish phone numbers. Do you have a Spanish number I can use?',
+}
 
 
 async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) -> Handoff:
@@ -144,5 +161,55 @@ async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
     """
     claim_or_refuse(ctx, ACTIONS)
     ctx.deps._complaint = None
-    ctx.deps.commit(pending=None)
+    ctx.deps.commit(pending=None, wanted=None)
     return Handoff(to='concierge', because=because, status='unserved')
+
+
+_PHONE_CONTENT = re.compile(
+    r'[+\d]|\b(?:phone|number|digits?|zero|one|two|three|four|five|six|seven|eight|nine|'
+    r'actually|instead|correction|wrong|wait)\b',
+    re.IGNORECASE,
+)
+"""Anything in an utterance that might be a number or a correction to one."""
+
+
+def _waiting_for_a_number(call: SalonCall) -> bool:
+    """Interposed for a waiting request, nobody identified, no readback out, and nothing number-like said yet.
+
+    Anything the caller has said that might be digits or a correction sends
+    the turn to the model instead, which is the safe side: combining fragments
+    is the model's job, and a wrong readback costs a whole extra turn.
+    """
+    return (
+        bool(call.state.pending)
+        and not call.state.customer_verified
+        and call.pending('phone') is None
+        and not any(_PHONE_CONTENT.search(words) for words in call._inputs.values())
+    )
+
+
+async def read_back_caller_id(call: SalonCall) -> Ask:
+    """Read back the number the carrier supplied."""
+    return await readback_number(call, call.state.customer_phone)
+
+
+async def ask_for_number(call: SalonCall) -> str:
+    """Ask for a number, when the carrier supplied none."""
+    return await guide(call, 'number')
+
+
+OPENINGS = (
+    Opening(
+        'ask_number',
+        'handoff',
+        lambda call: _waiting_for_a_number(call) and bool(call.state.customer_phone),
+        read_back_caller_id,
+    ),
+    Opening(
+        'verification_guidance',
+        'handoff',
+        lambda call: _waiting_for_a_number(call) and not call.state.customer_phone,
+        ask_for_number,
+    ),
+)
+"""The verify step's arrival: read back the carrier's number if there is one, else ask for it."""

@@ -11,9 +11,11 @@ check fails, we stop and rethink before starting the next phase.
 Any business should be able to describe a phone flow as a short list of typed
 steps (collect, confirm, action, conversation). The app, not the model,
 decides when a step is done and what comes next. The model only reads what the
-caller said and proposes data. The salon stays working the whole way through,
-and we prove the idea on two more very different flows before we let anyone
-write a flow file.
+caller said and proposes data. Pydantic graph owns the flow; our turn engine
+owns the voice work. Everything reusable is a class in `core` that a business
+(the salon today) subclasses or fills in. The salon keeps working the whole
+way through, and we prove the idea on two more very different flows before
+anyone writes a flow file.
 
 ## What we keep, no matter what
 
@@ -26,9 +28,11 @@ write a flow file.
 - `core` imports nothing from `salon`. Only `core/processor.py` imports
   Pipecat.
 - No new dependency without asking. No pytest. Every comment is a docstring.
-- Prompts in `prompts/*.md` are not edited without a live check.
-- One orchestration owner. We do **not** add Pipecat Flows or
-  `pydantic-graph` on top of the current engine.
+- Prompts in `prompts/*.md` and tool docstrings are not edited without a live
+  check.
+- **One flow owner: pydantic graph** (`pydantic_graph` 2.46.0, already locked
+  because Pydantic AI runs on it). We do not add Pipecat Flows, and we do not
+  keep our own step-routing next to the graph once the trial passes.
 
 ## Order of work
 
@@ -37,13 +41,151 @@ write a flow file.
 | 0 | Honest measurement | No | None |
 | 1 | Test cases and a baseline | No | One live eval run |
 | 2 | State solver experiment (salon, behind a switch) | Only when switched on | Live eval runs |
-| 3 | Compare and decide | No | None |
-| 4 | Generic step contract in `core`, salon ported to it | No | None |
-| 5 | Two more example flows | New code only | Live eval runs |
-| 6 | Flow file loader and publish checks | New code only | None |
+| 3 | Compare and pick the default interpreter | No | None |
+| 4 | Reusable base classes in `core`, salon ported onto them | No | None |
+| 5 | Pydantic graph trial: the salon as a graph | No | None |
+| 6 | Two more example flows | New code only | Live eval runs |
+| 7 | Flow files and publish checks | New code only | None |
 
-Phases 0 and 1 are small and safe and can start now. Phase 2 is the real
-question. Phases 4 to 6 only happen if phase 3 says yes.
+Phases 0 and 1 are small and safe and can start now. Phase 3 only decides
+which interpreter is the default. Because interpreters are pluggable classes
+(see below), phases 4 to 7 go ahead whichever one wins.
+
+---
+
+## The class design
+
+This is the target shape. Each phase below says which of these classes it
+adds. The rules behind it:
+
+- **Small base classes, clear jobs.** One class, one responsibility. A base
+  class holds the rule every subclass must follow; a subclass only fills in
+  what differs.
+- **At most two levels of inheritance**: `core` base, then a kind (for example
+  `ConfirmStep`), then the business (for example the salon's step). Anything
+  deeper is done by composition: a step *has* an interpreter and operations,
+  it is not *a kind of* interpreter.
+- **Guards cannot be skipped by a subclass.** The public method that runs the
+  checks is a template method marked `@typing.final` (checked by `ty`), and
+  subclasses override only the protected hook inside it (for example
+  `Operation.run` is final and calls `self._execute`).
+- **Config is frozen and shared, call state is per call.** Steps, operations,
+  interpreters and flows are immutable and built once per flow version.
+  Everything that changes during a call lives on the `CallContext` subclass.
+- **Match the repo's style**: PEP 695 generics (as in
+  `class Classifier[InputT: BaseModel, OutputT: BaseModel]`), Pydantic models
+  for anything validated, frozen dataclasses for plain config, `Protocol` only
+  where a structural type is enough (as `Question` is today).
+- **Tool docstrings are prompt text**, so model-facing tool functions stay as
+  thin functions with their current docstrings; they call the class that does
+  the work.
+
+### Where each class lives
+
+| Module | Classes | Job |
+|---|---|---|
+| `core/proposals.py` | `Proposal`, `ProposalLedger` | What we asked the caller and are waiting on; who it was asked to; whether it was heard in full |
+| `core/decisions.py` | `Decision` and its variants, `DecisionResult` | What the caller's reply means, as typed data |
+| `core/interpreters.py` | `Interpreter` (base), `ClassifierInterpreter`, `RuleInterpreter` | Turning the caller's words into a `Decision` |
+| `core/operations.py` | `Operation` (base), `Receipt` | One business action, with approval and receipt checks built in |
+| `core/completion.py` | `Completion` (base), `FieldsPresent`, `ProposalApproved`, `ReceiptMatched` | "This step's job is done", backed by evidence |
+| `core/steps.py` | `Outcome` types, `Step` (base), `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` | One step of a flow |
+| `core/flow.py` | `Flow`, `FlowRunner`, `Registry` | The steps as a pydantic graph, and one caller turn through it |
+| `core/flowspec.py` | `FlowSpec`, `StepSpec` and one subclass per kind | Flow files (phase 7) |
+
+`core/classifiers.py` (`Classifier`), `core/turn.py` and
+`core/processor.py` stay. `core/graph.py` shrinks and is removed at the end of
+phase 5 if the trial passes. The layout table in `CLAUDE.md` is updated in the
+same commit as each new module.
+
+### The classes in a bit more detail
+
+**`Proposal`** (Pydantic model, frozen, strict). Fields every question has:
+`owner`, `turn`, `spoken`, `value`, `delivered`. Methods: `is_current(call)`
+(right turn, right owner) and `can_be_accepted(call)` (current *and*
+delivered). The salon subclasses it per kind instead of one model with every
+field: `PhoneProposal`, `BookingProposal`, `MoveOrAddProposal`,
+`ComplaintProposal`, `ClosingProposal`. Replaces today's `Asked`.
+
+**`ProposalLedger`** (owned by `CallContext`). `ask(proposal)`,
+`pending(kind) -> P | None` (only acceptable ones), `last() -> Proposal | None`
+(includes interrupted, for the interpreter to read), `consume()`. Moves the
+logic now in `SalonCall.ask`, `pending_question`, `pending` and `answered`
+into `core`.
+
+**`Decision`** (Pydantic models, one per variant, joined by a `kind`
+discriminator). Generic variants in `core`: `Accept`, `Reject`, `Revise`,
+`Clarify(question)`, `SwitchTask(target, current, details)`, `EndCall`,
+`NoDecision`. A business adds its own by subclassing: the salon adds
+`CorrectPhone(digits)` and `ChooseAppointment(choice)`. `DecisionResult[D]`
+holds the decision and an optional short reply.
+
+**`Interpreter[InputT, DecisionT]`** (abstract). The public
+`interpret(call, usage, limits)` is final and does the parts every interpreter
+must do: at most once per turn, cache the answer, drop it if the turn moved on
+or was barged, count the request, and turn a failure into `NoDecision`. That
+is the logic in `classify_reply` today. Subclasses fill in two hooks:
+`_input(call) -> InputT` and `_decide(input) -> DecisionT`.
+- `ClassifierInterpreter` uses a `Classifier` (composition) for one
+  structured model request.
+- `RuleInterpreter` parses without a model: digits, yes/no words, DTMF. It is
+  the floor in phase 3 and the choice for button or keypad input.
+- The salon's interpreters (`SalonConsentInterpreter` for today's four-label
+  classifier, `SalonSolver` for phase 2) are subclasses that only build the
+  input and name the decision type.
+
+**`Operation[ArgsT, ReceiptT]`** (abstract). One business action. Class
+attributes: `name`, `args_type`, `receipt_type`, `needs_approval`. Public
+`run(call, args)` is final and does, in order: claim the one action per reply,
+check the approved proposal matches these exact args (when
+`needs_approval`), call `_execute`, validate the result into `receipt_type`,
+and return the receipt. Subclasses fill in `_execute(call, args)` and
+`proposal(args) -> Proposal` (the words to read back). Salon subclasses:
+`LookupCustomer`, `WriteBooking`, `WriteComplaint`. Today's executor
+functions (`lookup_customer`, `write_booking`, `write_complaint`) become
+one-line calls to these, so the model-facing tools do not change.
+
+**`Completion`** (abstract). `name`, `is_met(call) -> bool`, and
+`depends_on: frozenset[str]` (the facts whose change clears it). Concrete:
+`FieldsPresent(*fields)`, `ProposalApproved(kind)`,
+`ReceiptMatched(operation)`. When an earlier fact changes, the ledger clears
+every completion and approval that depends on it.
+
+**`Outcome`** (frozen dataclasses): `Completed`, `Stay`, `MoveTo(to, reply)`,
+`Ended`. Every step returns one. The graph routes on the outcome **type**
+with `GraphBuilder.match(...)`, so a new step kind never needs a new routing
+rule.
+
+**`Step[C]`** (abstract, frozen). Fields: `id`, `completes`, `operations`,
+`interpreter` (optional), `openings`, `then` (next step id). Public
+`run(ctx) -> Outcome` is final: interpret (if the step has an interpreter),
+act, check completions, else speak. Subclasses fill in the hooks:
+- `CollectStep`: asks for typed fields, done when they validate.
+- `ConfirmStep`: reads back an operation's proposal, done on `Accept` of
+  that exact proposal; `Reject` / `Revise` go to their configured steps.
+- `ActionStep`: runs one `Operation`, done on a matching receipt; an unknown
+  result stays pending, never "failed".
+- `ConversationStep`: answers from knowledge, stays active every turn.
+- `AgentStep`: wraps one of today's Pydantic AI agents and the existing turn
+  engine. This is how the salon's four agents move onto the graph without
+  being rewritten.
+
+**`Flow[C]`** (frozen). `id`, `version`, `steps`, `start`.
+`build() -> pydantic_graph.Graph` registers each step's bound `run` with
+`GraphBuilder.step(call=step.run, node_id=step.id)` and adds a decision per
+step that matches on `Outcome` types. `render()` returns the Mermaid diagram
+(`Graph.render()`). `validate()` runs `build(validate_graph_structure=True)`
+plus our own checks (phase 7).
+
+**`FlowRunner`**. Runs one caller turn: `Graph.iter()`, then
+`override_next([GraphTaskRequest(current_step, ...)])` to start at the step
+the caller is in, then `next()` step by step. Between steps it checks barge-in,
+staleness and the turn budget, the same checks `Turn._hops` does today. It
+stops on `Stay` or `Ended`. Pydantic graph 2.46.0 has no save-and-resume, so
+the current step lives on the call state and each turn is a fresh short run.
+
+**`Registry`**. Named `Operation`s, `Interpreter`s, knowledge sources and
+checks. A flow (code or file) can only refer to things by name through it.
 
 ---
 
@@ -60,19 +202,19 @@ step had to talk".
 
 1. `core/state.py`, `Request`: keep `fallback` meaning only "the classifier
    request failed or returned nothing usable" (set in
-   `salon/classification.py`). Add one field for what happened next, for
-   example `outcome: Literal['', 'action', 'refused', 'conversation'] = ''`.
+   `salon/classification.py`). Add
+   `outcome: Literal['', 'action', 'refused', 'conversation'] = ''`.
 2. `core/turn.py` `_hops`: stop writing `fallback`. Write `outcome` instead:
    `action` when a `LocalAction` ran and returned, `refused` when it raised
    `ModelRetry`, `conversation` when no action applied and an agent ran.
-3. `core/processor.py:321`: keep the `classifier_fallback` span attribute
-   but feed it from the real fallback only. Add `classifier_outcome`.
-4. Add the interpretation result itself to the span (the labels, not the
-   caller's words), so a trace shows three separate things: what the model
-   understood, what the app allowed, and what the backend said.
+3. `core/processor.py:321`: feed `classifier_fallback` from the real fallback
+   only. Add `classifier_outcome`.
+4. Put the interpretation labels (not the caller's words) on the span, so a
+   trace shows three separate things: what the model understood, what the app
+   allowed, and what the backend said.
 
 **Tests.** Extend `tests/test_classifiers.py::decisions_and_fallback` with the
-case from the complaint trace: classifier says `accept` on a phone readback,
+case from the complaint trace: `accept` on a phone readback,
 `confirm_customer` runs, the next step has no opening. Assert `fallback` is
 false and `outcome` is `action`. Add a refused case and a failed-request case.
 Update `tests/test_traces.py` for the new attribute.
@@ -89,10 +231,10 @@ design is better. We need the same cases run against every candidate.
 
 **Changes.**
 
-1. New file `evals/cases.py`: a typed list of cases (a Pydantic model per
-   case: step, pending proposal, whether it was interrupted, prior speech,
-   caller text, expected decision, expected state change, expected request
-   count). Start with about 60, grouped by kind:
+1. New `evals/cases.py`: a `Case` Pydantic model (step, pending proposal,
+   delivered or not, prior speech, caller text, expected decision, expected
+   state change, expected request count) and a list of about 60, grouped by
+   kind:
    - clear yes / no, in English and Spanish;
    - conditional yes ("yes, if it's under twenty");
    - yes plus a question;
@@ -102,30 +244,28 @@ design is better. We need the same cases run against every candidate.
    - stale proposal (answer two turns late);
    - mixed intents ("yes, and also I want to complain");
    - goodbye vs "no thanks" vs "no, but...".
-   Labels are written and reviewed by a person. Seed them from real
-   Langfuse traces where we can, not only made-up lines.
-2. `evals/consent.py`: read cases from `evals/cases.py` instead of its own
-   inline list. Report, per case kind: semantic accuracy, false accept,
-   request count, and request time. Keep it opt-in and billable only when
-   run on purpose.
-3. An offline replay in `tests/` that runs every case through
-   `take_turn` with a `FunctionModel` returning the labelled answer. This
-   checks the **app side** (guards, state changes, request counts) with no
-   network. It will catch a design that skips a mandatory step even when the
-   model is right.
+   Labels are written and reviewed by a person, seeded from real Langfuse
+   traces where we can.
+2. `evals/consent.py`: read cases from `evals/cases.py`. Report per case kind:
+   semantic accuracy, false accept, request count, request time. Stays opt-in
+   and billable only when run on purpose.
+3. An offline replay in `tests/` that runs every case through `take_turn`
+   with a `FunctionModel` returning the labelled answer. It checks the **app
+   side** (guards, state changes, request counts) with no network, and will
+   catch a design that skips a mandatory step even when the model is right.
+   Written against the `Interpreter` interface from the start, so phases 2
+   and 3 reuse it unchanged.
 
-**Done when.** One live baseline run of the current classifier is saved (as a
-JSON file under `evals/results/`, git-ignored or committed, our choice) and
-the offline replay passes for the current code. That baseline is the number
-phase 3 compares against.
+**Done when.** One live baseline run of the current classifier is saved under
+`evals/results/` and the offline replay passes on the current code.
 
 ---
 
 ## Phase 2: the state solver experiment
 
-**Why.** The research's best idea: one structured request that both
-understands the reply and proposes the next move, so a correction or a task
-switch costs one request instead of two or three. Today:
+**Why.** One structured request that both understands the reply and proposes
+the next move, so a correction or a task switch costs one request instead of
+two or three:
 
 | Turn | Now | Goal |
 |---|---|---|
@@ -135,278 +275,268 @@ switch costs one request instead of two or three. Today:
 | Switch during an interrupted readback | 2 | 1 |
 | Ordinary question | 1 | 1 (no solver in front) |
 
-It is only used where there is a pending question (delivered or
-interrupted). It is **not** put in front of every agent reply.
+It runs only where there is a pending question (delivered or interrupted),
+never in front of every agent reply. It sits behind a switch in
+`salon/classification.py`, so today's path stays the default.
 
-It sits behind a switch (a module constant or env var in
-`salon/classification.py`), so the current path stays the default and both
-can run on the same cases.
+This phase is where the first reusable classes appear, built small and only
+as far as the experiment needs: `Decision` and its variants, `Interpreter`,
+`ClassifierInterpreter`, and `SalonSolver`. Today's classifier is wrapped as
+`SalonConsentInterpreter` so both run through the same interface.
 
-### 2a. Input and output models (`salon/models/consent.py`)
+### 2a. Input and decisions
 
 - `SolverInput` (frozen, `extra='forbid'`): caller text, last thing we said,
-  active step, owner phone, the pending proposal with a `delivered: bool`
-  (false when interrupted), a small list of allowed destinations (name, one
-  line of purpose, what they need), and the relevant facts (for example the
-  number read back, so "last three are 123" can be applied).
-- `Decision`: a discriminated union on `kind`, one variant per legal move,
-  each with only the fields it needs:
-  - `accept` (no fields) — only valid when the proposal was delivered;
-  - `reject`;
-  - `correct_phone` with `digits: str` (a candidate, not a verified number);
-  - `choose_appointment` with `choice: Literal['move', 'add']`;
-  - `switch_task` with `target`, `current: Literal['abandon', 'pause']`,
-    and optional `details`;
-  - `clarify` with a short question;
-  - `end_call`;
-  - `none` (nothing to decide; let the agent talk).
-- `SolverResult`: `decision: Decision` and an optional short `reply` that is
-  only spoken for moves that do not need a fixed line (`switch_task`,
-  `clarify`). Readbacks and confirmations stay worded by code.
-- Build the destination list from `AGENTS` and the step's exits, not by hand,
-  so it cannot drift from the graph.
+  active step, owner phone, the last proposal with `delivered`, the allowed
+  destinations (name, one line of purpose, what they need, built from
+  `AGENTS` and the step's exits so it cannot drift), and the relevant facts
+  (for example the number read back, so "last three are 123" can be applied).
+- Decisions: `Accept`, `Reject`, `CorrectPhone(digits)`,
+  `ChooseAppointment(choice)`, `SwitchTask(target, current, details)`,
+  `Clarify(question)`, `EndCall`, `NoDecision`, joined by
+  `Field(discriminator='kind')`.
+- `SolverResult = DecisionResult[SalonDecision]`: the decision plus an
+  optional short reply, only spoken for `SwitchTask` and `Clarify`. Readbacks
+  and confirmations stay worded by code.
+- Check early that Gemini's native schema accepts the union. If it does not,
+  use one flat model with a `kind` enum and optional fields, checked by a
+  `model_validator`, and keep the same `Decision` classes on our side.
 
-Use Pydantic's `Field(discriminator='kind')`. `Classifier` already wants an
-object at the top level, which `SolverResult` is. Check early that the Gemini
-native schema accepts the union (`oneOf` with a `const` tag); if it does not,
-fall back to one flat model with a `kind` enum and optional fields, validated
-by a `model_validator`.
+### 2b. Dispatch
 
-### 2b. Dispatch (`salon/agents.py`, new `solve()` next to `advance()`)
+A `SalonSolver.dispatch(call, result) -> LocalAction | None` maps each
+decision to an **existing** executor. No new write paths.
 
-Map each decision to an **existing** executor. No new write paths.
+- `Accept` → the same branches `advance()` has today.
+- `CorrectPhone` → validate with the phone shape, then
+  `readback_number(call, digits)`. It replaces the pending phone question and
+  clears identity-based approval. Unclear digits → `Clarify`.
+- `ChooseAppointment` → the existing `move_or_add` branch.
+- `SwitchTask` → a new `switch_task` executor in `salon/tools/desk.py`: check
+  the target is a legal exit now, drop the pending proposal, keep complaint
+  details, commit the move with `route()` so prerequisites and checkpoints
+  still apply. It never cancels an existing appointment, and refuses while a
+  write with an unknown result is in flight. Added to `ACTIONS`.
+- `EndCall` → `end_conversation`.
+- `Clarify` → speak the reply, keep the question pending.
+- `NoDecision` or a failed request → the agent runs, as today.
 
-- `accept` → the same branches `advance()` has today
-  (`lookup_customer`, `write_booking`, `write_complaint`).
-- `correct_phone` → validate with the existing phone shape, then
-  `readback_number(call, digits)`. This replaces the pending phone question
-  and clears any identity-based approval. Unclear digits → `clarify`.
-- `choose_appointment` → existing `move_or_add` branch.
-- `switch_task` → a new executor `switch_task(call, target, current, details)`
-  in `salon/tools/desk.py` that: checks `target` is a legal exit now,
-  drops the pending proposal, keeps complaint details if given, commits the
-  step change with `route()` so prerequisites and checkpoints still apply,
-  and returns the new result type from 2c. It never cancels an existing
-  appointment. If a write is in flight with an unknown result, it refuses and
-  says so.
-- `end_call` → `end_conversation` as today.
-- `clarify` → speak the reply, keep the question pending.
-- `none` / failed request → fall through to the agent, same as today.
-
-Rules the dispatcher checks, not the model:
-
-- `accept` on an interrupted or stale proposal is turned into `none`.
-- The result is dropped if the turn moved on (`call.is_current(generation)`),
-  as `classify_reply` does now.
-- Cache per turn, like `classify_reply`, so a tool retry cannot ask twice.
-- `switch_task` goes in `ACTIONS` so `one_action_per_reply` and
-  `tests/test_flow.py` see it.
+The base `Interpreter.interpret` already turns `Accept` on an interrupted or
+stale proposal into `NoDecision`, drops results from a turn that moved on,
+and caches per turn.
 
 ### 2c. A move that ends the turn (`core/turn.py`, `core/state.py`)
 
-Today a `Handoff` always runs the next step's agent in the same turn. That
-extra request is exactly what we want to remove.
-
-- Add a small result type in `core/state.py`, for example
-  `Transition(to, because, reply)`, or a flag on `Handoff`
-  (`ends_turn: bool = False`). Pick whichever needs fewer special cases in
-  `_hops`; lean toward the flag so routing code is shared.
-- In `_hops`: route and commit exactly as for a normal handoff (same
-  `route()`, checkpoint, `call.commit(agent=..., pending=...)`, barge and
-  staleness checks). Then, instead of looping, speak the reply and return.
-- If the new step has an opening for this entry, prefer the opening over the
-  generated reply: it is code-worded and costs nothing.
-
-This belongs in `core` because any flow will want it. Keep it free of salon
-words.
+Today a `Handoff` always runs the next step's agent in the same turn. Add
+`ends_turn: bool = False` to `Handoff`. `_hops` routes and commits exactly as
+for a normal handoff (same `route()`, checkpoint, barge and staleness
+checks), then speaks the reply and returns instead of looping. If the new
+step has an opening for this entry, the opening wins: it is code-worded and
+free. In phase 5 this becomes the `MoveTo(to, reply)` outcome.
 
 ### 2d. Interrupted proposals
 
-`SalonCall.pending_question()` hides interrupted readbacks, which is right for
-consent. The solver still needs to see them to handle "no wait, it's 123".
-Add `SalonCall.last_proposal()` that returns the question plus a `delivered`
-flag. The solver gets that. Authorization still uses `pending_question()`
-only, so an interrupted proposal can never be accepted.
+`pending_question()` hides interrupted readbacks, which is right for consent.
+The solver still needs to see them to handle "no wait, it's 123". Add
+`SalonCall.last_proposal()` (becomes `ProposalLedger.last()` in phase 4).
+Authorization still uses `pending_question()` only.
 
-### 2e. Tests (offline, no network)
+### 2e. Tests (offline)
 
-- All phase 1 cases through `solve()` with a `FunctionModel`.
-- Must-never tests: accept on interrupted proposal does not write; accept on
-  stale proposal does not write; `switch_task` to a step whose prerequisite is
-  missing goes through `verify`; `correct_phone` never sets
-  `customer_verified`; switching away from booking never cancels a booking;
-  a barge during the solver request leaves state untouched.
-- Request count tests for each row of the table above.
-- `tests/test_core.py` still passes (no Pipecat import outside the
-  processor; `turn` and `processor` agree).
+- All phase 1 cases through both interpreters with a `FunctionModel`.
+- Must-never tests: accept on an interrupted or stale proposal does not
+  write; `SwitchTask` to a step whose prerequisite is missing goes through
+  `verify`; `CorrectPhone` never sets `customer_verified`; leaving booking
+  never cancels a booking; a barge during the solver request changes nothing.
+- A request count test per row of the table above.
+- `tests/test_core.py` still passes.
 
-**Done when.** Offline suite is clean with the switch on and off, and one
-live eval run of the solver is saved next to the baseline.
+**Done when.** The offline suite is clean with the switch on and off, and one
+live solver run is saved next to the baseline.
 
 ---
 
-## Phase 3: compare and decide
+## Phase 3: compare and pick the default interpreter
 
-Run the same cases on: (a) current classifier, (b) state solver, and
-(c) plain parsing where the input allows it (digits, yes/no words), as a
-floor.
-
-Measure and report each on its own line, never merged:
+Run the same cases on `SalonConsentInterpreter`, `SalonSolver`, and a
+`RuleInterpreter` floor. Report each on its own line:
 
 - false accept of a proposal that was not approved (must be zero on the
   reviewed set);
 - mandatory steps skipped (must be zero);
 - task success over full scripted conversations;
 - unneeded "could you say that again";
-- requests per turn and tokens per turn;
-- time from end of caller speech to first audio, from local voice calls with
-  Langfuse, not just request time.
+- requests and tokens per turn;
+- time from end of caller speech to first audio, from local voice calls.
 
-**Go** if the solver has no more false accepts than the baseline, no skipped
-steps, and clearly fewer requests on correction and switch turns without
-slowing plain "yes" turns by more than about 150 ms at the median. Otherwise
-keep the current classifier, keep phase 0 and phase 1, and write down why.
-
-Write the result into this file (or a short follow-up note) with the real
-numbers.
+The solver becomes the default if it has no more false accepts than the
+baseline, no skipped steps, and clearly fewer requests on correction and
+switch turns without slowing plain "yes" turns by more than about 150 ms at
+the median. Otherwise the current classifier stays the default. Either way
+the other one stays available as a class. Write the real numbers into this
+file.
 
 ---
 
-## Phase 4: a generic step contract in `core`
+## Phase 4: reusable base classes in `core`
 
-Only after a "go". No change in how the salon behaves; this is a move, not a
+No change in how the salon behaves. This is a move into classes, not a
 rewrite.
 
-**Add to `core/graph.py`** (or a new `core/flow.py` if `graph.py` grows too
-big):
+**Add:** `core/proposals.py`, `core/operations.py`, `core/completion.py`,
+and finish `core/decisions.py` and `core/interpreters.py` from phase 2.
 
-- `Completion[C]`: a named check over the call that says "this step's job is
-  done", backed by evidence (validated fields, an approved current proposal,
-  or a matching receipt). A plain callable with a name, like `Exit.guard`.
-- `Node.completes: tuple[Completion, ...]` and `Node.then: str` (next step
-  once complete). `_hops` checks completion after an action and moves on in
-  code. No model decides "what's next" once a step is done.
-- `Node.solver`: the optional interpreter from phase 2, generalised: a
-  `Classifier` plus a function that builds its input from the call and a
-  dispatch table from decision kind to `LocalAction`. Replaces the salon-only
-  `advance` field; `advance` stays as an alias until the salon is moved over.
-- A generic `Proposal` base (owner, turn, spoken, value, delivered) in
-  `core/state.py`. The salon's `Asked` becomes a subclass per kind (phone,
-  booking, complaint, closing) instead of one model with every field.
-  Pending-question tracking moves from `SalonCall` into `CallContext`.
+**Port the salon:**
 
-**Move out of `salon.agents.build`:**
+- `Asked` → `Proposal` subclasses. `SalonCall`'s question logic moves into
+  `ProposalLedger` on `CallContext`.
+- `lookup_customer`, `write_booking`, `write_complaint` → `Operation`
+  subclasses. The functions stay as one-line wrappers so tools and their
+  docstrings do not change.
+- `classify_reply` and `advance()` → the interpreter's final `interpret` plus
+  a `dispatch` method.
+- The hard-coded names in `salon.agents.build` (`'complaints'`,
+  `'record_complaint'`, `structured_speech = name in (...)`) become fields on
+  a `StepConfig`, so `build` has no salon words left and can move to `core`.
 
-- the hard-coded names (`'complaints'`, `'record_complaint'`,
-  `structured_speech = name in (...)`) become fields on the step
-  (`structured_speech: bool`, and a per-output "offered when" check);
-- `build` itself becomes a generic `core` builder that takes a registry of
-  tools and outputs; the salon passes its own.
+**Tests.**
 
-**Tests.** Every existing test passes unchanged. Add `tests/test_graph.py`
-checks: a step with completions and `then` advances in code; a failed action
-is never completion; changing an earlier fact clears later completions and
-approvals.
-
-**Known limit we keep.** One pending prerequisite (`route` and
-`Checkpoint`). A flat ten-step list does not need nesting. Nested flows stay
-out of scope.
+- Every existing test passes unchanged.
+- New tests for each base class using a tiny fake business defined inside the
+  test, never the salon, so `core` is proven reusable on its own.
+- A test that fails if a subclass overrides a `@final` method (belt and
+  braces for `ty`).
+- `tests/test_flow.py` keeps scanning for anything that commits state and is
+  not an action, now including `Operation` subclasses.
 
 ---
 
-## Phase 5: prove it on two very different flows
+## Phase 5: pydantic graph trial
 
-A contract proven on one domain is not proven. Add two small example
-packages beside `salon/`, each with an in-memory fake backend and its own
-offline tests:
+**Why.** Pydantic graph can own "which step, is it done, where next"
+instead of our own `Node`, `Exit`, `route`, `moved_by` and the step-to-step
+part of `Turn._hops`.
 
-1. **`examples/access/`**: the ten-step access request from the research
-   (identify, team, system, level, reason, start, end, eligibility check,
-   confirm, submit). Checks: two fields in one sentence fill two steps;
-   approval before the proposal was read out is ignored; changing the system
-   clears the level and the eligibility result; submit needs a matching
-   receipt, and the receipt says "submitted", not "approved"; an unknown
-   backend result stays pending, not "failed".
-2. **`examples/help/`**: one conversation step with a knowledge folder and no
-   solver. Checks: each answer ends the turn; the step stays active; zero
+What we checked in the installed code (`pydantic_graph` 2.46.0):
+
+- `GraphBuilder` builds a graph at runtime from steps and decisions; a step
+  can be any async callable, including a bound method such as `step.run`.
+- `Graph.iter()` + `GraphRun.next()` run one step at a time, and
+  `override_next()` can start at any node or end early.
+- `build(validate_graph_structure=True)` checks the graph's structure.
+- `Graph.render()` gives a Mermaid diagram.
+- Runs create tracing spans on their own.
+- There is **no** save-and-resume, so each caller turn is one short run
+  starting at the current step, and the current step lives on the call state.
+
+**Add:** `core/steps.py` (`Outcome` types, `Step` and its kinds, `AgentStep`)
+and `core/flow.py` (`Flow`, `FlowRunner`, `Registry`).
+
+**Port the salon:** its four agents become four `AgentStep`s in one `Flow`.
+Prerequisites (`requires` / `satisfied_by`) and the one-deep checkpoint become
+graph decisions plus the checkpoint on the call. `FlowRunner` replaces the
+step loop in `_hops`; the per-step voice work in `_speak` stays in
+`core/turn.py`.
+
+**Pass marks (all three):**
+
+1. All test modules pass without changing what they assert.
+2. Barge-in still works: a turn cancelled mid-step leaves state as today,
+   and retained input still carries to the next turn.
+3. `core/flow.py` + `core/steps.py` + what is left of the hop logic is
+   smaller than `core/graph.py` + today's `_hops`.
+
+If all three pass, delete `core/graph.py` and the old hop loop. If not, keep
+the phase 4 classes, drop the graph, and write down why.
+
+---
+
+## Phase 6: prove it on two very different flows
+
+A design proven on one business is not proven. Add two small example packages
+beside `salon/`, each only subclassing and filling in `core` classes, each
+with an in-memory fake backend and offline tests:
+
+1. **`examples/access/`**: the ten-step access request (identify, team,
+   system, level, reason, start, end, eligibility check, confirm, submit),
+   built from `CollectStep`, `ConfirmStep` and `ActionStep`. Checks: two
+   fields in one sentence fill two steps; approval before the proposal was
+   read out is ignored; changing the system clears the level and eligibility
+   (`Completion.depends_on`); submit needs a matching receipt that says
+   "submitted", not "approved"; an unknown backend result stays pending.
+2. **`examples/help/`**: one `ConversationStep` with a knowledge folder and no
+   interpreter. Checks: each answer ends the turn; the step stays active; zero
    classifier requests on ordinary questions; goodbye still ends the call.
 
-`bot.py` stays the only runnable entry point. Pick the flow with an env var
+`bot.py` stays the only runnable entry point; pick the flow with an env var
 (default `salon`).
 
 **Done when.** All three flows run on the same `core` with no `core` change
-made just for one of them. Anything that had to be special-cased is listed
-here as debt.
+made just for one of them. Anything special-cased is listed here as debt.
 
 ---
 
-## Phase 6: flow files and publish checks
+## Phase 7: flow files and publish checks
 
-Only after phase 5.
+**Format.** JSON first, since Pydantic reads it with no new dependency. YAML
+is nicer to write and `pyyaml` is already in `uv.lock` as an indirect
+dependency, but making it direct needs a yes from the team first.
 
-**Format.** JSON first, since `pydantic` reads it with no new dependency.
-YAML is nicer to write, and `pyyaml` is already in `uv.lock` as an indirect
-dependency, but making it a direct dependency needs a yes from the team first.
+**Add `core/flowspec.py`:**
 
-**New `core/flowspec.py`:**
+- `FlowSpec(version: Literal[1], id: str, steps: list[StepSpec])`, strict (no
+  unknown fields).
+- `StepSpec` is a discriminated union on `kind`: `CollectSpec`,
+  `ConfirmSpec`, `ActionSpec`, `ConversationSpec`. Each has one method,
+  `to_step(registry) -> Step`, so compiling is polymorphic, not a long
+  if-chain, and a new step kind is one new pair of classes.
+- `FlowSpec.compile(registry) -> Flow`. Use `Agent.from_spec` only for the
+  agent part (model, instructions), never for flow logic.
 
-- `FlowSpec(version: Literal[1], id: str, steps: list[Step])` with
-  `model_config = STRICT` (no unknown fields).
-- `Step` is a discriminated union on `kind`:
-  `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, each with
-  `id`, and only the fields that kind needs (`fields` and `question`;
-  `proposal`, `on_reject`, `on_revise`; `handler`, `approval`, `on_error`;
-  `knowledge`, `instructions`).
-- A `Registry` the developer fills in code: handlers (typed args, readback
-  text, executor, receipt model), knowledge sources, and named checks.
-  Config can only **name** these. It never runs Python.
-- `compile(spec, registry) -> dict[str, Node]`: turns the spec into the same
-  `Node` / `Exit` / `Opening` / `Completion` objects phase 4 made. Use
-  `Agent.from_spec` only for the agent part (model, instructions), never for
-  flow logic.
-
-**Publish checks** (raise before a flow can be used, with a clear message):
+**Publish checks** (`Flow.validate()`, raise before a flow can be used):
 
 - unknown step kind, unknown field, duplicate step id;
-- `on_*` or `then` pointing at a step that does not exist;
-- a handler, knowledge source or check that is not registered;
-- a field reference that does not exist on an earlier step;
-- an action with no confirm step before it, when its handler says it needs
-  approval;
-- a path from start to an action that skips a required step.
+- a destination that does not exist;
+- an operation, interpreter, knowledge source or check that is not in the
+  `Registry`;
+- a field reference that no earlier step collects;
+- an `ActionSpec` whose operation `needs_approval` with no `ConfirmSpec` for
+  it before it;
+- any path from start to an action that skips a required step;
+- plus pydantic graph's own structure check.
 
 **Runtime.** Compile once per published version and share it. Each call pins
-the version it started on. State stays per call.
+the version it started on.
 
 **Tests.** Write the salon, access and help flows as spec files; assert each
-compiles to nodes that behave the same as the hand-written ones on the phase 1
-and phase 5 cases. One test per publish check, with a broken spec.
+behaves the same as the code-built flow on the phase 1 and phase 6 cases. One
+test per publish check, with a broken spec.
 
 ---
 
 ## Out of scope for this plan
 
-- Adopting Pipecat Flows or `pydantic-graph` as the engine. Revisit only if a
-  second real product shows it would remove a lot of our own code.
+- Pipecat Flows as the engine.
 - Durable storage, multi-worker locks, and resuming a call after a restart.
-  Needed for production, but a separate project. Backend writes should still
-  be idempotent when we get there.
-- A visual flow editor. The spec format should be easy to show as a short
-  list, but building the editor comes later.
+  Needed for production, but a separate project. Backend writes should be
+  idempotent when we get there.
+- A visual flow editor. `Flow.render()` gives a diagram to start from.
 - Fixing speech-to-text mistakes. A better interpreter does not fix bad input.
 - Replacing the remaining language heuristics (`times_named`, complaint word
-  list). Tracked as known debt; the solver may make some of them unneeded.
+  list). Tracked as known debt.
 
 ## Risks and how we handle them
 
 | Risk | What we do |
 |---|---|
-| The solver says "accept" when the caller did not agree | Zero false accepts on the reviewed set is a hard gate; guards still check identity, freshness and the exact proposal |
-| A bigger request is slower on plain "yes" turns | Measure per case kind; keep the old path for plain confirms if needed |
-| Gemini rejects the union schema | Flat model with a `kind` enum plus a validator (2a) |
-| A generated reply says something that did not happen | Replies only on `switch_task` and `clarify`; success lines come from receipts; the guarded clause check in `_hops` still runs |
-| The generic layer grows faster than it helps | Phase 5 gate: if the two new flows need `core` hacks, stop and simplify |
-| Prompt drift | Prompts are moved, not edited; any wording change gets a live check |
+| The solver says "accept" when the caller did not agree | Zero false accepts on the reviewed set is a hard gate; `Operation.run` still checks identity, freshness and the exact proposal |
+| A bigger request is slower on plain "yes" turns | Measure per case kind; interpreters are pluggable per step |
+| Gemini rejects the union schema | Flat model plus a validator on the wire; same `Decision` classes in code |
+| A generated reply says something that did not happen | Replies only on `SwitchTask` and `Clarify`; success lines come from receipts; the guarded clause check still runs |
+| Too many classes, too little gain | Two levels of inheritance at most; phase 5 pass mark 3 (less code) and phase 6 gate (no special cases) |
+| A subclass skips a guard | Guards live in `@final` template methods; a test checks nothing overrides them |
+| Pydantic graph cannot handle barge-in cleanly | Phase 5 pass mark 2; fall back to the phase 4 classes on our own loop |
+| Prompt drift | Prompts and tool docstrings are moved, not edited; any wording change gets a live check |
 
 ## Check before every push
 

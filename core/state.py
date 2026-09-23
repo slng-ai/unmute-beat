@@ -65,6 +65,8 @@ def present(value: object) -> bool:
     return value is not None and value != ''
 
 
+_FILLERS = frozenset({'entry', 'tool_filler'})
+"""Lines that cover a silence and answer nothing: hearing one does not end the caller's turn."""
 _WORD = re.compile(r"[\w']+")
 
 
@@ -505,26 +507,29 @@ class CallContext(BaseModel):
                 segment.interrupted = True
 
     def continues_turn(self) -> bool:
-        """Whether the caller's next words continue this turn, because nothing of the agent's answer reached them yet.
+        """Whether the caller's next words continue this turn: they cut in before any answer to it had played to its end.
 
-        A turn is over when the caller has heard the agent answer it. Until
-        then, whatever the caller says next is more of the same utterance:
-        "Yes, please." and "That sounds perfect." cut apart by a pause are one
-        reply to the question before them, not a reply and then a remark.
+        When the caller stops is the runtime's call (its endpointing), and it
+        stops on every pause. What the harness owns is what happens when they
+        go on: the pieces accumulate into one utterance, so "+34" and "611 111
+        111" are one number and "Yes, please." and "That sounds perfect." are
+        one reply to the question before them. A caller who talks over the
+        agent's answer to a piece is still talking; a caller who speaks after
+        an answer has played out is answering it.
 
         Both halves are required: the caller must have started speaking again
-        (`note_barge`, or a run cut off), and the answer must not have reached
-        them. With a runtime that reports playback, it reached them when its
-        audio started and something other than a filler had been said.
-        Without one, anything handed to TTS counts as heard, so only a piece
-        cut off before it said anything continues. Either way a missing signal
-        errs towards a new turn, which is how every turn was counted before.
+        (`note_barge`, or a run cut off), and no answer may have played to its
+        end. With a runtime that reports playback, that is a non-filler
+        segment whose audio ran out before the caller cut in. Without one,
+        anything handed to TTS counts as heard, so only a piece cut off before
+        it said anything continues. Either way a missing signal errs towards a
+        new turn, which is how every turn was counted before.
         """
         if self._turn == 0 or not self._pieces or not self._interrupted:
             return False
         said = [s for s in self.spoken if s.text]
         if self._playback_known:
-            return not (self._reached and any(s.origin not in ('entry', 'tool_filler') for s in said))
+            return not any(s.playback == 'played' and s.origin not in _FILLERS for s in said)
         return not said
 
     def retain_input(self) -> None:
@@ -899,34 +904,40 @@ class CallContext(BaseModel):
         A continuation (`continues_turn`) keeps the turn's number, so the
         question the caller is answering is still the one before it, and joins
         the words, so everything that reads `heard` reads the whole reply. The
-        speech the cut-off piece produced never reached the caller, so it is
-        recorded as heard by nobody (its generated text is kept for audit), and
-        the question ledger is rewound to where the turn began. Nothing the
-        caller said is dropped: every piece is in `_pieces`, and `fresh` is
-        what the model has not been sent yet.
+        answer to the cut-off piece is kept as far as the caller heard it:
+        what never started playing is recorded as heard by nobody, what was
+        playing keeps the runtime's estimate, and the generated text stays for
+        audit. The question ledger is rewound to where the turn began. Nothing
+        the caller said is dropped: every piece is in `_pieces`, and `fresh`
+        is what the model has not been sent yet. Either way, what the caller
+        missed of the last speech is said to this piece's runs (`spoken_over`).
         """
         continuing = self.continues_turn()
         self.close_model_text()
+        missed = _missed(self._spoken)
         if continuing:
             for segment in self._spoken:
-                segment.text, segment.interrupted, segment.delivery = '', True, 'runtime-estimate'
+                if segment.playback != 'played':
+                    segment.interrupted = True
+                if segment.playback == 'queued':
+                    segment.text, segment.delivery = '', 'runtime-estimate'
         self._speech_history.extend(self._spoken)
         if continuing:
             logger.info(
-                'turn {} continues with piece {}: nothing of its answer reached the caller',
+                'turn {} continues with piece {}: the caller went on before any answer played out',
                 self._turn,
                 len(self._pieces) + 1,
             )
             self._pieces.append(heard)
             self._proposals.rewind(self)
         else:
-            self._spoken_over = _missed([*self._spoken, *([self._open] if self._open else [])])
             self._turn += 1
             self._pieces = [heard]
             self._attempt = 0
             self._acted = False
             self._proposals.age(self)
             self._proposals.open_turn()
+        self._spoken_over = missed
         self.heard = ' '.join(p for p in self._pieces if p)
         self._inputs[self._turn] = self.heard
         self._interrupted = False

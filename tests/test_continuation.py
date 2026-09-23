@@ -34,7 +34,6 @@ from salon.classification import CLASSIFIER
 from salon.diary import Diary
 from salon.models.consent import ConsentInput, ReplyClassification
 from salon.models.state import open_call
-from salon.tools import identity
 from salon.tools.booking import ask_booking
 
 PHONE = '+34611111111'
@@ -160,6 +159,7 @@ async def a_reply_after_the_answer_played_is_a_new_turn():
         await probe._turn('Hmm, how long does it take?')
         assert call.turn == 2
         call.note_reached()
+        call.note_drained()
         probe.interrupt()
         await probe._turn('Okay.')
     assert call.turn == 3 and call.heard == 'Okay.', (call.turn, call.heard)
@@ -228,80 +228,12 @@ async def a_read_back_cut_off_is_not_agreed_to():
         assert readback.interrupted and (readback.text == '') is not started, readback
 
 
-def verify_call():
-    """A caller in verify who has just been asked for their number, and heard the request in full."""
-    books.reset()
-    books.set_clock(CLOCK)
-    call = open_call('', diary=books)
-    call.commit(agent='verify', pending='booking')
-    call.turn_started('I would like a haircut on Friday.')
-    call.note_said(
-        'fixed', 'Which phone number should I use? Please say it with the country code.', origin='guidance'
-    )
-    call.note_reached()
-    call.note_drained()
-    call.turn_ended(interrupted=False)
-    return call
-
-
-def a_number_cut_off_mid_digits_is_waited_for():
-    """Which words count as a caller stopping in the middle of a number."""
-    call = verify_call()
-    for heard, waits in (
-        ("Yes, please. It's +. 3.", True),
-        ('+34 611.', True),
-        ('+34 611 111 111.', False),
-        ('It is from Spain.', False),
-        ('Yes, please.', False),
-    ):
-        call._pieces = [heard]
-        call.heard = heard
-        assert identity.number_unfinished(call) is waits, heard
-    call.commit(agent='booking')
-    call.heard = 'Friday at 9'
-    assert not identity.number_unfinished(call), 'only verify waits for digits'
-
-
-async def a_number_in_pieces_arrives_as_one_reply():
-    """The K3 loop: "+34." and a pause is waited for, and the rest joins it, so the number is read back once."""
-    for goes_on in (True, False):
-        call = verify_call()
-        probe = Probe(call)
-        heard_by_model: list[str] = []
-
-        async def verify(messages, info, call=call, heard_by_model=heard_by_model):
-            heard_by_model.append(call.heard)
-            digits = ''.join(c for c in call.heard if c.isdigit())
-            if len(digits) == 11:
-                yield {0: DeltaToolCall(name='ask_number', json_args=f'{{"phone":"+{digits}"}}')}
-            else:
-                yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"incomplete"}')}
-
-        with (
-            patch.object(identity, 'UNFINISHED_WAIT', 0.3),
-            agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)),
-        ):
-            probe.interrupt()
-            first = asyncio.create_task(probe._turn("It's +34."))
-            await asyncio.sleep(0.1)
-            assert not heard_by_model, 'answered a caller who had stopped mid-number'
-            if goes_on:
-                probe.interrupt()
-                await asyncio.wait_for(first, 3)
-                await probe._turn('611 111 111.')
-            else:
-                await asyncio.wait_for(first, 3)
-        said = probe.fixed()
-        if goes_on:
-            assert heard_by_model == ["It's +34. 611 111 111."], heard_by_model
-            assert said == ['Let me read that back to you: +34 611 111 111. Have I got that right?'], said
-            assert call.turn == 2
-        else:
-            assert said == ['Please give me the rest of the digits.'], said
-
-
 async def the_next_reply_is_told_what_was_not_heard():
-    """The K5 failure: an answer spoken over is said to the next run as a fact, with what was missed."""
+    """The K5 failure: the caller talks over the first answer with their second question.
+
+    They were still talking, so it is one turn with both questions in it, and
+    the run that answers it is told how far the first answer got.
+    """
     call = booking_call()
     call.commit(agent='concierge')
     probe = Probe(call)
@@ -320,11 +252,46 @@ async def the_next_reply_is_told_what_was_not_heard():
         segment = next(s for s in call.spoken if s.kind == 'model')
         call.note_heard('We do', segment_ids=(segment.id,), interrupted=True)
         await probe._turn('Oh, and when do you close on Saturday?')
-    assert call.turn == 2
+    assert call.turn == 1, call.turn
+    assert call.heard == 'Do you do balayage? Oh, and when do you close on Saturday?', call.heard
+    kept = [s.text for s in call.all_spoken if s.generated.startswith('We do colour')]
+    assert kept == ['We do'], 'what the caller heard of the cut-off answer was lost'
     assert (
         'They heard: "We do". They did not hear: "colour work, but balayage is not on our list."' in seen[-1]
     ), seen[-1]
     assert 'spoke over' not in seen[0]
+
+
+async def a_number_talked_over_arrives_whole():
+    """The K3 loop: the caller goes on with the digits while the agent is asking for the rest.
+
+    When the caller stops is the runtime's endpointing. The harness's part is
+    that they were still talking, so their pieces accumulate and the last
+    piece completes the number, whatever the agent had begun to say.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('', diary=books)
+    call.commit(agent='verify', pending='booking')
+    probe = Probe(call)
+    heard_by_model: list[str] = []
+
+    async def verify(messages, info):
+        heard_by_model.append(call.heard)
+        digits = ''.join(c for c in call.heard if c.isdigit())
+        if len(digits) == 11:
+            yield {0: DeltaToolCall(name='ask_number', json_args=f'{{"phone":"+{digits}"}}')}
+        else:
+            yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"incomplete"}')}
+
+    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
+        await probe._turn("It's +34.")
+        call.note_reached()
+        probe.interrupt()
+        await probe._turn('611 111 111.')
+    assert call.turn == 1 and call.heard == "It's +34. 611 111 111.", (call.turn, call.heard)
+    assert heard_by_model == ["It's +34.", "It's +34. 611 111 111."], heard_by_model
+    assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 111 111. Have I got that right?'
 
 
 async def a_missing_barge_never_merges_turns():
@@ -386,9 +353,8 @@ async def main():
     await an_attempted_write_is_never_authorised_twice()
     await a_read_back_cut_off_is_not_agreed_to()
     await a_missing_barge_never_merges_turns()
-    a_number_cut_off_mid_digits_is_waited_for()
     await the_next_reply_is_told_what_was_not_heard()
-    await a_number_in_pieces_arrives_as_one_reply()
+    await a_number_talked_over_arrives_whole()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

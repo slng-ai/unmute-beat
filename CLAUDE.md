@@ -126,13 +126,15 @@ all clean. Paste the real output; don't round up.
    after stream teardown, even when Pipecat cancels the task. Never slice by
    the original history length. The processor carries input that never entered
    a run to the front of the next turn.
-7. **A caller turn lasts until the agent's answer reaches them.** The runtime
-   closes a turn on every pause, so one sentence often arrives in pieces. A
-   piece that arrives after the caller cut in and before any answer played
-   continues the same turn (`CallContext.continues_turn`): same turn number,
-   `heard` joined, the question ledger rewound, unplayed speech recorded as
-   unheard. `BotStartedSpeakingFrame` is the playback signal; without it the
-   engine errs towards a new turn.
+7. **A caller turn lasts until an answer has played out to them.** When the
+   caller stops is the runtime's endpointing, and it stops on every pause. The
+   harness accumulates: a caller who cuts in before any answer played to its
+   end is still talking, so the piece continues the same turn
+   (`CallContext.continues_turn`): same turn number, `heard` joined, the
+   question ledger rewound, speech kept as far as it was heard. A segment is
+   heard in full only if its audio ran out (`BotStoppedSpeakingFrame`) before
+   the caller cut in. Without playback signals the engine errs towards a new
+   turn.
 
 ## Known debt
 

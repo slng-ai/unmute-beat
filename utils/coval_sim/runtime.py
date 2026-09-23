@@ -1,5 +1,6 @@
 """Child processes this tool starts and stops: the bot and the tunnel."""
 
+import json
 import os
 import re
 import signal
@@ -95,13 +96,31 @@ def answers_http(url: str) -> bool:
     return True
 
 
+def resolves_publicly(host: str) -> bool:
+    """Whether public DNS has an address for host, asked of Cloudflare's resolver over HTTPS.
+
+    Over HTTPS rather than through this machine's resolver, whose cache would
+    remember a lookup made before the host existed as missing.
+    """
+    request = urllib.request.Request(
+        f'https://cloudflare-dns.com/dns-query?name={host}&type=A', headers={'accept': 'application/dns-json'}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as reply:
+            return bool(json.load(reply).get('Answer'))
+    except OSError, ValueError:
+        return False
+
+
 class Tunnel(Process):
     """A cloudflared quick tunnel to a local port: no account, a new host each time.
 
-    Ready means cloudflared says the edge accepted the connection, which can
-    come twenty seconds after it prints the host. Probing the public URL from
-    here instead does not work: a lookup made before the host exists is cached
-    as missing, and the probe keeps failing long after Coval could reach it.
+    Ready means two things. cloudflared says the edge accepted the connection,
+    which can come twenty seconds after it prints the host. And public DNS
+    answers for the host: a run once launched every call against a host Coval
+    could not resolve yet, and all five failed before reaching the bot.
+    Probing the public URL through this machine's resolver does not work: a
+    lookup made before the host exists is cached as missing.
 
     Args:
         port: The local port to expose.
@@ -122,3 +141,4 @@ class Tunnel(Process):
             self.stop()
             raise NotReadyError(f'{self.name} printed no host; see {self.log}')
         self.host = found.group(1)
+        self.wait_until(lambda: resolves_publicly(self.host), 120)

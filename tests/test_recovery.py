@@ -15,10 +15,12 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.processor import PydanticAgentProcessor
 from salon import agents, diary
+from salon.classification import classify_reply
 from salon.diary import Diary
 from salon.instructions import COMPLAINT_GUIDANCE
 from salon.models.state import open_call
 from salon.tools import complaints, desk
+from tests.classifier_model import classifier_model
 
 PHONE = '+34680840464'
 
@@ -182,6 +184,7 @@ async def complaint_cannot_skip_readback():
     with agents.AGENTS['complaints'].agent.override(model=FunctionModel(stream_function=stream)):
         await Probe(call, agents.AGENTS)._turn('My haircut last week was uneven. I would like a redo.')
     call.turn_started('Yes.')
+    await classify_reply(call)
     assert call.complaint_approved
     call.turn_started('Actually, I want a refund instead.')
     assert not call.complaint_approved
@@ -403,6 +406,7 @@ async def complaint_approval_ends_with_its_intent():
         call.turn_started('My haircut yesterday was uneven. I want a redo.')
         (await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')).put(call)
         call.turn_started('Yes.')
+        await classify_reply(call)
         assert call.complaint_approved
         if abandon:
             call.commit(agent='verify', pending='complaints')
@@ -526,17 +530,23 @@ async def selected_time_needs_no_extra_confirmation():
         assert call.state.writes == 1 and len(call.requests) == 1, words
 
 
-def consent_and_history_boundaries():
+async def consent_and_history_boundaries():
     call = open_call(PHONE, diary=books)
+    call.note_said('fixed', 'Would you like a redo?')
     call.turn_started('No, thanks.')
-    call.messages = [ModelResponse(parts=[TextPart(content='Would you like a redo?')])]
+    await classify_reply(call)
     assert not desk._can_end(call)
-    call.messages = [ModelResponse(parts=[TextPart(content='Anything else?')])]
+    call.note_said('fixed', 'Anything else?')
+    call.turn_started('No, thanks.')
+    await classify_reply(call)
     assert desk._can_end(call)
     call.note_model_text('Anything else?')
     call.note_heard('')
+    call.turn_started('No, thanks.')
+    await classify_reply(call)
     assert not desk._can_end(call), 'unheard speech cannot establish permission to hang up'
     call.turn_started('No thanks, but can you move my booking?')
+    await classify_reply(call)
     assert not desk._can_end(call)
     call.commit(agent='complaints')
     assert call.claims_completion('I have recorded your request for a redo.')
@@ -549,7 +559,7 @@ def consent_and_history_boundaries():
 
 
 async def main():
-    consent_and_history_boundaries()
+    await consent_and_history_boundaries()
     await service_requests_verify_first()
     await declining_verification_abandons_the_service()
     await verified_complaint_uses_exact_approved_wording()
@@ -568,4 +578,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    with classifier_model():
+        asyncio.run(main())

@@ -16,6 +16,7 @@ from typing import Any, Literal, NamedTuple
 
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.state import VoiceState, present
 
@@ -84,8 +85,8 @@ class Node[S: VoiceState]:
     the step gets its own instructions and the named values projected into
     them, and nothing the caller said to anybody else.
     """
-    advance: Callable[[Any], LocalAction | None] | None = None
-    """Given the call, a known next action that needs no model, or None to run the agent."""
+    advance: Callable[[Any, RunUsage, UsageLimits], Awaitable[LocalAction | None]] | None = None
+    """Resolve a decision within the shared budget, or return None to run the conversational agent."""
 
 
 @asynccontextmanager

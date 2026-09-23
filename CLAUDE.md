@@ -21,14 +21,16 @@ its supporting link. Read it before changing how a turn works.
 | `core/history.py` | `paired` and `project`: what each provider request is actually sent |
 | `core/turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
 | `core/processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
-| `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `agrees`, `ends`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
+| `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `ConsentInput`, `ReplyClassification`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
 | `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`) |
 | `salon/diary.py` | `Diary`: customers, slots, offers, bookings, complaints, in memory, and the oracle that says no |
 | `salon/instructions.py` | compiles `prompts/*.md` against `SalonCall` at import; `GREETING`; the salon's documents |
-| `salon/agents.py` | `MODEL`, `advance()`, `build()`, the `AGENTS` table |
+| `salon/classification.py` | shared model and cached salon interpretation |
+| `core/classifiers.py` | generic Pydantic input/output classifier using one direct model request |
+| `salon/agents.py` | `advance()`, `build()`, the `AGENTS` table |
 | `prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `tests/` | twelve assert-script modules, no pytest, no network |
+| `tests/` | thirteen assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -52,7 +54,7 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all twelve modules, offline, no .env
+uv run python -m tests                                   # all thirteen modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 ```
@@ -98,8 +100,8 @@ all clean. Paste the real output; don't round up.
    business; `claim_or_refuse` is how an action checks it holds that claim.
    `tests/test_flow.py` scans the tools package for anything that commits
    state and is not an action.
-5. **Consent is application-owned.** Nothing a model writes establishes that
-   the caller agreed to anything. `CallContext.heard` is what they said;
+5. **Consent is application-owned.** A model interprets replies; application guards authorize
+   the exact action, identity and fresh proposal. `CallContext.heard` is what they said;
    `SalonCall._asked` is the one question they are answering, put to them by an
    `Ask` output whose words this code chose. Every consequential action checks
    the two against each other, and on a step that can write, model speech goes
@@ -112,11 +114,8 @@ all clean. Paste the real output; don't round up.
 
 ## Known debt
 
-The consent matchers in `salon/models/consent.py` (`agrees`, `ends`,
-`move_or_add`), `times_named` in `salon/diary.py` and the complaint word list
-in `salon/tools/complaints.py` are closed word lists over the caller's accepted
-utterance, not language understanding. Every one of them fails towards
-*asking*, so a miss costs one clarifying turn and cannot cost a booking nobody
-wanted. Upgrade path, if live runs show too many clarifications: a small model
-on the utterances they return nothing for, with these kept as the fast path.
-Marked `ponytail:` at each definition.
+`times_named` in `salon/diary.py` and the complaint word list in
+`salon/tools/complaints.py` remain language-specific heuristics. Consent,
+move/add and closing interpretation use the typed classifier. Structured
+output validates shape, not semantic accuracy; run the explicit live evaluation
+before making accuracy or latency claims.

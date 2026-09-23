@@ -11,9 +11,10 @@ from typing import Literal
 
 from pydantic import TypeAdapter
 from pydantic_ai import ModelRetry, RunContext
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.policies import claim_or_refuse
-from salon.models.consent import agrees
+from salon.classification import classify_reply
 from salon.models.receipts import CustomerLookup
 from salon.models.shapes import SubmittedPhone
 from salon.models.state import Handoff, SalonCall
@@ -78,10 +79,12 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
         phone: The exact number they confirmed, in E.164.
     """
     claim_or_refuse(ctx, ACTIONS)
-    return await lookup_customer(ctx.deps, phone)
+    return await lookup_customer(ctx.deps, phone, usage=ctx.usage, usage_limits=ctx.usage_limits)
 
 
-async def lookup_customer(call: SalonCall, phone: str) -> Handoff:
+async def lookup_customer(
+    call: SalonCall, phone: str, *, usage: RunUsage | None = None, usage_limits: UsageLimits | None = None
+) -> Handoff:
     """The lookup, once the caller has agreed to these digits. Shared by the tool and by `advance`.
 
     The caller has to have agreed to *these digits*, last turn, in answer to a
@@ -103,7 +106,8 @@ async def lookup_customer(call: SalonCall, phone: str) -> Handoff:
             'Nothing was looked up: those digits have not been read back to this caller and agreed '
             f'to. Call `ask_number` with {phone} and wait for their answer.'
         )
-    if not agrees(call.heard):
+    reply = await classify_reply(call, usage=usage, usage_limits=usage_limits)
+    if reply.confirmation != 'accept':
         raise ModelRetry(
             'Nothing was looked up: the caller did not agree to the number that was read back. '
             f'They said "{call.heard}". If those are different digits it is a correction -- read '

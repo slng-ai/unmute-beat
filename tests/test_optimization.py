@@ -1,4 +1,4 @@
-"""Run: python -m tests.test_optimization — model-free actions retain the same guards."""
+"""Run: python -m tests.test_optimization — classified actions retain the same guards."""
 
 import asyncio
 from contextlib import suppress
@@ -18,6 +18,7 @@ from salon import agents, diary
 from salon.diary import Diary
 from salon.models.state import open_call
 from salon.tools import booking
+from tests.classifier_model import classifier_model
 
 PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -78,9 +79,9 @@ async def approvals_and_receipts():
         call = await offered()
         probe = Counter(call, agents.AGENTS)
         await probe._turn(answer)
-        assert probe._finished.status == 'answered' and probe.requests() == 0
+        assert probe._finished.status == 'answered' and probe.requests() == 1
         assert len(books.bookings_for(PHONE, CLOCK.date())) == 1 and call.state.writes == 1
-        assert call.requests == [] and len(call.spoken) == 1
+        assert len(call.requests) == 1 and call.requests[0].kind == 'classifier' and len(call.spoken) == 1
         assert call.turn in call._retained_turns
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
         receipt = [
@@ -88,7 +89,7 @@ async def approvals_and_receipts():
         ]
         assert len(receipt) == 1 and call.state.appointment.booking_id in str(receipt)
         call.turn_started(answer)
-        assert agents.advance(call) is None, 'the same approval cannot write twice'
+        assert (await agents.advance(call)) is None, 'the same approval cannot write twice'
 
     for words in (
         'Yes, but Saturday.',
@@ -100,17 +101,17 @@ async def approvals_and_receipts():
     ):
         call = await offered()
         call.turn_started(words)
-        assert agents.advance(call) is None, words
+        assert (await agents.advance(call)) is None, words
         assert not call.state.writes
 
     call = await offered()
     call.commit(customer_phone='+34934567890', verified_phone='+34934567890', customer_verified='existing')
     call.turn_started('Yes.')
-    assert agents.advance(call) is None, 'approval belonged to the old identity'
+    assert (await agents.advance(call)) is None, 'approval belonged to the old identity'
     call = await offered()
     call.turn_started('One moment.')
     call.turn_started('Yes.')
-    assert agents.advance(call) is None, 'stale approval'
+    assert (await agents.advance(call)) is None, 'stale approval'
     try:
         await booking.write_booking(call, 'invented', '', '')  # ty: ignore[invalid-argument-type]
     except ValidationError:
@@ -143,8 +144,8 @@ async def cancellation_keeps_committed_receipt():
     ]
     assert len(receipt) == 1 and books.complaints()[0]['reference'] in str(receipt)
     call.turn_started('Yes.')
-    assert agents.advance(call) is None
-    assert not call.requests
+    assert (await agents.advance(call)) is None
+    assert len(call.requests) == 1 and call.requests[0].kind == 'classifier'
 
 
 async def barge_before_execution():
@@ -192,11 +193,11 @@ async def phone_and_lifecycle():
     call.commit(agent='verify', pending='booking')
     call.turn_started('Book a haircut for Friday afternoon.')
     call._return_status = 'Application handoff: concierge -> verify.'
-    action = agents.advance(call)
+    action = await agents.advance(call)
     assert action and action.name == 'ask_number'
     (await action.run()).put(call)
     call.turn_started('Yes, that is my number.')
-    action = agents.advance(call)
+    action = await agents.advance(call)
     assert action and action.name == 'confirm_customer'
     result = await action.run()
     assert result.to == 'booking' and call.state.verified_phone == PHONE
@@ -205,13 +206,13 @@ async def phone_and_lifecycle():
     (await agents.ask_number(context(call), PHONE)).put(call)
     call.commit(customer_phone='+34934567890')
     call.turn_started('Yes.')
-    assert agents.advance(call) is None, 'phone approval survived an identity change'
+    assert (await agents.advance(call)) is None, 'phone approval survived an identity change'
     for words in ('My number ends in two two.', 'Use another number.', '+34 600 111', 'Actually, wait.'):
         call = open_call(PHONE, diary=books)
         call.commit(agent='verify', pending='booking')
         call.turn_started(words)
         call._return_status = 'Application handoff: concierge -> verify.'
-        assert agents.advance(call) is None, words
+        assert (await agents.advance(call)) is None, words
     assert len({id(n.agent.model) for n in agents.AGENTS.values()}) == 1
 
     counts = []
@@ -244,8 +245,9 @@ async def main():
     await barge_before_execution()
     await unsupported_booking_speech()
     await phone_and_lifecycle()
-    print('optimization ok: zero-request approvals, validation, retention, fencing, lifecycle')
+    print('optimization ok: single-request approvals, validation, retention, fencing, lifecycle')
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    with classifier_model():
+        asyncio.run(main())

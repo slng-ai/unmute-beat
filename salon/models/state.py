@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_valida
 
 from core import state as core
 from salon.diary import Diary, day_phrases
-from salon.models.consent import NOT_YES, Asked, agrees
+from salon.models.consent import Asked, ConsentInput, ReplyClassification
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
 
 
@@ -191,6 +191,9 @@ class SalonCall(core.CallContext):
     _writes_before: int = PrivateAttr(default=0)
     """What `writes` stood at when this turn began, so "did anything land in this turn" is answerable."""
     _asked: Asked | None = PrivateAttr(default=None)
+    _classified_turn: int = PrivateAttr(default=-1)
+    _classification_input: ConsentInput | None = PrivateAttr(default=None)
+    _classification: ReplyClassification = PrivateAttr(default_factory=ReplyClassification)
     _complaint: Asked | None = PrivateAttr(default=None)
     """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
     _day_words: list[str] = PrivateAttr(default_factory=list)
@@ -217,9 +220,10 @@ class SalonCall(core.CallContext):
         """
         super().turn_started(heard)
         self._writes_before = self.state.writes
-        if (question := self.pending('complaint')) and agrees(heard):
-            self._complaint = question.model_copy(update={'owner': self.state.customer_phone})
-        elif self._complaint and (self.state.agent != 'verify' or NOT_YES.search(heard)):
+        self._classified_turn = -1
+        self._classification_input = None
+        self._classification = ReplyClassification()
+        if self._complaint and self.state.agent != 'verify':
             self._complaint = None
         if self._complaint and self._complaint.owner and self._complaint.owner != self.state.customer_phone:
             self._complaint = None
@@ -233,7 +237,35 @@ class SalonCall(core.CallContext):
         """Record that this question has gone out to the caller, on this turn."""
         if question.about == 'complaint':
             self._complaint = None
-        self._asked = question.model_copy(update={'turn': self._turn})
+        self._asked = Asked.model_validate({**question.model_dump(), 'turn': self._turn})
+
+    def pending_question(self) -> Asked | None:
+        """The current proposal, excluding stale identities and interrupted readbacks."""
+        question = self._asked
+        if question is None or question.turn != self.turn - 1:
+            return None
+        if question.owner and question.owner != self.state.customer_phone:
+            return None
+        if question.spoken and any(
+            segment.turn == question.turn and segment.generated == question.spoken and segment.interrupted
+            for segment in self.all_spoken
+        ):
+            return None
+        return question
+
+    @property
+    def classification(self) -> ReplyClassification:
+        """Only an interpretation of this input, identity and still-current proposal."""
+        snapshot = self._classification_input
+        if (
+            self._classified_turn != self.turn
+            or snapshot is None
+            or snapshot.utterance != self.heard
+            or snapshot.owner != self.state.customer_phone
+            or snapshot.pending != self.pending_question()
+        ):
+            return ReplyClassification()
+        return self._classification
 
     def pending(self, about: str, **fields: str) -> Asked | None:
         """The question the caller is answering right now, if it is this one.
@@ -241,8 +273,8 @@ class SalonCall(core.CallContext):
         Only the turn after it was asked: a question put two turns ago has
         been overtaken by whatever the caller said in between.
         """
-        asked = self._asked
-        if asked is None or asked.about != about or asked.turn != self._turn - 1:
+        asked = self.pending_question()
+        if asked is None or asked.about != about:
             return None
         return asked if all(getattr(asked, name) == value for name, value in fields.items()) else None
 

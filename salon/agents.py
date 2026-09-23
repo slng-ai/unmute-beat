@@ -15,7 +15,7 @@ What the salon does differently from the same agency built on a node graph:
 * **Consent is the application's.** A question the caller must answer is
   worded here and recorded on the call; the caller's next words are checked
   against it before anything consequential runs, and a clear answer runs the
-  same executor with no model request at all.
+  same executor after one structured classification request.
 * **A refusal carries the alternatives.** The diary says what the caller
   actually holds, or which slots are really free, so the model's next turn is
   a correction rather than a guess.
@@ -29,14 +29,13 @@ from dataclasses import replace
 
 from pydantic_ai import Agent, RunContext, Tool, ToolOutput
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.models import infer_model
-from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.tools import ToolDefinition
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.graph import Exit, LocalAction, Node, lent
 from core.policies import one_action_per_reply, request_clock, speak_by
+from salon.classification import MODEL, SETTINGS, classify_reply
 from salon.instructions import GREETING, instructions
-from salon.models.consent import agrees
 from salon.models.receipts import BookingCommand
 from salon.models.shapes import AgentName
 from salon.models.state import SalonCall, SalonState
@@ -55,7 +54,7 @@ from salon.tools.complaints import (
     record_complaint,
     write_complaint,
 )
-from salon.tools.desk import hand_over_for, hang_up
+from salon.tools.desk import end_conversation, hand_over_for, hang_up
 from salon.tools.identity import (
     ask_number,
     confirm_customer,
@@ -68,30 +67,6 @@ from salon.tools.policy import ACTIONS, SPEAK_BY
 
 __all__ = ['AGENTS', 'GREETING', 'MODEL', 'SETTINGS', 'advance', 'build']
 
-MODEL = infer_model('google-cloud:gemini-3.5-flash-lite')
-"""One model for now. `build` takes it per agent, so giving one step a different model is a one-word edit."""
-SETTINGS: object = GoogleModelSettings(
-    service_tier='priority',
-    google_thinking_config={'thinking_level': 'MINIMAL'},  # ty: ignore[invalid-argument-type]
-)
-"""Thinking pinned off rather than left out.
-
-Left out, no `thinking_config` is sent and whatever Google currently defaults
-this model to is what a call gets, a setting that can change under us on the
-one dimension a voice turn cannot absorb.
-"""
-
-_CLEAR_APPROVAL = re.compile(
-    r'(?:yes|yeah|yep|yup|sure|okay|ok|right|correct|exactly|absolutely|go for it|go ahead|do it|'
-    r"that(?:'s| is) (?:right|correct)|yes[, ]+(?:that(?:'s| is) (?:right|correct|my number)))"
-    r'(?:[, ]+please)?[.! ]*',
-    re.IGNORECASE,
-)
-"""An answer that is nothing but agreement.
-
-ponytail: only complete, familiar answers bypass the model. Extend from
-observed misses.
-"""
 _PHONE_CONTENT = re.compile(
     r'[+\d]|\b(?:phone|number|digits?|zero|one|two|three|four|five|six|seven|eight|nine|'
     r'actually|instead|correction|wrong|wait)\b',
@@ -100,23 +75,31 @@ _PHONE_CONTENT = re.compile(
 """Anything in an utterance that might be a number or a correction to one."""
 
 
-def advance(call: SalonCall) -> LocalAction | None:
-    """A known next action that needs no model, or None to run the agent.
+async def advance(
+    call: SalonCall, usage: RunUsage | None = None, usage_limits: UsageLimits | None = None
+) -> LocalAction | None:
+    """Resolve a pending decision before spending a conversational request.
 
-    Only a clear approval of the one question this call is waiting on, under
-    the identity it was asked for: the readback of a number, of a booking, or
-    of a complaint. Each runs the same executor its model tool runs, so every
-    guard still applies. The one other case is a caller who has just been
-    handed to verification with a prefetched number and has said nothing about
-    any number: the readback is put to them without asking a model to decide
-    to ask it. Ambiguous input still goes to the agent.
+    Classification is shared with the tool guards. An unresolved answer falls
+    through to conversation, while application guards still own every write.
     """
-    if _CLEAR_APPROVAL.fullmatch(call.heard.strip()) and agrees(call.heard):
-        if (
-            call.state.agent == 'verify'
-            and (question := call.pending('phone'))
-            and (not question.owner or question.owner == call.state.customer_phone)
-        ):
+    question = call.pending_question()
+    if question is not None or call._complaint is not None:
+        await classify_reply(call, usage=usage, usage_limits=usage_limits)
+    reply = call.classification
+    if question is not None and reply.conversation == 'end':
+        return LocalAction('hang_up', lambda: end_conversation(call, 'Thanks for calling. Goodbye.'))
+    if question is not None and question.about == 'move_or_add' and call.state.customer_verified:
+        choice_question = question
+        if reply.appointment_choice == 'add':
+            return LocalAction('save_booking', lambda: write_booking(call, 'book', choice_question.value, ''))
+        if reply.appointment_choice == 'move' and question.booking_id:
+            return LocalAction(
+                'save_booking',
+                lambda: write_booking(call, 'move', choice_question.value, choice_question.booking_id),
+            )
+    if reply.confirmation == 'accept':
+        if call.state.agent == 'verify' and (question := call.pending('phone')):
             phone = question.value
             return LocalAction('confirm_customer', lambda: lookup_customer(call, phone))
         if (
@@ -124,7 +107,6 @@ def advance(call: SalonCall) -> LocalAction | None:
             and call.state.agent == 'booking'
             and (question := call.pending('booking'))
             and question.action in ('book', 'move', 'cancel')
-            and (not question.owner or question.owner == call.state.customer_phone)
         ):
             command = BookingCommand.model_validate(
                 {'action': question.action, 'slot_id': question.value, 'booking_id': question.booking_id}
@@ -250,7 +232,7 @@ def build(
         return kept
 
     return Node(
-        Agent[SalonCall, object](  # ty: ignore[no-matching-overload]
+        Agent[SalonCall, object](
             model,
             name=name,
             deps_type=SalonCall,

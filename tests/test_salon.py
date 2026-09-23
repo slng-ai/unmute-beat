@@ -50,6 +50,7 @@ from salon.tools import complaints
 from salon.tools.booking import read_diary
 from salon.tools.complaints import _record_complaint
 from salon.tools.writes import MANAGER_CALLS, REPLY_SOON
+from tests.classifier_model import classifier_model
 
 books = Diary()
 """This module's salon, emptied by each case that writes to it."""
@@ -314,7 +315,7 @@ async def verify_then_book():
         verify=outputs('confirm_customer', phone=PHONE),
         booking=outputs('offer_times', when=day, service='haircut'),
     ):
-        await probe._turn("yes that's right, and can I get a haircut?")
+        await probe._turn("yes, that's right")
 
     assert call.state.customer_verified == 'existing', call.state.customer_verified
     assert call.state.customer_phone == PHONE
@@ -665,7 +666,7 @@ async def the_note_is_said_once():
     assert books.complaints()[0]['reference'] in said, said
     assert REPLY_SOON in said and MANAGER_CALLS not in said, said
     assert not probe.spoken(), probe.spoken()
-    assert not call.requests, call.requests
+    assert len(call.requests) == 1 and call.requests[0].kind == 'classifier', call.requests
 
 
 async def a_tool_result_is_never_a_script():
@@ -1442,4 +1443,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    with classifier_model():
+        asyncio.run(main())

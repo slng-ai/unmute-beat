@@ -39,6 +39,7 @@ from core.turn import EXHAUSTED, UNBACKED, TurnBudget, take_turn
 from salon.agents import AGENTS
 from salon.diary import Diary
 from salon.models.state import Appointment, SalonCall, open_call
+from tests.classifier_model import classifier_model
 
 PHONE = '+34600111222'
 
@@ -895,4 +896,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    with classifier_model():
+        asyncio.run(main())

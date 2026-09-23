@@ -61,7 +61,7 @@ measuring.
 A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
 hands the caller to booking; booking needs an identified caller, so the graph
 interposes verification, which reads the caller ID back. *"Yes, that's right."*
-The lookup runs with no model request, the graph resumes booking, and the
+One classifier request approves the lookup, the graph resumes booking, and the
 diary's free times are offered. *"Three o'clock."* An unambiguous choice of an
 offered time is the authorisation, so the write lands and the confirmation is
 spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
@@ -86,10 +86,11 @@ salon/
   tools/                identity, booking, complaints, desk, writes, asking, policy
   diary.py              the salon's books, in memory
   instructions.py       the prompts, compiled against the call at import
-  agents.py             the model, advance(), build(), the AGENTS table
+  classification.py     shared model and cached typed interpretation
+  agents.py             advance(), build(), the AGENTS table
 prompts/                one prompt per step, the shared rules, knowledge/
 utils/observability.py  Langfuse over OTel
-tests/                  twelve assert scripts
+tests/                  thirteen assert scripts
 ```
 
 `core` knows nothing about the salon, and nothing in `core` but the processor
@@ -319,17 +320,25 @@ mechanism for each:
 - **A clock per request.** `request_clock` stamps each provider request on
   the way out, so time to first token is per request and says whether the
   first thing back was speech or a tool call.
-- **Consent is application-owned.** `CallContext.heard` is what the caller
-  said this turn, `Asked` (`salon/models/consent.py`) is the one question they
-  are answering, and an `Ask` output function words the question and records
-  it. Every consequential action checks the two against each other, and the
-  matchers `agrees`, `ends`, `move_or_add` and `times_named` are closed word
-  lists that fail towards asking again.
-- **Approvals with no model request.** `Node.advance` (`salon/agents.py`
-  `advance()`) runs before a step's agent. A clear yes to the pending question
-  runs the same executor the model tool runs (`lookup_customer`,
-  `write_booking`, `write_complaint`) as a `LocalAction`, spending the shared
-  budget and retaining its receipt, with zero provider requests.
+- **Interpretation is typed; authorization is application-owned.**
+  `core/classifiers.py` sends one direct native structured-output request.
+  Its one-line prompt refers to class descriptions in the Pydantic output
+  schema; salon definitions live in `salon/models/consent.py`. Shape validation
+  cannot guarantee semantic accuracy. Guards still check identity, freshness,
+  the exact proposal, valid options and one-time consumption.
+- **Classification replaces conversation at known decisions.** Async
+  `advance()` classifies pending confirmations, move/add and recorded closing
+  questions. A resolved decision invokes the existing executor with one
+  classifier request. Ordinary turns skip it; tools can request interpretation
+  on demand. Ambiguity or provider failure permits conversational fallback
+  within the shared budget. One cached interpretation per turn prevents retries
+  from repeatedly classifying. Cancellation retains caller input, excludes
+  classification JSON from history and discards late results.
+- **Measure the tradeoff.** Turn traces include classifier duration, count and
+  fallback alongside existing voice latency. Resolved decisions use one request;
+  fallback or tool-triggered checks can use two. Subsequent workflow steps may
+  still require conversation. Native structured output must be supported by the
+  injected model. No latency improvement is assumed.
 - **Deterministic continuation.** A finisher does its work and returns a
   `Handoff` whose destination is `call.resume(...)`, which the graph already
   knows. A prerequisite step reports `completed` or `unserved`, and the
@@ -369,6 +378,13 @@ counting `model_requests` on the turn span, not every observation labelled
 a generation: speech services are generations too.
 
 - Langfuse trace structure and counting: https://langfuse.com/docs/observability/best-practices
+
+### Live classifier evaluation
+
+Explicitly run `uv run --env-file .env python -m evals.consent` to make live
+requests. It reports English, Spanish and mixed-language semantic accuracy,
+false acceptances and classifier p50/p95 duration separately from offline flow
+tests. These are classifier timings, not end-to-end voice measurements.
 
 ---
 

@@ -1,9 +1,13 @@
 """Offline contracts for generic classification and the salon's decision boundary."""
 
 import asyncio
+import difflib
+import json
+import os
 from contextlib import suppress
 from datetime import datetime
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 from unittest.mock import patch
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -15,10 +19,13 @@ from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimitExceeded, UsageL
 from core.classifiers import TASK, Classifier, ClassSet, Exchange, output_model
 from core.interpreters import RuleInterpreter
 from core.policies import TurnBudget
+from core.readings import Reading
+from core.state import Checkpoint
 from core.turn import Barge, take_turn
 from salon import agents, diary
 from salon.classification import classify_reply
 from salon.models.consent import Asked
+from salon.models.receipts import Slots
 from salon.models.state import SalonCall, open_call
 from salon.tools.asking import Ask
 from tests.classifier_model import ALL, classifier_model, classifier_with
@@ -415,9 +422,152 @@ def every_read_back_is_one_request():
     assert step.json_schema() == CONFIRMATION.classifier.json_schema()
 
 
+GOLDEN = Path(__file__).parent / 'golden' / 'readings.json'
+"""Every classifier request this repo can send, pinned. `BLESS_READINGS=1` rewrites it."""
+
+
+def _request(classifier: Classifier) -> dict[str, Any]:
+    """What one classifier sends besides the caller's words: model, settings, instructions and both schemas."""
+    return {
+        'model': getattr(classifier.model, 'model_name', classifier.model),
+        'settings': dict(classifier.model_settings or {}),
+        'instructions': classifier.instructions,
+        'output_name': classifier.output_type.__name__,
+        'output_schema': classifier.json_schema(),
+        'input_schema': classifier.input_type.model_json_schema(),
+    }
+
+
+def _next_turn(call: SalonCall, heard: str, said: str = '') -> None:
+    """The agent says `said` and the caller answers `heard`: a new turn, as a runtime with no playback signal counts it."""
+    if said:
+        call.note_said('fixed', said, origin='ask')
+    call.turn_started(heard)
+
+
+def _diary() -> diary.Diary:
+    books = diary.Diary()
+    books.set_clock(CLOCK)
+    return books
+
+
+def _states() -> dict[str, SalonCall]:
+    """Salon calls standing where each reading can apply, on the pinned clock, so what each one sends is fixed."""
+    states = {}
+
+    call = open_call(PHONE, diary=(books := _diary()))
+    _next_turn(call, 'I want a haircut on Friday.')
+    call._checkpoint = Checkpoint(
+        owner='booking', messages=[], speech_ids=frozenset(), heard=call.heard, turn=call.turn
+    )
+    call.commit(agent='verify')
+    _next_turn(
+        call,
+        'Yes, and make it Saturday instead.',
+        Ask(about='phone', value=PHONE, spoken='Is it +34 600 111 222?').put(call),
+    )
+    states['phone_read_back_in_a_detour'] = call
+
+    call = open_call(PHONE, diary=(books := _diary()))
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    _next_turn(call, 'A haircut on Friday, please.')
+    held = books.find_slots(PHONE, 'Friday', 'haircut', CLOCK, offered_to=call.id)['slots'][0]
+    books.save_booking(PHONE, 'book', held['slot_id'], '', False, CLOCK, offered_to=call.id)
+    slots = Slots.model_validate(
+        books.find_slots(PHONE, 'Saturday', 'haircut', CLOCK, offered_to=call.id)
+    ).slots[:2]
+    call.commit(offered=slots)
+    offer = 'For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?'
+    call.ask(Asked(about='offer', spoken=offer, value=','.join(s.slot_id for s in slots), owner=PHONE))
+    _next_turn(call, 'Nine, same as the other one.', offer)
+    states['offer_while_holding'] = call
+
+    call = open_call(PHONE, diary=(books := _diary()))
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    _next_turn(call, 'Can I get a haircut Saturday at ten?')
+    slot = books.find_slots(PHONE, 'Saturday', 'haircut', CLOCK, offered_to=call.id)['slots'][0]
+    ask = 'Would you like to move the appointment you already have, or add another one?'
+    call.ask(Asked(about='move_or_add', spoken=ask, value=slot['slot_id'], action='move', owner=PHONE))
+    _next_turn(call, 'Move it, please.', ask)
+    states['move_or_add'] = call
+
+    call = open_call(PHONE, diary=(books := _diary()))
+    call.commit(agent='concierge', customer_verified='existing', verified_phone=PHONE)
+    _next_turn(call, 'Yes, book it.')
+    slot = books.find_slots(PHONE, 'Monday', 'blowout', CLOCK, offered_to=call.id)['slots'][0]
+    booked = books.save_booking(PHONE, 'book', slot['slot_id'], '', True, CLOCK, offered_to=call.id)
+    books.withdraw_offers(call.id)
+    told = f"You're booked for {booked['spoken']}. Anything else?"
+    call.offer_undo(booked['booking_id'], told)
+    call.ask(Asked(about='closing', spoken=told, owner=PHONE))
+    _next_turn(call, 'How much is that? If it is over 30, leave it.', told)
+    states['closing_after_a_booking'] = call
+
+    call = open_call(PHONE, diary=(books := _diary()))
+    call.commit(agent='complaints')
+    _next_turn(call, 'My colour came out patchy.')
+    call._complaint = Asked(about='complaint', spoken='A patchy colour. Shall I record that?', turn=call.turn)
+    call.commit(agent='verify')
+    _next_turn(call, 'Yes, that is it.')
+    _next_turn(
+        call, 'Yes, go ahead.', Ask(about='phone', value=PHONE, spoken='Is it +34 600 111 222?').put(call)
+    )
+    states['complaint_kept_through_verify'] = call
+
+    call = open_call(PHONE, diary=(books := _diary()))
+    _next_turn(call, 'When do you open?')
+    states['nothing_pending'] = call
+    return states
+
+
+def _sent(reading, call: SalonCall) -> str | None:
+    value = reading.snapshot(call) if isinstance(reading, Reading) else reading._input(call)
+    return None if value is None else value.model_dump_json()
+
+
+def pinned() -> dict[str, Any]:
+    """Every classifier request, and the exact input each reading sends in each fixed call state."""
+    from core.steps import confirm_interpreter
+    from examples.access.flow import FLOW
+    from salon.classification import MODEL, SOLVER, SOLVER_CLASSIFIER
+
+    readings = (*ALL, SOLVER)
+    requests = {reading.name: _request(reading.classifier) for reading in ALL}
+    requests |= {
+        'solver': _request(SOLVER_CLASSIFIER),
+        'confirm_step': _request(confirm_interpreter(MODEL).classifier),
+        'access_confirm': _request(FLOW.interpreter.classifier),
+    }
+    sent = {state: {r.name: _sent(r, call) for r in readings} for state, call in _states().items()}
+    return {'requests': requests, 'sent': sent}
+
+
+def requests_are_pinned():
+    """No classifier request changes without a diff: schema, instructions, settings and the values sent.
+
+    Moving code between modules must not change a byte a model is sent. A
+    change that means to is a prompt change, and needs its live check
+    before it ships. The file is compared as text, because key order is part
+    of what is sent.
+    """
+    current = json.dumps(pinned(), indent=1, sort_keys=False, default=str) + '\n'
+    if os.environ.get('BLESS_READINGS') == '1':
+        GOLDEN.parent.mkdir(exist_ok=True)
+        GOLDEN.write_text(current)
+        print('readings pinned again: a prompt change, which needs a live check')
+        return
+    expected = GOLDEN.read_text()
+    if current != expected:
+        diff = difflib.unified_diff(
+            expected.splitlines(), current.splitlines(), 'pinned', 'now', lineterm='', n=2
+        )
+        raise AssertionError('a classifier request changed:\n' + '\n'.join(list(diff)[:80]))
+
+
 async def main():
     classes_live_in_schema()
     every_read_back_is_one_request()
+    requests_are_pinned()
     await generic_contracts()
     await invalid_answers_and_cancellation()
     await decisions_and_fallback()

@@ -265,6 +265,11 @@ def booking_question(
     which is read back like any other proposal: the caller's yes to it is what
     writes, never the pick.
 
+    It asks from its first word. "So that is a hair colour, tomorrow at 9 AM"
+    sounds like a confirmation, and in Coval run RPH7TzmF (K5) the caller who
+    had picked a time and said goodbye took it as one and hung up with nothing
+    booked. A goodbye read this turn is answered before the question.
+
     Raises:
         ModelRetry: If the slot is not one this caller is being offered, or the booking not one they hold.
     """
@@ -278,10 +283,12 @@ def booking_question(
             )
         service = spoken_service(offered['service'])
         words = (
-            f'So that is a {service}, {offered["spoken"]}. Shall I book that in?'
+            f'Shall I book you in for a {service}, {offered["spoken"]}?'
             if action == 'book'
-            else f'So I will move you to {offered["spoken"]}. Shall I do that?'
+            else f'Shall I move your appointment to {offered["spoken"]}?'
         )
+        if call.classification.conversation == 'end':
+            words = f'Before you go: {words[0].lower()}{words[1:]}'
     else:
         return cancel_question(call, booking_id)
     return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)

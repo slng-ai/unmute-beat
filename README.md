@@ -65,8 +65,8 @@ hands the caller to booking; booking needs an identified caller, so the graph
 interposes verification, which reads the caller ID back. *"Yes, that's right."*
 One classifier request interprets the approval; application guards authorize
 the lookup, the graph resumes booking, and the diary's free times are offered. *"Three o'clock."* The
-application reads the time back: *"So that is a haircut, Friday at 3:00 PM.
-Shall I book that in?"* *"Yes."* Only that yes writes, and the confirmation is
+application reads the time back: *"Shall I book you in for a haircut, Friday
+at 3:00 PM?"* *"Yes."* Only that yes writes, and the confirmation is
 spoken in the diary's own words. Neither turn needs a model request beyond the
 one classifier. *"That's all, thanks, bye."* The line closes.
 

@@ -542,7 +542,7 @@ async def a_selected_time_is_read_back_with_no_model():
             assert call.state.writes == 0, f'{words}: a pick booked before its read-back'
             assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
             readback = call.all_spoken[-1].generated
-            assert readback.startswith('So that is a haircut, Friday at 9:30 AM'), readback
+            assert readback.startswith('Shall I book you in for a haircut, Friday at 9:30 AM'), readback
             call.note_reached()
             call.note_drained()
             probe.interrupt()

@@ -110,7 +110,7 @@ async def agreed_to_a_pick(call, probe, pick: str) -> None:
     probe.interrupt()
     await probe._turn(pick)
     assert call.state.writes == writes, f'{pick!r} booked before it was read back'
-    assert probe.fixed()[-1].startswith('So that is a'), probe.fixed()
+    assert probe.fixed()[-1].startswith('Shall I book you in for a'), probe.fixed()
     call.note_reached()
     call.note_drained()
     probe.interrupt()
@@ -436,6 +436,33 @@ async def a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it():
     assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the goodbye touched the booking'
 
 
+async def a_pick_said_with_a_goodbye_is_asked_before_they_go():
+    """Coval run RPH7TzmF, K5: "Fine, nine o'clock then. That's all. Goodbye!" got "So that is a hair colour...".
+
+    The caller heard a confirmation and hung up with nothing booked. The
+    read-back now asks from its first word, and says why before they go.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A hair colour on Friday.')
+    await offer(call, 'Friday', 'hair-color')
+    call.note_reached()
+    call.note_drained()
+    call.turn_ended(interrupted=False)
+    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
+    words = "Nine o'clock then. That's all I need. Goodbye!"
+
+    def classify(name, data):
+        return {'chosen_offer': nine, 'conversation': 'end'}.get(name)
+
+    with scripted_readings(classify):
+        probe.interrupt()
+        await probe._turn(words)
+    asked = probe.fixed()[-1]
+    assert asked.startswith('Before you go: shall I book you in for a hair colour'), asked
+    assert call.state.writes == 0 and call.ended == '', 'booked, or hung up, before the yes'
+
+
 async def only_a_slot_on_the_table_can_be_picked():
     """A pick is the classifier's reading checked against the table, never a word list and never a free slot id.
 
@@ -474,7 +501,7 @@ async def only_a_slot_on_the_table_can_be_picked():
             await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
         assert call.state.writes == 0, (reading, 'a pick booked before it was read back')
         put = call.all_spoken[-1].generated if call.all_spoken else ''
-        assert put.startswith('So that is a') is read_back, (reading, put)
+        assert put.startswith('Shall I book you in for a') is read_back, (reading, put)
         if read_back:
             assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
 
@@ -759,6 +786,7 @@ async def main():
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
+    await a_pick_said_with_a_goodbye_is_asked_before_they_go()
     await only_a_slot_on_the_table_can_be_picked()
     await a_pick_with_no_question_pending_is_still_read_back()
     await an_add_on_to_a_pick_is_read_with_it()

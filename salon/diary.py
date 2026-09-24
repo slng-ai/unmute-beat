@@ -597,12 +597,20 @@ class Diary:
         chosen a slot only when exactly one of these is at it. Same matching
         rule as `offer_of`, because an offer the write would refuse is not one
         the caller can have chosen.
+
+        A time this caller already holds is not on the table: it is theirs.
+        Left on it, "Fine, nine o'clock then", said to keep the nine o'clock
+        they had just booked, read as picking it again, and the caller was
+        asked whether to move or add (Coval run TgByaegk, K5).
         """
         today = self.now().date()
+        held = {(b.day, b.at, b.service) for b in self._bookings.values() if phone and b.phone == phone}
         live = [
             (slot_id, offer)
             for (who, slot_id), offer in self._offers.items()
-            if who == offered_to and self._offer_for(offered_to, slot_id, phone) is not None
+            if who == offered_to
+            and self._offer_for(offered_to, slot_id, phone) is not None
+            and (offer.day, offer.at, offer.service) not in held
         ]
         live.sort(key=lambda pair: (pair[1].day, pair[1].at, pair[1].service))
         return [

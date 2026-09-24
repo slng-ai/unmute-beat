@@ -481,7 +481,7 @@ async def an_add_on_after_a_booking_is_read_against_it():
     readings = {
         '09:00.': {'chosen_offer': nine},
         joined: {'confirmation': 'conditional'},
-        'Oh, okay. Fine. 09:00 then.': {'last_change': 'keep'},
+        'Oh, okay. Fine. 09:00 then.': {'last_change': 'keep', 'chosen_offer': nine},
     }
     seen: dict[str, ConsentInput] = {}
 
@@ -522,6 +522,11 @@ async def an_add_on_after_a_booking_is_read_against_it():
     else:
         raise AssertionError('a cancel was read back to a caller keeping the booking')
     assert call.state.writes == 1 and call.undo_booking, 'the booking stands'
+    assert call.picked_offer() == '', 'a time the caller already holds is not on the table to pick again'
+    asked = call.pending_question()
+    assert asked is None or asked.about != 'move_or_add', (
+        'the caller was asked to move or add the booking they kept'
+    )
 
 
 async def a_missing_barge_never_merges_turns():

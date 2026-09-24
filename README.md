@@ -64,9 +64,11 @@ A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
 hands the caller to booking; booking needs an identified caller, so the graph
 interposes verification, which reads the caller ID back. *"Yes, that's right."*
 One classifier request interprets the approval; application guards authorize
-the lookup, the graph resumes booking, and the diary's free times are offered. *"Three o'clock."* An unambiguous choice of an
-offered time is the authorisation, so the write lands and the confirmation is
-spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
+the lookup, the graph resumes booking, and the diary's free times are offered. *"Three o'clock."* The
+application reads the time back: *"So that is a haircut, Friday at 3:00 PM.
+Shall I book that in?"* *"Yes."* Only that yes writes, and the confirmation is
+spoken in the diary's own words. Neither turn needs a model request beyond the
+one classifier. *"That's all, thanks, bye."* The line closes.
 
 Tests: `uv run python -m tests`. Offline, no `.env`, no network.
 
@@ -134,6 +136,40 @@ Coval records the same id as the simulation's `call_sid`, so to open a call's
 trace, filter Langfuse sessions by the `call_sid` of
 `coval --format json simulations get <call id>`.
 
+### Measuring a run: the ledger
+
+Coval says whether each call did the right thing. The ledger says what it
+cost, read the same way from every build's traces: the harness, the
+one-prompt baseline, the graph build and LiveKit.
+
+```bash
+uv run --env-file .env python -m evals.ledger \
+    harness CA08dd... CA2e8e... -- baseline CA1cef... -- graph trace:a8b92a0f... -- livekit trace:4808dbcf...
+```
+
+```
+== harness: 5 calls
+   input tokens per call: mean 9532 (5692 to 14588); per caller turn 1402; output 1254
+   requests: 63 completed over 34 caller turns (1.85 per turn), 29 cancelled or unreported
+   calls in a row per turn: 0: 6 turns, 1: 20 turns, 2: 5 turns, 3: 3 turns
+   latency: p50 1.36s p90 4.82s max 5.12s, 27 of 34 turns timed
+```
+
+1. Each group is a label and its calls: a Twilio call id (the harness's
+   Langfuse session), `session:<id>` or `trace:<id>`.
+2. Tokens are Langfuse's `input` plus cached input, counted once. A request
+   with no usage is counted as cancelled, never as zero tokens.
+3. Requests that overlap are one step of the caller's wait. "Calls in a row"
+   counts the steps; the harness's readings run side by side.
+4. Latency is Pipecat's `turn.user_bot_latency_seconds`. LiveKit has none, so
+   it is estimated from its spans and marked as estimated.
+5. Every harness write leaves a `write` span with the question it answered
+   (`core/operations.py`), so the ledger checks each one: a question about
+   that action, put on an earlier turn. The other builds' writes are listed
+   with the lines just before them, for a person to read.
+
+It only reads traces; nothing is billed.
+
 ---
 
 # How it is built
@@ -170,13 +206,14 @@ salon/
   baseline.py           the same salon as one prompt on Pipecat's own LLM service (VOICE_HARNESS=pipecat)
   agents.py             the AGENTS table, compiled from flow.yaml
 utils/observability.py  Langfuse over OTel
-tests/                  twenty-one assert scripts
+tests/                  twenty-two assert scripts
 examples/               access (ten steps) and help (one step), on core alone; VOICE_AGENCY=access|help
 evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
 evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
 evals/focused.py        the live failures replayed against the real readings, five times each, with tokens
 evals/readings.py       each reading as a Langfuse dataset and prompt, run on several small models
+evals/ledger.py         requests, tokens, calls in a row, latency and writes, read from any build's traces
 evals/solver.py         explicitly invoked live state-solver evaluation
 evals/compare.py        every interpreter side by side; the rule floor offline, the rest with --live
 evals/rules.py          the no-model floor the others must beat

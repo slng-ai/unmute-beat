@@ -366,3 +366,30 @@ time before any work started, which is turn taking.
   sent nothing for 8.49 s. A request with nothing in 1.5 s is now tried again.
 
 None of these fixes has been measured live yet. The next Coval run, on both builds, is what settles it.
+
+## 10. First matched run: harness and graph build on the same 5 core cases
+
+Branch `fix/harness-faults` at `2715fc9`, Coval test set `8YK67zzr`, one iteration each, 24 September about 21:15-21:52
+CEST. Harness run [`hdbogMqB`](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/hdbogMqBE2bYYbUf35owxE),
+graph build run [`LJk4sZJe`](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/LJk4sZJeAspriDHUwkrHjx)
+(agent `voice-harness-graph-pipecat`, the unmute graph build's own `bot.py`).
+
+| | Harness | Graph build |
+|---|---|---|
+| Caller wait p50 / p90 / max | 1.62 s / 3.18 s / 3.89 s | 2.03 s / 3.58 s / 4.30 s |
+| Input tokens per call (counted) | 9,325 | 46,214 |
+| Cancelled requests per call, uncounted (upper bound) | 15.2 (≈ 16,000 tokens) | 6 (≈ 21,300 tokens) |
+| Tokens per turn (counted) | 1,260 | 6,602 |
+| Write audit | 4 of 4 answered a matching question | not checkable (no application question) |
+| Calls with expected behaviours below 1 | 1 (0.75) | 4 (0.50 to 0.75) |
+| Consent judge NO | 1 (judge error: nothing was booked) | 3 (not read yet) |
+| Asked-again judge NO | 2 (one judge error, one real) | 0 |
+
+- Before the fixes, on `4bLgLR4t`: harness p50 1.71 s, p90 4.44 s, max 6.22 s.
+- The harness's real fault: "Yes, that's right. Oh, and sorry, can we make it Saturday instead of Friday?" to the
+  phone read-back was read as `revise`, so the number was read back again (simulation `AJ4tDZJq`).
+- The graph build crashed once: Gemini refused a function call with no `thought_signature`, and its complaint agent
+  stopped (graph bot log, 21:21:52). It also called `get_service_price`, a tool its step did not offer.
+- The early step run (started beside the readings) is dropped when a reading decides, which doubled the harness's
+  cancelled requests (7 per call before, 15 now). Their tokens are not in the counted figures.
+- Five calls a side is a small sample. The 18-case set, with case 19 (book, move, cancel), is the next run.

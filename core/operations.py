@@ -21,6 +21,7 @@ model-facing tool, which has the reply in front of it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, final
@@ -34,6 +35,20 @@ from core.proposals import Proposal
 from core.state import CallContext
 
 _tracer = trace.get_tracer('voice.operations')
+
+
+def operation_token(*parts: object) -> str:
+    """One stable name for a business action, across every attempt at it.
+
+    Derived rather than generated, so a retry of the same action derives the
+    same token without anything having to remember it between attempts. What
+    it identifies is the action, this caller moving this booking to this slot,
+    and not the request that carried it.
+
+    ponytail: derived rather than handed out by the service. A real one would
+    issue it, and then this goes.
+    """
+    return hashlib.sha256('|'.join(str(part) for part in parts).encode()).hexdigest()[:16]
 
 
 class OutcomeUnknownError(Exception):

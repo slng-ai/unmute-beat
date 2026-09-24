@@ -14,7 +14,6 @@ or promise a policy step the salon has not written down.
 
 from __future__ import annotations
 
-import hashlib
 import re
 from collections.abc import Callable
 from typing import NoReturn
@@ -27,21 +26,6 @@ from salon.diary import RefusedError
 from salon.models.consent import Asked
 from salon.models.receipts import ComplaintRecord, Saved
 from salon.models.state import Appointment, SalonCall, Unresolved
-
-
-def operation_token(*parts: object) -> str:
-    """One stable name for a business action, across every attempt at it.
-
-    Derived rather than generated, so a retry of the same action derives the
-    same token without anything having to remember it between attempts. What
-    it identifies is the action, this caller moving this booking to this slot,
-    and not the request that carried it.
-
-    ponytail: derived rather than handed out by the service. A real one would
-    issue it, and then this goes.
-    """
-    return hashlib.sha256('|'.join(str(part) for part in parts).encode()).hexdigest()[:16]
-
 
 DID = {'book': 'booked', 'move': 'moved', 'cancel': 'cancelled'}
 """What the diary calls the outcome of each action. A response reporting one of the other two is not this request's answer."""

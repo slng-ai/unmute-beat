@@ -27,16 +27,16 @@ its supporting link. Read it before changing how a turn works.
 | `salon/diary.py` | `Diary`: customers, slots, offers, bookings, complaints, in memory, and the oracle that says no |
 | `salon/flow.yaml` | the salon as four `agent` steps: each one's prompt, module, exits and requirements |
 | `salon/steps/` | one module per step, each giving `node(step)`: its tools, outputs and openings |
-| `salon/nodes.py` | `build()`, `advance()`, `decided()`, `solve()`, the guards: what every step is built from |
+| `salon/nodes.py` | `BUILDER` (core's `AgentBuilder`, given the salon's information) and `build()`, `advance()`, `decided()`, `solve()`, the guards |
 | `salon/instructions.py` | loads `flow.yaml` as `SPEC`; `instructions(name)` is a step's compiled prompt; `GREETING`; `COMPLAINT_GUIDANCE` |
 | `salon/classification.py` | `SALON`, the salon's conversation: core's acts given the salon's information, which builds its narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`) and decides on them; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply`. Tools reach it through the call (`SalonCall.read_reply`), never by import |
 | `salon/baseline.py` | the same salon as one prompt on Pipecat's own Gemini service, the tools on the same `Diary`; `VOICE_HARNESS=pipecat` puts it in `bot.py` in place of the harness |
 | `core/classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
 | `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
 | `core/proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
-| `core/operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record |
+| `core/operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record; `needs_approval` says whether a read-back yes is required; `operation_token` |
 | `core/completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
-| `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
+| `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step) and `AgentBuilder` (builds its agent the same way for every use case), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
 | `core/flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
 | `core/readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
 | `core/conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack`, `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |

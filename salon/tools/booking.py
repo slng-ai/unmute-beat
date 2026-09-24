@@ -20,7 +20,7 @@ from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.graph import Opening
-from core.operations import Operation
+from core.operations import Operation, operation_token
 from core.policies import claim_or_refuse, pick
 from core.state import present
 from salon.diary import (
@@ -44,7 +44,6 @@ from salon.tools.writes import (
     _settle,
     _unknown,
     close_with,
-    operation_token,
     spoken_service,
 )
 

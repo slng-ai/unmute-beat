@@ -27,22 +27,27 @@ the eligibility check are asked for and run again.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
-from pydantic_ai import Agent, ModelRetry, RunContext, ToolOutput
+from pydantic_ai import Agent, ModelRetry, RunContext, Tool, ToolOutput
+from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
+from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.classifiers import Classifier, output_model
 from core.completion import FieldsPresent, ReceiptMatched
 from core.decisions import Accept, Clarify, Conditional, NoDecision, Reject, Revise
-from core.graph import Exit, LocalAction, Node, Opening
+from core.desk import Desk
+from core.graph import Exit, LocalAction, Node, Opening, lent
 from core.interpreters import Interpreter
 from core.operations import Operation, OutcomeUnknownError
+from core.policies import one_action_per_reply, request_clock, speak_by
 from core.proposals import BaseProposal, Proposal
 from core.readings import CONFIRM, ReadBackInput
 from core.state import CallContext, Handoff, VoiceState, present
@@ -524,6 +529,174 @@ class AgentStep(Step):
 
     def node(self, flow: StepFlow) -> Node[Any]:
         return self.build(self)
+
+
+class AgentBuilder[C: CallContext]:
+    """Builds a hand-built step's agent the same way for every use case.
+
+    A use case gives it its call type, model and settings, the names of its
+    actions (at most one runs per model reply), its `Desk`, its `advance` (what
+    decides a turn before any model runs) and the request by which a run must
+    answer with what it holds. Each step then passes only what its own code
+    can say (`build`).
+    """
+
+    def __init__(
+        self,
+        *,
+        call_type: type[C],
+        model: Model | str,
+        settings: ModelSettings | None,
+        actions: frozenset[str],
+        desk: Desk[C],
+        advance: Callable[[Any, RunUsage, UsageLimits], Awaitable[LocalAction | None]] | None,
+        speak_by: int,
+    ) -> None:
+        self.call_type = call_type
+        self.model = model
+        self.settings = settings
+        self.actions = actions
+        self.desk = desk
+        self.advance = advance
+        self.speak_by = speak_by
+
+    def build(
+        self,
+        step: AgentStep,
+        tools: Sequence[Any] = (),
+        finishers: Sequence[Any] = (),
+        asks: Sequence[Any] = (),
+        openings: tuple[Opening[Any], ...] = (),
+        structured_speech: bool = False,
+        offered_when: Mapping[str, Callable[[Any], bool]] | None = None,
+        stand_ins: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
+        model: Model | str | None = None,
+        shares_detour: bool = False,
+    ) -> Node[Any]:
+        """One step: its agent, its legal exits, and what has to hold before it runs.
+
+        The step's name, prompt, exits and requirements come from its entry in
+        the flow file; the arguments here are what only its code can say.
+        Everything that differs between steps is an argument, so this names no
+        step and no tool: `structured_speech` for a step that speaks only
+        through its outputs, `offered_when` for an output offered only while a
+        fact holds, and `stand_ins` for an output whose name the model knows but
+        whose implementation is this step's own.
+
+        Every output tool is named explicitly. Pydantic AI calls a lone output
+        function `final_result` and renames a bare `hand_over` to
+        `final_result_hand_over` as soon as there is more than one output, which
+        the per-request narrowing then fails to find by name. Everything that
+        writes is `sequential`, so two of them can never overlap; the conflict
+        policy refusing the second is the brace to that belt.
+
+        A question ends the run the same way finishing the step does, and for the
+        same reason: the words are already decided, so a further model request
+        would only be a chance to word them differently. Questions are not
+        actions, because asking changes nothing and writes nothing.
+
+        `str` in the output list is what keeps speech streaming to TTS. A step
+        that can write or verify speaks only through its output functions, so it
+        does not get it and provider text never reaches TTS from it.
+
+        The whole output set is always declared; what varies per request is which
+        of it is *offered*, decided by the two prepare hooks below.
+        """
+        exits, actions = step.exits, self.actions
+        borrowed = lent(exits)
+        named = [
+            ToolOutput((stand_ins or {}).get(fn, fn), name=fn.__name__, sequential=fn.__name__ in actions)
+            for fn in finishers
+        ]
+        questions = [ToolOutput(fn, name=fn.__name__) for fn in asks]
+        handoff = (
+            [
+                ToolOutput(
+                    self.desk.hand_over_for(exits, tuple(fn.__name__ for fn in asks)),
+                    name='hand_over',
+                    sequential=True,
+                )
+            ]
+            if exits
+            else []
+        )
+        offered = offered_when or {}
+        declared = [*([str] if not structured_speech else []), *handoff, *named, *questions]
+
+        def outputs(state: VoiceState) -> list:
+            """What this step may return: the superset `narrow` picks from at each request."""
+            return declared
+
+        async def only_reachable(ctx: RunContext[Any], defs: list[ToolDefinition]) -> list[ToolDefinition]:
+            """Take a borrowed tool back out while the edge it stands for is shut.
+
+            A caller the step cannot yet serve is not offered the tool the edge
+            lends, so the model cannot call it and be refused, which costs the
+            round trip the lending was there to save. Re-run before every model
+            request, so a tool that ran a moment ago and changed the state is
+            reflected in the very next schema.
+            """
+            return [d for d in defs if d.name not in borrowed or borrowed[d.name].guard(ctx.deps.state)]
+
+        async def narrow(ctx: RunContext[Any], defs: list[ToolDefinition]) -> list[ToolDefinition]:
+            """Offer only the destinations that are open at this request.
+
+            The output-tool half of `only_reachable`, and a separate hook because
+            Pydantic AI prepares ordinary and output tools through different ones.
+            An exit whose guard has stopped holding leaves the enum the model is
+            sent, so it cannot be chosen rather than being refused after it was;
+            with none left, `hand_over` goes entirely. An output with an
+            `offered_when` fact is offered only while it holds.
+            """
+            legal = list(dict.fromkeys(e.to for e in exits if e.guard(ctx.deps.state)))
+            kept = []
+            for tool_def in defs:
+                if (when := offered.get(tool_def.name)) is not None and not when(ctx.deps):
+                    continue
+                if tool_def.name != 'hand_over':
+                    kept.append(tool_def)
+                    continue
+                if not legal:
+                    continue
+                schema = deepcopy(tool_def.parameters_json_schema)
+                if (to := schema.get('properties', {}).get('to')) is not None:
+                    to.pop('const', None)
+                    to['enum'] = legal
+                kept.append(replace(tool_def, parameters_json_schema=schema))
+            return kept
+
+        return Node(
+            Agent[Any, object](
+                model if model is not None else self.model,
+                name=step.id,
+                deps_type=self.call_type,
+                output_type=declared,
+                instructions=step.instructions,
+                tools=[
+                    *(
+                        fn if isinstance(fn, Tool) else Tool(fn, sequential=fn.__name__ in actions)
+                        for fn in tools
+                    ),
+                    *(Tool(fn, sequential=fn.__name__ in actions) for exit in exits for fn in exit.via),
+                ],
+                capabilities=[
+                    one_action_per_reply(actions),
+                    Hooks(prepare_tools=only_reachable, prepare_output_tools=narrow),
+                    *([speak_by(self.speak_by)] if not structured_speech else []),
+                    request_clock(),
+                ],
+                model_settings=self.settings,
+            ),
+            exits=exits,
+            requires=step.requires,
+            satisfied_by=step.satisfied_by,
+            outputs=outputs,
+            guarded=step.guarded,
+            shares_detour=shares_detour,
+            model_speech=not structured_speech,
+            advance=self.advance,
+            openings=openings,
+        )
 
 
 class _Facts(dict):

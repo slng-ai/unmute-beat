@@ -16,7 +16,7 @@ from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.operations import Operation
+from core.operations import Operation, operation_token
 from core.policies import claim_or_refuse
 from core.state import present
 from salon.instructions import COMPLAINT_GUIDANCE
@@ -25,7 +25,7 @@ from salon.models.state import SalonCall, Unresolved
 from salon.tools.asking import Ask
 from salon.tools.desk import hang_up
 from salon.tools.policy import ACTIONS
-from salon.tools.writes import OUTSTANDING, _answered, acknowledgement, close_with, operation_token
+from salon.tools.writes import OUTSTANDING, _answered, acknowledgement, close_with
 
 _COMPLAINT_REQUEST_WORDS = (
     'a about an are be been caller can client complain complaining complaint complaints could customer '

@@ -1,0 +1,15 @@
+# Faro, a bilingual language-learning companion: one hand-built agent step on its own call type.
+# The phases (identify, signup, onboarding, assessment, plan, lessons) are application state, not steps:
+# the step's module offers each tool only in the phases it belongs to. The greeting reads back the
+# caller ID, so it is written by code (`examples/faro/__init__.py`), not here.
+version: 1
+id: faro
+call: state.py:FaroCall
+voice: voice.md
+
+steps:
+  - id: companion
+    kind: agent
+    prompt: prompts/companion.md
+    code: steps/companion.py
+    guarded: true

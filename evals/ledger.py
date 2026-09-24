@@ -51,8 +51,8 @@ MODELS = ('gemini', 'gpt', 'claude')
 """A generation from one of these is a model request. STT and TTS generations are not."""
 CLASSIFIER = 'You classify the answer to a question'
 """The first words of every harness classifier's instructions (`core.classifiers.TASK`)."""
-TASKS = frozenset({'save_booking', 'record_complaint'})
-"""Tool calls that change the business: the work a call is for."""
+TASKS = frozenset({'save_booking', 'record_complaint', 'save_name', 'activate_plan', 'record_answer'})
+"""Tool calls that change the business: the work a call is for. The salon's, then Faro's (`examples/faro`)."""
 FAILED = ('error', 'nothing was', 'refus', 'not saved')
 """Words in a tool's output that mean the write did not happen."""
 
@@ -167,11 +167,16 @@ class Call:
 
     def unmatched(self) -> list[Write]:
         """Audited writes with no question behind them, or a question about another action: none should exist."""
-        return [w for w in self.writes if 'about' in w.audit and w.name in TASKS and not _matches(w.audit)]
+        return [w for w in self.writes if 'about' in w.audit and w.name in ANSWERS and not _matches(w.audit)]
 
 
-ANSWERS = {'save_booking': ('booking', 'move_or_add'), 'record_complaint': ('complaint',)}
-"""The questions whose yes can authorise each write."""
+ANSWERS = {
+    'save_booking': ('booking', 'move_or_add'),
+    'record_complaint': ('complaint',),
+    'confirm_phone': ('phone',),
+    'activate_plan': ('plan',),
+}
+"""The questions whose yes can authorise each write. A write not named here needs no yes: it is audited, not matched."""
 
 
 def _matches(audit: dict[str, Any]) -> bool:
@@ -296,7 +301,7 @@ def summary(label: str, calls: list[Call]) -> list[str]:
         if tasks
         else '   tokens per completed task: undefined, no task completed'
     )
-    audited = [w for c in calls for w in c.writes if 'about' in w.audit and w.name in TASKS]
+    audited = [w for c in calls for w in c.writes if 'about' in w.audit and w.name in ANSWERS]
     if audited:
         bad = [w for c in calls for w in c.unmatched()]
         lines.append(

@@ -17,3 +17,4 @@ wheels/
 # Tooling
 .ruff_cache/
 
+data/

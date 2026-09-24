@@ -3,14 +3,15 @@
 Everything else a caller hears is the use case's: its prompts, its
 read-backs, its receipts. These four are said by the turn engine when
 something went wrong, so no use case wrote them. A call picks its locale by
-class (`CallContext.locale`).
+class (`CallContext.default_locale`), or per call by overriding `locale`, as a
+bilingual use case does (`examples/faro`).
 
 The instructions every classifier is sent (`core.classifiers.TASK`) and the
 class descriptions (`core.readings`) stay in English whatever the caller
 speaks: they are read by the model, not said to the caller.
 
-ponytail: only English exists. A second language needs its own four lines
-and a live check of the readings on its own dataset.
+ponytail: English and Spanish. The Spanish readings are checked only by
+Faro's live runs (`evals/faro.py`), not on a dataset of their own.
 """
 
 from __future__ import annotations
@@ -45,4 +46,11 @@ ENGLISH = Locale(
     exhausted="Sorry, I'm going round in circles there. Could you say that again?",
     unbacked="Sorry, let me correct myself: I haven't actually made that change. Let me check where we are.",
     withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
+)
+
+SPANISH = Locale(
+    stumble='Perdona, he tenido un problema. ¿Me lo repites?',
+    exhausted='Perdona, me estoy liando. ¿Me lo repites?',
+    unbacked='Perdona, me corrijo: todavía no he hecho ese cambio. Déjame ver dónde estamos.',
+    withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
 )

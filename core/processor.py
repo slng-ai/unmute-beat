@@ -43,12 +43,11 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pydantic_ai import ModelResponse, TextPart
 
 from core import turn as core
 from core.graph import Node
 from core.policies import TurnBudget
-from core.state import CallContext
+from core.state import CallContext, Question
 from core.turn import EXHAUSTED, STUMBLE  # noqa: F401  -- re-exported for tests
 
 _tracer = trace.get_tracer('slng-voice-harness')
@@ -170,18 +169,16 @@ class PydanticAgentProcessor(FrameProcessor):
         """
         await self.push_frame(EndWorkerFrame())
 
-    async def greet(self, line: str) -> None:
+    async def greet(self, line: str | Question) -> None:
         """Open the call with a fixed line, and record it as said.
 
         Fixed rather than generated: the caller hears it as the transport
         connects instead of a model round trip later. Recording it keeps the
-        agents' history honest about who spoke first.
+        agents' history honest about who spoke first. A `Question` greeting,
+        such as a caller ID read back, is put on the call first, so the
+        caller's first reply answers it (`core.turn.greet`).
         """
-        self._call.note_said('fixed', line, origin='entry')
-        await self.say(line)
-        self._call.messages.append(
-            ModelResponse(parts=[TextPart(content=line)], metadata={'speech_ids': [self._call.spoken[-1].id]})
-        )
+        await self.say(core.greet(self._call, line))
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         """Interruptions land while a turn is still streaming, which is the point.

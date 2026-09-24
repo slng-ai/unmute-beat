@@ -17,11 +17,11 @@ from core.interpreters import RuleInterpreter
 from core.policies import TurnBudget
 from core.turn import Barge, take_turn
 from salon import agents, diary
-from salon.classification import CLASSIFIER, classify_reply
-from salon.models.consent import Asked, ReplyClassification
+from salon.classification import classify_reply
+from salon.models.consent import Asked
 from salon.models.state import SalonCall, open_call
 from salon.tools.asking import Ask
-from tests.classifier_model import classifier_model
+from tests.classifier_model import ALL, classifier_model, classifier_with
 
 
 class Input(Exchange):
@@ -211,7 +211,7 @@ async def decisions_and_fallback():
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
         assert 'appointment_choice' not in str(call.messages)
         _, finished = await take_turn(call, agents.AGENTS, 'No, thanks.')
-        assert finished.requests == 1 and call.ended == 'caller'
+        assert call.ended == 'caller' and {r.kind for r in call.requests} == {'classifier'}, call.requests
 
         call, _ = pending_booking()
         seen = []
@@ -286,7 +286,7 @@ async def outcome_is_not_fallback():
         yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"correction"}')}
 
     with (
-        patch.object(CLASSIFIER, 'model', FunctionModel(broken)),
+        classifier_with(FunctionModel(broken)),
         agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=guidance)),
     ):
         await take_turn(call, agents.AGENTS, 'Yes.')
@@ -317,7 +317,7 @@ async def binding_failures_and_late_results():
     def invalid(messages, info):
         return ModelResponse(parts=[TextPart('broken')])
 
-    with patch.object(CLASSIFIER, 'model', FunctionModel(invalid)):
+    with classifier_with(FunctionModel(invalid)):
         usage = RunUsage()
         for _ in range(2):
             assert (await classify_reply(call, usage=usage)).confirmation == 'unclear'
@@ -328,11 +328,11 @@ async def binding_failures_and_late_results():
     async def late(messages, info):
         entered.set()
         await release.wait()
-        return ModelResponse(parts=[TextPart(ReplyClassification(confirmation='accept').model_dump_json())])
+        return ModelResponse(parts=[TextPart('{"confirmation": "accept"}')])
 
     call, _ = pending_booking()
     call.turn_started('Yes.')
-    with patch.object(CLASSIFIER, 'model', FunctionModel(late)):
+    with classifier_with(FunctionModel(late)):
         task = asyncio.create_task(classify_reply(call))
         await entered.wait()
         call.begin_turn()
@@ -356,7 +356,7 @@ async def limits_and_barge():
 
     call, _ = pending_booking()
     barge = Barge()
-    with patch.object(CLASSIFIER, 'model', FunctionModel(slow)):
+    with classifier_with(FunctionModel(slow)):
         task = asyncio.create_task(take_turn(call, agents.AGENTS, 'Yes.', barge=barge))
         await entered.wait()
         barge.fire()
@@ -391,14 +391,18 @@ async def rule_interpreters_spend_nothing():
 
 
 def classes_live_in_schema():
-    schema = ReplyClassification.model_json_schema()
-    for definition in schema['$defs'].values():
-        for choice in definition['anyOf']:
-            assert choice['const'] and choice['description']
-    assert CLASSIFIER.instructions.startswith(CLASSIFIER.context) and TASK in CLASSIFIER.instructions
-    assert '- `question`:' in CLASSIFIER.instructions and '- `pending`:' in CLASSIFIER.instructions
-    for label in ('accept', 'conditional', 'withdraw', 'booking'):
-        assert label not in CLASSIFIER.instructions, f'{label!r}: classes belong in the schema, not the task'
+    """Every reading's classes are in its own output schema, with descriptions; its instructions are the task."""
+    for reading in ALL:
+        classifier = reading.classifier
+        for definition in classifier.output_type.model_json_schema()['properties'].values():
+            for choice in definition.get('anyOf', []):
+                assert choice['const'] and choice['description'], (reading.name, choice)
+        assert classifier.instructions.startswith(classifier.context) and TASK in classifier.instructions
+        assert '- `question`:' in classifier.instructions and '- `answer`:' in classifier.instructions
+        for label in ('accept', 'conditional', 'withdraw', 'booking'):
+            assert label not in classifier.instructions, (
+                f'{reading.name}, {label!r}: classes belong in the schema'
+            )
 
 
 async def main():

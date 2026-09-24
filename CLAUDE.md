@@ -29,7 +29,8 @@ its supporting link. Read it before changing how a turn works.
 | `salon/steps/` | one module per step, each giving `node(step)`: its tools, outputs and openings |
 | `salon/nodes.py` | `build()`, `advance()`, `decided()`, `solve()`, the guards: what every step is built from |
 | `salon/instructions.py` | loads `flow.yaml` as `SPEC`; `instructions(name)` is a step's compiled prompt; `GREETING`; `COMPLAINT_GUIDANCE` |
-| `salon/classification.py` | `CONSENT` (six labels, default), `SOLVER` (one decision, `SALON_INTERPRETER=solver`), `DETOUR` (was the request kept during the number check); `classify_reply` |
+| `salon/classification.py` | the salon's narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`), each with when it applies; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply` |
+| `salon/baseline.py` | the same salon as one prompt on Pipecat's own Gemini service, the tools on the same `Diary`; `VOICE_HARNESS=pipecat` puts it in `bot.py` in place of the harness |
 | `core/classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
 | `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
 | `core/proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
@@ -37,13 +38,14 @@ its supporting link. Read it before changing how a turn works.
 | `core/completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
 | `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
 | `core/flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
+| `core/readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
 | `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`); `VOICE_AGENCY=access` runs one in `bot.py` |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
 | `utils/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI |
-| `tests/` | twenty assert-script modules, no pytest, no network |
+| `tests/` | twenty-one assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -67,7 +69,7 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all twenty modules, offline, no .env
+uv run python -m tests                                   # all twenty-one modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 uv run python -m utils.coval_sim run VkpkmRMV            # Coval release check, 18 real calls, billable

@@ -569,6 +569,12 @@ class CallContext(BaseModel):
                 said.append(words)
         return said
 
+    def said_last_turn(self) -> str:
+        """What the agent said on the turn before this one: the question a reply answers."""
+        previous = [segment for segment in self.all_spoken if segment.turn < self.turn]
+        last_turn = max((segment.turn for segment in previous), default=-1)
+        return ' '.join(s.text for s in previous if s.turn == last_turn).strip()
+
     def detour_speech(self) -> str:
         """What the agent said to the caller since a prerequisite's detour began, in order, as far as it was heard."""
         checkpoint = self._checkpoint

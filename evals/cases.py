@@ -365,6 +365,7 @@ CASES: tuple[Case, ...] = (
         spoken=BOOKING,
         utterance="No, forget it, I'll call back. Bye.",
         expect='end',
+        legacy='reject',
     ),
     Case(
         id='complaint-yes',

@@ -14,8 +14,9 @@ from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_valida
 
 from core import state as core
 from core.proposals import Proposal
+from core.readings import Option
 from salon.diary import Diary, day_phrases
-from salon.models.consent import Asked, ConsentInput, OfferedTime, ReplyClassification
+from salon.models.consent import Asked, ReplyClassification
 from salon.models.receipts import Slot
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
 
@@ -220,9 +221,6 @@ class SalonCall(core.CallContext):
     """The salon's books. A private attribute because the prompt templates are compiled against this model's schema."""
     _writes_before: int = PrivateAttr(default=0)
     """What `writes` stood at when this turn began, so "did anything land in this turn" is answerable."""
-    _classified_turn: int = PrivateAttr(default=-1)
-    _classification_input: ConsentInput | None = PrivateAttr(default=None)
-    _classification: ReplyClassification = PrivateAttr(default_factory=ReplyClassification)
     _complaint: Asked | None = PrivateAttr(default=None)
     """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
     _undo: tuple[str, str] | None = PrivateAttr(default=None)
@@ -230,10 +228,10 @@ class SalonCall(core.CallContext):
 
     A pick of an offered time books at once, with no read-back. The caller
     who then hears the price and says "leave it" was told goodbye with the
-    booking still in the diary. For as long as they hold it, every reading
-    is shown it (`just_changed`) and a reading that takes it back is offered
-    the cancel (`decided`), whichever turn it comes on and whether or not the
-    caller added it in the same breath as the pick.
+    booking still in the diary. For as long as they hold it, every reply is
+    read against it (`LAST_CHANGE`) and one that takes it back is offered the
+    cancel (`salon.nodes.ACTS`), whichever turn it comes on and whether or not
+    the caller added it in the same breath as the pick.
     """
     _day_words: list[str] = PrivateAttr(default_factory=list)
     """Every day the caller has named, in their own words, from whichever turn.
@@ -264,9 +262,6 @@ class SalonCall(core.CallContext):
         super().turn_started(heard)
         if not self.continuing:
             self._writes_before = self.state.writes
-        self._classified_turn = -1
-        self._classification_input = None
-        self._classification = ReplyClassification()
         if self._complaint and self.state.agent != 'verify':
             self._complaint = None
         if self._complaint and self._complaint.owner and self._complaint.owner != self.state.customer_phone:
@@ -307,27 +302,16 @@ class SalonCall(core.CallContext):
         """
         return super().last_proposal()
 
-    def consent_snapshot(self) -> ConsentInput:
-        """The application-owned context a consent answer is an answer to, as of now."""
-        previous = [segment for segment in self.all_spoken if segment.turn < self.turn]
-        last_turn = max((segment.turn for segment in previous), default=-1)
-        return ConsentInput(
-            answer=self.heard,
-            question=' '.join(s.text for s in previous if s.turn == last_turn).strip(),
-            owner=self.state.customer_phone,
-            pending=self.pending_question(),
-            retained_complaint=self._complaint,
-            just_changed=self._undo[1] if self._undo is not None and self.undo_booking else '',
-            offered=self._table(),
-            holding=tuple(
-                f'{b["service"]} {b["spoken"]}'
-                for b in self._diary.bookings_for(self.state.customer_phone, self._diary.now().date())
-            )
-            if self.state.customer_phone
-            else (),
-        ).model_copy(deep=True)
+    def holding(self) -> tuple[str, ...]:
+        """The appointments this caller holds, as the salon says them. Empty before anybody is identified."""
+        phone = self.state.customer_phone
+        if not phone:
+            return ()
+        return tuple(
+            f'{b["service"]} {b["spoken"]}' for b in self._diary.bookings_for(phone, self._diary.now().date())
+        )
 
-    def _table(self) -> tuple[OfferedTime, ...]:
+    def table(self) -> tuple[Option, ...]:
         """The times the caller can pick from right now.
 
         The pending offer's, when the question is an offer. Otherwise the ones
@@ -339,33 +323,13 @@ class SalonCall(core.CallContext):
         if question is not None and question.value:
             ids = question.value.split(',')
             return tuple(
-                OfferedTime(slot_id=slot.slot_id, spoken=slot.spoken)
+                Option(id=slot.slot_id, said=slot.spoken)
                 for slot in self.state.offered
                 if slot.slot_id in ids
             )
         phone = self.state.customer_phone
         return tuple(
-            OfferedTime(slot_id=row['slot_id'], spoken=row['spoken'])
-            for row in self._diary.offered_to(self.id, phone)
-        )
-
-    @property
-    def awaits_reading(self) -> bool:
-        """Whether the reply could decide something the application acts on, so it must be read first.
-
-        A question waiting on an answer, a complaint approval kept through
-        verification, a booking made in this call that the caller could still
-        take back, or times on the table. The last is not the same as a pending offer: "Nine, but only if
-        it's under thirty" answers the offer, the price comes back, and "fine,
-        nine then" picks from the same table with no question pending. Read
-        only on a question, that pick reached the step's model, which hung up
-        on the goodbye in the same breath.
-        """
-        return (
-            self.pending_question() is not None
-            or self._complaint is not None
-            or bool(self.undo_booking)
-            or bool(self._table())
+            Option(id=row['slot_id'], said=row['spoken']) for row in self._diary.offered_to(self.id, phone)
         )
 
     def picked_offer(self) -> str:
@@ -376,7 +340,7 @@ class SalonCall(core.CallContext):
         authorise a time that was never offered.
         """
         chosen = self.classification.chosen_offer
-        return chosen if chosen and chosen in {o.slot_id for o in self._table()} else ''
+        return chosen if chosen and chosen in {o.id for o in self.table()} else ''
 
     def offer_undo(self, booking_id: str, told: str) -> None:
         """A booking was just made and confirmed in these words: the caller may take it back while they hold it."""
@@ -390,28 +354,16 @@ class SalonCall(core.CallContext):
         held = self._diary.bookings_for(self.state.customer_phone, self._diary.now().date())
         return self._undo[0] if any(b['booking_id'] == self._undo[0] for b in held) else ''
 
-    def record_classification(self, snapshot: ConsentInput, result: ReplyClassification) -> None:
-        """Keep this turn's consent reading, bound to the snapshot it read. Only an interpreter calls this."""
-        self._classified_turn = self.turn
-        self._classification_input = snapshot
-        self._classification = result
-
     @property
     def classification(self) -> ReplyClassification:
-        """Only an interpretation of this input, identity and still-current proposal."""
-        snapshot = self._classification_input
-        if self._classified_turn != self.turn or snapshot is None:
-            return ReplyClassification()
-        now = self.consent_snapshot()
-        if (
-            snapshot.answer != now.answer
-            or snapshot.owner != now.owner
-            or snapshot.pending != now.pending
-            or snapshot.offered != now.offered
-            or snapshot.holding != now.holding
-        ):
-            return ReplyClassification()
-        return self._classification
+        """This turn's readings of the reply, each only while it is still about the call as it is now.
+
+        Imported here rather than at the top: the readings are built on this
+        class, so the module holding them cannot be imported before it.
+        """
+        from salon.classification import reading_of
+
+        return reading_of(self)
 
     @computed_field
     @property

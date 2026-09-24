@@ -532,8 +532,8 @@ async def selected_time_needs_no_extra_confirmation():
             agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=stream)),
         ):
             await Probe(call, agents.AGENTS)._turn(words)
-        assert call.state.writes == 1 and len(call.requests) == 1, words
-        assert [r.kind for r in call.requests] == ['classifier'], (
+        assert call.state.writes == 1, words
+        assert {r.kind for r in call.requests} == {'classifier'}, (
             'a plain pick of an offered time needs no model'
         )
 
@@ -542,19 +542,19 @@ async def consent_and_history_boundaries():
     call = open_call(PHONE, diary=books)
     call.note_said('fixed', 'Would you like a redo?')
     call.turn_started('No, thanks.')
-    await classify_reply(call)
+    await classify_reply(call, closing=True)
     assert not desk._can_end(call)
     call.note_said('fixed', 'Anything else?')
     call.turn_started('No, thanks.')
-    await classify_reply(call)
+    await classify_reply(call, closing=True)
     assert desk._can_end(call)
     call.note_model_text('Anything else?')
     call.note_heard('')
     call.turn_started('No, thanks.')
-    await classify_reply(call)
+    await classify_reply(call, closing=True)
     assert not desk._can_end(call), 'unheard speech cannot establish permission to hang up'
     call.turn_started('No thanks, but can you move my booking?')
-    await classify_reply(call)
+    await classify_reply(call, closing=True)
     assert not desk._can_end(call)
     call.commit(agent='complaints')
     assert call.claims_completion('I have recorded your request for a redo.')

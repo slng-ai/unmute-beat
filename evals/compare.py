@@ -26,11 +26,11 @@ import time
 from pydantic_ai.usage import RunUsage
 
 from evals.cases import CASES, Case, Meaning
-from evals.consent import classifier_meaning, consent_input
+from evals.consent import read_case
 from evals.report import Report, Result
 from evals.rules import decide
 from evals.solver import solver_input, solver_meaning
-from salon.classification import CLASSIFIER, SOLVER_CLASSIFIER
+from salon.classification import SOLVER_CLASSIFIER
 
 RESOLVED_BY_ACTION = {'accept', 'end', 'move', 'add'}
 """Readings that an application action answers on its own, when the proposal was heard."""
@@ -82,7 +82,7 @@ async def classifier_report() -> Report:
     usage, results = RunUsage(), []
     for case in CASES:
         started = time.perf_counter()
-        actual = classifier_meaning(case, await CLASSIFIER.classify(consent_input(case), usage=usage))
+        actual = await read_case(case, usage)
         results.append(
             Result.of(
                 case,

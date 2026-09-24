@@ -17,25 +17,23 @@ Scripted models, no audio, no network. Asserts, no pytest, same as the rest.
 import asyncio
 from contextlib import ExitStack, contextmanager
 from datetime import datetime
-from unittest.mock import patch
 
 from pipecat.clocks.system_clock import SystemClock
 from pipecat.frames.frames import BotStartedSpeakingFrame, StartFrame, TTSSpeakFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
 from pipecat.utils.asyncio.task_manager import TaskManager
 from pydantic_ai import ModelRetry, RunContext
-from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.history import project
 from core.processor import PydanticAgentProcessor
 from core.state import Checkpoint
 from salon import agents, diary
-from salon.classification import CLASSIFIER, DETOUR
 from salon.diary import Diary
-from salon.models.consent import ConsentInput, ReplyClassification
 from salon.models.state import open_call
 from salon.tools.booking import ask_booking, offer, offer_cancel, undo_ready
+from tests.classifier_model import scripted as scripted_readings
 
 PHONE = '+34611111111'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -89,17 +87,16 @@ def classifier(labels: dict[str, str], hold: str = ''):
     asked: list[str] = []
     held = asyncio.Event()
 
-    async def classify(messages, info):
-        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
-        asked.append(data.answer)
-        if data.answer == hold:
+    async def classify(name, data):
+        if name != 'confirmation':
+            return None
+        asked.append(data['answer'])
+        if data['answer'] == hold:
             held.set()
             await asyncio.Event().wait()
-        confirmation = labels.get(data.answer, 'unclear') if data.pending else 'not_applicable'
-        result = ReplyClassification(confirmation=confirmation)  # ty: ignore[invalid-argument-type]
-        return ModelResponse(parts=[TextPart(result.model_dump_json())])
+        return labels.get(data['answer'], 'unclear')
 
-    with patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)):
+    with scripted_readings(classify):
         yield asked, held
 
 
@@ -320,19 +317,11 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
         },
         'Yes, cancel it. Bye.': {'confirmation': 'accept', 'last_change': 'withdraw', 'conversation': 'end'},
     }
-    given: list[ConsentInput] = []
+    given: list[tuple[str, str]] = []
 
-    async def classify(messages, info):
-        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
-        given.append(data)
-        fields = dict(readings.get(data.answer, {}))
-        if not data.just_changed:
-            fields.pop('last_change', None)
-        if data.pending is None or data.pending.about != 'booking':
-            fields.pop('confirmation', None)
-        if data.pending is None or data.pending.about != 'offer':
-            fields.pop('chosen_offer', None)
-        return ModelResponse(parts=[TextPart(ReplyClassification.model_validate(fields).model_dump_json())])
+    def classify(name, data):
+        given.append((name, data['answer']))
+        return readings.get(data['answer'], {}).get(name)
 
     async def booking(messages, info):
         yield {
@@ -346,7 +335,7 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
         yield 'Anything else?'
 
     with ExitStack() as stack:
-        stack.enter_context(patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)))
+        stack.enter_context(scripted_readings(classify))
         for name, node in agents.AGENTS.items():
             model = FunctionModel(stream_function=booking if name == 'booking' else other)
             stack.enter_context(node.agent.override(model=model))
@@ -361,7 +350,9 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
             call.note_drained()
         probe.interrupt()
         await probe._turn("Oh, that's too much for me. Leave it, thanks. Goodbye.")
-        assert given[-1].just_changed, 'the classifier was not told what had just been booked'
+        assert ('last_change', call.heard) in given, (
+            'the reply was not read against what had just been booked'
+        )
         assert call.ended == '', 'hung up with the booking still in the diary'
         cancel = probe.fixed()[-1]
         assert cancel.startswith('So that is your hair colour') and cancel.endswith(
@@ -398,21 +389,21 @@ async def only_a_slot_on_the_table_can_be_picked():
         saturday = books.find_slots(PHONE, 'Saturday', 'hair-color', books.now(), offered_to='someone else')
         chosen = {'offered': nine, 'conditional': '', 'elsewhere': saturday['slots'][0]['slot_id']}[reading]
 
-        async def classify(messages, info, chosen=chosen):
-            return ModelResponse(parts=[TextPart(ReplyClassification(chosen_offer=chosen).model_dump_json())])
+        def classify(name, data, chosen=chosen):
+            return chosen if name == 'chosen_offer' else None
 
         async def booking(messages, info):
             yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
 
         with (
-            patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)),
+            scripted_readings(classify),
             agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking)),
         ):
             probe.interrupt()
             await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
         assert (call.state.writes == 1) is books_it, (reading, call.state.writes)
         if books_it:
-            assert [r.kind for r in call.requests] == ['classifier'], 'a plain pick needs no model'
+            assert {r.kind for r in call.requests} == {'classifier'}, 'a plain pick needs no model'
 
 
 async def a_pick_with_no_question_pending_still_books():
@@ -440,11 +431,8 @@ async def a_pick_with_no_question_pending_still_books():
         },
     }
 
-    async def classify(messages, info):
-        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
-        return ModelResponse(
-            parts=[TextPart(ReplyClassification.model_validate(readings[data.answer]).model_dump_json())]
-        )
+    def classify(name, data):
+        return readings[data['answer']].get(name)
 
     runs: list[str] = []
 
@@ -454,7 +442,7 @@ async def a_pick_with_no_question_pending_still_books():
 
     call.commit(agent='concierge')
     with (
-        patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)),
+        scripted_readings(classify),
         agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=desk)),
     ):
         probe.interrupt()
@@ -491,20 +479,17 @@ async def an_add_on_after_a_booking_is_read_against_it():
         joined: {'confirmation': 'conditional'},
         'Oh, okay. Fine. 09:00 then.': {'last_change': 'keep', 'chosen_offer': nine},
     }
-    seen: dict[str, ConsentInput] = {}
+    seen: dict[str, set[str]] = {}
 
-    async def classify(messages, info):
-        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
-        seen[data.answer] = data
-        return ModelResponse(
-            parts=[TextPart(ReplyClassification.model_validate(readings[data.answer]).model_dump_json())]
-        )
+    def classify(name, data):
+        seen.setdefault(data['answer'], set()).add(name)
+        return readings[data['answer']].get(name)
 
     async def speak(messages, info):
         yield 'A hair colour is 75 euros. Would you like to keep it?'
 
     with ExitStack() as stack:
-        stack.enter_context(patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)))
+        stack.enter_context(scripted_readings(classify))
         for name in ('concierge', 'complaints'):
             stack.enter_context(
                 agents.AGENTS[name].agent.override(model=FunctionModel(stream_function=speak))
@@ -515,12 +500,14 @@ async def an_add_on_after_a_booking_is_read_against_it():
         probe.interrupt()
         await probe._turn('But only if it costs less than 30 euros.')
         assert call.heard == joined and call.turn == 2, 'the add-on continues the turn of the pick'
-        assert seen[joined].just_changed, 'the add-on was not read against the booking just made'
+        assert 'last_change' in seen[joined], 'the add-on was not read against the booking just made'
         call.note_reached()
         call.note_drained()
         probe.interrupt()
         await probe._turn('Oh, okay. Fine. 09:00 then.')
-    assert seen['Oh, okay. Fine. 09:00 then.'].just_changed, 'a booking still held can still be taken back'
+    assert 'last_change' in seen['Oh, okay. Fine. 09:00 then.'], (
+        'a booking still held can still be taken back'
+    )
     assert not undo_ready(call), 'the caller kept it, so the cancel offer is off the table'
     context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
     try:
@@ -563,7 +550,7 @@ def a_detour_keeps_the_rest_of_its_first_turn():
     assert call.detour_words() == ['Actually, make it Saturday.'], call.detour_words()
     call.turn_started('Yes.')
     assert call.detour_words() == ['Actually, make it Saturday.', 'Yes.'], call.detour_words()
-    assert DETOUR._input(call).answer == 'Actually, make it Saturday. Yes.', DETOUR._input(call)
+    assert ' '.join(call.detour_words()) == 'Actually, make it Saturday. Yes.', call.detour_words()
     call.note_request_kept()
     assert call.request_kept
     call.turn_started('And one more thing.')

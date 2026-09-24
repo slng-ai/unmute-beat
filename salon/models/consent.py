@@ -17,6 +17,7 @@ from core.decisions import (
     Revise,
     SwitchTask,
 )
+from core.readings import ChoiceInput
 from core.state import STRICT
 
 
@@ -46,180 +47,32 @@ class Asked(BaseModel):
     """The caller turn it went out on. Set by `SalonCall.ask`, never by a tool."""
 
 
-class OfferedTime(BaseModel):
-    """One time the salon has just offered this caller, with the id a pick must name."""
+class OfferInput(ChoiceInput):
+    """A reply read against the times on the table, and what the caller already holds, for "the same time"."""
 
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    slot_id: str
-    spoken: str
-
-
-class ConsentInput(Exchange):
-    """A snapshot of the accepted reply and its application-owned context.
-
-    `question` is everything the salon said on the turn before the reply.
-    The field descriptions are prompt text: the classifier lists them to the
-    model.
-    """
-
-    owner: str = Field(description="The caller's phone number, once they have given one. Empty before that.")
-    pending: Asked | None = Field(
-        default=None,
-        description='The question the salon is waiting on an answer to, as it recorded it: what it is about '
-        '(`about`), its words (`spoken`) and what it proposes (`value`). Null when no question is waiting.',
-    )
-    retained_complaint: Asked | None = Field(
-        default=None,
-        description='A complaint the caller already approved, kept while their number is checked. Null if none.',
-    )
-    just_changed: str = Field(
-        default='',
-        description='What the salon told the caller it had changed earlier in this call, which the caller '
-        'can still take back. Empty when there is nothing.',
-    )
-    offered: tuple[OfferedTime, ...] = Field(
-        default=(), description='The times the caller can pick from right now, each with its `slot_id`.'
-    )
     holding: tuple[str, ...] = Field(
         default=(), description='The appointments the caller already holds, as the salon says them.'
     )
 
 
-type Confirmation = (
-    Annotated[
-        Literal['accept'],
-        Field(description='Clearly approves the exact pending proposal without conditions or questions.'),
-    ]
-    | Annotated[Literal['reject'], Field(description='Declines the pending proposal.')]
-    | Annotated[Literal['revise'], Field(description='Asks to change the pending proposal.')]
-    | Annotated[Literal['conditional'], Field(description='Agrees only under an additional condition.')]
-    | Annotated[
-        Literal['unclear'], Field(description='Asks a question, or the answer is ambiguous or incomplete.')
-    ]
-    | Annotated[Literal['not_applicable'], Field(description='No confirmation is pending.')]
-)
-
-type AppointmentChoice = (
-    Annotated[Literal['move'], Field(description='Replace an existing appointment with the proposed one.')]
-    | Annotated[Literal['add'], Field(description='Keep the existing appointment and add another.')]
-    | Annotated[
-        Literal['unclear'],
-        Field(description='Both, neither, conditional, or ambiguous; a bare yes cannot choose.'),
-    ]
-    | Annotated[
-        Literal['not_applicable'], Field(description='The answer is unrelated to choosing an appointment.')
-    ]
-)
-
-type Conversation = (
-    Annotated[
-        Literal['end'],
-        Field(
-            description='Ends the whole call with no remaining request; interpret refusals against the previous question.'
-        ),
-    ]
-    | Annotated[
-        Literal['continue'],
-        Field(description='Has more to discuss, asks a question, or only declines a proposal.'),
-    ]
-    | Annotated[Literal['unclear'], Field(description='Whether the caller wants to end the call is unclear.')]
-)
-
-type RetainedApproval = (
-    Annotated[
-        Literal['keep'],
-        Field(description='The approved complaint is unchanged while identity verification continues.'),
-    ]
-    | Annotated[
-        Literal['withdraw'],
-        Field(description='Withdraws or changes the complaint or its resolution, or switches tasks.'),
-    ]
-    | Annotated[
-        Literal['unclear'], Field(description='There is no retained complaint approval, or it is uncertain.')
-    ]
-)
-
-
-type LastChange = (
-    Annotated[
-        Literal['keep'],
-        Field(description='Keeps the change in `just_changed`, or does not take it back.'),
-    ]
-    | Annotated[
-        Literal['withdraw'],
-        Field(
-            description='Takes back the change in `just_changed`: asks to undo or cancel it, or says '
-            'to leave it or that they no longer want it. A condition on it is not taking it back.'
-        ),
-    ]
-    | Annotated[
-        Literal['unclear'],
-        Field(
-            description='`just_changed` is empty, whether they take it back is unclear, or they put a condition '
-            'on it ("only if...") that has not been answered yet.'
-        ),
-    ]
-)
-
-
 class ReplyClassification(BaseModel):
-    """Interpretation only: these labels cannot name or execute a business action."""
+    """This turn's readings, merged into the one view every tool guard reads. Interpretation only.
 
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    confirmation: Confirmation = 'unclear'
-    appointment_choice: AppointmentChoice = 'unclear'
-    conversation: Conversation = 'unclear'
-    retained_approval: RetainedApproval = 'unclear'
-    last_change: LastChange = 'unclear'
-    """Whether the reply takes back the change in `just_changed`. Read only against it: empty, it means nothing."""
-    chosen_offer: str = Field(
-        default='',
-        description='The slot_id of the one time in `offered` that the answer picks or asks for, copied exactly '
-        'from `offered`: a time they name, or "the same time" as one in `holding`. It still counts when the '
-        'answer also says thanks, goodbye or that they need nothing else, whatever `question` was. Empty if '
-        'the answer names no time in `offered`, puts a condition on it, or could mean more than one.',
-    )
-    """Checked against the pending offer by the application: a slot that was not on the table authorises nothing."""
-
-
-type RequestChange = (
-    Annotated[
-        Literal['kept'],
-        Field(
-            description='In `answer` the caller only answered what they were asked (a phone number, '
-            'a yes or no, a correction of it) and changed or added nothing to `request`.'
-        ),
-    ]
-    | Annotated[
-        Literal['changed'],
-        Field(
-            description='Somewhere in `answer` the caller changed `request` or asked for '
-            'something more: another day, time or service, a question, a complaint.'
-        ),
-    ]
-    | Annotated[Literal['unclear'], Field(description='There is no `request`, or it is uncertain.')]
-)
-
-
-class DetourInput(Exchange):
-    """What was said while the salon checked who the caller is, and the request that check interrupted.
-
-    `question` is everything the salon said during the check, `answer`
-    everything the caller said, both in order. Its own snapshot and its own
-    request, not fields of `ConsentInput`: added there, they cost the consent
-    reading its accuracy (Coval run CFmgWMUy, "Yes. That's correct." to a
-    read-back read as nothing pending, three of five calls).
+    Not a model output: each field is one narrow reading's label
+    (`salon.classification.reading_of`), or its default when that reading did
+    not apply, failed or went stale. These labels cannot name or execute a
+    business action.
     """
 
-    request: str = Field(description='What the caller asked for before the check began, in their words.')
-
-
-class DetourReading(BaseModel):
-    """Interpretation only: whether the interrupted request still stands. It authorises no business action."""
-
     model_config = ConfigDict(extra='forbid', frozen=True)
-    request_change: RequestChange = 'unclear'
-    """Only `kept` lets a return from the check act on the request without a model run."""
+    confirmation: Literal['accept', 'reject', 'revise', 'conditional', 'unclear'] = 'unclear'
+    appointment_choice: Literal['move', 'add', 'unclear'] = 'unclear'
+    conversation: Literal['end', 'continue', 'unclear'] = 'unclear'
+    retained_approval: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
+    last_change: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
+    """Whether the reply takes back the booking made in this call. Only read while the caller holds it."""
+    chosen_offer: str = ''
+    """Checked against the table by the application: a slot that was not on it authorises nothing."""
 
 
 class CorrectPhone(Decision):

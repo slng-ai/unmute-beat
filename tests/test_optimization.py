@@ -306,7 +306,7 @@ async def openings_skip_the_model():
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn('9:00 AM, please.')
-    assert probe.requests() == 1 and call.requests[0].kind == 'classifier', 'a plain pick needs no model'
+    assert {r.kind for r in call.requests} == {'classifier'}, 'a plain pick needs no model'
     assert call.state.writes == 1, call.state
     assert call.state.offered == [], 'a save takes the offer off the table'
 

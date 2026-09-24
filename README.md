@@ -80,7 +80,14 @@ says or does.
 uv run python -m utils.coval_sim run 8YK67zzr     # the core set: 5 calls aimed at known harness failures
 uv run python -m utils.coval_sim run VkpkmRMV     # the full salon release set, 18 calls
 uv run python -m utils.coval_sim run 9CN3Djw2     # the one-call smoke set
+VOICE_HARNESS=pipecat uv run python -m utils.coval_sim run 8YK67zzr   # the same calls against the one-prompt baseline
 ```
+
+`VOICE_HARNESS=pipecat` swaps the harness for the baseline
+([salon/baseline.py](salon/baseline.py)): the same pipeline, turn taking,
+diary and model, with Pipecat's own Gemini service and one system prompt
+holding every rule in place of the harness. Nothing else changes, so a
+difference between two runs is the conversation layer.
 
 ```
 FAIL  salon  test set VkpkmRMV  run Ab12Cd34Ef56Gh78
@@ -138,6 +145,7 @@ core/
   graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
   flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
   classifiers.py        generic Pydantic input/output classification in one request
+  readings.py           narrow readings: one small classifier per act, and the fixed order they act in
   decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
   proposals.py          the one question a call waits on, and when it can be answered
   completion.py         when a step is done: evidence in the facts, never a flag
@@ -158,15 +166,16 @@ salon/
   steps/                one module per step, each giving node(step)
   nodes.py              build(), advance(): what every step is built from
   instructions.py       loads flow.yaml; each step's compiled prompt
-  classification.py     the consent classifier and the state solver, one live at a time
+  classification.py     the salon's narrow readings, and the opt-in state solver
+  baseline.py           the same salon as one prompt on Pipecat's own LLM service (VOICE_HARNESS=pipecat)
   agents.py             the AGENTS table, compiled from flow.yaml
 utils/observability.py  Langfuse over OTel
-tests/                  eighteen assert scripts
+tests/                  twenty-one assert scripts
 examples/               access (ten steps) and help (one step), on core alone; VOICE_AGENCY=access|help
 evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
 evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
-evals/focused.py        the live failures replayed against the real classifiers, five times each
+evals/focused.py        the live failures replayed against the real readings, five times each, with tokens
 evals/solver.py         explicitly invoked live state-solver evaluation
 evals/compare.py        every interpreter side by side; the rule floor offline, the rest with --live
 evals/rules.py          the no-model floor the others must beat
@@ -801,22 +810,56 @@ with `ClassSet` and `output_model`, so a flow file can define them. A new use
 case supplies its own context, facts and classes. There are no salon rules
 in `core`.
 
+### Narrow readings: one small classifier per act
+
+A reply can do a handful of things every voice agent has to hear. Each one
+is its own reading ([core/readings.py](core/readings.py)), and a reading runs
+only when the call's state says its act can happen this turn:
+
+```mermaid
+flowchart LR
+    A[caller's reply] --> B{what can happen now?}
+    B -->|read-back waiting| C[confirm]
+    B -->|options on the table| D[choose]
+    B -->|undoable change held| E[take back]
+    B -->|question waiting| F[closing]
+    C & D & E & F --> G[fixed order: answer, take back, pick, goodbye]
+    G --> H[one action, or the step's model]
+```
+
+1. The application's state decides which readings apply. A reading that
+   cannot apply is never sent.
+2. The ones that apply run side by side, so the turn waits for the slowest.
+3. Each has its own input (the question, the answer, and only the facts it
+   needs) and its own classes with their descriptions.
+4. `Acts` tries what the business does on each act in one fixed order, the
+   same for every business. "Yes, cancel it" to a cancel question answers
+   it before it counts as taking anything back.
+
+Core owns the inputs, the classes and their descriptions (`CONFIRM`,
+`TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`, and `Choice` for picking
+one of the options by id). A business writes, per reading, when it applies,
+one context sentence, and the action each label takes. The salon's are in
+[salon/classification.py](salon/classification.py) and
+[salon/nodes.py](salon/nodes.py) (`ACTS`). The tool guards read one merged
+view of this turn's labels, `SalonCall.classification`.
+
+A request sends 270 to 430 input tokens, against about 2,300 for the one
+consent classifier it replaced, which was sent every class and every fact on
+every turn. On the 53 reviewed cases in `evals/cases.py` the readings gave
+the reviewed answer 50 times and accepted wrongly once; the single
+classifier, on the same cases the same day, 43 and 5. Four of those five were
+answers to a question the caller never heard in full, which a reading is now
+never sent at all.
+
 `uv run --env-file .env python -m evals.focused` sends the exact inputs of
-the live failures to the real model, five times each, and says which cases
-did not pass every time. It is billable and cheap: 65 small requests.
-
-The salon wiring is in [salon/classification.py](salon/classification.py),
-and its contracts are in [salon/models/consent.py](salon/models/consent.py):
-
-| Contract | Contents |
-|---|---|
-| `ConsentInput` | The answer, the speech it answers, caller identity, pending question, any retained complaint approval, what was just changed, the times on the table and the caller's bookings. |
-| `ReplyClassification` | Confirmation (`accept`, `reject`, `revise`, `conditional`, `unclear`, `not_applicable`), appointment choice (`move`, `add`, `unclear`, `not_applicable`), conversation status, whether retained complaint approval still applies, whether the answer takes back the last change, and which offered time it picks. |
-| `DetourInput`, `DetourReading` | While the number is checked: what the salon said, what the caller said, the request the check interrupted, and whether the caller kept it (`kept`, `changed`, `unclear`). Its own request, run beside the consent reading. |
+the live failures to the real readings, five times each, says which cases
+did not pass every time, and prints each reading's input tokens per request.
+It is billable and cheap: 130 small requests.
 
 ### The state solver (opt-in)
 
-`SALON_INTERPRETER=solver` swaps the four-label classifier for a
+`SALON_INTERPRETER=solver` swaps the narrow readings for a
 [state solver](salon/classification.py): one structured request that reads the
 reply as exactly one [decision](core/decisions.py) (accept, reject, revise,
 conditional, clarify, correct the number, choose move or add, switch task,
@@ -824,8 +867,8 @@ end the call, or nothing). The three the classifier cannot say are applied
 by existing executors: a corrected number is read back with `readback_number`,
 a switch moves the caller through the same routing and prerequisites as any
 handoff and ends the turn, and a clarifying question is only asked about a
-readback. Everything else is written into the same consent reading the
-classifier produces, so every tool guard reads the solver unchanged. An
+readback. Everything else is written into the same merged view the
+readings produce, so every tool guard reads the solver unchanged. An
 interrupted proposal is shown to the solver so it can be corrected or
 abandoned, and can never be accepted. It stays opt-in until it has been
 compared live on `evals/cases.py`; see `docs/plans/portable-typed-flows.md`.

@@ -9,20 +9,17 @@ labelled answer is `evals/consent.py`'s question, and costs money.
 
 import asyncio
 from datetime import datetime
-from unittest.mock import patch
 
 from pydantic_ai import RunContext
-from pydantic_ai.messages import ModelResponse, TextPart
-from pydantic_ai.models.function import FunctionModel
 
 from evals.cases import CASES, Case, Meaning, by_group
-from evals.consent import classifier_meaning, legacy_classification
+from evals.consent import classifier_meaning, label_of, reading_for
 from salon import agents, diary
-from salon.classification import CLASSIFIER
-from salon.models.consent import Asked, ConsentInput
+from salon.models.consent import Asked
 from salon.models.state import SalonCall, open_call
 from salon.tools.asking import Ask
 from salon.tools.complaints import ask_complaint
+from tests.classifier_model import scripted
 
 PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -101,21 +98,10 @@ def expected_action(case: Case, meaning: Meaning) -> str | None:
     return None
 
 
-def scripted(meaning: Meaning):
-    """A classifier model that always answers with this meaning."""
-
-    def answer(messages, info):
-        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
-        result = legacy_classification(meaning, retained=data.retained_complaint is not None)
-        return ModelResponse(parts=[TextPart(result.model_dump_json())])
-
-    return FunctionModel(answer)
-
-
 async def replay(case: Case, meaning: Meaning) -> tuple[str | None, SalonCall]:
     call = await pending(case)
     call._end = _ignore
-    with patch.object(CLASSIFIER, 'model', scripted(meaning)):
+    with scripted(lambda name, data: label_of(meaning, name)):
         action = await agents.advance(call)
         if action is not None:
             await action.run()
@@ -145,9 +131,8 @@ def cases_are_well_formed():
     for case in CASES:
         if case.expect == 'correct_phone':
             assert case.digits.startswith('+34'), case.id
-        assert classifier_meaning(case, legacy_classification(case.legacy_meaning)) == case.legacy_meaning, (
-            case.id
-        )
+        label = label_of(case.legacy_meaning, reading_for(case).name) or ''
+        assert classifier_meaning(case, label) == case.legacy_meaning, case.id
 
 
 async def correct_interpretations_do_the_right_thing():

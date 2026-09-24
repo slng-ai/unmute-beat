@@ -26,7 +26,6 @@ step's prompt, exits and requirements come from `salon/flow.yaml`.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import replace
@@ -40,9 +39,10 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from core.decisions import Clarify
 from core.graph import Exit, LocalAction, Node, Opening, lent
 from core.policies import one_action_per_reply, request_clock, speak_by
+from core.readings import Acts
 from core.steps import AgentStep
 from salon import classification
-from salon.classification import DETOUR, MODEL, SETTINGS, SOLVER, classify_reply
+from salon.classification import MODEL, SETTINGS, SOLVER, classify_reply
 from salon.models.consent import CorrectPhone, SalonSwitch
 from salon.models.receipts import BookingCommand
 from salon.models.shapes import SubmittedPhone
@@ -54,7 +54,7 @@ from salon.tools.desk import clarify, end_conversation, hand_over_for, switch_ta
 from salon.tools.identity import lookup_customer, readback_number
 from salon.tools.policy import ACTIONS, SPEAK_BY
 
-__all__ = ['EXITS', 'advance', 'build', 'complaint_ready', 'decided', 'solve', 'verified']
+__all__ = ['ACTS', 'EXITS', 'advance', 'build', 'complaint_ready', 'decided', 'solve', 'verified']
 
 EXITS: dict[str, tuple[Exit[SalonState], ...]] = {}
 """Each built step's exits, by name, so `solve` can hand a caller on without importing the table that holds the steps."""
@@ -65,82 +65,104 @@ async def advance(
 ) -> LocalAction | None:
     """Resolve a pending decision before spending a conversational request.
 
-    Classification is shared with the tool guards. An unresolved answer falls
-    through to conversation, while application guards still own every write.
-    While the identity check runs, whether the caller kept the request it
-    interrupted is read at the same time, as its own request, so it adds no
-    wait and cannot blur the consent reading.
-    With the solver live, `solve` reads the reply instead and can also answer
-    a correction or a change of task.
+    The readings that apply to this turn run side by side (`classify_reply`),
+    and the salon's rules act on them in core's fixed order (`ACTS`). A turn
+    no reading applies to costs no request here. Classification is shared
+    with the tool guards; an unresolved answer falls through to conversation,
+    while application guards still own every write. With the solver live,
+    `solve` reads the reply instead and can also answer a correction or a
+    change of task.
     """
     if classification.INTERPRETER == 'solver':
         return await solve(call, usage, usage_limits)
-    if call.awaits_reading:
-        readings = [classify_reply(call, usage=usage, usage_limits=usage_limits)]
-        if call.detour_request:
-            readings.append(DETOUR.interpret(call, usage=usage, usage_limits=usage_limits))
-        await asyncio.gather(*readings)
+    await classify_reply(call, usage=usage, usage_limits=usage_limits)
     return decided(call)
 
 
 def decided(call: SalonCall) -> LocalAction | None:
-    """The action this turn's consent reading decides on its own, or None to let the step's agent answer.
+    """The action this turn's readings decide on their own, or None to let the step's agent answer."""
+    return ACTS.decide(call)
 
-    In order of what the caller would lose if it were missed: a booking made
-    in this call that they take back is offered for cancelling, on whatever
-    turn they say so (Coval run Y47Ut7oC, K2: "Leave it, thanks" two turns
-    after the booking was read as the goodbye it also was, and hung up on it)
-    unless that cancel is the question already waiting, which the answer then
-    answers ("Yes, please cancel it" is a withdrawal too, and re-asked it
-    three times, Coval run gdw96FkH), a plain pick of an offered
-    time books it (the write's own guard still checks the slot was on the
-    table, and asks move-or-add if they already hold one), an answer that
-    agrees to something runs it, and only then does a goodbye end the call. "Yes, go
-    ahead, bye" used to hang up on the yes, and "Leave it, thanks, goodbye"
-    used to hang up on the booking.
+
+def _move_or_add(call: SalonCall) -> LocalAction | None:
+    """The caller chose between moving the booking they hold and adding the new time."""
+    question = call.pending('move_or_add')
+    if question is None or not call.state.customer_verified:
+        return None
+    choice = call.classification.appointment_choice
+    if choice == 'add':
+        return LocalAction('save_booking', lambda: write_booking(call, 'book', question.value, ''))
+    if choice == 'move' and question.booking_id:
+        return LocalAction(
+            'save_booking', lambda: write_booking(call, 'move', question.value, question.booking_id)
+        )
+    return None
+
+
+def _agreed(call: SalonCall) -> LocalAction | None:
+    """A yes to the read-back waiting: the number, a booking change, or a complaint."""
+    if call.classification.confirmation != 'accept':
+        return None
+    if call.state.agent == 'verify' and (question := call.pending('phone')):
+        phone = question.value
+        return LocalAction('confirm_customer', lambda: lookup_customer(call, phone))
+    if (
+        call.state.customer_verified
+        and (question := call.pending('booking'))
+        and question.action in ('book', 'move', 'cancel')
+        and (call.state.agent == 'booking' or question.action == 'cancel')
+    ):
+        command = BookingCommand.model_validate(
+            {'action': question.action, 'slot_id': question.value, 'booking_id': question.booking_id}
+        )
+        return LocalAction('save_booking', lambda: write_booking(call, **command.model_dump()))
+    if call.state.agent == 'complaints' and call.complaint_approved and call.pending('complaint'):
+        approved = call._complaint
+        assert approved is not None
+        return LocalAction(
+            'record_complaint', lambda: write_complaint(call, approved.summary, approved.requested_resolution)
+        )
+    return None
+
+
+def _took_back(call: SalonCall) -> LocalAction | None:
+    """A booking made in this call that the caller takes back is offered for cancelling, on whatever turn.
+
+    Coval run Y47Ut7oC, K2: "Leave it, thanks" two turns after the booking was
+    read as the goodbye it also was, and hung up on it. Not while that cancel
+    is itself the question waiting: then the answer answers it, and a yes has
+    already cancelled (Coval run gdw96FkH, "Yes, please cancel it" re-asked
+    three times).
     """
+    undo = call.undo_booking
+    if not undo or call.classification.last_change != 'withdraw':
+        return None
     question = call.pending_question()
-    reply = call.classification
-    cancelling = (
-        question is not None and question.action == 'cancel' and question.booking_id == call.undo_booking
-    )
-    if (undo := call.undo_booking) and reply.last_change == 'withdraw' and not cancelling:
-        return LocalAction('ask_booking', lambda: _cancel_question(call, undo))
+    if question is not None and question.action == 'cancel' and question.booking_id == undo:
+        return None
+    return LocalAction('ask_booking', lambda: _cancel_question(call, undo))
+
+
+def _picked(call: SalonCall) -> LocalAction | None:
+    """A plain pick of a time on the table books it. The write's own guard still checks the slot, and asks move or add."""
     if (slot := call.picked_offer()) and call.state.customer_verified:
         return LocalAction('save_booking', lambda: write_booking(call, 'book', slot, ''))
-    if question is not None and question.about == 'move_or_add' and call.state.customer_verified:
-        choice_question = question
-        if reply.appointment_choice == 'add':
-            return LocalAction('save_booking', lambda: write_booking(call, 'book', choice_question.value, ''))
-        if reply.appointment_choice == 'move' and question.booking_id:
-            return LocalAction(
-                'save_booking',
-                lambda: write_booking(call, 'move', choice_question.value, choice_question.booking_id),
-            )
-    if reply.confirmation == 'accept':
-        if call.state.agent == 'verify' and (question := call.pending('phone')):
-            phone = question.value
-            return LocalAction('confirm_customer', lambda: lookup_customer(call, phone))
-        if (
-            call.state.customer_verified
-            and (question := call.pending('booking'))
-            and question.action in ('book', 'move', 'cancel')
-            and (call.state.agent == 'booking' or question.action == 'cancel')
-        ):
-            command = BookingCommand.model_validate(
-                {'action': question.action, 'slot_id': question.value, 'booking_id': question.booking_id}
-            )
-            return LocalAction('save_booking', lambda: write_booking(call, **command.model_dump()))
-        if call.state.agent == 'complaints' and call.complaint_approved and call.pending('complaint'):
-            approved = call._complaint
-            assert approved is not None
-            return LocalAction(
-                'record_complaint',
-                lambda: write_complaint(call, approved.summary, approved.requested_resolution),
-            )
-    if question is not None and reply.conversation == 'end':
+    return None
+
+
+def _goodbye(call: SalonCall) -> LocalAction | None:
+    if call.pending_question() is not None and call.classification.conversation == 'end':
         return LocalAction('hang_up', lambda: end_conversation(call, 'Thanks for calling. Goodbye.'))
     return None
+
+
+ACTS = Acts[SalonCall](
+    answer=(_move_or_add, _agreed),
+    take_back=(_took_back,),
+    pick=(_picked,),
+    goodbye=(_goodbye,),
+)
+"""The salon's rule for each act. The order is core's: "Yes, go ahead, bye" books before it hangs up."""
 
 
 async def _cancel_question(call: SalonCall, booking_id: str) -> Ask:

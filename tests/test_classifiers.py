@@ -405,8 +405,19 @@ def classes_live_in_schema():
             )
 
 
+def every_read_back_is_one_request():
+    """A flow's `ConfirmStep` sends what the salon's `confirmation` reading sends, so one dataset measures both."""
+    from core.steps import confirm_interpreter
+    from salon.classification import CONFIRMATION, MODEL
+
+    step = confirm_interpreter(MODEL).classifier
+    assert step.input_type is CONFIRMATION.classifier.input_type
+    assert step.json_schema() == CONFIRMATION.classifier.json_schema()
+
+
 async def main():
     classes_live_in_schema()
+    every_read_back_is_one_request()
     await generic_contracts()
     await invalid_answers_and_cancellation()
     await decisions_and_fallback()

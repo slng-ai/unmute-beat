@@ -16,7 +16,8 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserProm
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.flow import Flow
-from core.steps import ConfirmInput, ConfirmReading, FlowCall
+from core.readings import ReadBackInput
+from core.steps import CONFIRMATION, FlowCall
 from core.turn import take_turn
 from examples.access import flow as access
 from examples.access.backend import DIRECTORY
@@ -58,10 +59,11 @@ async def extracts(messages, info):
 
 
 def reads(messages, info):
-    data = ConfirmInput.model_validate_json(messages[-1].parts[0].content)
-    kind = READ.get(data.answer, 'none')
+    """The confirmation classifier: core's `CONFIRM` classes, the same request the salon's reading sends."""
+    data = ReadBackInput.model_validate_json(messages[-1].parts[0].content)
+    label = READ.get(data.answer, 'unclear')
     return ModelResponse(
-        parts=[TextPart(ConfirmReading.model_validate({'decision': {'kind': kind}}).model_dump_json())]
+        parts=[TextPart(CONFIRMATION.model_validate({'confirmation': label}).model_dump_json())]
     )
 
 

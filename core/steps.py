@@ -37,13 +37,14 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.classifiers import Classifier, Exchange
+from core.classifiers import Classifier, output_model
 from core.completion import FieldsPresent, ReceiptMatched
 from core.decisions import Accept, Clarify, Conditional, NoDecision, Reject, Revise
 from core.graph import Exit, LocalAction, Node, Opening
-from core.interpreters import ClassifierInterpreter, Interpreter
+from core.interpreters import Interpreter
 from core.operations import Operation, OutcomeUnknownError
 from core.proposals import BaseProposal, Proposal
+from core.readings import CONFIRM, ReadBackInput
 from core.state import CallContext, Handoff, VoiceState, present
 
 
@@ -75,12 +76,6 @@ class Prompted:
         return self.spoken
 
 
-class ConfirmInput(Exchange):
-    """What the confirmation interpreter reads: the reply, and the exact proposal read back as `question`."""
-
-    delivered: bool = Field(description='Whether the person heard the whole read-back before answering.')
-
-
 class ConfirmReading(BaseModel):
     """The reply to a readback, as one decision."""
 
@@ -88,35 +83,62 @@ class ConfirmReading(BaseModel):
     decision: Accept | Reject | Revise | Conditional | Clarify | NoDecision = Field(discriminator='kind')
 
 
-class ConfirmInterpreter(ClassifierInterpreter[FlowCall, ConfirmInput, ConfirmReading]):
-    """Reads a reply to the last readback. A readback the caller spoke over can never be accepted."""
+CONFIRMATION = output_model('ConfirmationReading', {'confirmation': CONFIRM})
+"""What the model is asked for: core's `CONFIRM` classes, the same request a business's `confirmation` reading sends.
 
-    def _input(self, call: FlowCall) -> ConfirmInput:
+One shape and one set of descriptions for every read-back in every flow, so
+the `harness-reading/confirm` dataset measures this step as well as the
+salon's (`evals.readings`), and tuning one tunes both.
+"""
+
+DECISIONS: dict[str, type[Accept | Reject | Revise | Conditional | NoDecision]] = {
+    'accept': Accept,
+    'reject': Reject,
+    'revise': Revise,
+    'conditional': Conditional,
+    'unclear': NoDecision,
+}
+"""Each class as the decision the step acts on. `unclear` lets the step's model answer, as a question needs."""
+
+
+class ConfirmInterpreter(Interpreter[FlowCall, ReadBackInput, ConfirmReading]):
+    """Reads a reply to the last readback with the `CONFIRM` classes. A readback spoken over is never accepted."""
+
+    def __init__(self, name: str, classifier: Classifier[ReadBackInput, Any]) -> None:
+        super().__init__(name, ConfirmReading(decision=NoDecision()))
+        self.classifier = classifier
+
+    def _input(self, call: FlowCall) -> ReadBackInput:
         last = call.last_proposal()
-        return ConfirmInput(
-            answer=call.heard, question=last[0].spoken if last else '', delivered=bool(last and last[1])
+        return ReadBackInput(
+            question=call.said_last_turn(), answer=call.heard, proposal=last[0].spoken if last else ''
         )
 
-    def _still_valid(self, call: FlowCall, value: ConfirmInput) -> bool:
+    def _still_valid(self, call: FlowCall, value: ReadBackInput) -> bool:
         last = call.last_proposal()
-        return value.answer == call.heard and value.question == (last[0].spoken if last else '')
+        return value.answer == call.heard and value.proposal == (last[0].spoken if last else '')
 
-    def _settle(self, call: FlowCall, value: ConfirmInput, result: ConfirmReading) -> ConfirmReading:
-        if not value.delivered and isinstance(result.decision, Accept):
+    async def _decide(
+        self, value: ReadBackInput, *, usage: RunUsage | None, usage_limits: UsageLimits | None
+    ) -> ConfirmReading:
+        result = await self.classifier.classify(value, usage=usage, usage_limits=usage_limits)
+        return ConfirmReading(decision=DECISIONS[result.confirmation]())
+
+    def _settle(self, call: FlowCall, value: ReadBackInput, result: ConfirmReading) -> ConfirmReading:
+        last = call.last_proposal()
+        if not (last and last[1]) and isinstance(result.decision, Accept):
             return ConfirmReading(decision=NoDecision())
         return result
 
 
-def confirm_interpreter(model: Model | str, settings: ModelSettings | None = None) -> ConfirmInterpreter:
+def confirm_interpreter(
+    model: Model | str,
+    settings: ModelSettings | None = None,
+    context: str = 'The person was read back a proposal and is waiting to confirm it.',
+) -> ConfirmInterpreter:
     """The default reader of confirmations: one structured request, no tools, no history."""
-    classifier = Classifier(
-        model,
-        ConfirmInput,
-        ConfirmReading,
-        context='The person was read back a proposal and asked to confirm it. Read their answer as exactly one decision.',
-        model_settings=settings,
-    )
-    return ConfirmInterpreter('confirm', classifier, ConfirmReading(decision=NoDecision()))
+    classifier = Classifier(model, ReadBackInput, CONFIRMATION, context=context, model_settings=settings)
+    return ConfirmInterpreter('confirm', classifier)
 
 
 class ConfirmedOperation[ArgsT: BaseModel, ReceiptT: BaseModel](

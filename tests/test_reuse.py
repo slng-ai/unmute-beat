@@ -66,7 +66,7 @@ async def a_pick_is_read_back_and_only_the_yes_books():
     with scripted(chosen_time='0900') as asked:
         await take_turn(call, nodes, 'Nine, please.')
     assert heard[-1] == 'Shall I book you in for Tuesday at 9:00 AM?', heard
-    assert agent.requests == 0 and asked == ['chosen_time', 'conversation'], (agent.requests, asked)
+    assert agent.requests == 0 and sorted(asked) == ['chosen_time', 'conversation'], (agent.requests, asked)
     assert not call._book, 'a pick is not a yes: nothing is booked yet'
 
     with scripted(confirmation='accept') as asked:

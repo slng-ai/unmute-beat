@@ -571,32 +571,92 @@ def pinned() -> dict[str, Any]:
     return {'requests': requests, 'sent': sent}
 
 
+AGENT_GOLDEN = Path(__file__).parent / 'golden' / 'agents.json'
+"""Each salon step's first model request, pinned: its instructions, its tools and its output tools."""
+
+
+def _tools(defs) -> list[dict[str, Any]]:
+    return [
+        {
+            'name': d.name,
+            'description': d.description,
+            'parameters': d.parameters_json_schema,
+            'sequential': d.sequential,
+        }
+        for d in defs
+    ]
+
+
+async def _agent_request(step: str, heard: str) -> dict[str, Any]:
+    """What a step's agent is sent on a turn no reading decides, from a call standing in that step."""
+    from tests.classifier_model import classifier_model
+
+    call = open_call(PHONE, diary=_diary())
+    if step in ('booking', 'complaints'):
+        call.commit(agent=step, customer_verified='existing', verified_phone=PHONE)
+    else:
+        call.commit(agent=step)
+    seen: dict[str, Any] = {}
+
+    async def capture(messages, info):
+        if not seen:
+            seen.update(
+                instructions=info.instructions,
+                allow_text=info.allow_text_output,
+                tools=_tools(info.function_tools),
+                outputs=_tools(info.output_tools),
+            )
+        yield {0: DeltaToolCall(name='no_such_tool', json_args='{}')}
+
+    with classifier_model(), agents.AGENTS[step].agent.override(model=FunctionModel(stream_function=capture)):
+        await take_turn(call, agents.AGENTS, heard)
+    assert seen, f'{step} sent no model request'
+    return seen
+
+
+async def agent_requests_are_pinned():
+    """No step's prompt or tool schema changes without a diff. Tool docstrings are prompt text."""
+    heard = {
+        'concierge': 'Do you do blowouts?',
+        'verify': 'My number is on file.',
+        'booking': 'A haircut on Friday, please.',
+        'complaints': 'My colour came out patchy last week.',
+    }
+    pinned = {step: await _agent_request(step, words) for step, words in heard.items()}
+    _compare(AGENT_GOLDEN, pinned)
+
+
+def _compare(path: Path, value: Any) -> None:
+    """The file is compared as text, because key order is part of what is sent. `BLESS_READINGS=1` rewrites it."""
+    current = json.dumps(value, indent=1, sort_keys=False, default=str) + '\n'
+    if os.environ.get('BLESS_READINGS') == '1':
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(current)
+        print(f'{path.name} pinned again: a prompt change, which needs a live check')
+        return
+    expected = path.read_text()
+    if current != expected:
+        diff = difflib.unified_diff(
+            expected.splitlines(), current.splitlines(), 'pinned', 'now', lineterm='', n=2
+        )
+        raise AssertionError(f'a model request changed ({path.name}):\n' + '\n'.join(list(diff)[:80]))
+
+
 def requests_are_pinned():
     """No classifier request changes without a diff: schema, instructions, settings and the values sent.
 
     Moving code between modules must not change a byte a model is sent. A
     change that means to is a prompt change, and needs its live check
-    before it ships. The file is compared as text, because key order is part
-    of what is sent.
+    before it ships.
     """
-    current = json.dumps(pinned(), indent=1, sort_keys=False, default=str) + '\n'
-    if os.environ.get('BLESS_READINGS') == '1':
-        GOLDEN.parent.mkdir(exist_ok=True)
-        GOLDEN.write_text(current)
-        print('readings pinned again: a prompt change, which needs a live check')
-        return
-    expected = GOLDEN.read_text()
-    if current != expected:
-        diff = difflib.unified_diff(
-            expected.splitlines(), current.splitlines(), 'pinned', 'now', lineterm='', n=2
-        )
-        raise AssertionError('a classifier request changed:\n' + '\n'.join(list(diff)[:80]))
+    _compare(GOLDEN, pinned())
 
 
 async def main():
     classes_live_in_schema()
     every_read_back_is_one_request()
     requests_are_pinned()
+    await agent_requests_are_pinned()
     acts_keep_their_order()
     await generic_contracts()
     await invalid_answers_and_cancellation()

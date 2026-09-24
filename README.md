@@ -199,7 +199,7 @@ flow machinery. The `examples/` folder has two flows built from standard
 steps alone: `access`, a ten-step request, and `help`, one conversation step.
 
 Every node contains an agent. The engine can still complete a known action
-without running that agent (section 6).
+without running that agent (section 7).
 
 Implementation: [core/steps.py](core/steps.py).
 
@@ -313,7 +313,153 @@ through one small, explicit function. The flow-file format is this package's
 own, implemented in [core/flowspec.py](core/flowspec.py). It is not a Pydantic
 Graph YAML feature.
 
-## 6. What happens during a caller turn
+## 6. Classifiers and the solver: interpreting the caller
+
+**Both interpret what the caller meant. Python rules decide what to do with
+that interpretation.** The difference is how much each interpretation covers.
+
+`Classifier` ([core/classifiers.py](core/classifiers.py)) is one reusable core
+component. It takes typed input, makes one structured model request and
+validates the returned data. Both the narrow readings and the solver use it.
+Neither has the conversational agent's tool loop.
+
+Every classification is made of the same five parts:
+
+| Part | Who supplies it |
+|---|---|
+| The question the person was asked | the application, from state |
+| The person's answer | the application, from state |
+| Context: what the classifier is for, in one sentence | the author |
+| The classes | the author |
+| Each class's description | the author |
+
+The instructions are built from these parts by a fixed template, never
+hand-written per business. So the same classifier works for a salon, a clinic
+or a help desk, with only the context sentence and the classes changed.
+
+### Narrow readings: one question at a time
+
+The default approach uses small classifiers, each answering one question. A
+**reading** ([core/readings.py](core/readings.py)) wraps one classifier with
+the context it needs and a rule for when it applies. Only the readings that
+apply run, side by side, so the caller waits for the slowest one only. Core
+owns the common ones:
+
+| Reading | Classes | Applies when |
+|---|---|---|
+| confirm (`CONFIRM`) | accept, reject, revise, conditional, unclear | a read-back is waiting for an answer |
+| choose (`Choice`) | one option id or none, plus the option named with a condition | options are on the table |
+| take back (`TAKE_BACK`) | keep, withdraw, unclear | a change made in this call can still be undone |
+| still agreed (`STILL_AGREED`) | keep, withdraw, unclear | an approval is held through a detour |
+| closing (`CLOSING`) | end, continue, unclear | the caller was asked "anything else?" |
+| request kept (`REQUEST`) | kept, changed, unclear | a detour, such as a number check, interrupted a request |
+
+Each request sends only the facts its act needs, about 260 to 430 input
+tokens. Each reading has its own Langfuse dataset (`harness-reading/<name>`),
+so it can be measured and tuned on its own (`evals/readings.py`).
+
+The results feed `Conversation` ([core/conversation.py](core/conversation.py)).
+Its Python rules try the acts in one fixed order: answer the pending question,
+then take back, then pick, then goodbye. The first act that decides selects an
+application action. Otherwise the reply goes to the conversational agent.
+
+The acts are core classes. An application gives each one its information:
+
+| Act | Information it takes | What it does |
+|---|---|---|
+| `ReadBack` | the question it answers, the operation a yes runs | runs that operation on a yes to that exact question |
+| `Offer` | where the options come from, what a pick does | reads a plain pick back, never writes it. Refuses a pick with a condition |
+| `FixedChoice` | a fixed question and its options | runs the action for the chosen option, such as "move it or add another?" |
+| `TakeBack` | what can be taken back | offers to undo a change made in this call |
+| `HeldApproval` | the approval to keep | keeps an approval through a detour, drops it on any change |
+| `HeardValue` | a parser from words to a value | reads a value back with no model request, such as a whole phone number |
+| `Detour` | the question that ends a prerequisite | notices when the caller changes the request mid-detour |
+| `Closing` | the goodbye | ends the call once the caller is done |
+
+The salon's whole setup is one declaration, `SALON` in
+[salon/classification.py](salon/classification.py). A second use case,
+[tests/clinic.py](tests/clinic.py), builds a clinic line on the same classes in
+about 240 lines, with no salon code.
+
+### The solver: one richer decision
+
+The optional salon solver looks at a wider snapshot: the caller's words, the
+current step, identity, the pending proposal, whether it was heard, and the
+possible task destinations. It returns one typed
+[decision](core/decisions.py), which can carry the information needed to act
+on it.
+
+For example, after a phone read-back, "No, the last two digits are 34" is read
+narrowly as `revise`. That says there is a correction, but not the corrected
+number. The solver can instead return `CorrectPhone` with the full proposed
+number. Python validates that number and reads it back. The correction alone
+does not verify anyone.
+
+Its other decisions are accept, reject, clarify, choose move or add, switch
+task and end the call. "Solver" names this broader strategy: one decision per
+request, not a plan of several actions.
+
+| | Narrow readings (default) | Salon solver (opt-in) |
+|---|---|---|
+| Question | What does this reply mean for one act? | Which supported decision best describes this reply now? |
+| Result | a label or a chosen option | one decision, sometimes with fields such as corrected digits or a destination |
+| Requests | one per applicable, uncached reading, side by side | one per uncached interpretation |
+| Input | only the facts for its act | the wider call snapshot |
+| Application handling | the shared conversation rules choose the action | Python handles correction, switching and clarification directly. Other decisions feed the shared rules |
+| Measured | per reading, on Langfuse datasets, on four models | not yet compared live |
+
+The solver can settle some replies that would otherwise need the
+conversational agent. Its broader task also needs its own accuracy checks. It
+is not automatically faster, more accurate or equal in coverage. Narrow
+readings are the default in code. `SALON_INTERPRETER=solver` selects the
+solver.
+
+### What they share, and where they run
+
+Both use core's **Interpreter** machinery
+([core/interpreters.py](core/interpreters.py)):
+
+- They share the turn's request budget.
+- An interpretation is cached for the turn, so a tool guard reuses it instead
+  of asking again.
+- A result that no longer matches the call is rejected, never used.
+- A validation or provider failure gives a fallback that authorizes nothing.
+- Some readings can run again when application work puts new options on the
+  table.
+
+They run in the node's `advance` stage, before its conversational agent, when
+the call's state asks for an interpretation. They are two alternative
+strategies, not two stages in a row. A tool can also ask for an
+interpretation when it needs one. Ordinary conversation needs no extra request
+up front.
+
+An interpreted acceptance still passes the operation's authorization. An
+interpreted task switch still passes routing and prerequisites. If the
+interpretation settles nothing, the engine tries an applicable opening, and
+otherwise runs the conversational agent.
+
+### Why not let the model set a flag?
+
+A flag the model sets, such as `confirmed=true` on a tool call, costs no extra
+request. It failed in practice: the one-prompt baseline cancelled a booking and
+recorded a complaint with no read-back. A word list worked, but only in
+English. A reading costs one small request, about 0.8 s, and works across
+languages and businesses. The price is more requests per turn, each smaller: on
+the paired Coval run the harness made 1.85 requests per caller turn against the
+baseline's 1.34, and sent 1,402 input tokens per turn against 3,946.
+
+**This is another reuse boundary.** Core supplies classification,
+interpretation caching and the shared conversation rules. The application
+supplies its facts, its supported decisions and its handlers. The graph and the
+operation checks stay in place whichever strategy is selected.
+
+Implementation: [core/classifiers.py](core/classifiers.py),
+[core/readings.py](core/readings.py), [core/interpreters.py](core/interpreters.py),
+[core/conversation.py](core/conversation.py), and the salon's solver and
+decision handlers in [salon/classification.py](salon/classification.py) and
+[salon/nodes.py](salon/nodes.py).
+
+## 7. What happens during a caller turn
 
 The engine starts at the node recorded in the call's state. It first checks
 whether application logic can settle the next action. Otherwise, it runs the
@@ -322,7 +468,9 @@ node's agent.
 ```mermaid
 flowchart TD
     Input["Caller input and current call state"] --> Node["Enter the current node"]
-    Node --> Known{"Known action available?"}
+    Node --> Interpret["advance: narrow readings or the solver, when needed"]
+    Interpret --> Rules["Python decision rules, otherwise an opening"]
+    Rules --> Known{"Known action available?"}
     Known -->|Yes| Direct["Run the application action"]
     Known -->|No| Agent["Run the agent with current tools and context"]
     Direct --> Result["Handle the checked result"]
@@ -334,10 +482,9 @@ flowchart TD
 ```
 
 The node's `advance` function gets the first chance to settle the caller's
-answer. An applicable `opening` is tried next. Both can select a
-`LocalAction`: a named application action to run. `advance` may send narrow
-classifier requests (section 7), so this path does not mean zero model
-requests. It means no request to the step's agent.
+answer (section 6). An applicable `opening` is tried next. Both can select a
+`LocalAction`: a named application action to run. Interpretation can use model
+requests even when the conversational agent is skipped.
 
 If conversation is needed, `AgentBuilder` prepares the offered tools and
 handoff destinations from current state before each model request. Shared
@@ -361,7 +508,8 @@ action is refused, the agent gets the reason and can clarify.
 
 Prerequisite routing remembers one pending destination. After the
 prerequisite completes, the application resumes that work without asking the
-model to choose the destination again.
+model to choose the destination again. A changed request is handled by the
+application's conversation rules.
 
 An exit can also declare a `via` tool: a successful call of that tool moves
 the call into the destination node. Core rechecks the route's conditions after
@@ -378,135 +526,6 @@ application's job.
 Implementation: [core/turn.py](core/turn.py),
 [core/conversation.py](core/conversation.py) and
 [core/proposals.py](core/proposals.py).
-
-## 7. Reading a reply: classifiers, readings, acts and the solver
-
-Section 6 said `advance` can settle a turn before the agent runs. This is how
-it knows what the caller meant.
-
-```mermaid
-flowchart LR
-    reply["Caller's reply"] --> which{"Which acts can happen now?"}
-    which -->|"read-back waiting"| confirm[confirm]
-    which -->|"options on the table"| choose[choose]
-    which -->|"a change can be taken back"| takeback[take back]
-    which -->|"closing question asked"| closing[closing]
-    confirm & choose & takeback & closing --> order["Acts, in a fixed order"]
-    order --> action["One application action, or the step's agent"]
-```
-
-1. The call's state says which acts can happen this turn. A read-back is
-   waiting, times are on the table, a booking made in this call can still be
-   taken back.
-2. Each act that can happen has its own **reading**: one small classifier
-   request. The readings that apply run side by side, so the caller waits for
-   the slowest one only. A turn where no act can happen sends none.
-3. Code tries the acts in one fixed order: answer the waiting question, then
-   take back, then pick, then goodbye. The first act that decides runs, with no
-   request to the step's agent.
-4. When no act decides, the step's agent answers, as in section 6.
-
-### The classifier
-
-[core/classifiers.py](core/classifiers.py) has one generic class,
-`Classifier[InputT, OutputT]`. It is one direct model request, with no agent
-loop, no tools and no conversation history. Every classification has the same
-five parts:
-
-| Part | Who supplies it |
-|---|---|
-| The question the person was asked | the application, from state |
-| The person's answer | the application, from state |
-| Context: what the classifier is for, in one sentence | the author |
-| The classes | the author |
-| Each class's description | the author |
-
-The instructions are built from these parts by a fixed template. They are
-never hand-written per business. So the same classifier works for a salon, a
-clinic or a help desk, with only the context sentence and the classes
-changed.
-
-### Narrow readings
-
-A **reading** ([core/readings.py](core/readings.py)) is a classifier for one
-act, plus the rule for when it applies. Core owns the common ones and their
-classes:
-
-| Reading | Classes | Applies when |
-|---|---|---|
-| confirm (`CONFIRM`) | accept, reject, revise, conditional, unclear | a read-back is waiting for an answer |
-| choose (`Choice`) | one option id, or none, plus the option named with a condition | options are on the table |
-| take back (`TAKE_BACK`) | keep, withdraw, unclear | a change made in this call can still be undone |
-| still agreed (`STILL_AGREED`) | keep, withdraw, unclear | an approval is held through a detour |
-| closing (`CLOSING`) | end, continue, unclear | the caller was asked "anything else?" |
-| request kept (`REQUEST`) | kept, changed, unclear | a detour, such as a number check, interrupted a request |
-
-Each reading sends only the facts it needs, about 260 to 430 input tokens.
-Each one has its own Langfuse dataset (`harness-reading/<name>`), so it can be
-measured and tuned on its own (`evals/readings.py`).
-
-### Acts: what the application does with a reading
-
-The acts are core classes in [core/conversation.py](core/conversation.py). An
-application gives each one its information, and `Conversation` puts them
-together:
-
-| Act | Information it takes | What it does |
-|---|---|---|
-| `ReadBack` | the question it answers, the operation a yes runs | runs that operation on a yes to that exact question |
-| `Offer` | where the options come from, what a pick does | reads a plain pick back, never writes it. Refuses a pick with a condition |
-| `FixedChoice` | a fixed question and its options | runs the action for the chosen option, such as "move it or add another?" |
-| `TakeBack` | what can be taken back | offers to undo a change made in this call |
-| `HeldApproval` | the approval to keep | keeps an approval through a detour, drops it on any change |
-| `HeardValue` | a parser from words to a value | reads a value back with no model request, such as a whole phone number |
-| `Detour` | the question that ends a prerequisite | notices when the caller changes the request mid-detour |
-| `Closing` | the goodbye | ends the call once the caller is done |
-
-The salon's whole reading setup is one declaration, `SALON` in
-[salon/classification.py](salon/classification.py). A second use case,
-[tests/clinic.py](tests/clinic.py), builds a clinic line on the same classes in
-about 240 lines, with no salon code.
-
-### The solver: the alternative, off by default
-
-`SALON_INTERPRETER=solver` swaps the narrow readings for one **state solver**
-request. The solver reads the whole reply at once, and picks exactly one
-[decision](core/decisions.py): accept, reject, revise, conditional, clarify,
-correct the number, move or add, switch task, end the call, or nothing.
-
-| | Narrow readings (default) | State solver (opt-in) |
-|---|---|---|
-| Requests per turn | one per act that can happen, side by side | one |
-| What each request sees | only the facts for its act | every decision and fact at once |
-| Tokens per request | about 260 to 430 | larger, because it carries everything |
-| Can say | only its act's classes | also "correct the number" and "switch task" |
-| Measured | per reading, on Langfuse datasets, on four models | not yet compared live |
-| Where | `core/readings.py`, `core/conversation.py` | `salon/classification.py` (`SOLVER`) |
-
-Both write into the same merged view that the tool guards read, so the guards
-and the graph do not change when you swap them. The readings are the default
-because each one is small, runs only when it can matter, and can be tested on
-its own. The solver stays opt-in until it has been compared live on the same
-cases.
-
-### Why not let the model set a flag?
-
-A flag the model sets, such as `confirmed=true` on a tool call, costs no extra
-request. It failed in practice. The one-prompt baseline cancelled a booking and
-recorded a complaint with no read-back. A word list worked, but only in
-English. A reading costs one small request, about 0.8 s, and works across
-languages and businesses.
-
-### What it costs
-
-- **More requests, each smaller.** On the paired Coval run the harness made
-  1.85 requests per caller turn, and the baseline 1.34. It sent 1,402 input
-  tokens per turn against 3,946.
-- **A reading is a full round trip.** When a reading applies but no act
-  decides, the caller waits for the reading and then the step's agent.
-- **Readings can still be wrong.** An allowed label can be the wrong label.
-  That is why every write is also checked by an `Operation`, and why each
-  reading has its own dataset.
 
 ## 8. Streaming and interruptions are part of execution
 
@@ -552,7 +571,7 @@ definitions and call data through the interfaces above.
 | Step construction, node contract and graph execution | Step definitions, exits and prerequisite rules |
 | Validated state commits and per-call context | State fields, constraints and call creation |
 | Agent construction and request preparation (`AgentBuilder`, `Desk`) | Model, prompts, tools and allowed outputs |
-| Question tracking, readings and common conversation acts (`Conversation`) | Proposals, choices, context sentences and what each act does |
+| Classification, interpretation caching, question tracking and common conversation acts (`Conversation`) | Relevant facts, interpretation strategy, proposals, choices and decision handlers |
 | Operation execution sequence | Authorization, backend integration and recovery |
 | Turn budgets, streaming and interruption handling | Wording (`Locale`), speech policies and voice configuration |
 
@@ -574,6 +593,10 @@ interruptions, recovery and shared turn limits. Tests also compare YAML and
 Python definitions, check that direct core execution and the Pipecat adapter
 agree, and pin every request the harness sends (`tests/golden/*.json`), so a
 code change that alters a prompt shows as a diff.
+
+Solver tests check how Python handles scripted decisions, including
+corrections and task switches. They check execution behaviour. Whether the
+model chooses the right decision needs a live evaluation.
 
 ```bash
 uv run ruff check .
@@ -631,8 +654,8 @@ browser client, so there is nothing else to start.
 | `-t webrtc` | one transport instead of all of them |
 | `--host` / `--port` | Pipecat's runner flags. `uv run bot.py --help` for the rest |
 | `VOICE_AGENCY` | which flow answers: `salon` (default), `access` or `help`. See section 4 |
-| `SALON_INTERPRETER` | `solver` reads replies with one state-solver request instead of the narrow readings. See section 7 |
-| `SALON_NAMED_PICK` | `0` turns off the pick reading's `named` field (on by default for the salon). See section 7 |
+| `SALON_INTERPRETER` | `solver` reads replies with one state-solver request instead of the narrow readings. See section 6 |
+| `SALON_NAMED_PICK` | `0` turns off the pick reading's `named` field (on by default for the salon). See section 6 |
 | `VOICE_HARNESS` | `pipecat` swaps the harness for the one-prompt baseline (`salon/baseline.py`): the same pipeline, diary and model, with Pipecat's own Gemini service |
 
 All of these are optional: `uv run bot.py` on its own is a live-clock

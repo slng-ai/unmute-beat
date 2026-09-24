@@ -15,12 +15,14 @@ import time
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
+
+from core.locale import ENGLISH, Locale
 
 if TYPE_CHECKING:
     from core.conversation import Conversation
@@ -342,6 +344,9 @@ class CallContext(BaseModel):
     """
 
     model_config = ConfigDict(validate_assignment=True)
+
+    locale: ClassVar[Locale] = ENGLISH
+    """The words the turn engine says itself, in this call's language. A use case in another language sets its own."""
 
     state: VoiceState
     messages: list[ModelMessage] = Field(default_factory=list)

@@ -52,25 +52,17 @@ from pydantic_ai.usage import UsageLimitExceeded
 from core.flow import Answered, Flow, Moved
 from core.graph import Node, moved_by, route
 from core.history import paired, project
+from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
 from core.state import CallContext, Checkpoint, Handoff, Question, turn_generation
 
-STUMBLE = 'Sorry, I had a problem there. Could you say that again?'
-"""Said when a run raised: an error the caller can hear beats silence on an open line."""
-EXHAUSTED = "Sorry, I'm going round in circles there. Could you say that again?"
-"""Said when a turn runs out of budget: no further model request, no business work, no second allowance."""
-UNBACKED = "Sorry, let me correct myself: I haven't actually made that change. Let me check where we are."
-"""Said when the model told the caller it changed something the business has no record of changing.
-
-It cannot be unsaid, the words are already at TTS, so the next thing the
-caller hears is the correction.
-"""
-WITHHELD = 'Sorry -- nothing has been changed yet. Let me check where we are.'
-"""Said in place of a clause that claimed a change nothing made, on a step that can write.
-
-Unlike `UNBACKED`, these words were caught before they reached TTS, so nothing
-has to be taken back.
-"""
+STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
+    ENGLISH.stumble,
+    ENGLISH.exhausted,
+    ENGLISH.unbacked,
+    ENGLISH.withheld,
+)
+"""The English fixed lines, by their old names. What a call hears is its own locale's (`CallContext.locale`)."""
 _CLAUSE = re.compile(r'[.!?,;:]')
 _CLAUSE_MAX = 60
 """Where one clause ends, and the cap that stops a model that never punctuates from holding the whole answer."""
@@ -259,17 +251,17 @@ class Turn:
             spent = str(over)
 
         if failure:
-            call.note_said('fixed', STUMBLE, origin='error')
-            yield FixedSpeech(STUMBLE, reason='error')
+            call.note_said('fixed', call.locale.stumble, origin='error')
+            yield FixedSpeech(call.locale.stumble, reason='error')
         elif spent and not barge.hit:
             logger.warning('turn exhausted: {}', spent)
-            call.note_said('fixed', EXHAUSTED, origin='error')
-            yield FixedSpeech(EXHAUSTED, reason='exhausted')
+            call.note_said('fixed', call.locale.exhausted, origin='error')
+            yield FixedSpeech(call.locale.exhausted, reason='exhausted')
 
         if not barge.hit and (claim := call.unbacked_claim()):
             logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
-            call.note_said('fixed', UNBACKED, origin='error')
-            yield FixedSpeech(UNBACKED, reason='unbacked')
+            call.note_said('fixed', call.locale.unbacked, origin='error')
+            yield FixedSpeech(call.locale.unbacked, reason='unbacked')
 
         call.turn_ended(interrupted=barge.hit)
         status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
@@ -727,8 +719,8 @@ class Turn:
 
         if gate == 'blocked':
             note_spoken(call, _delivered(call), interrupted=True)
-            call.note_said('fixed', WITHHELD, origin='error')
-            yield FixedSpeech(WITHHELD, reason='withheld')
+            call.note_said('fixed', call.locale.withheld, origin='error')
+            yield FixedSpeech(call.locale.withheld, reason='withheld')
         yield RunEnded(step)
         yield _Outcome(output, succeeded)
 

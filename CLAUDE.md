@@ -21,6 +21,7 @@ its supporting link. Read it before changing how a turn works.
 | `core/policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
 | `core/history.py` | `paired` and `project`: what each provider request is actually sent |
 | `core/turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
+| `core/locale.py` | `Locale`: the four lines the turn engine says itself, in one language; `ENGLISH`. A call picks one by class (`CallContext.locale`) |
 | `core/processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
 | `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `ConsentInput`, `ReplyClassification`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
 | `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`). Each write is an `Operation`: `LOOKUP`, `WRITE_BOOKING`, `WRITE_COMPLAINT` |

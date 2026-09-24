@@ -17,6 +17,7 @@ from unittest.mock import patch
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
+from core.locale import Locale
 from core.turn import take_turn
 from tests.clinic import CLINIC, ClinicCall, desk
 
@@ -124,6 +125,22 @@ async def a_value_said_in_full_is_read_back_by_code():
     assert call.state.patient == 'P-1234'
 
 
+async def the_engine_speaks_the_calls_own_language():
+    """A use case in another language gives its own locale, and the turn engine's own lines follow it."""
+
+    class Llamada(ClinicCall):
+        locale = Locale(stumble='Perdone, ¿puede repetirlo?', exhausted='', unbacked='', withheld='')
+
+    async def broken(messages, info):
+        raise RuntimeError('the model is down')
+        yield ''
+
+    call = Llamada()
+    with scripted():
+        said, finished = await take_turn(call, desk(FunctionModel(stream_function=broken)), '¿Hola?')
+    assert finished.status == 'failed' and said == 'Perdone, ¿puede repetirlo?', (finished.status, said)
+
+
 def no_salon_code_is_loaded():
     """In a fresh interpreter, because `python -m tests` runs every module in one process, salon included."""
     probe = (
@@ -140,6 +157,7 @@ async def main():
     await a_pick_with_a_condition_is_left_to_the_model()
     await a_yes_without_its_question_writes_nothing()
     await a_value_said_in_full_is_read_back_by_code()
+    await the_engine_speaks_the_calls_own_language()
     no_salon_code_is_loaded()
     print('reuse ok: a second use case on the same core classes, with no salon code')
 

@@ -126,12 +126,22 @@ STILL_AGREED = ClassSet(
 CLOSING = ClassSet(
     about='Whether the answer ends the whole call.',
     classes={
-        'end': 'Ends the whole call with nothing left to ask. A "no" to "anything else?" ends it.',
+        'end': 'Ends the whole call with nothing left to ask: a goodbye, "that\'s all", or a "no" to "anything '
+        'else?". Thanks on their own, or a yes to what was proposed, do not end it.',
         'continue': 'Has more to discuss, asks a question, or only declines what was just proposed.',
         'unclear': 'Whether they want to end the call is unclear.',
     },
     default='unclear',
 )
+"""Version 3 names what ends a call and says a yes or thanks alone do not.
+
+The closing reading now also runs beside a read-back (`Conversation.read`).
+On version 1, "Yes, that's perfect, thank you." read as `end` on gpt-6-luna in
+3 of 3 runs, on gpt-5.6-luna and gemini-3.1-flash-lite in 1 of 3. Version 2
+("a yes or a thank-you ... does not, unless ...") fixed the GPT models and
+broke gemini-3.5-flash-lite, 3 of 3. Version 3: 1.00 on 18 items, 3 runs on
+each of the 4 models, no false `end` (harness-reading/closing, 24 September).
+"""
 
 
 class DetourInput(Exchange):

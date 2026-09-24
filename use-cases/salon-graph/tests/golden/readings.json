@@ -473,7 +473,7 @@
       "anyOf": [
        {
         "const": "end",
-        "description": "Ends the whole call with nothing left to ask. A \"no\" to \"anything else?\" ends it.",
+        "description": "Ends the whole call with nothing left to ask: a goodbye, \"that's all\", or a \"no\" to \"anything else?\". Thanks on their own, or a yes to what was proposed, do not end it.",
         "type": "string"
        },
        {

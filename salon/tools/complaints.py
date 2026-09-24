@@ -142,7 +142,7 @@ async def record_complaint(ctx: RunContext[SalonCall]) -> ComplaintRecord:
     another acknowledgement. It uses the approved wording without changes.
     """
     await classify_reply(ctx.deps, usage=ctx.usage, usage_limits=ctx.usage_limits)
-    approved = ctx.deps._complaint
+    approved = ctx.deps.approved_complaint
     if approved is None:
         raise ModelRetry('Use ask_complaint and wait for approval before recording anything.')
     return await _record_complaint(ctx, approved.summary, approved.requested_resolution)
@@ -197,7 +197,7 @@ class WriteComplaint(Operation[SalonCall, ComplaintArgs, ComplaintRecord, Compla
                 'Nobody is identified yet. Return to concierge so verification can run before complaints.'
             )
         await classify_reply(call, usage=usage, usage_limits=usage_limits)
-        approved = call._complaint
+        approved = call.approved_complaint
         if (
             approved is None
             or approved.value != _gist(args.summary)
@@ -208,9 +208,9 @@ class WriteComplaint(Operation[SalonCall, ComplaintArgs, ComplaintRecord, Compla
                 '`ask_complaint` and wait for their answer. Use the exact wording they approved.'
             )
         if approved.owner and approved.owner != call.state.customer_phone:
-            call._complaint = None
+            call.release('complaint')
             raise ModelRetry('The caller identity changed. Confirm the complaint again with ask_complaint.')
-        call._complaint = None
+        call.release('complaint')
         call.answered()
 
     async def _execute(self, call: SalonCall, args: ComplaintArgs, grant: None) -> ComplaintRecord:

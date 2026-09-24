@@ -227,6 +227,30 @@ class Checkpoint:
     """The caller turn the detour began on. Everything the caller said after it was said to the prerequisite."""
 
 
+@dataclass(frozen=True)
+class Held:
+    """Something the caller agreed to, or was told was done, that a later reply can still take back.
+
+    A booking just made, which the caller may still undo; an approval kept
+    while a prerequisite runs. The application holds it on the call by kind
+    (`CallContext.hold`), and a reading reads the caller's reply against what
+    they were told (`told`).
+    """
+
+    key: str
+    """What it is, as the application names it: a booking id, the digest of approved wording."""
+    told: str
+    """What the caller heard about it, word for word. A reading of their reply is read against this."""
+    owner: str = ''
+    """The caller identity it belongs to. Empty when it belongs to whoever is on the line."""
+    turn: int = 0
+    """The caller turn it was agreed on."""
+    item: Any = None
+    """The application's own record of it, such as the question that was approved."""
+    lasts: Callable[[Any], bool] | None = None
+    """Checked on every caller turn: once it says no, the call lets go of it. None lasts until released."""
+
+
 class Handoff(BaseModel):
     """Where the caller goes next. Agencies return this from their `hand_over` action and their finishers."""
 
@@ -389,6 +413,8 @@ class CallContext(BaseModel):
     """Every message that executed, retained for audit and never projected away."""
     _hidden_speech: set[str] = PrivateAttr(default_factory=set)
     _checkpoint: Checkpoint | None = PrivateAttr(default=None)
+    _held: dict[str, Held] = PrivateAttr(default_factory=dict)
+    """What the caller could still take back, by kind. See `hold`."""
     _request_kept: bool = PrivateAttr(default=False)
     """Whether a reading of this turn found the detour's request unchanged. See `note_request_kept`."""
     _return_status: str = PrivateAttr(default='')
@@ -717,6 +743,18 @@ class CallContext(BaseModel):
     def answered(self) -> None:
         """Consume the pending question. One answer authorises one action."""
         self._proposals.consume()
+
+    def hold(self, kind: str, held: Held) -> None:
+        """Keep this, of this kind, until it is released or its `lasts` says no. One of each kind at a time."""
+        self._held = {**self._held, kind: held}
+
+    def held(self, kind: str) -> Held | None:
+        """What is held of this kind, if anything."""
+        return self._held.get(kind)
+
+    def release(self, kind: str) -> None:
+        """Let go of what is held of this kind: done, withdrawn, or no longer the caller's."""
+        self._held = {name: held for name, held in self._held.items() if name != kind}
 
     @property
     def _asked(self) -> Any:
@@ -1073,6 +1111,9 @@ class CallContext(BaseModel):
         self._spoken.clear()
         self._open = None
         self._spoke = False
+        self._held = {
+            name: held for name, held in self._held.items() if held.lasts is None or held.lasts(self)
+        }
 
     async def speak_now(self, text: str, origin: str = 'confirmation') -> None:
         """Say this whatever else was said. For a confirmation, a question or a goodbye, never a filler."""

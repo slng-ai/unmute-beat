@@ -107,7 +107,7 @@ def _read_back(call: SalonCall) -> ReadBackInput | None:
 def _approve_complaint(call: SalonCall, label: str) -> None:
     """A yes to the complaint read-back is kept, bound to the caller it was put to, until it is recorded or withdrawn."""
     if (question := call.pending('complaint')) and label == 'accept':
-        call._complaint = question.model_copy(update={'owner': call.state.customer_phone})
+        call.approve_complaint(question)
 
 
 CONFIRMATION = classify(
@@ -176,9 +176,9 @@ CHOSEN_OFFER = choose(
 
 
 def _held_change(call: SalonCall) -> TakeBackInput | None:
-    if not call.undo_booking or call._undo is None:
+    if not call.undo_booking or (undo := call.held('undo')) is None:
         return None
-    return TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=call._undo[1])
+    return TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=undo.told)
 
 
 LAST_CHANGE = classify(
@@ -195,16 +195,16 @@ LAST_CHANGE = classify(
 
 def _kept_complaint(call: SalonCall) -> TakeBackInput | None:
     """A complaint approved on an earlier turn. Not on the turn of the yes itself, which that reading already read."""
-    complaint = call._complaint
+    complaint = call.held('complaint')
     if complaint is None or complaint.turn + 1 >= call.turn:
         return None
-    return TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=complaint.spoken)
+    return TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=complaint.told)
 
 
 def _forget_complaint(call: SalonCall, label: str) -> None:
     """Anything but a clear keep drops the approval: the complaint is read back again."""
     if label != 'keep':
-        call._complaint = None
+        call.release('complaint')
 
 
 RETAINED_APPROVAL = classify(
@@ -280,16 +280,15 @@ CLOSING_DEFERS = (APPOINTMENT_CHOICE, CHOSEN_OFFER)
 def reading_of(call: SalonCall) -> ReplyClassification:
     """This turn's readings as the one view the tool guards read. A reading that did not run reads as its default."""
     if INTERPRETER == 'solver':
-        return consent_of(SOLVER.current(call), call._complaint is not None)
-    choice = APPOINTMENT_CHOICE.label(call)
+        return consent_of(SOLVER.current(call), call.held('complaint') is not None)
     return ReplyClassification.model_validate(
         {
             'confirmation': CONFIRMATION.label(call),
-            'appointment_choice': choice if choice in ('move', 'add') else 'unclear',
+            'appointment_choice': APPOINTMENT_CHOICE.picked(call) or 'unclear',
             'conversation': CONVERSATION.label(call),
             'retained_approval': RETAINED_APPROVAL.label(call),
             'last_change': LAST_CHANGE.label(call),
-            'chosen_offer': CHOSEN_OFFER.label(call),
+            'chosen_offer': CHOSEN_OFFER.picked(call),
         }
     )
 
@@ -359,7 +358,7 @@ class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]
             owner=call.state.customer_phone,
             proposal=last[0] if last else None,
             delivered=bool(last and last[1]),
-            retained_complaint=call._complaint,
+            retained_complaint=call.approved_complaint,
             destinations=tuple(d for d in DESTINATIONS if d.name != call.state.agent),
         ).model_copy(deep=True)
 
@@ -377,9 +376,9 @@ class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]
         """An undelivered proposal cannot be agreed to, whatever the model read; then keep or drop the complaint."""
         if not value.delivered and isinstance(result.decision, Accept | ChooseAppointment):
             result = SalonSolution(decision=NoDecision())
-        reading = consent_of(result, call._complaint is not None)
-        if call._complaint is not None and reading.retained_approval != 'keep':
-            call._complaint = None
+        reading = consent_of(result, call.held('complaint') is not None)
+        if call.held('complaint') is not None and reading.retained_approval != 'keep':
+            call.release('complaint')
         _approve_complaint(call, reading.confirmation)
         return result
 

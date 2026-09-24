@@ -232,6 +232,21 @@ class Reading[C: CallContext, InputT: Exchange](ClassifierInterpreter[C, InputT,
         )
 
 
+class ChoiceReading[C: CallContext, InputT: ChoiceInput](Reading[C, InputT]):
+    """A reading that picks one of the options its snapshot gives, by id.
+
+    The model names an id; the application decides whether it counts. Only
+    an id among the options this reading was sent is a pick, so no reading
+    of a reply can choose something that was never offered.
+    """
+
+    def picked(self, call: C) -> str:
+        """The option this turn's reply picks, or '' when it picks none, names one not offered, or did not run."""
+        chosen = self.label(call)
+        options = self.snapshot(call)
+        return chosen if chosen and options is not None and chosen in {o.id for o in options.options} else ''
+
+
 def _title(name: str) -> str:
     return name.title().replace('_', '')
 
@@ -261,15 +276,15 @@ def choose[C: CallContext, InputT: ChoiceInput](
     context: str,
     model: Model | str,
     settings: ModelSettings | None = None,
-) -> Reading[C, InputT]:
-    """A reading that picks one of the options the snapshot gives, by id. The application checks the id.
+) -> ChoiceReading[C, InputT]:
+    """A reading that picks one of the options the snapshot gives, by id. `ChoiceReading.picked` checks the id.
 
     Each gets its own output model, named after the reading, so two choices
     in one call are two schemas and a trace says which one answered.
     """
     output = create_model(f'{_title(name)}Choice', __base__=Choice)
     classifier = Classifier(model, input_type, output, context=context, model_settings=settings)
-    return Reading(name, classifier, snapshot, field='choice', rereadable=True)
+    return ChoiceReading(name, classifier, snapshot, field='choice', rereadable=True)
 
 
 async def read(

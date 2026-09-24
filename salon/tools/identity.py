@@ -194,7 +194,7 @@ async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
         because: One short sentence: why this stopped. Never spoken.
     """
     claim_or_refuse(ctx, ACTIONS)
-    ctx.deps._complaint = None
+    ctx.deps.release('complaint')
     ctx.deps.commit(pending=None, wanted=None)
     return Handoff(to='concierge', because=because, status='unserved')
 

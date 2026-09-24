@@ -15,7 +15,7 @@ its supporting link. Read it before changing how a turn works.
 | Path | Owns |
 |---|---|
 | `bot.py` | the Pipecat pipeline: STT, VAD and smart-turn, TTS, transport, tracing worker, greeting. The only runnable entry point |
-| `core/state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question` |
+| `core/state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question`, `Held` (what the caller could still take back, `hold`/`held`/`release`) |
 | `core/graph.py` | `Node`, `Exit`, `LocalAction`, `Opening`, `route`, `moved_by`, `lent`, `model_clients` |
 | `core/flow.py` | `Flow`: the steps table as a `pydantic_graph` graph with each step's legal moves; it walks every turn and refuses an undeclared move; `render()` draws it |
 | `core/policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
@@ -38,7 +38,7 @@ its supporting link. Read it before changing how a turn works.
 | `core/completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
 | `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
 | `core/flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
-| `core/readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
+| `core/readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |

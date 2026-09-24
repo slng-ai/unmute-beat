@@ -221,17 +221,6 @@ class SalonCall(core.CallContext):
     """The salon's books. A private attribute because the prompt templates are compiled against this model's schema."""
     _writes_before: int = PrivateAttr(default=0)
     """What `writes` stood at when this turn began, so "did anything land in this turn" is answerable."""
-    _complaint: Asked | None = PrivateAttr(default=None)
-    """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
-    _undo: tuple[str, str] | None = PrivateAttr(default=None)
-    """The booking made in this call, as (booking id, what the caller was told), so the caller can take it back.
-
-    A caller can still change their mind after the yes: one who then hears
-    the price and says "leave it" was told goodbye with the booking still in
-    the diary (Coval K2, when a pick booked at once). For as long as they hold
-    it, every reply is read against it (`LAST_CHANGE`) and one that takes it
-    back is offered the cancel (`salon.nodes.ACTS`), whichever turn it comes on.
-    """
     _day_words: list[str] = PrivateAttr(default_factory=list)
     """Every day the caller has named, in their own words, from whichever turn.
 
@@ -261,10 +250,6 @@ class SalonCall(core.CallContext):
         super().turn_started(heard)
         if not self.continuing:
             self._writes_before = self.state.writes
-        if self._complaint and self.state.agent != 'verify':
-            self._complaint = None
-        if self._complaint and self._complaint.owner and self._complaint.owner != self.state.customer_phone:
-            self._complaint = None
         for words in day_phrases(heard):
             if words not in self._day_words:
                 self._day_words = [*self._day_words, words][-_DAYS_REMEMBERED:]
@@ -277,7 +262,7 @@ class SalonCall(core.CallContext):
         """Record a salon question: validated as `Asked`, and a new complaint readback forgets an approved one."""
         question = Asked.model_validate(proposal.model_dump())
         if question.about == 'complaint':
-            self._complaint = None
+            self.release('complaint')
         super().ask(question)
 
     def pending_question(self) -> Asked | None:
@@ -335,23 +320,54 @@ class SalonCall(core.CallContext):
         """The slot on the table this reply picks or asks for, or ''.
 
         The classifier names it; the application decides whether it counts:
-        only an id on the table for this call, so no reading of the reply can
-        authorise a time that was never offered.
+        only an id on the table for this call (`ChoiceReading.picked`), so no
+        reading of the reply can authorise a time that was never offered.
         """
-        chosen = self.classification.chosen_offer
-        return chosen if chosen and chosen in {o.id for o in self.table()} else ''
+        return self.classification.chosen_offer
 
     def offer_undo(self, booking_id: str, told: str) -> None:
-        """A booking was just made and confirmed in these words: the caller may take it back while they hold it."""
-        self._undo = (booking_id, told)
+        """A booking was just made and confirmed in these words: the caller may take it back while they hold it.
+
+        A caller can still change their mind after the yes: one who then hears
+        the price and says "leave it" was told goodbye with the booking still in
+        the diary (Coval K2, when a pick booked at once). For as long as they hold
+        it, every reply is read against it (`LAST_CHANGE`) and one that takes it
+        back is offered the cancel (`salon.nodes.ACTS`), whichever turn it comes on.
+        """
+        self.hold('undo', core.Held(key=booking_id, told=told))
 
     @property
     def undo_booking(self) -> str:
         """The booking made in this call that the caller could still take back, while they still hold it, or ''."""
-        if self._undo is None:
+        if (undo := self.held('undo')) is None:
             return ''
         held = self._diary.bookings_for(self.state.customer_phone, self._diary.now().date())
-        return self._undo[0] if any(b['booking_id'] == self._undo[0] for b in held) else ''
+        return undo.key if any(b['booking_id'] == undo.key for b in held) else ''
+
+    def approve_complaint(self, question: Asked) -> None:
+        """The caller agreed to this complaint read-back: keep it, bound to them, until it is recorded or withdrawn.
+
+        It lasts only while the caller is being verified for it and under the
+        identity it was approved for.
+        """
+        approved = question.model_copy(update={'owner': self.state.customer_phone})
+        self.hold(
+            'complaint',
+            core.Held(
+                key=approved.value,
+                told=approved.spoken,
+                owner=approved.owner,
+                turn=approved.turn,
+                item=approved,
+                lasts=_kept_for_verification,
+            ),
+        )
+
+    @property
+    def approved_complaint(self) -> Asked | None:
+        """The complaint read-back the caller approved, while it is still kept."""
+        held = self.held('complaint')
+        return held.item if held is not None else None
 
     @property
     def classification(self) -> ReplyClassification:
@@ -368,7 +384,7 @@ class SalonCall(core.CallContext):
     @property
     def complaint_approved(self) -> bool:
         """Whether approved complaint wording still belongs to this caller. Never model-authored."""
-        approved = self._complaint
+        approved = self.approved_complaint
         return approved is not None and (not approved.owner or approved.owner == self.state.customer_phone)
 
     @property
@@ -418,6 +434,14 @@ class SalonCall(core.CallContext):
             if segment.kind == 'model' and (claim := self._invented(segment.text)):
                 return claim
         return ''
+
+
+def _kept_for_verification(call: SalonCall) -> bool:
+    """An approved complaint is kept only through the number check, and only under the number it was approved for."""
+    held = call.held('complaint')
+    return call.state.agent == 'verify' and not (
+        held and held.owner and held.owner != call.state.customer_phone
+    )
 
 
 def open_call(from_number: str = '', diary: Diary | None = None) -> SalonCall:

@@ -506,7 +506,9 @@ def _states() -> dict[str, SalonCall]:
     call = open_call(PHONE, diary=(books := _diary()))
     call.commit(agent='complaints')
     _next_turn(call, 'My colour came out patchy.')
-    call._complaint = Asked(about='complaint', spoken='A patchy colour. Shall I record that?', turn=call.turn)
+    call.approve_complaint(
+        Asked(about='complaint', spoken='A patchy colour. Shall I record that?', turn=call.turn)
+    )
     call.commit(agent='verify')
     _next_turn(call, 'Yes, that is it.')
     _next_turn(

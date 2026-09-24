@@ -140,7 +140,7 @@ async def cancellation_keeps_committed_receipt():
     with suppress(asyncio.CancelledError):
         await task
     assert len(books.complaints()) == 1 and call.state.writes == 1
-    assert call.input_retained and not call._complaint
+    assert call.input_retained and call.held('complaint') is None
     receipt = [
         m for m in call._protocol if (m.metadata or {}).get('application_action') == 'record_complaint'
     ]

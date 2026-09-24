@@ -121,7 +121,7 @@ def _agreed(call: SalonCall) -> LocalAction | None:
         )
         return LocalAction('save_booking', lambda: write_booking(call, **command.model_dump()))
     if call.state.agent == 'complaints' and call.complaint_approved and call.pending('complaint'):
-        approved = call._complaint
+        approved = call.approved_complaint
         assert approved is not None
         return LocalAction(
             'record_complaint', lambda: write_complaint(call, approved.summary, approved.requested_resolution)
@@ -224,7 +224,7 @@ async def solve(
     answers better than a one-line question would.
     """
     last = call.last_proposal()
-    if last is None and call._complaint is None:
+    if last is None and call.held('complaint') is None:
         return None
     solution = await SOLVER.interpret(call, usage=usage, usage_limits=usage_limits)
     proposal = last[0] if last else None

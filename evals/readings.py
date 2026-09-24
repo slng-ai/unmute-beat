@@ -47,6 +47,7 @@ from core.readings import DetourInput, ReadBackInput, Reading, TakeBackInput
 from evals.cases import CASES as REVIEWED
 from evals.consent import label_of, reading_for, reading_input
 from evals.focused import CASES as FOCUSED
+from evals.focused import NINE, SLOTS, TIMES
 from salon.classification import (
     APPOINTMENT_CHOICE,
     CHOSEN_OFFER,
@@ -331,6 +332,66 @@ OTHER: tuple[tuple[str, str, dict[str, Any], str], ...] = (
 """Items from businesses other than the salon, written for this check and not yet reviewed."""
 
 
+FOCUSED_NAMED = {'pick-conditional': NINE}
+"""The option a focused pick case names without picking it. Every other pick item names none."""
+
+NAMED: tuple[tuple[str, dict[str, Any], str, str], ...] = (
+    (
+        CHOSEN_OFFER.classifier.context,
+        {'question': TIMES, 'answer': 'The first one, if it is under 30 euros.'},
+        NINE,
+        'dev',
+    ),
+    (
+        CHOSEN_OFFER.classifier.context,
+        {'question': TIMES, 'answer': 'Is the 9:30 one with the senior stylist? Then that one.'},
+        SLOTS[1].id,
+        'dev',
+    ),
+    (
+        CLINIC + ' The patient was offered appointment times.',
+        {
+            'question': 'I have Tuesday at 4 PM or Wednesday at 9 AM. Which suits you?',
+            'answer': 'Tuesday at 4, as long as it is Dr. Park.',
+            'options': [
+                {'id': 'tue-16', 'said': 'Tuesday at 4 PM'},
+                {'id': 'wed-09', 'said': 'Wednesday at 9 AM'},
+            ],
+        },
+        'tue-16',
+        'test',
+    ),
+    (
+        RESTAURANT + ' The guest was offered two times.',
+        {
+            'question': 'I can do 7 or 8 tonight. Which would you like?',
+            'answer': "Is the 8 o'clock one on the terrace? If so, that one.",
+            'options': [{'id': 't19', 'said': '7 PM'}, {'id': 't20', 'said': '8 PM'}],
+        },
+        't20',
+        'test',
+    ),
+    (
+        COURIER + ' The customer was asked where to leave the parcel.',
+        {
+            'question': 'Shall we leave it at your door, or with a neighbour?',
+            'answer': "With the neighbour, if they're in. Are they?",
+            'options': [
+                {'id': 'door', 'said': 'at the door'},
+                {'id': 'neighbour', 'said': 'with a neighbour'},
+            ],
+        },
+        'neighbour',
+        'test',
+    ),
+)
+"""Picks with a condition or a question: no plain pick, and the option they name. Written by Claude, not reviewed.
+
+For the `named` field of the pick reading (`Offer.named`). The salon's two
+are `dev`; the other businesses' are `test`, as the rest of `OTHER` is.
+"""
+
+
 def _input(kind: str, value: BaseModel) -> dict[str, Any]:
     data = value.model_dump(mode='json')
     if kind == 'choose':
@@ -361,7 +422,7 @@ def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, An
                 kind,
                 f'focused-{case.id}',
                 {'context': case.reading.classifier.context, **_input(kind, case.value)},
-                {'label': label, 'also_ok': list(also)},
+                {'label': label, 'also_ok': list(also), **_named(kind, FOCUSED_NAMED.get(case.id, ''))},
                 {
                     'source': 'evals/focused.py',
                     'business': 'salon',
@@ -383,7 +444,7 @@ def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, An
                 kind,
                 f'reviewed-{case.id}',
                 {'context': reading.classifier.context, **_input(kind, value)},
-                {'label': label, 'also_ok': []},
+                {'label': label, 'also_ok': [], **_named(kind, '')},
                 {
                     'source': 'evals/cases.py',
                     'business': 'salon',
@@ -400,7 +461,7 @@ def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, An
                 kind,
                 f'other-{kind}-{n}',
                 {'context': context, **data},
-                {'label': label, 'also_ok': []},
+                {'label': label, 'also_ok': [], **_named(kind, '')},
                 {
                     'source': 'evals/readings.py',
                     'business': context.split(' with ')[1].split('.')[0],
@@ -410,7 +471,32 @@ def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, An
                 },
             )
         )
+    for n, (context, data, named, split) in enumerate(NAMED):
+        rows.append(
+            (
+                'choose',
+                f'named-{n}',
+                {'context': context, 'options': [o.model_dump() for o in SLOTS], 'holding': [], **data},
+                {'label': '', 'also_ok': [], 'named': named},
+                {
+                    'source': 'evals/readings.py',
+                    'business': context.split(' with ')[1].split('.')[0],
+                    'reading': CHOSEN_OFFER.name,
+                    'label_source': 'written by Claude, not reviewed',
+                    'split': split,
+                },
+            )
+        )
     return rows
+
+
+def _named(kind: str, named: str) -> dict[str, str]:
+    """A pick item's expected `named`, for the pick reading with it on. Other readings have none."""
+    return {'named': named} if kind == 'choose' else {}
+
+
+def _names(kind: Kind) -> bool:
+    return 'named' in kind.reading.classifier.output_type.model_fields
 
 
 def instructions(kind: Kind) -> str:
@@ -508,14 +594,16 @@ def task_for(name: str, kind: Kind, prompt: Any, model_name: str):
             try:
                 result = await classifier.classify(kind.input_type.model_validate(data), usage=usage)
                 label = getattr(result, kind.reading.field)
+                named = getattr(result, 'named', None)
             except Exception as error:
-                label = f'ERROR {type(error).__name__}'
+                label, named = f'ERROR {type(error).__name__}', None
             seconds = time.perf_counter() - started
+            answer = {'label': label, **({'named': named} if named is not None else {})}
             generation.update(
-                output={'label': label},
+                output=answer,
                 usage_details={'input': usage.input_tokens, 'output': usage.output_tokens},
             )
-        return {'label': label, 'seconds': round(seconds, 3), 'input_tokens': usage.input_tokens}
+        return {**answer, 'seconds': round(seconds, 3), 'input_tokens': usage.input_tokens}
 
     return task
 
@@ -533,7 +621,15 @@ def scorers(kind: Kind):
             name='false-accept', value=int(kind.acts(output['label']) and not right(output, expected_output))
         )
 
-    return [exact_match, false_accept]
+    def named_match(*, output, expected_output, **kwargs):
+        expected = (expected_output or {}).get('named', '')
+        return Evaluation(
+            name='named-match',
+            value=int(output.get('named', '') == expected),
+            comment=f'named {output.get("named", "")!r}, expected {expected!r}',
+        )
+
+    return [exact_match, false_accept, *([named_match] if _names(kind) else [])]
 
 
 def totals(*, item_results, **kwargs):
@@ -543,7 +639,9 @@ def totals(*, item_results, **kwargs):
     def total(score: str) -> float:
         return sum(e.value for r in item_results for e in r.evaluations if e.name == score)
 
+    named = [e.value for r in item_results for e in r.evaluations if e.name == 'named-match']
     return [
+        *([Evaluation(name='named-accuracy', value=sum(named) / len(named))] if named else []),
         Evaluation(name='accuracy', value=total('exact-match') / n),
         Evaluation(name='false-accepts', value=total('false-accept')),
         Evaluation(name='mean-seconds', value=sum(r.output['seconds'] for r in item_results) / n),
@@ -618,9 +716,14 @@ def run(plan: Plan) -> None:
             print(
                 f'{name:13} v{prompt.version} {plan.split or "all":4} r{n} {model_name:22} accuracy {scores["accuracy"]:.2f} of {len(rows):<3} '
                 f'false accepts {scores["false-accepts"]:.0f}  median {seconds[len(seconds) // 2]:.2f}s  '
-                f'{scores["mean-input-tokens"]:.0f} tokens in',
+                f'{scores["mean-input-tokens"]:.0f} tokens in'
+                + (f'  named {scores["named-accuracy"]:.2f}' if 'named-accuracy' in scores else ''),
                 flush=True,
             )
+            for r in rows:
+                for e in r.evaluations:
+                    if e.name == 'named-match' and not e.value:
+                        print('     named wrong:', getattr(r.item, 'id', ''), e.comment)
             for row in wrong:
                 print('     wrong:', row)
     lf.flush()

@@ -70,9 +70,26 @@ def _spanish_and_present(value: str) -> str:
     it is a number being submitted for a lookup, and an empty one submitted as
     if it were a number would create an empty customer record and verify the
     caller as nobody. Same digits, different question, so a different type.
+
+    A Spanish number with the wrong count of digits says which way it is
+    wrong. Coval run RPH7TzmF, K3: speech-to-text heard "six seven one, two
+    seven three" as "672. 1. 273.", ten digits, and the model answered the
+    bare validation error with "Please give me the rest of the digits".
     """
     if not value:
         raise ValueError('no number was given. Ask the caller for one; never look up an empty number')
+    national = re.sub(r'\D', '', value)[2:] if value.startswith('+34') else ''
+    if national and len(national) > 9:
+        raise ValueError(
+            f'that is {len(national)} digits after +34, and a Spanish number has 9: a digit was misheard or '
+            "repeated. Nothing is missing, so do not ask for the rest; use verification_guidance 'correction' "
+            'to ask for the whole number again.'
+        )
+    if national and len(national) < 9:
+        raise ValueError(
+            f'that is only {len(national)} digits after +34, and a Spanish number has 9. Use '
+            "verification_guidance 'incomplete' to ask for the rest."
+        )
     return _spanish.validate_python(value)
 
 

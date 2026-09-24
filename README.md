@@ -10,16 +10,17 @@ the business may do about it. One frame processor joins the two.
 
 ```mermaid
 flowchart TD
-    caller((caller)) --> pipecat[Pipecat: audio, STT, turn taking, TTS]
-    pipecat -- the caller's words --> turn[Turn engine]
-    turn --> graph[Flow graph: which step, which moves are legal]
-    graph --> step[The current step]
-    step --> readings[Readings: small classifiers]
+    caller((caller)) --> audio[Pipecat: audio, STT, turn taking, TTS]
+    audio -- the caller's words --> engine[Turn engine]
+    engine --> flowgraph[Flow graph: which step, which moves are legal]
+    flowgraph --> current[The current step]
+    current --> readings[Readings: small classifiers]
     readings --> acts[Acts: code decides]
-    step --> agent[Step agent: Pydantic AI]
-    acts & agent --> ops[Operations: guarded writes]
+    current --> stepagent[Step agent: Pydantic AI]
+    acts --> ops[Operations: guarded writes]
+    stepagent --> ops
     ops --> backend[(Business backend)]
-    turn -- speech --> pipecat
+    engine -- speech --> audio
 ```
 
 1. Pipecat hears the caller and decides when they have finished speaking.
@@ -72,7 +73,7 @@ browser client, so there is nothing else to start.
 | `VOICE_AGENCY` | which flow answers: `salon` (default), `access` or `help`. See section 6 |
 | `SALON_INTERPRETER` | `solver` reads replies with one state-solver request instead of the narrow readings. See section 8 |
 | `SALON_NAMED_PICK` | `0` turns off the pick reading's `named` field (on by default for the salon). See section 8 |
-| `VOICE_HARNESS` | `pipecat` swaps the harness for the one-prompt baseline. See "Coval simulations" |
+| `VOICE_HARNESS` | `pipecat` swaps the harness for the one-prompt baseline (`salon/baseline.py`): the same pipeline, diary and model, with Pipecat's own Gemini service |
 
 All of these are optional: `uv run bot.py` on its own is a live-clock
 call, from an anonymous number, into the salon as the last call left it. The
@@ -90,104 +91,6 @@ spoken in the diary's own words. Neither turn needs a model request beyond the
 one classifier. *"That's all, thanks, bye."* The line closes.
 
 Tests: `uv run python -m tests`. Offline, no `.env`, no network.
-
-## Coval simulations
-
-Coval places simulated phone calls to the bot, running on your laptop, and
-grades each one. Run it before a release, or after a change to what the agent
-says or does.
-
-```bash
-uv run python -m utils.coval_sim run 8YK67zzr     # the core set: 5 calls aimed at known harness failures
-uv run python -m utils.coval_sim run VkpkmRMV     # the full salon release set, 18 calls
-uv run python -m utils.coval_sim run 9CN3Djw2     # the one-call smoke set
-VOICE_HARNESS=pipecat uv run python -m utils.coval_sim run 8YK67zzr   # the same calls against the one-prompt baseline
-```
-
-`VOICE_HARNESS=pipecat` swaps the harness for the baseline
-([salon/baseline.py](salon/baseline.py)): the same pipeline, turn taking,
-diary and model, with Pipecat's own Gemini service and one system prompt
-holding every rule in place of the harness. Nothing else changes, so a
-difference between two runs is the conversation layer.
-
-```
-FAIL  salon  test set VkpkmRMV  run Ab12Cd34Ef56Gh78
-      call XdjHhNEhaG6TLBraQTFnfk: Changes Match What The Caller Agreed answered NO
-      call 5pU9frjpwHPFjNvzR2xH5E: Harness: expected behaviors scored 0.60
-      log: /var/folders/.../coval-sim-rq0wjtjr/salon-bot.log
-```
-
-```mermaid
-flowchart LR
-  tool[coval_sim] -->|starts| bot[bot.py -t twilio]
-  tool -->|opens| tunnel[cloudflared tunnel]
-  tool -->|writes tunnel URL| agent[Coval agent]
-  coval[Coval] -->|calls via tunnel| bot
-```
-
-1. The tool asks Coval which test sets are attached to agents named
-   `voice-harness-<agency>-pipecat`. `salon` is the `VOICE_AGENCY` the bot runs.
-2. It opens a cloudflared tunnel and starts `bot.py` on Pipecat's Twilio route.
-3. It writes the tunnel address into the Coval agent, then launches one run per test set.
-4. It waits, reads every call back, prints one row per run, and stops everything it started.
-
-Each simulated call has no caller ID, so the agent has to ask for the number,
-and gets a fresh diary (`DIARY_PER_CALL`), so calls running side by side cannot
-see each other's bookings. The simulated caller always gives +34 671 273 454.
-
-A row fails when a call did not finish, the agent never spoke, the agent said
-one of the harness's recovery lines (`STUMBLE`, `EXHAUSTED`, `UNBACKED`,
-`WITHHELD` in `core/turn.py`), a yes/no metric answered NO, or the composite
-metric (`Harness: expected behaviors`) scored below 1. Latency numbers are reported by Coval but never fail a row. Read the
-transcript before you trust a failure: `coval --format json simulations get <call id>`.
-
-| Option | What it does |
-|---|---|
-| `--iterations 3` | runs each case three times |
-| `--concurrency 3` | calls in flight at once (default 3) |
-| `--persona "Interruptive Speaker"` | another Coval caller (default `Standard Customer`) |
-| `add <agency>` | creates the `voice-harness-<agency>-pipecat` Coval agent |
-
-It needs `coval`, `cloudflared` and `uv` on your PATH, and `COVAL_API_KEY`
-with the model and speech keys in `.env`. It does not run in CI. Traces go to
-Langfuse as usual, and each call's Langfuse session is its Twilio call id.
-Coval records the same id as the simulation's `call_sid`, so to open a call's
-trace, filter Langfuse sessions by the `call_sid` of
-`coval --format json simulations get <call id>`.
-
-### Measuring a run: the ledger
-
-Coval says whether each call did the right thing. The ledger says what it
-cost, read the same way from every build's traces: the harness, the
-one-prompt baseline, the graph build and LiveKit.
-
-```bash
-uv run --env-file .env python -m evals.ledger \
-    harness CA08dd... CA2e8e... -- baseline CA1cef... -- graph trace:a8b92a0f... -- livekit trace:4808dbcf...
-```
-
-```
-== harness: 5 calls
-   input tokens per call: mean 9532 (5692 to 14588); per caller turn 1402; output 1254
-   requests: 63 completed over 34 caller turns (1.85 per turn), 29 cancelled or unreported
-   calls in a row per turn: 0: 6 turns, 1: 20 turns, 2: 5 turns, 3: 3 turns
-   latency: p50 1.36s p90 4.82s max 5.12s, 27 of 34 turns timed
-```
-
-1. Each group is a label and its calls: a Twilio call id (the harness's
-   Langfuse session), `session:<id>` or `trace:<id>`.
-2. Tokens are Langfuse's `input` plus cached input, counted once. A request
-   with no usage is counted as cancelled, never as zero tokens.
-3. Requests that overlap are one step of the caller's wait. "Calls in a row"
-   counts the steps; the harness's readings run side by side.
-4. Latency is Pipecat's `turn.user_bot_latency_seconds`. LiveKit has none, so
-   it is estimated from its spans and marked as estimated.
-5. Every harness write leaves a `write` span with the question it answered
-   (`core/operations.py`), so the ledger checks each one: a question about
-   that action, put on an earlier turn. The other builds' writes are listed
-   with the lines just before them, for a person to read.
-
-It only reads traces; nothing is billed.
 
 ---
 
@@ -784,9 +687,9 @@ flowchart LR
     code[Python list of steps] --> sf
     spec -- compile, refuse if broken --> sf[StepFlow]
     sf --> nodes[nodes table: one Node per step]
-    nodes --> graph[Flow: Pydantic graph of legal moves]
+    nodes --> flowgraph[Flow: Pydantic graph of legal moves]
     nodes --> turn[Turn: one caller turn]
-    graph -- walks every turn --> turn
+    flowgraph -- walks every turn --> turn
 ```
 
 1. **Write the steps.** Either as Python (`examples/access/flow.py`,
@@ -1290,10 +1193,10 @@ flowchart LR
     read --> acts{An act decides?}
     acts -- Yes --> guards[Application guards]
     guards -- Authorized --> run[Read-back, write, undo or goodbye]
-    acts -- No --> open{Step just entered?}
-    apply -- No --> open
-    open -- Yes, with an opening --> opening[Opening: no model]
-    open -- No --> agent[Step agent]
+    acts -- No --> entered{Step just entered?}
+    apply -- No --> entered
+    entered -- Yes, with an opening --> opening[Opening: no model]
+    entered -- No --> agent[Step agent]
 ```
 
 1. `advance()` (`salon/nodes.py`) runs the readings that apply to this turn,
@@ -1413,7 +1316,7 @@ Every write attempt leaves a `write` span (`core/operations.py`). Its
 `write.audit` attribute holds the action, its arguments, the question it
 answered, the turn that question was put on, what the caller said, and the
 result. `evals.ledger` reads these spans to check consent from the traces
-alone, with no judge. See "Measuring a run: the ledger" above.
+alone, with no judge.
 
 ---
 

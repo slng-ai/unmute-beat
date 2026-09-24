@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
 
 if TYPE_CHECKING:
+    from core.conversation import Conversation
     from core.proposals import Proposal, ProposalLedger
 
 SayFn = Callable[[str], Awaitable[None]]
@@ -743,6 +744,15 @@ class CallContext(BaseModel):
     def answered(self) -> None:
         """Consume the pending question. One answer authorises one action."""
         self._proposals.consume()
+
+    @property
+    def conversation(self) -> Conversation[Any]:
+        """The conversation whose readings read this call's replies (`core.conversation`).
+
+        An agency with readings overrides this; a call without any has none,
+        and nothing that needs one (a goodbye read by `core.desk`) can run on it.
+        """
+        raise NotImplementedError(f'{type(self).__name__} reads its replies with no conversation')
 
     def hold(self, kind: str, held: Held) -> None:
         """Keep this, of this kind, until it is released or its `lasts` says no. One of each kind at a time."""

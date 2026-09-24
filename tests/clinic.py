@@ -17,11 +17,12 @@ from pydantic_ai.models import Model
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.conversation import Closing, Conversation, HeardValue, Offer, ReadBack, TakeBack
+from core.desk import Desk
 from core.graph import LocalAction, Node
 from core.operations import Operation
 from core.proposals import BaseProposal
 from core.readings import ChoiceInput, Option
-from core.state import CallContext, Held, VoiceState
+from core.state import CallContext, Handoff, Held, VoiceState
 from core.steps import Prompted
 
 TIMES = {'0900': 'Tuesday at 9:00 AM', '1000': 'Tuesday at 10:00 AM'}
@@ -48,6 +49,10 @@ class ClinicCall(CallContext):
 
     def table(self) -> tuple[Option, ...]:
         return self._offered
+
+    @property
+    def conversation(self) -> Conversation[ClinicCall]:
+        return CLINIC
 
 
 class Slot(BaseModel):
@@ -160,12 +165,10 @@ async def _read_back_patient(call: ClinicCall, patient: str) -> Prompted:
     return Prompted(about='patient', spoken=f'Is your patient number {patient}?', value=patient)
 
 
-async def _goodbye(call: ClinicCall) -> str:
-    call.answered()
-    call.end_requested('caller')
-    await call.speak_now('Goodbye.', origin='goodbye')
-    await call.end_call()
-    return 'Goodbye.'
+DESK = Desk[ClinicCall](
+    call_type=ClinicCall, handoff=Handoff, actions=frozenset({'book', 'cancel', 'identify', 'hang_up'})
+)
+"""Core's shared actions, given the clinic's call and actions: its goodbye is the salon's code."""
 
 
 def _patient_number(words: str) -> str:
@@ -217,7 +220,7 @@ def conversation(model: Model | str) -> Conversation[ClinicCall]:
                 on_withdraw=_offer_undo,
             ),
         ),
-        closing=Closing(goodbye=_goodbye),
+        closing=Closing(goodbye=lambda call: DESK.end_conversation(call, 'Goodbye.')),
     )
 
 

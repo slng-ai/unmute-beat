@@ -40,6 +40,7 @@ its supporting link. Read it before changing how a turn works.
 | `core/flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
 | `core/readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
 | `core/conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack`, `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
+| `core/desk.py` | `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry` |
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |

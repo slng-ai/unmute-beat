@@ -563,19 +563,19 @@ async def consent_and_history_boundaries():
     call.note_said('fixed', 'Would you like a redo?')
     call.turn_started('No, thanks.')
     await classify_reply(call, closing=True)
-    assert not desk._can_end(call)
+    assert not desk.DESK.can_end(call)
     call.note_said('fixed', 'Anything else?')
     call.turn_started('No, thanks.')
     await classify_reply(call, closing=True)
-    assert desk._can_end(call)
+    assert desk.DESK.can_end(call)
     call.note_model_text('Anything else?')
     call.note_heard('')
     call.turn_started('No, thanks.')
     await classify_reply(call, closing=True)
-    assert not desk._can_end(call), 'unheard speech cannot establish permission to hang up'
+    assert not desk.DESK.can_end(call), 'unheard speech cannot establish permission to hang up'
     call.turn_started('No thanks, but can you move my booking?')
     await classify_reply(call, closing=True)
-    assert not desk._can_end(call)
+    assert not desk.DESK.can_end(call)
     call.commit(agent='complaints')
     assert call.claims_completion('I have recorded your request for a redo.')
 

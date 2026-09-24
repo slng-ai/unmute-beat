@@ -214,6 +214,23 @@ class SalonConversation(Conversation[SalonCall]):
             }
         )
 
+    async def read(
+        self,
+        call: SalonCall,
+        *,
+        usage: RunUsage | None = None,
+        usage_limits: UsageLimits | None = None,
+        closing: bool = False,
+        before_model: bool = False,
+    ) -> None:
+        """Read the reply with whichever interpreter is live: the narrow readings, or the opt-in solver."""
+        if INTERPRETER == 'solver':
+            await SOLVER.interpret(call, usage=usage, usage_limits=usage_limits)
+            return
+        await super().read(
+            call, usage=usage, usage_limits=usage_limits, closing=closing, before_model=before_model
+        )
+
     async def read_reply(
         self,
         call: SalonCall,
@@ -223,7 +240,7 @@ class SalonConversation(Conversation[SalonCall]):
         closing: bool = False,
         before_model: bool = False,
     ) -> ReplyClassification:
-        """Read the reply with whichever interpreter is live, then return the merged view.
+        """Read the reply, then return the merged view.
 
         `before_model` is `advance` reading the turn before any model runs. On
         "anything else?" it leaves out the two choice readings: across the Coval
@@ -235,12 +252,9 @@ class SalonConversation(Conversation[SalonCall]):
         against the live call through `SalonCall.classification`; a late or
         rebound answer is never published.
         """
-        if INTERPRETER == 'solver':
-            await SOLVER.interpret(call, usage=usage, usage_limits=usage_limits)
-        else:
-            await self.read(
-                call, usage=usage, usage_limits=usage_limits, closing=closing, before_model=before_model
-            )
+        await self.read(
+            call, usage=usage, usage_limits=usage_limits, closing=closing, before_model=before_model
+        )
         return call.classification
 
 

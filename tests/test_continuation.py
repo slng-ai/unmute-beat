@@ -101,6 +101,25 @@ def classifier(labels: dict[str, str], hold: str = ''):
         yield asked, held
 
 
+async def agreed_to_a_pick(call, probe, pick: str) -> None:
+    """A pick of an offered time is read back with no model, and the caller's "Yes." books it.
+
+    The script in force must read `pick` as that slot and "Yes." as accept.
+    """
+    writes = call.state.writes
+    probe.interrupt()
+    await probe._turn(pick)
+    assert call.state.writes == writes, f'{pick!r} booked before it was read back'
+    assert probe.fixed()[-1].startswith('So that is a'), probe.fixed()
+    call.note_reached()
+    call.note_drained()
+    probe.interrupt()
+    await probe._turn('Yes.')
+    assert call.state.writes == writes + 1, 'the yes to the read-back did not book'
+    call.note_reached()
+    call.note_drained()
+
+
 def scripted_steps(reasks: list[int]):
     """Every step's model, scripted: booking asks the question again (what the model did live), the rest speak."""
 
@@ -312,6 +331,7 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
     slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
     readings = {
         "Nine o'clock works.": {'chosen_offer': slot.slot_id},
+        'Yes.': {'confirmation': 'accept'},
         "Oh, that's too much for me. Leave it, thanks. Goodbye.": {
             'last_change': 'withdraw',
             'conversation': 'end',
@@ -340,10 +360,8 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
         for name, node in agents.AGENTS.items():
             model = FunctionModel(stream_function=booking if name == 'booking' else other)
             stack.enter_context(node.agent.override(model=model))
-        await probe._turn("Nine o'clock works.")
-        assert call.state.writes == 1 and len(books.bookings_for(PHONE, CLOCK.date())) == 1
-        call.note_reached()
-        call.note_drained()
+        await agreed_to_a_pick(call, probe, "Nine o'clock works.")
+        assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
         if asks_price:
             probe.interrupt()
             await probe._turn('How much is that?')
@@ -383,6 +401,7 @@ async def a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it():
     slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
     readings = {
         "Nine o'clock works.": {'chosen_offer': slot.slot_id},
+        'Yes.': {'confirmation': 'accept'},
         "That's all, thank you. Goodbye.": {'last_change': 'keep', 'conversation': 'end'},
     }
     given: list[tuple[str, str]] = []
@@ -407,10 +426,7 @@ async def a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it():
         for name, node in agents.AGENTS.items():
             model = FunctionModel(stream_function=booking if name == 'booking' else other)
             stack.enter_context(node.agent.override(model=model))
-        await probe._turn("Nine o'clock works.")
-        assert call.state.writes == 1
-        call.note_reached()
-        call.note_drained()
+        await agreed_to_a_pick(call, probe, "Nine o'clock works.")
         probe.interrupt()
         await probe._turn("That's all, thank you. Goodbye.")
     read = sorted(name for name, answer in given if answer == "That's all, thank you. Goodbye.")
@@ -424,9 +440,10 @@ async def only_a_slot_on_the_table_can_be_picked():
 
     "Nine, but only if it costs less than thirty" named a time and used to
     book on the time alone. And a reading naming a real slot that was never
-    offered to this caller authorises nothing, whoever produced it.
+    offered to this caller authorises nothing, whoever produced it. A pick
+    that counts is read back, with no model; nothing is booked on the pick.
     """
-    for reading, books_it in (
+    for reading, read_back in (
         ('offered', True),
         ('conditional', False),
         ('elsewhere', False),
@@ -454,19 +471,22 @@ async def only_a_slot_on_the_table_can_be_picked():
         ):
             probe.interrupt()
             await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
-        assert (call.state.writes == 1) is books_it, (reading, call.state.writes)
-        if books_it:
-            assert {r.kind for r in call.requests} == {'classifier'}, 'a plain pick needs no model'
+        assert call.state.writes == 0, (reading, 'a pick booked before it was read back')
+        put = call.all_spoken[-1].generated if call.all_spoken else ''
+        assert put.startswith('So that is a') is read_back, (reading, put)
+        if read_back:
+            assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
 
 
-async def a_pick_with_no_question_pending_still_books():
+async def a_pick_with_no_question_pending_is_still_read_back():
     """Coval run DkLvLzC5, K5: the pick came two turns after the offer, with no question pending.
 
     "Nine, but only if it costs less than thirty" answered the offer; the
     price came back from the front desk; "Fine, nine o'clock then, that's
     all, goodbye" picked from the same table. The reply was read only when a
     question was pending, so the front desk's model heard it and hung up. The
-    table is enough to read it, and the pick books before the goodbye.
+    table is enough to read it: the pick is read back before the goodbye, and
+    the yes to it books from the front desk, with no model either time.
     """
     call = booking_call()
     probe = Probe(call)
@@ -482,6 +502,7 @@ async def a_pick_with_no_question_pending_still_books():
             'chosen_offer': nine,
             'conversation': 'end',
         },
+        'Yes.': {'confirmation': 'accept'},
     }
 
     def classify(name, data):
@@ -503,20 +524,22 @@ async def a_pick_with_no_question_pending_still_books():
         assert call.state.writes == 0 and runs == ['concierge'], 'a condition books nothing'
         call.note_reached()
         call.note_drained()
-        probe.interrupt()
-        await probe._turn("Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye.")
-    assert call.state.writes == 1, 'the pick from the table was not booked'
+        await agreed_to_a_pick(
+            call, probe, "Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye."
+        )
+    assert call.ended == '', 'hung up on a pick that was still to be read back'
     assert runs == ['concierge'], 'the front desk model answered a reply the application had already read'
 
 
-async def an_add_on_after_a_booking_is_read_against_it():
+async def an_add_on_to_a_pick_is_read_with_it():
     """Coval run ad3n4Vxn, K5: "09:00." booked at once, then "but only if it costs less than 30 euros".
 
     No endpointing can tell a complete answer from one the caller will add
-    to, so the harness does not wait: it reads the add-on against the booking
-    it just made, whose confirmation never finished playing. Later, "Fine,
-    nine o'clock then" read as keeping it takes the cancel offer off the
-    table, where the model had read the cancellation back anyway.
+    to. A pick is read back now, not booked, so the add-on continues the turn
+    of the pick and nothing is booked on a condition. "Fine, nine o'clock
+    then" is read back again and the yes books it; kept after that, the cancel
+    offer is off the table, where the model had read the cancellation back
+    anyway.
     """
     call = booking_call()
     probe = Probe(call)
@@ -530,7 +553,9 @@ async def an_add_on_after_a_booking_is_read_against_it():
     readings = {
         '09:00.': {'chosen_offer': nine},
         joined: {'confirmation': 'conditional'},
-        'Oh, okay. Fine. 09:00 then.': {'last_change': 'keep', 'chosen_offer': nine},
+        'Oh, okay. Fine. 09:00 then.': {'chosen_offer': nine},
+        'Yes.': {'confirmation': 'accept'},
+        'Great, I will keep it.': {'last_change': 'keep'},
     }
     seen: dict[str, set[str]] = {}
 
@@ -539,28 +564,29 @@ async def an_add_on_after_a_booking_is_read_against_it():
         return readings[data['answer']].get(name)
 
     async def speak(messages, info):
-        yield 'A hair colour is 75 euros. Would you like to keep it?'
+        yield 'A hair colour is 75 euros.'
+
+    async def booking(messages, info):
+        yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
 
     with ExitStack() as stack:
         stack.enter_context(scripted_readings(classify))
-        for name in ('concierge', 'complaints'):
-            stack.enter_context(
-                agents.AGENTS[name].agent.override(model=FunctionModel(stream_function=speak))
-            )
+        for name in ('booking', 'concierge', 'complaints'):
+            model = FunctionModel(stream_function=booking if name == 'booking' else speak)
+            stack.enter_context(agents.AGENTS[name].agent.override(model=model))
         probe.interrupt()
         await probe._turn('09:00.')
-        assert call.state.writes == 1, 'a plain pick books at once'
+        assert call.state.writes == 0, 'a pick booked before it was read back'
         probe.interrupt()
         await probe._turn('But only if it costs less than 30 euros.')
         assert call.heard == joined and call.turn == 2, 'the add-on continues the turn of the pick'
-        assert 'last_change' in seen[joined], 'the add-on was not read against the booking just made'
+        assert call.state.writes == 0, 'booked on a condition'
         call.note_reached()
         call.note_drained()
+        await agreed_to_a_pick(call, probe, 'Oh, okay. Fine. 09:00 then.')
         probe.interrupt()
-        await probe._turn('Oh, okay. Fine. 09:00 then.')
-    assert 'last_change' in seen['Oh, okay. Fine. 09:00 then.'], (
-        'a booking still held can still be taken back'
-    )
+        await probe._turn('Great, I will keep it.')
+    assert 'last_change' in seen['Great, I will keep it.'], 'a booking still held can still be taken back'
     assert not undo_ready(call), 'the caller kept it, so the cancel offer is off the table'
     context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
     try:
@@ -733,8 +759,8 @@ async def main():
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await only_a_slot_on_the_table_can_be_picked()
-    await a_pick_with_no_question_pending_still_books()
-    await an_add_on_after_a_booking_is_read_against_it()
+    await a_pick_with_no_question_pending_is_still_read_back()
+    await an_add_on_to_a_pick_is_read_with_it()
     a_detour_keeps_the_rest_of_its_first_turn()
     await a_yes_said_as_the_line_drops_still_counts()
     a_read_back_said_again_in_full_can_be_answered()

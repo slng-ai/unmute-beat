@@ -502,7 +502,13 @@ async def cancelled_queue_keeps_all_accepted_input(fragmented=False):
             await probe.cleanup()
 
 
-async def selected_time_needs_no_extra_confirmation():
+async def a_selected_time_is_read_back_with_no_model():
+    """A plain pick of an offered time is read back by the application, and only the yes to that books it.
+
+    The graph and LiveKit builds say "choosing a time is not a yes", and the
+    Coval release check asks for a read-back before "booked". The read-back
+    costs no model request: the pick's reading already named the slot.
+    """
     for words in ('09:30, please.', '9:30 AM', 'half past nine, please.'):
         books.reset()
         books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
@@ -527,15 +533,22 @@ async def selected_time_needs_no_extra_confirmation():
                 )
             }
 
+        probe = Probe(call, agents.AGENTS)
         with (
             classifier_model(),
             agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=stream)),
         ):
-            await Probe(call, agents.AGENTS)._turn(words)
+            await probe._turn(words)
+            assert call.state.writes == 0, f'{words}: a pick booked before its read-back'
+            assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
+            readback = call.all_spoken[-1].generated
+            assert readback.startswith('So that is a haircut, Friday at 9:30 AM'), readback
+            call.note_reached()
+            call.note_drained()
+            probe.interrupt()
+            await probe._turn('Yes.')
         assert call.state.writes == 1, words
-        assert {r.kind for r in call.requests} == {'classifier'}, (
-            'a plain pick of an offered time needs no model'
-        )
+        assert {r.kind for r in call.requests} == {'classifier'}, 'the yes to it needs no model either'
 
 
 async def consent_and_history_boundaries():
@@ -579,7 +592,7 @@ async def main():
     await complaint_readback_uses_caller_evidence()
     await complaint_preamble_cannot_bypass_structured_speech()
     await complaint_approval_ends_with_its_intent()
-    await selected_time_needs_no_extra_confirmation()
+    await a_selected_time_is_read_back_with_no_model()
     await cancelled_queue_keeps_all_accepted_input()
     await cancelled_queue_keeps_all_accepted_input(fragmented=True)
     print('recovery ok')

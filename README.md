@@ -910,9 +910,11 @@ return), a guard over the call, and the executor the model's tool uses.
   desk typed into `hand_over(booking=...)`.
 
 The booking prompt also shows the times just offered, with their slot ids.
-So a caller picking one costs one request (`save_booking`), not a diary
-re-read first. One model round trip costs about 0.8s on this setup, so a
-turn only stays under 1.1s with one request at most.
+A caller picking one is read back without a model request (`salon.nodes._picked`):
+the pick's reading names the slot, and the application puts the read-back.
+Only the yes to it books, also without a model request. One model round trip
+costs about 0.8s on this setup, so a turn only stays under 1.1s with one
+request at most.
 
 ### Next: change the inference engine, preserve the contract
 

@@ -48,7 +48,7 @@ from salon.models.receipts import BookingCommand
 from salon.models.shapes import SubmittedPhone
 from salon.models.state import SalonCall, SalonState
 from salon.tools.asking import Ask
-from salon.tools.booking import cancel_question, write_booking
+from salon.tools.booking import booking_question, cancel_question, write_booking
 from salon.tools.complaints import write_complaint
 from salon.tools.desk import clarify, end_conversation, hand_over_for, switch_task
 from salon.tools.identity import lookup_customer, readback_number
@@ -100,7 +100,12 @@ def _move_or_add(call: SalonCall) -> LocalAction | None:
 
 
 def _agreed(call: SalonCall) -> LocalAction | None:
-    """A yes to the read-back waiting: the number, a booking change, or a complaint."""
+    """A yes to the read-back waiting: the number, a booking change, or a complaint.
+
+    A booking read-back is answered from whichever step the caller is in, as a
+    cancel always was: the question is the authority and the write's own guard
+    checks it. A pick read back from the front desk is answered there.
+    """
     if call.classification.confirmation != 'accept':
         return None
     if call.state.agent == 'verify' and (question := call.pending('phone')):
@@ -110,7 +115,6 @@ def _agreed(call: SalonCall) -> LocalAction | None:
         call.state.customer_verified
         and (question := call.pending('booking'))
         and question.action in ('book', 'move', 'cancel')
-        and (call.state.agent == 'booking' or question.action == 'cancel')
     ):
         command = BookingCommand.model_validate(
             {'action': question.action, 'slot_id': question.value, 'booking_id': question.booking_id}
@@ -144,10 +148,20 @@ def _took_back(call: SalonCall) -> LocalAction | None:
 
 
 def _picked(call: SalonCall) -> LocalAction | None:
-    """A plain pick of a time on the table books it. The write's own guard still checks the slot, and asks move or add."""
-    if (slot := call.picked_offer()) and call.state.customer_verified:
+    """A plain pick of a time on the table is read back, with no model request; only the yes to it books.
+
+    A caller who already holds a booking is asked first whether this moves it
+    or adds another: the write's own guard puts that question and refuses.
+    """
+    if not ((slot := call.picked_offer()) and call.state.customer_verified):
+        return None
+    if call.holding():
         return LocalAction('save_booking', lambda: write_booking(call, 'book', slot, ''))
-    return None
+    return LocalAction('ask_booking', lambda: _read_back_pick(call, slot))
+
+
+async def _read_back_pick(call: SalonCall, slot: str) -> Ask:
+    return booking_question(call, 'book', slot, '')
 
 
 def _goodbye(call: SalonCall) -> LocalAction | None:

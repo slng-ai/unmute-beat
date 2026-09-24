@@ -253,7 +253,21 @@ async def ask_booking(
         slot_id: The slot exactly as the diary returned it. Empty when cancelling.
         booking_id: The booking exactly as the diary returned it. Empty when booking.
     """
-    call = ctx.deps
+    return booking_question(ctx.deps, action, slot_id, booking_id)
+
+
+def booking_question(
+    call: SalonCall, action: Literal['book', 'move', 'cancel'], slot_id: str, booking_id: str
+) -> Ask:
+    """The read-back of one booking, move or cancel, worded from the diary's own record.
+
+    Shared by `ask_booking` and by the pick of an offered time (`salon.nodes`),
+    which is read back like any other proposal: the caller's yes to it is what
+    writes, never the pick.
+
+    Raises:
+        ModelRetry: If the slot is not one this caller is being offered, or the booking not one they hold.
+    """
     phone = call.state.customer_phone
     if action in ('book', 'move'):
         offered = call.diary.offer_of(call.id, slot_id, phone)
@@ -325,20 +339,17 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
     """Whether the caller authorised this exact write, and whether it is a second appointment.
 
     Refuses by raising, so a write that reaches past here has caller evidence
-    behind it. Three paths, checked against application state:
+    behind it. Two paths, checked against application state:
 
     * They agreed to an `ask_booking` readback of this same action, slot and
       booking, on the turn before this one.
-    * They picked one of the times the pending offer put to them. This is the
-      fast path the booking policy is built on: a plain choice of an offered
-      slot authorises that slot. The consent reading names the slot and the
-      application checks it was on the table (`SalonCall.picked_offer`); a
-      pick with a condition attached names none. Not available for a new
-      booking while they already hold one, because then the unanswered
-      question is whether this replaces it. A move needs the booking it moves
-      and the reading that the caller asked to move it, not to add one: the
-      action is the model's argument, and it is not the caller's word.
     * They answered the move-or-add question in their own words.
+
+    Picking one of the offered times is not one of them. It used to be: a
+    plain choice of an offered slot booked it, one turn faster. The graph and
+    LiveKit builds of this salon say "choosing a time is not a yes", and the
+    Coval release check asks for a read-back and a yes before "booked", so a
+    pick is now read back (`salon.nodes._picked`) and only the yes writes.
 
     The boolean it returns is the *second appointment* decision, and it comes
     from what the caller said, never from an argument: a flag the model could
@@ -390,21 +401,6 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
                     'them again in those words.'
                 )
 
-    offered = call.diary.offer_of(call.id, slot_id, phone)
-    picked = bool(offered) and call.picked_offer() == slot_id
-    if action == 'book' and picked and not held:
-        call.answered()
-        return False
-    if (
-        action == 'move'
-        and picked
-        and call.classification.appointment_choice == 'move'
-        and booking_id
-        and any(b['booking_id'] == booking_id for b in held)
-    ):
-        call.answered()
-        return False
-
     if held and action == 'book':
         one = held[0]
         call.ask(Asked(about='move_or_add', value=slot_id, action='move', booking_id=one['booking_id']))
@@ -427,10 +423,10 @@ async def save_booking(
 ) -> str:
     """Write the diary, and finish this step. Nothing is booked, moved or cancelled until this runs.
 
-    Only after the caller has authorised this exact appointment -- by naming
-    one of the times just offered to them, or by agreeing to an `ask_booking`
-    readback of it. It speaks the confirmation itself, so say nothing after
-    calling it.
+    Only after the caller has agreed to an `ask_booking` readback of this
+    exact appointment. Picking one of the offered times is not agreement yet:
+    read it back first. It speaks the confirmation itself, so say nothing
+    after calling it.
 
     Args:
         action: book a new time, move an existing booking, or cancel one.

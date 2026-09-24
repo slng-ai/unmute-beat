@@ -226,12 +226,11 @@ class SalonCall(core.CallContext):
     _undo: tuple[str, str] | None = PrivateAttr(default=None)
     """The booking made in this call, as (booking id, what the caller was told), so the caller can take it back.
 
-    A pick of an offered time books at once, with no read-back. The caller
-    who then hears the price and says "leave it" was told goodbye with the
-    booking still in the diary. For as long as they hold it, every reply is
-    read against it (`LAST_CHANGE`) and one that takes it back is offered the
-    cancel (`salon.nodes.ACTS`), whichever turn it comes on and whether or not
-    the caller added it in the same breath as the pick.
+    A caller can still change their mind after the yes: one who then hears
+    the price and says "leave it" was told goodbye with the booking still in
+    the diary (Coval K2, when a pick booked at once). For as long as they hold
+    it, every reply is read against it (`LAST_CHANGE`) and one that takes it
+    back is offered the cancel (`salon.nodes.ACTS`), whichever turn it comes on.
     """
     _day_words: list[str] = PrivateAttr(default_factory=list)
     """Every day the caller has named, in their own words, from whichever turn.

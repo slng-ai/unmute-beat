@@ -15,7 +15,7 @@ Scripted models, no audio, no network. Asserts, no pytest, same as the rest.
 """
 
 import asyncio
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from datetime import datetime
 
 from pipecat.clocks.system_clock import SystemClock
@@ -32,6 +32,7 @@ from core.state import Checkpoint
 from salon import agents, diary
 from salon.diary import Diary
 from salon.models.state import open_call
+from salon.tools.asking import Ask
 from salon.tools.booking import ask_booking, offer, offer_cancel, undo_ready
 from tests.classifier_model import scripted as scripted_readings
 
@@ -557,6 +558,73 @@ def a_detour_keeps_the_rest_of_its_first_turn():
     assert not call.request_kept, 'a reading of one turn is no evidence about the next'
 
 
+async def a_yes_said_as_the_line_drops_still_counts():
+    """Coval run 4eDqRVLR, K4: the caller approved and hung up while their yes was still being read.
+
+    The pipeline was torn down at once and the approved complaint was never
+    recorded. The running turn now gets a bounded time to finish; a turn that
+    never finishes does not hold the line open.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    await read_back_a_haircut(call, probe)
+    gate = asyncio.Event()
+
+    async def classify(name, data):
+        if name != 'confirmation':
+            return None
+        await gate.wait()
+        return 'accept'
+
+    reasks: list[int] = []
+    with scripted_readings(classify), scripted_steps(reasks):
+        probe.interrupt()
+        turn = asyncio.create_task(probe.serve('Yes, please.'))
+        await asyncio.sleep(0.01)
+        finishing = asyncio.create_task(probe.finish_turn(3))
+        await asyncio.sleep(0.05)
+        assert not finishing.done(), 'the line was torn down while the yes was still being read'
+        gate.set()
+        await asyncio.wait_for(finishing, 3)
+        await turn
+    assert call.state.writes == 1, 'the yes said as the line dropped did not book'
+
+    call = booking_call()
+    probe = Probe(call)
+    await read_back_a_haircut(call, probe)
+    with scripted_readings(lambda name, data: asyncio.Event().wait()), scripted_steps(reasks):
+        probe.interrupt()
+        turn = asyncio.create_task(probe.serve('Yes, please.'))
+        await asyncio.sleep(0.01)
+        started = asyncio.get_running_loop().time()
+        await probe.finish_turn(0.1)
+        assert asyncio.get_running_loop().time() - started < 1, 'a turn that never finishes held the line'
+        turn.cancel()
+        with suppress(asyncio.CancelledError):
+            await turn
+
+
+def a_read_back_said_again_in_full_can_be_answered():
+    """Coval run 4eDqRVLR, K3: the caller talked over the number read-back, and it was said again, whole.
+
+    Both copies had the same words on the same turn, and the ledger took the
+    cut-off first one as the question's fate: the "yes" to the second found
+    nothing pending, and the number was read back a third time. The copy the
+    caller heard last is the one they are answering.
+    """
+    call = open_call('', diary=books)
+    call.commit(agent='verify')
+    call.turn_started("It's plus three four, six seven one, two seven three, four five four.")
+    readback = 'Let me read that back to you: +34 671 273 454. Have I got that right?'
+    Ask(about='phone', value='+34671273454', spoken=readback).put(call)
+    call.note_said('fixed', readback, origin='ask')
+    call.note_heard('Let me read that', segment_ids=(call.spoken[-1].id,), interrupted=True)
+    Ask(about='phone', value='+34671273454', spoken=readback).put(call)
+    call.note_said('fixed', readback, origin='ask')
+    call.turn_started("Yes. That's right.")
+    assert call.pending('phone') is not None, 'the read-back heard in full is waiting on this answer'
+
+
 def heard_is_matched_by_words():
     """What the runtime says went out is matched word by word, and an interruption always cuts."""
     call = booking_call()
@@ -615,6 +683,8 @@ async def main():
     await a_pick_with_no_question_pending_still_books()
     await an_add_on_after_a_booking_is_read_against_it()
     a_detour_keeps_the_rest_of_its_first_turn()
+    await a_yes_said_as_the_line_drops_still_counts()
+    a_read_back_said_again_in_full_can_be_answered()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

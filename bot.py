@@ -61,6 +61,12 @@ DIARY_PER_CALL = bool(os.getenv('DIARY_PER_CALL'))
 phone number, so a shared diary lets one test case's booking change the next case's path."""
 AGENCY = os.getenv('VOICE_AGENCY', 'salon')
 """Which flow answers: `salon`, or an example under `examples/` (`access`, `help`)."""
+FINISH_SECONDS = 8.0
+"""How long a turn already running may go on after the caller hangs up: a reading and a write fit in it.
+
+ponytail: a fixed bound. Take it from the turn budget's own deadline if a
+slower model or tool ever needs longer.
+"""
 HARNESS = os.getenv('VOICE_HARNESS', 'pydantic')
 """What stands between the aggregators and TTS: `pydantic`, this harness, or `pipecat`, the
 salon as one prompt on Pipecat's own Gemini service (`salon/baseline.py`), to measure against."""
@@ -230,7 +236,10 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     @transport.event_handler('on_client_disconnected')
     async def on_client_disconnected(transport, client):
+        """Let a turn already running finish its write, for a few seconds, before the line is torn down."""
         logger.info('client disconnected')
+        if isinstance(node, PydanticAgentProcessor):
+            await node.finish_turn(FINISH_SECONDS)
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)

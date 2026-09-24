@@ -109,19 +109,24 @@ class ProposalLedger[P: Proposal]:
             self.asked = None
 
     def last(self, call: CallContext) -> tuple[P, bool] | None:
-        """Last turn's question under the caller's current identity, and whether they heard it in full."""
+        """Last turn's question under the caller's current identity, and whether they heard it in full.
+
+        Whether they heard it is the last copy's fate: a read-back the caller
+        talked over and that was then said again, whole, on the same turn, was
+        heard (Coval run 4eDqRVLR, K3: the cut-off first copy left the "yes"
+        to the second with nothing pending).
+        """
         question = self.asked
         if question is None or question.turn != call.turn - 1:
             return None
         if question.owner and question.owner != call.identity():
             return None
-        heard = not (
-            question.spoken
-            and any(
-                segment.turn == question.turn and segment.generated == question.spoken and segment.interrupted
-                for segment in call.all_spoken
-            )
-        )
+        copies = [
+            segment
+            for segment in call.all_spoken
+            if segment.turn == question.turn and segment.generated == question.spoken
+        ]
+        heard = not (question.spoken and copies and copies[-1].interrupted)
         return question, heard
 
     def pending(self, call: CallContext) -> P | None:

@@ -24,6 +24,7 @@ here opens a span inside it, and the agents' own spans land under that.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from typing import Any
 
@@ -98,6 +99,8 @@ class PydanticAgentProcessor(FrameProcessor):
         self._playback_turns: dict[str, list[str] | None] = {}
         self._playback_runs: dict[tuple[int, int], list[str]] = {}
         self._active_playback: list[str] | None = None
+        self._idle = asyncio.Event()
+        self._idle.set()
         call._say = self.say
         call._end = self.hang_up
         call._playback_known = True
@@ -206,7 +209,7 @@ class PydanticAgentProcessor(FrameProcessor):
             unseen = users[self._context_users :]
             self._context_users = len(users)
             if unseen:
-                await self._turn(' '.join(filter(None, (_last_user_text(LLMContext([m])) for m in unseen))))
+                await self.serve(' '.join(filter(None, (_last_user_text(LLMContext([m])) for m in unseen))))
         else:
             await self.push_frame(frame, direction)
 
@@ -221,6 +224,26 @@ class PydanticAgentProcessor(FrameProcessor):
         """
         self.interrupt()
         await super()._start_interruption()
+
+    async def serve(self, prompt: str | None) -> None:
+        """One caller turn, marked as running until it is over, so a dropped line can let it finish."""
+        self._idle.clear()
+        try:
+            await self._turn(prompt)
+        finally:
+            self._idle.set()
+
+    async def finish_turn(self, timeout: float) -> None:
+        """Wait, for up to `timeout` seconds, for a turn already running to finish.
+
+        For the moment the line drops: the caller's last words may be the yes
+        to a read-back, and the turn reading them is still running. Cancelled
+        there, an approved complaint was never recorded (Coval run 4eDqRVLR,
+        K4). Allowed to finish, it writes only what its guards authorise, as
+        on any turn; what it says goes nowhere.
+        """
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self._idle.wait(), timeout)
 
     def interrupt(self) -> None:
         """The caller spoke over us. Stop the run instead of finishing into a void.

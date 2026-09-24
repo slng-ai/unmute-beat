@@ -1,7 +1,7 @@
 """The narrow readings as Langfuse datasets and prompts, and experiments across models.
 
     uv run --env-file .env python -m evals.readings build [--publish]   # datasets, and prompts as `candidate`
-    uv run --env-file .env python -m evals.readings run [--label L] [--repeat N] [MODEL...] [READING...]
+    uv run --env-file .env python -m evals.readings run [--label L | --version N] [--repeat N] [--split S] [MODEL...] [READING...]
 
 One dataset and one prompt per reading (`core.readings`), named
 `harness-reading/<reading>`. An item is exactly what the reading is sent (the
@@ -338,8 +338,20 @@ def _input(kind: str, value: BaseModel) -> dict[str, Any]:
     return data
 
 
+SPLITS = ('dev', 'validation', 'test')
+"""Where an item may be used. `dev` items may be looked at and tuned on; `test` items are measured, never tuned on.
+
+Every salon item is `dev`: confirm's version 3 was written against their
+failures, so none of them is held out any more. The other businesses' items
+are `test`, a held-out domain: measured, never tuned on. `validation`, for
+choosing between models and versions, is empty until new items are written
+for it, and new items for `test` must be from a domain or pattern the tuning
+never saw.
+"""
+
+
 def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, Any]]]:
-    """Every item as (dataset, id, input, expected output, metadata)."""
+    """Every item as (dataset, id, input, expected output, metadata). The metadata's `split` is one of `SPLITS`."""
     rows = []
     for case in FOCUSED:
         kind = BY_READING[case.reading.name]
@@ -355,6 +367,7 @@ def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, An
                     'business': 'salon',
                     'reading': case.reading.name,
                     'label_source': 'live failure, label by Claude, not reviewed',
+                    'split': 'dev',
                 },
             )
         )
@@ -377,6 +390,7 @@ def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, An
                     'reading': reading.name,
                     'group': case.group,
                     'label_source': 'reviewed case',
+                    'split': 'dev',
                 },
             )
         )
@@ -392,6 +406,7 @@ def items() -> list[tuple[str, str, dict[str, Any], dict[str, Any], dict[str, An
                     'business': context.split(' with ')[1].split('.')[0],
                     'reading': KINDS[kind].reading.name,
                     'label_source': 'written by Claude, not reviewed',
+                    'split': 'test',
                 },
             )
         )
@@ -536,36 +551,59 @@ def totals(*, item_results, **kwargs):
     ]
 
 
-def run(models: list[str], only: list[str], label: str = 'production', repeat: int = 1) -> None:
+@dataclass(frozen=True)
+class Plan:
+    """One `run`: which models and readings, which prompt version, how often, on which items."""
+
+    models: tuple[str, ...] = tuple(MODELS)
+    only: tuple[str, ...] = ()
+    label: str = 'production'
+    version: int | None = None
+    """Pins the prompt version; the label is then ignored."""
+    repeat: int = 1
+    split: str = ''
+    """Only the items of this split (`SPLITS`); empty runs them all."""
+
+
+def run(plan: Plan) -> None:
     lf = get_client()
     stamp = datetime.now(UTC).strftime('%Y%m%d-%H%M')
     for name, kind in KINDS.items():
-        if only and name not in only:
+        if plan.only and name not in plan.only:
             continue
         dataset = lf.get_dataset(f'harness-reading/{name}')
-        prompt = lf.get_prompt(f'harness-reading/{name}', label=label, cache_ttl_seconds=0)
+        if plan.version is not None:
+            prompt = lf.get_prompt(f'harness-reading/{name}', version=plan.version, cache_ttl_seconds=0)
+        else:
+            prompt = lf.get_prompt(f'harness-reading/{name}', label=plan.label, cache_ttl_seconds=0)
         if (prompt.config or {}).get('json_schema') != kind.reading.classifier.json_schema():
             raise SystemExit(
-                f'{name}: prompt v{prompt.version} ({label}) records other classes than the code sends. '
+                f'{name}: prompt v{prompt.version} records other classes than the code sends. '
                 'Build it, or check out the code it was built from.'
             )
-        for model_name, n in ((m, n) for m in models for n in range(1, repeat + 1)):
-            result = dataset.run_experiment(
+        chosen = [i for i in dataset.items if not plan.split or (i.metadata or {}).get('split') == plan.split]
+        if not chosen:
+            print(f'{name:13} no items in split {plan.split!r}; skipped', flush=True)
+            continue
+        for model_name, n in ((m, n) for m in plan.models for n in range(1, plan.repeat + 1)):
+            result = lf.run_experiment(
                 name=f'{name} v{prompt.version} {model_name}',
-                run_name=f'{name}-v{prompt.version}-{model_name}-{stamp}-r{n}',
-                description=f'The {name} reading, prompt version {prompt.version} ({label}), on {model_name}, '
-                f'repeat {n} of {repeat}.',
+                run_name=f'{name}-v{prompt.version}-{model_name}-{plan.split or "all"}-{stamp}-r{n}',
+                description=f'The {name} reading, prompt version {prompt.version}, on {model_name}, '
+                f'{plan.split or "all"} items, repeat {n} of {plan.repeat}.',
+                data=chosen,
                 task=task_for(name, kind, prompt, model_name),
                 evaluators=scorers(kind),
                 run_evaluators=[totals],
                 max_concurrency=8,
                 metadata={
                     'reading': name,
-                    'prompt_version': prompt.version,
-                    'prompt_label': label,
+                    'prompt_version': str(prompt.version),
+                    'prompt_labels': ','.join(prompt.labels),
                     'model': model_name,
-                    'repeat': n,
-                    'items': len(dataset.items),
+                    'repeat': str(n),
+                    'split': plan.split or 'all',
+                    'items': str(len(chosen)),
                 },
             )
             rows = result.item_results
@@ -578,7 +616,7 @@ def run(models: list[str], only: list[str], label: str = 'production', repeat: i
                 if e.name == 'exact-match' and not e.value
             ]
             print(
-                f'{name:13} v{prompt.version} r{n} {model_name:22} accuracy {scores["accuracy"]:.2f} of {len(rows):<3} '
+                f'{name:13} v{prompt.version} {plan.split or "all":4} r{n} {model_name:22} accuracy {scores["accuracy"]:.2f} of {len(rows):<3} '
                 f'false accepts {scores["false-accepts"]:.0f}  median {seconds[len(seconds) // 2]:.2f}s  '
                 f'{scores["mean-input-tokens"]:.0f} tokens in',
                 flush=True,
@@ -588,24 +626,40 @@ def run(models: list[str], only: list[str], label: str = 'production', repeat: i
     lf.flush()
 
 
-def arguments(args: list[str]) -> tuple[list[str], list[str], str, int]:
-    """`run`'s arguments: models, readings, prompt label and repeats. Anything unknown stops the run."""
-    label, repeat, names = 'production', '1', []
+OPTIONS = ('--label', '--version', '--repeat', '--split')
+
+
+def arguments(args: list[str]) -> Plan:
+    """`run`'s arguments as a plan. Anything unknown stops the run before a request is made."""
+    options: dict[str, str] = {}
+    names: list[str] = []
     rest = iter(args)
     for arg in rest:
-        if arg == '--label':
-            label = next(rest, '')
-        elif arg == '--repeat':
-            repeat = next(rest, '')
+        if arg in OPTIONS:
+            options[arg] = next(rest, '')
         else:
             names.append(arg)
     unknown = [n for n in names if n not in MODELS and n not in KINDS]
-    if unknown or label in ('', '--repeat') or not repeat.isdigit():
+    values = options.values()
+    if (
+        unknown
+        or any(not v or v in OPTIONS for v in values)
+        or not options.get('--repeat', '1').isdigit()
+        or not options.get('--version', '1').isdigit()
+        or options.get('--split', 'dev') not in SPLITS
+    ):
         raise SystemExit(
-            f'unknown {unknown or "option value"}. Models: {", ".join(MODELS)}. Readings: {", ".join(KINDS)}.'
+            f'unknown {unknown or "option value"}. Models: {", ".join(MODELS)}. Readings: {", ".join(KINDS)}. '
+            f'Options: {", ".join(OPTIONS)}; splits: {", ".join(SPLITS)}.'
         )
-    models = [n for n in names if n in MODELS] or list(MODELS)
-    return models, [n for n in names if n in KINDS], label, int(repeat)
+    return Plan(
+        models=tuple(n for n in names if n in MODELS) or tuple(MODELS),
+        only=tuple(n for n in names if n in KINDS),
+        label=options.get('--label', 'production'),
+        version=int(options['--version']) if '--version' in options else None,
+        repeat=int(options.get('--repeat', '1')),
+        split=options.get('--split', ''),
+    )
 
 
 if __name__ == '__main__':
@@ -613,6 +667,6 @@ if __name__ == '__main__':
     if command == 'build':
         build(publish='--publish' in sys.argv[2:])
     elif command == 'run':
-        run(*arguments(sys.argv[2:]))
+        run(arguments(sys.argv[2:]))
     else:
         raise SystemExit(__doc__)

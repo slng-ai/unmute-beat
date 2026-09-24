@@ -160,16 +160,22 @@ async def unheard_questions_cannot_be_accepted():
 
 def a_readings_run_refuses_names_it_does_not_know():
     """A misspelt model once ran all four; `evals.readings run` now stops on any name it does not know."""
-    from evals.readings import MODELS, arguments
+    from evals.readings import Plan, arguments
 
-    assert arguments(['gemini-3.5-flash-lite', 'confirm', '--repeat', '3', '--label', 'candidate']) == (
-        ['gemini-3.5-flash-lite'],
-        ['confirm'],
-        'candidate',
-        3,
+    assert arguments(['gemini-3.5-flash-lite', 'confirm', '--repeat', '3', '--label', 'candidate']) == Plan(
+        models=('gemini-3.5-flash-lite',), only=('confirm',), label='candidate', repeat=3
     )
-    assert arguments([]) == (list(MODELS), [], 'production', 1)
-    for bad in (['gemini-3.5-flash'], ['confirmation'], ['--repeat', 'x'], ['--label']):
+    assert arguments(['--version', '3', '--split', 'test']) == Plan(version=3, split='test')
+    assert arguments([]) == Plan()
+    for bad in (
+        ['gemini-3.5-flash'],
+        ['confirmation'],
+        ['--repeat', 'x'],
+        ['--label'],
+        ['--label', '--repeat', '2'],
+        ['--version', 'v3'],
+        ['--split', 'train'],
+    ):
         try:
             arguments(bad)
         except SystemExit:

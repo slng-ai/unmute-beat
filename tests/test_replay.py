@@ -158,8 +158,28 @@ async def unheard_questions_cannot_be_accepted():
             assert case.about != 'phone' or not call.state.customer_verified, case.id
 
 
+def a_readings_run_refuses_names_it_does_not_know():
+    """A misspelt model once ran all four; `evals.readings run` now stops on any name it does not know."""
+    from evals.readings import MODELS, arguments
+
+    assert arguments(['gemini-3.5-flash-lite', 'confirm', '--repeat', '3', '--label', 'candidate']) == (
+        ['gemini-3.5-flash-lite'],
+        ['confirm'],
+        'candidate',
+        3,
+    )
+    assert arguments([]) == (list(MODELS), [], 'production', 1)
+    for bad in (['gemini-3.5-flash'], ['confirmation'], ['--repeat', 'x'], ['--label']):
+        try:
+            arguments(bad)
+        except SystemExit:
+            continue
+        raise AssertionError(f'{bad} was accepted')
+
+
 async def main():
     cases_are_well_formed()
+    a_readings_run_refuses_names_it_does_not_know()
     await correct_interpretations_do_the_right_thing()
     await unheard_questions_cannot_be_accepted()
     print(f'replay ok: {len(CASES)} reviewed cases, application side only')

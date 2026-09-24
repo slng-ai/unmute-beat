@@ -1,7 +1,7 @@
 """The narrow readings as Langfuse datasets and prompts, and experiments across models.
 
-    uv run --env-file .env python -m evals.readings build        # datasets and prompts, upserted
-    uv run --env-file .env python -m evals.readings run [MODEL...] [READING...]  # billable; default all
+    uv run --env-file .env python -m evals.readings build [--publish]   # datasets, and prompts as `candidate`
+    uv run --env-file .env python -m evals.readings run [--label L] [--repeat N] [MODEL...] [READING...]
 
 One dataset and one prompt per reading (`core.readings`), named
 `harness-reading/<reading>`. An item is exactly what the reading is sent (the
@@ -21,6 +21,13 @@ request path a live call takes, with the model swapped and the instructions
 taken from the prompt version in Langfuse. Scores: exact match, false accept
 (a label that would let the application act when the expected label would
 not), and per run accuracy, false accepts, latency and input tokens.
+
+`build` writes a changed prompt under the label `candidate`; only
+`--publish` moves `production`, so building is never a release by accident.
+The classes and their descriptions are sent from the code, not from the
+prompt's config, so `run` refuses a prompt version whose recorded schema is
+not what the code would send: a run is only ever labelled with the version it
+really measured.
 """
 
 import sys
@@ -401,7 +408,7 @@ def instructions(kind: Kind) -> str:
     return '\n\n'.join(('{{context}}', TASK, 'The input:\n' + '\n'.join(fields)))
 
 
-def build() -> None:
+def build(publish: bool = False) -> None:
     lf = get_client()
     rows = items()
     for name, kind in KINDS.items():
@@ -424,27 +431,38 @@ def build() -> None:
                 expected_output=expected,
                 metadata=metadata,
             )
+        label = 'production' if publish else 'candidate'
+        text, config = instructions(kind), prompt_config(kind)
         current = None
-        try:
-            current = lf.get_prompt(dataset, label='production')
-        except Exception:
-            current = None
-        text = instructions(kind)
-        if current is None or current.prompt != text:
-            lf.create_prompt(
+        for wanted in dict.fromkeys((label, 'production')):
+            try:
+                current = lf.get_prompt(dataset, label=wanted, cache_ttl_seconds=0)
+                break
+            except Exception:
+                current = None
+        if current is None or current.prompt != text or current.config != config:
+            current = lf.create_prompt(
                 name=dataset,
                 type='text',
                 prompt=text,
-                labels=['production'],
-                config={
-                    'input_type': kind.input_type.__name__,
-                    'field': kind.reading.field,
-                    'json_schema': kind.reading.classifier.json_schema(),
-                },
-                commit_message='The instructions core.classifiers.Classifier builds today.',
+                labels=[label],
+                config=config,
+                commit_message='The instructions and classes core.classifiers.Classifier builds today.',
             )
-        print(f'{dataset}: {sum(1 for r in rows if r[0] == name)} items')
+        elif publish and 'production' not in current.labels:
+            lf.update_prompt(name=dataset, version=current.version, new_labels=['production'])
+        rows_here = sum(1 for r in rows if r[0] == name)
+        print(f'{dataset}: {rows_here} items, prompt v{current.version} {current.labels}')
     lf.flush()
+
+
+def prompt_config(kind: Kind) -> dict[str, Any]:
+    """What a prompt version records beside its text: the input and the classes the code sends with it."""
+    return {
+        'input_type': kind.input_type.__name__,
+        'field': kind.reading.field,
+        'json_schema': kind.reading.classifier.json_schema(),
+    }
 
 
 def model(name: str):
@@ -518,24 +536,37 @@ def totals(*, item_results, **kwargs):
     ]
 
 
-def run(models: list[str], only: list[str]) -> None:
+def run(models: list[str], only: list[str], label: str = 'production', repeat: int = 1) -> None:
     lf = get_client()
     stamp = datetime.now(UTC).strftime('%Y%m%d-%H%M')
     for name, kind in KINDS.items():
         if only and name not in only:
             continue
         dataset = lf.get_dataset(f'harness-reading/{name}')
-        prompt = lf.get_prompt(f'harness-reading/{name}', label='production')
-        for model_name in models:
+        prompt = lf.get_prompt(f'harness-reading/{name}', label=label, cache_ttl_seconds=0)
+        if (prompt.config or {}).get('json_schema') != kind.reading.classifier.json_schema():
+            raise SystemExit(
+                f'{name}: prompt v{prompt.version} ({label}) records other classes than the code sends. '
+                'Build it, or check out the code it was built from.'
+            )
+        for model_name, n in ((m, n) for m in models for n in range(1, repeat + 1)):
             result = dataset.run_experiment(
                 name=f'{name} v{prompt.version} {model_name}',
-                run_name=f'{name}-v{prompt.version}-{model_name}-{stamp}',
-                description=f'The {name} reading, prompt version {prompt.version}, on {model_name}.',
+                run_name=f'{name}-v{prompt.version}-{model_name}-{stamp}-r{n}',
+                description=f'The {name} reading, prompt version {prompt.version} ({label}), on {model_name}, '
+                f'repeat {n} of {repeat}.',
                 task=task_for(name, kind, prompt, model_name),
                 evaluators=scorers(kind),
                 run_evaluators=[totals],
                 max_concurrency=8,
-                metadata={'reading': name, 'prompt_version': prompt.version, 'model': model_name},
+                metadata={
+                    'reading': name,
+                    'prompt_version': prompt.version,
+                    'prompt_label': label,
+                    'model': model_name,
+                    'repeat': n,
+                    'items': len(dataset.items),
+                },
             )
             rows = result.item_results
             scores = {e.name: e.value for e in result.run_evaluations}
@@ -547,7 +578,7 @@ def run(models: list[str], only: list[str]) -> None:
                 if e.name == 'exact-match' and not e.value
             ]
             print(
-                f'{name:13} {model_name:22} accuracy {scores["accuracy"]:.2f} of {len(rows):<3} '
+                f'{name:13} v{prompt.version} r{n} {model_name:22} accuracy {scores["accuracy"]:.2f} of {len(rows):<3} '
                 f'false accepts {scores["false-accepts"]:.0f}  median {seconds[len(seconds) // 2]:.2f}s  '
                 f'{scores["mean-input-tokens"]:.0f} tokens in',
                 flush=True,
@@ -557,12 +588,31 @@ def run(models: list[str], only: list[str]) -> None:
     lf.flush()
 
 
+def arguments(args: list[str]) -> tuple[list[str], list[str], str, int]:
+    """`run`'s arguments: models, readings, prompt label and repeats. Anything unknown stops the run."""
+    label, repeat, names = 'production', '1', []
+    rest = iter(args)
+    for arg in rest:
+        if arg == '--label':
+            label = next(rest, '')
+        elif arg == '--repeat':
+            repeat = next(rest, '')
+        else:
+            names.append(arg)
+    unknown = [n for n in names if n not in MODELS and n not in KINDS]
+    if unknown or label in ('', '--repeat') or not repeat.isdigit():
+        raise SystemExit(
+            f'unknown {unknown or "option value"}. Models: {", ".join(MODELS)}. Readings: {", ".join(KINDS)}.'
+        )
+    models = [n for n in names if n in MODELS] or list(MODELS)
+    return models, [n for n in names if n in KINDS], label, int(repeat)
+
+
 if __name__ == '__main__':
     command = sys.argv[1] if len(sys.argv) > 1 else ''
     if command == 'build':
-        build()
+        build(publish='--publish' in sys.argv[2:])
     elif command == 'run':
-        wanted = sys.argv[2:]
-        run([m for m in wanted if m in MODELS] or list(MODELS), [k for k in wanted if k in KINDS])
+        run(*arguments(sys.argv[2:]))
     else:
         raise SystemExit(__doc__)

@@ -30,13 +30,26 @@ class CovalClient:
         self._binary = binary
 
     def _call(self, *args: str) -> Any:
-        out = subprocess.run(
-            [self._binary, '--format', 'json', *args],
-            capture_output=True,
-            text=True,
-            env=self._env,
-            check=False,
-        )
+        """Run one coval command. A read that hits a network error is tried again, up to three times.
+
+        Only reads: a launch or an update sent twice could start two runs.
+        A 25-minute run used to be lost to one dropped poll (the baseline's
+        first Coval call, 2026-09-24), though the call itself had finished.
+        """
+        for attempt in range(4):
+            out = subprocess.run(
+                [self._binary, '--format', 'json', *args],
+                capture_output=True,
+                text=True,
+                env=self._env,
+                check=False,
+            )
+            retry = (
+                out.returncode != 0 and 'Network error' in out.stderr and args[1:2] in (('get',), ('list',))
+            )
+            if not retry or attempt == 3:
+                break
+            time.sleep(5 * (attempt + 1))
         if out.returncode != 0:
             raise CovalError(f'coval {" ".join(args[:2])}: {out.stderr.strip()}')
         return json.loads(out.stdout) if out.stdout.strip() else None

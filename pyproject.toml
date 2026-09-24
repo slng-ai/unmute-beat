@@ -10,7 +10,7 @@ dependencies = [
     "pydantic-ai-slim[google,openai,spec]>=2.46.0",
     # Google's libphonenumber: a regex cannot know a Spanish number has nine national digits.
     "pydantic-extra-types[phonenumbers]>=2.11.1",
-    "pipecat-ai[runner,silero,webrtc]>=1.11.0",
+    "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",
     "pipecat-slng>=0.5.2",
     "python-dotenv>=1.2.3",
     "websockets>=16.1.1",

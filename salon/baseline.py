@@ -24,9 +24,11 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
+from typing import Any
 
 from google import genai
 from google.genai.types import HttpOptions
+from opentelemetry import trace
 from pipecat.frames.frames import EndWorkerFrame, TTSSpeakFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.services.google.llm import GoogleLLMService
@@ -40,6 +42,21 @@ from salon.models.shapes import SubmittedPhone, unsupported_region
 PROMPTS = FOLDER / 'prompts'
 MODEL = 'gemini-3.5-flash-lite'
 """The harness's model (`salon.classification.MODEL`), thinking pinned the same way."""
+
+_tracer = trace.get_tracer('voice.baseline')
+
+
+def written(action: str, args: dict[str, Any], result: Any) -> None:
+    """One `write` span per diary write, as the harness leaves (`core.operations`), so `evals.ledger` counts both.
+
+    It has no question in it: here the model decides the caller agreed, so
+    whether it did is for a person or a judge to read from the transcript.
+    """
+    failed = isinstance(result, dict) and 'error' in result
+    audit = {'action': action, 'args': args, 'status': 'failed' if failed else 'ok', 'consent': 'model'}
+    with _tracer.start_as_current_span('write') as span:
+        span.set_attribute('write.audit', json.dumps(audit, default=str))
+
 
 PHONE = TypeAdapter(SubmittedPhone)
 
@@ -156,6 +173,7 @@ class Desk:
                 )
             except RefusedError as error:
                 result = {'error': str(error)}
+            written('save_booking', {'action': action, 'slot_id': slot_id, 'booking_id': booking_id}, result)
             await params.result_callback(result)
 
         async def record_complaint(params: FunctionCallParams, summary: str, requested_resolution: str):
@@ -167,9 +185,11 @@ class Desk:
             """
             if not self.phone:
                 return await params.result_callback({'error': 'Identify the caller first.'})
-            await params.result_callback(
-                self.diary.record_complaint(self.phone, summary, requested_resolution)
+            result = self.diary.record_complaint(self.phone, summary, requested_resolution)
+            written(
+                'record_complaint', {'summary': summary, 'requested_resolution': requested_resolution}, result
             )
+            await params.result_callback(result)
 
         async def end_call(params: FunctionCallParams, goodbye: str):
             """End the call once the caller has said they are finished.

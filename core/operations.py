@@ -21,15 +21,19 @@ model-facing tool, which has the reply in front of it.
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, final
 
+from opentelemetry import trace
 from pydantic import BaseModel
 from pydantic_ai import ModelRetry
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.proposals import Proposal
 from core.state import CallContext
+
+_tracer = trace.get_tracer('voice.operations')
 
 
 class OutcomeUnknownError(Exception):
@@ -61,15 +65,46 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         usage: RunUsage | None = None,
         usage_limits: UsageLimits | None = None,
     ) -> OutputT:
-        """Do it, in the one order that is safe. Refusals are `ModelRetry`, with a reason the model can use."""
+        """Do it, in the one order that is safe. Refusals are `ModelRetry`, with a reason the model can use.
+
+        Every authorised attempt leaves one `write` span, whichever path ran it
+        (a model's tool or `advance` with no model), carrying `write.audit`:
+        the action, its arguments, the question the caller was answering and
+        what they said, and whether it landed (ok, failed, or unknown when the
+        service's outcome is). `evals.ledger` reads it. A refusal leaves none:
+        nothing was attempted.
+        """
         checked: ArgsT = self.args_type.model_validate(args.model_dump())  # ty: ignore[invalid-assignment]
         if (early := await self._before(call, checked)) is not None:
             return early
+        asked = call.pending_question()
+        heard = call.heard
         grant = await self._authorise(call, checked, usage=usage, usage_limits=usage_limits)
-        call.note_business_attempt()
-        raw = await self._execute(call, checked, grant)
-        receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
-        return await self._record(call, checked, receipt)
+        with _tracer.start_as_current_span('write') as span:
+            audit: dict[str, Any] = {
+                'action': self.name,
+                'args': checked.model_dump(mode='json'),
+                'question': asked.spoken if asked is not None else '',
+                'about': asked.about if asked is not None else '',
+                'asked_turn': asked.turn if asked is not None else None,
+                'turn': call.turn,
+                'heard': heard,
+                'status': 'unknown',
+            }
+            try:
+                call.note_business_attempt()
+                raw = await self._execute(call, checked, grant)
+                receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
+                output = await self._record(call, checked, receipt)
+                audit.update(status='ok', receipt=receipt.model_dump(mode='json'))
+                return output
+            except OutcomeUnknownError:
+                raise
+            except BaseException:
+                audit['status'] = 'failed'
+                raise
+            finally:
+                span.set_attribute('write.audit', json.dumps(audit, default=str))
 
     async def _before(self, call: C, args: ArgsT) -> OutputT | None:
         """Settle anything that must be resolved before a new action. Return an output to stop here."""

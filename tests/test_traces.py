@@ -394,8 +394,71 @@ def two_calls_at_once_stay_apart():
     assert not speech._calls and not speech._lines and not speech._turns, 'a finished call left state behind'
 
 
+async def every_write_names_the_question_it_answered():
+    """The harness's writes, model or not, each leave a `write` span naming the question the caller answered.
+
+    Most writes run from `advance` with no model and no tool span, so the
+    traces showed no write at all (24 September). A refused write leaves no
+    span: nothing was attempted.
+    """
+    from datetime import datetime
+
+    from pydantic_ai import ModelRetry, RunContext
+
+    from salon import agents, diary
+    from salon.diary import Diary
+    from salon.tools.booking import write_booking
+    from tests.classifier_model import classifier_model
+
+    books = Diary()
+    books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
+    call = open_call(PHONE, diary=books)
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
+    spans.clear()
+    with classifier_model():
+        call.turn_started('A haircut on Friday at nine.')
+        found = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)
+        slot = next(s['slot_id'] for s in found['slots'] if s['time'] == '09:00')
+        try:
+            await write_booking(call, 'book', slot, '')
+        except ModelRetry:
+            pass
+        else:
+            raise AssertionError('a booking nobody agreed to was written')
+        assert not named('write'), 'a refused write left an audit'
+
+        booked = await agents.ask_booking(context, 'book', slot, '')
+        booked.put(call)
+        call.turn_started('Yes.')
+        await write_booking(call, 'book', slot, '')
+        held = books.bookings_for(PHONE, books.now().date())[0]['booking_id']
+        cancel = await agents.ask_booking(context, 'cancel', '', held)
+        cancel.put(call)
+        call.turn_started('Yes.')
+        await write_booking(call, 'cancel', '', held)
+
+        call.commit(agent='complaints')
+        call.turn_started('The last cut was uneven. I would like a redo.')
+        complaint = await agents.ask_complaint(context, 'The last cut was uneven', 'a redo')
+        complaint.put(call)
+        call.turn_started('Absolutely.')
+        await agents.record_complaint(context)
+
+    audits = [json.loads(str(span.attributes['write.audit'])) for span in named('write')]
+    assert [(a['action'], a['args'].get('action'), a['status']) for a in audits] == [
+        ('save_booking', 'book', 'ok'),
+        ('save_booking', 'cancel', 'ok'),
+        ('record_complaint', None, 'ok'),
+    ], audits
+    for audit, asked in zip(audits, (booked, cancel, complaint), strict=True):
+        assert audit['question'] == asked.spoken and audit['asked_turn'] < audit['turn'], audit
+    assert [a['heard'] for a in audits] == ['Yes.', 'Yes.', 'Absolutely.']
+
+
 async def main():
     await one_trace_per_call()
+    await every_write_names_the_question_it_answered()
     agent_output_is_readable()
     speech_reaches_langfuse()
     a_call_reads_as_a_call()

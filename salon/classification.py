@@ -7,8 +7,8 @@ happen this turn:
 | Reading | Runs when | Classes |
 |---|---|---|
 | `CONFIRMATION` | a phone, booking or complaint read-back is waiting | accept, reject, revise, conditional, unclear |
-| `APPOINTMENT_CHOICE` | the caller was asked to move or add, or holds a booking while times are on the table | move, add, or neither |
-| `CHOSEN_OFFER` | times are on the table, and no read-back or choice is waiting | one slot id, or none |
+| `APPOINTMENT_CHOICE` | the caller was asked to move or add, or holds a booking while times are on the table; on "anything else?" only once the booking tool asks | move, add, or neither |
+| `CHOSEN_OFFER` | times are on the table, and no read-back or choice is waiting; on "anything else?" only once the booking tool asks | one slot id, or none |
 | `LAST_CHANGE` | the caller still holds a booking made in this call | keep, withdraw, unclear |
 | `RETAINED_APPROVAL` | a complaint approved on an earlier turn is kept through the number check | keep, withdraw, unclear |
 | `CONVERSATION` | a question other than a read-back is waiting, or the model asks to hang up | end, continue, unclear |
@@ -273,6 +273,9 @@ READINGS: tuple[Reading, ...] = (
 )
 """Every reading that runs on its own when it applies. `CONVERSATION` joins them only as `classify_reply` says."""
 
+CLOSING_DEFERS = (APPOINTMENT_CHOICE, CHOSEN_OFFER)
+"""The readings `advance` leaves to the booking tool on "anything else?" (see `classify_reply`)."""
+
 
 def reading_of(call: SalonCall) -> ReplyClassification:
     """This turn's readings as the one view the tool guards read. A reading that did not run reads as its default."""
@@ -390,6 +393,7 @@ async def classify_reply(
     usage: RunUsage | None = None,
     usage_limits: UsageLimits | None = None,
     closing: bool = False,
+    before_model: bool = False,
 ) -> ReplyClassification:
     """Run every reading that applies to this turn, then return the merged view. Each runs at most once per turn.
 
@@ -399,13 +403,23 @@ async def classify_reply(
     model hangs up, and `closing` reads it then. Consumers
     recheck the view against the live call through
     `SalonCall.classification`; a late or rebound answer is never published.
+
+    `before_model` is `advance` reading the turn before any model runs. On
+    "anything else?" it leaves out the two choice readings: across the Coval
+    runs of 24 September they ran on every closing reply and never decided
+    one (0 of 6), while a goodbye paid for both. A move asked for there
+    ("can we move it to Saturday, same time?") still gets them, read by the
+    booking tool before it writes (`WriteBooking._authorise`), against the
+    times the model has just put on the table.
     """
     if INTERPRETER == 'solver':
         await SOLVER.interpret(call, usage=usage, usage_limits=usage_limits)
         return call.classification
     question = call.pending_question()
     ending = closing or (question is not None and question.about not in READ_BACKS)
+    deferred = before_model and question is not None and question.about == 'closing'
+    readings = [r for r in READINGS if not (deferred and r in CLOSING_DEFERS)]
     await read(
-        call, (*READINGS, *((CONVERSATION,) if ending else ())), usage=usage, usage_limits=usage_limits
+        call, (*readings, *((CONVERSATION,) if ending else ())), usage=usage, usage_limits=usage_limits
     )
     return call.classification

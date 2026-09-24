@@ -75,7 +75,7 @@ async def advance(
     """
     if classification.INTERPRETER == 'solver':
         return await solve(call, usage, usage_limits)
-    await classify_reply(call, usage=usage, usage_limits=usage_limits)
+    await classify_reply(call, usage=usage, usage_limits=usage_limits, before_model=True)
     return decided(call)
 
 

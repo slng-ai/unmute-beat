@@ -365,6 +365,60 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
     assert books.bookings_for(PHONE, CLOCK.date()) == [], books.bookings_for(PHONE, CLOCK.date())
 
 
+async def a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it():
+    """Coval run 4eDqRVLR: "That's all, thank you. Goodbye." after a booking ran four readings, one needed.
+
+    On "anything else?" the two choice readings ran on every reply and never
+    decided one. They are left to the booking tool, which reads them itself
+    if the model goes on to move or add; what the goodbye needs is whether it
+    takes the booking back and whether it ends the call.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A hair colour on Friday.')
+    await offer(call, 'Friday', 'hair-color')
+    call.note_reached()
+    call.note_drained()
+    call.turn_ended(interrupted=False)
+    slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
+    readings = {
+        "Nine o'clock works.": {'chosen_offer': slot.slot_id},
+        "That's all, thank you. Goodbye.": {'last_change': 'keep', 'conversation': 'end'},
+    }
+    given: list[tuple[str, str]] = []
+
+    def classify(name, data):
+        given.append((name, data['answer']))
+        return readings.get(data['answer'], {}).get(name)
+
+    async def booking(messages, info):
+        yield {
+            0: DeltaToolCall(
+                name='save_booking',
+                json_args=f'{{"action":"book","slot_id":"{slot.slot_id}","booking_id":""}}',
+            )
+        }
+
+    async def other(messages, info):
+        yield 'Goodbye.'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=booking if name == 'booking' else other)
+            stack.enter_context(node.agent.override(model=model))
+        await probe._turn("Nine o'clock works.")
+        assert call.state.writes == 1
+        call.note_reached()
+        call.note_drained()
+        probe.interrupt()
+        await probe._turn("That's all, thank you. Goodbye.")
+    read = sorted(name for name, answer in given if answer == "That's all, thank you. Goodbye.")
+    assert read == ['conversation', 'last_change'], read
+    assert call.ended, 'the goodbye did not end the call'
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the goodbye touched the booking'
+
+
 async def only_a_slot_on_the_table_can_be_picked():
     """A pick is the classifier's reading checked against the table, never a word list and never a free slot id.
 
@@ -677,6 +731,7 @@ async def main():
     await a_number_talked_over_arrives_whole()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
+    await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await only_a_slot_on_the_table_can_be_picked()
     await a_pick_with_no_question_pending_still_books()
     await an_add_on_after_a_booking_is_read_against_it()

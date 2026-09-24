@@ -182,10 +182,13 @@ core/
   flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
   classifiers.py        generic Pydantic input/output classification in one request
   readings.py           narrow readings: one small classifier per act, and the fixed order they act in
+  conversation.py       the acts as classes a use case fills in (ReadBack, Offer, TakeBack, ...) and Conversation
+  desk.py               Desk: hand over, hang up, clarify, switch task, for any use case
+  locale.py             Locale: the lines the turn engine says itself, in one language
   decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
   proposals.py          the one question a call waits on, and when it can be answered
   completion.py         when a step is done: evidence in the facts, never a flag
-  steps.py              typed steps (collect, confirm, action, conversation, end) and StepFlow
+  steps.py              typed steps (collect, confirm, action, conversation, end), StepFlow, AgentBuilder
   flowspec.py           flow files as YAML (or JSON), checked before they run
   operations.py         Operation: one business action with its checks in a fixed order
   interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
@@ -200,7 +203,7 @@ salon/
   flow.yaml             the four steps: prompt, module, exits, requirements
   prompts/              one prompt per step, the shared rules, knowledge/
   steps/                one module per step, each giving node(step)
-  nodes.py              build(), advance(): what every step is built from
+  nodes.py              BUILDER (core's AgentBuilder), build(), advance()
   instructions.py       loads flow.yaml; each step's compiled prompt
   classification.py     the salon's conversation (SALON: its acts and readings), and the opt-in solver
   baseline.py           the same salon as one prompt on Pipecat's own LLM service (VOICE_HARNESS=pipecat)
@@ -221,6 +224,118 @@ evals/rules.py          the no-model floor the others must beat
 
 `core` knows nothing about the salon, and nothing in `core` but the processor
 knows about Pipecat. `tests/test_core.py` reads the source and checks both.
+
+# Adding a use case
+
+A use case gives core's classes its information, and core's code runs it.
+[tests/clinic.py](tests/clinic.py) is a complete one: a clinic's booking
+line in about 200 lines, with no salon code. The salon is built the same
+way, in [salon/classification.py](salon/classification.py) (`SALON`),
+[salon/tools/desk.py](salon/tools/desk.py) (`DESK`) and
+[salon/nodes.py](salon/nodes.py) (`BUILDER`).
+
+```mermaid
+flowchart LR
+  info[Use case information] --> conv[Conversation]
+  info --> desk[Desk]
+  info --> builder[AgentBuilder]
+  conv --> readings[Narrow readings]
+  conv --> acts[Rules in fixed order]
+  acts --> ops[Operations]
+  builder --> steps[Steps]
+  steps --> engine[Turn engine]
+```
+
+1. The use case writes a call type (`CallContext` subclass) and its state.
+2. It writes one `Operation` per business action: what the backend does, and
+   what the caller hears when it lands.
+3. It gives `Conversation` its acts: which questions are read back and what a
+   yes runs, where the options on the table come from, what a pick and a
+   take-back do, the goodbye.
+4. `Conversation` builds one narrow reading per act. On each turn it runs the
+   readings that apply, side by side, and tries the rules in core's order:
+   answers, then take-backs, then picks, then goodbye.
+5. A rule that decides runs an operation, or a read-back, with no model
+   request. `Operation` checks the caller agreed to that exact question
+   before anything is written, and records a `write` span for the ledger.
+6. `AgentBuilder` builds each step's agent, with the shared `Desk` tools, for
+   whatever no rule decides.
+
+This is the clinic's whole conversation:
+
+```python
+Conversation[ClinicCall](
+    context='A patient is on the phone with the front desk of Riverside Clinic.',
+    model=model,
+    read_back_context='The front desk read something back and is waiting for a yes.',
+    read_backs=(
+        ReadBack(about='booking', action='book', run=lambda call, q: BOOK.run(call, Slot(slot=q.value))),
+        ReadBack(about='cancel', action='cancel', run=lambda call, q: CANCEL.run(call, Slot(slot=q.value))),
+        ReadBack(about='patient', action='identify', run=lambda call, q: IDENTIFY.run(call, Patient(patient=q.value))),
+    ),
+    offers=(Offer(name='chosen_time', about='offer', options=ClinicCall.table, input_type=ChoiceInput,
+                  context='The patient was offered appointment times.', on_pick=_read_back_time),),
+    values=(HeardValue(about='patient', action='ask_patient', parse=_patient_number,
+                       read_back=_read_back_patient, when=lambda call: not call.state.patient),),
+    take_backs=(TakeBack(name='undo_booking', kind='undo', on_withdraw=_offer_undo,
+                         context='Earlier in this call the clinic booked an appointment for the patient.'),),
+    closing=Closing(goodbye=lambda call: DESK.end_conversation(call, 'Goodbye.')),
+)
+```
+
+### What each class takes
+
+| Class | Where | The information a use case gives it |
+|---|---|---|
+| `Conversation` | `core/conversation.py` | who is talking (one sentence), the model and settings, its acts |
+| `ReadBack` | `core/conversation.py` | the question it answers, the action a yes runs, when a yes counts |
+| `FixedChoice` | `core/conversation.py` | the question, its options, the action for each option |
+| `Offer` | `core/conversation.py` | where the options on the table come from, what a pick does |
+| `HeardValue` | `core/conversation.py` | a parser from words to a value, how the value is read back |
+| `TakeBack` | `core/conversation.py` | the kind of thing held, what taking it back does |
+| `HeldApproval` | `core/conversation.py` | the read-back whose yes is kept through a detour, how it is kept |
+| `Detour` | `core/conversation.py` | the question that ends a prerequisite's check |
+| `Closing` | `core/conversation.py` | the goodbye, the readings to skip on "anything else?" |
+| `Operation` | `core/operations.py` | its arguments and receipt types, the question that authorises it (`proposal`), what the backend does (`_execute`, `_record`), or `needs_approval = False` for an action with no read-back |
+| `Desk` | `core/desk.py` | the call and hand-over types, the action names, what blocks a switch, an optional `Carry` |
+| `AgentBuilder` | `core/steps.py` | the call type, model, settings, action names, `Desk`, `advance` |
+| `Locale` | `core/locale.py` | the four lines the turn engine says itself, in the call's language |
+| `Held` | `core/state.py` | something the caller could still take back, kept on the call by kind |
+
+### What stays code in each use case
+
+- **What the backend does.** Each operation's `_execute` and `_record`.
+- **Where options come from.** A callable, such as the diary's free slots.
+- **Parsers.** Such as a Spanish phone number (`salon/tools/identity.py`).
+- **The words.** Read-backs, receipts and prompts are the use case's own.
+
+### How to check a new one
+
+- **Its behaviour.** Write assert scripts like
+  [tests/test_reuse.py](tests/test_reuse.py). They run the real turn engine
+  with scripted classifier answers and no network.
+- **Its prompts.** `tests/golden/readings.json` and `tests/golden/agents.json`
+  pin every request the salon sends. They cover classifiers and step agents,
+  so any code change that alters a prompt shows as a diff.
+  `BLESS_READINGS=1 uv run python -m tests.test_classifiers` pins them again.
+  Do that only for a change that is meant, and check it live.
+- **Its readings.** Each reading's name is its Langfuse dataset's name
+  (`harness-reading/<name>`). Readings with core's classes (`confirm`,
+  `take_back`, `closing`) share what was measured for the salon.
+
+### Known limits
+
+- Recovering a write whose outcome is unknown is still the salon's code
+  (`salon/tools/writes.py`). It is tied to the diary's operation log.
+- The patterns for a claimed change nothing made (`_CLAIMED`, `_RECORDED` in
+  `salon/models/state.py`) are the salon's, and English.
+- A pick with a condition relies on the pick reading returning no pick. The
+  salon also checks the times named, with an English word list.
+- Classifier instructions and class descriptions are English. The fixed lines
+  follow the call's `Locale`, but a conversation in another language needs a
+  live check of the readings on its own dataset.
+- Form-like flows (`StepFlow`: collect, confirm, action) share the confirm
+  request with `ReadBack`, but not the class.
 
 # Design choices
 

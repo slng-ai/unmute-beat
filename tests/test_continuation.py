@@ -318,7 +318,7 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
             'last_change': 'withdraw',
             'conversation': 'end',
         },
-        'Yes, cancel it. Bye.': {'confirmation': 'accept', 'conversation': 'end'},
+        'Yes, cancel it. Bye.': {'confirmation': 'accept', 'last_change': 'withdraw', 'conversation': 'end'},
     }
     given: list[ConsentInput] = []
 

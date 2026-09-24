@@ -89,7 +89,10 @@ def decided(call: SalonCall) -> LocalAction | None:
     In order of what the caller would lose if it were missed: a booking made
     in this call that they take back is offered for cancelling, on whatever
     turn they say so (Coval run Y47Ut7oC, K2: "Leave it, thanks" two turns
-    after the booking was read as the goodbye it also was, and hung up on it), a plain pick of an offered
+    after the booking was read as the goodbye it also was, and hung up on it)
+    unless that cancel is the question already waiting, which the answer then
+    answers ("Yes, please cancel it" is a withdrawal too, and re-asked it
+    three times, Coval run gdw96FkH), a plain pick of an offered
     time books it (the write's own guard still checks the slot was on the
     table, and asks move-or-add if they already hold one), an answer that
     agrees to something runs it, and only then does a goodbye end the call. "Yes, go
@@ -98,7 +101,10 @@ def decided(call: SalonCall) -> LocalAction | None:
     """
     question = call.pending_question()
     reply = call.classification
-    if (undo := call.undo_booking) and reply.last_change == 'withdraw':
+    cancelling = (
+        question is not None and question.action == 'cancel' and question.booking_id == call.undo_booking
+    )
+    if (undo := call.undo_booking) and reply.last_change == 'withdraw' and not cancelling:
         return LocalAction('ask_booking', lambda: _cancel_question(call, undo))
     if (slot := call.picked_offer()) and call.state.customer_verified:
         return LocalAction('save_booking', lambda: write_booking(call, 'book', slot, ''))

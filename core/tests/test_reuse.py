@@ -16,12 +16,13 @@ from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from tests.clinic import CLINIC, ClinicCall, desk
 
 from core.graph import Node
 from core.locale import Locale
+from core.policies import TurnBudget
 from core.turn import take_turn
 
 
@@ -200,6 +201,36 @@ async def a_reading_that_changes_the_call_gets_a_fresh_run():
     assert _said(call).count('It is 40 euros.') == 1, _said(call)
 
 
+async def a_request_that_sends_nothing_is_tried_again():
+    """A step request with no first part in `first_part` seconds is cancelled and its run tried once more.
+
+    The user's call of 24 September: one request sent nothing for 8.49 s,
+    and the caller heard nothing until they asked "You still with me?".
+    """
+    for stalls, expected in ((1, 'It is 40 euros.'), (2, None)):
+        call, _, _ = opened()
+        calls: list[int] = []
+
+        async def stream(messages, info, stalls=stalls, calls=calls):
+            calls.append(1)
+            if len(calls) <= stalls:
+                await asyncio.sleep(10)
+            yield 'It is 40 euros.'
+
+        nodes = desk(FunctionModel(stream_function=stream))
+        with scripted(chosen_time=''):
+            started = time.perf_counter()
+            said, done = await take_turn(call, nodes, 'How much is it?', TurnBudget(first_part=0.2))
+            took = time.perf_counter() - started
+        assert len(calls) == 2 and took < 1, (len(calls), took)
+        prompts = [p for m in call.messages for p in m.parts if isinstance(p, UserPromptPart)]
+        assert [p.content for p in prompts] == ['How much is it?'], prompts
+        if expected:
+            assert said == expected and done.status == 'answered', (said, done)
+        else:
+            assert said == call.locale.exhausted and done.status == 'exhausted', (said, done)
+
+
 async def the_engine_speaks_the_calls_own_language():
     """A use case in another language gives its own locale, and the turn engine's own lines follow it."""
 
@@ -235,6 +266,7 @@ async def main():
     await a_reading_and_the_step_run_side_by_side()
     await a_reading_that_decides_drops_the_step_run()
     await a_reading_that_changes_the_call_gets_a_fresh_run()
+    await a_request_that_sends_nothing_is_tried_again()
     await the_engine_speaks_the_calls_own_language()
     no_salon_code_is_loaded()
     print('reuse ok: a second use case on the same core classes, with no salon code')

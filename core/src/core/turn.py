@@ -215,6 +215,11 @@ class _Early:
 
 
 @dataclass(frozen=True)
+class _Stalled:
+    """Internal: a step request sent nothing within `TurnBudget.first_part`, so its run was cancelled."""
+
+
+@dataclass(frozen=True)
 class _Exhausted:
     """Internal: the hop loop ran out. Not part of the public stream."""
 
@@ -275,6 +280,8 @@ class Turn:
         self.flow = flow if flow is not None else Flow.of(nodes)
         """The steps table as a Pydantic graph: it walks the hops and refuses a move the table does not allow."""
         self._hops_run = 0
+        self._stalls = 0
+        """Step requests this turn that sent nothing in time (`TurnBudget.first_part`). The first is tried again."""
         self._channel: asyncio.Queue[tuple[object, asyncio.Future[None] | None]] = asyncio.Queue()
 
     def _stale(self) -> bool:
@@ -526,18 +533,32 @@ class Turn:
             yield RunEnded(node.agent.name or call.state.agent)
         if action is None or output is None:
             failed: _Failed | None = None
-            async for event in early.events() if early is not None else self._speak(node, prompt):
+            run = early.events() if early is not None else self._speak(node, prompt)
+            while True:
+                stalled = False
+                async for event in run:
+                    if failed is not None:
+                        continue
+                    if isinstance(event, _Outcome):
+                        output, succeeded = event.output, event.succeeded
+                    elif isinstance(event, _Stalled):
+                        stalled = True
+                    elif isinstance(event, _Failed):
+                        failed = event
+                    else:
+                        yield event
                 if failed is not None:
-                    continue
-                if isinstance(event, _Outcome):
-                    output, succeeded = event.output, event.succeeded
-                elif isinstance(event, _Failed):
-                    failed = event
-                else:
-                    yield event
-            if failed is not None:
-                yield failed
-                return
+                    yield failed
+                    return
+                if not stalled:
+                    break
+                if self._stale():
+                    return
+                if self._stalls:
+                    yield _Exhausted('a second step request that sent nothing')
+                    return
+                self._stalls += 1
+                run = self._speak(node, None if call.input_retained else prompt)
 
         call._return_status, call._entered = '', ''
         if isinstance(output, Question) and not barge.hit:
@@ -674,10 +695,30 @@ class Turn:
         excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'reset' else frozenset()
         initial = [] if node.history == 'reset' else paired(project(call, call.messages))
 
+        stall: asyncio.TimerHandle | None = None
+        stalled = False
+
+        def give_up() -> None:
+            nonlocal stalled
+            stalled = True
+            logger.warning(
+                'step request {}:{} sent nothing in {:g}s', run_id, requested, self.budget.first_part
+            )
+            if events is not None:
+                events.cancel()
+
+        def disarm() -> None:
+            nonlocal stall
+            if stall is not None:
+                stall.cancel()
+                stall = None
+
         async def prepare(ctx, request):
-            nonlocal requested
+            nonlocal requested, stall
             requested += 1
             call._response = f'{run_id}:{requested}'
+            disarm()
+            stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
             messages = project(call, request.messages, excluded=excluded)
             parameters = request.model_request_parameters
             notes = [note for note in (call.spoken_over, call._return_status) if note]
@@ -692,6 +733,7 @@ class Turn:
             return replace(request, messages=messages, model_request_parameters=parameters)
 
         async def tag(ctx, *, request_context, response):
+            disarm()
             response.metadata = (response.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
             return response
 
@@ -755,6 +797,7 @@ class Turn:
                     barge.attach(events)
                 async for event in events:
                     if isinstance(event, PartStartEvent):
+                        disarm()
                         if event.index == 0:
                             streamed += 1
                         call._response = f'{run_id}:{streamed}'
@@ -802,6 +845,7 @@ class Turn:
             yield _Failed(f'{type(error).__name__}: {error}')
             return
         finally:
+            disarm()
             if events is not None and not retained_run:
                 try:
                     new_messages = events.new_messages()
@@ -821,7 +865,7 @@ class Turn:
             call.note_said('fixed', call.locale.withheld, origin='error')
             yield FixedSpeech(call.locale.withheld, reason='withheld')
         yield RunEnded(step)
-        yield _Outcome(output, succeeded)
+        yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
 
 
 def run_turn(

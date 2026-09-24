@@ -54,6 +54,13 @@ class TurnBudget:
     tool_calls: int = 8
     seconds: float = 20.0
     repair_retries: int = 2
+    first_part: float = 1.5
+    """Seconds a step request may go without its first part before it is cancelled and its run tried again, once.
+
+    Over Coval run 4bLgLR4t, step requests had their first part at p50 0.74 s
+    and p99 1.20 s. One request in the user's call of 24 September sent
+    nothing for 8.49 s; the caller heard nothing until they spoke again.
+    """
 
     def account(self) -> tuple[RunUsage, UsageLimits]:
         """A fresh tally and the limits to read it against, for one turn."""

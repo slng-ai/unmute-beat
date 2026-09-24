@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -66,6 +66,12 @@ STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
 _CLAUSE = re.compile(r'[.!?,;:]')
 _CLAUSE_MAX = 60
 """Where one clause ends, and the cap that stops a model that never punctuates from holding the whole answer."""
+EARLY_AFTER = 0.05
+"""Seconds `advance` may take before the step's run is started beside it (`_Early`).
+
+A decision made by code is back well inside this; one waiting on a model
+reading takes 0.7 s or more, and that is the wait the early run overlaps.
+"""
 
 
 @dataclass(frozen=True)
@@ -146,6 +152,66 @@ class Barge:
         self.hit = True
         if self._events is not None:
             self._events.cancel()  # ty: ignore[unresolved-attribute]
+
+
+@dataclass
+class _Hold:
+    """Internal: what keeps an early run quiet until the readings have decided nothing."""
+
+    opened: asyncio.Event = field(default_factory=asyncio.Event)
+    dropped: bool = False
+    """The readings decided something: the run is cancelled, and nothing it produced is kept or said."""
+
+
+_DONE = object()
+
+
+class _Early:
+    """Internal: the step's run, started while `advance` waits on its readings.
+
+    A reading takes 0.7 s or more, and a turn it does not decide used to pay
+    for it and then for the step's first request, one after the other. Here
+    the request goes out at the same time. The run stops at its first event
+    and waits (`_Hold`): the SDK's event stream has no buffer, so the run can
+    get no further, and no tool or output function runs, no speech is
+    recorded and nothing reaches the caller until the readings are done. If
+    they decide an action, the run is dropped; if they decide nothing, it goes
+    on from where it stopped, its first request already answered.
+
+    ponytail: a dropped run's request is still billed for its input. That is
+    the price of the overlap, paid only on the turns a reading decides.
+    """
+
+    def __init__(self, run: Callable[[_Hold], AsyncIterator[object]]) -> None:
+        self.hold = _Hold()
+        self._queue: asyncio.Queue[object] = asyncio.Queue()
+
+        async def pump() -> None:
+            try:
+                async for event in run(self.hold):
+                    await self._queue.put(event)
+            finally:
+                self._queue.put_nowait(_DONE)
+
+        self._task = asyncio.ensure_future(pump())
+
+    async def drop(self) -> None:
+        """Cancel the run and keep nothing of it."""
+        self.hold.dropped = True
+        self._task.cancel()
+        with suppress(asyncio.CancelledError):
+            await self._task
+
+    async def events(self) -> AsyncIterator[object]:
+        """Let the run go on, and pass its events out as they come. Its errors are raised here."""
+        self.hold.opened.set()
+        try:
+            while (event := await self._queue.get()) is not _DONE:
+                yield event
+            await self._task
+        finally:
+            if not self._task.done():
+                await self.drop()
 
 
 @dataclass(frozen=True)
@@ -386,17 +452,37 @@ class Turn:
         retained_before = call.input_retained
         requests_before = len(call.requests)
         action = None
+        early: _Early | None = None
+        retained_early = retained_before
         if node.advance:
+            state_before, held_before = call.state, dict(call._held)
             task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
             barge.attach(task)
             try:
+                done, _ = await asyncio.wait({task}, timeout=EARLY_AFTER)
+                if not done:
+                    retained_early = call.input_retained
+                    sent = None if retained_early else prompt
+                    early = _Early(lambda hold: self._speak(node, sent, hold))
                 action = await task
             except asyncio.CancelledError:
+                if early is not None:
+                    await early.drop()
                 if not barge.hit:
                     raise
                 return
             finally:
                 barge.detach()
+            if early is not None and (
+                action is not None
+                or self._stale()
+                or node.opening(call) is not None
+                or call.state is not state_before
+                or call._held != held_before
+                or call.input_retained != retained_early
+            ):
+                await early.drop()
+                early = None
         if self._stale():
             return
         if not retained_before and call.input_retained:
@@ -440,7 +526,7 @@ class Turn:
             yield RunEnded(node.agent.name or call.state.agent)
         if action is None or output is None:
             failed: _Failed | None = None
-            async for event in self._speak(node, prompt):
+            async for event in early.events() if early is not None else self._speak(node, prompt):
                 if failed is not None:
                     continue
                 if isinstance(event, _Outcome):
@@ -528,8 +614,15 @@ class Turn:
             await call.say(pick(f'enter:{output.to}', lines), origin='entry')
         yield _Continue(prompt)
 
-    async def _speak(self, node: Node, prompt: str | None) -> AsyncIterator[object]:
+    async def _speak(
+        self, node: Node, prompt: str | None, hold: _Hold | None = None
+    ) -> AsyncIterator[object]:
         """Run one step's agent, streaming whatever it says.
+
+        With `hold`, this is an early run (`_Early`): it stops at its first
+        event until the readings have decided nothing, and a dropped one keeps
+        nothing. The barge signal is attached only once it goes on, because
+        until then the signal belongs to `advance`.
 
         `Node.outputs` builds the run's `output_type` from the live state; the
         per-request narrowing that keeps it honest across several requests
@@ -616,6 +709,8 @@ class Turn:
             """
             nonlocal retained_run
             retained_run = True
+            if hold is not None and hold.dropped:
+                return
             overlap = next(
                 (
                     k
@@ -656,7 +751,8 @@ class Turn:
                 usage_limits=self.limits,
                 retries=self.budget.repair_retries,
             ) as events:
-                barge.attach(events)
+                if hold is None:
+                    barge.attach(events)
                 async for event in events:
                     if isinstance(event, PartStartEvent):
                         if event.index == 0:
@@ -667,6 +763,9 @@ class Turn:
                                 call.note_first_output('text')
                             case ToolCallPart():
                                 call.note_first_output('tool')
+                    if hold is not None and not hold.opened.is_set():
+                        await hold.opened.wait()
+                        barge.attach(events)
                     if chunk := _speech(event):
                         if not node.model_speech:
                             continue
@@ -711,7 +810,7 @@ class Turn:
                 else:
                     retain(new_messages)
             barge.detach()
-            if held and gate != 'blocked':
+            if held and gate != 'blocked' and not (hold is not None and hold.dropped):
                 call.note_model_text(held)
                 call._spoke = True
                 yield TextDelta(held, step)

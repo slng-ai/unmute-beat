@@ -11,27 +11,31 @@ import json
 import os
 import subprocess
 import sys
+import time
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
+from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, TextPart
-from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from tests.clinic import CLINIC, ClinicCall, desk
 
+from core.graph import Node
 from core.locale import Locale
 from core.turn import take_turn
 
 
 @contextmanager
-def scripted(**labels: str):
-    """Every clinic reading answers its label here, or its default. Yields the names of the readings asked."""
+def scripted(delay: float = 0.0, **labels: str):
+    """Every clinic reading answers its label here, or its default, after `delay` seconds. Yields the readings asked."""
     asked: list[str] = []
     with ExitStack() as stack:
         for reading in (*CLINIC.readings, CLINIC.closing.reading):
             value = labels.get(reading.name, getattr(reading.fallback, reading.field))
 
-            def answer(messages, info, name=reading.name, field=reading.field, value=value):
+            async def answer(messages, info, name=reading.name, field=reading.field, value=value):
                 asked.append(name)
+                await asyncio.sleep(delay)
                 return ModelResponse(parts=[TextPart(json.dumps({field: value}))])
 
             stack.enter_context(patch.object(reading.classifier, 'model', FunctionModel(answer)))
@@ -39,13 +43,15 @@ def scripted(**labels: str):
 
 
 class Desk:
-    """The clinic's agent, scripted: it counts the requests it gets and says one line."""
+    """The clinic's agent, scripted: it counts the requests it gets and says one line, after `delay` seconds."""
 
-    def __init__(self) -> None:
+    def __init__(self, delay: float = 0.0) -> None:
         self.requests = 0
+        self.delay = delay
 
     async def stream(self, messages, info):
         self.requests += 1
+        await asyncio.sleep(self.delay)
         yield 'It is 40 euros.'
 
 
@@ -125,6 +131,75 @@ async def a_value_said_in_full_is_read_back_by_code():
     assert call.state.patient == 'P-1234'
 
 
+def _said(call: ClinicCall) -> str:
+    """Every model response the call kept, as text."""
+    return ' '.join(
+        part.content
+        for message in call.messages
+        if isinstance(message, ModelResponse)
+        for part in message.parts
+        if isinstance(part, TextPart)
+    )
+
+
+async def a_reading_and_the_step_run_side_by_side():
+    """A reading that decides nothing costs no wait of its own: the step's request went out beside it."""
+    call, _, agent = opened()
+    agent.delay = 0.4
+    nodes = desk(FunctionModel(stream_function=agent.stream))
+    with scripted(delay=0.4, chosen_time=''):
+        started = time.perf_counter()
+        said, _ = await take_turn(call, nodes, 'How much is it?')
+        took = time.perf_counter() - started
+    assert said == 'It is 40 euros.' and agent.requests == 1, (said, agent.requests)
+    assert took < 0.7, f'{took:.2f}s: the reading and the step request ran one after the other'
+
+
+async def a_reading_that_decides_drops_the_step_run():
+    """The early run is cancelled: nothing it said reaches the caller or the history, and its tool never runs."""
+    call, heard, _ = opened()
+    ran: list[str] = []
+
+    async def stream(messages, info):
+        await asyncio.sleep(0.1)
+        yield {0: DeltaToolCall(name='look_up', json_args='{}')}
+
+    async def advance(call, usage, limits):
+        await CLINIC.read(call, usage=usage, usage_limits=limits, before_model=True)
+        return CLINIC.decide(call)
+
+    agent = Agent[ClinicCall, str](
+        FunctionModel(stream_function=stream), deps_type=ClinicCall, output_type=str
+    )
+
+    @agent.tool_plain
+    def look_up() -> str:
+        ran.append('look_up')
+        return 'nothing'
+
+    with scripted(delay=0.3, chosen_time='0900'):
+        said, _ = await take_turn(call, {'desk': Node(agent, advance=advance)}, 'Nine, please.')
+    assert heard[-1] == 'Shall I book you in for Tuesday at 9:00 AM?' and not said, (heard, said)
+    assert not ran, 'a tool of the dropped run ran'
+    assert not any(isinstance(m, ModelResponse) for m in call.messages), call.messages
+
+
+async def a_reading_that_changes_the_call_gets_a_fresh_run():
+    """The early run's prompt was built from the call as it was; a reading that changed it means a new run."""
+    call, _, agent = opened()
+    nodes = desk(FunctionModel(stream_function=agent.stream))
+
+    async def advance(call, usage, limits):
+        await asyncio.sleep(0.2)
+        call.commit(patient='P-1234')
+        return None
+
+    nodes = {'desk': Node(nodes['desk'].agent, advance=advance)}
+    said, _ = await take_turn(call, nodes, 'It is P-1234.')
+    assert said == 'It is 40 euros.' and agent.requests == 2, (said, agent.requests)
+    assert _said(call).count('It is 40 euros.') == 1, _said(call)
+
+
 async def the_engine_speaks_the_calls_own_language():
     """A use case in another language gives its own locale, and the turn engine's own lines follow it."""
 
@@ -157,6 +232,9 @@ async def main():
     await a_pick_with_a_condition_is_left_to_the_model()
     await a_yes_without_its_question_writes_nothing()
     await a_value_said_in_full_is_read_back_by_code()
+    await a_reading_and_the_step_run_side_by_side()
+    await a_reading_that_decides_drops_the_step_run()
+    await a_reading_that_changes_the_call_gets_a_fresh_run()
     await the_engine_speaks_the_calls_own_language()
     no_salon_code_is_loaded()
     print('reuse ok: a second use case on the same core classes, with no salon code')

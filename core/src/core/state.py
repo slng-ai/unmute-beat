@@ -988,15 +988,17 @@ class CallContext(BaseModel):
         return False
 
     def note_first_output(self, kind: Literal['text', 'tool']) -> None:
-        """The newest provider request has produced its first part.
+        """The newest step request has produced its first part.
 
-        A second part in the same response does not overwrite the first: time
+        A classifier's request is timed by its interpreter, and one can be in
+        flight beside a step's (`core.turn._Early`), so it is passed over. A second part in the same response does not overwrite the first: time
         to *first* output is the number, and `kind` says whether that first
         thing was speech the caller can hear or a tool call they cannot.
         """
-        if self._requests and self._requests[-1].first_output is None:
-            self._requests[-1].first_output = time.perf_counter()
-            self._requests[-1].kind = kind
+        pending = [r for r in self._requests if r.kind != 'classifier']
+        if pending and pending[-1].first_output is None:
+            pending[-1].first_output = time.perf_counter()
+            pending[-1].kind = kind
 
     def begin_turn(self) -> int:
         """Open a new accepted caller turn, and say which one it is.

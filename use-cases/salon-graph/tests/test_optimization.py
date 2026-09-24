@@ -15,12 +15,14 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from core.graph import Node, model_clients
 from core.policies import TurnBudget
 from core.processor import PydanticAgentProcessor
-from core.turn import Barge, RunStarted, run_turn
+from core.turn import Barge, RunStarted, run_turn, take_turn
 from salon import agents, diary
 from salon.diary import Diary
+from salon.models.consent import Asked
 from salon.models.state import open_call
 from salon.tools import booking
 from tests.classifier_model import classifier_model
+from tests.classifier_model import scripted as scripted_readings
 
 PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -400,6 +402,38 @@ async def openings_decline():
     assert call.state.wanted is not None and not call.state.offered, 'a refused read changes nothing'
 
 
+async def a_slow_reading_does_not_delay_the_answer():
+    """On "anything else?" a question is read by the closing reading and answered by the concierge, side by side.
+
+    Coval run 4bLgLR4t: a reading takes 0.7 to 1.8 s, and a turn it does not
+    decide used to wait for it before the step's first request. Now both go
+    out together, and the turn waits for the slower one.
+    """
+    call = fresh('concierge')
+    call.ask(Asked(about='closing', spoken='Anything else?', owner=PHONE))
+    call.note_said('fixed', 'Anything else?', origin='ask')
+    asked: list[str] = []
+
+    async def speak(messages, info):
+        asked.append('concierge')
+        await asyncio.sleep(0.4)
+        yield 'We open at nine.'
+
+    async def slow(name, data):
+        await asyncio.sleep(0.4)
+        return 'continue' if name == 'conversation' else None
+
+    with (
+        scripted_readings(slow),
+        agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=speak)),
+    ):
+        started = asyncio.get_running_loop().time()
+        said, done = await take_turn(call, agents.AGENTS, 'When do you open tomorrow?')
+        took = asyncio.get_running_loop().time() - started
+    assert said == 'We open at nine.' and asked == ['concierge'] and done.status == 'answered', (said, asked)
+    assert took < 0.7, f'{took:.2f}s: the reading and the concierge ran one after the other'
+
+
 async def warm_up():
     """One single-token request per distinct client as the session opens, never raised if it fails."""
     sent = []
@@ -429,6 +463,7 @@ async def main():
     await openings_skip_the_model()
     await a_changed_request_runs_the_model()
     await openings_decline()
+    await a_slow_reading_does_not_delay_the_answer()
     await warm_up()
     print(
         'optimization ok: single-request approvals, openings, validation, retention, fencing, lifecycle, warm-up'

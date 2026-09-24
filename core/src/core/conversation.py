@@ -542,17 +542,18 @@ class Conversation[C: CallContext]:
     ) -> None:
         """Run every reading that applies to this turn, side by side. Each runs at most once per turn.
 
-        Whether the call is over is read on its own only while a question other
-        than a read-back waits ("anything else?", an offer, a fixed choice). A
-        reply to a read-back is read only as that; if it also says goodbye, the
-        step's model hangs up, and `closing` reads it then.
+        Whether the call is over is read beside every other reading whenever a
+        question waits, a read-back included: a yes and a goodbye in one reply
+        are both acted on (`Acts.decide`). It costs one more small request on
+        a read-back turn, side by side, so no longer a wait. `closing` reads it
+        with no question waiting, when the step's model asks to hang up.
 
         `before_model` is a turn read before any model runs: on the closing
         question it leaves out the readings `Closing.skip_before_model` names,
         which a tool that needs them still runs itself.
         """
         question = call.pending_question()
-        ending = closing or (question is not None and question.about not in self.read_back_abouts)
+        ending = closing or question is not None
         deferred = before_model and question is not None and question.about == self.closing.about
         readings = [r for r in self.readings if not (deferred and r.name in self.closing.skip_before_model)]
         await read(

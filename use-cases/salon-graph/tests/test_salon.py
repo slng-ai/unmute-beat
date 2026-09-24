@@ -670,7 +670,9 @@ async def the_note_is_said_once():
     assert books.complaints()[0]['reference'] in said, said
     assert REPLY_SOON in said and MANAGER_CALLS not in said, said
     assert not probe.spoken(), probe.spoken()
-    assert len(call.requests) == 1 and call.requests[0].kind == 'classifier', call.requests
+    assert [r.kind for r in call.requests] == ['classifier', 'classifier'], (
+        'confirm and closing, side by side'
+    )
 
 
 async def a_tool_result_is_never_a_script():

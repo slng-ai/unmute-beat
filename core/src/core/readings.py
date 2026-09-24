@@ -349,6 +349,13 @@ class Acts[C: CallContext]:
        question pending.
     4. `goodbye`: the call is over. Last, so "Yes, go ahead, bye" does the
        yes before it hangs up.
+
+    An answer and a goodbye in the same reply are both done: the answer
+    first, then the goodbye, as one action. "Yes, that's perfect. I do not
+    need anything else. Goodbye." (Coval run 4bLgLR4t, case 09) used to book
+    and then ask "Anything else?". While the answer runs the call is marked
+    as leaving (`CallContext.leaving`), so its confirmation asks nothing more.
+    A refused answer is not followed by the goodbye.
     """
 
     answer: Sequence[Rule[C]] = ()
@@ -358,7 +365,23 @@ class Acts[C: CallContext]:
 
     def decide(self, call: C) -> LocalAction | None:
         """The first action any rule takes, in the fixed order, or None to let the step's model answer."""
-        for rule in (*self.answer, *self.take_back, *self.pick, *self.goodbye):
+        for rule in self.answer:
+            if (action := rule(call)) is not None:
+                bye = next((b for r in self.goodbye if (b := r(call)) is not None), None)
+                return action if bye is None else _then_goodbye(call, action, bye)
+        for rule in (*self.take_back, *self.pick, *self.goodbye):
             if (action := rule(call)) is not None:
                 return action
         return None
+
+
+def _then_goodbye(call: CallContext, answer: LocalAction, goodbye: LocalAction) -> LocalAction:
+    """The answer, said as a caller who is leaving hears it, then the goodbye."""
+
+    async def both() -> object:
+        call._leaving = True
+        done = await answer.run()
+        await goodbye.run()
+        return done
+
+    return LocalAction(answer.name, both)

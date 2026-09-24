@@ -28,7 +28,7 @@ from salon.models.consent import Asked
 from salon.models.receipts import Slots
 from salon.models.state import SalonCall, open_call
 from salon.tools.asking import Ask
-from tests.classifier_model import ALL, classifier_model, classifier_with
+from tests.classifier_model import ALL, classifier_model, classifier_with, scripted
 
 
 class Input(Exchange):
@@ -211,7 +211,7 @@ async def decisions_and_fallback():
     with classifier_model():
         call, _ = pending_booking()
         _, finished = await take_turn(call, agents.AGENTS, 'Yes.')
-        assert finished.requests == 1 and call.state.writes == 1
+        assert finished.requests == 2 and call.state.writes == 1, 'confirm and closing, side by side'
         assert call._asked.about == 'closing'
         assert call.requests[0].duration is not None and not call.requests[0].fallback
         assert call.requests[0].outcome == 'action' and '"confirmation":"accept"' in call.requests[0].labels
@@ -229,7 +229,7 @@ async def decisions_and_fallback():
 
         with agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=clarify)):
             _, finished = await take_turn(call, agents.AGENTS, 'Yes, if it is free.')
-        assert len(seen) == 1 and finished.requests == 2 and not call.state.writes
+        assert len(seen) == 1 and finished.requests == 3 and not call.state.writes
         assert not call.requests[0].fallback and call.requests[0].outcome == 'none', (
             'a conditional answer was understood; the agent carrying on is not a failure'
         )
@@ -243,6 +243,32 @@ async def decisions_and_fallback():
         with agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=answer)):
             _, finished = await take_turn(call, agents.AGENTS, 'When do you open?')
         assert finished.requests == 1 and all(r.kind != 'classifier' for r in call.requests)
+
+
+async def a_yes_and_a_goodbye_are_both_done():
+    """Coval run 4bLgLR4t, case 09: "Yes, that's perfect. Thank you. I do not need anything else. Goodbye."
+
+    Only the confirm reading ran, so the booking was made and the caller was
+    asked "Anything else?". The closing reading now runs beside it: the
+    booking is made, its receipt asks nothing more, and the call ends.
+    """
+    words = "Yes, that's perfect. Thank you. I do not need anything else. Goodbye."
+
+    def script(name, data):
+        return {'confirmation': 'accept', 'conversation': 'end'}.get(name)
+
+    async def line(text):
+        """The call's line to the caller."""
+
+    with scripted(script):
+        call, _ = pending_booking()
+        call._say = line
+        _, finished = await take_turn(call, agents.AGENTS, words)
+    assert call.state.writes == 1 and call.ended == 'caller', (call.state.writes, call.ended)
+    lines = [s.text for s in call.spoken]
+    assert lines[-1] == 'Thanks for calling. Goodbye.', lines
+    assert not any('?' in text for text in lines), f'a question was asked of a caller who is leaving: {lines}'
+    assert finished.requests == 2 and {r.kind for r in call.requests} == {'classifier'}, call.requests
 
 
 def pending_readback():
@@ -263,7 +289,7 @@ async def outcome_is_not_fallback():
     with classifier_model(), concierge.override(model=FunctionModel(stream_function=answer)):
         call = pending_readback()
         _, finished = await take_turn(call, agents.AGENTS, 'Yes.')
-        assert call.state.customer_verified and call.state.agent == 'concierge' and finished.requests == 2
+        assert call.state.customer_verified and call.state.agent == 'concierge' and finished.requests == 3
         classified = call.requests[0]
         assert classified.kind == 'classifier' and not classified.fallback and classified.outcome == 'action'
 
@@ -312,11 +338,13 @@ async def binding_failures_and_late_results():
         call.turn_started('Yes.')
         usage = RunUsage()
         assert (await classify_reply(call, usage=usage)).confirmation == 'accept'
-        assert (await classify_reply(call, usage=usage)).confirmation == 'accept' and usage.requests == 1
+        assert (await classify_reply(call, usage=usage)).confirmation == 'accept' and usage.requests == 2, (
+            'confirm and closing, once each'
+        )
         call.commit(customer_phone='+34600999888')
         assert call.classification.confirmation != 'accept'
         await classify_reply(call, usage=usage)
-        assert usage.requests == 1
+        assert usage.requests == 2
 
     call, _ = pending_booking()
     call.turn_started('Yes.')
@@ -328,7 +356,7 @@ async def binding_failures_and_late_results():
         usage = RunUsage()
         for _ in range(2):
             assert (await classify_reply(call, usage=usage)).confirmation == 'unclear'
-        assert usage.requests == 1
+        assert usage.requests == 2, 'each reading failed once and was not asked again'
 
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -678,6 +706,7 @@ async def main():
     await generic_contracts()
     await invalid_answers_and_cancellation()
     await decisions_and_fallback()
+    await a_yes_and_a_goodbye_are_both_done()
     await outcome_is_not_fallback()
     await binding_failures_and_late_results()
     await limits_and_barge()

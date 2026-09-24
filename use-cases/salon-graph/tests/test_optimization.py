@@ -83,9 +83,11 @@ async def approvals_and_receipts():
         call = await offered()
         probe = Counter(call, agents.AGENTS)
         await probe._turn(answer)
-        assert probe._finished.status == 'answered' and probe.requests() == 1
+        assert probe._finished.status == 'answered' and probe.requests() == 2, (
+            'confirm and closing, side by side'
+        )
         assert len(books.bookings_for(PHONE, CLOCK.date())) == 1 and call.state.writes == 1
-        assert len(call.requests) == 1 and call.requests[0].kind == 'classifier' and len(call.spoken) == 1
+        assert [r.kind for r in call.requests] == ['classifier', 'classifier'] and len(call.spoken) == 1
         assert call.input_retained
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
         receipt = [
@@ -267,8 +269,9 @@ async def openings_skip_the_model():
     just offered. Each is now an opening or the consent reading, and each is
     counted here: a plain pick of an offered time is written from the reading
     alone, with no model request at all. The return from verification makes
-    two classifier requests, side by side: the consent reading, and whether
-    the caller kept the request verification interrupted.
+    three classifier requests, side by side: the consent reading, whether the
+    caller kept the request verification interrupted, and whether they said
+    goodbye with it.
     """
     books.reset()
     books.set_clock(CLOCK)
@@ -298,9 +301,9 @@ async def openings_skip_the_model():
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn("Yes, that's right.")
-    assert probe.requests() == 2 and {r.kind for r in call.requests} == {'classifier'}, call.requests
-    assert abs(call.requests[0].started - call.requests[1].started) < 0.05, (
-        'the two readings run side by side'
+    assert probe.requests() == 3 and {r.kind for r in call.requests} == {'classifier'}, call.requests
+    assert max(r.started for r in call.requests) - min(r.started for r in call.requests) < 0.05, (
+        'the three readings run side by side'
     )
     assert call.state.agent == 'booking' and call.state.customer_verified, call.state
     assert call.state.wanted is None and len(call.state.offered) == 3, call.state

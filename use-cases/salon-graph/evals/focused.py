@@ -208,6 +208,33 @@ CASES = (
         'end',
     ),
     Case(
+        'closing-readback-yes',
+        CONVERSATION,
+        Exchange(question='Shall I book you in for a haircut, tomorrow at 9:00 AM?', answer='Yes, please.'),
+        lambda r: r != 'end',
+        'not end',
+    ),
+    Case(
+        'closing-readback-thanks',
+        CONVERSATION,
+        Exchange(
+            question='Shall I book you in for a haircut, tomorrow at 9:00 AM?',
+            answer="Yes, that's perfect, thank you.",
+        ),
+        lambda r: r != 'end',
+        'not end',
+    ),
+    Case(
+        'closing-readback-goodbye',
+        CONVERSATION,
+        Exchange(
+            question='Shall I book you in for a haircut, tomorrow at 9:00 AM?',
+            answer="Yes, that's perfect. Thank you. I do not need anything else. Goodbye.",
+        ),
+        lambda r: r == 'end',
+        'end',
+    ),
+    Case(
         'closing-question',
         CONVERSATION,
         Exchange(question='Anything else?', answer='Actually, how long does a colour take?'),

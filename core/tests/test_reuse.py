@@ -141,6 +141,19 @@ async def a_goodbye_to_a_cut_off_question_does_not_hang_up():
         assert call.heard == 'Yes. That is perfect.' and len(call._book) == 1, (order, call.heard, call._book)
 
 
+async def a_yes_and_a_goodbye_are_both_done():
+    """A yes to the read-back that also says goodbye books, says the receipt without "Anything else?", and ends."""
+    call, heard, agent = opened()
+    nodes = desk(FunctionModel(stream_function=agent.stream))
+    with scripted(chosen_time='0900'):
+        await take_turn(call, nodes, 'Nine, please.')
+    with scripted(confirmation='accept', conversation='end') as asked:
+        await take_turn(call, nodes, 'Yes, that is all. Goodbye.')
+    assert call._book == {'0900': 'walk-in'} and call.ended == 'caller', (call._book, call.ended)
+    assert heard[-2:] == ['Booked for Tuesday at 9:00 AM.', 'Goodbye.'], heard
+    assert sorted(asked) == ['confirmation', 'conversation'] and agent.requests == 0, (asked, agent.requests)
+
+
 async def a_pick_with_a_condition_is_left_to_the_model():
     """The pick reading finds no plain pick in a condition, so nothing is read back and the agent answers."""
     call, heard, agent = opened()
@@ -341,6 +354,7 @@ async def main():
     await a_pick_is_read_back_and_only_the_yes_books()
     await a_change_is_not_taken_as_an_undo()
     await a_goodbye_to_a_cut_off_question_does_not_hang_up()
+    await a_yes_and_a_goodbye_are_both_done()
     await a_pick_with_a_condition_is_left_to_the_model()
     await a_yes_without_its_question_writes_nothing()
     await a_value_said_in_full_is_read_back_by_code()

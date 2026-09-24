@@ -455,6 +455,8 @@ class CallContext(BaseModel):
     a stop takes those segments back to `playing`, so it marks them cut off.
     """
     _playback_known: bool = PrivateAttr(default=False)
+    _leaving: bool = PrivateAttr(default=False)
+    """The caller said goodbye in the same reply as the answer this turn runs (`core.readings.Acts`)."""
     _spoken_over: str = PrivateAttr(default='')
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
     """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
@@ -473,6 +475,11 @@ class CallContext(BaseModel):
     def fresh(self) -> str:
         """The words of this turn that are not in the model history yet, in order. What a run is sent."""
         return ' '.join(p for i, p in enumerate(self._pieces) if (self._turn, i) not in self._retained and p)
+
+    @property
+    def leaving(self) -> bool:
+        """Whether the caller is going: a confirmation said now asks nothing more, because the goodbye follows it."""
+        return self._leaving
 
     @property
     def input_retained(self) -> bool:
@@ -1131,6 +1138,7 @@ class CallContext(BaseModel):
         self._inputs[self._turn] = self.heard
         self._interrupted = False
         self._reached = False
+        self._leaving = False
         self._request_kept = False
         self._response = ''
         self._entered = ''

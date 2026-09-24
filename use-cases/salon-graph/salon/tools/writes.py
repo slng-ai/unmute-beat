@@ -86,7 +86,19 @@ def acknowledgement(reference: str, requested_resolution: str) -> str:
 
 
 async def close_with(call: SalonCall, text: str) -> None:
-    """Speak a receipt and record its offer of further help as a decision point."""
+    """Speak a receipt and record its offer of further help as a decision point.
+
+    To a caller who is leaving (`CallContext.leaving`), only the receipt: the
+    goodbye comes next, and "Anything else?" right before it asks nothing.
+
+    ponytail: the offer of help is the last sentence of every receipt here,
+    all of them this module's own templates, so it is cut off by position.
+    A receipt that ends otherwise would need the offer passed apart.
+    """
+    if call.leaving:
+        receipt, _, offer = text.rpartition('. ')
+        await call.speak_now(f'{receipt}.' if receipt and offer.endswith('?') else text)
+        return
     call.ask(Asked(about='closing', spoken=text, owner=call.state.customer_phone))
     await call.speak_now(text)
 

@@ -88,9 +88,14 @@ class Book(Operation[ClinicCall, Slot, Receipt, str]):
 
     async def _record(self, call: ClinicCall, args: Slot, receipt: Receipt) -> str:
         call.commit(booked=receipt.slot)
-        told = f'Booked for {TIMES[receipt.slot]}. Anything else?'
+        told = f'Booked for {TIMES[receipt.slot]}.'
         call.hold('undo', Held(key=receipt.slot, told=told))
-        await call.speak_now(Prompted(about='closing', spoken=told).put(call), origin='confirmation')
+        if call.leaving:
+            await call.speak_now(told, origin='confirmation')
+            return told
+        await call.speak_now(
+            Prompted(about='closing', spoken=f'{told} Anything else?').put(call), origin='confirmation'
+        )
         return told
 
 

@@ -79,10 +79,17 @@ CONFIRM = ClassSet(
         'reject': 'Declines the proposal.',
         'revise': 'Asks to change the proposal.',
         'conditional': 'Agrees only under an added condition ("yes, if...").',
-        'unclear': 'Asks a question, or the answer is ambiguous or incomplete.',
+        'unclear': 'Asks a question, or the answer is ambiguous or incomplete. An answer put as a question, even '
+        'one that sounds like a yes, is unclear.',
     },
     default='unclear',
 )
+"""Version 3 of `harness-reading/confirm` in Langfuse. Over 3 runs on 42 items, it cut false accepts from 1 per
+run to 0 on gemini-3.1-flash-lite and to 2 in 3 runs on gemini-3.5-flash-lite ("Go for it?"), with gpt-6-luna at 0.
+
+ponytail: "Go for it?" can still read as accept on 3.5. The application still needs the read-back to have been
+heard and the caller to be the one asked; a model or rule that reaches zero there is the upgrade.
+"""
 
 TAKE_BACK = ClassSet(
     about='Whether the answer takes back what is in `agreed`, which has already been done.',

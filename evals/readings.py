@@ -434,7 +434,7 @@ def build(publish: bool = False) -> None:
         label = 'production' if publish else 'candidate'
         text, config = instructions(kind), prompt_config(kind)
         current = None
-        for wanted in dict.fromkeys((label, 'production')):
+        for wanted in ('candidate', 'production'):
             try:
                 current = lf.get_prompt(dataset, label=wanted, cache_ttl_seconds=0)
                 break

@@ -129,9 +129,9 @@ async def ask_complaint(ctx: RunContext[SalonCall], summary: str, requested_reso
         resolution=_gist(requested_resolution),
         summary=summary,
         requested_resolution=requested_resolution,
-        spoken=f"I'll note your words: {summary.strip().rstrip('.?!')}. "
+        spoken=f'Shall I record your complaint in your words: {summary.strip().rstrip(".?!")}. '
         + (f'Your request: {requested_resolution.strip().rstrip(".?!")}. ' if requested_resolution else '')
-        + 'The salon will review this; no refund or booking change is approved. Shall I record that?',
+        + 'The salon will review it; no refund or booking change is approved yet. Is that right?',
     )
 
 

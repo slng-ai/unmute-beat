@@ -317,7 +317,7 @@ def cancel_question(call: SalonCall, booking_id: str) -> Ask:
             'what they actually have.'
         )
     one = held[booking_id]
-    words = f'So that is your {spoken_service(one["service"])} {one["spoken"]} cancelled. Shall I go ahead?'
+    words = f'Shall I cancel your {spoken_service(one["service"])} {one["spoken"]}?'
     return Ask(about='booking', value='', action='cancel', booking_id=booking_id, spoken=words)
 
 

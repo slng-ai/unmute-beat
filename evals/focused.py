@@ -45,7 +45,7 @@ SLOTS = tuple(
 NINE = SLOTS[0].id
 REQUEST = "Hi, I'd like to book a haircut for this Friday, please."
 BOOKED = "Lovely, that's your hair colour booked for tomorrow at 9:00 AM."
-COMPLAINT = "I'll note your words: the colour burned my scalp, and you'd like a full refund. Is that right?"
+COMPLAINT = 'Shall I record your complaint in your words: the colour burned my scalp. Your request: a full refund. Is that right?'
 MOVE_OR_ADD_QUESTION = 'Would you like to move your existing appointment, or add another one?'
 
 
@@ -171,9 +171,9 @@ CASES = (
         'cancel-yes',
         CONFIRMATION,
         ReadBackInput(
-            question='So that is your hair colour tomorrow at 9:00 AM cancelled. Shall I go ahead?',
+            question='Shall I cancel your hair colour tomorrow at 9:00 AM?',
             answer='Yes, please cancel it.',
-            proposal='So that is your hair colour tomorrow at 9:00 AM cancelled. Shall I go ahead?',
+            proposal='Shall I cancel your hair colour tomorrow at 9:00 AM?',
         ),
         lambda r: r == 'accept',
         'accept',

@@ -356,9 +356,7 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
         )
         assert call.ended == '', 'hung up with the booking still in the diary'
         cancel = probe.fixed()[-1]
-        assert cancel.startswith('So that is your hair colour') and cancel.endswith(
-            'cancelled. Shall I go ahead?'
-        )
+        assert cancel.startswith('Shall I cancel your hair colour'), cancel
         call.note_reached()
         call.note_drained()
         probe.interrupt()

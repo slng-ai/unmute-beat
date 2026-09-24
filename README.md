@@ -176,6 +176,7 @@ evals/cases.py          reviewed reply cases, shared by the live evaluation and 
 evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
 evals/focused.py        the live failures replayed against the real readings, five times each, with tokens
+evals/readings.py       each reading as a Langfuse dataset and prompt, run on several small models
 evals/solver.py         explicitly invoked live state-solver evaluation
 evals/compare.py        every interpreter side by side; the rule floor offline, the rest with --live
 evals/rules.py          the no-model floor the others must beat

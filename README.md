@@ -1,25 +1,42 @@
 # slng-voice-harness
 
-A Pydantic AI agency standing where Pipecat's LLM service would.
+A voice agent harness. Pydantic AI runs the conversation where Pipecat's LLM
+service would sit.
 
-Pipecat owns the transport, VAD, turn taking, STT and TTS (through SLNG). The
-agents own the conversation: prompts, tools, typed state, and which step is
-running. The seam between them is one frame processor.
+Pipecat owns the audio: the phone line, voice detection, turn taking,
+speech to text and text to speech (through SLNG). The harness owns the
+conversation: which step the caller is in, what their reply means, and what
+the business may do about it. One frame processor joins the two.
 
 ```mermaid
 flowchart TD
-    mic((caller)) --> in[transport.input]
-    in --> stt[SlngSTT]
-    stt --> ua[user aggregator]
-    ua -- LLMContextFrame --> P[PydanticAgentProcessor]
-    P -- LLMTextFrame / TTSSpeakFrame --> tts[SlngTTS]
-    tts --> out[transport.output]
-    out --> aa[assistant aggregator]
-    aa -. what was heard .-> P
-    P <--> T[core.turn: one caller turn]
-    T <--> A[salon.agents: four Pydantic AI agents]
-    A <--> D[(Diary)]
+    caller((caller)) --> pipecat[Pipecat: audio, STT, turn taking, TTS]
+    pipecat -- the caller's words --> turn[Turn engine]
+    turn --> graph[Flow graph: which step, which moves are legal]
+    graph --> step[The current step]
+    step --> readings[Readings: small classifiers]
+    readings --> acts[Acts: code decides]
+    step --> agent[Step agent: Pydantic AI]
+    acts & agent --> ops[Operations: guarded writes]
+    ops --> backend[(Business backend)]
+    turn -- speech --> pipecat
 ```
+
+1. Pipecat hears the caller and decides when they have finished speaking.
+2. The turn engine (`core/turn.py`) runs that one caller turn.
+3. The flow graph starts at the step the caller is in. It refuses any move
+   the flow does not declare.
+4. The step first runs the readings that can apply now. Each is one small
+   classifier request, such as "was that a yes to the read-back?".
+5. If a reading settles the turn, code acts on it with no further model
+   request. It puts a read-back, runs an approved write, offers an undo, or
+   says goodbye.
+6. Otherwise the step's agent answers. It is a Pydantic AI agent with only
+   that step's prompt and tools.
+7. Every write goes through an `Operation`. The operation checks that the
+   caller said yes to this exact question before the backend is touched.
+
+The section [Architecture](#architecture) says why it is built this way.
 
 ---
 
@@ -53,7 +70,9 @@ browser client, so there is nothing else to start.
 | `-t webrtc` | one transport instead of all of them |
 | `--host` / `--port` | Pipecat's runner flags. `uv run bot.py --help` for the rest |
 | `VOICE_AGENCY` | which flow answers: `salon` (default), `access` or `help`. See section 6 |
-| `SALON_INTERPRETER` | `solver` reads replies with the state solver instead of the four-label classifier. See section 8 |
+| `SALON_INTERPRETER` | `solver` reads replies with one state-solver request instead of the narrow readings. See section 8 |
+| `SALON_NAMED_PICK` | `0` turns off the pick reading's `named` field (on by default for the salon). See section 8 |
+| `VOICE_HARNESS` | `pipecat` swaps the harness for the one-prompt baseline. See "Coval simulations" |
 
 All of these are optional: `uv run bot.py` on its own is a live-clock
 call, from an anonymous number, into the salon as the last call left it. The
@@ -169,6 +188,177 @@ uv run --env-file .env python -m evals.ledger \
    with the lines just before them, for a person to read.
 
 It only reads traces; nothing is billed.
+
+---
+
+# Architecture
+
+## One caller turn
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant P as Pipecat
+    participant T as Turn engine
+    participant G as Flow graph
+    participant R as Readings
+    participant A as Step agent
+    participant O as Operation
+    C->>P: "Yes, book it."
+    P->>T: the caller's words
+    T->>G: start at the caller's step
+    G->>R: run the readings that apply
+    R-->>G: confirm = accept
+    G->>O: code runs the write the yes answered
+    O-->>P: fixed line: "Lovely, that's booked."
+    Note over G,A: no reading settled it? the step agent answers instead
+    G->>A: step prompt, step tools
+    A-->>P: streamed speech
+```
+
+1. Pipecat's smart-turn model decides the caller has finished. The words
+   reach the turn engine through `PydanticAgentProcessor`.
+2. The turn engine runs one short graph run. It starts at the step the
+   caller is in.
+3. The step runs only the readings its state allows. A read-back waiting
+   means `confirm` runs. Times on the table mean `choose` runs. Readings that
+   apply run side by side, so the caller waits for the slowest one only.
+4. Code tries the acts in one fixed order: answer the waiting question, then
+   take back, then pick, then goodbye. The first act that decides runs, with
+   no step-model request.
+5. When no act decides, the step's agent answers. Its speech streams to TTS
+   as it is written. A tool it calls is checked by the same guards.
+6. If the step hands the caller on, the graph checks the move is legal and
+   runs the next step in the same turn.
+
+## Decisions: what and why
+
+Each decision says what we did, why, and where it lives. The numbers come
+from the POC runs in
+[docs/research/poc-evidence-2026-09-24.md](docs/research/poc-evidence-2026-09-24.md).
+
+### Pipecat for audio, Pydantic AI for the conversation
+
+- **What.** Pipecat keeps the transport, voice detection, smart-turn, STT and
+  TTS. Our processor sits in the LLM slot and speaks Pipecat's frames.
+- **Why.** Turn taking is hard, and Pipecat has researched it. We use its
+  recommended defaults, with no dial of ours. Pydantic AI gives typed tools,
+  typed output and typed state for the part we want to own.
+- **Where.** `bot.py`, `core/processor.py`. Section 1 below.
+
+### One small agent per step, not one big prompt
+
+- **What.** The salon is four steps: front desk, booking, complaints and
+  number check. Each step has its own prompt and only its own tools.
+- **Why.** A model request carries only the rules of the step the caller is
+  in. On the same 5 Coval cases the harness sent 1,402 input tokens per
+  caller turn, and the one-prompt baseline sent 3,946.
+- **Where.** `salon/flow.yaml`, `salon/steps/`, `salon/prompts/`.
+
+### A graph of steps, with every move declared
+
+- **What.** The steps and their legal moves compile into one Pydantic graph
+  (`core/flow.py`). Every turn is one short run of that graph.
+- **Why.** A move the flow does not declare has no branch, so the graph
+  refuses it. A confused model shows up as a failed turn, not as a caller in
+  a step nobody designed. The graph also draws itself (`Flow.render()`), so
+  the picture cannot drift from the code. One engine runs the salon and every
+  typed flow.
+- **What the graph does not do.** It never reads the caller's words, and it
+  never runs a model. Where a hand-over really lands depends on the call:
+  "booking needs a verified number first" is `route()` in `core/graph.py`.
+  The graph checks the result. Code chooses it.
+- **Where.** `core/flow.py`, `core/graph.py`. Section 3 and section 6 below.
+
+### Narrow readings, not a flag the model sets
+
+- **What.** Each thing a reply can do has its own small classifier: confirm a
+  read-back, choose an option, take back a change, keep an approval, end the
+  call, keep the request during a detour. A reading runs only when its act
+  can happen now.
+- **Why.** A flag the model sets (`confirmed=true`) failed in practice. The
+  baseline cancelled a booking and recorded a complaint with no read-back. A
+  word list worked, but only in English. A reading sends 256 to 431 input
+  tokens, and each has its own Langfuse dataset, so it can be measured and
+  tuned on its own. The instructions are the same fixed template for every
+  use case. Only the context sentence, the question and answer, and the
+  classes change.
+- **Where.** `core/classifiers.py`, `core/readings.py`. Section 8 below.
+
+### Code decides the acts, in one fixed order
+
+- **What.** The acts (`ReadBack`, `Offer`, `TakeBack`, `Closing`, ...) are
+  core classes. A use case gives them its information. `Conversation` runs
+  the readings and tries the acts in the same order for every business.
+- **Why.** A turn a reading settles needs no step-model request. The order
+  is decided once, not per prompt, so "Yes, cancel it" to a cancel question
+  always answers the question before it counts as a take-back.
+- **Where.** `core/conversation.py`. The salon's is `SALON` in
+  `salon/classification.py`. A second use case, `tests/clinic.py`, is about
+  240 lines on the same classes.
+
+### The application words every question that can lead to a write
+
+- **What.** Read-backs are written by code ("Shall I book you in for a
+  haircut, Friday at 3:00 PM?"). They are recorded as the one question the
+  call waits on (`core/proposals.py`). A pick is read back before it books.
+- **Why.** A yes can only be checked against a question whose exact words we
+  know. A read-back the caller talked over is never counted as heard.
+- **Where.** `core/proposals.py`, `core/state.py`, the `Ask` outputs in
+  `salon/tools/`.
+
+### Every write is an `Operation` with fixed checks
+
+- **What.** One business action is one `Operation`. Its `run` validates,
+  checks consent, executes, validates the receipt and records, always in that
+  order. It leaves a `write` span with the question it answered.
+- **Why.** No write happens without a matching yes, whatever the model says.
+  A write whose outcome is unknown blocks every other write until it is
+  resolved. The ledger checks every write from the traces: all 15 in the
+  last four core runs answered a matching question.
+- **Where.** `core/operations.py`. Section 5 below.
+
+### State is typed and replaced whole
+
+- **What.** A call's facts are one Pydantic model. `call.commit(**updates)`
+  validates a whole new state, or changes nothing.
+- **Why.** A state that breaks a rule cannot exist, even for a moment. For
+  example, a verified flag cannot outlive a corrected number.
+- **Where.** `core/state.py`, `salon/models/state.py`. Section 4 below.
+
+### A use case is information, not new engine code
+
+- **What.** A new business gives core's classes its information: a call type,
+  its operations, its acts (`Conversation`), its desk tools (`Desk`), how its
+  step agents are built (`AgentBuilder`), and its lines (`Locale`).
+- **Why.** The engine, the readings, the guards and the checks are written
+  once. The clinic in `tests/clinic.py` imports nothing from the salon.
+- **Where.** See [Adding a use case](#adding-a-use-case).
+
+### Everything is measured against a baseline
+
+- **What.** `VOICE_HARNESS=pipecat` swaps the harness for one prompt on
+  Pipecat's own Gemini service, with everything else the same. Coval calls
+  both. `evals.ledger` reads both builds' traces the same way.
+  `tests/golden/*.json` pins every request the harness sends.
+- **Why.** A claim about tokens, latency or consent needs the same calls on
+  both builds. A code change that alters a prompt must show as a diff, never
+  slip in.
+- **Where.** `salon/baseline.py`, `evals/ledger.py`, `evals/readings.py`,
+  `utils/coval_sim/`, `tests/test_classifiers.py`.
+
+## What it costs
+
+- **More requests, each smaller.** On the paired run the harness made 1.85
+  requests per caller turn, and the baseline 1.34. Readings run side by
+  side, so they add one wait, not one per reading.
+- **A reading is a full model round trip.** It takes about 0.8 s. A turn
+  where a reading applies but no act decides waits for the reading and
+  then the step agent.
+- **The slow tail is mostly not the model.** In the slow turns we opened,
+  most of the wait came before any model request started, in both builds.
+  That points to end-of-turn detection. It is a reading of a few traces, not
+  a measured cause.
 
 ---
 
@@ -509,9 +699,9 @@ Two functions walk the graph and neither runs a model:
   count; a refused tool is not a move.
 
 Illegal moves are unrepresentable rather than refused. Each step's `hand_over`
-is built by `hand_over_for` with a `Literal` of only that step's destinations,
-and two `prepare` hooks rebuild the offered tools before every provider
-request: `only_reachable` hides a borrowed tool while its guard does not hold,
+is built by `Desk.hand_over_for` (`core/desk.py`) with a `Literal` of only that
+step's destinations. `AgentBuilder` (`core/steps.py`) adds two `prepare` hooks
+that rebuild the offered tools before every provider request: `only_reachable` hides a borrowed tool while its guard does not hold,
 and `narrow` rewrites the `hand_over` enum to the exits that are open right
 now. Both are re-checked at execution, because a schema built before the tools
 in the same reply ran is a convenience for the model, never the enforcement.
@@ -756,8 +946,8 @@ both:
 |---|---|---|
 | Question it answers | Where may the caller go next? | What did the caller mean? |
 | Looks at | step names and legal moves | the caller's words and the question they were asked |
-| Uses a model | never | one small request, only when a question is waiting |
-| Lives in | `core/flow.py` | `core/classifiers.py`, `salon/classification.py`, and the confirm step in `core/steps.py` |
+| Uses a model | never | one small request per reading, only for the readings that can apply now |
+| Lives in | `core/flow.py` | `core/readings.py`, `core/conversation.py`, the salon's `SALON` in `salon/classification.py`, and the confirm step in `core/steps.py` |
 
 A turn where the caller answers a question:
 
@@ -770,8 +960,8 @@ flowchart TD
     move --> check[Graph: is booking to concierge a legal move? yes]
 ```
 
-When no question is waiting, the classifier does not run, and the step's
-agent simply answers. The graph never reads the caller's words, and the
+When no reading can apply, no classifier runs, and the step's agent simply
+answers. The graph never reads the caller's words, and the
 classifier never decides where the caller goes. Changing one does not
 remove the need for the other: `SALON_INTERPRETER=solver` swaps the
 classifier for the solver (section 8), and the graph stays exactly the same.
@@ -938,7 +1128,7 @@ mechanism for each:
 - **Typed interpretation, guarded execution.** The classifier interprets a
   reply to a pending question; application guards authorize the exact action.
   Resolved decisions replace the conversational request. See
-  [the classifier flow and evolution path](#7-typed-classification-and-its-evolution).
+  [the classifier flow and evolution path](#8-typed-classification-and-its-evolution).
 - **Deterministic continuation.** A finisher does its work and returns a
   `Handoff` whose destination is `call.resume(...)`, which the graph already
   knows. A prerequisite step reports `completed` or `unserved`, and the
@@ -1040,6 +1230,41 @@ the live failures to the real readings, five times each, says which cases
 did not pass every time, and prints each reading's input tokens per request.
 It is billable and cheap: 130 small requests.
 
+### Each reading is measured on its own dataset
+
+Each reading has a Langfuse dataset named after it (`harness-reading/confirm`,
+`harness-reading/choose`, ...) and a Langfuse prompt with `candidate` and
+`production` labels. `evals/readings.py` builds them from the code and runs
+experiments on several models:
+
+```bash
+uv run --env-file .env python -m evals.readings build                  # datasets and candidate prompts
+uv run --env-file .env python -m evals.readings run --repeat 3 confirm  # production prompt, every model, 3 times
+uv run --env-file .env python -m evals.readings run --label candidate --repeat 3 choose
+```
+
+1. A run scores accuracy, false accepts (a label that would allow something
+   the caller did not agree to), seconds and input tokens.
+2. A prompt is promoted with `build --publish` only after the candidate is
+   no worse than production, over 3 runs on each model.
+3. On 24 September, 5 of the 6 readings scored 1.00 on the three smaller
+   models. `confirm` is the one that varies: 0.90 to 0.93 on
+   gemini-3.5-flash-lite at version 3.
+
+### A pick with a condition
+
+"Nine o'clock, but only if it is under 30 euros" names a time, but it is not
+a pick. The pick reading has a second field, `named`: the option the caller
+named with a condition, a question or a doubt (`NamedChoice` in
+`core/readings.py`). With `Offer(named=True)`, the booking guard refuses to
+read that option back, so the step agent answers the condition first.
+
+The salon turns it on. On `harness-reading/choose` it kept pick accuracy at
+1.00, with no false accept, over 3 runs on gemini-3.5-flash-lite. Core
+leaves it off by default, because gpt-5.6-luna lost pick accuracy with it
+(0.95, 0.95, 0.86). The salon keeps its English word list of times as a
+second check, which can only refuse.
+
 ### The state solver (opt-in)
 
 `SALON_INTERPRETER=solver` swaps the narrow readings for a
@@ -1056,22 +1281,33 @@ interrupted proposal is shown to the solver so it can be corrected or
 abandoned, and can never be accepted. It stays opt-in until it has been
 compared live on `evals/cases.py`; see `docs/plans/portable-typed-flows.md`.
 
+### Before the step agent runs
+
 ```mermaid
 flowchart LR
-    reply[Caller reply] --> pending{Pending decision?}
-    pending -- Yes --> classify[Typed classifier]
-    pending -- No --> agent[Conversational agent]
-    classify -- Clear decision --> guards[Application guards]
-    guards -- Authorized --> execute[Existing executor]
-    classify -- Unresolved or failed --> agent
+    reply[Caller reply] --> apply{Any reading applies?}
+    apply -- Yes --> read[Readings, side by side]
+    read --> acts{An act decides?}
+    acts -- Yes --> guards[Application guards]
+    guards -- Authorized --> run[Read-back, write, undo or goodbye]
+    acts -- No --> open{Step just entered?}
+    apply -- No --> open
+    open -- Yes, with an opening --> opening[Opening: no model]
+    open -- No --> agent[Step agent]
 ```
 
-Async `advance()` classifies pending confirmations, move/add questions and
-recorded closing questions before the conversational agent runs. Clear
-answers take one classifier request to resolve that decision. Ordinary turns
-skip upfront classification; a tool can request it on demand. Ambiguous
-answers, questions or provider failures can require a second, conversational
-request. Subsequent workflow steps may still need conversation.
+1. `advance()` (`salon/nodes.py`) runs the readings that apply to this turn,
+   side by side. A turn no reading applies to sends no classifier request.
+2. `SALON.decide` tries the acts in core's order. An act that decides runs
+   with no step-model request.
+3. When no act decides, a step that was just entered may still open with no
+   model (see openings below).
+4. Otherwise the step agent answers. A tool can ask for the readings on
+   demand (`call.read_reply`). They are cached for the turn, so they never
+   run twice.
+5. On "Anything else?" the choice readings wait
+   (`Closing(skip_before_model=...)`). The booking tool runs them when it is
+   about to read a time back.
 
 Only explicit acceptance can approve a confirmation. Code checks identity,
 freshness, the exact proposal and valid options, then consumes approval once.
@@ -1094,7 +1330,9 @@ return), a guard over the call, and the executor the model's tool uses.
 The booking prompt also shows the times just offered, with their slot ids.
 A caller picking one is read back without a model request (`salon.classification._picked`):
 the pick's reading names the slot, and the application puts the read-back.
-Only the yes to it books, also without a model request. One model round trip
+Only the yes to it books, also without a model request. Once a booking is
+made, the offered times leave the table, so the next replies do not run the
+choice readings. One model round trip
 costs about 0.8s on this setup, so a turn only stays under 1.1s with one
 request at most.
 
@@ -1170,6 +1408,12 @@ a generation: speech services are generations too.
 Classifier request count, duration and fallback are recorded on the turn span
 alongside existing voice latency. Compare complete caller turns, including
 fallback, when evaluating a change of model.
+
+Every write attempt leaves a `write` span (`core/operations.py`). Its
+`write.audit` attribute holds the action, its arguments, the question it
+answered, the turn that question was put on, what the caller said, and the
+result. `evals.ledger` reads these spans to check consent from the traces
+alone, with no judge. See "Measuring a run: the ledger" above.
 
 ---
 

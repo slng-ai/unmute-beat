@@ -8,7 +8,7 @@ Asserts, no pytest, no fixtures, same as the rest.
 
 from pathlib import Path
 
-from coval_sim.__main__ import ReleaseCheck, Repository
+from coval_sim.__main__ import BOT_ENV, GRAPH_BUILD, GRAPH_ENV, ReleaseCheck, Repository
 from coval_sim.coval import CovalClient
 from coval_sim.models import (
     FALLBACKS,
@@ -69,6 +69,14 @@ def test_use_case_folders() -> None:
         pass
     else:
         raise AssertionError('a folder with no bot.py must be refused')
+
+
+def test_graph_build() -> None:
+    """`graph` is the unmute graph build's own folder, run with its placeholders; nothing else gets them."""
+    assert Agent(id='g', display_name='voice-harness-graph-pipecat').agency == 'graph'
+    assert GRAPH_ENV['MANAGER_PHONE_NUMBER'] and not set(GRAPH_ENV) & set(BOT_ENV), GRAPH_ENV
+    if (GRAPH_BUILD / 'bot.py').exists():
+        assert Repository.find(Path(__file__).resolve().parent).use_case('graph') == GRAPH_BUILD
 
 
 def spoke(sim_id: str) -> Simulation:
@@ -135,6 +143,7 @@ def test_fallbacks() -> None:
 if __name__ == '__main__':
     test_plan()
     test_use_case_folders()
+    test_graph_build()
     test_problems()
     test_fallbacks()
     print('ok')

@@ -28,6 +28,13 @@ The rules, each one a mistake made once by hand:
   before the bot speaks. LiveKit records no such figure; its latency is
   estimated as the gap from the end of the user turn to the next
   `agent_speaking`, plus LiveKit's own `lk.end_of_turn_delay`, and marked so.
+* Latency is split in two. The answer time runs from the work that answered
+  (the harness's agent span for the last piece of the turn, or the graph
+  build's first model request) to the first speech sent to TTS: what the
+  build itself took. The rest of the latency came before any
+  work started, which is turn taking (smart-turn waiting out its ceiling on
+  a caller it thought was still going). Every build is split the same way,
+  so a slow build and a slow end-of-turn are told apart.
 * A write is a `save_booking` or `record_complaint` tool call, or a `write`
   span: the harness leaves one per attempt (`core.operations`) with the
   question it answered, the one-prompt baseline one per diary write
@@ -148,6 +155,8 @@ class Turn:
     in_a_row: int
     latency: float | None
     estimated: bool = False
+    answer: float | None = None
+    """Seconds from the work that answered to the first speech: the build's own share of `latency`."""
 
 
 @dataclass
@@ -199,6 +208,22 @@ def _text(value: Any) -> str:
     return value if isinstance(value, str) else str(value or '')
 
 
+def _answer(pieces: list[datetime], first_request: datetime | None, speech: list[datetime]) -> float | None:
+    """Seconds from the work that answered to the first speech after it, or None when either is missing.
+
+    The harness opens one agent span per piece of a caller turn; an earlier
+    piece's run is cancelled when the caller goes on, so the answer is timed
+    from the last piece that started before the speech. A build with no such
+    span (the graph build) is timed from its first model request.
+    """
+    starts = pieces or ([first_request] if first_request is not None else [])
+    for said in sorted(speech):
+        began = [s for s in starts if s <= said]
+        if began:
+            return (said - max(began)).total_seconds()
+    return None
+
+
 def read_call(ref: str, observations: list[Obs]) -> Call:
     """The ledger of one call, from all of its observations."""
     obs = sorted(observations, key=lambda o: o.start)
@@ -212,7 +237,18 @@ def read_call(ref: str, observations: list[Obs]) -> Call:
         return at
 
     per_turn: dict[str, list[Obs]] = {}
+    pieces: dict[str, list[datetime]] = {}
+    first_request: dict[str, datetime] = {}
+    speech: dict[str, list[datetime]] = {}
     for o in obs:
+        if (turn := turn_of(o)) is None:
+            continue
+        if o.type == 'AGENT' and 'turn_pieces' in o.attrs:
+            pieces.setdefault(turn.id, []).append(o.start)
+        if is_request(o):
+            first_request[turn.id] = min(first_request.get(turn.id, o.start), o.start)
+        if o.name == 'tts':
+            speech.setdefault(turn.id, []).append(o.start)
         if not is_request(o):
             continue
         used = tokens(o)
@@ -232,7 +268,10 @@ def read_call(ref: str, observations: list[Obs]) -> Call:
         requests = per_turn.get(turn.id, [])
         shape = ''.join('C' if kind(o) == 'classifier' else 'S' for o in requests) or '-'
         latency = turn.attrs.get('turn.user_bot_latency_seconds')
-        call.turns.append(Turn(shape, steps_in_a_row(requests), None if latency is None else float(latency)))
+        answer = _answer(pieces.get(turn.id, []), first_request.get(turn.id), speech.get(turn.id, []))
+        call.turns.append(
+            Turn(shape, steps_in_a_row(requests), None if latency is None else float(latency), answer=answer)
+        )
     if livekit:
         speaking = [o for o in obs if o.name == 'agent_speaking']
         estimates = []
@@ -344,6 +383,18 @@ def summary(label: str, calls: list[Call]) -> list[str]:
             )
     else:
         lines.append('   latency: missing, no turn in these traces records it')
+    answered = [t.answer for t in rows if t.answer is not None]
+    if answered:
+        lines.append(
+            f'   answer time (answering work to first speech): p50 {statistics.median(answered):.2f}s '
+            f'p90 {quantile(answered, 0.9):.2f}s max {max(answered):.2f}s, {len(answered)} turns'
+        )
+    before = [t.latency - t.answer for t in rows if t.latency is not None and t.answer is not None]
+    if before:
+        lines.append(
+            f'   waited over 2 s before any work started (turn taking): {sum(b > 2 for b in before)} of '
+            f'{len(before)} turns'
+        )
     return lines
 
 

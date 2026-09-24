@@ -638,6 +638,22 @@ async def the_ledger_is_cut_down_to_what_was_heard():
     assert delivered.text == 'We have nine,' and delivered.interrupted, delivered
 
 
+async def a_slow_turn_is_covered_once():
+    """A concierge slow to answer: one holding line goes out first, through the runtime, and then the answer."""
+    call = _fresh(True)
+    probe = Probe(call, budget=TurnBudget(hold_after=0.1))
+
+    async def slow(messages, info):
+        await asyncio.sleep(0.3)
+        yield 'Nine is free.'
+
+    with scripted(concierge=slow):
+        await probe._turn('anything tomorrow?')
+    assert [s.origin for s in call.spoken] == ['tool_filler', 'model'], call.spoken
+    fixed = [f.text for f in probe.frames if isinstance(f, TTSSpeakFrame)]
+    assert call.spoken[0].text in call.locale.holding and fixed == [call.spoken[0].text], fixed
+
+
 async def a_segment_is_timed_from_when_it_started_going_out():
     """Not from when the run finished assembling it.
 
@@ -936,6 +952,7 @@ async def main():
     await the_cores_own_fixed_lines_are_in_the_ledger_too()
     await the_ledger_is_cut_down_to_what_was_heard()
     await a_segment_is_timed_from_when_it_started_going_out()
+    await a_slow_turn_is_covered_once()
     the_core_imports_no_runtime()
     the_processor_no_longer_runs_the_turn()
     print('ok')

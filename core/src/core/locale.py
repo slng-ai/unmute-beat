@@ -39,6 +39,12 @@ class Locale:
     Unlike `unbacked`, these words were caught before they reached TTS, so
     nothing has to be taken back.
     """
+    holding: tuple[str, ...]
+    """Said once in a turn that is taking a while, before anything else: a tool is running, or nothing was said yet.
+
+    Generic on purpose: it promises no work, so it is true before a lookup, a
+    hand-over or a cancellation alike. More than one, so it does not repeat.
+    """
 
 
 ENGLISH = Locale(
@@ -46,6 +52,7 @@ ENGLISH = Locale(
     exhausted="Sorry, I'm going round in circles there. Could you say that again?",
     unbacked="Sorry, let me correct myself: I haven't actually made that change. Let me check where we are.",
     withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
+    holding=('Let me have a look.', 'One moment.'),
 )
 
 SPANISH = Locale(

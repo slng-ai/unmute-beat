@@ -288,6 +288,29 @@ class Turn:
         """Whether this turn may no longer decide where the caller is."""
         return self.barge.hit or not self.call.is_current(self.generation)
 
+    async def _hold(self) -> None:
+        """Say one holding line (`Locale.holding`), only while nothing has been said in this turn.
+
+        On a timer, not on a tool starting: a tool that speaks its own line
+        would get the holding line in front of it, and the timer already
+        covers any silence that lasts, a tool's, a hand-over's or a slow
+        request's alike.
+
+        Once per turn, and never after the answer started: the check is on
+        the turn's own speech ledger, which records model text before it is
+        passed on. Origin `tool_filler`, so a caller who cuts in over it is
+        still in the same turn (`CallContext.continues_turn`).
+        """
+        call = self.call
+        if self._stale() or any(s.text for s in call.spoken) or not call.locale.holding:
+            return
+        await call.say(pick('holding', call.locale.holding), origin='tool_filler')
+
+    async def _hold_after(self) -> None:
+        """The holding line for a turn still silent after `TurnBudget.hold_after` seconds."""
+        await asyncio.sleep(self.budget.hold_after)
+        await self._hold()
+
     async def events(self, prompt: str | None) -> AsyncIterator[TurnEvent]:
         """Run the turn, yielding what a runtime needs to voice it, and finish with how it ended.
 
@@ -309,6 +332,7 @@ class Turn:
 
         spent = ''
         failure = ''
+        holding = asyncio.ensure_future(self._hold_after())
         try:
             async with asyncio.timeout(self.budget.seconds):
                 async for event in self._hops(prompt):
@@ -322,6 +346,8 @@ class Turn:
             spent = f'the {self.budget.seconds:g}s turn deadline'
         except UsageLimitExceeded as over:
             spent = str(over)
+        finally:
+            holding.cancel()
 
         if failure:
             call.note_said('fixed', call.locale.stumble, origin='error')

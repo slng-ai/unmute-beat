@@ -212,6 +212,20 @@ async def speech_nobody_heard_is_recorded_as_unheard():
     assert 'Let me check that.' not in str(project(call, call.messages))
 
 
+async def a_holding_line_heard_in_full_keeps_the_turn_open():
+    """A holding line answers nothing: a caller who goes on after hearing all of it is still in the same turn."""
+    call = booking_call()
+    probe = Probe(call)
+    await read_back_a_haircut(call, probe)
+    call.turn_started('Yes, please.')
+    await call.say('Let me have a look.', origin='tool_filler')
+    call.note_reached()
+    played_out(call)
+    call.note_barge()
+    call.turn_started('That sounds perfect.')
+    assert call.turn == 2 and call.heard == 'Yes, please. That sounds perfect.', (call.turn, call.heard)
+
+
 async def an_attempted_write_is_never_authorised_twice():
     """If the first piece already acted on the answer, the continuation cannot spend the same answer again."""
     call = booking_call()
@@ -965,6 +979,7 @@ async def main():
     await a_reply_split_by_a_pause_is_one_answer()
     await a_reply_after_the_answer_played_is_a_new_turn()
     await speech_nobody_heard_is_recorded_as_unheard()
+    await a_holding_line_heard_in_full_keeps_the_turn_open()
     await an_attempted_write_is_never_authorised_twice()
     await a_read_back_cut_off_is_not_agreed_to()
     await a_missing_barge_never_merges_turns()

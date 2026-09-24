@@ -231,11 +231,45 @@ async def a_request_that_sends_nothing_is_tried_again():
             assert said == call.locale.exhausted and done.status == 'exhausted', (said, done)
 
 
+async def a_slow_turn_says_one_holding_line():
+    """A turn silent for `hold_after` seconds says one holding line, before the answer; a quick one says none.
+
+    Nor after the answer started: a model that spoke at once and then went
+    quiet is not covered, because the caller is already hearing it.
+    """
+    budget = TurnBudget(hold_after=0.1)
+    for delay, expected in ((0.4, 1), (0.0, 0)):
+        call, _, agent = opened()
+        agent.delay = delay
+        with scripted(chosen_time=''):
+            said, _ = await take_turn(call, desk(FunctionModel(stream_function=agent.stream)), 'Hm.', budget)
+        fillers = [s for s in call.spoken if s.origin == 'tool_filler']
+        assert len(fillers) == expected and said == 'It is 40 euros.', (delay, call.spoken)
+        if expected:
+            assert call.spoken[0] is fillers[0] and fillers[0].text in call.locale.holding, call.spoken
+
+    async def speaks_then_pauses(messages, info):
+        yield 'Well, '
+        await asyncio.sleep(0.4)
+        yield 'it is 40 euros.'
+
+    call, _, _ = opened()
+    with scripted(chosen_time=''):
+        await take_turn(call, desk(FunctionModel(stream_function=speaks_then_pauses)), 'Hm.', budget)
+    assert not any(s.origin == 'tool_filler' for s in call.spoken), call.spoken
+
+
 async def the_engine_speaks_the_calls_own_language():
     """A use case in another language gives its own locale, and the turn engine's own lines follow it."""
 
     class Llamada(ClinicCall):
-        default_locale = Locale(stumble='Perdone, ¿puede repetirlo?', exhausted='', unbacked='', withheld='')
+        default_locale = Locale(
+            stumble='Perdone, ¿puede repetirlo?',
+            exhausted='',
+            unbacked='',
+            withheld='',
+            holding=('Un momento.',),
+        )
 
     async def broken(messages, info):
         raise RuntimeError('the model is down')
@@ -267,6 +301,7 @@ async def main():
     await a_reading_that_decides_drops_the_step_run()
     await a_reading_that_changes_the_call_gets_a_fresh_run()
     await a_request_that_sends_nothing_is_tried_again()
+    await a_slow_turn_says_one_holding_line()
     await the_engine_speaks_the_calls_own_language()
     no_salon_code_is_loaded()
     print('reuse ok: a second use case on the same core classes, with no salon code')

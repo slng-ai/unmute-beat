@@ -62,6 +62,13 @@ def phone(answer: str) -> ReadBackInput:
     return ReadBackInput(question=READBACK, answer=answer, proposal=READBACK)
 
 
+BOOKING_READBACK = 'Shall I book you in for a haircut, Saturday at 9:00 AM?'
+
+
+def booking(answer: str) -> ReadBackInput:
+    return ReadBackInput(question=BOOKING_READBACK, answer=answer, proposal=BOOKING_READBACK)
+
+
 def offer(answer: str, question: str = TIMES) -> OfferInput:
     return OfferInput(question=question, answer=answer, options=SLOTS)
 
@@ -90,6 +97,41 @@ CASES = (
     ),
     Case(
         'phone-no', CONFIRMATION, phone('No, the last digit is five.'), lambda r: r != 'accept', 'not accept'
+    ),
+    Case(
+        'phone-yes-then-new-day',
+        CONFIRMATION,
+        phone("Yes, that's right. Oh, and sorry, can we make it Saturday instead of Friday?"),
+        lambda r: r == 'accept',
+        'accept',
+    ),
+    Case(
+        'phone-yes-then-question',
+        CONFIRMATION,
+        phone("Yes, that's the one. How much is a haircut, by the way?"),
+        lambda r: r == 'accept',
+        'accept',
+    ),
+    Case(
+        'booking-yes-price',
+        CONFIRMATION,
+        booking('Yes. How much is it?'),
+        lambda r: r != 'accept',
+        'not accept',
+    ),
+    Case(
+        'booking-yes-but-day',
+        CONFIRMATION,
+        booking('Yes, but make it Sunday.'),
+        lambda r: r != 'accept',
+        'not accept',
+    ),
+    Case(
+        'booking-yes-but-time',
+        CONFIRMATION,
+        booking('Yes, but at ten instead.'),
+        lambda r: r != 'accept',
+        'not accept',
     ),
     Case('pick-nine', CHOSEN_OFFER, offer("Nine o'clock works for me."), lambda r: r == NINE, 'nine'),
     Case(

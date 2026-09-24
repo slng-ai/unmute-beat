@@ -1113,6 +1113,98 @@
     "title": "ReadBackInput",
     "type": "object"
    }
+  },
+  "chosen_offer+named": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The caller was offered appointment times. A time they name, or \"the same time\" as one in `holding`, picks it.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `options`: The options the person can pick from, each with its `id`.\n- `holding`: The appointments the caller already holds, as the salon says them.",
+   "output_name": "ChosenOfferChoice",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "choice": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer picks or asks for, copied exactly. It still counts when the answer also says thanks or goodbye. Empty if the answer picks none of them, puts a condition on its pick, or could mean more than one.",
+      "title": "Choice",
+      "type": "string"
+     },
+     "named": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer names without simply picking it: it puts a condition on it, asks about it, or doubts it. Empty if the answer names none, or picks it plainly.",
+      "title": "Named",
+      "type": "string"
+     }
+    },
+    "title": "ChosenOfferChoice",
+    "type": "object"
+   },
+   "input_schema": {
+    "$defs": {
+     "Option": {
+      "additionalProperties": false,
+      "description": "One option the person can pick, with the id a pick must name.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "said": {
+        "title": "Said",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "said"
+      ],
+      "title": "Option",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "A reply read against the times on the table, and what the caller already holds, for \"the same time\".",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "options": {
+      "description": "The options the person can pick from, each with its `id`.",
+      "items": {
+       "$ref": "#/$defs/Option"
+      },
+      "title": "Options",
+      "type": "array"
+     },
+     "holding": {
+      "default": [],
+      "description": "The appointments the caller already holds, as the salon says them.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Holding",
+      "type": "array"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "options"
+    ],
+    "title": "OfferInput",
+    "type": "object"
+   }
   }
  },
  "sent": {

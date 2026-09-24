@@ -17,19 +17,23 @@ Scripted models, no audio, no network. Asserts, no pytest, same as the rest.
 import asyncio
 from contextlib import ExitStack, contextmanager, suppress
 from datetime import datetime
+from unittest.mock import patch
 
 from pipecat.clocks.system_clock import SystemClock
 from pipecat.frames.frames import BotStartedSpeakingFrame, StartFrame, TTSSpeakFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
 from pipecat.utils.asyncio.task_manager import TaskManager
+from pydantic import create_model
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.history import project
 from core.processor import PydanticAgentProcessor
+from core.readings import NamedChoice
 from core.state import Checkpoint
 from salon import agents, diary
+from salon.classification import SALON
 from salon.diary import Diary
 from salon.models.state import open_call
 from salon.tools.asking import Ask
@@ -546,6 +550,61 @@ async def a_time_named_with_a_condition_is_not_read_back():
     assert call.pending_question() is None or call.pending_question().about != 'booking'
 
 
+async def a_named_pick_is_refused_without_the_word_list():
+    """With the named pick on, the reading says which time was asked about, so no English word list is needed.
+
+    "The first one, if it is under 30 euros" names no time `times_named` knows,
+    so the word-list guard reads it back. The named reading refuses it.
+    """
+    choosing = SALON.offer('chosen_offer')
+    named_output = create_model('ChosenOfferChoice', __base__=NamedChoice)
+
+    async def attempt(named: bool) -> tuple[list[str], list[str]]:
+        call = booking_call()
+        probe = Probe(call)
+        call.turn_started('A hair colour on Friday.')
+        await offer(call, 'Friday', 'hair-color')
+        call.note_reached()
+        played_out(call)
+        call.turn_ended(interrupted=False)
+        first = call.state.offered[0].slot_id
+        tries: list[str] = []
+
+        def classify(name, data):
+            return {'choice': '', 'named': first} if name == 'chosen_offer' and named else None
+
+        async def booking(messages, info):
+            tries.append('booking')
+            if len(tries) == 1:
+                yield {
+                    0: DeltaToolCall(
+                        name='ask_booking',
+                        json_args=f'{{"action":"book","slot_id":"{first}","booking_id":""}}',
+                    )
+                }
+            else:
+                yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
+
+        with ExitStack() as stack:
+            if named:
+                stack.enter_context(patch.object(choosing, 'named', True))
+                stack.enter_context(patch.object(choosing.reading.classifier, 'output_type', named_output))
+            stack.enter_context(scripted_readings(classify))
+            stack.enter_context(
+                agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking))
+            )
+            probe.interrupt()
+            await probe._turn('The first one, if it is under 30 euros.')
+        return tries, probe.fixed()
+
+    tries, said = await attempt(named=False)
+    assert tries == ['booking'] and any(line.startswith('Shall I book') for line in said), (
+        'the word-list guard is expected to miss this wording; if it now catches it, this check shows no gain'
+    )
+    tries, said = await attempt(named=True)
+    assert tries == ['booking', 'booking'] and not any(line.startswith('Shall I book') for line in said), said
+
+
 async def only_a_slot_on_the_table_can_be_picked():
     """A pick is the classifier's reading checked against the table, never a word list and never a free slot id.
 
@@ -917,6 +976,7 @@ async def main():
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await a_pick_said_with_a_goodbye_is_asked_before_they_go()
     await a_time_named_with_a_condition_is_not_read_back()
+    await a_named_pick_is_refused_without_the_word_list()
     await only_a_slot_on_the_table_can_be_picked()
     await a_pick_with_no_question_pending_is_still_read_back()
     await an_add_on_to_a_pick_is_read_with_it()

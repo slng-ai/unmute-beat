@@ -92,6 +92,15 @@ classifier's. Flip the default here once they are.
 """
 
 
+NAMED_PICK = os.environ.get('SALON_NAMED_PICK') == '1'
+"""Whether the pick reading also names a time picked with a condition or a question (`Offer.named`).
+
+ponytail: off until `harness-reading/choose` shows, over 3 runs on each model,
+no lower pick accuracy and no more false accepts than production. Then turn it
+on here, and the booking guard stops needing `times_named`.
+"""
+
+
 def _verified(call: SalonCall) -> bool:
     return bool(call.state.customer_verified)
 
@@ -308,6 +317,7 @@ SALON = SalonConversation(
             context='The caller was offered appointment times. A time they name, or "the same time" as one '
             'in `holding`, picks it.',
             on_pick=_picked,
+            named=NAMED_PICK,
         ),
     ),
     values=(

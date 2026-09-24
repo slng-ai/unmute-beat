@@ -554,6 +554,24 @@ def _sent(reading, call: SalonCall) -> str | None:
     return None if value is None else value.model_dump_json()
 
 
+def _named_pick() -> Reading:
+    """The pick reading with its `named` field on (`Offer.named`): the one prompt change waiting to be measured."""
+    from core.readings import choose
+    from salon.classification import CHOSEN_OFFER, MODEL, SETTINGS
+    from salon.models.consent import OfferInput
+
+    context = CHOSEN_OFFER.classifier.context
+    return choose(
+        'chosen_offer',
+        OfferInput,
+        CHOSEN_OFFER.snapshot,
+        context=context,
+        model=MODEL,
+        settings=SETTINGS,
+        named=True,
+    )
+
+
 def pinned() -> dict[str, Any]:
     """Every classifier request, and the exact input each reading sends in each fixed call state."""
     from core.steps import confirm_interpreter
@@ -566,6 +584,7 @@ def pinned() -> dict[str, Any]:
         'solver': _request(SOLVER_CLASSIFIER),
         'confirm_step': _request(confirm_interpreter(MODEL).classifier),
         'access_confirm': _request(FLOW.interpreter.classifier),
+        'chosen_offer+named': _request(_named_pick().classifier),
     }
     sent = {state: {r.name: _sent(r, call) for r in readings} for state, call in _states().items()}
     return {'requests': requests, 'sent': sent}

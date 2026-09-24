@@ -36,8 +36,13 @@ def reading_asked(messages, info) -> tuple[Reading, dict[str, Any]]:
     return reading, json.loads(messages[-1].parts[0].content)
 
 
-def answered(reading: Reading, label: str | None) -> ModelResponse:
-    """The model's answer for one reading: its label, or its default. A choice of 'unclear' picks nothing."""
+def answered(reading: Reading, label: str | dict[str, str] | None) -> ModelResponse:
+    """The model's answer for one reading: its label, or its default. A choice of 'unclear' picks nothing.
+
+    A dict is the whole answer, field by field, for a reading with more than one field (`NamedChoice`).
+    """
+    if isinstance(label, dict):
+        return ModelResponse(parts=[TextPart(json.dumps(label))])
     default = getattr(reading.fallback, reading.field)
     value = default if label is None else label
     if reading.field == 'choice' and value == 'unclear':

@@ -253,7 +253,8 @@ async def ask_booking(
         booking_id: The booking exactly as the diary returned it. Empty when booking.
     """
     call = ctx.deps
-    if action in ('book', 'move') and _names_the_time(call, slot_id):
+    names = call.conversation.offer('chosen_offer').named
+    if action in ('book', 'move') and (names or _names_the_time(call, slot_id)):
         await call.read_reply(usage=ctx.usage, usage_limits=ctx.usage_limits)
     if action in ('book', 'move') and _named_but_not_picked(call, slot_id):
         raise ModelRetry(
@@ -271,9 +272,15 @@ def _named_but_not_picked(call: SalonCall, slot_id: str) -> bool:
     price question unanswered. A yes to a time the model proposed in its own
     words names no time, and is read back as before. `times_named` only ever
     refuses here; it never authorises anything.
+
+    With the named pick on (`salon.classification.NAMED_PICK`), the reading
+    itself says which time was named that way (`Offer.refuses`), and the
+    English word list is not needed.
     """
-    picking = call.conversation.reading('chosen_offer')
-    return _names_the_time(call, slot_id) and picking.ran(call) and not call.picked_offer()
+    offer = call.conversation.offer('chosen_offer')
+    if offer.named:
+        return offer.refuses(call, slot_id)
+    return _names_the_time(call, slot_id) and offer.reading.ran(call) and not call.picked_offer()
 
 
 def _names_the_time(call: SalonCall, slot_id: str) -> bool:

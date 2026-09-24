@@ -174,11 +174,18 @@ class Offer[C: CallContext, InputT: ChoiceInput](Act[C]):
     """Other questions a pick can answer, besides this offer and no question at all."""
     facts: Callable[[C], Mapping[str, Any]] = _no_facts
     """More input for the reading, for a use case whose `input_type` carries more facts than the options."""
+    named: bool = False
+    """Whether the reading also says which option was named with a condition or a question (`NamedChoice`).
+
+    A prompt change: measured on the reading's dataset before it is turned on.
+    """
     reading: ChoiceReading[C, InputT] = field(init=False, repr=False)
 
     def attach(self, conversation: Conversation[C]) -> None:
         super().attach(conversation)
-        self.reading = conversation.choose(self.name, self.input_type, self._snapshot, context=self.context)
+        self.reading = conversation.choose(
+            self.name, self.input_type, self._snapshot, context=self.context, named=self.named
+        )
 
     def _snapshot(self, call: C) -> InputT | None:
         question = call.pending_question()
@@ -193,6 +200,20 @@ class Offer[C: CallContext, InputT: ChoiceInput](Act[C]):
     def rule(self, call: C) -> LocalAction | None:
         option = self.label(call, self.name)
         return self.on_pick(call, option) if option else None
+
+    def refuses(self, call: C, option: str) -> bool:
+        """Whether reading `option` back now would skip what the caller asked about it.
+
+        The caller named it with a condition, a question or a doubt, and did
+        not simply pick it: "nine, but only if it is under 30 euros". Answer
+        that first. Only with `named`, and only once this turn's reading ran.
+        """
+        return (
+            self.reading.names
+            and self.reading.ran(call)
+            and self.reading.named(call) == option
+            and not self.label(call, self.name)
+        )
 
 
 @dataclass(kw_only=True)
@@ -389,6 +410,7 @@ class Conversation[C: CallContext]:
         self.model = model
         self.settings = settings
         self.read_backs = tuple(read_backs)
+        self.offers = tuple(offers)
         self.held = tuple(held)
         self.closing = closing
         acts: list[Act[C]] = [*read_backs, *choices, *offers, *values, *take_backs, *held]
@@ -454,7 +476,13 @@ class Conversation[C: CallContext]:
         )
 
     def choose[InputT: ChoiceInput](
-        self, name: str, input_type: type[InputT], snapshot: Callable[[C], InputT | None], *, context: str
+        self,
+        name: str,
+        input_type: type[InputT],
+        snapshot: Callable[[C], InputT | None],
+        *,
+        context: str,
+        named: bool = False,
     ) -> ChoiceReading[C, InputT]:
         """A reading that picks one option by id, on this conversation's context and model."""
         return choose(
@@ -464,7 +492,12 @@ class Conversation[C: CallContext]:
             context=self._context(context),
             model=self.model,
             settings=self.settings,
+            named=named,
         )
+
+    def offer(self, name: str) -> Offer[C, Any]:
+        """The offer whose reading is called `name`."""
+        return next(o for o in self.offers if o.name == name)
 
     def _context(self, own: str) -> str:
         return ' '.join(part for part in (self.context, own) if part)

@@ -162,6 +162,16 @@ class Choice(BaseModel):
     )
 
 
+class NamedChoice(Choice):
+    """The one option the answer picks, and the one it names without simply picking it."""
+
+    named: str = Field(
+        default='',
+        description='The `id` of the one option in `options` the answer names without simply picking it: it puts '
+        'a condition on it, asks about it, or doubts it. Empty if the answer names none, or picks it plainly.',
+    )
+
+
 class Reading[C: CallContext, InputT: Exchange](ClassifierInterpreter[C, InputT, BaseModel]):
     """One act's reading: when it applies, what it reads, and its classes.
 
@@ -242,9 +252,20 @@ class ChoiceReading[C: CallContext, InputT: ChoiceInput](Reading[C, InputT]):
 
     def picked(self, call: C) -> str:
         """The option this turn's reply picks, or '' when it picks none, names one not offered, or did not run."""
-        chosen = self.label(call)
+        return self._offered(call, self.label(call))
+
+    @property
+    def names(self) -> bool:
+        """Whether this reading also says which option was named without being picked (`NamedChoice`)."""
+        return 'named' in self.classifier.output_type.model_fields
+
+    def named(self, call: C) -> str:
+        """The option this turn's reply names with a condition, a question or a doubt, or ''. It authorises nothing."""
+        return self._offered(call, getattr(self.current(call), 'named', ''))
+
+    def _offered(self, call: C, option: str) -> str:
         options = self.snapshot(call)
-        return chosen if chosen and options is not None and chosen in {o.id for o in options.options} else ''
+        return option if option and options is not None and option in {o.id for o in options.options} else ''
 
 
 def _title(name: str) -> str:
@@ -276,13 +297,17 @@ def choose[C: CallContext, InputT: ChoiceInput](
     context: str,
     model: Model | str,
     settings: ModelSettings | None = None,
+    named: bool = False,
 ) -> ChoiceReading[C, InputT]:
     """A reading that picks one of the options the snapshot gives, by id. `ChoiceReading.picked` checks the id.
 
     Each gets its own output model, named after the reading, so two choices
-    in one call are two schemas and a trace says which one answered.
+    in one call are two schemas and a trace says which one answered. With
+    `named`, the reading also says which option was named but not simply
+    picked (`NamedChoice`), under the same model name: a prompt change,
+    measured on the reading's dataset before it is turned on.
     """
-    output = create_model(f'{_title(name)}Choice', __base__=Choice)
+    output = create_model(f'{_title(name)}Choice', __base__=NamedChoice if named else Choice)
     classifier = Classifier(model, input_type, output, context=context, model_settings=settings)
     return ChoiceReading(name, classifier, snapshot, field='choice', rereadable=True)
 

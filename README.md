@@ -271,14 +271,39 @@ Conversation[ClinicCall](
     read_backs=(
         ReadBack(about='booking', action='book', run=lambda call, q: BOOK.run(call, Slot(slot=q.value))),
         ReadBack(about='cancel', action='cancel', run=lambda call, q: CANCEL.run(call, Slot(slot=q.value))),
-        ReadBack(about='patient', action='identify', run=lambda call, q: IDENTIFY.run(call, Patient(patient=q.value))),
+        ReadBack(
+            about='patient',
+            action='identify',
+            run=lambda call, q: IDENTIFY.run(call, Patient(patient=q.value)),
+        ),
     ),
-    offers=(Offer(name='chosen_time', about='offer', options=ClinicCall.table, input_type=ChoiceInput,
-                  context='The patient was offered appointment times.', on_pick=_read_back_time),),
-    values=(HeardValue(about='patient', action='ask_patient', parse=_patient_number,
-                       read_back=_read_back_patient, when=lambda call: not call.state.patient),),
-    take_backs=(TakeBack(name='undo_booking', kind='undo', on_withdraw=_offer_undo,
-                         context='Earlier in this call the clinic booked an appointment for the patient.'),),
+    offers=(
+        Offer(
+            name='chosen_time',
+            about='offer',
+            options=ClinicCall.table,
+            input_type=ChoiceInput,
+            context='The patient was offered appointment times.',
+            on_pick=_read_back_time,
+        ),
+    ),
+    values=(
+        HeardValue(
+            about='patient',
+            action='ask_patient',
+            parse=_patient_number,
+            read_back=_read_back_patient,
+            when=lambda call: not call.state.patient,
+        ),
+    ),
+    take_backs=(
+        TakeBack(
+            name='undo_booking',
+            kind='undo',
+            on_withdraw=_offer_undo,
+            context='Earlier in this call the clinic booked an appointment for the patient.',
+        ),
+    ),
     closing=Closing(goodbye=lambda call: DESK.end_conversation(call, 'Goodbye.')),
 )
 ```

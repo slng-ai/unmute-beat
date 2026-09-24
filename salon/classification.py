@@ -2,10 +2,13 @@
 
 Two interpreters read a caller's reply, and one of them is live at a time:
 
-* `CONSENT`, the default: six narrow labels (confirmation, appointment
+* `CONSENT`, the default: seven narrow labels (confirmation, appointment
   choice, end of call, retained complaint approval, whether the reply takes
-  back the booking just made, and which time on the table it picks). A correction or a change of task is not
-  something it can say, so those fall through to an agent.
+  back the booking just made, which time on the table it picks, and whether
+  the caller kept the request the identity check interrupted). A correction
+  or a change of task is not something it can say, so those fall through to
+  an agent. The solver gives no `request_change`, so with it live a return
+  from the identity check always runs the step's model.
 * `SOLVER`, behind `SALON_INTERPRETER=solver`: one decision per reply from a
   wider set (accept, correct the number, switch task, clarify, ...), so a
   correction or a switch can be answered without a second request.
@@ -144,6 +147,8 @@ class ConsentInterpreter(ClassifierInterpreter['SalonCall', ConsentInput, ReplyC
     ) -> ReplyClassification:
         call.record_classification(value, result)
         _retain_complaint(call, call.classification)
+        if value.detour_request and result.request_change == 'kept':
+            call.note_request_kept()
         return result
 
 

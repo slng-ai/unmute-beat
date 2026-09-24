@@ -29,6 +29,7 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.history import project
 from core.processor import PydanticAgentProcessor
+from core.state import Checkpoint
 from salon import agents, diary
 from salon.classification import CLASSIFIER
 from salon.diary import Diary
@@ -415,6 +416,30 @@ async def a_missing_barge_never_merges_turns():
     assert call.turn == 2 and call.heard == 'Two.'
 
 
+def a_detour_keeps_the_rest_of_its_first_turn():
+    """The caller went on in the turn that started the identity check: that piece was said to the check too.
+
+    The checkpoint holds the request as it stood when the detour began, and
+    the continuation keeps the turn's number, so counting only later turns
+    lost "make it Saturday" from the words the waiting step is given.
+    """
+    call = open_call('', diary=books)
+    call.turn_started('A haircut on Friday.')
+    call._checkpoint = Checkpoint('booking', [], frozenset(), call.heard, call.turn)
+    call._playback_known, call._interrupted = True, True
+    call.turn_started('Actually, make it Saturday.')
+    assert call.turn == 1, 'a piece before any answer played continues the turn'
+    assert call.detour_request == 'A haircut on Friday.'
+    assert call.detour_words() == ['Actually, make it Saturday.'], call.detour_words()
+    call.turn_started('Yes.')
+    assert call.detour_words() == ['Actually, make it Saturday.', 'Yes.'], call.detour_words()
+    assert call.consent_snapshot().detour_words == ('Actually, make it Saturday.', 'Yes.')
+    call.note_request_kept()
+    assert call.request_kept
+    call.turn_started('And one more thing.')
+    assert not call.request_kept, 'a reading of one turn is no evidence about the next'
+
+
 def heard_is_matched_by_words():
     """What the runtime says went out is matched word by word, and an interruption always cuts."""
     call = booking_call()
@@ -469,6 +494,7 @@ async def main():
     await a_number_talked_over_arrives_whole()
     await a_booking_taken_back_is_offered_for_cancelling()
     await only_a_slot_on_the_table_can_be_picked()
+    a_detour_keeps_the_rest_of_its_first_turn()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

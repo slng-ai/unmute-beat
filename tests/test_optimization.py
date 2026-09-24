@@ -9,6 +9,7 @@ from datetime import datetime
 from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
 from pydantic import ValidationError
 from pydantic_ai import Agent, ModelResponse, ModelRetry, RunContext, TextPart, UserPromptPart
+from pydantic_ai.messages import SystemPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.graph import Node, model_clients
@@ -305,6 +306,47 @@ async def openings_skip_the_model():
     assert call.state.offered == [], 'a save takes the offer off the table'
 
 
+async def a_changed_request_runs_the_model():
+    """The caller changes the request while their number is checked: the return opening would offer the old one.
+
+    Live call of 2026-09-23 (core run 2cWX643n), the same shape for a
+    complaint: what the caller said while verify ran never reached the step
+    that needed it. The words are now kept (`keep_detour_words`), and the
+    booking step's model-free opening, which offers times for the request
+    typed before the detour, no longer runs on a request the caller changed.
+    The model runs instead, told what the caller said meanwhile.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('', diary=books)
+    probe = Counter(call, agents.AGENTS)
+    never, _ = scripted()
+    concierge, _ = scripted(
+        (
+            'hand_over',
+            {'to': 'booking', 'because': 'a haircut', 'booking': {'service': 'haircut', 'when': 'Friday'}},
+        )
+    )
+    with (
+        agents.AGENTS['concierge'].agent.override(model=concierge),
+        agents.AGENTS['verify'].agent.override(model=never),
+    ):
+        await probe._turn('I would like to book a haircut for Friday.')
+    verify, _ = scripted(('ask_number', {'phone': PHONE}))
+    with agents.AGENTS['verify'].agent.override(model=verify):
+        await probe._turn(
+            'It is plus three four, six hundred, one one one, two two two. Make it Saturday instead.'
+        )
+    booking_model, seen = scripted(('booking_guidance', {'topic': 'day'}))
+    with agents.AGENTS['booking'].agent.override(model=booking_model):
+        await probe._turn("Yes, that's right.")
+    assert call.state.agent == 'booking' and call.state.customer_verified, call.state
+    assert len(seen) == 1, 'the booking model ran in place of the opening'
+    notes = [p.content for m in call.messages for p in m.parts if isinstance(p, SystemPromptPart)]
+    assert any('Make it Saturday instead.' in n for n in notes), notes
+    assert not any(s.text.startswith('For a haircut on Friday') for s in call.spoken), call.spoken
+
+
 async def openings_decline():
     """Each opening falls back to the model when what it knows is not enough."""
     call = open_call('', diary=books)
@@ -318,9 +360,13 @@ async def openings_decline():
     call = fresh()
     call.turn_started('Yes.')
     call._entered = 'completed'
+    call._request_kept = True
     assert agents.AGENTS['booking'].opening(call) is None, 'no request was carried'
     call.commit(wanted={'service': 'haircut', 'when': 'Friday'})
     assert agents.AGENTS['booking'].opening(call) is not None
+    call._request_kept = False
+    assert agents.AGENTS['booking'].opening(call) is None, 'no reading found the request unchanged'
+    call._request_kept = True
     call._entered = 'handoff'
     assert agents.AGENTS['booking'].opening(call) is None, 'only a return from verification'
     call._entered = 'completed'
@@ -331,6 +377,7 @@ async def openings_decline():
     call.commit(wanted={'service': 'haircut', 'when': 'next Friday'})
     call.turn_started('Friday, please.')
     call._entered = 'completed'
+    call._request_kept = True
     action = agents.AGENTS['booking'].opening(call)
     assert action is not None
     try:
@@ -369,6 +416,7 @@ async def main():
     await unsupported_booking_speech()
     await phone_and_lifecycle()
     await openings_skip_the_model()
+    await a_changed_request_runs_the_model()
     await openings_decline()
     await warm_up()
     print(

@@ -68,6 +68,10 @@ class ConsentInput(BaseModel):
     """The times on the table: the pending offer's, or else those the diary has just offered this call."""
     holding: tuple[str, ...] = ()
     """The appointments the caller already holds, as the salon says them, so "the same time" can be read."""
+    detour_request: str = ''
+    """What the caller asked for before the salon stopped to check who they are. Empty outside that check."""
+    detour_words: tuple[str, ...] = ()
+    """Everything the caller has said since that check began, one turn per item, this reply last."""
 
 
 type Confirmation = (
@@ -144,6 +148,25 @@ type LastChange = (
 )
 
 
+type RequestChange = (
+    Annotated[
+        Literal['kept'],
+        Field(
+            description='In `detour_words` the caller only answered what they were asked (a phone number, '
+            'a yes or no, a correction of it) and changed or added nothing to `detour_request`.'
+        ),
+    ]
+    | Annotated[
+        Literal['changed'],
+        Field(
+            description='Somewhere in `detour_words` the caller changed `detour_request` or asked for '
+            'something more: another day, time or service, a question, a complaint.'
+        ),
+    ]
+    | Annotated[Literal['unclear'], Field(description='There is no `detour_request`, or it is uncertain.')]
+)
+
+
 class ReplyClassification(BaseModel):
     """Interpretation only: these labels cannot name or execute a business action."""
 
@@ -161,6 +184,8 @@ class ReplyClassification(BaseModel):
         'attach a condition, ask a question first, or it is unclear which one.',
     )
     """Checked against the pending offer by the application: a slot that was not on the table authorises nothing."""
+    request_change: RequestChange = 'unclear'
+    """Whether the request the identity check interrupted still stands. Only `kept` lets a return skip the model."""
 
 
 class CorrectPhone(Decision):

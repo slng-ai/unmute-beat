@@ -71,6 +71,11 @@ class Opening[C: CallContext]:
     share every check. It is tried only after `advance` has declined, so an
     answer to a pending question always wins; a refusal from the executor is
     context for the model run that follows, never a second attempt.
+
+    An opening on a prerequisite's return (`after='completed'`) acts on the
+    request the detour interrupted. It runs only when a reading of the
+    return turn found that request unchanged (`CallContext.request_kept`);
+    otherwise the step's model runs, with what the caller said meanwhile.
     """
 
     name: str
@@ -83,6 +88,8 @@ class Opening[C: CallContext]:
     def action(self, call: C) -> LocalAction | None:
         """This opening as the turn's next action, or None when it does not apply to this call now."""
         if not self.after or call.entered != self.after or not self.applies(call):
+            return None
+        if self.after == 'completed' and not call.request_kept:
             return None
         return LocalAction(self.name, lambda: self.run(call))
 

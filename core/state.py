@@ -382,6 +382,8 @@ class CallContext(BaseModel):
     """Every message that executed, retained for audit and never projected away."""
     _hidden_speech: set[str] = PrivateAttr(default_factory=set)
     _checkpoint: Checkpoint | None = PrivateAttr(default=None)
+    _request_kept: bool = PrivateAttr(default=False)
+    """Whether a reading of this turn found the detour's request unchanged. See `note_request_kept`."""
     _return_status: str = PrivateAttr(default='')
     _entered: Entry = PrivateAttr(default='')
     """How the step now running was reached within this turn. Set with `_return_status`, cleared with it."""
@@ -543,6 +545,48 @@ class CallContext(BaseModel):
         self._protocol.append(deepcopy(message))
         self.mark_retained()
 
+    @property
+    def detour_request(self) -> str:
+        """What the caller asked for when a prerequisite interrupted it. Empty while no step is waiting."""
+        return self._checkpoint.heard if self._checkpoint is not None else ''
+
+    def detour_words(self, checkpoint: Checkpoint | None = None) -> list[str]:
+        """What the caller has said to a prerequisite since its detour began, a turn per item, oldest first.
+
+        That includes the rest of the turn the detour began on: a caller who
+        went on in that same turn (`continues_turn`) said it to the
+        prerequisite, and it is not in the request the checkpoint holds.
+        """
+        checkpoint = checkpoint or self._checkpoint
+        if checkpoint is None:
+            return []
+        said = []
+        for turn in range(checkpoint.turn, self.turn + 1):
+            words = self._inputs.get(turn, '').strip()
+            if turn == checkpoint.turn:
+                words = words.removeprefix(checkpoint.heard.strip()).strip()
+            if words:
+                said.append(words)
+        return said
+
+    def note_request_kept(self) -> None:
+        """Record that a reading of this turn found the detour's request unchanged.
+
+        A return opening acts on the request the checkpoint holds, with no
+        model to read what the caller said meanwhile. "And make it Saturday
+        instead", said with the number, made that request stale, so a return
+        opening runs only on this evidence (`Opening.action`). Only a reading
+        of the whole detour gives it, and only while the detour is open;
+        every new piece of the caller's turn takes it away again.
+        """
+        if self._checkpoint is not None:
+            self._request_kept = True
+
+    @property
+    def request_kept(self) -> bool:
+        """Whether this turn has evidence that the caller kept the request the detour interrupted."""
+        return self._request_kept
+
     def keep_detour_words(self, checkpoint: Checkpoint, step: str, *, sent: str = '') -> str:
         """Keep what the caller said during a prerequisite's detour, when the waiting step's history is restored.
 
@@ -555,11 +599,7 @@ class CallContext(BaseModel):
         later run) and returned for this hop's status. `sent` is left out,
         because it is about to reach the model as the caller's own prompt.
         """
-        said = [
-            words
-            for turn in range(checkpoint.turn + 1, self.turn + 1)
-            if (words := self._inputs.get(turn, '').strip()) and words != sent
-        ]
+        said = [words for words in self.detour_words(checkpoint) if words != sent]
         if not said:
             return ''
         note = (
@@ -973,6 +1013,7 @@ class CallContext(BaseModel):
         self._inputs[self._turn] = self.heard
         self._interrupted = False
         self._reached = False
+        self._request_kept = False
         self._response = ''
         self._entered = ''
         self._interpretations.clear()

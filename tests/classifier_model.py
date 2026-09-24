@@ -48,6 +48,17 @@ LABELS = {
     "yes, that's right, thank you": ('accept', 'unclear', 'continue'),
 }
 
+CHANGES = ('instead', 'as well', 'also')
+"""What makes a scripted detour reply change the request it interrupted. The real classifier reads meaning."""
+
+
+def _change(data: ConsentInput) -> str:
+    """Whether the caller kept the interrupted request, by rule for scripted tests."""
+    if not data.detour_request:
+        return 'unclear'
+    said = ' '.join(data.detour_words).casefold()
+    return 'changed' if any(word in said for word in CHANGES) else 'kept'
+
 
 def _chosen(data: ConsentInput) -> str:
     """The slot on the table a scripted reply picks: the one whose time it names, if exactly one, and no condition.
@@ -87,6 +98,7 @@ def classify(messages, info):
             'conversation': conversation,
             'retained_approval': 'keep' if data.retained_complaint else 'unclear',
             'chosen_offer': _chosen(data),
+            'request_change': _change(data),
         }
     )
     return ModelResponse(parts=[TextPart(result.model_dump_json())])

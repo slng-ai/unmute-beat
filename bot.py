@@ -25,8 +25,6 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from loguru import logger
-from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
-from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import LLMFullResponseStartFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -42,8 +40,6 @@ from pipecat.services.tts_service import TextAggregationMode
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
-from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
-from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
@@ -120,27 +116,16 @@ def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
 def aggregators(context: LLMContext) -> LLMContextAggregatorPair:
     """The pair that decides when the caller has finished and records what the bot said.
 
-    The smart-turn analyser is binary: it says COMPLETE and the agent starts at
-    once, or INCOMPLETE and the caller waits the whole fallback out. Pipecat's
-    default fallback is three seconds, which is the entire price of the model
-    being unsure. Turns judged cleanly on the live call of 2026-09-20 came back
-    in 1.2 to 1.9 seconds; the two it did not cost 5.6 and 4.5. A second and a
-    half is already a long pause in a booking, and `SMART_TURN_STOP_SECS` is a
-    dial to measure rather than a setting to get right once.
+    Pipecat's recommended turn taking, unchanged: Silero VAD, and its default
+    strategies, which end a turn with the smart-turn v3 model on its default
+    parameters. When the caller goes on after a turn ended, the harness joins
+    the pieces (`CallContext.continues_turn`); how the turn ends is Pipecat's.
+
+    ponytail: the defaults are what Pipecat measured. Tune end-of-turn timing
+    later, in the stop strategy as Pipecat recommends, from traces.
     """
-    stop_secs = float(os.getenv('SMART_TURN_STOP_SECS', '1.5'))
     return LLMContextAggregatorPair(
-        context,
-        user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(),
-            user_turn_strategies=UserTurnStrategies(
-                stop=[
-                    TurnAnalyzerUserTurnStopStrategy(
-                        turn_analyzer=LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=stop_secs))
-                    )
-                ]
-            ),
-        ),
+        context, user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer())
     )
 
 

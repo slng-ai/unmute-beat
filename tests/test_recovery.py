@@ -29,6 +29,13 @@ books = Diary()
 """This module's salon, emptied by each case that writes to it."""
 
 
+def played_out(call) -> None:
+    """The audio ran out after playing in full. Its start is moved back: a test's start and stop are one instant."""
+    if call._burst != float('inf'):
+        call._burst -= 60
+    call.note_drained()
+
+
 def context(call):
     return RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
 
@@ -544,7 +551,7 @@ async def a_selected_time_is_read_back_with_no_model():
             readback = call.all_spoken[-1].generated
             assert readback.startswith('Shall I book you in for a haircut, Friday at 9:30 AM'), readback
             call.note_reached()
-            call.note_drained()
+            played_out(call)
             probe.interrupt()
             await probe._turn('Yes.')
         assert call.state.writes == 1, words

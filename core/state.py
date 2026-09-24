@@ -67,6 +67,13 @@ def present(value: object) -> bool:
 
 _FILLERS = frozenset({'entry', 'tool_filler'})
 """Lines that cover a silence and answer nothing: hearing one does not end the caller's turn."""
+SPEECH_CHARS_PER_SECOND = 15.0
+"""About how fast a voice says English text. Audio that stopped in under half its words' time was cut off.
+
+ponytail: a fixed rate. Per-segment playout events from the runtime would make it exact.
+"""
+CUT_OFF_WINDOW = 1.0
+"""Seconds after an early stop in which a cut-in is taken to have caused it (`CallContext._stopped_early`)."""
 _WORD = re.compile(r"[\w']+")
 
 
@@ -405,6 +412,16 @@ class CallContext(BaseModel):
     """Whether any of this turn's speech started playing to the caller. Only meaningful when `_playback_known`."""
     _burst: float = PrivateAttr(default=float('inf'))
     """When the audio now going out started, on the segments' clock. Infinite while nothing is playing."""
+    _stopped_early: tuple[float, list[Spoken]] = PrivateAttr(default=(float('-inf'), []))
+    """When the audio last stopped far sooner than its words could be said, and what it was playing.
+
+    The runtime's stop signal and the caller's cut-in can arrive in either
+    order, because the audio stops *because* the caller cut in. Stop first,
+    and the segments were already `played` when the cut-in came, so a closing
+    question heard for 56 ms read as heard in full and "That's perfect." hung
+    up on it (Coval run Z56CoZax, K5). A cut-in within `CUT_OFF_WINDOW` of such
+    a stop takes those segments back to `playing`, so it marks them cut off.
+    """
     _playback_known: bool = PrivateAttr(default=False)
     _spoken_over: str = PrivateAttr(default='')
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
@@ -478,12 +495,29 @@ class CallContext(BaseModel):
         ponytail: a segment submitted in the moment between the audio running
         out and the runtime saying so is counted as played. The ceiling is the
         runtime's stop delay; the upgrade path is per-segment playout events.
+
+        A segment the caller already cut off stays cut off: the audio stopping
+        after a cut-in is the cut-in, not the end of the words. Audio that
+        stopped in under half the time its words take is remembered, so a
+        cut-in arriving just after the stop still cuts it (`_stopped_early`).
         """
-        for segment in self.all_spoken:
-            if segment.playback == 'playing' or (
-                segment.playback == 'queued' and segment.text and segment.at >= self._burst
-            ):
-                segment.playback = 'played'
+        ended = [
+            segment
+            for segment in self.all_spoken
+            if not segment.interrupted
+            and (
+                segment.playback == 'playing'
+                or (segment.playback == 'queued' and segment.text and segment.at >= self._burst)
+            )
+        ]
+        for segment in ended:
+            segment.playback = 'played'
+        now = time.perf_counter()
+        spoken_for = sum(len(s.text) for s in ended) / SPEECH_CHARS_PER_SECOND
+        if ended and now - self._burst < spoken_for / 2:
+            self._stopped_early = (now, ended)
+        else:
+            self._stopped_early = (float('-inf'), [])
         self._burst = float('inf')
 
     def turn_ended(self, *, interrupted: bool) -> None:
@@ -504,6 +538,11 @@ class CallContext(BaseModel):
         self._interrupted = True
         if not self._playback_known:
             return
+        stopped, early = self._stopped_early
+        if time.perf_counter() - stopped <= CUT_OFF_WINDOW:
+            for segment in early:
+                segment.playback = 'playing'
+        self._stopped_early = (float('-inf'), [])
         for segment in self.all_spoken:
             if segment.playback == 'queued' and segment.text:
                 segment.text, segment.interrupted, segment.delivery = '', True, 'runtime-estimate'

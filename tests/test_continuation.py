@@ -56,6 +56,18 @@ class Probe(PydanticAgentProcessor):
         return [f.text for f in self.frames if isinstance(f, TTSSpeakFrame)]
 
 
+def played_out(call) -> None:
+    """The audio ran out after playing in full: the runtime's stop signal, a long while after its start.
+
+    A test has no audio, so start and stop arrive in the same instant, which
+    is what audio cut off by the caller looks like (`CallContext._stopped_early`).
+    The start is moved back instead.
+    """
+    if call._burst != float('inf'):
+        call._burst -= 60
+    call.note_drained()
+
+
 def booking_call():
     """An identified caller in the booking step, with a haircut read back to them and heard in full."""
     books.reset()
@@ -74,7 +86,7 @@ async def read_back_a_haircut(call, probe) -> str:
     question = await ask_booking(context, 'book', slot['slot_id'], '')
     await call.speak_now(question.put(call), origin='ask')
     call.note_reached()
-    call.note_drained()
+    played_out(call)
     call.turn_ended(interrupted=False)
     return question.spoken
 
@@ -112,12 +124,12 @@ async def agreed_to_a_pick(call, probe, pick: str) -> None:
     assert call.state.writes == writes, f'{pick!r} booked before it was read back'
     assert probe.fixed()[-1].startswith('Shall I book you in for a'), probe.fixed()
     call.note_reached()
-    call.note_drained()
+    played_out(call)
     probe.interrupt()
     await probe._turn('Yes.')
     assert call.state.writes == writes + 1, 'the yes to the read-back did not book'
     call.note_reached()
-    call.note_drained()
+    played_out(call)
 
 
 def scripted_steps(reasks: list[int]):
@@ -177,7 +189,7 @@ async def a_reply_after_the_answer_played_is_a_new_turn():
         await probe._turn('Hmm, how long does it take?')
         assert call.turn == 2
         call.note_reached()
-        call.note_drained()
+        played_out(call)
         probe.interrupt()
         await probe._turn('Okay.')
     assert call.turn == 3 and call.heard == 'Okay.', (call.turn, call.heard)
@@ -326,7 +338,7 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
     call.turn_started('A hair colour on Friday.')
     await offer(call, 'Friday', 'hair-color')
     call.note_reached()
-    call.note_drained()
+    played_out(call)
     call.turn_ended(interrupted=False)
     slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
     readings = {
@@ -366,7 +378,7 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
             probe.interrupt()
             await probe._turn('How much is that?')
             call.note_reached()
-            call.note_drained()
+            played_out(call)
         probe.interrupt()
         await probe._turn("Oh, that's too much for me. Leave it, thanks. Goodbye.")
         assert ('last_change', call.heard) in given, (
@@ -376,7 +388,7 @@ async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
         cancel = probe.fixed()[-1]
         assert cancel.startswith('Shall I cancel your hair colour'), cancel
         call.note_reached()
-        call.note_drained()
+        played_out(call)
         probe.interrupt()
         await probe._turn('Yes, cancel it. Bye.')
     assert call.state.writes == 2, 'the agreed cancel was dropped for the goodbye'
@@ -396,7 +408,7 @@ async def a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it():
     call.turn_started('A hair colour on Friday.')
     await offer(call, 'Friday', 'hair-color')
     call.note_reached()
-    call.note_drained()
+    played_out(call)
     call.turn_ended(interrupted=False)
     slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
     readings = {
@@ -447,7 +459,7 @@ async def a_pick_said_with_a_goodbye_is_asked_before_they_go():
     call.turn_started('A hair colour on Friday.')
     await offer(call, 'Friday', 'hair-color')
     call.note_reached()
-    call.note_drained()
+    played_out(call)
     call.turn_ended(interrupted=False)
     nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
     words = "Nine o'clock then. That's all I need. Goodbye!"
@@ -481,7 +493,7 @@ async def only_a_slot_on_the_table_can_be_picked():
         call.turn_started('A hair colour on Friday.')
         await offer(call, 'Friday', 'hair-color')
         call.note_reached()
-        call.note_drained()
+        played_out(call)
         call.turn_ended(interrupted=False)
         nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
         saturday = books.find_slots(PHONE, 'Saturday', 'hair-color', books.now(), offered_to='someone else')
@@ -521,7 +533,7 @@ async def a_pick_with_no_question_pending_is_still_read_back():
     call.turn_started('A hair colour on Friday.')
     await offer(call, 'Friday', 'hair-color')
     call.note_reached()
-    call.note_drained()
+    played_out(call)
     call.turn_ended(interrupted=False)
     nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
     readings = {
@@ -551,7 +563,7 @@ async def a_pick_with_no_question_pending_is_still_read_back():
         await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
         assert call.state.writes == 0 and runs == ['concierge'], 'a condition books nothing'
         call.note_reached()
-        call.note_drained()
+        played_out(call)
         await agreed_to_a_pick(
             call, probe, "Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye."
         )
@@ -574,7 +586,7 @@ async def an_add_on_to_a_pick_is_read_with_it():
     call.turn_started('A hair colour on Friday.')
     await offer(call, 'Friday', 'hair-color')
     call.note_reached()
-    call.note_drained()
+    played_out(call)
     call.turn_ended(interrupted=False)
     nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
     joined = '09:00. But only if it costs less than 30 euros.'
@@ -610,7 +622,7 @@ async def an_add_on_to_a_pick_is_read_with_it():
         assert call.heard == joined and call.turn == 2, 'the add-on continues the turn of the pick'
         assert call.state.writes == 0, 'booked on a condition'
         call.note_reached()
-        call.note_drained()
+        played_out(call)
         await agreed_to_a_pick(call, probe, 'Oh, okay. Fine. 09:00 then.')
         probe.interrupt()
         await probe._turn('Great, I will keep it.')
@@ -731,6 +743,51 @@ def a_read_back_said_again_in_full_can_be_answered():
     assert call.pending('phone') is not None, 'the read-back heard in full is waiting on this answer'
 
 
+async def a_question_cut_off_as_the_audio_stops_is_not_heard():
+    """Coval run Z56CoZax, K5: the audio's stop reached the call before the caller's cut-in did.
+
+    The confirmation and its "Anything else?" played for 56 ms, so it was
+    already `played` when the cut-in arrived, and "That's perfect." read as a
+    goodbye to a question the caller never heard. Either order is one event:
+    the audio stops because the caller cut in.
+    """
+    from salon.tools.writes import close_with
+
+    async def line(text):
+        """The call's line to the caller: without one, nothing said is recorded, and nothing here is tested."""
+
+    for stop_first in (True, False):
+        call = booking_call()
+        call._say = line
+        call.turn_started('Yes, please.')
+        await close_with(call, "You're all set for Friday at 9:00 AM. Anything else I can help with?")
+        call.note_reached()
+        if stop_first:
+            call.note_drained()
+            call.note_barge()
+        else:
+            call.note_barge()
+            call.note_drained()
+        call.turn_ended(interrupted=True)
+        call.turn_started("That's perfect.")
+        assert call.pending_question() is None, (stop_first, 'answered a question the caller never heard')
+        assert call.heard == "Yes, please. That's perfect.", (stop_first, call.heard)
+
+    call = booking_call()
+    call._say = line
+    call.turn_started('Yes, please.')
+    await close_with(call, 'Anything else?')
+    assert call.all_spoken[-1].generated == 'Anything else?', 'nothing was recorded as said'
+    call.note_reached()
+    await asyncio.sleep(0.6)
+    call.note_drained()
+    call.note_barge()
+    call.turn_ended(interrupted=False)
+    call.turn_started('No, thanks.')
+    asked = call.pending_question()
+    assert asked is not None and asked.about == 'closing', 'a question that played out in full was heard'
+
+
 def heard_is_matched_by_words():
     """What the runtime says went out is matched word by word, and an interruption always cuts."""
     call = booking_call()
@@ -793,6 +850,7 @@ async def main():
     a_detour_keeps_the_rest_of_its_first_turn()
     await a_yes_said_as_the_line_drops_still_counts()
     a_read_back_said_again_in_full_can_be_answered()
+    await a_question_cut_off_as_the_audio_stops_is_not_heard()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

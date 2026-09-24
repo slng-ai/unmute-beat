@@ -29,7 +29,7 @@ its supporting link. Read it before changing how a turn works.
 | `salon/steps/` | one module per step, each giving `node(step)`: its tools, outputs and openings |
 | `salon/nodes.py` | `build()`, `advance()`, `decided()`, `solve()`, the guards: what every step is built from |
 | `salon/instructions.py` | loads `flow.yaml` as `SPEC`; `instructions(name)` is a step's compiled prompt; `GREETING`; `COMPLAINT_GUIDANCE` |
-| `salon/classification.py` | the salon's narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`), each with when it applies; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply` |
+| `salon/classification.py` | `SALON`, the salon's conversation: core's acts given the salon's information, which builds its narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`) and decides on them; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply`. Tools reach it through the call (`SalonCall.read_reply`), never by import |
 | `salon/baseline.py` | the same salon as one prompt on Pipecat's own Gemini service, the tools on the same `Diary`; `VOICE_HARNESS=pipecat` puts it in `bot.py` in place of the harness |
 | `core/classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
 | `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
@@ -39,6 +39,7 @@ its supporting link. Read it before changing how a turn works.
 | `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
 | `core/flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
 | `core/readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
+| `core/conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack`, `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
@@ -55,8 +56,9 @@ Anything about *running* a turn goes in `turn`, anything about frames goes in
 module but the processor imports Pipecat.
 
 `core` imports nothing from `salon`. `salon.models` imports `core.state`;
-`salon.tools` imports models, the diary and `core.policies`; `salon.agents`
-imports everything; `bot.py` wires it to Pipecat.
+`salon.tools` imports models, the diary and `core.policies`, and reads a reply
+through the call; `salon.classification` imports the tools its acts run;
+`salon.agents` imports everything; `bot.py` wires it to Pipecat.
 
 State is replaced wholesale via `call.commit(**updates)`: one validated
 candidate or nothing, never field-by-field assignment. Tools live with the step

@@ -422,6 +422,33 @@ def every_read_back_is_one_request():
     assert step.json_schema() == CONFIRMATION.classifier.json_schema()
 
 
+def acts_keep_their_order():
+    """The salon's acts are tried in core's slots, and within a slot in the order the salon gave them.
+
+    A yes to the number read-back comes before the number heard in the same
+    words, so "yes, that's +34 ..." is the yes; a pick comes after any take-back.
+    """
+    from salon.classification import SALON
+
+    def named(rules) -> list[str]:
+        return [
+            f'{type(r.__self__).__name__}:{getattr(r.__self__, "name", "") or r.__self__.about}'
+            for r in rules
+        ]
+
+    acts = SALON.acts
+    assert named(acts.answer) == [
+        'FixedChoice:appointment_choice',
+        'ReadBack:phone',
+        'ReadBack:booking',
+        'ReadBack:complaint',
+        'HeardValue:phone',
+    ], named(acts.answer)
+    assert named(acts.take_back) == ['TakeBack:last_change']
+    assert named(acts.pick) == ['Offer:chosen_offer']
+    assert named(acts.goodbye) == ['Closing:conversation']
+
+
 GOLDEN = Path(__file__).parent / 'golden' / 'readings.json'
 """Every classifier request this repo can send, pinned. `BLESS_READINGS=1` rewrites it."""
 
@@ -570,6 +597,7 @@ async def main():
     classes_live_in_schema()
     every_read_back_is_one_request()
     requests_are_pinned()
+    acts_keep_their_order()
     await generic_contracts()
     await invalid_answers_and_cancellation()
     await decisions_and_fallback()

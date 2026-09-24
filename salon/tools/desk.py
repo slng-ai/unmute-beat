@@ -11,7 +11,6 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 
 from core.graph import Exit
 from core.policies import claim_or_refuse
-from salon.classification import classify_reply
 from salon.models.state import BookingRequest, Handoff, SalonCall
 from salon.tools.policy import ACTIONS
 
@@ -88,7 +87,7 @@ async def hang_up(ctx: RunContext[SalonCall], goodbye: str) -> str:
         goodbye: One short goodbye in your own words. It is the last thing they hear.
     """
     claim_or_refuse(ctx, ACTIONS)
-    await classify_reply(ctx.deps, usage=ctx.usage, usage_limits=ctx.usage_limits, closing=True)
+    await ctx.deps.read_reply(usage=ctx.usage, usage_limits=ctx.usage_limits, closing=True)
     return await end_conversation(ctx.deps, goodbye)
 
 

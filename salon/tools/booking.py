@@ -23,7 +23,6 @@ from core.graph import Opening
 from core.operations import Operation
 from core.policies import claim_or_refuse, pick
 from core.state import present
-from salon.classification import CHOSEN_OFFER, classify_reply
 from salon.diary import (
     AlreadyHoldsError,
     RefusedError,
@@ -256,7 +255,7 @@ async def ask_booking(
     """
     call = ctx.deps
     if action in ('book', 'move') and _names_the_time(call, slot_id):
-        await classify_reply(call, usage=ctx.usage, usage_limits=ctx.usage_limits)
+        await call.read_reply(usage=ctx.usage, usage_limits=ctx.usage_limits)
     if action in ('book', 'move') and _named_but_not_picked(call, slot_id):
         raise ModelRetry(
             f'Nothing was asked: the caller named that time but did not simply pick it. They said '
@@ -274,7 +273,8 @@ def _named_but_not_picked(call: SalonCall, slot_id: str) -> bool:
     words names no time, and is read back as before. `times_named` only ever
     refuses here; it never authorises anything.
     """
-    return _names_the_time(call, slot_id) and CHOSEN_OFFER.ran(call) and not call.picked_offer()
+    picking = call.conversation.reading('chosen_offer')
+    return _names_the_time(call, slot_id) and picking.ran(call) and not call.picked_offer()
 
 
 def _names_the_time(call: SalonCall, slot_id: str) -> bool:
@@ -382,7 +382,7 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
     plain choice of an offered slot booked it, one turn faster. The graph and
     LiveKit builds of this salon say "choosing a time is not a yes", and the
     Coval release check asks for a read-back and a yes before "booked", so a
-    pick is now read back (`salon.nodes._picked`) and only the yes writes.
+    pick is now read back (`salon.classification._picked`) and only the yes writes.
 
     The boolean it returns is the *second appointment* decision, and it comes
     from what the caller said, never from an argument: a flag the model could
@@ -520,7 +520,7 @@ class WriteBooking(Operation[SalonCall, BookingCommand, Saved, str]):
         read the same reply does not pay for it twice.
         """
         if args.action in ('book', 'move') or call.pending('booking') or call.pending('move_or_add'):
-            await classify_reply(call, usage=usage, usage_limits=usage_limits)
+            await call.read_reply(usage=usage, usage_limits=usage_limits)
         additional = _authorised(call, args.action, args.slot_id, args.booking_id)
         if not present(call.state.customer_verified):
             raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')

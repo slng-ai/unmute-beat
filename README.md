@@ -202,7 +202,7 @@ salon/
   steps/                one module per step, each giving node(step)
   nodes.py              build(), advance(): what every step is built from
   instructions.py       loads flow.yaml; each step's compiled prompt
-  classification.py     the salon's narrow readings, and the opt-in state solver
+  classification.py     the salon's conversation (SALON: its acts and readings), and the opt-in solver
   baseline.py           the same salon as one prompt on Pipecat's own LLM service (VOICE_HARNESS=pipecat)
   agents.py             the AGENTS table, compiled from flow.yaml
 utils/observability.py  Langfuse over OTel
@@ -876,11 +876,14 @@ flowchart LR
 
 Core owns the inputs, the classes and their descriptions (`CONFIRM`,
 `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`, and `Choice` for picking
-one of the options by id). A business writes, per reading, when it applies,
-one context sentence, and the action each label takes. The salon's are in
-[salon/classification.py](salon/classification.py) and
-[salon/nodes.py](salon/nodes.py) (`ACTS`). The tool guards read one merged
-view of this turn's labels, `SalonCall.classification`.
+one of the options by id). Core also owns the acts themselves, as classes in
+[core/conversation.py](core/conversation.py): `ReadBack`, `FixedChoice`,
+`Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`, put
+together by `Conversation`. A business gives each one its information: the
+question it answers, one context sentence, where its options come from, and
+the action each answer takes. The salon's is one declaration, `SALON` in
+[salon/classification.py](salon/classification.py). The tool guards read one
+merged view of this turn's labels, `SalonCall.classification`.
 
 A request sends 270 to 430 input tokens, against about 2,300 for the one
 consent classifier it replaced, which was sent every class and every fact on
@@ -947,7 +950,7 @@ return), a guard over the call, and the executor the model's tool uses.
   desk typed into `hand_over(booking=...)`.
 
 The booking prompt also shows the times just offered, with their slot ids.
-A caller picking one is read back without a model request (`salon.nodes._picked`):
+A caller picking one is read back without a model request (`salon.classification._picked`):
 the pick's reading names the slot, and the application puts the read-back.
 Only the yes to it books, also without a model request. One model round trip
 costs about 0.8s on this setup, so a turn only stays under 1.1s with one

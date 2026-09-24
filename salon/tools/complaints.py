@@ -19,7 +19,6 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from core.operations import Operation
 from core.policies import claim_or_refuse
 from core.state import present
-from salon.classification import classify_reply
 from salon.instructions import COMPLAINT_GUIDANCE
 from salon.models.receipts import ComplaintRecord
 from salon.models.state import SalonCall, Unresolved
@@ -141,7 +140,7 @@ async def record_complaint(ctx: RunContext[SalonCall]) -> ComplaintRecord:
     It speaks the receipt itself. Do not reword the approved complaint or say
     another acknowledgement. It uses the approved wording without changes.
     """
-    await classify_reply(ctx.deps, usage=ctx.usage, usage_limits=ctx.usage_limits)
+    await ctx.deps.read_reply(usage=ctx.usage, usage_limits=ctx.usage_limits)
     approved = ctx.deps.approved_complaint
     if approved is None:
         raise ModelRetry('Use ask_complaint and wait for approval before recording anything.')
@@ -196,7 +195,7 @@ class WriteComplaint(Operation[SalonCall, ComplaintArgs, ComplaintRecord, Compla
             raise ModelRetry(
                 'Nobody is identified yet. Return to concierge so verification can run before complaints.'
             )
-        await classify_reply(call, usage=usage, usage_limits=usage_limits)
+        await call.read_reply(usage=usage, usage_limits=usage_limits)
         approved = call.approved_complaint
         if (
             approved is None

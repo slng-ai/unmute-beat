@@ -8,9 +8,10 @@ be told to the model and nothing can be got wrong.
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_validator
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core import state as core
 from core.proposals import Proposal
@@ -19,6 +20,9 @@ from salon.diary import Diary, day_phrases
 from salon.models.consent import Asked, ReplyClassification
 from salon.models.receipts import Slot
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
+
+if TYPE_CHECKING:
+    from salon.classification import SalonConversation
 
 
 class Appointment(BaseModel):
@@ -332,7 +336,7 @@ class SalonCall(core.CallContext):
         the price and says "leave it" was told goodbye with the booking still in
         the diary (Coval K2, when a pick booked at once). For as long as they hold
         it, every reply is read against it (`LAST_CHANGE`) and one that takes it
-        back is offered the cancel (`salon.nodes.ACTS`), whichever turn it comes on.
+        back is offered the cancel (`salon.classification.SALON`), whichever turn it comes on.
         """
         self.hold('undo', core.Held(key=booking_id, told=told))
 
@@ -370,15 +374,34 @@ class SalonCall(core.CallContext):
         return held.item if held is not None else None
 
     @property
-    def classification(self) -> ReplyClassification:
-        """This turn's readings of the reply, each only while it is still about the call as it is now.
+    def conversation(self) -> SalonConversation:
+        """The salon's acts and their readings (`salon.classification.SALON`), which read this call's replies.
 
-        Imported here rather than at the top: the readings are built on this
-        class, so the module holding them cannot be imported before it.
+        Imported here rather than at the top: the conversation is built on this
+        class and on the tools that use it, so its module cannot be imported
+        before this one. This is the one place the call reaches for it; tools
+        ask the call (`read_reply`) and never import it themselves.
         """
-        from salon.classification import reading_of
+        from salon.classification import SALON
 
-        return reading_of(self)
+        return SALON
+
+    @property
+    def classification(self) -> ReplyClassification:
+        """This turn's readings of the reply, each only while it is still about the call as it is now."""
+        return self.conversation.view(self)
+
+    async def read_reply(
+        self,
+        *,
+        usage: RunUsage | None = None,
+        usage_limits: UsageLimits | None = None,
+        closing: bool = False,
+    ) -> ReplyClassification:
+        """Run this turn's readings of the reply, each at most once, and return the merged view."""
+        return await self.conversation.read_reply(
+            self, usage=usage, usage_limits=usage_limits, closing=closing
+        )
 
     @computed_field
     @property

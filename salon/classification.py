@@ -1,23 +1,24 @@
-"""The salon's semantic decision boundary, independent of its conversational agents.
+"""The salon's conversation: core's acts (`core.conversation`), given the salon's information.
 
-A caller's reply is read by narrow readings (`core.readings`), each one small
-classifier for one act, run only when the call's state says that act can
-happen this turn:
+Everything here is information a use case gives core's classes: who is
+talking, which questions are read back and what a yes runs, where the times
+on the table come from, what a pick and a take-back do. The readings, the
+order the acts are tried in and how a reply is read are core's, the same for
+every business. Each act's reading runs only when the call's state says the
+act can happen this turn:
 
-| Reading | Runs when | Classes |
-|---|---|---|
-| `CONFIRMATION` | a phone, booking or complaint read-back is waiting | accept, reject, revise, conditional, unclear |
-| `APPOINTMENT_CHOICE` | the caller was asked to move or add, or holds a booking while times are on the table; on "anything else?" only once the booking tool asks | move, add, or neither |
-| `CHOSEN_OFFER` | times are on the table, and no read-back or choice is waiting; on "anything else?" only once the booking tool asks | one slot id, or none |
-| `LAST_CHANGE` | the caller still holds a booking made in this call | keep, withdraw, unclear |
-| `RETAINED_APPROVAL` | a complaint approved on an earlier turn is kept through the number check | keep, withdraw, unclear |
-| `CONVERSATION` | a question other than a read-back is waiting, or the model asks to hang up | end, continue, unclear |
-| `DETOUR` | the number read-back is waiting during the check | kept, changed, unclear |
+| Reading | Act | Runs when | Classes |
+|---|---|---|---|
+| `CONFIRMATION` | `ReadBack` | a phone, booking or complaint read-back is waiting | accept, reject, revise, conditional, unclear |
+| `APPOINTMENT_CHOICE` | `FixedChoice` | the caller was asked to move or add, or holds a booking while times are on the table; on "anything else?" only once the booking tool asks | move, add, or neither |
+| `CHOSEN_OFFER` | `Offer` | times are on the table, and no read-back or choice is waiting; on "anything else?" only once the booking tool asks | one slot id, or none |
+| `LAST_CHANGE` | `TakeBack` | the caller still holds a booking made in this call | keep, withdraw, unclear |
+| `RETAINED_APPROVAL` | `HeldApproval` | a complaint approved on an earlier turn is kept through the number check | keep, withdraw, unclear |
+| `CONVERSATION` | `Closing` | a question other than a read-back is waiting, or the model asks to hang up | end, continue, unclear |
+| `DETOUR` | `Detour` | the number read-back is waiting during the check | kept, changed, unclear |
 
-The classes and their descriptions are core's, the same for every business.
-The salon writes only when each reading runs, one context sentence, and what
-the application does with each label (`salon.nodes.ACTS`). The readings that
-apply run side by side, so a turn waits for the slowest, not for their sum.
+A number said in full while nobody is identified is read back by code, with
+no reading at all (`HeardValue`).
 
 Whichever readings ran, the tool guards read one merged view,
 `SalonCall.classification` (`reading_of`). `SOLVER`, behind
@@ -26,31 +27,29 @@ instead, and writes into the same view, so no guard changes either way.
 """
 
 import os
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from pydantic_ai.models import infer_model
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.classifiers import Classifier, Exchange
-from core.decisions import Accept, Conditional, EndCall, NoDecision, Reject, Revise
-from core.interpreters import ClassifierInterpreter
-from core.readings import (
-    CLOSING,
-    CONFIRM,
-    REQUEST,
-    STILL_AGREED,
-    TAKE_BACK,
-    ChoiceInput,
-    DetourInput,
-    Option,
-    ReadBackInput,
-    Reading,
-    TakeBackInput,
-    choose,
-    classify,
-    read,
+from core.classifiers import Classifier
+from core.conversation import (
+    Closing,
+    Conversation,
+    Detour,
+    FixedChoice,
+    HeardValue,
+    HeldApproval,
+    Offer,
+    ReadBack,
+    TakeBack,
 )
+from core.decisions import Accept, Conditional, EndCall, NoDecision, Reject, Revise
+from core.graph import LocalAction
+from core.interpreters import ClassifierInterpreter
+from core.readings import Option, Reading
+from core.state import Held
 from salon.models.consent import (
     Asked,
     ChooseAppointment,
@@ -62,10 +61,12 @@ from salon.models.consent import (
     SalonSwitch,
     SolverInput,
 )
-
-if TYPE_CHECKING:
-    from salon.models.state import SalonCall
-
+from salon.models.state import SalonCall
+from salon.tools.asking import Ask
+from salon.tools.booking import booking_question, cancel_question, write_booking
+from salon.tools.complaints import write_complaint
+from salon.tools.desk import end_conversation
+from salon.tools.identity import lookup_customer, number_heard, readback_number
 
 MODEL = infer_model('google-cloud:gemini-3.5-flash-lite')
 """One model for now. `build` takes it per agent, so giving one step a different model is a one-word edit."""
@@ -90,36 +91,32 @@ the reviewed cases and its false acceptances are no worse than the
 classifier's. Flip the default here once they are.
 """
 
-SALON = 'A caller is on the phone with the receptionist of Sage and Stone, a hair salon.'
-"""Who is talking. Every reading's context starts here. Prompt text."""
 
-READ_BACKS = ('phone', 'booking', 'complaint')
-"""The questions that wait on a yes to an exact proposal."""
+def _verified(call: SalonCall) -> bool:
+    return bool(call.state.customer_verified)
 
 
-def _read_back(call: SalonCall) -> ReadBackInput | None:
-    question = call.pending_question()
-    if question is None or question.about not in READ_BACKS:
+def _add(call: SalonCall, question: Asked) -> LocalAction:
+    return LocalAction('save_booking', lambda: write_booking(call, 'book', question.value, ''))
+
+
+def _move(call: SalonCall, question: Asked) -> LocalAction | None:
+    if not question.booking_id:
         return None
-    return ReadBackInput(question=call.said_last_turn(), answer=call.heard, proposal=question.spoken)
+    return LocalAction(
+        'save_booking', lambda: write_booking(call, 'move', question.value, question.booking_id)
+    )
 
 
-def _approve_complaint(call: SalonCall, label: str) -> None:
-    """A yes to the complaint read-back is kept, bound to the caller it was put to, until it is recorded or withdrawn."""
-    if (question := call.pending('complaint')) and label == 'accept':
-        call.approve_complaint(question)
+def _could_move(call: SalonCall) -> bool:
+    """A caller who holds a booking and names a time on the table may be moving it: "Saturday, same time?".
 
+    No question asked it, and a move needs their word that it is a move.
+    """
+    question = call.pending_question()
+    picking = (question is None or question.about in ('offer', 'closing')) and bool(call.table())
+    return picking and bool(call.holding())
 
-CONFIRMATION = classify(
-    'confirmation',
-    CONFIRM,
-    ReadBackInput,
-    _read_back,
-    context=f'{SALON} The receptionist read something back and is waiting for a yes.',
-    model=MODEL,
-    settings=SETTINGS,
-    settle=_approve_complaint,
-)
 
 MOVE_OR_ADD = (
     Option(id='move', said='Move the appointment they already hold to the new time.'),
@@ -127,169 +124,239 @@ MOVE_OR_ADD = (
 )
 
 
-def _move_or_add(call: SalonCall) -> ChoiceInput | None:
-    """When the caller was asked to move or add, or holds a booking and could be picking a time to move it to.
+def _picked(call: SalonCall, slot: str) -> LocalAction | None:
+    """A plain pick of a time on the table is read back, with no model request; only the yes to it books.
 
-    The second is the caller's own "can we move it to Saturday, same time?":
-    no question asked it, and a move needs their word that it is a move.
+    A caller who already holds a booking is asked first whether this moves it
+    or adds another: the write's own guard puts that question and refuses.
+    """
+    if not call.state.customer_verified:
+        return None
+    if call.holding():
+        return LocalAction('save_booking', lambda: write_booking(call, 'book', slot, ''))
+    return LocalAction('ask_booking', lambda: _read_back_pick(call, slot))
+
+
+async def _read_back_pick(call: SalonCall, slot: str) -> Ask:
+    return booking_question(call, 'book', slot, '')
+
+
+def _still_booked(call: SalonCall, held: Held) -> bool:
+    return call.undo_booking == held.key
+
+
+def _took_back(call: SalonCall, held: Held) -> LocalAction | None:
+    """A booking made in this call that the caller takes back is offered for cancelling, on whatever turn.
+
+    Coval run Y47Ut7oC, K2: "Leave it, thanks" two turns after the booking was
+    read as the goodbye it also was, and hung up on it. Not while that cancel
+    is itself the question waiting: then the answer answers it, and a yes has
+    already cancelled (Coval run gdw96FkH, "Yes, please cancel it" re-asked
+    three times).
     """
     question = call.pending_question()
-    asked = question is not None and question.about == 'move_or_add'
-    picking = (question is None or question.about in ('offer', 'closing')) and bool(call.table())
-    if not asked and not (picking and call.holding()):
+    if question is not None and question.action == 'cancel' and question.booking_id == held.key:
         return None
-    return ChoiceInput(question=call.said_last_turn(), answer=call.heard, options=MOVE_OR_ADD)
+    return LocalAction('ask_booking', lambda: _cancel_question(call, held.key))
 
 
-APPOINTMENT_CHOICE = choose(
-    'appointment_choice',
-    ChoiceInput,
-    _move_or_add,
-    context=f'{SALON} The caller already holds an appointment. Read whether the answer moves it or adds another. '
-    'A bare yes picks neither.',
-    model=MODEL,
-    settings=SETTINGS,
-)
+async def _cancel_question(call: SalonCall, booking_id: str) -> Ask:
+    """The application's own cancel read-back for a booking the caller has just taken back.
+
+    A cancel question can be answered from whichever step the caller is in,
+    because the question is the authority and the write's own guard checks it:
+    the caller who took back a picked time is back at the front desk by then.
+    """
+    return cancel_question(call, booking_id)
 
 
-def _offers(call: SalonCall) -> OfferInput | None:
-    """The times on the table, unless a read-back or a move-or-add question is what the caller is answering."""
-    question = call.pending_question()
-    if question is not None and question.about not in ('offer', 'closing'):
-        return None
-    if not (table := call.table()):
-        return None
-    return OfferInput(
-        question=call.said_last_turn(), answer=call.heard, options=table, holding=call.holding()
-    )
+async def _record_approved(call: SalonCall, question: Asked) -> object:
+    approved = call.approved_complaint
+    assert approved is not None
+    return await write_complaint(call, approved.summary, approved.requested_resolution)
 
 
-CHOSEN_OFFER = choose(
-    'chosen_offer',
-    OfferInput,
-    _offers,
-    context=f'{SALON} The caller was offered appointment times. A time they name, or "the same time" as one '
-    'in `holding`, picks it.',
-    model=MODEL,
-    settings=SETTINGS,
-)
+def _unidentified(call: SalonCall) -> bool:
+    """A number said in full is read back with no model only while the caller is being identified."""
+    return call.state.agent == 'verify' and not call.state.customer_verified
 
 
-def _held_change(call: SalonCall) -> TakeBackInput | None:
-    if not call.undo_booking or (undo := call.held('undo')) is None:
-        return None
-    return TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=undo.told)
-
-
-LAST_CHANGE = classify(
-    'last_change',
-    TAKE_BACK,
-    TakeBackInput,
-    _held_change,
-    context=f'{SALON} Earlier in this call the salon booked an appointment for the caller, which they can still '
-    'take back.',
-    model=MODEL,
-    settings=SETTINGS,
-)
-
-
-def _kept_complaint(call: SalonCall) -> TakeBackInput | None:
-    """A complaint approved on an earlier turn. Not on the turn of the yes itself, which that reading already read."""
-    complaint = call.held('complaint')
-    if complaint is None or complaint.turn + 1 >= call.turn:
-        return None
-    return TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=complaint.told)
-
-
-def _forget_complaint(call: SalonCall, label: str) -> None:
-    """Anything but a clear keep drops the approval: the complaint is read back again."""
-    if label != 'keep':
-        call.release('complaint')
-
-
-RETAINED_APPROVAL = classify(
-    'retained_approval',
-    STILL_AGREED,
-    TakeBackInput,
-    _kept_complaint,
-    context=f'{SALON} The caller approved a complaint to record, and the salon is checking their number before it '
+COMPLAINT_KEPT = HeldApproval[SalonCall](
+    name='retained_approval',
+    kind='complaint',
+    about='complaint',
+    context='The caller approved a complaint to record, and the salon is checking their number before it '
     'records it.',
+    keep=lambda call, question: call.approve_complaint(question),
+)
+"""A yes to the complaint read-back, kept, bound to the caller it was put to, until it is recorded or withdrawn."""
+
+
+class SalonConversation(Conversation[SalonCall]):
+    """The salon's acts, whose rules read the merged view, so the opt-in solver stands in for every reading."""
+
+    def label(self, call: SalonCall, name: str) -> str:
+        return getattr(call.classification, name)
+
+    def view(self, call: SalonCall) -> ReplyClassification:
+        """This turn's readings as the one view the tool guards read. A reading that did not run reads as its default."""
+        if INTERPRETER == 'solver':
+            return consent_of(SOLVER.current(call), call.held('complaint') is not None)
+        labels = self.labels(call)
+        return ReplyClassification.model_validate(
+            {
+                'confirmation': labels['confirmation'],
+                'appointment_choice': labels['appointment_choice'] or 'unclear',
+                'conversation': labels['conversation'],
+                'retained_approval': labels['retained_approval'],
+                'last_change': labels['last_change'],
+                'chosen_offer': labels['chosen_offer'],
+            }
+        )
+
+    async def read_reply(
+        self,
+        call: SalonCall,
+        *,
+        usage: RunUsage | None = None,
+        usage_limits: UsageLimits | None = None,
+        closing: bool = False,
+        before_model: bool = False,
+    ) -> ReplyClassification:
+        """Read the reply with whichever interpreter is live, then return the merged view.
+
+        `before_model` is `advance` reading the turn before any model runs. On
+        "anything else?" it leaves out the two choice readings: across the Coval
+        runs of 24 September they ran on every closing reply and never decided
+        one (0 of 6), while a goodbye paid for both. A move asked for there
+        ("can we move it to Saturday, same time?") still gets them, read by the
+        booking tool before it writes (`WriteBooking._authorise`), against the
+        times the model has just put on the table. Consumers recheck the view
+        against the live call through `SalonCall.classification`; a late or
+        rebound answer is never published.
+        """
+        if INTERPRETER == 'solver':
+            await SOLVER.interpret(call, usage=usage, usage_limits=usage_limits)
+        else:
+            await self.read(
+                call, usage=usage, usage_limits=usage_limits, closing=closing, before_model=before_model
+            )
+        return call.classification
+
+
+SALON = SalonConversation(
+    context='A caller is on the phone with the receptionist of Sage and Stone, a hair salon.',
     model=MODEL,
     settings=SETTINGS,
-    settle=_forget_complaint,
+    read_back_context='The receptionist read something back and is waiting for a yes.',
+    read_backs=(
+        ReadBack(
+            about='phone',
+            action='confirm_customer',
+            run=lambda call, question: lookup_customer(call, question.value),
+            when=lambda call, question: call.state.agent == 'verify',
+        ),
+        ReadBack(
+            about='booking',
+            action='save_booking',
+            run=lambda call, question: write_booking(
+                call, question.action, question.value, question.booking_id
+            ),
+            when=lambda call, question: _verified(call) and question.action in ('book', 'move', 'cancel'),
+        ),
+        ReadBack(
+            about='complaint',
+            action='record_complaint',
+            run=_record_approved,
+            when=lambda call, question: call.state.agent == 'complaints' and call.complaint_approved,
+        ),
+    ),
+    choices=(
+        FixedChoice(
+            name='appointment_choice',
+            about='move_or_add',
+            options=MOVE_OR_ADD,
+            context='The caller already holds an appointment. Read whether the answer moves it or adds another. '
+            'A bare yes picks neither.',
+            actions={'add': _add, 'move': _move},
+            also=_could_move,
+            when=_verified,
+        ),
+    ),
+    offers=(
+        Offer[SalonCall, OfferInput](
+            name='chosen_offer',
+            about='offer',
+            also_on=('closing',),
+            options=SalonCall.table,
+            input_type=OfferInput,
+            facts=lambda call: {'holding': call.holding()},
+            context='The caller was offered appointment times. A time they name, or "the same time" as one '
+            'in `holding`, picks it.',
+            on_pick=_picked,
+        ),
+    ),
+    values=(
+        HeardValue(
+            about='phone',
+            action='ask_number',
+            parse=number_heard,
+            read_back=readback_number,
+            when=_unidentified,
+        ),
+    ),
+    take_backs=(
+        TakeBack(
+            name='last_change',
+            kind='undo',
+            context='Earlier in this call the salon booked an appointment for the caller, which they can still '
+            'take back.',
+            on_withdraw=_took_back,
+            still_holds=_still_booked,
+        ),
+    ),
+    held=(COMPLAINT_KEPT,),
+    detour=Detour(
+        name='request_change',
+        ends_on='phone',
+        context='The caller asked for something, then the salon stopped to check who they are.',
+    ),
+    closing=Closing(
+        goodbye=lambda call: end_conversation(call, 'Thanks for calling. Goodbye.'),
+        skip_before_model=('appointment_choice', 'chosen_offer'),
+    ),
 )
+"""The salon, as information given to core's acts. The order inside each slot is the order tried."""
 
-
-def _closing(call: SalonCall) -> Exchange:
-    """The words of the question waiting, which is what the caller answers, or else the last thing said."""
-    question = call.pending_question()
-    said = question.spoken if question is not None and question.spoken else call.said_last_turn()
-    return Exchange(question=said, answer=call.heard)
-
-
-CONVERSATION = classify(
-    'conversation',
-    CLOSING,
-    Exchange,
-    _closing,
-    context=SALON,
-    model=MODEL,
-    settings=SETTINGS,
-)
-
-
-def _detour(call: SalonCall) -> DetourInput | None:
-    """Only on the reply to the number read-back: the turn a return from the check can happen."""
-    if not call.detour_request or call.pending('phone') is None:
-        return None
-    return DetourInput(
-        question=call.detour_speech(), answer=' '.join(call.detour_words()), request=call.detour_request
-    )
-
-
-def _request_kept(call: SalonCall, label: str) -> None:
-    if label == 'kept':
-        call.note_request_kept()
-
-
-DETOUR = classify(
-    'request_change',
-    REQUEST,
-    DetourInput,
-    _detour,
-    context=f'{SALON} The caller asked for something, then the salon stopped to check who they are.',
-    model=MODEL,
-    settings=SETTINGS,
-    settle=_request_kept,
-)
-
-READINGS: tuple[Reading, ...] = (
-    CONFIRMATION,
-    APPOINTMENT_CHOICE,
-    CHOSEN_OFFER,
-    LAST_CHANGE,
-    RETAINED_APPROVAL,
-    DETOUR,
-)
+CONFIRMATION = SALON.reading('confirmation')
+APPOINTMENT_CHOICE = SALON.reading('appointment_choice')
+CHOSEN_OFFER = SALON.reading('chosen_offer')
+LAST_CHANGE = SALON.reading('last_change')
+RETAINED_APPROVAL = SALON.reading('retained_approval')
+CONVERSATION = SALON.reading('conversation')
+DETOUR = SALON.reading('request_change')
+READINGS: tuple[Reading, ...] = SALON.readings
 """Every reading that runs on its own when it applies. `CONVERSATION` joins them only as `classify_reply` says."""
-
-CLOSING_DEFERS = (APPOINTMENT_CHOICE, CHOSEN_OFFER)
-"""The readings `advance` leaves to the booking tool on "anything else?" (see `classify_reply`)."""
+READ_BACKS = SALON.read_back_abouts
+"""The questions that wait on a yes to an exact proposal."""
 
 
 def reading_of(call: SalonCall) -> ReplyClassification:
-    """This turn's readings as the one view the tool guards read. A reading that did not run reads as its default."""
-    if INTERPRETER == 'solver':
-        return consent_of(SOLVER.current(call), call.held('complaint') is not None)
-    return ReplyClassification.model_validate(
-        {
-            'confirmation': CONFIRMATION.label(call),
-            'appointment_choice': APPOINTMENT_CHOICE.picked(call) or 'unclear',
-            'conversation': CONVERSATION.label(call),
-            'retained_approval': RETAINED_APPROVAL.label(call),
-            'last_change': LAST_CHANGE.label(call),
-            'chosen_offer': CHOSEN_OFFER.picked(call),
-        }
+    """This turn's readings as the one view the tool guards read. See `SalonConversation.view`."""
+    return SALON.view(call)
+
+
+async def classify_reply(
+    call: SalonCall,
+    *,
+    usage: RunUsage | None = None,
+    usage_limits: UsageLimits | None = None,
+    closing: bool = False,
+    before_model: bool = False,
+) -> ReplyClassification:
+    """Run every reading that applies to this turn, then return the merged view. See `SalonConversation.read_reply`."""
+    return await SALON.read_reply(
+        call, usage=usage, usage_limits=usage_limits, closing=closing, before_model=before_model
     )
 
 
@@ -346,7 +413,7 @@ def consent_of(solution: SalonSolution, retained: bool) -> ReplyClassification:
     )
 
 
-class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]):
+class SalonSolver(ClassifierInterpreter[SalonCall, SolverInput, SalonSolution]):
     """One decision per reply, from the proposal, the step, and where the caller could go instead."""
 
     def _input(self, call: SalonCall) -> SolverInput:
@@ -379,46 +446,8 @@ class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]
         reading = consent_of(result, call.held('complaint') is not None)
         if call.held('complaint') is not None and reading.retained_approval != 'keep':
             call.release('complaint')
-        _approve_complaint(call, reading.confirmation)
+        COMPLAINT_KEPT.approve(call, reading.confirmation)
         return result
 
 
 SOLVER = SalonSolver('solver', SOLVER_CLASSIFIER, SalonSolution(decision=NoDecision()))
-
-
-async def classify_reply(
-    call: SalonCall,
-    *,
-    usage: RunUsage | None = None,
-    usage_limits: UsageLimits | None = None,
-    closing: bool = False,
-    before_model: bool = False,
-) -> ReplyClassification:
-    """Run every reading that applies to this turn, then return the merged view. Each runs at most once per turn.
-
-    Whether the call is over is read on its own only while a question other
-    than a read-back waits ("anything else?", an offer, move or add). A reply
-    to a read-back is read only as that; if it also says goodbye, the step's
-    model hangs up, and `closing` reads it then. Consumers
-    recheck the view against the live call through
-    `SalonCall.classification`; a late or rebound answer is never published.
-
-    `before_model` is `advance` reading the turn before any model runs. On
-    "anything else?" it leaves out the two choice readings: across the Coval
-    runs of 24 September they ran on every closing reply and never decided
-    one (0 of 6), while a goodbye paid for both. A move asked for there
-    ("can we move it to Saturday, same time?") still gets them, read by the
-    booking tool before it writes (`WriteBooking._authorise`), against the
-    times the model has just put on the table.
-    """
-    if INTERPRETER == 'solver':
-        await SOLVER.interpret(call, usage=usage, usage_limits=usage_limits)
-        return call.classification
-    question = call.pending_question()
-    ending = closing or (question is not None and question.about not in READ_BACKS)
-    deferred = before_model and question is not None and question.about == 'closing'
-    readings = [r for r in READINGS if not (deferred and r in CLOSING_DEFERS)]
-    await read(
-        call, (*readings, *((CONVERSATION,) if ending else ())), usage=usage, usage_limits=usage_limits
-    )
-    return call.classification

@@ -22,7 +22,6 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from core.graph import Opening
 from core.operations import Operation
 from core.policies import claim_or_refuse
-from salon.classification import classify_reply
 from salon.models.receipts import CustomerLookup
 from salon.models.shapes import SubmittedPhone
 from salon.models.state import Handoff, SalonCall
@@ -141,7 +140,7 @@ class LookupCustomer(Operation[SalonCall, PhoneArgs, CustomerLookup, Handoff]):
                 'Nothing was looked up: those digits have not been read back to this caller and agreed '
                 f'to. Call `ask_number` with {args.phone} and wait for their answer.'
             )
-        reply = await classify_reply(call, usage=usage, usage_limits=usage_limits)
+        reply = await call.read_reply(usage=usage, usage_limits=usage_limits)
         if reply.confirmation != 'accept':
             raise ModelRetry(
                 'Nothing was looked up: the caller did not agree to the number that was read back. '

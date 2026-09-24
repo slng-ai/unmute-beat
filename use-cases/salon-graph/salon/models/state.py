@@ -68,12 +68,13 @@ class Unresolved(BaseModel):
 
 
 class BookingRequest(BaseModel):
-    """What the caller asked to book before anyone knew who they were, in their own words.
+    """What the caller asked to book or move, in their own words, carried by the front desk's hand-over.
 
-    Carried by the front desk's handoff so that, once verification completes,
-    the booking step can offer times without a model request to re-read a
-    sentence the caller said a turn ago. The words stay the caller's: the diary
-    still resolves the day, and still refuses a day they never named.
+    With it, the booking step acts on arrival without a model request to
+    re-read a sentence the caller said a moment ago: it offers times, or
+    reads a move back when the time they named is free. On a caller not yet
+    verified it waits for verification first. The words stay the caller's:
+    the diary still resolves the day, and still refuses a day they never named.
     """
 
     model_config = core.STRICT
@@ -81,6 +82,11 @@ class BookingRequest(BaseModel):
     service: Service
     when: str = Field(min_length=1)
     at: str = ''
+    change: Literal['book', 'move'] = Field(
+        default='book',
+        description='move: they want the appointment they already hold moved to this day and time.',
+    )
+    """Whether this is a new appointment or a move of the one they hold. A move is still read back before it is made."""
 
 
 class Handoff(core.Handoff):

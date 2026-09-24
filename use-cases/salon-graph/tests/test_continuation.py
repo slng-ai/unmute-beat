@@ -15,8 +15,9 @@ Scripted models, no audio, no network. Asserts, no pytest, same as the rest.
 """
 
 import asyncio
+import json
 from contextlib import ExitStack, contextmanager, suppress
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import patch
 
 from pipecat.clocks.system_clock import SystemClock
@@ -369,6 +370,96 @@ async def a_number_in_pieces_is_read_back_without_the_model():
         await probe._turn("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.")
     assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 273 454. Have I got that right?'
     assert call.requests == [], 'reading a whole number back costs no request'
+
+
+async def a_move_after_a_booking_is_read_back_not_cancelled():
+    """The user's call of 24 September (trace cd3c08fa), turns 6 to 9: book, then move it to Saturday, same time.
+
+    "Move it to Saturday instead" was read as taking the booking back, and the
+    caller was offered a cancel. Then "Same time." cost six requests in a row
+    and a refused save. Now the take-back reading says `change`, the front
+    desk hands the move over in one request, booking offers Saturday's times
+    marked as a move with no model, the pick is read back as the move with no
+    model, and the yes moves it.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A haircut on Friday.')
+    await offer(call, 'Friday', 'haircut')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    friday = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
+    saturday: list[str] = []
+
+    def classify(name, data):
+        answer = data['answer']
+        if name == 'chosen_offer' and answer == "Nine o'clock works.":
+            return friday.slot_id
+        if name == 'chosen_offer' and answer == 'Same time.':
+            nine = next(o for o in data['options'] if '9:00' in o['said'])
+            saturday.append(nine['id'])
+            return nine['id']
+        if name == 'confirmation' and answer in ('Yes.', 'Yes, please.'):
+            return 'accept'
+        if name == 'last_change' and 'Saturday' in answer:
+            return 'change'
+        if name == 'conversation':
+            return 'continue'
+        return None
+
+    asked: dict[str, int] = {}
+
+    async def desk(messages, info):
+        asked['concierge'] = asked.get('concierge', 0) + 1
+        yield {
+            0: DeltaToolCall(
+                name='hand_over',
+                json_args=json.dumps(
+                    {
+                        'to': 'booking',
+                        'because': 'move the haircut to Saturday',
+                        'booking': {'service': 'haircut', 'when': 'Saturday', 'change': 'move'},
+                    }
+                ),
+            )
+        }
+
+    async def other(messages, info):
+        asked['step'] = asked.get('step', 0) + 1
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=desk if name == 'concierge' else other)
+            stack.enter_context(node.agent.override(model=model))
+        await agreed_to_a_pick(call, probe, "Nine o'clock works.")
+        (held,) = books.bookings_for(PHONE, CLOCK.date())
+        asked.clear()
+
+        probe.interrupt()
+        await probe._turn('Sorry, can you actually move the appointment to Saturday instead?')
+        offered = probe.fixed()[-1]
+        assert 'cancel' not in offered.lower(), 'a caller who asked to move was offered a cancel'
+        assert offered.startswith('For a haircut on Saturday'), offered
+        assert asked == {'concierge': 1}, asked
+        call.note_reached()
+        played_out(call)
+
+        probe.interrupt()
+        await probe._turn('Same time.')
+        assert probe.fixed()[-1].startswith('Shall I move your appointment to Saturday'), probe.fixed()[-1]
+        assert asked == {'concierge': 1}, f'the pick of a move cost a model request: {asked}'
+        call.note_reached()
+        played_out(call)
+
+        probe.interrupt()
+        await probe._turn('Yes.')
+    (moved,) = books.bookings_for(PHONE, CLOCK.date())
+    assert moved['booking_id'] == held['booking_id'], 'the booking held was moved, not a second one added'
+    assert date.fromisoformat(moved['date']).weekday() == 5 and moved['time'] == '09:00', (held, moved)
+    assert saturday and asked == {'concierge': 1}, asked
 
 
 async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
@@ -987,6 +1078,7 @@ async def main():
     await a_number_talked_over_arrives_whole()
     await a_number_in_pieces_is_read_back_without_the_model()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
+    await a_move_after_a_booking_is_read_back_not_cancelled()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await a_pick_said_with_a_goodbye_is_asked_before_they_go()

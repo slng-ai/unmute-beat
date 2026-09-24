@@ -269,7 +269,12 @@
        },
        {
         "const": "withdraw",
-        "description": "Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they no longer want it. A condition on it is not taking it back.",
+        "description": "Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they no longer want it. A condition on it is not taking it back. Asking for it on another day, at another time or as another service is `change`.",
+        "type": "string"
+       },
+       {
+        "const": "change",
+        "description": "Wants what is in `agreed` done differently: another day, time or service. It is not undone.",
         "type": "string"
        },
        {

@@ -96,6 +96,21 @@ async def a_pick_is_read_back_and_only_the_yes_books():
     assert call.ended == 'caller' and heard[-1] == 'Goodbye.' and agent.requests == 0
 
 
+async def a_change_is_not_taken_as_an_undo():
+    """ "Can we do Thursday instead?" after a booking changes it, it does not take it back: no cancel is offered."""
+    call, heard, agent = opened()
+    nodes = desk(FunctionModel(stream_function=agent.stream))
+    with scripted(chosen_time='0900'):
+        await take_turn(call, nodes, 'Nine, please.')
+    with scripted(confirmation='accept'):
+        await take_turn(call, nodes, 'Yes.')
+    assert call._book and call.held('undo') is not None
+    with scripted(undo_booking='change') as asked:
+        said, _ = await take_turn(call, nodes, 'Can we do Thursday instead?')
+    assert 'undo_booking' in asked and not any('cancel' in line for line in heard[-1:]), heard
+    assert agent.requests == 1 and said == 'It is 40 euros.' and call._book, (agent.requests, said)
+
+
 async def a_pick_with_a_condition_is_left_to_the_model():
     """The pick reading finds no plain pick in a condition, so nothing is read back and the agent answers."""
     call, heard, agent = opened()
@@ -294,6 +309,7 @@ def no_salon_code_is_loaded():
 
 async def main():
     await a_pick_is_read_back_and_only_the_yes_books()
+    await a_change_is_not_taken_as_an_undo()
     await a_pick_with_a_condition_is_left_to_the_model()
     await a_yes_without_its_question_writes_nothing()
     await a_value_said_in_full_is_read_back_by_code()

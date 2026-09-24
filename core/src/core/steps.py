@@ -35,6 +35,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 from pydantic_ai import Agent, ModelRetry, RunContext, Tool, ToolOutput
 from pydantic_ai.capabilities.hooks import Hooks
+from pydantic_ai.messages import ModelMessage, ModelRequest, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
@@ -531,6 +532,18 @@ class AgentStep(Step):
         return self.build(self)
 
 
+def _moved_this_run(messages: Sequence[ModelMessage], borrowed: Mapping[str, Any]) -> bool:
+    """Whether a borrowed tool has returned since the caller's words: the move it stands for is made."""
+    for message in reversed(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        if any(isinstance(p, ToolReturnPart) and p.tool_name in borrowed for p in message.parts):
+            return True
+        if any(isinstance(p, UserPromptPart) for p in message.parts):
+            return False
+    return False
+
+
 class AgentBuilder[C: CallContext]:
     """Builds a hand-built step's agent the same way for every use case.
 
@@ -647,8 +660,16 @@ class AgentBuilder[C: CallContext]:
             sent, so it cannot be chosen rather than being refused after it was;
             with none left, `hand_over` goes entirely. An output with an
             `offered_when` fact is offered only while it holds.
+
+            Once a borrowed tool has returned in this run, `hand_over` goes too:
+            the tool's success already moves the caller (`moved_by`), so a
+            hand-over after it is a second request for a move already made.
+            The user's call of 24 September read the diary from the front desk,
+            then handed over to booking as well.
             """
             legal = list(dict.fromkeys(e.to for e in exits if e.guard(ctx.deps.state)))
+            if _moved_this_run(ctx.messages, borrowed):
+                legal = []
             kept = []
             for tool_def in defs:
                 if (when := offered.get(tool_def.name)) is not None and not when(ctx.deps):

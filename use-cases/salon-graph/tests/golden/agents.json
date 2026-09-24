@@ -10,7 +10,7 @@
     "parameters": {
      "$defs": {
       "BookingRequest": {
-       "description": "What the caller asked to book before anyone knew who they were, in their own words.\n\nCarried by the front desk's handoff so that, once verification completes,\nthe booking step can offer times without a model request to re-read a\nsentence the caller said a turn ago. The words stay the caller's: the diary\nstill resolves the day, and still refuses a day they never named.",
+       "description": "What the caller asked to book or move, in their own words, carried by the front desk's hand-over.\n\nWith it, the booking step acts on arrival without a model request to\nre-read a sentence the caller said a moment ago: it offers times, or\nreads a move back when the time they named is free. On a caller not yet\nverified it waits for verification first. The words stay the caller's:\nthe diary still resolves the day, and still refuses a day they never named.",
        "properties": {
         "service": {
          "enum": [
@@ -26,6 +26,15 @@
         },
         "at": {
          "default": "",
+         "type": "string"
+        },
+        "change": {
+         "default": "book",
+         "description": "move: they want the appointment they already hold moved to this day and time.",
+         "enum": [
+          "book",
+          "move"
+         ],
          "type": "string"
         }
        },
@@ -61,7 +70,7 @@
         }
        ],
        "default": null,
-       "description": "Only with to=\"booking\", for a new appointment the caller\nhas asked for: the service, their own day words, and their\ntime words if they gave any. Leave it out if they named no\nservice or no day."
+       "description": "Only with to=\"booking\", for an appointment the caller has\nasked for, or asked to move: the service, their own day words,\nand their time words if they gave any (\"the same time\" is the\ntime of the appointment they hold). Leave it out if they named\nno service or no day."
       }
      },
      "required": [
@@ -239,39 +248,6 @@
      "required": [
       "to",
       "because"
-     ],
-     "type": "object"
-    },
-    "sequential": true
-   },
-   {
-    "name": "save_booking",
-    "description": "Write the diary, and finish this step. Nothing is booked, moved or cancelled until this runs.\n\nOnly after the caller has agreed to an `ask_booking` readback of this\nexact appointment. Picking one of the offered times is not agreement yet:\nread it back first. It speaks the confirmation itself, so say nothing\nafter calling it.",
-    "parameters": {
-     "additionalProperties": false,
-     "properties": {
-      "action": {
-       "description": "book a new time, move an existing booking, or cancel one.",
-       "enum": [
-        "book",
-        "move",
-        "cancel"
-       ],
-       "type": "string"
-      },
-      "slot_id": {
-       "description": "The slot exactly as the diary returned it. Empty when cancelling.",
-       "type": "string"
-      },
-      "booking_id": {
-       "description": "The booking exactly as the diary returned it. Empty when booking.",
-       "type": "string"
-      }
-     },
-     "required": [
-      "action",
-      "slot_id",
-      "booking_id"
      ],
      "type": "object"
     },

@@ -69,7 +69,7 @@ class ReplyClassification(BaseModel):
     appointment_choice: Literal['move', 'add', 'unclear'] = 'unclear'
     conversation: Literal['end', 'continue', 'unclear'] = 'unclear'
     retained_approval: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
-    last_change: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
+    last_change: Literal['keep', 'withdraw', 'change', 'unclear'] = 'unclear'
     """Whether the reply takes back the booking made in this call. Only read while the caller holds it."""
     chosen_offer: str = ''
     """Checked against the table by the application: a slot that was not on it authorises nothing."""

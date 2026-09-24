@@ -121,6 +121,8 @@ FOCUSED_LABELS: dict[str, tuple[str, tuple[str, ...]]] = {
     'condition-after-booking': ('unclear', ('keep',)),
     'withdraw-later': ('withdraw', ()),
     'goodbye-keeps-booking': ('keep', ()),
+    'change-move': ('change', ()),
+    'change-service': ('change', ()),
     'cancel-yes': ('accept', ()),
     'closing': ('end', ()),
     'closing-question': ('continue', ()),
@@ -235,6 +237,28 @@ OTHER: tuple[tuple[str, str, dict[str, Any], str], ...] = (
             'agreed': 'Your cleaning on Tuesday at 4 PM is booked.',
         },
         'keep',
+    ),
+    (
+        'take-back',
+        CLINIC
+        + ' Earlier in this call the receptionist booked an appointment, which the patient can still take back.',
+        {
+            'question': 'Your cleaning on Tuesday at 4 PM is booked. Anything else?',
+            'answer': 'Can we do the day after instead?',
+            'agreed': 'Your cleaning on Tuesday at 4 PM is booked.',
+        },
+        'change',
+    ),
+    (
+        'take-back',
+        RESTAURANT
+        + ' Earlier in this call the host booked a table for the guest, which they can still take back.',
+        {
+            'question': 'Your table for four tonight at 8 is booked. Anything else?',
+            'answer': 'Oh, could we make it 9 instead?',
+            'agreed': 'Your table for four tonight at 8 is booked.',
+        },
+        'change',
     ),
     (
         'take-back',

@@ -243,7 +243,12 @@ class HeardValue[C: CallContext](Act[C]):
 
 @dataclass(kw_only=True)
 class TakeBack[C: CallContext](Act[C]):
-    """Something done in this call that the caller can still take back, on whatever turn they do."""
+    """Something done in this call that the caller can still take back, on whatever turn they do.
+
+    Only `withdraw` acts. A `change` (the same thing, another day, time or
+    service) is left to the step's model, which can move it; offering the
+    undo there was offering a cancel to a caller who asked to move.
+    """
 
     name: str
     kind: str

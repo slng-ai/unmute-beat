@@ -12,7 +12,7 @@ act can happen this turn:
 | `CONFIRMATION` | `ReadBack` | a phone, booking or complaint read-back is waiting | accept, reject, revise, conditional, unclear |
 | `APPOINTMENT_CHOICE` | `FixedChoice` | the caller was asked to move or add, or holds a booking while times are on the table; on "anything else?" only once the booking tool asks | move, add, or neither |
 | `CHOSEN_OFFER` | `Offer` | times are on the table, and no read-back or choice is waiting; on "anything else?" only once the booking tool asks | one slot id, or none |
-| `LAST_CHANGE` | `TakeBack` | the caller still holds a booking made in this call | keep, withdraw, unclear |
+| `LAST_CHANGE` | `TakeBack` | the caller still holds a booking made in this call | keep, withdraw, change, unclear |
 | `RETAINED_APPROVAL` | `HeldApproval` | a complaint approved on an earlier turn is kept through the number check | keep, withdraw, unclear |
 | `CONVERSATION` | `Closing` | a question other than a read-back is waiting, or the model asks to hang up | end, continue, unclear |
 | `DETOUR` | `Detour` | the number read-back is waiting during the check | kept, changed, unclear |
@@ -137,11 +137,17 @@ MOVE_OR_ADD = (
 def _picked(call: SalonCall, slot: str) -> LocalAction | None:
     """A plain pick of a time on the table is read back, with no model request; only the yes to it books.
 
-    A caller who already holds a booking is asked first whether this moves it
-    or adds another: the write's own guard puts that question and refuses.
+    Times offered for a move (the front desk carried "move it to Saturday")
+    are read back as that move. Otherwise a caller who already holds a
+    booking is asked first whether this moves it or adds another: the write's
+    own guard puts that question and refuses.
     """
     if not call.state.customer_verified:
         return None
+    question = call.pending('offer')
+    if question is not None and question.action == 'move' and question.booking_id:
+        moving = question.booking_id
+        return LocalAction('ask_booking', lambda: _read_back_move(call, slot, moving))
     if call.holding():
         return LocalAction('save_booking', lambda: write_booking(call, 'book', slot, ''))
     return LocalAction('ask_booking', lambda: _read_back_pick(call, slot))
@@ -149,6 +155,10 @@ def _picked(call: SalonCall, slot: str) -> LocalAction | None:
 
 async def _read_back_pick(call: SalonCall, slot: str) -> Ask:
     return booking_question(call, 'book', slot, '')
+
+
+async def _read_back_move(call: SalonCall, slot: str, booking_id: str) -> Ask:
+    return booking_question(call, 'move', slot, booking_id)
 
 
 def _still_booked(call: SalonCall, held: Held) -> bool:

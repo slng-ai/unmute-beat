@@ -381,7 +381,9 @@ async def openings_decline():
     assert agents.AGENTS['booking'].opening(call) is None, 'no reading found the request unchanged'
     call._request_kept = True
     call._entered = 'handoff'
-    assert agents.AGENTS['booking'].opening(call) is None, 'only a return from verification'
+    assert agents.AGENTS['booking'].opening(call) is not None, (
+        'a hand-over that carried a request opens on it'
+    )
     call._entered = 'completed'
     call.commit(customer_phone='+34934567890')
     assert agents.AGENTS['booking'].opening(call) is None, 'the identity changed, so nobody is verified'

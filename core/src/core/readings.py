@@ -96,13 +96,21 @@ TAKE_BACK = ClassSet(
     classes={
         'keep': 'Keeps what is in `agreed`, or does not take it back.',
         'withdraw': 'Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they '
-        'no longer want it. A condition on it is not taking it back.',
+        'no longer want it. A condition on it is not taking it back. Asking for it on another day, at another '
+        'time or as another service is `change`.',
+        'change': 'Wants what is in `agreed` done differently: another day, time or service. It is not undone.',
         'unclear': 'Whether they take it back is unclear, or they put a condition on it ("only if...") that '
         'has not been answered yet.',
     },
     default='unclear',
 )
-"""For a change already made that the person can still undo. Asking to change it is not taking it back."""
+"""For a change already made that the person can still undo. Asking to change it is not taking it back.
+
+Version 2 adds `change`. With only keep, withdraw and unclear, "Sorry, can
+you actually move the appointment to Saturday instead?" was read as
+`withdraw` (the user's call of 24 September), and the caller who asked to
+move was offered a cancel.
+"""
 
 STILL_AGREED = ClassSet(
     about='Whether the person still agrees to what is in `agreed`, exactly as it is. It has not been done yet.',

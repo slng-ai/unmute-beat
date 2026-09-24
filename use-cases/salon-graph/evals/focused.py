@@ -157,6 +157,28 @@ CASES = (
         'withdraw',
     ),
     Case(
+        'change-move',
+        LAST_CHANGE,
+        held(
+            'Sorry, can you actually move the appointment to Saturday instead?',
+            "You're all set for tomorrow at 9:00 AM. Anything else I can help with?",
+            agreed="You're all set for tomorrow at 9:00 AM.",
+        ),
+        lambda r: r == 'change',
+        'change',
+    ),
+    Case(
+        'change-service',
+        LAST_CHANGE,
+        held(
+            'Actually, could it be a blowout instead of the haircut?',
+            'Done, tomorrow at 9:00 AM. Anything else?',
+            agreed='Done, tomorrow at 9:00 AM.',
+        ),
+        lambda r: r == 'change',
+        'change',
+    ),
+    Case(
         'goodbye-keeps-booking',
         LAST_CHANGE,
         held(

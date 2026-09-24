@@ -485,6 +485,9 @@ async def correction_refuses_stale_slot():
 
     The refusal came back inside the same run, so the caller waited for one turn rather than two. No
     prompt sentence and no model request was involved in noticing the day had changed.
+
+    The first day's slot was read back last turn: `save_booking` is offered only while a read-back
+    waits, and a caller who changes the day in answer to one is exactly this case.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -495,6 +498,7 @@ async def correction_refuses_stale_slot():
     today = books.now().date()
     said_first, said_second = diary.spoken_day(first, today), diary.spoken_day(second, today)
     stale = books.find_slots(PHONE, first.isoformat(), 'haircut', books.now())['slots'][0]
+    call.ask(Asked(about='booking', value=stale['slot_id'], action='book'))
 
     with scripted(
         booking=then(
@@ -716,34 +720,54 @@ async def a_tool_result_is_never_a_script():
             )
 
 
+async def a_diary_read_from_the_desk_is_the_move():
+    """The front desk reads the diary, which moves the caller: it is not offered `hand_over` after it.
+
+    The user's call of 24 September read the diary from the desk, then handed
+    over to booking as well, one request more for a move already made.
+    """
+    books.reset()
+    call = open_call(PHONE, diary=books)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    probe = Probe(call)
+    offered: list[list[str]] = []
+    day = diary.spoken_day(open_days(1)[0], books.now().date())
+
+    async def after_read(messages, info: AgentInfo):
+        offered.append([t.name for t in info.output_tools])
+        yield 'I have nine or ten.'
+
+    with scripted(concierge=then(tool_call('read_diary', when=day, service='haircut'), after_read)):
+        await probe._turn(f'What do you have for a haircut {day}?')
+    assert offered and 'hand_over' not in offered[-1], offered
+    assert call.state.agent == 'booking', 'the diary read moved the caller'
+
+
 async def refusal_retries():
+    """With no read-back waiting, `save_booking` is not offered at all: a save nobody agreed to cannot be tried.
+
+    It used to be offered and refused, which cost a request on the turn: the
+    user's call of 24 September tried a move nothing had read back.
+    """
     books.reset()
     call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     call.commit(agent='booking')
     probe = Probe(call)
-    seen = []
+    offered: list[list[str]] = []
 
-    async def unauthorised_then_ask(messages, info: AgentInfo):
-        if not seen:
-            seen.append('tried')
-            yield {
-                0: DeltaToolCall(
-                    name=_output_tool(info, 'save_booking'),
-                    json_args=json.dumps({'action': 'book', 'slot_id': 'x', 'booking_id': ''}),
-                )
-            }
-        else:
-            yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
+    async def ask(messages, info: AgentInfo):
+        offered.append([t.name for t in info.output_tools])
+        yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
 
-    with scripted(booking=unauthorised_then_ask):
+    with scripted(booking=ask):
         await probe._turn('monday morning')
 
-    assert call.state.appointment is None, 'a save nobody agreed to must write nothing'
-    assert call.state.agent == 'booking', 'the step stays open so the model can fix it'
+    assert offered and all('save_booking' not in names for names in offered), offered
+    assert call.state.appointment is None and call.state.agent == 'booking'
     assert probe.spoken() == ''
     assert probe.fixed() == ['Which time would you like?']
-    assert probe.runs() == 1, 'a retry is the same run, not a second turn'
+    assert probe.runs() == 1
 
 
 async def hangs_up():
@@ -1438,6 +1462,7 @@ async def main():
     await the_note_is_said_once()
     await a_tool_result_is_never_a_script()
     await refusal_retries()
+    await a_diary_read_from_the_desk_is_the_move()
     await hangs_up()
     print('ok')
 

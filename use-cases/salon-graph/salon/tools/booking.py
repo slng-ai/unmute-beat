@@ -150,7 +150,9 @@ _OFFERED = 3
 """How many times one offer speaks. More is a list nobody on a phone remembers."""
 
 
-async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> str:
+async def offer(
+    call: SalonCall, when: str, service: Service, at: str = '', *, move: str = '', found: Slots | None = None
+) -> str:
     """Read the diary and speak the first few free times. Shared by `offer_times` and the booking step's opening.
 
     What was spoken is recorded, ids and all, so the turn the caller picks one
@@ -158,8 +160,13 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
     the id of a time they have already been told. The offer is also the
     question the caller's next reply answers: the consent reading names which
     of these ids they picked, and only an id offered here can count.
+
+    `move` is the booking the caller asked to move, so a pick of one of these
+    times is read back as that move (`salon.classification._picked`), not
+    asked about again. `found` is a diary read already made for this request.
     """
-    found = await find_times(call, when, service, at)
+    if found is None:
+        found = await find_times(call, when, service, at)
     spoken = found.slots[:_OFFERED]
     if spoken:
         times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in spoken)
@@ -179,6 +186,8 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
                 spoken=text,
                 value=','.join(slot.slot_id for slot in spoken),
                 owner=call.state.customer_phone,
+                action='move' if move else '',
+                booking_id=move,
             )
         )
     else:
@@ -629,12 +638,42 @@ def _resuming_a_request(call: SalonCall) -> bool:
     )
 
 
-async def offer_wanted(call: SalonCall) -> str:
-    """Offer times for the request the caller made before they were verified."""
+def _handed_a_request(call: SalonCall) -> bool:
+    """Handed over by the front desk with a request typed from the caller's words, the caller already verified."""
+    return present(call.state.customer_verified) and call.state.wanted is not None
+
+
+def _only_booking(call: SalonCall) -> str:
+    """The one booking this caller holds, by id, or '' when they hold none or more than one."""
+    held = call.diary.bookings_for(call.state.customer_phone, call.diary.now().date())
+    return held[0]['booking_id'] if len(held) == 1 else ''
+
+
+async def offer_wanted(call: SalonCall) -> str | Ask:
+    """Act on the request the front desk carried: offer times, or read a move back when its time is free.
+
+    A move of the one booking the caller holds, to a time the diary has free
+    exactly as they named it, is read back at once: "Shall I move your
+    appointment to Saturday at 9:00 AM?". Otherwise the free times are
+    offered, marked as a move, so the time they pick is read back as one.
+    The user's call of 24 September spent six requests in a row on "same
+    time" after "move it to Saturday"; this is none.
+    """
     wanted = call.state.wanted
     assert wanted is not None
-    return await offer(call, wanted.when, wanted.service, wanted.at)
+    move = _only_booking(call) if wanted.change == 'move' else ''
+    if not move:
+        return await offer(call, wanted.when, wanted.service, wanted.at)
+    found = await find_times(call, wanted.when, wanted.service, wanted.at)
+    named = resolve_time(wanted.at)
+    exact = next((slot for slot in found.slots if slot.time.strftime('%H:%M') == named), None)
+    if exact is not None:
+        return booking_question(call, 'move', exact.slot_id, move)
+    return await offer(call, wanted.when, wanted.service, wanted.at, move=move, found=found)
 
 
-OPENINGS = (Opening('offer_times', 'completed', _resuming_a_request, offer_wanted),)
-"""The booking step's arrival back from verification: offer times for what the caller already asked for."""
+OPENINGS = (
+    Opening('offer_times', 'completed', _resuming_a_request, offer_wanted),
+    Opening('offer_times', 'handoff', _handed_a_request, offer_wanted),
+)
+"""The booking step's arrival with a request already known: back from verification, or handed over by the front desk."""

@@ -331,3 +331,38 @@ have been running.
    the POC. 36 calls.
 3. **Have a person label the consent on about 16 calls.** Until then, trust the harness's write audit, which is exact,
    and read the baseline's writes by hand.
+
+## 9. Update, 24 September evening: two more runs, and where the wait goes
+
+Both runs are on build `bfcac34`, before the fixes on branch `fix/harness-faults`.
+
+| Run | Calls | Tokens per call | Per turn | Per task | Write audit | Wait p50 | Wait p90 |
+|---|---|---|---|---|---|---|---|
+| [`RmoWxPcQ`](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/RmoWxPcQ2JHuRJ8DeFbSTW) (core 5) | 5 | 9,252 | 1,250 | 11,566 | 4 of 4 | 1.70 s | 4.47 s |
+| [`4bLgLR4t`](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/4bLgLR4tQQ3HQmPxXUbp9x) (release 18) | 18 | 8,412 | 1,059 | 7,969 (19 tasks) | 19 of 19 | 1.71 s | 4.44 s |
+
+- `RmoWxPcQ`: consent 5 of 5. K1 (0.8) and K3 (0.75) were judge errors. No harness fault.
+- `4bLgLR4t`, before and after the judge changes: behaviours fully met 9 → 11 of 18, consent YES 14 → 16 of 18,
+  not asked again YES 11 → 12 of 18. Real faults: 05 (a cut-off question answered), 09 (a yes and a goodbye got
+  "Anything else?"), 01 and 03 (prompts), 16 (minor). STT: 06 and 13. Judge errors: 03 and 15 (read "manager will call
+  you back" as a transfer), 08 and 09 (consent), 17, 18.
+
+### Where the wait went, on `4bLgLR4t`
+
+The ledger now splits each wait in two: the answer time, from the work that answered to the first speech, and the
+time before any work started, which is turn taking.
+
+| | Harness, 18 calls | Graph build, call `cd48a382` |
+|---|---|---|
+| Wait p50 / p90 | 1.71 s / 4.44 s | 1.81 s / 3.60 s |
+| Answer time p50 / p90 | 0.99 s / 1.97 s | 1.13 s / 1.70 s |
+| Turns that waited over 2 s before any work | 34 of 120 | 0 of 8 |
+
+- **Turn taking was the tail.** The bot log shows "End of Turn complete due to stop_secs" 29 times: smart-turn waited
+  out its 3 s default ceiling. The graph build sets it to 1.6 s. The harness now uses the same settings.
+- **A reading and the step's model ran one after the other.** A reading takes p50 0.91 s, p90 1.14 s, one at 2.71 s
+  (133 requests). They now run side by side, and a slow reading is sent twice.
+- **Step requests** had their first part at p50 0.74 s, p99 1.20 s (65 requests). One request in the user's own call
+  sent nothing for 8.49 s. A request with nothing in 1.5 s is now tried again.
+
+None of these fixes has been measured live yet. The next Coval run, on both builds, is what settles it.

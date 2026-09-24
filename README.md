@@ -106,8 +106,8 @@ interruption handling. The application supplies the business rules those
 mechanisms apply.
 
 Pipecat supplies the voice layer: audio transport, detecting speaking turns
-(Silero VAD and smart-turn, at Pipecat's recommended defaults), speech
-recognition and speech synthesis (through SLNG). Keeping that work separate
+(Silero VAD and smart-turn, set as the graph build of the same salon sets
+them), speech recognition and speech synthesis (through SLNG). Keeping that work separate
 lets the conversation engine be tested without a microphone or telephone.
 
 ## 3. What "typed conversation" means
@@ -438,6 +438,11 @@ interpreted task switch still passes routing and prerequisites. If the
 interpretation settles nothing, the engine tries an applicable opening, and
 otherwise runs the conversational agent.
 
+A reading that needs a model request takes 0.7 s or more. The agent's first
+request does not wait for it: it goes out at the same time, and the run is
+held at its first event until the readings are done (section 7). A reading
+slower than 1.2 s is sent a second time, and the first answer wins.
+
 ### Why not let the model set a flag?
 
 A flag the model sets, such as `confirmed=true` on a tool call, costs no extra
@@ -490,6 +495,42 @@ If conversation is needed, `AgentBuilder` prepares the offered tools and
 handoff destinations from current state before each model request. Shared
 policy allows at most one business-changing or routing action per model reply.
 The executors still check authorization when called.
+
+### Keeping the caller's wait short
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant E as Turn engine
+    participant R as Readings
+    participant A as Step's agent
+    C->>E: words
+    par side by side
+        E->>R: readings that apply
+    and
+        E->>A: first request, held at its first event
+    end
+    Note over E: 1.2 s with nothing said: one holding line
+    R-->>E: decided nothing
+    E->>A: go on
+    A-->>C: answer
+```
+
+1. The readings and the agent's first request go out together. The run stops
+   at its first event: the SDK's event stream has no buffer, so no tool runs
+   and nothing is said until the readings are done.
+2. If a reading decides an action, the run is dropped and nothing of it is
+   kept. If the readings changed the call, a fresh run starts. Otherwise the
+   run goes on, its first request already answered.
+3. A turn silent for 1.2 s says one holding line from the call's locale
+   ("Let me have a look."). Never after the answer started, and never twice.
+4. A request that sends nothing in 1.5 s is cancelled and its run tried once
+   more (`TurnBudget.first_part`). A second one gives the fixed "going round
+   in circles" line.
+5. Fewer requests in a row: after a borrowed tool (reading the diary from the
+   front desk) the model is not offered a hand-over for the move it already
+   made, and a hand-over that carries the request lets the next step act on
+   arrival with no model request.
 
 ### From words to an authorized action
 

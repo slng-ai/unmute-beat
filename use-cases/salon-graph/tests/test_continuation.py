@@ -341,6 +341,36 @@ async def a_number_talked_over_arrives_whole():
     assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 111 111. Have I got that right?'
 
 
+async def a_number_with_a_digit_too_many_is_refused_with_its_reason():
+    """Coval run 4bLgLR4t, cases 06 and 13: speech to text heard one digit too many after "+34".
+
+    The agent said "Please say the full number again" with no reason, and the
+    caller said the same number again. Now the count is said, by code.
+    """
+    from salon.tools.identity import number_problem
+
+    assert number_problem('+34 672. 1. 273. 45. 4.') == (
+        'I heard 10 digits after +34, and a Spanish number has nine. Could you say the whole number again, please?'
+    )
+    assert number_problem("It's +34 6. 71. 2.") == '', 'too few is a caller still going'
+    assert number_problem("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.") == '', 'a whole number has no problem'
+
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('', diary=books)
+    call.commit(agent='verify', pending='booking')
+    probe = Probe(call)
+
+    async def verify(messages, info):
+        raise AssertionError('the model was asked to explain a count the application had')
+        yield ''
+
+    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
+        await probe._turn('+34 672. 1. 273. 45. 4.')
+    assert probe.fixed()[-1].startswith('I heard 10 digits after +34'), probe.fixed()
+    assert call.requests == [], 'saying why costs no request'
+
+
 async def a_number_in_pieces_is_read_back_without_the_model():
     """Coval run L5RWCS7b, K3: nine digits said in pauses, and the model asked for "the rest" three times.
 
@@ -1114,6 +1144,7 @@ async def main():
     await the_next_reply_is_told_what_was_not_heard()
     await a_number_talked_over_arrives_whole()
     await a_number_in_pieces_is_read_back_without_the_model()
+    await a_number_with_a_digit_too_many_is_refused_with_its_reason()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_move_after_a_booking_is_read_back_not_cancelled()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)

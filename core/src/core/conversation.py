@@ -73,6 +73,10 @@ def _no_facts(call: Any) -> Mapping[str, Any]:
     return {}
 
 
+def _no_reason(words: str) -> str:
+    return ''
+
+
 @dataclass(kw_only=True)
 class Act[C: CallContext]:
     """One conversational act. `Conversation` attaches it once, which is when its reading is built."""
@@ -231,10 +235,25 @@ class HeardValue[C: CallContext](Act[C]):
     """The value in the caller's words, or '' when there is none. Code, never a model."""
     read_back: Callable[[C, str], Awaitable[object]]
     when: Callable[[C], bool] = _always
+    why_not: Callable[[str], str] = _no_reason
+    """Why the caller's words hold something like the value but not a value, as a line to say, or ''.
+
+    Code, like `parse`. With a line, it is said with no model request: "Please
+    say the full number again" with no reason, after a transcript with one
+    digit too many, left the caller repeating the same number (Coval run
+    4bLgLR4t, cases 06 and 13).
+    """
+    say_why: Callable[[C, str], Awaitable[object]] | None = None
+    """How that line is said. Without it, a value that does not parse is left to the step's model."""
 
     def rule(self, call: C) -> LocalAction | None:
-        if not self.when(call) or not (value := self.parse(call.heard)):
+        if not self.when(call):
             return None
+        if not (value := self.parse(call.heard)):
+            say_why, why = self.say_why, self.why_not(call.heard)
+            if say_why is None or not why:
+                return None
+            return LocalAction(self.action, lambda: say_why(call, why))
         asked = call.last_proposal()
         if asked is not None and asked[0].about == self.about and asked[0].value == value:
             return None

@@ -317,6 +317,22 @@ async def a_slow_turn_says_one_holding_line():
     assert not any(s.origin == 'tool_filler' for s in call.spoken), call.spoken
 
 
+async def a_value_that_does_not_parse_is_refused_with_its_reason():
+    """Five digits after the P: the clinic says why, by code, and the agent is not asked."""
+    call = ClinicCall()
+    heard: list[str] = []
+
+    async def say(text: str) -> None:
+        heard.append(text)
+
+    call._say = say
+    agent = Desk()
+    with scripted():
+        await take_turn(call, desk(FunctionModel(stream_function=agent.stream)), 'It is P-12345.')
+    assert heard[-1] == 'A patient number has four digits after the P. Could you say it again?', heard
+    assert agent.requests == 0 and not call.state.patient
+
+
 async def the_engine_speaks_the_calls_own_language():
     """A use case in another language gives its own locale, and the turn engine's own lines follow it."""
 
@@ -358,6 +374,7 @@ async def main():
     await a_pick_with_a_condition_is_left_to_the_model()
     await a_yes_without_its_question_writes_nothing()
     await a_value_said_in_full_is_read_back_by_code()
+    await a_value_that_does_not_parse_is_refused_with_its_reason()
     await a_reading_and_the_step_run_side_by_side()
     await a_reading_that_decides_drops_the_step_run()
     await a_reading_that_changes_the_call_gets_a_fresh_run()

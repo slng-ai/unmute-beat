@@ -181,6 +181,18 @@ def _patient_number(words: str) -> str:
     return found[-1] if found else ''
 
 
+def _patient_problem(words: str) -> str:
+    """A patient number with too many digits, said back as the reason it cannot be used."""
+    if _PATIENT.search(words) or not re.search(r'\bP-\d{5,}\b', words):
+        return ''
+    return 'A patient number has four digits after the P. Could you say it again?'
+
+
+async def _say_problem(call: ClinicCall, why: str) -> str:
+    await call.speak_now(why, origin='guidance')
+    return why
+
+
 def conversation(model: Model | str) -> Conversation[ClinicCall]:
     """The clinic, as information given to core's acts."""
     return Conversation[ClinicCall](
@@ -215,6 +227,8 @@ def conversation(model: Model | str) -> Conversation[ClinicCall]:
                 parse=_patient_number,
                 read_back=_read_back_patient,
                 when=lambda call: not call.state.patient,
+                why_not=_patient_problem,
+                say_why=_say_problem,
             ),
         ),
         take_backs=(

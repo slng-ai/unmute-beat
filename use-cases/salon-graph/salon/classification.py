@@ -66,7 +66,7 @@ from salon.tools.asking import Ask
 from salon.tools.booking import booking_question, cancel_question, write_booking
 from salon.tools.complaints import write_complaint
 from salon.tools.desk import end_conversation
-from salon.tools.identity import lookup_customer, number_heard, readback_number
+from salon.tools.identity import lookup_customer, number_heard, number_problem, readback_number, say_guidance
 
 MODEL = infer_model('google-cloud:gemini-3.5-flash-lite')
 """One model for now. `build` takes it per agent, so giving one step a different model is a one-word edit."""
@@ -338,6 +338,8 @@ SALON = SalonConversation(
             parse=number_heard,
             read_back=readback_number,
             when=_unidentified,
+            why_not=number_problem,
+            say_why=say_guidance,
         ),
     ),
     take_backs=(

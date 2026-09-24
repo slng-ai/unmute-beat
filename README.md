@@ -206,7 +206,7 @@ salon/
   baseline.py           the same salon as one prompt on Pipecat's own LLM service (VOICE_HARNESS=pipecat)
   agents.py             the AGENTS table, compiled from flow.yaml
 utils/observability.py  Langfuse over OTel
-tests/                  twenty-two assert scripts
+tests/                  twenty-three assert scripts
 examples/               access (ten steps) and help (one step), on core alone; VOICE_AGENCY=access|help
 evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
 evals/report.py         one result and report shape for every interpreter

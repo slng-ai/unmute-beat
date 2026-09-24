@@ -50,6 +50,7 @@ MODULES = (
     'tests.test_coval_sim',
     'tests.test_baseline',
     'tests.test_ledger',
+    'tests.test_reuse',
 )
 """In the order they are quickest to fail: the graph and the agency first, the engine and the adapter last."""
 

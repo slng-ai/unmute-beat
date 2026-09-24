@@ -47,7 +47,7 @@ its supporting link. Read it before changing how a turn works.
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
 | `evals/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
 | `utils/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI |
-| `tests/` | twenty-two assert-script modules, no pytest, no network |
+| `tests/` | twenty-three assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -72,7 +72,7 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all twenty-two modules, offline, no .env
+uv run python -m tests                                   # all twenty-three modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 uv run python -m utils.coval_sim run VkpkmRMV            # Coval release check, 18 real calls, billable

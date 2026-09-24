@@ -171,9 +171,10 @@ class ReplyClassification(BaseModel):
     """Whether the reply takes back the change the salon confirmed on the turn before. Read only against `just_changed`."""
     chosen_offer: str = Field(
         default='',
-        description='The slot_id of the one time in `offered` the caller plainly picks or asks for (a time they '
-        'name, or "the same time" as one in `holding`), copied exactly from `offered`. Empty if they pick none, '
-        'attach a condition, ask a question first, or it is unclear which one.',
+        description='The slot_id of the one time in `offered` that the answer picks or asks for, copied exactly '
+        'from `offered`: a time they name, or "the same time" as one in `holding`. It still counts when the '
+        'answer also says thanks, goodbye or that they need nothing else, whatever `question` was. Empty if '
+        'the answer names no time in `offered`, puts a condition on it, or could mean more than one.',
     )
     """Checked against the pending offer by the application: a slot that was not on the table authorises nothing."""
 

@@ -348,6 +348,25 @@ class SalonCall(core.CallContext):
             for row in self._diary.offered_to(self.id, phone)
         )
 
+    @property
+    def awaits_reading(self) -> bool:
+        """Whether the reply could decide something the application acts on, so it must be read first.
+
+        A question waiting on an answer, a complaint approval kept through
+        verification, a booking the caller could take back, or times on the
+        table. The last is not the same as a pending offer: "Nine, but only if
+        it's under thirty" answers the offer, the price comes back, and "fine,
+        nine then" picks from the same table with no question pending. Read
+        only on a question, that pick reached the step's model, which hung up
+        on the goodbye in the same breath.
+        """
+        return (
+            self.pending_question() is not None
+            or self._complaint is not None
+            or bool(self.undoable)
+            or bool(self._table())
+        )
+
     def picked_offer(self) -> str:
         """The slot on the table this reply picks or asks for, or ''.
 

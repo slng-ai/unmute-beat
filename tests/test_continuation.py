@@ -407,6 +407,59 @@ async def only_a_slot_on_the_table_can_be_picked():
             assert [r.kind for r in call.requests] == ['classifier'], 'a plain pick needs no model'
 
 
+async def a_pick_with_no_question_pending_still_books():
+    """Coval run DkLvLzC5, K5: the pick came two turns after the offer, with no question pending.
+
+    "Nine, but only if it costs less than thirty" answered the offer; the
+    price came back from the front desk; "Fine, nine o'clock then, that's
+    all, goodbye" picked from the same table. The reply was read only when a
+    question was pending, so the front desk's model heard it and hung up. The
+    table is enough to read it, and the pick books before the goodbye.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A hair colour on Friday.')
+    await offer(call, 'Friday', 'hair-color')
+    call.note_reached()
+    call.note_drained()
+    call.turn_ended(interrupted=False)
+    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
+    readings = {
+        "Nine o'clock, but only if it costs less than thirty euros.": {'confirmation': 'unclear'},
+        "Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye.": {
+            'chosen_offer': nine,
+            'conversation': 'end',
+        },
+    }
+
+    async def classify(messages, info):
+        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
+        return ModelResponse(
+            parts=[TextPart(ReplyClassification.model_validate(readings[data.answer]).model_dump_json())]
+        )
+
+    runs: list[str] = []
+
+    async def desk(messages, info):
+        runs.append('concierge')
+        yield 'Hair colour is 75 euros.'
+
+    call.commit(agent='concierge')
+    with (
+        patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)),
+        agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=desk)),
+    ):
+        probe.interrupt()
+        await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
+        assert call.state.writes == 0 and runs == ['concierge'], 'a condition books nothing'
+        call.note_reached()
+        call.note_drained()
+        probe.interrupt()
+        await probe._turn("Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye.")
+    assert call.state.writes == 1, 'the pick from the table was not booked'
+    assert runs == ['concierge'], 'the front desk model answered a reply the application had already read'
+
+
 async def a_missing_barge_never_merges_turns():
     """Without the caller cutting in, a silent turn is still over: a missing signal errs towards a new turn."""
     call = booking_call()
@@ -494,6 +547,7 @@ async def main():
     await a_number_talked_over_arrives_whole()
     await a_booking_taken_back_is_offered_for_cancelling()
     await only_a_slot_on_the_table_can_be_picked()
+    await a_pick_with_no_question_pending_still_books()
     a_detour_keeps_the_rest_of_its_first_turn()
     heard_is_matched_by_words()
     await playback_reaches_the_call()

@@ -82,6 +82,16 @@ CASES = (
         'nine',
     ),
     Case(
+        'pick-then-goodbye',
+        offer(
+            "Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye.",
+            question="Hair colour is 75 euros, so it's a bit more than 30 euros. Would you like to go ahead with that?",
+            pending=None,
+        ),
+        lambda r: r.chosen_offer == NINE,
+        'nine',
+    ),
+    Case(
         'withdraw',
         ConsentInput(
             question="You're all set for tomorrow at 9:00 AM. Anything else I can help with?",

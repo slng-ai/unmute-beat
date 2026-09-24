@@ -75,8 +75,7 @@ async def advance(
     """
     if classification.INTERPRETER == 'solver':
         return await solve(call, usage, usage_limits)
-    question = call.pending_question()
-    if question is not None or call._complaint is not None:
+    if call.awaits_reading:
         readings = [classify_reply(call, usage=usage, usage_limits=usage_limits)]
         if call.detour_request:
             readings.append(DETOUR.interpret(call, usage=usage, usage_limits=usage_limits))

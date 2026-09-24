@@ -186,7 +186,9 @@ async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
     For a caller who will not confirm a number, or who asks about something
     else entirely. Whatever they were waiting to do that needed identifying is
     given up with it, so use it when they have moved on and not while they are
-    still correcting the digits.
+    still correcting the digits. A change to what they asked for, such as
+    another day, time or service, is not moving on: carry on with the number,
+    and what they said is passed on.
 
     Args:
         because: One short sentence: why this stopped. Never spoken.

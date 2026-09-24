@@ -496,10 +496,8 @@ class Turn:
                 prompt = (
                     call.heard if output.status == 'unserved' and call.heard != checkpoint.heard else None
                 )
-                if (
-                    output.status == 'completed'
-                    and node.shares_detour
-                    and (note := call.keep_detour_words(checkpoint, call.state.agent, sent=prompt or ''))
+                if node.shares_detour and (
+                    note := call.keep_detour_words(checkpoint, call.state.agent, sent=prompt or '')
                 ):
                     call._return_status += f' {note}'
         else:

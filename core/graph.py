@@ -137,10 +137,12 @@ class Node[S: VoiceState]:
     Off by default: a prerequisite's conversation is its own, and the step
     that waited gets back its saved history and a status, nothing the caller
     told the prerequisite. A step turns it on when nothing it hears is secret
-    from the step it serves, and it is honoured only on a `completed` return.
-    Then everything the caller said during the detour is kept for the waiting
-    step (`CallContext.keep_detour_words`), so a request changed mid-detour
-    is not lost.
+    from the step it serves. Then everything the caller said during the
+    detour is kept for the step that runs next (`CallContext.keep_detour_words`),
+    however the detour ended: a request changed mid-detour is not lost, and
+    nor is a number the caller gave to a check that was then given up (Coval
+    run ad3n4Vxn, K3, where the number was asked for again from scratch). The
+    prerequisite's own speech stays out either way.
     """
 
     def opening(self, call: CallContext) -> LocalAction | None:

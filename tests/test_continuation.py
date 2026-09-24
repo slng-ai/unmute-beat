@@ -427,6 +427,7 @@ async def a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it():
             model = FunctionModel(stream_function=booking if name == 'booking' else other)
             stack.enter_context(node.agent.override(model=model))
         await agreed_to_a_pick(call, probe, "Nine o'clock works.")
+        assert call.table() == (), 'the times offered for a booking stay on the table after it is made'
         probe.interrupt()
         await probe._turn("That's all, thank you. Goodbye.")
     read = sorted(name for name, answer in given if answer == "That's all, thank you. Goodbye.")

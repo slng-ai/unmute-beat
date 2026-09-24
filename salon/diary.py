@@ -573,6 +573,17 @@ class Diary:
             return None
         return offer
 
+    def withdraw_offers(self, offered_to: str) -> None:
+        """Take every time off this call's table: it has booked or moved, so the times offered for it are spent.
+
+        Left on, every later reply was read as a possible pick (Coval run
+        RPH7TzmF, K1: "No, that's all, thanks. Bye." after the booking ran two
+        choice readings that could not decide anything). A caller who wants
+        another time is offered times again.
+        """
+        for key in [k for k in self._offers if k[0] == offered_to]:
+            del self._offers[key]
+
     def offer_of(self, offered_to: str, slot_id: str, phone: str = '') -> dict:
         """What this caller was offered under that id: the day, the time, the service and its one spoken phrasing.
 

@@ -549,6 +549,8 @@ class WriteBooking(Operation[SalonCall, BookingCommand, Saved, str]):
             unresolved=None,
             offered=[],
         )
+        if args.action in ('book', 'move'):
+            call.diary.withdraw_offers(call.id)
         call.retain_action('save_booking', receipt.model_dump(mode='json'))
         told = pick(f'saved:{receipt.status}', SAVED[receipt.status]).format(
             spoken=receipt.spoken,

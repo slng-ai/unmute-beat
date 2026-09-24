@@ -74,8 +74,8 @@ class ConsentInput(Exchange):
     )
     just_changed: str = Field(
         default='',
-        description='What the salon told the caller it had just changed, on the turn before this answer. '
-        'Empty when nothing changed.',
+        description='What the salon told the caller it had changed earlier in this call, which the caller '
+        'can still take back. Empty when there is nothing.',
     )
     offered: tuple[OfferedTime, ...] = Field(
         default=(), description='The times the caller can pick from right now, each with its `slot_id`.'
@@ -143,18 +143,21 @@ type RetainedApproval = (
 type LastChange = (
     Annotated[
         Literal['keep'],
-        Field(description='Keeps the change the salon just confirmed, or does not take it back.'),
+        Field(description='Keeps the change in `just_changed`, or does not take it back.'),
     ]
     | Annotated[
         Literal['withdraw'],
         Field(
-            description='Takes back the change the salon just confirmed: asks to undo or cancel it, or says '
-            'to leave it or that they no longer want it.'
+            description='Takes back the change in `just_changed`: asks to undo or cancel it, or says '
+            'to leave it or that they no longer want it. A condition on it is not taking it back.'
         ),
     ]
     | Annotated[
         Literal['unclear'],
-        Field(description='Nothing was just changed, or whether they take it back is unclear.'),
+        Field(
+            description='`just_changed` is empty, whether they take it back is unclear, or they put a condition '
+            'on it ("only if...") that has not been answered yet.'
+        ),
     ]
 )
 
@@ -168,7 +171,7 @@ class ReplyClassification(BaseModel):
     conversation: Conversation = 'unclear'
     retained_approval: RetainedApproval = 'unclear'
     last_change: LastChange = 'unclear'
-    """Whether the reply takes back the change the salon confirmed on the turn before. Read only against `just_changed`."""
+    """Whether the reply takes back the change in `just_changed`. Read only against it: empty, it means nothing."""
     chosen_offer: str = Field(
         default='',
         description='The slot_id of the one time in `offered` that the answer picks or asks for, copied exactly '

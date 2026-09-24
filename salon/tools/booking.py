@@ -282,12 +282,22 @@ async def offer_cancel(ctx: RunContext[SalonCall]) -> Ask:
     call = ctx.deps
     if not (booking_id := call.undo_booking):
         raise ModelRetry('Nothing was asked: nothing booked in this call is still held by this caller.')
+    if call.classification.last_change == 'keep':
+        raise ModelRetry(
+            'Nothing was asked: the caller is keeping the appointment. Do not offer to cancel it.'
+        )
     return cancel_question(call, booking_id)
 
 
 def undo_ready(call: SalonCall) -> bool:
-    """`offer_cancel` is offered only while a booking made in this call is still held."""
-    return bool(call.undo_booking)
+    """`offer_cancel` is offered only while a booking made in this call is held and the caller has not kept it.
+
+    Coval run ad3n4Vxn, K5: asked whether to keep or cancel, the caller said
+    "Fine, nine o'clock then", the reading said keep, and the model read the
+    cancellation back anyway. The reading is the application's evidence, so
+    it decides whether the offer is on the table at all.
+    """
+    return bool(call.undo_booking) and call.classification.last_change != 'keep'
 
 
 def cancel_question(call: SalonCall, booking_id: str) -> Ask:

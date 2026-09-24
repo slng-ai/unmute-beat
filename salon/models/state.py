@@ -225,8 +225,8 @@ class SalonCall(core.CallContext):
     _classification: ReplyClassification = PrivateAttr(default_factory=ReplyClassification)
     _complaint: Asked | None = PrivateAttr(default=None)
     """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
-    _undo: tuple[str, str, int] | None = PrivateAttr(default=None)
-    """The booking just made, as (booking id, what the caller was told, turn), so the caller can take it back.
+    _undo: tuple[str, str, int, int] | None = PrivateAttr(default=None)
+    """The booking just made, as (booking id, what the caller was told, turn, pieces heard), so the caller can take it back.
 
     A pick of an offered time books at once, with no read-back. The caller
     who then hears the price and says "leave it" was told goodbye with the
@@ -316,7 +316,7 @@ class SalonCall(core.CallContext):
             owner=self.state.customer_phone,
             pending=self.pending_question(),
             retained_complaint=self._complaint,
-            just_changed=self._undo[1] if self._undo is not None and self.undoable else '',
+            just_changed=self._undo[1] if self._undo is not None and self.undo_booking else '',
             offered=self._table(),
             holding=tuple(
                 f'{b["service"]} {b["spoken"]}'
@@ -353,8 +353,8 @@ class SalonCall(core.CallContext):
         """Whether the reply could decide something the application acts on, so it must be read first.
 
         A question waiting on an answer, a complaint approval kept through
-        verification, a booking the caller could take back, or times on the
-        table. The last is not the same as a pending offer: "Nine, but only if
+        verification, a booking made in this call that the caller could still
+        take back, or times on the table. The last is not the same as a pending offer: "Nine, but only if
         it's under thirty" answers the offer, the price comes back, and "fine,
         nine then" picks from the same table with no question pending. Read
         only on a question, that pick reached the step's model, which hung up
@@ -363,7 +363,7 @@ class SalonCall(core.CallContext):
         return (
             self.pending_question() is not None
             or self._complaint is not None
-            or bool(self.undoable)
+            or bool(self.undo_booking)
             or bool(self._table())
         )
 
@@ -378,8 +378,12 @@ class SalonCall(core.CallContext):
         return chosen if chosen and chosen in {o.slot_id for o in self._table()} else ''
 
     def offer_undo(self, booking_id: str, told: str) -> None:
-        """A booking was just made and confirmed in these words: the caller's next reply may take it back."""
-        self._undo = (booking_id, told, self.turn)
+        """A booking was just made and confirmed in these words: the caller's next reply may take it back.
+
+        The turn and how many pieces of it had arrived are kept, so a piece
+        the caller adds after it, in the same turn, is known to be about it.
+        """
+        self._undo = (booking_id, told, self.turn, len(self._pieces))
 
     @property
     def undo_booking(self) -> str:
@@ -396,8 +400,18 @@ class SalonCall(core.CallContext):
         Only the very next reply is read against it, because only then is a
         question already pending and its classification already paid for.
         Later on, the step's own model offers the undo (`offer_cancel`).
+
+        The next reply includes one the caller adds in the same turn, after
+        the change was made on an earlier piece: its confirmation never
+        finished playing, and what they add is about it. "09:00." was booked,
+        and "but only if it costs less than 30 euros" came in the same breath
+        (Coval run ad3n4Vxn, K5).
         """
-        return self.undo_booking if self._undo is not None and self._undo[2] == self.turn - 1 else ''
+        if self._undo is None:
+            return ''
+        _, _, turn, pieces = self._undo
+        after = turn == self.turn - 1 or (turn == self.turn and len(self._pieces) > pieces)
+        return self.undo_booking if after else ''
 
     def record_classification(self, snapshot: ConsentInput, result: ReplyClassification) -> None:
         """Keep this turn's consent reading, bound to the snapshot it read. Only an interpreter calls this."""

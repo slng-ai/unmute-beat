@@ -23,7 +23,7 @@ from pipecat.clocks.system_clock import SystemClock
 from pipecat.frames.frames import BotStartedSpeakingFrame, StartFrame, TTSSpeakFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
 from pipecat.utils.asyncio.task_manager import TaskManager
-from pydantic_ai import RunContext
+from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
@@ -35,7 +35,7 @@ from salon.classification import CLASSIFIER, DETOUR
 from salon.diary import Diary
 from salon.models.consent import ConsentInput, ReplyClassification
 from salon.models.state import open_call
-from salon.tools.booking import ask_booking, offer
+from salon.tools.booking import ask_booking, offer, offer_cancel, undo_ready
 
 PHONE = '+34611111111'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -460,6 +460,70 @@ async def a_pick_with_no_question_pending_still_books():
     assert runs == ['concierge'], 'the front desk model answered a reply the application had already read'
 
 
+async def an_add_on_after_a_booking_is_read_against_it():
+    """Coval run ad3n4Vxn, K5: "09:00." booked at once, then "but only if it costs less than 30 euros".
+
+    No endpointing can tell a complete answer from one the caller will add
+    to, so the harness does not wait: it reads the add-on against the booking
+    it just made, whose confirmation never finished playing. Later, "Fine,
+    nine o'clock then" read as keeping it takes the cancel offer off the
+    table, where the model had read the cancellation back anyway.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A hair colour on Friday.')
+    await offer(call, 'Friday', 'hair-color')
+    call.note_reached()
+    call.note_drained()
+    call.turn_ended(interrupted=False)
+    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
+    joined = '09:00. But only if it costs less than 30 euros.'
+    readings = {
+        '09:00.': {'chosen_offer': nine},
+        joined: {'confirmation': 'conditional'},
+        'Oh, okay. Fine. 09:00 then.': {'last_change': 'keep'},
+    }
+    seen: dict[str, ConsentInput] = {}
+
+    async def classify(messages, info):
+        data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
+        seen[data.answer] = data
+        return ModelResponse(
+            parts=[TextPart(ReplyClassification.model_validate(readings[data.answer]).model_dump_json())]
+        )
+
+    async def speak(messages, info):
+        yield 'A hair colour is 75 euros. Would you like to keep it?'
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)))
+        for name in ('concierge', 'complaints'):
+            stack.enter_context(
+                agents.AGENTS[name].agent.override(model=FunctionModel(stream_function=speak))
+            )
+        probe.interrupt()
+        await probe._turn('09:00.')
+        assert call.state.writes == 1, 'a plain pick books at once'
+        probe.interrupt()
+        await probe._turn('But only if it costs less than 30 euros.')
+        assert call.heard == joined and call.turn == 2, 'the add-on continues the turn of the pick'
+        assert seen[joined].just_changed, 'the add-on was not read against the booking just made'
+        call.note_reached()
+        call.note_drained()
+        probe.interrupt()
+        await probe._turn('Oh, okay. Fine. 09:00 then.')
+    assert seen['Oh, okay. Fine. 09:00 then.'].just_changed, 'a booking still held can still be taken back'
+    assert not undo_ready(call), 'the caller kept it, so the cancel offer is off the table'
+    context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
+    try:
+        await offer_cancel(context)
+    except ModelRetry:
+        pass
+    else:
+        raise AssertionError('a cancel was read back to a caller keeping the booking')
+    assert call.state.writes == 1 and call.undo_booking, 'the booking stands'
+
+
 async def a_missing_barge_never_merges_turns():
     """Without the caller cutting in, a silent turn is still over: a missing signal errs towards a new turn."""
     call = booking_call()
@@ -548,6 +612,7 @@ async def main():
     await a_booking_taken_back_is_offered_for_cancelling()
     await only_a_slot_on_the_table_can_be_picked()
     await a_pick_with_no_question_pending_still_books()
+    await an_add_on_after_a_booking_is_read_against_it()
     a_detour_keeps_the_rest_of_its_first_turn()
     heard_is_matched_by_words()
     await playback_reaches_the_call()

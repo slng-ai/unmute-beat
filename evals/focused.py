@@ -103,6 +103,52 @@ CASES = (
         'withdraw',
     ),
     Case(
+        'keep-after-question',
+        ConsentInput(
+            question="A hair colour is 75 euros, so it's over 30 euros. Would you like to keep the appointment, "
+            'or shall I cancel it for you?',
+            answer='Oh, okay. Fine. 09:00 then.',
+            owner=NUMBER,
+            just_changed="Lovely, that's your hair colour booked for tomorrow at 9:00 AM.",
+        ),
+        lambda r: r.last_change == 'keep',
+        'keep',
+    ),
+    Case(
+        'condition-after-booking',
+        ConsentInput(
+            question=TIMES,
+            answer='09:00. But only if it costs less than 30 EUR.',
+            owner=NUMBER,
+            just_changed="Lovely, that's your hair colour booked for tomorrow at 9:00 AM.",
+        ),
+        lambda r: r.last_change != 'withdraw',
+        'not withdraw',
+    ),
+    Case(
+        'withdraw-later',
+        ConsentInput(
+            question='A hair colour is 75 euros. Anything else I can help you with?',
+            answer="Oh, that's too much for me. Leave it, thanks.",
+            owner=NUMBER,
+            just_changed="You're all set for tomorrow at 9:00 AM.",
+        ),
+        lambda r: r.last_change == 'withdraw',
+        'withdraw',
+    ),
+    Case(
+        'goodbye-after-booking',
+        ConsentInput(
+            question='Done, tomorrow at 9:00 AM. Anything else?',
+            answer="No, that's all, thanks. Bye.",
+            owner=NUMBER,
+            just_changed='Done, tomorrow at 9:00 AM.',
+            pending=Asked(about='closing', spoken='Anything else?', owner=NUMBER, turn=6),
+        ),
+        lambda r: r.last_change != 'withdraw' and r.conversation == 'end',
+        'end, not withdraw',
+    ),
+    Case(
         'closing',
         ConsentInput(
             question='Done, tomorrow at 9:00 AM. Anything else?',

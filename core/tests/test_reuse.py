@@ -111,6 +111,36 @@ async def a_change_is_not_taken_as_an_undo():
     assert agent.requests == 1 and said == 'It is 40 euros.' and call._book, (agent.requests, said)
 
 
+async def a_goodbye_to_a_cut_off_question_does_not_hang_up():
+    """The caller cuts in 0.2 s into "Booked ... Anything else?": their words go on the same turn, not answer it.
+
+    Whichever order the cut-in, the runtime's report of the whole line, and
+    the audio stopping arrive in (Coval run 4bLgLR4t, case 05, hung up here).
+    """
+    from core import turn as engine
+
+    for order in (('barge', 'report', 'stop'), ('stop', 'barge', 'report')):
+        call, heard, agent = opened()
+        nodes = desk(FunctionModel(stream_function=agent.stream))
+        with scripted(chosen_time='0900'):
+            await take_turn(call, nodes, 'Nine, please.')
+        with scripted(confirmation='accept'):
+            await take_turn(call, nodes, 'Yes.')
+        told, turn = heard[-1], call.turn
+        call.note_reached()
+        for signal in order:
+            if signal == 'barge':
+                call.note_barge()
+            elif signal == 'report':
+                engine.note_spoken(call, told, interrupted=True)
+            else:
+                call.note_drained()
+        with scripted(conversation='end'):
+            await take_turn(call, nodes, 'That is perfect.')
+        assert call.ended == '' and call.turn == turn, (order, call.ended, call.turn)
+        assert call.heard == 'Yes. That is perfect.' and len(call._book) == 1, (order, call.heard, call._book)
+
+
 async def a_pick_with_a_condition_is_left_to_the_model():
     """The pick reading finds no plain pick in a condition, so nothing is read back and the agent answers."""
     call, heard, agent = opened()
@@ -310,6 +340,7 @@ def no_salon_code_is_loaded():
 async def main():
     await a_pick_is_read_back_and_only_the_yes_books()
     await a_change_is_not_taken_as_an_undo()
+    await a_goodbye_to_a_cut_off_question_does_not_hang_up()
     await a_pick_with_a_condition_is_left_to_the_model()
     await a_yes_without_its_question_writes_nothing()
     await a_value_said_in_full_is_read_back_by_code()

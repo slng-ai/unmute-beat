@@ -888,6 +888,12 @@ class CallContext(BaseModel):
         segments are cut to as many words as the runtime says went out, rather
         than left looking as if every word was heard. Returns whether anything
         was applied.
+
+        A report never clears a cut-in the call already recorded. The report
+        holds what TTS was handed, and TTS is handed a whole line at once: in
+        Coval run 4bLgLR4t (case 05) the report of an "Anything else?" cut off
+        0.2 s in held every word, cleared the cut-in's mark, and the caller's
+        next words answered a question they never heard.
         """
         if not segment_ids:
             segment_ids = tuple(s.id for s in self.spoken[-1:])
@@ -929,7 +935,7 @@ class CallContext(BaseModel):
             self.close_model_text()
         for segment, text in zip(selected, updates, strict=True):
             segment.text = text
-            segment.interrupted = text != segment.generated
+            segment.interrupted = segment.interrupted or text != segment.generated
             segment.delivery = 'runtime-estimate'
         return True
 

@@ -1023,6 +1023,43 @@ async def a_question_cut_off_as_the_audio_stops_is_not_heard():
     assert asked is not None and asked.about == 'closing', 'a question that played out in full was heard'
 
 
+async def a_cut_off_question_reported_in_full_is_still_cut_off():
+    """Coval run 4bLgLR4t, case 05 (call CA6912853c): "That's perfect." hung up on an "Anything else?" cut off.
+
+    The bot log: the line started at 44.830, the caller cut in at 45.034,
+    the audio stopped at 45.084. Between the cut-in and the stop, Pipecat's
+    assistant aggregator reported what was spoken, and that report held the
+    whole line, because the TTS had been handed all of it. The report cleared
+    the cut-in's mark, the stop then counted the line as played, and the next
+    piece began a new turn that answered the unheard question.
+    """
+    from core import turn as engine
+    from salon.tools.writes import close_with
+
+    async def line(text):
+        """The call's line to the caller: without one, nothing said is recorded."""
+
+    words = "You're all set for Friday at 9:00 AM. Anything else I can help with?"
+    orders = (('barge', 'report', 'stop'), ('stop', 'barge', 'report'), ('barge', 'stop', 'report'))
+    for order in orders:
+        call = booking_call()
+        call._say = line
+        call.turn_started('Yes, please.')
+        await close_with(call, words)
+        call.turn_ended(interrupted=False)
+        call.note_reached()
+        for signal in order:
+            if signal == 'barge':
+                call.note_barge()
+            elif signal == 'report':
+                engine.note_spoken(call, words, interrupted=True)
+            else:
+                call.note_drained()
+        call.turn_started("That's perfect.")
+        assert call.pending_question() is None, (order, 'answered a question the caller never heard')
+        assert call.heard == "Yes, please. That's perfect.", (order, call.heard)
+
+
 def heard_is_matched_by_words():
     """What the runtime says went out is matched word by word, and an interruption always cuts."""
     call = booking_call()
@@ -1091,6 +1128,7 @@ async def main():
     await a_yes_said_as_the_line_drops_still_counts()
     a_read_back_said_again_in_full_can_be_answered()
     await a_question_cut_off_as_the_audio_stops_is_not_heard()
+    await a_cut_off_question_reported_in_full_is_still_cut_off()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

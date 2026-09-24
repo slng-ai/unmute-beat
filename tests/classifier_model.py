@@ -55,7 +55,7 @@ CHANGES = ('instead', 'as well', 'also')
 def detour(messages, info):
     """Whether the caller kept the interrupted request, by rule for scripted tests."""
     data = DetourInput.model_validate_json(messages[-1].parts[0].content)
-    said = ' '.join(data.said_since).casefold()
+    said = data.answer.casefold()
     change = 'changed' if any(word in said for word in CHANGES) else 'kept'
     return ModelResponse(parts=[TextPart(DetourReading(request_change=change).model_dump_json())])
 
@@ -69,10 +69,10 @@ def _chosen(data: ConsentInput) -> str:
     """
     if not data.offered or (data.pending is not None and data.pending.about not in ('offer', 'closing')):
         return ''
-    if 'only if' in data.utterance:
+    if 'only if' in data.answer:
         return ''
-    named = set(times_named(data.utterance))
-    if 'same time' in data.utterance.casefold():
+    named = set(times_named(data.answer))
+    if 'same time' in data.answer.casefold():
         named |= {time for held in data.holding for time in times_named(held)}
     wanted = {time.replace(':', '') for time in named}
     matches = [o.slot_id for o in data.offered if o.slot_id.split('T')[1][:4] in wanted]
@@ -81,14 +81,14 @@ def _chosen(data: ConsentInput) -> str:
 
 def classify(messages, info):
     data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
-    key = data.utterance.casefold().strip().rstrip('.! ')
+    key = data.answer.casefold().strip().rstrip('.! ')
     confirmation, choice, conversation = LABELS.get(key, ('unclear', 'unclear', 'continue'))
     if data.pending is None or data.pending.about not in ('phone', 'booking', 'complaint'):
         confirmation = 'not_applicable'
     if key in ('no, thanks', 'no thanks', 'no thank you'):
         conversation = (
             'end'
-            if (data.pending and data.pending.about == 'closing') or data.previous_speech == 'Anything else?'
+            if (data.pending and data.pending.about == 'closing') or data.question == 'Anything else?'
             else 'continue'
         )
     result = ReplyClassification.model_validate(

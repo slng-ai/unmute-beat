@@ -74,7 +74,14 @@ classifier's. Flip the default here once they are.
 """
 
 
-CLASSIFIER = Classifier(MODEL, ConsentInput, ReplyClassification, model_settings=SETTINGS)
+CONTEXT = (
+    'A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The receptionist asked '
+    'them something and is waiting for the answer. The salon acts only on a clear class; an unclear one changes '
+    'nothing.'
+)
+"""The salon's context for its consent reading: who is talking, and what an answer is for. Prompt text."""
+
+CLASSIFIER = Classifier(MODEL, ConsentInput, ReplyClassification, context=CONTEXT, model_settings=SETTINGS)
 
 SOLVER_INSTRUCTIONS = (
     'Read the caller utterance as exactly one decision about the pending proposal, using the class '
@@ -89,7 +96,7 @@ comparison before `INTERPRETER` defaults to the solver.
 """
 
 SOLVER_CLASSIFIER = Classifier(
-    MODEL, SolverInput, SalonSolution, instructions=SOLVER_INSTRUCTIONS, model_settings=SETTINGS
+    MODEL, SolverInput, SalonSolution, context=SOLVER_INSTRUCTIONS, model_settings=SETTINGS
 )
 
 DESTINATIONS = (
@@ -130,7 +137,7 @@ class ConsentInterpreter(ClassifierInterpreter['SalonCall', ConsentInput, ReplyC
         """
         now = call.consent_snapshot()
         return (
-            value.utterance == now.utterance
+            value.answer == now.answer
             and value.owner == now.owner
             and value.pending == now.pending
             and value.offered == now.offered
@@ -146,7 +153,7 @@ class ConsentInterpreter(ClassifierInterpreter['SalonCall', ConsentInput, ReplyC
         must all be unchanged, or the stale reading stays the safe default.
         """
         now = call.consent_snapshot()
-        return value.utterance == now.utterance and value.owner == now.owner and value.pending == now.pending
+        return value.answer == now.answer and value.owner == now.owner and value.pending == now.pending
 
     def _settle(
         self, call: SalonCall, value: ConsentInput, result: ReplyClassification
@@ -183,8 +190,8 @@ class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]
     def _input(self, call: SalonCall) -> SolverInput:
         last = call.last_proposal()
         return SolverInput(
-            utterance=call.heard,
-            previous_speech=call.consent_snapshot().previous_speech,
+            answer=call.heard,
+            question=call.consent_snapshot().question,
             step=call.state.agent,
             owner=call.state.customer_phone,
             proposal=last[0] if last else None,
@@ -197,7 +204,7 @@ class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]
         last = call.last_proposal()
         proposal: Asked | None = last[0] if last else None
         return (
-            value.utterance == call.heard
+            value.answer == call.heard
             and value.owner == call.state.customer_phone
             and value.step == call.state.agent
             and value.proposal == proposal
@@ -219,7 +226,9 @@ class DetourInterpreter(ClassifierInterpreter['SalonCall', DetourInput, DetourRe
     """Whether the caller kept the request the identity check interrupted, read from everything said since."""
 
     def _input(self, call: SalonCall) -> DetourInput:
-        return DetourInput(request=call.detour_request, said_since=tuple(call.detour_words()))
+        return DetourInput(
+            question=call.detour_speech(), answer=' '.join(call.detour_words()), request=call.detour_request
+        )
 
     def _still_valid(self, call: SalonCall, value: DetourInput) -> bool:
         return value == self._input(call)
@@ -230,7 +239,16 @@ class DetourInterpreter(ClassifierInterpreter['SalonCall', DetourInput, DetourRe
         return result
 
 
-DETOUR_CLASSIFIER = Classifier(MODEL, DetourInput, DetourReading, model_settings=SETTINGS)
+DETOUR_CONTEXT = (
+    'A caller is on the phone with Sage and Stone, a hair salon. They asked for something, then the salon '
+    'stopped to check who they are. `question` is what the salon said during that check and `answer` is what '
+    'the caller said.'
+)
+"""The context for reading whether the caller kept their request. Prompt text."""
+
+DETOUR_CLASSIFIER = Classifier(
+    MODEL, DetourInput, DetourReading, context=DETOUR_CONTEXT, model_settings=SETTINGS
+)
 DETOUR = DetourInterpreter('detour', DETOUR_CLASSIFIER, DetourReading())
 SOLVER = SalonSolver('solver', SOLVER_CLASSIFIER, SalonSolution(decision=NoDecision()))
 

@@ -12,7 +12,7 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, UserProm
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimitExceeded, UsageLimits
 
-from core.classifiers import Classifier
+from core.classifiers import TASK, Classifier, ClassSet, Exchange, output_model
 from core.interpreters import RuleInterpreter
 from core.policies import TurnBudget
 from core.turn import Barge, take_turn
@@ -24,8 +24,9 @@ from salon.tools.asking import Ask
 from tests.classifier_model import classifier_model
 
 
-class Input(BaseModel):
-    text: str = Field(min_length=1)
+class Input(Exchange):
+    question: str = Field(default='', description='What the person was asked.')
+    answer: str = Field(min_length=1, description='What the person said.')
 
 
 class Output(BaseModel):
@@ -47,7 +48,10 @@ async def generic_contracts():
         assert not info.function_tools and not info.output_tools
         assert info.model_request_parameters.output_mode == 'native'
         assert info.model_request_parameters.output_object.json_schema == Nested.model_json_schema()
-        assert info.instructions == 'Classify the input using the class descriptions in the output schema.'
+        assert (
+            info.instructions
+            == f'{TASK}\n\nThe input:\n- `question`: What the person was asked.\n- `answer`: What the person said.'
+        )
         return ModelResponse(
             parts=[TextPart('{"answer":{"label":"one"},"count":2}')],
             usage=RequestUsage(input_tokens=12, output_tokens=8),
@@ -56,13 +60,13 @@ async def generic_contracts():
     classifier = Classifier(FunctionModel(respond), Input, Nested)
     usage = RunUsage()
     result = await classifier.classify(
-        Input(text='first'), usage=usage, usage_limits=UsageLimits(request_limit=1)
+        Input(answer='first'), usage=usage, usage_limits=UsageLimits(request_limit=1)
     )
     assert result.answer.label == 'one' and result.count == 2
     assert usage.requests == 1 and usage.input_tokens == 12 and usage.output_tokens == 8
     try:
         await classifier.classify(
-            Input(text='second'), usage=usage, usage_limits=UsageLimits(request_limit=1)
+            Input(answer='second'), usage=usage, usage_limits=UsageLimits(request_limit=1)
         )
     except UsageLimitExceeded:
         pass
@@ -70,19 +74,58 @@ async def generic_contracts():
         raise AssertionError('classifier exceeded its shared request budget')
     assert len(seen) == 1
     try:
-        await classifier.classify(Input.model_construct(text=''))
+        await classifier.classify(Input.model_construct(answer=''))
     except ValidationError:
         pass
     else:
         raise AssertionError('invalid input reached the model')
     assert len(seen) == 1
 
-    def other(messages, info):
-        assert Nested.model_validate_json(messages[0].parts[0].content).count == 2
-        return ModelResponse(parts=[TextPart('{"text":"different input and output models"}')])
+    await classes_from_data()
 
-    second = Classifier(FunctionModel(other), Nested, Input)
-    assert (await second.classify(result)).text == 'different input and output models'
+
+async def classes_from_data():
+    """A classifier whose classes come from configuration: the author writes only context, classes and descriptions.
+
+    The request carries the question and the answer from state, the author's
+    context before the fixed task, and every class with its description in
+    the schema. Nothing about any business is in the classifier itself.
+    """
+    reading = output_model(
+        'Reading',
+        {
+            'intent': ClassSet(
+                'What the person wants.',
+                {'book': 'Wants an appointment.', 'unclear': 'Anything else, or not clear.'},
+                default='unclear',
+            )
+        },
+    )
+
+    def respond(messages, info):
+        schema = info.model_request_parameters.output_object.json_schema
+        intent = schema['properties']['intent']
+        assert intent['description'] == 'What the person wants.', intent
+        assert [(m['const'], m['description']) for m in intent['anyOf']] == [
+            ('book', 'Wants an appointment.'),
+            ('unclear', 'Anything else, or not clear.'),
+        ], intent
+        assert info.instructions.startswith('A line into a shop.\n\n' + TASK), info.instructions
+        assert '- `question`: What the person was asked.' in info.instructions
+        sent = Input.model_validate_json(messages[0].parts[0].content)
+        assert (sent.question, sent.answer) == ('How can I help?', 'Book me in.'), sent
+        return ModelResponse(parts=[TextPart('{"intent":"book"}')])
+
+    classifier = Classifier(FunctionModel(respond), Input, reading, context='A line into a shop.')
+    result = await classifier.classify(Input(question='How can I help?', answer='Book me in.'))
+    assert result.model_dump() == {'intent': 'book'}
+    assert reading().model_dump() == {'intent': 'unclear'}, 'the default is the fallback'
+    try:
+        ClassSet('x', {'yes': 'Agrees.'}, default='no').annotation()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('a default outside the classes was accepted')
 
 
 async def invalid_answers_and_cancellation():
@@ -101,7 +144,9 @@ async def invalid_answers_and_cancellation():
 
         usage = RunUsage()
         try:
-            await Classifier(FunctionModel(invalid), Input, Output).classify(Input(text='input'), usage=usage)
+            await Classifier(FunctionModel(invalid), Input, Output).classify(
+                Input(answer='input'), usage=usage
+            )
         except UnexpectedModelBehavior, ValidationError:
             pass
         else:
@@ -113,7 +158,7 @@ async def invalid_answers_and_cancellation():
 
     usage = RunUsage()
     try:
-        await Classifier(FunctionModel(failed), Input, Output).classify(Input(text='input'), usage=usage)
+        await Classifier(FunctionModel(failed), Input, Output).classify(Input(answer='input'), usage=usage)
     except ModelHTTPError:
         pass
     else:
@@ -128,7 +173,7 @@ async def invalid_answers_and_cancellation():
 
     usage = RunUsage()
     task = asyncio.create_task(
-        Classifier(FunctionModel(slow), Input, Output).classify(Input(text='input'), usage=usage)
+        Classifier(FunctionModel(slow), Input, Output).classify(Input(answer='input'), usage=usage)
     )
     await entered.wait()
     task.cancel()
@@ -326,11 +371,11 @@ async def rule_interpreters_spend_nothing():
 
     class Words(RuleInterpreter[SalonCall, Input, Output]):
         def _input(self, call):
-            return Input(text=call.heard)
+            return Input(answer=call.heard)
 
         def _rule(self, value):
-            decided.append(value.text)
-            return Output(label='one' if 'one' in value.text else 'two')
+            decided.append(value.answer)
+            return Output(label='one' if 'one' in value.answer else 'two')
 
     words = Words('words', Output(label='two'))
     call = open_call(PHONE)
@@ -350,8 +395,10 @@ def classes_live_in_schema():
     for definition in schema['$defs'].values():
         for choice in definition['anyOf']:
             assert choice['const'] and choice['description']
-    assert len(CLASSIFIER.instructions.splitlines()) == 1
-    assert 'booking' not in CLASSIFIER.instructions
+    assert CLASSIFIER.instructions.startswith(CLASSIFIER.context) and TASK in CLASSIFIER.instructions
+    assert '- `question`:' in CLASSIFIER.instructions and '- `pending`:' in CLASSIFIER.instructions
+    for label in ('accept', 'conditional', 'withdraw', 'booking'):
+        assert label not in CLASSIFIER.instructions, f'{label!r}: classes belong in the schema, not the task'
 
 
 async def main():

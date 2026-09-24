@@ -569,6 +569,13 @@ class CallContext(BaseModel):
                 said.append(words)
         return said
 
+    def detour_speech(self) -> str:
+        """What the agent said to the caller since a prerequisite's detour began, in order, as far as it was heard."""
+        checkpoint = self._checkpoint
+        if checkpoint is None:
+            return ''
+        return ' '.join(s.text for s in self.all_spoken if s.id not in checkpoint.speech_ids and s.text)
+
     def note_request_kept(self) -> None:
         """Record that a reading of this turn found the detour's request unchanged.
 

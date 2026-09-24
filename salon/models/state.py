@@ -311,8 +311,8 @@ class SalonCall(core.CallContext):
         previous = [segment for segment in self.all_spoken if segment.turn < self.turn]
         last_turn = max((segment.turn for segment in previous), default=-1)
         return ConsentInput(
-            utterance=self.heard,
-            previous_speech=' '.join(s.text for s in previous if s.turn == last_turn).strip(),
+            answer=self.heard,
+            question=' '.join(s.text for s in previous if s.turn == last_turn).strip(),
             owner=self.state.customer_phone,
             pending=self.pending_question(),
             retained_complaint=self._complaint,
@@ -394,7 +394,7 @@ class SalonCall(core.CallContext):
             return ReplyClassification()
         now = self.consent_snapshot()
         if (
-            snapshot.utterance != now.utterance
+            snapshot.answer != now.answer
             or snapshot.owner != now.owner
             or snapshot.pending != now.pending
             or snapshot.offered != now.offered

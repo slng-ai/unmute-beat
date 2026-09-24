@@ -29,8 +29,8 @@ its supporting link. Read it before changing how a turn works.
 | `salon/steps/` | one module per step, each giving `node(step)`: its tools, outputs and openings |
 | `salon/nodes.py` | `build()`, `advance()`, `decided()`, `solve()`, the guards: what every step is built from |
 | `salon/instructions.py` | loads `flow.yaml` as `SPEC`; `instructions(name)` is a step's compiled prompt; `GREETING`; `COMPLAINT_GUIDANCE` |
-| `salon/classification.py` | `CONSENT` (four labels, default) and `SOLVER` (one decision, `SALON_INTERPRETER=solver`); `classify_reply` |
-| `core/classifiers.py` | generic Pydantic input/output classifier using one direct model request |
+| `salon/classification.py` | `CONSENT` (six labels, default), `SOLVER` (one decision, `SALON_INTERPRETER=solver`), `DETOUR` (was the request kept during the number check); `classify_reply` |
+| `core/classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
 | `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
 | `core/proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
 | `core/operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record |

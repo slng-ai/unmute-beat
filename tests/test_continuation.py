@@ -91,11 +91,11 @@ def classifier(labels: dict[str, str], hold: str = ''):
 
     async def classify(messages, info):
         data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
-        asked.append(data.utterance)
-        if data.utterance == hold:
+        asked.append(data.answer)
+        if data.answer == hold:
             held.set()
             await asyncio.Event().wait()
-        confirmation = labels.get(data.utterance, 'unclear') if data.pending else 'not_applicable'
+        confirmation = labels.get(data.answer, 'unclear') if data.pending else 'not_applicable'
         result = ReplyClassification(confirmation=confirmation)  # ty: ignore[invalid-argument-type]
         return ModelResponse(parts=[TextPart(result.model_dump_json())])
 
@@ -322,7 +322,7 @@ async def a_booking_taken_back_is_offered_for_cancelling():
     async def classify(messages, info):
         data = ConsentInput.model_validate_json(messages[-1].parts[0].content)
         given.append(data)
-        fields = dict(readings.get(data.utterance, {}))
+        fields = dict(readings.get(data.answer, {}))
         if not data.just_changed:
             fields.pop('last_change', None)
         if data.pending is None or data.pending.about != 'booking':
@@ -433,7 +433,7 @@ def a_detour_keeps_the_rest_of_its_first_turn():
     assert call.detour_words() == ['Actually, make it Saturday.'], call.detour_words()
     call.turn_started('Yes.')
     assert call.detour_words() == ['Actually, make it Saturday.', 'Yes.'], call.detour_words()
-    assert DETOUR._input(call).said_since == ('Actually, make it Saturday.', 'Yes.')
+    assert DETOUR._input(call).answer == 'Actually, make it Saturday. Yes.', DETOUR._input(call)
     call.note_request_kept()
     assert call.request_kept
     call.turn_started('And one more thing.')

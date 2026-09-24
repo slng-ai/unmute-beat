@@ -80,8 +80,8 @@ def solver_input(case: Case) -> SolverInput:
     step = STEP.get(case.about, 'concierge')
     proposal = None if case.stale else Asked(about=case.about, spoken=case.spoken, owner=PHONE, value=PHONE)
     return SolverInput(
-        utterance=case.utterance,
-        previous_speech=case.spoken,
+        answer=case.utterance,
+        question=case.spoken,
         step=step,  # ty: ignore[invalid-argument-type]
         owner=PHONE,
         proposal=proposal,

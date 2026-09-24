@@ -30,14 +30,14 @@ def words(utterance: str) -> str:
 
 def decide(value: SolverInput) -> SalonSolution:
     """One exact-word decision, or nothing."""
-    said = words(value.utterance)
+    said = words(value.answer)
     closing = value.proposal is not None and value.proposal.about == 'closing'
     if said in BYE or (closing and said in NO):
         return SalonSolution(decision=EndCall())
     if value.proposal is None or not value.delivered:
         return SalonSolution(decision=NoDecision())
     choice = value.proposal.about in ('closing', 'move_or_add')
-    if said in YES and not choice and '?' not in value.utterance:
+    if said in YES and not choice and '?' not in value.answer:
         return SalonSolution(decision=Accept())
     if said in NO:
         return SalonSolution(decision=Reject())

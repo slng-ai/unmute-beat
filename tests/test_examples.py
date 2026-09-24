@@ -59,7 +59,7 @@ async def extracts(messages, info):
 
 def reads(messages, info):
     data = ConfirmInput.model_validate_json(messages[-1].parts[0].content)
-    kind = READ.get(data.utterance, 'none')
+    kind = READ.get(data.answer, 'none')
     return ModelResponse(
         parts=[TextPart(ConfirmReading.model_validate({'decision': {'kind': kind}}).model_dump_json())]
     )

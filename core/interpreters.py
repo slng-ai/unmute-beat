@@ -24,7 +24,7 @@ from pydantic import BaseModel, ValidationError
 from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.classifiers import Classifier
+from core.classifiers import Classifier, Exchange
 from core.state import CallContext, Interpretation, Request
 
 FAILURES = (ValidationError, UnexpectedModelBehavior, ModelHTTPError, HTTPError)
@@ -133,7 +133,7 @@ class Interpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](ABC):
         return result
 
 
-class ClassifierInterpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](
+class ClassifierInterpreter[C: CallContext, InputT: Exchange, OutputT: BaseModel](
     Interpreter[C, InputT, OutputT]
 ):
     """An interpreter that decides with one structured model request and no repair loop."""

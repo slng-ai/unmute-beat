@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.classifiers import Exchange
 from core.decisions import (
     Accept,
     Clarify,
@@ -53,21 +54,35 @@ class OfferedTime(BaseModel):
     spoken: str
 
 
-class ConsentInput(BaseModel):
-    """A snapshot of the accepted reply and its application-owned context."""
+class ConsentInput(Exchange):
+    """A snapshot of the accepted reply and its application-owned context.
 
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    utterance: str
-    previous_speech: str
-    owner: str
-    pending: Asked | None = None
-    retained_complaint: Asked | None = None
-    just_changed: str = ''
-    """What the salon told the caller it had just changed, in its own words, on the turn before this reply. Empty when nothing changed."""
-    offered: tuple[OfferedTime, ...] = ()
-    """The times on the table: the pending offer's, or else those the diary has just offered this call."""
-    holding: tuple[str, ...] = ()
-    """The appointments the caller already holds, as the salon says them, so "the same time" can be read."""
+    `question` is everything the salon said on the turn before the reply.
+    The field descriptions are prompt text: the classifier lists them to the
+    model.
+    """
+
+    owner: str = Field(description="The caller's phone number, once they have given one. Empty before that.")
+    pending: Asked | None = Field(
+        default=None,
+        description='The question the salon is waiting on an answer to, as it recorded it: what it is about '
+        '(`about`), its words (`spoken`) and what it proposes (`value`). Null when no question is waiting.',
+    )
+    retained_complaint: Asked | None = Field(
+        default=None,
+        description='A complaint the caller already approved, kept while their number is checked. Null if none.',
+    )
+    just_changed: str = Field(
+        default='',
+        description='What the salon told the caller it had just changed, on the turn before this answer. '
+        'Empty when nothing changed.',
+    )
+    offered: tuple[OfferedTime, ...] = Field(
+        default=(), description='The times the caller can pick from right now, each with its `slot_id`.'
+    )
+    holding: tuple[str, ...] = Field(
+        default=(), description='The appointments the caller already holds, as the salon says them.'
+    )
 
 
 type Confirmation = (
@@ -167,14 +182,14 @@ type RequestChange = (
     Annotated[
         Literal['kept'],
         Field(
-            description='In `said_since` the caller only answered what they were asked (a phone number, '
+            description='In `answer` the caller only answered what they were asked (a phone number, '
             'a yes or no, a correction of it) and changed or added nothing to `request`.'
         ),
     ]
     | Annotated[
         Literal['changed'],
         Field(
-            description='Somewhere in `said_since` the caller changed `request` or asked for '
+            description='Somewhere in `answer` the caller changed `request` or asked for '
             'something more: another day, time or service, a question, a complaint.'
         ),
     ]
@@ -182,20 +197,17 @@ type RequestChange = (
 )
 
 
-class DetourInput(BaseModel):
-    """What the caller said while the salon checked who they are, and the request that check interrupted.
+class DetourInput(Exchange):
+    """What was said while the salon checked who the caller is, and the request that check interrupted.
 
-    Its own snapshot and its own request, not fields of `ConsentInput`: added
-    there, they cost the consent reading its accuracy (Coval run CFmgWMUy,
-    "Yes. That's correct." to a read-back read as nothing pending, three of
-    five calls).
+    `question` is everything the salon said during the check, `answer`
+    everything the caller said, both in order. Its own snapshot and its own
+    request, not fields of `ConsentInput`: added there, they cost the consent
+    reading its accuracy (Coval run CFmgWMUy, "Yes. That's correct." to a
+    read-back read as nothing pending, three of five calls).
     """
 
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    request: str
-    """What the caller asked for before the check began."""
-    said_since: tuple[str, ...]
-    """Everything the caller has said since, one turn per item, oldest first."""
+    request: str = Field(description='What the caller asked for before the check began, in their words.')
 
 
 class DetourReading(BaseModel):
@@ -262,7 +274,7 @@ class Destination(BaseModel):
     needs: str = ''
 
 
-class SolverInput(BaseModel):
+class SolverInput(Exchange):
     """A snapshot of the reply and every application-owned fact needed to read it as one decision.
 
     `delivered` is False when the caller spoke over the proposal, so it may be
@@ -271,12 +283,20 @@ class SolverInput(BaseModel):
     again when it is applied.
     """
 
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    utterance: str
-    previous_speech: str
-    step: Literal['concierge', 'verify', 'booking', 'complaints']
-    owner: str
-    proposal: Asked | None = None
-    delivered: bool = False
-    retained_complaint: Asked | None = None
-    destinations: tuple[Destination, ...] = ()
+    step: Literal['concierge', 'verify', 'booking', 'complaints'] = Field(
+        description='The part of the call the caller is in.'
+    )
+    owner: str = Field(description="The caller's phone number, once they have given one. Empty before that.")
+    proposal: Asked | None = Field(
+        default=None, description='The proposal the salon put to the caller last. Null when there is none.'
+    )
+    delivered: bool = Field(
+        default=False, description='Whether the caller heard the whole proposal before answering.'
+    )
+    retained_complaint: Asked | None = Field(
+        default=None,
+        description='A complaint the caller already approved, kept while their number is checked. Null if none.',
+    )
+    destinations: tuple[Destination, ...] = Field(
+        default=(), description='The tasks the caller could switch to, and what each needs first.'
+    )

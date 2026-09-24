@@ -166,6 +166,7 @@ examples/               access (ten steps) and help (one step), on core alone; V
 evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
 evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
+evals/focused.py        the live failures replayed against the real classifiers, five times each
 evals/solver.py         explicitly invoked live state-solver evaluation
 evals/compare.py        every interpreter side by side; the rule floor offline, the rest with --live
 evals/rules.py          the no-model floor the others must beat
@@ -781,22 +782,37 @@ It has no agent loop, business tools, conversation history or repair requests.
 
 [Classifier](core/classifiers.py) is an ordinary generic Python class:
 `Classifier[InputT, OutputT]`, with both contracts defined by Pydantic models.
-It validates the input, sends its JSON with the output model's JSON Schema,
-and validates the returned answer. The default prompt is just:
+Every classification is made of the same five things:
 
-> Classify the input using the class descriptions in the output schema.
+| Part | Who supplies it | Where it goes |
+|---|---|---|
+| The question the person was asked | the application, from state | `Exchange.question` |
+| The person's answer | the application, from state | `Exchange.answer` |
+| Context: what the classifier is for | the author, a sentence or two | `Classifier(context=...)`, first in the instructions |
+| The classes | the author | the output model's fields |
+| Each class's description | the author | the output schema |
 
-Class keys and their meanings live together in the output model, using
-`Annotated[Literal[...], Field(description=...)]`. A new use case supplies its
-own input model and output classes. There are no salon rules in `core`.
+The instructions are built, never hand-written: the author's context, one
+fixed task sentence (`TASK`), and a list of the input's other fields by their
+`Field(description=...)`. Those extra fields are facts the application
+knows, such as the times on the table. The classes are written either as
+`Annotated[Literal[...], Field(description=...)]` members or as plain data
+with `ClassSet` and `output_model`, so a flow file can define them. A new use
+case supplies its own context, facts and classes. There are no salon rules
+in `core`.
+
+`uv run --env-file .env python -m evals.focused` sends the exact inputs of
+the live failures to the real model, five times each, and says which cases
+did not pass every time. It is billable and cheap: 65 small requests.
 
 The salon wiring is in [salon/classification.py](salon/classification.py),
 and its contracts are in [salon/models/consent.py](salon/models/consent.py):
 
 | Contract | Contents |
 |---|---|
-| `ConsentInput` | Accepted utterance, preceding delivered speech, caller identity, pending proposal and any retained complaint approval. |
-| `ReplyClassification` | Confirmation (`accept`, `reject`, `revise`, `conditional`, `unclear`, `not_applicable`), appointment choice (`move`, `add`, `unclear`, `not_applicable`), conversation status and whether retained complaint approval still applies. |
+| `ConsentInput` | The answer, the speech it answers, caller identity, pending question, any retained complaint approval, what was just changed, the times on the table and the caller's bookings. |
+| `ReplyClassification` | Confirmation (`accept`, `reject`, `revise`, `conditional`, `unclear`, `not_applicable`), appointment choice (`move`, `add`, `unclear`, `not_applicable`), conversation status, whether retained complaint approval still applies, whether the answer takes back the last change, and which offered time it picks. |
+| `DetourInput`, `DetourReading` | While the number is checked: what the salon said, what the caller said, the request the check interrupted, and whether the caller kept it (`kept`, `changed`, `unclear`). Its own request, run beside the consent reading. |
 
 ### The state solver (opt-in)
 

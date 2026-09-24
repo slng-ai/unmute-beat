@@ -54,7 +54,7 @@ def consent_input(case: Case) -> ConsentInput:
     """What `classify_reply` would send for this case."""
     heard = case.delivered and not case.stale
     pending = Asked(about=case.about, spoken=case.spoken, owner=OWNER) if heard else None
-    return ConsentInput(utterance=case.utterance, previous_speech=case.spoken, owner=OWNER, pending=pending)
+    return ConsentInput(answer=case.utterance, question=case.spoken, owner=OWNER, pending=pending)
 
 
 async def main() -> None:

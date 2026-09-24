@@ -37,7 +37,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.classifiers import Classifier
+from core.classifiers import Classifier, Exchange
 from core.completion import FieldsPresent, ReceiptMatched
 from core.decisions import Accept, Clarify, Conditional, NoDecision, Reject, Revise
 from core.graph import Exit, LocalAction, Node, Opening
@@ -75,13 +75,10 @@ class Prompted:
         return self.spoken
 
 
-class ConfirmInput(BaseModel):
-    """What the confirmation interpreter reads: the reply, and the exact proposal it may be answering."""
+class ConfirmInput(Exchange):
+    """What the confirmation interpreter reads: the reply, and the exact proposal read back as `question`."""
 
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    utterance: str
-    proposal: str
-    delivered: bool
+    delivered: bool = Field(description='Whether the person heard the whole read-back before answering.')
 
 
 class ConfirmReading(BaseModel):
@@ -97,12 +94,12 @@ class ConfirmInterpreter(ClassifierInterpreter[FlowCall, ConfirmInput, ConfirmRe
     def _input(self, call: FlowCall) -> ConfirmInput:
         last = call.last_proposal()
         return ConfirmInput(
-            utterance=call.heard, proposal=last[0].spoken if last else '', delivered=bool(last and last[1])
+            answer=call.heard, question=last[0].spoken if last else '', delivered=bool(last and last[1])
         )
 
     def _still_valid(self, call: FlowCall, value: ConfirmInput) -> bool:
         last = call.last_proposal()
-        return value.utterance == call.heard and value.proposal == (last[0].spoken if last else '')
+        return value.answer == call.heard and value.question == (last[0].spoken if last else '')
 
     def _settle(self, call: FlowCall, value: ConfirmInput, result: ConfirmReading) -> ConfirmReading:
         if not value.delivered and isinstance(result.decision, Accept):
@@ -116,7 +113,7 @@ def confirm_interpreter(model: Model | str, settings: ModelSettings | None = Non
         model,
         ConfirmInput,
         ConfirmReading,
-        instructions='Read the utterance as exactly one decision about the proposal, using the schema descriptions.',
+        context='The person was read back a proposal and asked to confirm it. Read their answer as exactly one decision.',
         model_settings=settings,
     )
     return ConfirmInterpreter('confirm', classifier, ConfirmReading(decision=NoDecision()))

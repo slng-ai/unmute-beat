@@ -51,7 +51,7 @@ from salon.tools.asking import Ask
 from salon.tools.booking import booking_question, cancel_question, write_booking
 from salon.tools.complaints import write_complaint
 from salon.tools.desk import clarify, end_conversation, hand_over_for, switch_task
-from salon.tools.identity import lookup_customer, readback_number
+from salon.tools.identity import lookup_customer, number_heard, readback_number
 from salon.tools.policy import ACTIONS, SPEAK_BY
 
 __all__ = ['ACTS', 'EXITS', 'advance', 'build', 'complaint_ready', 'decided', 'solve', 'verified']
@@ -129,6 +129,24 @@ def _agreed(call: SalonCall) -> LocalAction | None:
     return None
 
 
+def _number_given(call: SalonCall) -> LocalAction | None:
+    """A whole Spanish number in the caller's words, while nobody is identified, is read back with no model.
+
+    After `_agreed`, so "yes, that's +34 671 273 454" to the read-back of that
+    number is the yes. A different number is a correction, read back as such;
+    the same number said again, with no yes, is left to the reading and the
+    model. See `number_heard` for why code, not the model, counts the digits.
+    """
+    if call.state.agent != 'verify' or call.state.customer_verified:
+        return None
+    if not (phone := number_heard(call.heard)):
+        return None
+    asked = call.last_proposal()
+    if asked is not None and asked[0].about == 'phone' and asked[0].value == phone:
+        return None
+    return LocalAction('ask_number', lambda: readback_number(call, phone))
+
+
 def _took_back(call: SalonCall) -> LocalAction | None:
     """A booking made in this call that the caller takes back is offered for cancelling, on whatever turn.
 
@@ -171,7 +189,7 @@ def _goodbye(call: SalonCall) -> LocalAction | None:
 
 
 ACTS = Acts[SalonCall](
-    answer=(_move_or_add, _agreed),
+    answer=(_move_or_add, _agreed, _number_given),
     take_back=(_took_back,),
     pick=(_picked,),
     goodbye=(_goodbye,),

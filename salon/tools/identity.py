@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
@@ -205,6 +205,32 @@ _PHONE_CONTENT = re.compile(
     re.IGNORECASE,
 )
 """Anything in an utterance that might be a number or a correction to one."""
+
+
+_SPANISH_RUN = re.compile(r'\+\s*3\s*4(?:[\s.,-]*\d)+')
+"""A "+34" and the digit groups after it, however the pauses split them: "+34 6. 71. 2. 73. 4. 5. 4."."""
+
+
+def number_heard(words: str) -> str:
+    """The Spanish number the caller said whole, as the last "+34" and exactly nine digits after it, or ''.
+
+    Coval run L5RWCS7b, K3: the caller said "+34 6. 71. 2. / 73. 4. / 5. /
+    4." and then "+34. / 671. / 273. 45. / 4.", nine digits both times, and
+    the model counted neither and asked for "the rest of the digits" twice.
+    Speech-to-text writes digits as numerals, so counting them is code's job.
+    Anything else (ten digits, digits in words, no "+34", a number that is
+    not a real Spanish one) is '' and the model handles it, as before.
+    """
+    runs = _SPANISH_RUN.findall(words)
+    if not runs:
+        return ''
+    digits = re.sub(r'\D', '', runs[-1])
+    if len(digits) != 11:
+        return ''
+    try:
+        return _PHONE.validate_python(f'+{digits}')
+    except ValidationError:
+        return ''
 
 
 def _waiting_for_a_number(call: SalonCall) -> bool:

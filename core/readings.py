@@ -28,7 +28,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic_ai.models import Model
@@ -195,6 +195,19 @@ class Reading[C: CallContext, InputT: Exchange](ClassifierInterpreter[C, InputT,
     def label(self, call: C) -> str:
         """This turn's label, or the default when the reading did not run, failed or went stale."""
         return getattr(self.current(call), self.field)
+
+    def ran(self, call: C) -> bool:
+        """Whether this reading was asked this turn about the call as it is now, so its label is an answer.
+
+        Its default and "it did not run" read the same through `label`; a
+        guard that acts on a default has to know which one it has.
+        """
+        cached = call._interpretations.get(self.name)
+        return (
+            cached is not None
+            and cached.turn == call.turn
+            and self._still_valid(call, cast(InputT, cached.input))
+        )
 
     def _input(self, call: C) -> InputT:
         value = self.snapshot(call)

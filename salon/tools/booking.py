@@ -2,10 +2,10 @@
 
 `save_booking` is the only thing that changes an appointment, and it will not
 run on the model's say-so. `_authorised` is what stands between the two: the
-caller either agreed to a readback of this exact write, picked one of the
-times the pending offer put to them, or answered the move-or-add question in
-their own words. The model supplies none of those; the consent reading
-interprets the reply, and this code checks it against what was on the table.
+caller either agreed to a readback of this exact write, or answered the
+move-or-add question in their own words. A plain pick of an offered time is
+read back first. The model supplies none of those; the readings interpret the
+reply, and this code checks it against what was on the table.
 
 The step's opening is here too: resumed after verification with the
 request the caller made at the front desk, it offers times for it without a
@@ -23,13 +23,14 @@ from core.graph import Opening
 from core.operations import Operation
 from core.policies import claim_or_refuse, pick
 from core.state import present
-from salon.classification import classify_reply
+from salon.classification import CHOSEN_OFFER, classify_reply
 from salon.diary import (
     AlreadyHoldsError,
     RefusedError,
     day_phrases,
     resolve_day,
     resolve_time,
+    times_named,
 )
 from salon.models.consent import Asked
 from salon.models.receipts import BookingCommand, Held, Saved, Slots
@@ -135,8 +136,8 @@ async def offer_times(
 ) -> str:
     """Read availability and speak up to three real choices, ending this reply.
 
-    Use when the caller needs to choose a time. For an already authorized same-time
-    move or clear selection, use read_diary then save_booking instead.
+    Use when the caller needs to choose a time. For a same-time move or a
+    time they already picked plainly, use read_diary then ask_booking instead.
 
     Args:
         when: The caller's own day words.
@@ -155,7 +156,7 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
     """Read the diary and speak the first few free times. Shared by `offer_times` and the booking step's opening.
 
     What was spoken is recorded, ids and all, so the turn the caller picks one
-    can go straight to `save_booking` rather than re-reading the diary to find
+    can go straight to its read-back rather than re-reading the diary to find
     the id of a time they have already been told. The offer is also the
     question the caller's next reply answers: the consent reading names which
     of these ids they picked, and only an id offered here can count.
@@ -253,7 +254,32 @@ async def ask_booking(
         slot_id: The slot exactly as the diary returned it. Empty when cancelling.
         booking_id: The booking exactly as the diary returned it. Empty when booking.
     """
-    return booking_question(ctx.deps, action, slot_id, booking_id)
+    call = ctx.deps
+    if action in ('book', 'move') and _names_the_time(call, slot_id):
+        await classify_reply(call, usage=ctx.usage, usage_limits=ctx.usage_limits)
+    if action in ('book', 'move') and _named_but_not_picked(call, slot_id):
+        raise ModelRetry(
+            f'Nothing was asked: the caller named that time but did not simply pick it. They said '
+            f'"{call.heard}". Answer their question or condition first; read it back once they pick it plainly.'
+        )
+    return booking_question(call, action, slot_id, booking_id)
+
+
+def _named_but_not_picked(call: SalonCall, slot_id: str) -> bool:
+    """The caller named this slot's time, and the pick reading still found no plain pick: a condition or a doubt.
+
+    Coval run L5RWCS7b, K5: "09:00. But only if it costs less than 30 euros"
+    read as no pick, and the booking model read 9:00 back anyway, leaving the
+    price question unanswered. A yes to a time the model proposed in its own
+    words names no time, and is read back as before. `times_named` only ever
+    refuses here; it never authorises anything.
+    """
+    return _names_the_time(call, slot_id) and CHOSEN_OFFER.ran(call) and not call.picked_offer()
+
+
+def _names_the_time(call: SalonCall, slot_id: str) -> bool:
+    offered = call.diary.offer_of(call.id, slot_id, call.state.customer_phone)
+    return bool(offered) and offered['time'] in times_named(call.heard)
 
 
 def booking_question(

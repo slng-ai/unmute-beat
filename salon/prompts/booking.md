@@ -35,5 +35,6 @@ Times just offered to the caller, with their slot ids:
 - {{spoken}}: `{{slot_id}}`
 {{/each}}
 If they pick one of these, read it back with `ask_booking` and its slot id.
-The diary has already been read for them.
+A pick with a condition or a question attached is not a pick yet: answer
+that first. The diary has already been read for them.
 {{/if}}

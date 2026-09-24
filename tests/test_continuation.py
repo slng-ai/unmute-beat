@@ -33,7 +33,7 @@ from salon import agents, diary
 from salon.diary import Diary
 from salon.models.state import open_call
 from salon.tools.asking import Ask
-from salon.tools.booking import ask_booking, offer, offer_cancel, undo_ready
+from salon.tools.booking import booking_question, offer, offer_cancel, undo_ready
 from tests.classifier_model import scripted as scripted_readings
 
 PHONE = '+34611111111'
@@ -82,8 +82,7 @@ async def read_back_a_haircut(call, probe) -> str:
     call.turn_started('A haircut on Friday at nine, please.')
     slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)['slots']
     slot = next(s for s in slots if s['time'] == '09:00')
-    context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
-    question = await ask_booking(context, 'book', slot['slot_id'], '')
+    question = booking_question(call, 'book', slot['slot_id'], '')
     await call.speak_now(question.put(call), origin='ask')
     call.note_reached()
     played_out(call)
@@ -246,8 +245,7 @@ async def a_read_back_cut_off_is_not_agreed_to():
         call.turn_started('A haircut on Friday at nine, please.')
         slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)['slots']
         slot = next(s for s in slots if s['time'] == '09:00')
-        context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
-        question = await ask_booking(context, 'book', slot['slot_id'], '')
+        question = booking_question(call, 'book', slot['slot_id'], '')
         await call.speak_now(question.put(call), origin='ask')
         if started:
             call.note_reached()
@@ -320,8 +318,39 @@ async def a_number_talked_over_arrives_whole():
         probe.interrupt()
         await probe._turn('611 111 111.')
     assert call.turn == 1 and call.heard == "It's +34. 611 111 111.", (call.turn, call.heard)
-    assert heard_by_model == ["It's +34.", "It's +34. 611 111 111."], heard_by_model
+    assert heard_by_model == ["It's +34."], 'the whole number is read back by code, not counted by the model'
     assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 111 111. Have I got that right?'
+
+
+async def a_number_in_pieces_is_read_back_without_the_model():
+    """Coval run L5RWCS7b, K3: nine digits said in pauses, and the model asked for "the rest" three times.
+
+    Speech-to-text writes the digits as numerals, so the application counts
+    them. Nine after "+34" is read back with no model request; anything else
+    is still the model's, which gets the count in the validation error.
+    """
+    from salon.tools.identity import number_heard
+
+    assert number_heard("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.") == '+34671273454'
+    assert number_heard("That's the full number. +34. 671. 273. 45. 4.") == '+34671273454'
+    assert number_heard('+34. 671. 273. 4. 5. 4. 0. And sorry, can we make it Saturday?') == '', 'ten digits'
+    assert number_heard('+34 611 111 112, no, +34 611 111 111') == '+34611111111', 'the last number said'
+    assert number_heard('six one one, one one one, one one one') == '', 'digits in words are the model'
+
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('', diary=books)
+    call.commit(agent='verify', pending='booking')
+    probe = Probe(call)
+
+    async def verify(messages, info):
+        raise AssertionError('the model was asked to count digits the application had')
+        yield ''
+
+    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
+        await probe._turn("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.")
+    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 273 454. Have I got that right?'
+    assert call.requests == [], 'reading a whole number back costs no request'
 
 
 async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
@@ -473,6 +502,48 @@ async def a_pick_said_with_a_goodbye_is_asked_before_they_go():
     asked = probe.fixed()[-1]
     assert asked.startswith('Before you go: shall I book you in for a hair colour'), asked
     assert call.state.writes == 0 and call.ended == '', 'booked, or hung up, before the yes'
+
+
+async def a_time_named_with_a_condition_is_not_read_back():
+    """Coval run L5RWCS7b, K5: "09:00. But only if it costs less than 30 euros" was read back as a booking.
+
+    The pick reading was right, no pick; the booking model read 9:00 back
+    anyway and left the price unanswered. `ask_booking` now refuses a time
+    the caller named without picking it plainly, and the model answers.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A hair colour on Friday.')
+    await offer(call, 'Friday', 'hair-color')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
+    tries: list[str] = []
+
+    def classify(name, data):
+        return {'chosen_offer': ''}.get(name)
+
+    async def booking(messages, info):
+        tries.append('booking')
+        if len(tries) == 1:
+            yield {
+                0: DeltaToolCall(
+                    name='ask_booking', json_args=f'{{"action":"book","slot_id":"{nine}","booking_id":""}}'
+                )
+            }
+        else:
+            yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
+
+    with (
+        scripted_readings(classify),
+        agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking)),
+    ):
+        probe.interrupt()
+        await probe._turn('09:00. But only if it costs less than 30 euros.')
+    assert tries == ['booking', 'booking'], 'the refusal did not send the model back to answer'
+    assert not any(line.startswith('Shall I book') for line in probe.fixed()), probe.fixed()
+    assert call.pending_question() is None or call.pending_question().about != 'booking'
 
 
 async def only_a_slot_on_the_table_can_be_picked():
@@ -840,10 +911,12 @@ async def main():
     await a_missing_barge_never_merges_turns()
     await the_next_reply_is_told_what_was_not_heard()
     await a_number_talked_over_arrives_whole()
+    await a_number_in_pieces_is_read_back_without_the_model()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await a_pick_said_with_a_goodbye_is_asked_before_they_go()
+    await a_time_named_with_a_condition_is_not_read_back()
     await only_a_slot_on_the_table_can_be_picked()
     await a_pick_with_no_question_pending_is_still_read_back()
     await an_add_on_to_a_pick_is_read_with_it()

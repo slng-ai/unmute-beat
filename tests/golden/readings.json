@@ -173,6 +173,12 @@
       "description": "The `id` of the one option in `options` the answer picks or asks for, copied exactly. It still counts when the answer also says thanks or goodbye. Empty if the answer picks none of them, puts a condition on its pick, or could mean more than one.",
       "title": "Choice",
       "type": "string"
+     },
+     "named": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer names without simply picking it: it puts a condition on it, asks about it, or doubts it. Empty if the answer names none, or picks it plainly.",
+      "title": "Named",
+      "type": "string"
      }
     },
     "title": "ChosenOfferChoice",

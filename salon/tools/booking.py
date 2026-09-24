@@ -274,12 +274,14 @@ def _named_but_not_picked(call: SalonCall, slot_id: str) -> bool:
     refuses here; it never authorises anything.
 
     With the named pick on (`salon.classification.NAMED_PICK`), the reading
-    itself says which time was named that way (`Offer.refuses`), and the
-    English word list is not needed.
+    itself says which option was named that way (`Offer.refuses`), in any
+    language and with no time said: "the first one, if it is under 30 euros".
+    The word list stays as a second check. It can only refuse, so keeping it
+    costs nothing but English-only coverage.
     """
     offer = call.conversation.offer('chosen_offer')
-    if offer.named:
-        return offer.refuses(call, slot_id)
+    if offer.named and offer.refuses(call, slot_id):
+        return True
     return _names_the_time(call, slot_id) and offer.reading.ran(call) and not call.picked_offer()
 
 

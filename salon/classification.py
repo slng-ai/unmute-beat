@@ -92,12 +92,13 @@ classifier's. Flip the default here once they are.
 """
 
 
-NAMED_PICK = os.environ.get('SALON_NAMED_PICK') == '1'
+NAMED_PICK = os.environ.get('SALON_NAMED_PICK', '1') == '1'
 """Whether the pick reading also names a time picked with a condition or a question (`Offer.named`).
 
-ponytail: off until `harness-reading/choose` shows, over 3 runs on each model,
-no lower pick accuracy and no more false accepts than production. Then turn it
-on here, and the booking guard stops needing `times_named`.
+On for the salon since 24 September. On `harness-reading/choose`, 3 runs of
+21 items on the salon's model (gemini-3.5-flash-lite): pick accuracy 1.00, no
+false accept, named 1.00, as production. It is not on in core by default:
+gpt-5.6-luna fell to 0.95, 0.95 and 0.86. `SALON_NAMED_PICK=0` turns it off.
 """
 
 

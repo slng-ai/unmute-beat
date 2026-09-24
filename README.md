@@ -354,8 +354,10 @@ Conversation[ClinicCall](
   (`salon/tools/writes.py`). It is tied to the diary's operation log.
 - The patterns for a claimed change nothing made (`_CLAIMED`, `_RECORDED` in
   `salon/models/state.py`) are the salon's, and English.
-- A pick with a condition relies on the pick reading returning no pick. The
-  salon also checks the times named, with an English word list.
+- A pick with a condition is read by the pick reading's `named` field
+  (`Offer(named=True)`). The salon turns it on; core leaves it off, because
+  gpt-5.6-luna lost pick accuracy with it. The salon keeps its English word
+  list of times as a second check, which can only refuse.
 - Classifier instructions and class descriptions are English. The fixed lines
   follow the call's `Locale`, but a conversation in another language needs a
   live check of the readings on its own dataset.

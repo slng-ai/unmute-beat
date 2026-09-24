@@ -31,7 +31,7 @@ from core.history import project
 from core.processor import PydanticAgentProcessor
 from core.state import Checkpoint
 from salon import agents, diary
-from salon.classification import CLASSIFIER
+from salon.classification import CLASSIFIER, DETOUR
 from salon.diary import Diary
 from salon.models.consent import ConsentInput, ReplyClassification
 from salon.models.state import open_call
@@ -433,7 +433,7 @@ def a_detour_keeps_the_rest_of_its_first_turn():
     assert call.detour_words() == ['Actually, make it Saturday.'], call.detour_words()
     call.turn_started('Yes.')
     assert call.detour_words() == ['Actually, make it Saturday.', 'Yes.'], call.detour_words()
-    assert call.consent_snapshot().detour_words == ('Actually, make it Saturday.', 'Yes.')
+    assert DETOUR._input(call).said_since == ('Actually, make it Saturday.', 'Yes.')
     call.note_request_kept()
     assert call.request_kept
     call.turn_started('And one more thing.')

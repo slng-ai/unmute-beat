@@ -10,9 +10,9 @@ from unittest.mock import patch
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
-from salon.classification import CLASSIFIER
+from salon.classification import CLASSIFIER, DETOUR_CLASSIFIER
 from salon.diary import times_named
-from salon.models.consent import ConsentInput, ReplyClassification
+from salon.models.consent import ConsentInput, DetourInput, DetourReading, ReplyClassification
 
 LABELS = {
     'right': ('accept', 'unclear', 'continue'),
@@ -52,12 +52,12 @@ CHANGES = ('instead', 'as well', 'also')
 """What makes a scripted detour reply change the request it interrupted. The real classifier reads meaning."""
 
 
-def _change(data: ConsentInput) -> str:
+def detour(messages, info):
     """Whether the caller kept the interrupted request, by rule for scripted tests."""
-    if not data.detour_request:
-        return 'unclear'
-    said = ' '.join(data.detour_words).casefold()
-    return 'changed' if any(word in said for word in CHANGES) else 'kept'
+    data = DetourInput.model_validate_json(messages[-1].parts[0].content)
+    said = ' '.join(data.said_since).casefold()
+    change = 'changed' if any(word in said for word in CHANGES) else 'kept'
+    return ModelResponse(parts=[TextPart(DetourReading(request_change=change).model_dump_json())])
 
 
 def _chosen(data: ConsentInput) -> str:
@@ -98,7 +98,6 @@ def classify(messages, info):
             'conversation': conversation,
             'retained_approval': 'keep' if data.retained_complaint else 'unclear',
             'chosen_offer': _chosen(data),
-            'request_change': _change(data),
         }
     )
     return ModelResponse(parts=[TextPart(result.model_dump_json())])
@@ -106,5 +105,8 @@ def classify(messages, info):
 
 @contextmanager
 def classifier_model():
-    with patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)):
+    with (
+        patch.object(CLASSIFIER, 'model', FunctionModel(function=classify)),
+        patch.object(DETOUR_CLASSIFIER, 'model', FunctionModel(function=detour)),
+    ):
         yield

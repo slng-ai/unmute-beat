@@ -26,6 +26,7 @@ step's prompt, exits and requirements come from `salon/flow.yaml`.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import replace
@@ -41,7 +42,7 @@ from core.graph import Exit, LocalAction, Node, Opening, lent
 from core.policies import one_action_per_reply, request_clock, speak_by
 from core.steps import AgentStep
 from salon import classification
-from salon.classification import MODEL, SETTINGS, SOLVER, classify_reply
+from salon.classification import DETOUR, MODEL, SETTINGS, SOLVER, classify_reply
 from salon.models.consent import CorrectPhone, SalonSwitch
 from salon.models.receipts import BookingCommand
 from salon.models.shapes import SubmittedPhone
@@ -66,6 +67,9 @@ async def advance(
 
     Classification is shared with the tool guards. An unresolved answer falls
     through to conversation, while application guards still own every write.
+    While the identity check runs, whether the caller kept the request it
+    interrupted is read at the same time, as its own request, so it adds no
+    wait and cannot blur the consent reading.
     With the solver live, `solve` reads the reply instead and can also answer
     a correction or a change of task.
     """
@@ -73,7 +77,10 @@ async def advance(
         return await solve(call, usage, usage_limits)
     question = call.pending_question()
     if question is not None or call._complaint is not None:
-        await classify_reply(call, usage=usage, usage_limits=usage_limits)
+        readings = [classify_reply(call, usage=usage, usage_limits=usage_limits)]
+        if call.detour_request:
+            readings.append(DETOUR.interpret(call, usage=usage, usage_limits=usage_limits))
+        await asyncio.gather(*readings)
     return decided(call)
 
 

@@ -324,8 +324,6 @@ class SalonCall(core.CallContext):
             )
             if self.state.customer_phone
             else (),
-            detour_request=self.detour_request,
-            detour_words=tuple(self.detour_words()),
         ).model_copy(deep=True)
 
     def _table(self) -> tuple[OfferedTime, ...]:

@@ -2,13 +2,11 @@
 
 Two interpreters read a caller's reply, and one of them is live at a time:
 
-* `CONSENT`, the default: seven narrow labels (confirmation, appointment
+* `CONSENT`, the default: six narrow labels (confirmation, appointment
   choice, end of call, retained complaint approval, whether the reply takes
-  back the booking just made, which time on the table it picks, and whether
-  the caller kept the request the identity check interrupted). A correction
-  or a change of task is not something it can say, so those fall through to
-  an agent. The solver gives no `request_change`, so with it live a return
-  from the identity check always runs the step's model.
+  back the booking just made, and which time on the table it picks). A
+  correction or a change of task is not something it can say, so those fall
+  through to an agent.
 * `SOLVER`, behind `SALON_INTERPRETER=solver`: one decision per reply from a
   wider set (accept, correct the number, switch task, clarify, ...), so a
   correction or a switch can be answered without a second request.
@@ -16,6 +14,12 @@ Two interpreters read a caller's reply, and one of them is live at a time:
 Whichever is live, the tool guards read the same thing: `SalonCall.classification`,
 the consent reading bound to the proposal it answers. The solver writes its
 decision into that reading too, so no guard changes and no write path is new.
+
+`DETOUR` is separate from both: while the identity check runs, it reads
+whether the caller kept the request that check interrupted, the evidence a
+return opening needs (`CallContext.request_kept`). It runs beside the consent
+reading, not inside it, and only with the classifier live; with the solver, a
+return from the check always runs the step's model.
 """
 
 import os
@@ -34,6 +38,8 @@ from salon.models.consent import (
     ConsentInput,
     CorrectPhone,
     Destination,
+    DetourInput,
+    DetourReading,
     ReplyClassification,
     SalonSolution,
     SalonSwitch,
@@ -147,8 +153,6 @@ class ConsentInterpreter(ClassifierInterpreter['SalonCall', ConsentInput, ReplyC
     ) -> ReplyClassification:
         call.record_classification(value, result)
         _retain_complaint(call, call.classification)
-        if value.detour_request and result.request_change == 'kept':
-            call.note_request_kept()
         return result
 
 
@@ -209,6 +213,25 @@ class SalonSolver(ClassifierInterpreter['SalonCall', SolverInput, SalonSolution]
 
 
 CONSENT = ConsentInterpreter('consent', CLASSIFIER, ReplyClassification())
+
+
+class DetourInterpreter(ClassifierInterpreter['SalonCall', DetourInput, DetourReading]):
+    """Whether the caller kept the request the identity check interrupted, read from everything said since."""
+
+    def _input(self, call: SalonCall) -> DetourInput:
+        return DetourInput(request=call.detour_request, said_since=tuple(call.detour_words()))
+
+    def _still_valid(self, call: SalonCall, value: DetourInput) -> bool:
+        return value == self._input(call)
+
+    def _settle(self, call: SalonCall, value: DetourInput, result: DetourReading) -> DetourReading:
+        if result.request_change == 'kept':
+            call.note_request_kept()
+        return result
+
+
+DETOUR_CLASSIFIER = Classifier(MODEL, DetourInput, DetourReading, model_settings=SETTINGS)
+DETOUR = DetourInterpreter('detour', DETOUR_CLASSIFIER, DetourReading())
 SOLVER = SalonSolver('solver', SOLVER_CLASSIFIER, SalonSolution(decision=NoDecision()))
 
 

@@ -264,7 +264,9 @@ async def openings_skip_the_model():
     caller had already made, and again only to find the id of a time it had
     just offered. Each is now an opening or the consent reading, and each is
     counted here: a plain pick of an offered time is written from the reading
-    alone, with no model request at all.
+    alone, with no model request at all. The return from verification makes
+    two classifier requests, side by side: the consent reading, and whether
+    the caller kept the request verification interrupted.
     """
     books.reset()
     books.set_clock(CLOCK)
@@ -294,7 +296,10 @@ async def openings_skip_the_model():
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn("Yes, that's right.")
-    assert probe.requests() == 1 and call.requests[0].kind == 'classifier', call.requests
+    assert probe.requests() == 2 and {r.kind for r in call.requests} == {'classifier'}, call.requests
+    assert abs(call.requests[0].started - call.requests[1].started) < 0.05, (
+        'the two readings run side by side'
+    )
     assert call.state.agent == 'booking' and call.state.customer_verified, call.state
     assert call.state.wanted is None and len(call.state.offered) == 3, call.state
     assert call.spoken[-1].text.startswith('For a haircut on Friday, I have 9:00 AM'), call.spoken

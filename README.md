@@ -229,7 +229,7 @@ knows about Pipecat. `tests/test_core.py` reads the source and checks both.
 
 A use case gives core's classes its information, and core's code runs it.
 [tests/clinic.py](tests/clinic.py) is a complete one: a clinic's booking
-line in about 200 lines, with no salon code. The salon is built the same
+line in about 240 lines, with no salon code. The salon is built the same
 way, in [salon/classification.py](salon/classification.py) (`SALON`),
 [salon/tools/desk.py](salon/tools/desk.py) (`DESK`) and
 [salon/nodes.py](salon/nodes.py) (`BUILDER`).

@@ -295,8 +295,11 @@ async def a_number_talked_over_arrives_whole():
     assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 111 111. Have I got that right?'
 
 
-async def a_booking_taken_back_is_offered_for_cancelling():
+async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
     """The K2 failure: a picked time books at once; "leave it" must not end the call with it still booked.
+
+    Whether "leave it" comes on the very next turn or after "How much is that?"
+    (Coval run Y47Ut7oC, K2, where the later one hung up on it).
 
     And a reply that agrees and says goodbye in one breath runs what it agreed
     to: "Yes, cancel it. Bye." used to hang up on the yes.
@@ -351,6 +354,11 @@ async def a_booking_taken_back_is_offered_for_cancelling():
         assert call.state.writes == 1 and len(books.bookings_for(PHONE, CLOCK.date())) == 1
         call.note_reached()
         call.note_drained()
+        if asks_price:
+            probe.interrupt()
+            await probe._turn('How much is that?')
+            call.note_reached()
+            call.note_drained()
         probe.interrupt()
         await probe._turn("Oh, that's too much for me. Leave it, thanks. Goodbye.")
         assert given[-1].just_changed, 'the classifier was not told what had just been booked'
@@ -614,7 +622,8 @@ async def main():
     await a_missing_barge_never_merges_turns()
     await the_next_reply_is_told_what_was_not_heard()
     await a_number_talked_over_arrives_whole()
-    await a_booking_taken_back_is_offered_for_cancelling()
+    await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
+    await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await only_a_slot_on_the_table_can_be_picked()
     await a_pick_with_no_question_pending_still_books()
     await an_add_on_after_a_booking_is_read_against_it()

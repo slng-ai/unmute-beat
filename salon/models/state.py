@@ -225,14 +225,15 @@ class SalonCall(core.CallContext):
     _classification: ReplyClassification = PrivateAttr(default_factory=ReplyClassification)
     _complaint: Asked | None = PrivateAttr(default=None)
     """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
-    _undo: tuple[str, str, int, int] | None = PrivateAttr(default=None)
-    """The booking just made, as (booking id, what the caller was told, turn, pieces heard), so the caller can take it back.
+    _undo: tuple[str, str] | None = PrivateAttr(default=None)
+    """The booking made in this call, as (booking id, what the caller was told), so the caller can take it back.
 
     A pick of an offered time books at once, with no read-back. The caller
     who then hears the price and says "leave it" was told goodbye with the
-    booking still in the diary. The very next reply is read against it by the
-    consent classifier (`undoable`); after that, each step's model can offer
-    to cancel it (`offer_cancel`) for as long as the caller still holds it.
+    booking still in the diary. For as long as they hold it, every reading
+    is shown it (`just_changed`) and a reading that takes it back is offered
+    the cancel (`decided`), whichever turn it comes on and whether or not the
+    caller added it in the same breath as the pick.
     """
     _day_words: list[str] = PrivateAttr(default_factory=list)
     """Every day the caller has named, in their own words, from whichever turn.
@@ -378,12 +379,8 @@ class SalonCall(core.CallContext):
         return chosen if chosen and chosen in {o.slot_id for o in self._table()} else ''
 
     def offer_undo(self, booking_id: str, told: str) -> None:
-        """A booking was just made and confirmed in these words: the caller's next reply may take it back.
-
-        The turn and how many pieces of it had arrived are kept, so a piece
-        the caller adds after it, in the same turn, is known to be about it.
-        """
-        self._undo = (booking_id, told, self.turn, len(self._pieces))
+        """A booking was just made and confirmed in these words: the caller may take it back while they hold it."""
+        self._undo = (booking_id, told)
 
     @property
     def undo_booking(self) -> str:
@@ -392,26 +389,6 @@ class SalonCall(core.CallContext):
             return ''
         held = self._diary.bookings_for(self.state.customer_phone, self._diary.now().date())
         return self._undo[0] if any(b['booking_id'] == self._undo[0] for b in held) else ''
-
-    @property
-    def undoable(self) -> str:
-        """The booking this reply could take back without a model: made on the caller turn before this one, or ''.
-
-        Only the very next reply is read against it, because only then is a
-        question already pending and its classification already paid for.
-        Later on, the step's own model offers the undo (`offer_cancel`).
-
-        The next reply includes one the caller adds in the same turn, after
-        the change was made on an earlier piece: its confirmation never
-        finished playing, and what they add is about it. "09:00." was booked,
-        and "but only if it costs less than 30 euros" came in the same breath
-        (Coval run ad3n4Vxn, K5).
-        """
-        if self._undo is None:
-            return ''
-        _, _, turn, pieces = self._undo
-        after = turn == self.turn - 1 or (turn == self.turn and len(self._pieces) > pieces)
-        return self.undo_booking if after else ''
 
     def record_classification(self, snapshot: ConsentInput, result: ReplyClassification) -> None:
         """Keep this turn's consent reading, bound to the snapshot it read. Only an interpreter calls this."""

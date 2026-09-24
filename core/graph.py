@@ -71,6 +71,11 @@ class Opening[C: CallContext]:
     share every check. It is tried only after `advance` has declined, so an
     answer to a pending question always wins; a refusal from the executor is
     context for the model run that follows, never a second attempt.
+
+    An opening on a prerequisite's return (`after='completed'`) acts on the
+    request the detour interrupted. It runs only when a reading of the
+    return turn found that request unchanged (`CallContext.request_kept`);
+    otherwise the step's model runs, with what the caller said meanwhile.
     """
 
     name: str
@@ -83,6 +88,8 @@ class Opening[C: CallContext]:
     def action(self, call: C) -> LocalAction | None:
         """This opening as the turn's next action, or None when it does not apply to this call now."""
         if not self.after or call.entered != self.after or not self.applies(call):
+            return None
+        if self.after == 'completed' and not call.request_kept:
             return None
         return LocalAction(self.name, lambda: self.run(call))
 
@@ -124,6 +131,19 @@ class Node[S: VoiceState]:
     """Resolve a decision within the shared budget, or return None to run the conversational agent."""
     openings: tuple[Opening[Any], ...] = ()
     """What this step does on arrival without a model, tried in order after `advance` declines."""
+    shares_detour: bool = False
+    """Whether, as a prerequisite, this step hands the caller's words on to the step it was serving.
+
+    Off by default: a prerequisite's conversation is its own, and the step
+    that waited gets back its saved history and a status, nothing the caller
+    told the prerequisite. A step turns it on when nothing it hears is secret
+    from the step it serves. Then everything the caller said during the
+    detour is kept for the step that runs next (`CallContext.keep_detour_words`),
+    however the detour ended: a request changed mid-detour is not lost, and
+    nor is a number the caller gave to a check that was then given up (Coval
+    run ad3n4Vxn, K3, where the number was asked for again from scratch). The
+    prerequisite's own speech stays out either way.
+    """
 
     def opening(self, call: CallContext) -> LocalAction | None:
         """The first opening that applies to this call on this entry, or None to run the agent."""

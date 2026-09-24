@@ -24,11 +24,14 @@ here opens a span inside it, and the agents' own spans land under that.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from typing import Any
 
 from opentelemetry import trace
 from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
+    BotStoppedSpeakingFrame,
     EndWorkerFrame,
     Frame,
     InterruptionFrame,
@@ -96,8 +99,11 @@ class PydanticAgentProcessor(FrameProcessor):
         self._playback_turns: dict[str, list[str] | None] = {}
         self._playback_runs: dict[tuple[int, int], list[str]] = {}
         self._active_playback: list[str] | None = None
+        self._idle = asyncio.Event()
+        self._idle.set()
         call._say = self.say
         call._end = self.hang_up
+        call._playback_known = True
 
     def can_generate_metrics(self) -> bool:
         """No. This processor's own timings go on its span, not into Pipecat's metrics.
@@ -190,6 +196,12 @@ class PydanticAgentProcessor(FrameProcessor):
         if isinstance(frame, InterruptionFrame):
             self.interrupt()
             await self.push_frame(frame, direction)
+        elif isinstance(frame, BotStartedSpeakingFrame):
+            self._call.note_reached()
+            await self.push_frame(frame, direction)
+        elif isinstance(frame, BotStoppedSpeakingFrame):
+            self._call.note_drained()
+            await self.push_frame(frame, direction)
         elif isinstance(frame, LLMContextFrame):
             users = [
                 m for m in frame.context.get_messages() if isinstance(m, dict) and m.get('role') == 'user'
@@ -197,7 +209,7 @@ class PydanticAgentProcessor(FrameProcessor):
             unseen = users[self._context_users :]
             self._context_users = len(users)
             if unseen:
-                await self._turn(' '.join(filter(None, (_last_user_text(LLMContext([m])) for m in unseen))))
+                await self.serve(' '.join(filter(None, (_last_user_text(LLMContext([m])) for m in unseen))))
         else:
             await self.push_frame(frame, direction)
 
@@ -213,9 +225,34 @@ class PydanticAgentProcessor(FrameProcessor):
         self.interrupt()
         await super()._start_interruption()
 
+    async def serve(self, prompt: str | None) -> None:
+        """One caller turn, marked as running until it is over, so a dropped line can let it finish."""
+        self._idle.clear()
+        try:
+            await self._turn(prompt)
+        finally:
+            self._idle.set()
+
+    async def finish_turn(self, timeout: float) -> None:
+        """Wait, for up to `timeout` seconds, for a turn already running to finish.
+
+        For the moment the line drops: the caller's last words may be the yes
+        to a read-back, and the turn reading them is still running. Cancelled
+        there, an approved complaint was never recorded (Coval run 4eDqRVLR,
+        K4). Allowed to finish, it writes only what its guards authorise, as
+        on any turn; what it says goes nowhere.
+        """
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self._idle.wait(), timeout)
+
     def interrupt(self) -> None:
-        """The caller spoke over us. Stop the run instead of finishing into a void."""
+        """The caller spoke over us. Stop the run instead of finishing into a void.
+
+        Told to the call as well, even with no run going: a caller who starts
+        again before the last answer played is still in the same turn.
+        """
         self._interrupted = True
+        self._call.note_barge()
         self._barge.fire()
 
     def _parent(self):
@@ -257,13 +294,16 @@ class PydanticAgentProcessor(FrameProcessor):
         the turn was asked and what it answered go on it in Langfuse's own keys,
         so the numbers can be read against the sentence that produced them.
 
+        Words the last turn never got into the history are carried to the front
+        of this one, unless this is more of the same turn, in which case the
+        call already holds them as that turn's unsent pieces (`CallContext.fresh`).
+
         ponytail: a run of cancelled turns joins into one long carried prompt.
         Bound it if a real call ever carries more than a sentence or two.
         """
-        previous_messages = tuple(self._call.messages)
-        previous_parts = frozenset(id(p) for m in previous_messages for p in m.parts)
         if self._carried:
-            prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
+            if not self._call.continues_turn():
+                prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
             self._carried = ''
         with _tracer.start_as_current_span(self._call.state.agent, context=self._parent()) as span:
             if prompt:
@@ -320,6 +360,8 @@ class PydanticAgentProcessor(FrameProcessor):
                             span.set_attribute(
                                 'classifier_fallback', any(r.fallback for r in classifications)
                             )
+                            span.set_attribute('classifier_outcome', [r.outcome for r in classifications])
+                            span.set_attribute('classifier_labels', [r.labels for r in classifications])
                             timed = [(r.ttft, r.kind) for r in self._call.requests if r.ttft is not None]
                             span.set_attribute('request_ttft', [ttft for ttft, _ in timed])
                             span.set_attribute('request_first_output', [kind for _, kind in timed])
@@ -330,6 +372,7 @@ class PydanticAgentProcessor(FrameProcessor):
                             span.set_attribute('speech_origins', [s.origin for s in spoken])
                             span.set_attribute('speech_segments', [s.id for s in spoken])
                             span.set_attribute('attempt', self._call.attempt)
+                            span.set_attribute('turn_pieces', len(self._call._pieces))
                             if spoken:
                                 span.set_attribute(
                                     'turn_first_text_out',
@@ -366,12 +409,9 @@ class PydanticAgentProcessor(FrameProcessor):
                     span.set_attribute('detail', self._finished.detail)
                 if self._call.ended:
                     span.set_attribute('ended', self._call.ended)
-                if (
-                    prompt
-                    and self._call.turn not in self._call._retained_turns
-                    and not self._call.delivered(prompt, excluding=previous_parts)
-                ):
-                    self._carried = prompt
+                self._call.turn_ended(interrupted=self._interrupted)
+                if prompt and not self._call.input_retained:
+                    self._carried = self._call.fresh
                 self._active_playback = None
                 if open_response:
                     await self.push_frame(LLMFullResponseEndFrame())

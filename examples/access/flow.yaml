@@ -1,0 +1,109 @@
+# The access request. Each step's whole definition is here: its kind, its prompt file (steps that
+# run a model), its module (steps that run code), and where it goes when it does not go on.
+version: 1
+id: access_request
+greeting: Hi, I can help you request access to a system. What is your employee ID?
+voice: voice.md
+
+steps:
+  - id: employee
+    kind: collect
+    prompt: prompts/employee.md
+    model: steps/fields.py:Employee
+    question: What is your employee ID?
+
+  - id: identify
+    kind: action
+    code: steps/identify.py
+    on_error: stranger
+
+  - id: team
+    kind: collect
+    prompt: prompts/team.md
+    model: steps/fields.py:Team
+    question: Which team are you on?
+
+  - id: system
+    kind: collect
+    prompt: prompts/system.md
+    model: steps/fields.py:System
+    question: Which system do you need?
+    after: [team]
+
+  - id: level
+    kind: collect
+    prompt: prompts/level.md
+    model: steps/fields.py:Level
+    question: What access level do you need?
+    after: [system]
+
+  - id: reason
+    kind: collect
+    prompt: prompts/reason.md
+    question: What do you need it for?
+    fields:
+      reason:
+        type: string
+        min_length: 5
+        description: Why they need it, in their own words.
+
+  - id: start
+    kind: collect
+    prompt: prompts/start.md
+    model: steps/fields.py:Start
+    question: From what date?
+
+  - id: end
+    kind: collect
+    prompt: prompts/end.md
+    model: steps/fields.py:Finish
+    question: Until what date?
+    after: [start]
+
+  - id: eligibility
+    kind: action
+    code: steps/eligibility.py
+    on_error: refused
+
+  - id: confirm
+    kind: confirm
+    code: steps/submit.py
+    then: submit
+    on_reject: cancelled
+    on_revise: level
+
+  - id: submit
+    kind: action
+    code: steps/submit.py
+    on_error: failed
+    on_unknown: unconfirmed
+
+  - id: submitted
+    kind: end
+    outcome: completed
+    say: 'Done: request {submit[request_id]} is submitted. It still needs approval; you will get an email.'
+
+  - id: cancelled
+    kind: end
+    outcome: cancelled
+    say: Okay, I haven't submitted anything.
+
+  - id: refused
+    kind: end
+    outcome: failed
+    say: The access policy does not allow that request, so nothing was filed.
+
+  - id: stranger
+    kind: end
+    outcome: failed
+    say: I can't find that employee ID, so I can't file a request.
+
+  - id: failed
+    kind: end
+    outcome: failed
+    say: The ticketing system refused the request, so nothing was filed.
+
+  - id: unconfirmed
+    kind: end
+    outcome: pending
+    say: I couldn't confirm whether it went through. Please don't submit it again; we'll email you.

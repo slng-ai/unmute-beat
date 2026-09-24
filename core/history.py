@@ -52,23 +52,32 @@ def project(
     Fixed speech shares its producing response so the following tool result
     stays last. Google rejects requests ending with an assistant message.
     Speech left by cancellation without a protocol response is inserted before
-    the next caller input. Caller turn IDs deduplicate reset/handoff inputs.
+    the next caller input.
+
+    Caller turn IDs deduplicate reset/handoff inputs: within one turn, caller
+    words already sent are not sent again, whether repeated as they were or
+    as the whole turn joined up. A turn that arrived in pieces keeps every
+    piece, because each one holds words the others do not.
     """
     speech = [s for s in call.all_spoken if s.id not in excluded and s.id not in call._hidden_speech]
     by_id = {s.id: s for s in speech}
     result = []
     present = set()
-    callers = set()
+    callers: dict[int, list[str]] = {}
     for source in messages:
         message = deepcopy(source)
         meta = message.metadata or {}
         turn = meta.get('caller_turn')
         if turn is not None and isinstance(message, ModelRequest):
-            if turn in callers:
-                message = replace(
-                    message, parts=[p for p in message.parts if not isinstance(p, UserPromptPart)]
-                )
-            callers.add(turn)
+            sent = callers.setdefault(turn, [])
+            kept = []
+            for part in message.parts:
+                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                    if part.content in sent or (sent and part.content == ' '.join(sent)):
+                        continue
+                    sent.append(part.content)
+                kept.append(part)
+            message = replace(message, parts=kept)
         ids = meta.get('speech_ids', [])
         response = meta.get('voice_response')
         if isinstance(message, ModelResponse) and (ids or response):

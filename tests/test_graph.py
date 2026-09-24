@@ -20,7 +20,10 @@ from contextlib import ExitStack
 
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from core.flow import Answered, Flow, Moved
 from core.graph import moved_by, route
+from core.policies import TurnBudget
+from core.turn import Turn
 from salon.agents import AGENTS
 from salon.models.state import SalonCall, SalonState
 
@@ -372,7 +375,80 @@ async def a_finisher_keeps_its_name():
             assert 'final_result' not in offered, f'{name} offers an unnamed output tool: {offered}'
 
 
+PHONE = '+34600111222'
+
+
+def the_flow_graph():
+    """The salon table compiled to a Pydantic graph: each step's legal moves, and a diagram of them."""
+    flow = Flow.of(AGENTS)
+    assert Flow.of(AGENTS) is flow, 'compiled once per table'
+    assert flow.moves == {
+        'concierge': frozenset({'booking', 'complaints', 'verify'}),
+        'verify': frozenset({'concierge', 'booking', 'complaints'}),
+        'booking': frozenset({'concierge', 'complaints', 'verify'}),
+        'complaints': frozenset({'concierge', 'verify'}),
+    }, flow.moves
+    diagram = flow.render()
+    assert diagram.startswith('stateDiagram') and all(name in diagram for name in AGENTS)
+
+
+async def the_graph_refuses_an_undeclared_move():
+    """A move the table does not allow matches no branch, and the run fails instead of wandering."""
+
+    class Jumper:
+        def __init__(self):
+            self.ran = []
+
+        async def hop(self, step, prompt):
+            self.ran.append(step)
+            return Moved('booking') if step == 'complaints' else Answered()
+
+    driver = Jumper()
+    assert await Flow.of(AGENTS).run(driver, 'concierge', None) == Answered()
+    try:
+        await Flow.of(AGENTS).run(Jumper(), 'complaints', None)
+    except RuntimeError as error:
+        assert 'No branch matched' in str(error), error
+    else:
+        raise AssertionError('complaints -> booking is not an exit, and the graph let it through')
+
+
+async def every_turn_walks_the_graph():
+    """A turn is walked by its table's graph: the handoff below goes through the graph's decision points."""
+
+    async def hands(messages, info: AgentInfo):
+        yield {0: DeltaToolCall(name='hand_over', json_args='{"to": "complaints", "because": "refund"}')}
+
+    async def guidance(messages, info: AgentInfo):
+        yield {0: DeltaToolCall(name='complaint_guidance', json_args='{"topic": "details"}')}
+
+    call = SalonCall(
+        state=SalonState(customer_phone=PHONE, customer_verified='existing', verified_phone=PHONE)
+    )
+    turn = Turn(call, AGENTS, TurnBudget())
+    assert turn.flow is Flow.of(AGENTS)
+    ran = []
+    hop = turn.hop
+
+    async def counted(step, prompt):
+        ran.append(step)
+        return await hop(step, prompt)
+
+    turn.hop = counted  # ty: ignore[invalid-assignment]
+    with ExitStack() as stack:
+        stack.enter_context(AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=hands)))
+        stack.enter_context(
+            AGENTS['complaints'].agent.override(model=FunctionModel(stream_function=guidance))
+        )
+        events = [e async for e in turn.events('I want a refund')]
+    assert ran == ['concierge', 'complaints'] and events[-1].status == 'answered', (ran, events[-1])
+    assert call.state.agent == 'complaints'
+
+
 async def main():
+    the_flow_graph()
+    await the_graph_refuses_an_undeclared_move()
+    await every_turn_walks_the_graph()
     prerequisite_interposed()
     no_interpose_when_met()
     the_pending_slot_clears()

@@ -31,6 +31,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from core.graph import moved_by
 from core.processor import EXHAUSTED, PydanticAgentProcessor
+from core.turn import take_turn
 from salon.agents import AGENTS
 from salon.diary import Diary
 from salon.models.state import SalonCall, SalonState, open_call
@@ -387,6 +388,35 @@ async def the_winner_is_the_same_every_time():
     assert len(outcomes) == 1, outcomes
 
 
+async def a_failed_run_is_retained_once():
+    """A run that fails after a handoff keeps what it added, once, and before the turn is over.
+
+    When a run fails, the SDK can report the tail of the history it was given
+    as new, and the engine used to abandon the failed stream to the garbage
+    collector: the handoff landed in the history a second time, at some later
+    and arbitrary moment. The next model request would have seen it twice.
+    """
+    import gc
+
+    books.reset()
+    call = open_call(PHONE, diary=books)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+
+    async def hands(messages, info: AgentInfo):
+        yield {0: DeltaToolCall(name='hand_over', json_args='{"to": "complaints", "because": "a refund"}')}
+
+    with scripted(concierge=hands, complaints=_says('Words where only a tool is allowed.')):
+        _, finished = await take_turn(call, AGENTS, 'I want a refund')
+    assert finished.status == 'failed', finished
+    held = len(call.messages)
+    assert _calls(call) == ['hand_over'], _calls(call)
+    gc.collect()
+    await asyncio.sleep(0)
+    assert _calls(call) == ['hand_over'] and len(call.messages) == held, (
+        'the failed run was retained again, later'
+    )
+
+
 async def a_split_destination_name_never_moves_anybody():
     """`complaints` is split after `co`, which is not a destination.
 
@@ -564,8 +594,8 @@ def every_tool_that_writes_is_an_action():
 
     Source inspection rather than a registry, because the registry is the
     thing being checked: a tool added tomorrow is covered without anybody
-    remembering this test exists. Every module the salon's tools live in is
-    scanned.
+    remembering this test exists. Every module the salon's tools and steps
+    live in is scanned.
 
     A model-callable tool is a public function whose first parameter is
     `ctx`. Anything else that commits is an executor or a helper, and is
@@ -583,9 +613,38 @@ def every_tool_that_writes_is_an_action():
 
     root = pathlib.Path(agents.__file__).parent
     functions: dict[str, ast.AST] = {}
-    for path in [root / 'agents.py', *sorted((root / 'tools').glob('*.py'))]:
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+    operations: dict[str, list[str]] = {}
+    """An `Operation` subclass's methods, by qualified name: they are reached through its `run`."""
+    instances: dict[str, str] = {}
+    """A module-level operation instance, and its class, so `LOOKUP.run(...)` counts as calling its methods."""
+    for path in [
+        root / 'agents.py',
+        root / 'nodes.py',
+        *sorted((root / 'tools').glob('*.py')),
+        *sorted((root / 'steps').glob('*.py')),
+    ]:
+        tree = ast.parse(path.read_text())
+        methods = set()
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and any(
+                'Operation' in ast.unparse(base) for base in node.bases
+            ):
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                        functions[f'{node.name}.{item.name}'] = item
+                        operations.setdefault(node.name, []).append(f'{node.name}.{item.name}')
+                        methods.add(id(item))
+            elif (
+                isinstance(node, ast.Assign)
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id in operations
+            ):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        instances[target.id] = node.value.func.id
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and id(node) not in methods:
                 functions.setdefault(node.name, node)
 
     def commits(node: ast.AST) -> bool:
@@ -615,9 +674,15 @@ def every_tool_that_writes_is_an_action():
     called_by: dict[str, set[str]] = {}
     for name, node in functions.items():
         for inner in ast.walk(node):
-            callee = getattr(getattr(inner, 'func', None), 'id', None)
-            if isinstance(inner, ast.Call) and callee in functions:
+            if not isinstance(inner, ast.Call):
+                continue
+            callee = getattr(inner.func, 'id', None)
+            if callee in functions:
                 called_by.setdefault(callee, set()).add(name)
+            owner = getattr(getattr(inner.func, 'value', None), 'id', None)
+            if isinstance(inner.func, ast.Attribute) and inner.func.attr == 'run' and owner in instances:
+                for method in operations[instances[owner]]:
+                    called_by.setdefault(method, set()).add(name)
     openings = {o.run.__name__ for node in agents.AGENTS.values() for o in node.openings}
     terminal = tools | {'advance'} | openings
 
@@ -639,6 +704,9 @@ def every_tool_that_writes_is_an_action():
 
     missing = (writes & tools) - ACTIONS
     assert not missing, f'these write to state and are not in ACTIONS: {sorted(missing)}'
+    assert any('.' in name for name in writes), (
+        'no Operation method was scanned, so the class path is unchecked'
+    )
 
 
 def a_refused_tool_does_not_move_the_caller():
@@ -709,6 +777,7 @@ async def main():
     await a_second_action_is_refused_before_it_runs()
     await an_ordinary_tool_is_refused_when_it_is_the_second()
     await the_winner_is_the_same_every_time()
+    await a_failed_run_is_retained_once()
     await a_split_destination_name_never_moves_anybody()
     await a_name_that_prefixes_another_is_not_acted_on_early()
     await text_before_a_tool_streams_and_the_tool_still_runs()

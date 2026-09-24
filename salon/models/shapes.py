@@ -70,9 +70,26 @@ def _spanish_and_present(value: str) -> str:
     it is a number being submitted for a lookup, and an empty one submitted as
     if it were a number would create an empty customer record and verify the
     caller as nobody. Same digits, different question, so a different type.
+
+    A Spanish number with the wrong count of digits says which way it is
+    wrong. Coval run RPH7TzmF, K3: speech-to-text heard "six seven one, two
+    seven three" as "672. 1. 273.", ten digits, and the model answered the
+    bare validation error with "Please give me the rest of the digits".
     """
     if not value:
         raise ValueError('no number was given. Ask the caller for one; never look up an empty number')
+    national = re.sub(r'\D', '', value)[2:] if value.startswith('+34') else ''
+    if national and len(national) > 9:
+        raise ValueError(
+            f'that is {len(national)} digits after +34, and a Spanish number has 9: a digit was misheard or '
+            "repeated. Nothing is missing, so do not ask for the rest; use verification_guidance 'correction' "
+            'to ask for the whole number again.'
+        )
+    if national and len(national) < 9:
+        raise ValueError(
+            f'that is only {len(national)} digits after +34, and a Spanish number has 9. Use '
+            "verification_guidance 'incomplete' to ask for the rest."
+        )
     return _spanish.validate_python(value)
 
 
@@ -116,7 +133,9 @@ def _one_time(value: object) -> _time:
 Phone = Annotated[
     str,
     AfterValidator(_spanish_or_absent),
-    Field(description='A Spanish phone number in full international form, like +34600111222.'),
+    Field(
+        description='A Spanish phone number the caller said, in full international form: +34 then nine digits.'
+    ),
 ]
 """A state field: a Spanish number, or '' before anybody has given one.
 
@@ -124,6 +143,9 @@ An `AfterValidator` over a plain `str`, never the `PhoneNumber` type itself and
 never a `pattern=` constraint: both put a keyword in the schema the model is
 sent and some providers reject it. The description is how the shape reaches
 the model instead; it travels as prose, so no schema converter can strip it.
+
+It states the format and gives no example number: a model with no digits from
+the caller copied the example, which was also the diary's seeded customer.
 """
 Date = Annotated[_date, BeforeValidator(_one_day)]
 Time = Annotated[_time, BeforeValidator(_one_time)]
@@ -132,7 +154,9 @@ Id = Annotated[str, _shape(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', 'expected an i
 SubmittedPhone = Annotated[
     str,
     AfterValidator(_spanish_and_present),
-    Field(description='A Spanish phone number in full international form, like +34600111222.'),
+    Field(
+        description='A Spanish phone number the caller said, in full international form: +34 then nine digits.'
+    ),
 ]
 """A tool argument: a number being submitted for a lookup. Never for state; see `_spanish_and_present`."""
 

@@ -8,15 +8,21 @@ be told to the model and nothing can be got wrong.
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_validator
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core import state as core
+from core.proposals import Proposal
+from core.readings import Option
 from salon.diary import Diary, day_phrases
-from salon.models.consent import Asked, ConsentInput, ReplyClassification
+from salon.models.consent import Asked, ReplyClassification
 from salon.models.receipts import Slot
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
+
+if TYPE_CHECKING:
+    from salon.classification import SalonConversation
 
 
 class Appointment(BaseModel):
@@ -219,12 +225,6 @@ class SalonCall(core.CallContext):
     """The salon's books. A private attribute because the prompt templates are compiled against this model's schema."""
     _writes_before: int = PrivateAttr(default=0)
     """What `writes` stood at when this turn began, so "did anything land in this turn" is answerable."""
-    _asked: Asked | None = PrivateAttr(default=None)
-    _classified_turn: int = PrivateAttr(default=-1)
-    _classification_input: ConsentInput | None = PrivateAttr(default=None)
-    _classification: ReplyClassification = PrivateAttr(default_factory=ReplyClassification)
-    _complaint: Asked | None = PrivateAttr(default=None)
-    """A complaint readback the caller approved, kept until it is recorded or the caller moves on."""
     _day_words: list[str] = PrivateAttr(default_factory=list)
     """Every day the caller has named, in their own words, from whichever turn.
 
@@ -242,59 +242,36 @@ class SalonCall(core.CallContext):
     def turn_started(self, heard: str = '') -> None:
         """Also age out a question nobody answered, and mark where the write count stood.
 
+        The count is marked when a caller turn begins, not again for a later
+        piece of the same turn: a booking written on its first piece is still
+        this turn's write, and its confirmation is not an unbacked claim.
+
         A question is answerable on the turn after it was asked and no later;
         left standing, a "yes" to something else entirely three turns on would
         still find it. An approved complaint survives only while the caller is
         being verified for it and only under the identity it was approved for.
         """
         super().turn_started(heard)
-        self._writes_before = self.state.writes
-        self._classified_turn = -1
-        self._classification_input = None
-        self._classification = ReplyClassification()
-        if self._complaint and self.state.agent != 'verify':
-            self._complaint = None
-        if self._complaint and self._complaint.owner and self._complaint.owner != self.state.customer_phone:
-            self._complaint = None
-        if self._asked is not None and self._asked.turn < self._turn - 1:
-            self._asked = None
+        if not self.continuing:
+            self._writes_before = self.state.writes
         for words in day_phrases(heard):
             if words not in self._day_words:
                 self._day_words = [*self._day_words, words][-_DAYS_REMEMBERED:]
 
-    def ask(self, question: Asked) -> None:
-        """Record that this question has gone out to the caller, on this turn."""
+    def identity(self) -> str:
+        """The caller is whoever the number on the call says, until corrected."""
+        return self.state.customer_phone
+
+    def ask(self, proposal: Proposal) -> None:
+        """Record a salon question: validated as `Asked`, and a new complaint readback forgets an approved one."""
+        question = Asked.model_validate(proposal.model_dump())
         if question.about == 'complaint':
-            self._complaint = None
-        self._asked = Asked.model_validate({**question.model_dump(), 'turn': self._turn})
+            self.release('complaint')
+        super().ask(question)
 
     def pending_question(self) -> Asked | None:
         """The current proposal, excluding stale identities and interrupted readbacks."""
-        question = self._asked
-        if question is None or question.turn != self.turn - 1:
-            return None
-        if question.owner and question.owner != self.state.customer_phone:
-            return None
-        if question.spoken and any(
-            segment.turn == question.turn and segment.generated == question.spoken and segment.interrupted
-            for segment in self.all_spoken
-        ):
-            return None
-        return question
-
-    @property
-    def classification(self) -> ReplyClassification:
-        """Only an interpretation of this input, identity and still-current proposal."""
-        snapshot = self._classification_input
-        if (
-            self._classified_turn != self.turn
-            or snapshot is None
-            or snapshot.utterance != self.heard
-            or snapshot.owner != self.state.customer_phone
-            or snapshot.pending != self.pending_question()
-        ):
-            return ReplyClassification()
-        return self._classification
+        return super().pending_question()
 
     def pending(self, about: str, **fields: str) -> Asked | None:
         """The question the caller is answering right now, if it is this one.
@@ -302,20 +279,135 @@ class SalonCall(core.CallContext):
         Only the turn after it was asked: a question put two turns ago has
         been overtaken by whatever the caller said in between.
         """
-        asked = self.pending_question()
-        if asked is None or asked.about != about:
-            return None
-        return asked if all(getattr(asked, name) == value for name, value in fields.items()) else None
+        return super().pending(about, **fields)
 
-    def answered(self) -> None:
-        """Consume the pending question. One answer authorises one action."""
-        self._asked = None
+    def last_proposal(self) -> tuple[Asked, bool] | None:
+        """Last turn's question under this identity, and whether the caller heard it in full.
+
+        Wider than `pending_question`, for interpretation only: a readback the
+        caller spoke over can still be corrected or abandoned, but it can never
+        be accepted, so nothing that authorises an action reads this.
+        """
+        return super().last_proposal()
+
+    def holding(self) -> tuple[str, ...]:
+        """The appointments this caller holds, as the salon says them. Empty before anybody is identified."""
+        phone = self.state.customer_phone
+        if not phone:
+            return ()
+        return tuple(
+            f'{b["service"]} {b["spoken"]}' for b in self._diary.bookings_for(phone, self._diary.now().date())
+        )
+
+    def table(self) -> tuple[Option, ...]:
+        """The times the caller can pick from right now.
+
+        The pending offer's, when the question is an offer. Otherwise the ones
+        the diary has on the table for this call, so a caller who names a time
+        before anything was offered ("Friday at nine") is read against real
+        slots too. Either way only slots the diary offered this call are here.
+        """
+        question = self.pending('offer')
+        if question is not None and question.value:
+            ids = question.value.split(',')
+            return tuple(
+                Option(id=slot.slot_id, said=slot.spoken)
+                for slot in self.state.offered
+                if slot.slot_id in ids
+            )
+        phone = self.state.customer_phone
+        return tuple(
+            Option(id=row['slot_id'], said=row['spoken']) for row in self._diary.offered_to(self.id, phone)
+        )
+
+    def picked_offer(self) -> str:
+        """The slot on the table this reply picks or asks for, or ''.
+
+        The classifier names it; the application decides whether it counts:
+        only an id on the table for this call (`ChoiceReading.picked`), so no
+        reading of the reply can authorise a time that was never offered.
+        """
+        return self.classification.chosen_offer
+
+    def offer_undo(self, booking_id: str, told: str) -> None:
+        """A booking was just made and confirmed in these words: the caller may take it back while they hold it.
+
+        A caller can still change their mind after the yes: one who then hears
+        the price and says "leave it" was told goodbye with the booking still in
+        the diary (Coval K2, when a pick booked at once). For as long as they hold
+        it, every reply is read against it (`LAST_CHANGE`) and one that takes it
+        back is offered the cancel (`salon.classification.SALON`), whichever turn it comes on.
+        """
+        self.hold('undo', core.Held(key=booking_id, told=told))
+
+    @property
+    def undo_booking(self) -> str:
+        """The booking made in this call that the caller could still take back, while they still hold it, or ''."""
+        if (undo := self.held('undo')) is None:
+            return ''
+        held = self._diary.bookings_for(self.state.customer_phone, self._diary.now().date())
+        return undo.key if any(b['booking_id'] == undo.key for b in held) else ''
+
+    def approve_complaint(self, question: Asked) -> None:
+        """The caller agreed to this complaint read-back: keep it, bound to them, until it is recorded or withdrawn.
+
+        It lasts only while the caller is being verified for it and under the
+        identity it was approved for.
+        """
+        approved = question.model_copy(update={'owner': self.state.customer_phone})
+        self.hold(
+            'complaint',
+            core.Held(
+                key=approved.value,
+                told=approved.spoken,
+                owner=approved.owner,
+                turn=approved.turn,
+                item=approved,
+                lasts=_kept_for_verification,
+            ),
+        )
+
+    @property
+    def approved_complaint(self) -> Asked | None:
+        """The complaint read-back the caller approved, while it is still kept."""
+        held = self.held('complaint')
+        return held.item if held is not None else None
+
+    @property
+    def conversation(self) -> SalonConversation:
+        """The salon's acts and their readings (`salon.classification.SALON`), which read this call's replies.
+
+        Imported here rather than at the top: the conversation is built on this
+        class and on the tools that use it, so its module cannot be imported
+        before this one. This is the one place the call reaches for it; tools
+        ask the call (`read_reply`) and never import it themselves.
+        """
+        from salon.classification import SALON
+
+        return SALON
+
+    @property
+    def classification(self) -> ReplyClassification:
+        """This turn's readings of the reply, each only while it is still about the call as it is now."""
+        return self.conversation.view(self)
+
+    async def read_reply(
+        self,
+        *,
+        usage: RunUsage | None = None,
+        usage_limits: UsageLimits | None = None,
+        closing: bool = False,
+    ) -> ReplyClassification:
+        """Run this turn's readings of the reply, each at most once, and return the merged view."""
+        return await self.conversation.read_reply(
+            self, usage=usage, usage_limits=usage_limits, closing=closing
+        )
 
     @computed_field
     @property
     def complaint_approved(self) -> bool:
         """Whether approved complaint wording still belongs to this caller. Never model-authored."""
-        approved = self._complaint
+        approved = self.approved_complaint
         return approved is not None and (not approved.owner or approved.owner == self.state.customer_phone)
 
     @property
@@ -365,6 +457,14 @@ class SalonCall(core.CallContext):
             if segment.kind == 'model' and (claim := self._invented(segment.text)):
                 return claim
         return ''
+
+
+def _kept_for_verification(call: SalonCall) -> bool:
+    """An approved complaint is kept only through the number check, and only under the number it was approved for."""
+    held = call.held('complaint')
+    return call.state.agent == 'verify' and not (
+        held and held.owner and held.owner != call.state.customer_phone
+    )
 
 
 def open_call(from_number: str = '', diary: Diary | None = None) -> SalonCall:

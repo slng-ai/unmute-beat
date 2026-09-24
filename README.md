@@ -1,25 +1,626 @@
-# slng-voice-harness
+# Typed conversations: how the core works
 
-A Pydantic AI agency standing where Pipecat's LLM service would.
+A voice agent should let people speak naturally while following clear rules
+about what it knows, what it can do and when it can act. **The purpose of this
+core is to make those rules executable.** The model interprets language. Typed
+data, declared steps and Python checks connect that interpretation to the
+application's actions.
 
-Pipecat owns the transport, VAD, turn taking, STT and TTS (through SLNG). The
-agents own the conversation: prompts, tools, typed state, and which step is
-running. The seam between them is one frame processor.
+This guide explains the architecture implemented in `core/`. It follows the
+original goal of **typed conversations**: typed variables, typed steps and
+controlled flow, with the same execution machinery reusable across
+applications. The salon receptionist in `salon/` is the first application
+built on it.
+
+## 1. Start with a graph: a map of the conversation
+
+A graph describes pieces of work and the allowed connections between them. In
+a conversation:
+
+- A **node** is a place where work happens.
+- An **edge** is an allowed move to another node.
+- **State** holds what the call knows and where it is now.
+
+Pydantic Graph comes from the Pydantic AI project. It is an asynchronous Python
+graph and state-machine library, usable without AI agents. Its types describe
+the data passed through execution. Nodes and connections describe the
+workflow. Our core uses its `GraphBuilder` API to build an executable graph
+from the application's steps. See the official
+[graph overview](https://pydantic.dev/docs/ai/graph/graph/) and
+[Graph Builder guide](https://pydantic.dev/docs/ai/graph/builder/).
+
+### Why this fits voice calls
+
+Many service calls have a clear purpose and a limited set of meaningful
+stages. People can phrase a request in many ways, interrupt, correct
+themselves or ask a side question. The requirements for completing an action
+are much more stable: collect the information, establish the required facts,
+obtain approval and perform the action.
+
+A graph makes that structure visible without scripting every sentence. A node
+can hold a natural conversation for several turns. Connections allow
+branches, corrections and returns to unfinished work.
+
+Here is one path through the salon, simplified to show prerequisite routing:
+
+```mermaid
+flowchart LR
+    Concierge["Concierge: understand the request"] --> Check{"Customer verified?"}
+    Check -->|Yes| Booking["Booking: continue the request"]
+    Check -->|No| Verify["Verification: establish the required fact"]
+    Verify -->|"Completed: resume pending request"| Booking
+```
+
+The decision in the middle is a check against saved state. Once booking has
+been requested, the application already knows where to continue after
+verification. No model request is needed to choose that destination.
+
+**The graph controls the available paths. The agent handles conversation
+within a node.** This gives predictable structure while keeping the language
+flexible.
+
+### How it appears in the current core
+
+The application defines a table of nodes. `core/flow.py` turns that table into
+a Pydantic graph, including declared exits and prerequisite return paths. It
+can also draw a Mermaid diagram from the same definition:
+
+```bash
+uv run python -c "from core.flow import Flow; from salon.agents import AGENTS; print(Flow.of(AGENTS).render())"
+```
+
+The original proposal described a small step table. The current
+implementation keeps that authoring model and adds an executable graph behind
+it. Authors still describe steps. They do not maintain a second graph by hand.
+
+The graph checks whether execution follows a declared route. Application
+guards, Python conditions checked against current state, decide whether a
+route or action is permitted now. Both are needed: a connection can exist in
+the graph while being unavailable to this caller.
+
+Implementation: [core/flow.py](core/flow.py) and [core/graph.py](core/graph.py).
+
+## 2. Why these libraries have separate jobs
+
+The architecture needs three things: valid data, model execution and
+controlled movement between steps. Each library serves one of those needs.
+
+The model/tool loop is the cycle in which a model requests a tool, receives
+its result and continues until it produces an answer or another ending output.
+
+| Library | Its job here | Why we use it |
+|---|---|---|
+| **Pydantic** | Validate declared models for state, arguments and service results. | Rules about data become checks that Python can run, with useful errors when values are invalid. |
+| **Pydantic AI** | Run an agent with instructions, typed tools, outputs and streaming events. | It exposes the points where core needs to prepare tools, inspect results and manage the model/tool loop. |
+| **Pydantic Graph** | Execute the connections between steps. | The allowed routes become a runnable, inspectable structure that can also be drawn. |
+
+These capabilities are described in the official
+[Pydantic model documentation](https://pydantic.dev/docs/validation/latest/concepts/models/),
+[Pydantic AI tools documentation](https://pydantic.dev/docs/ai/tools-toolsets/tools/)
+and [graph documentation](https://pydantic.dev/docs/ai/graph/graph/).
+
+**Our core connects these parts into conversation behaviour.** It owns turn
+execution, prerequisite routing, tracked questions, action limits and
+interruption handling. The application supplies the business rules those
+mechanisms apply.
+
+Pipecat supplies the voice layer: audio transport, detecting speaking turns
+(Silero VAD and smart-turn, at Pipecat's recommended defaults), speech
+recognition and speech synthesis (through SLNG). Keeping that work separate
+lets the conversation engine be tested without a microphone or telephone.
+
+## 3. What "typed conversation" means
+
+A type describes what a value is allowed to contain. Validation checks a value
+against that description. Here, typing goes beyond the model's response. It
+also describes the information and decisions that move a call forward.
+
+| Part of the conversation | What is declared and checked |
+|---|---|
+| **Variables and state** | Field types and application constraints. A complete proposed state update is validated before it replaces the saved state. |
+| **Steps** | Their kind, required configuration, prompt and code references, and declared destinations. |
+| **Tool arguments** | The shape and permitted values of the action's input. |
+| **Service results** | The result returned by the backend is validated before the application uses it. |
+| **Approval** | The answer is checked against the exact proposal being discussed and the application's authorization rules. |
+| **Completion** | Required facts, or a valid service receipt (a record of the result), must establish success. |
+| **Flow** | Declared routes, prerequisites and current-state guards decide where execution can continue. |
+
+For example, a valid phone number, a confirmed number and an established
+customer identity are different facts. A number passing a format check cannot
+establish all three. The application must define the relationship between
+them.
+
+In the same way, a model saying "the booking is complete" is speech. The
+accepted service result is the evidence that a booking exists.
+
+### State belongs to the call
+
+Applications extend `VoiceState` with their own fields and validation rules. A
+`CallContext` holds that state together with the call's history, pending
+question and speech records. Agents and tools receive the current call through
+Pydantic AI's dependency mechanism, as `ctx.deps`. Each call carries its own
+data while sharing the same agent definitions. See
+[Pydantic AI dependencies](https://pydantic.dev/docs/ai/core-concepts/dependencies/).
+
+`call.commit(...)` builds and validates a complete candidate state. If
+validation fails, the old state stays intact. This matters when several fields
+must change together.
+
+The standard steps also keep a `facts` dictionary. Its declared collection and
+operation models are validated at their boundaries. Other dictionary entries
+do not get strong types automatically. Explicit application state models, as
+in the salon, give the stronger contract.
+
+**Types make rules checkable. They do not make language interpretation
+infallible.** A classifier can return an allowed label and still misunderstand
+the caller. Application checks and conversation evaluations stay necessary.
+
+Implementation: [core/state.py](core/state.py),
+[core/operations.py](core/operations.py) and
+[core/completion.py](core/completion.py).
+
+## 4. Steps, nodes and agents: how they fit together
+
+These terms describe different layers of the same definition.
+
+| Term | Meaning |
+|---|---|
+| **Step** | What the author describes: a piece of conversation work and its configuration. |
+| **Node** | What the engine runs: that step's agent, entry behaviour, requirements and allowed exits. |
+| **Agent** | The model-facing part of the node: instructions, tools and allowed outputs. |
+| **Flow** | The graph connecting the nodes. |
+| **Turn** | One response cycle to the caller, which may run more than one node. |
+
+A step can stay active across many turns. An agent run can make several model
+requests. Moving between steps does not start a separate call or lose the
+shared state.
+
+### Standard steps and custom agent steps
+
+Core offers standard building blocks for common structures:
+
+| Step type | Responsibility |
+|---|---|
+| `CollectStep` | Collect and validate declared fields. |
+| `ConfirmStep` | Present an exact proposal and handle acceptance, rejection or revision. |
+| `ActionStep` | Run an operation and check its returned result. |
+| `ConversationStep` | Hold an ongoing conversation from instructions and knowledge, with a goodbye output. |
+| `End` | Speak a closing line and record an outcome. |
+| `AgentStep` | Let application Python code assemble the node's tools and behaviour. |
+
+Standard steps use recorded facts to skip completed work and choose what comes
+next. Declared dependencies drop derived facts after a correction. Removing a
+local fact does not undo a backend action. That needs an explicit operation.
+
+The salon uses four custom `AgentStep` definitions. Custom steps and standard
+steps both become nodes in the same engine. This is a key reuse point:
+different conversation structures share turn execution, state handling and
+flow machinery. The `examples/` folder has two flows built from standard
+steps alone: `access`, a ten-step request, and `help`, one conversation step.
+
+Every node contains an agent. The engine can still complete a known action
+without running that agent (section 7).
+
+Implementation: [core/steps.py](core/steps.py).
+
+## 5. What an author writes: YAML, prompts and Python
+
+An application brings together three kinds of material:
+
+- **YAML describes the structure:** step names, prompt files, code files,
+  requirements and exits.
+- **Prompts describe the conversation:** instructions, knowledge and how to
+  respond.
+- **Python implements behaviour:** typed state, tools, validation,
+  authorization and backend actions.
+
+YAML makes the flow easy to review. Python expresses rules that need
+executable checks. Prompts give the model the context it needs to converse.
+
+For a custom agent step, the connection is explicit:
 
 ```mermaid
 flowchart TD
-    mic((caller)) --> in[transport.input]
-    in --> stt[SlngSTT]
-    stt --> ua[user aggregator]
-    ua -- LLMContextFrame --> P[PydanticAgentProcessor]
-    P -- LLMTextFrame / TTSSpeakFrame --> tts[SlngTTS]
-    tts --> out[transport.output]
-    out --> aa[assistant aggregator]
-    aa -. what was heard .-> P
-    P <--> T[core.turn: one caller turn]
-    T <--> A[salon.agents: four Pydantic AI agents]
-    A <--> D[(Diary)]
+    subgraph Application["What the application author supplies"]
+        YAML["flow.yaml: steps, requirements, exits"]
+        Prompt["Prompt files: instructions and knowledge"]
+        Models["Python models: typed call and state"]
+        Code["Step module: node(step)"]
+        Rules["Python tools and business rules"]
+    end
+
+    subgraph Core["How core builds the application"]
+        Spec["FlowSpec: validate references and compile prompts"]
+        Steps["StepFlow: construct each Step"]
+        Builder["AgentBuilder: assemble the agent and node"]
+        Nodes["Node table: one entry per step"]
+        FlowGraph["Flow: build the executable Pydantic graph"]
+    end
+
+    YAML --> Spec
+    Prompt --> Spec
+    Models --> Spec
+    Spec --> Steps
+    Steps -->|"Pass the configured AgentStep"| Code
+    Rules --> Code
+    Code -->|"Supply tools, outputs and entry actions"| Builder
+    Models -->|"Call type configured once"| Builder
+    Builder --> Nodes
+    Nodes --> FlowGraph
 ```
+
+`FlowSpec` checks the declared structure and references before any call
+starts. `StepFlow` constructs the steps. For an `AgentStep`, it calls the named
+Python module's `node(step)` function. That function receives the
+YAML-derived configuration and adds the executable behaviour.
+
+The diagram follows the custom-agent path the salon uses. Standard steps build
+their nodes through core's own implementations instead of a `node(step)`
+function. Authors can also construct steps directly in Python.
+
+### A real step, from declaration to implementation
+
+This is the booking entry in [salon/flow.yaml](salon/flow.yaml):
+
+```yaml
+- id: booking
+  kind: agent
+  prompt: prompts/booking.md
+  code: steps/booking.py
+  guarded: true
+  requires: [customer_verified]
+  satisfied_by: verify
+  exits: [concierge, complaints]
+```
+
+It names the prompt and the Python implementation. It says that booking needs
+`customer_verified`, that `verify` supplies it, and which exits booking
+offers. `guarded` turns on the engine's guarded speech (section 8).
+Authorization still lives in the operation checks.
+
+The referenced [Python module](salon/steps/booking.py) supplies this function,
+shown without its imports and docstring:
+
+```python
+def node(step: AgentStep) -> Node[SalonState]:
+    return build(
+        step,
+        tools=[read_diary],
+        finishers=[save_booking],
+        asks=[ask_booking, offer_times, booking_guidance],
+        openings=OPENINGS,
+        structured_speech=True,
+    )
+```
+
+Here `build` hands over to core's `AgentBuilder`, configured once with the
+application's call type, model and shared policies. The `step` argument
+carries the YAML settings. The other arguments say what this agent can do:
+
+- `tools` return information into the model/tool loop.
+- `finishers` and `asks` are output functions: a successful call ends the
+  agent run with a result or a question.
+- `openings` are actions that can run on entry when the next action is
+  already known.
+- `structured_speech=True` makes this agent speak through
+  application-controlled outputs.
+
+Ending an agent run is not ending the phone call. Asking a question ends the
+run so the caller can answer. A handoff can continue into another node.
+
+This keeps **the structure in YAML and the behaviour in Python**, joined
+through one small, explicit function. The flow-file format is this package's
+own, implemented in [core/flowspec.py](core/flowspec.py). It is not a Pydantic
+Graph YAML feature.
+
+## 6. Classifiers and the solver: interpreting the caller
+
+**Both interpret what the caller meant. Python rules decide what to do with
+that interpretation.** The difference is how much each interpretation covers.
+
+`Classifier` ([core/classifiers.py](core/classifiers.py)) is one reusable core
+component. It takes typed input, makes one structured model request and
+validates the returned data. Both the narrow readings and the solver use it.
+Neither has the conversational agent's tool loop.
+
+Every classification is made of the same five parts:
+
+| Part | Who supplies it |
+|---|---|
+| The question the person was asked | the application, from state |
+| The person's answer | the application, from state |
+| Context: what the classifier is for, in one sentence | the author |
+| The classes | the author |
+| Each class's description | the author |
+
+The instructions are built from these parts by a fixed template, never
+hand-written per business. So the same classifier works for a salon, a clinic
+or a help desk, with only the context sentence and the classes changed.
+
+### Narrow readings: one question at a time
+
+The default approach uses small classifiers, each answering one question. A
+**reading** ([core/readings.py](core/readings.py)) wraps one classifier with
+the context it needs and a rule for when it applies. Only the readings that
+apply run, side by side, so the caller waits for the slowest one only. Core
+owns the common ones:
+
+| Reading | Classes | Applies when |
+|---|---|---|
+| confirm (`CONFIRM`) | accept, reject, revise, conditional, unclear | a read-back is waiting for an answer |
+| choose (`Choice`) | one option id or none, plus the option named with a condition | options are on the table |
+| take back (`TAKE_BACK`) | keep, withdraw, unclear | a change made in this call can still be undone |
+| still agreed (`STILL_AGREED`) | keep, withdraw, unclear | an approval is held through a detour |
+| closing (`CLOSING`) | end, continue, unclear | the caller was asked "anything else?" |
+| request kept (`REQUEST`) | kept, changed, unclear | a detour, such as a number check, interrupted a request |
+
+Each request sends only the facts its act needs, about 260 to 430 input
+tokens. Each reading has its own Langfuse dataset (`harness-reading/<name>`),
+so it can be measured and tuned on its own (`evals/readings.py`).
+
+The results feed `Conversation` ([core/conversation.py](core/conversation.py)).
+Its Python rules try the acts in one fixed order: answer the pending question,
+then take back, then pick, then goodbye. The first act that decides selects an
+application action. Otherwise the reply goes to the conversational agent.
+
+The acts are core classes. An application gives each one its information:
+
+| Act | Information it takes | What it does |
+|---|---|---|
+| `ReadBack` | the question it answers, the operation a yes runs | runs that operation on a yes to that exact question |
+| `Offer` | where the options come from, what a pick does | reads a plain pick back, never writes it. Refuses a pick with a condition |
+| `FixedChoice` | a fixed question and its options | runs the action for the chosen option, such as "move it or add another?" |
+| `TakeBack` | what can be taken back | offers to undo a change made in this call |
+| `HeldApproval` | the approval to keep | keeps an approval through a detour, drops it on any change |
+| `HeardValue` | a parser from words to a value | reads a value back with no model request, such as a whole phone number |
+| `Detour` | the question that ends a prerequisite | notices when the caller changes the request mid-detour |
+| `Closing` | the goodbye | ends the call once the caller is done |
+
+The salon's whole setup is one declaration, `SALON` in
+[salon/classification.py](salon/classification.py). A second use case,
+[tests/clinic.py](tests/clinic.py), builds a clinic line on the same classes in
+about 240 lines, with no salon code.
+
+### The solver: one richer decision
+
+The optional salon solver looks at a wider snapshot: the caller's words, the
+current step, identity, the pending proposal, whether it was heard, and the
+possible task destinations. It returns one typed
+[decision](core/decisions.py), which can carry the information needed to act
+on it.
+
+For example, after a phone read-back, "No, the last two digits are 34" is read
+narrowly as `revise`. That says there is a correction, but not the corrected
+number. The solver can instead return `CorrectPhone` with the full proposed
+number. Python validates that number and reads it back. The correction alone
+does not verify anyone.
+
+Its other decisions are accept, reject, clarify, choose move or add, switch
+task and end the call. "Solver" names this broader strategy: one decision per
+request, not a plan of several actions.
+
+| | Narrow readings (default) | Salon solver (opt-in) |
+|---|---|---|
+| Question | What does this reply mean for one act? | Which supported decision best describes this reply now? |
+| Result | a label or a chosen option | one decision, sometimes with fields such as corrected digits or a destination |
+| Requests | one per applicable, uncached reading, side by side | one per uncached interpretation |
+| Input | only the facts for its act | the wider call snapshot |
+| Application handling | the shared conversation rules choose the action | Python handles correction, switching and clarification directly. Other decisions feed the shared rules |
+| Measured | per reading, on Langfuse datasets, on four models | not yet compared live |
+
+The solver can settle some replies that would otherwise need the
+conversational agent. Its broader task also needs its own accuracy checks. It
+is not automatically faster, more accurate or equal in coverage. Narrow
+readings are the default in code. `SALON_INTERPRETER=solver` selects the
+solver.
+
+### What they share, and where they run
+
+Both use core's **Interpreter** machinery
+([core/interpreters.py](core/interpreters.py)):
+
+- They share the turn's request budget.
+- An interpretation is cached for the turn, so a tool guard reuses it instead
+  of asking again.
+- A result that no longer matches the call is rejected, never used.
+- A validation or provider failure gives a fallback that authorizes nothing.
+- Some readings can run again when application work puts new options on the
+  table.
+
+They run in the node's `advance` stage, before its conversational agent, when
+the call's state asks for an interpretation. They are two alternative
+strategies, not two stages in a row. A tool can also ask for an
+interpretation when it needs one. Ordinary conversation needs no extra request
+up front.
+
+An interpreted acceptance still passes the operation's authorization. An
+interpreted task switch still passes routing and prerequisites. If the
+interpretation settles nothing, the engine tries an applicable opening, and
+otherwise runs the conversational agent.
+
+### Why not let the model set a flag?
+
+A flag the model sets, such as `confirmed=true` on a tool call, costs no extra
+request. It failed in practice: the one-prompt baseline cancelled a booking and
+recorded a complaint with no read-back. A word list worked, but only in
+English. A reading costs one small request, about 0.8 s, and works across
+languages and businesses. The price is more requests per turn, each smaller: on
+the paired Coval run the harness made 1.85 requests per caller turn against the
+baseline's 1.34, and sent 1,402 input tokens per turn against 3,946.
+
+**This is another reuse boundary.** Core supplies classification,
+interpretation caching and the shared conversation rules. The application
+supplies its facts, its supported decisions and its handlers. The graph and the
+operation checks stay in place whichever strategy is selected.
+
+Implementation: [core/classifiers.py](core/classifiers.py),
+[core/readings.py](core/readings.py), [core/interpreters.py](core/interpreters.py),
+[core/conversation.py](core/conversation.py), and the salon's solver and
+decision handlers in [salon/classification.py](salon/classification.py) and
+[salon/nodes.py](salon/nodes.py).
+
+## 7. What happens during a caller turn
+
+The engine starts at the node recorded in the call's state. It first checks
+whether application logic can settle the next action. Otherwise, it runs the
+node's agent.
+
+```mermaid
+flowchart TD
+    Input["Caller input and current call state"] --> Node["Enter the current node"]
+    Node --> Interpret["advance: narrow readings or the solver, when needed"]
+    Interpret --> Rules["Python decision rules, otherwise an opening"]
+    Rules --> Known{"Known action available?"}
+    Known -->|Yes| Direct["Run the application action"]
+    Known -->|No| Agent["Run the agent with current tools and context"]
+    Direct --> Result["Handle the checked result"]
+    Agent --> Result
+    Result --> Move{"Continue in another node?"}
+    Move -->|Yes| Route["Resolve prerequisites and follow a declared route"]
+    Route --> Node
+    Move -->|No| Finish["Finish this turn and keep its results"]
+```
+
+The node's `advance` function gets the first chance to settle the caller's
+answer (section 6). An applicable `opening` is tried next. Both can select a
+`LocalAction`: a named application action to run. Interpretation can use model
+requests even when the conversational agent is skipped.
+
+If conversation is needed, `AgentBuilder` prepares the offered tools and
+handoff destinations from current state before each model request. Shared
+policy allows at most one business-changing or routing action per model reply.
+The executors still check authorization when called.
+
+### From words to an authorized action
+
+`ProposalLedger` tracks the one question awaiting an answer, and whether the
+caller heard it in full. This gives "yes" a specific context. An `Operation`
+then validates arguments, resolves any required earlier work, checks
+authorization, calls the service, validates its receipt and records the
+result. Every write leaves a `write` span in the trace, with the question it
+answered.
+
+A tool the model chose and an action the application chose directly use the
+**same executor and checks**. So there are no separate rules per path. If an
+action is refused, the agent gets the reason and can clarify.
+
+### Continuing the flow
+
+Prerequisite routing remembers one pending destination. After the
+prerequisite completes, the application resumes that work without asking the
+model to choose the destination again. A changed request is handled by the
+application's conversation rules.
+
+An exit can also declare a `via` tool: a successful call of that tool moves
+the call into the destination node. Core rechecks the route's conditions after
+success.
+
+The turn engine reports either `Moved` or `Answered` to the graph. The graph
+follows the matching declared branch. An undeclared move raises an error. The
+whole turn shares limits for requests, tools, step runs and elapsed time.
+
+Each caller turn is one short graph run. The call keeps its position between
+turns. Durable storage and recovery across separate calls are the
+application's job.
+
+Implementation: [core/turn.py](core/turn.py),
+[core/conversation.py](core/conversation.py) and
+[core/proposals.py](core/proposals.py).
+
+## 8. Streaming and interruptions are part of execution
+
+Voice needs to respond while work is happening. Core consumes Pydantic AI's
+event stream, which exposes text and tool activity during an agent run. So
+permitted model text reaches speech synthesis before the whole response
+finishes. See
+[Pydantic AI output and streaming](https://pydantic.dev/docs/ai/core-concepts/output/).
+
+Application-controlled questions and confirmations go straight to speech. In
+the salon, conversational text can stream from the concierge, while
+consequential confirmations are said through controlled outputs. On a guarded
+step, speech goes out a clause at a time, and a clause claiming a change
+nothing made is replaced before it is spoken. Partial tool arguments are never
+treated as completed actions.
+
+Interruptions need more than stopping audio. The engine keeps accepted input
+and completed tool results, and uses playback feedback to track what speech
+was delivered. A question the caller talked over is not counted as heard, so
+a "yes" can never answer it. A completed booking stays recorded even if the
+caller interrupts its spoken confirmation.
+
+Before the next model request, core prepares history that reflects delivered
+speech and keeps tool calls paired with their results. Each node can take the
+full conversation history or a fresh one (`Node.history`).
+
+The reusable engine lives in `core/turn.py`. Only `core/processor.py` imports
+Pipecat and translates between core events and voice frames. That separation
+makes the engine reusable. Another voice adapter would still have to
+implement and test delivery and interruption behaviour.
+
+Implementation: [core/processor.py](core/processor.py) and
+[core/history.py](core/history.py).
+
+## 9. Where reuse comes from
+
+**Reuse comes from keeping conversation mechanics in core and application
+meaning in the application.** Core imports no salon code. It receives
+definitions and call data through the interfaces above.
+
+| Reused from core | Supplied by an application |
+|---|---|
+| Step construction, node contract and graph execution | Step definitions, exits and prerequisite rules |
+| Validated state commits and per-call context | State fields, constraints and call creation |
+| Agent construction and request preparation (`AgentBuilder`, `Desk`) | Model, prompts, tools and allowed outputs |
+| Classification, interpretation caching, question tracking and common conversation acts (`Conversation`) | Relevant facts, interpretation strategy, proposals, choices and decision handlers |
+| Operation execution sequence | Authorization, backend integration and recovery |
+| Turn budgets, streaming and interruption handling | Wording (`Locale`), speech policies and voice configuration |
+
+An author builds an application by defining its state and operations,
+describing its steps, connecting prompts and Python modules, and passing the
+resulting node table with a fresh call to the processor. Custom state and call
+types need an application call factory. The standard `StepFlow.open_call()`
+creates the generic call type. See [Adding a use case](#adding-a-use-case).
+
+The engine can be reused without putting new business rules inside it. That
+does not mean configuration alone supplies those rules, or that another
+application's behaviour has already been validated.
+
+## 10. How this design is checked
+
+The suite has **23 offline test modules**, with live model requests switched
+off. Scripted responses exercise invalid data, approval checks, routing,
+interruptions, recovery and shared turn limits. Tests also compare YAML and
+Python definitions, check that direct core execution and the Pipecat adapter
+agree, and pin every request the harness sends (`tests/golden/*.json`), so a
+code change that alters a prompt shows as a diff.
+
+Solver tests check how Python handles scripted decisions, including
+corrections and task switches. They check execution behaviour. Whether the
+model chooses the right decision needs a live evaluation.
+
+```bash
+uv run ruff check .
+uv run ty check .
+uv run python -m tests
+```
+
+We used **Coval and Langfuse to evaluate the feasibility of the package**:
+simulated phone calls scored by Coval, and the traces of the same calls read
+by `evals/ledger.py` for tokens, latency and every write. The same calls were
+run against a one-prompt Pipecat baseline (`VOICE_HARNESS=pipecat`,
+[salon/baseline.py](salon/baseline.py)). The figures, with links to every run,
+are in [docs/research/poc-evidence-2026-09-24.md](docs/research/poc-evidence-2026-09-24.md).
+
+The offline tests check whether the machinery follows its rules. Voice
+evaluations check how the model and audio path behave in the tested
+conversations. Both are needed: valid structure alone cannot show that the
+caller was understood.
+
+For the original motivation, see the V1 proposal and its supporting research
+(`UNMUTE_V1.md` and `RESEARCH.md`, kept outside this repository). They explain
+where the design started. The links above describe the current architecture.
+The full design notes, with every mechanism and its references, are in
+[docs/design.md](docs/design.md).
 
 ---
 
@@ -52,32 +653,189 @@ browser client, so there is nothing else to start.
 | `SALON_CLOCK` | pins the salon's idea of now, so "tomorrow" resolves to the same day on every run. No offset means the salon's own timezone |
 | `-t webrtc` | one transport instead of all of them |
 | `--host` / `--port` | Pipecat's runner flags. `uv run bot.py --help` for the rest |
+| `VOICE_AGENCY` | which flow answers: `salon` (default), `access` or `help`. See section 4 |
+| `SALON_INTERPRETER` | `solver` reads replies with one state-solver request instead of the narrow readings. See section 6 |
+| `SALON_NAMED_PICK` | `0` turns off the pick reading's `named` field (on by default for the salon). See section 6 |
+| `VOICE_HARNESS` | `pipecat` swaps the harness for the one-prompt baseline (`salon/baseline.py`): the same pipeline, diary and model, with Pipecat's own Gemini service |
 
-All three variables are optional: `uv run bot.py` on its own is a live-clock
+All of these are optional: `uv run bot.py` on its own is a live-clock
 call, from an anonymous number, into the salon as the last call left it. The
-remaining dials are in `.env.example`; `SMART_TURN_STOP_SECS` is the one worth
-measuring.
+remaining dials are in `.env.example`. Turn taking is Pipecat's recommended
+default (Silero VAD and smart-turn v3), with no dial of ours.
 
 A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
 hands the caller to booking; booking needs an identified caller, so the graph
 interposes verification, which reads the caller ID back. *"Yes, that's right."*
 One classifier request interprets the approval; application guards authorize
-the lookup, the graph resumes booking, and the diary's free times are offered. *"Three o'clock."* An unambiguous choice of an
-offered time is the authorisation, so the write lands and the confirmation is
-spoken in the diary's own words. *"That's all, thanks, bye."* The line closes.
+the lookup, the graph resumes booking, and the diary's free times are offered. *"Three o'clock."* The
+application reads the time back: *"Shall I book you in for a haircut, Friday
+at 3:00 PM?"* *"Yes."* Only that yes writes, and the confirmation is
+spoken in the diary's own words. Neither turn needs a model request beyond the
+one classifier. *"That's all, thanks, bye."* The line closes.
 
 Tests: `uv run python -m tests`. Offline, no `.env`, no network.
 
 ---
 
-# How it is built
+# Adding a use case
+
+A use case gives core's classes its information, and core's code runs it.
+[tests/clinic.py](tests/clinic.py) is a complete one: a clinic's booking
+line in about 240 lines, with no salon code. The salon is built the same
+way, in [salon/classification.py](salon/classification.py) (`SALON`),
+[salon/tools/desk.py](salon/tools/desk.py) (`DESK`) and
+[salon/nodes.py](salon/nodes.py) (`BUILDER`).
+
+```mermaid
+flowchart LR
+  info[Use case information] --> conv[Conversation]
+  info --> desk[Desk]
+  info --> builder[AgentBuilder]
+  conv --> readings[Narrow readings]
+  conv --> acts[Rules in fixed order]
+  acts --> ops[Operations]
+  builder --> steps[Steps]
+  steps --> engine[Turn engine]
+```
+
+1. The use case writes a call type (`CallContext` subclass) and its state.
+2. It writes one `Operation` per business action: what the backend does, and
+   what the caller hears when it lands.
+3. It gives `Conversation` its acts: which questions are read back and what a
+   yes runs, where the options on the table come from, what a pick and a
+   take-back do, the goodbye.
+4. `Conversation` builds one narrow reading per act. On each turn it runs the
+   readings that apply, side by side, and tries the rules in core's order:
+   answers, then take-backs, then picks, then goodbye.
+5. A rule that decides runs an operation, or a read-back, with no model
+   request. `Operation` checks the caller agreed to that exact question
+   before anything is written, and records a `write` span for the ledger.
+6. `AgentBuilder` builds each step's agent, with the shared `Desk` tools, for
+   whatever no rule decides.
+
+This is the clinic's whole conversation:
+
+```python
+Conversation[ClinicCall](
+    context='A patient is on the phone with the front desk of Riverside Clinic.',
+    model=model,
+    read_back_context='The front desk read something back and is waiting for a yes.',
+    read_backs=(
+        ReadBack(about='booking', action='book', run=lambda call, q: BOOK.run(call, Slot(slot=q.value))),
+        ReadBack(about='cancel', action='cancel', run=lambda call, q: CANCEL.run(call, Slot(slot=q.value))),
+        ReadBack(
+            about='patient',
+            action='identify',
+            run=lambda call, q: IDENTIFY.run(call, Patient(patient=q.value)),
+        ),
+    ),
+    offers=(
+        Offer(
+            name='chosen_time',
+            about='offer',
+            options=ClinicCall.table,
+            input_type=ChoiceInput,
+            context='The patient was offered appointment times.',
+            on_pick=_read_back_time,
+        ),
+    ),
+    values=(
+        HeardValue(
+            about='patient',
+            action='ask_patient',
+            parse=_patient_number,
+            read_back=_read_back_patient,
+            when=lambda call: not call.state.patient,
+        ),
+    ),
+    take_backs=(
+        TakeBack(
+            name='undo_booking',
+            kind='undo',
+            on_withdraw=_offer_undo,
+            context='Earlier in this call the clinic booked an appointment for the patient.',
+        ),
+    ),
+    closing=Closing(goodbye=lambda call: DESK.end_conversation(call, 'Goodbye.')),
+)
+```
+
+### What each class takes
+
+| Class | Where | The information a use case gives it |
+|---|---|---|
+| `Conversation` | `core/conversation.py` | who is talking (one sentence), the model and settings, its acts |
+| `ReadBack` | `core/conversation.py` | the question it answers, the action a yes runs, when a yes counts |
+| `FixedChoice` | `core/conversation.py` | the question, its options, the action for each option |
+| `Offer` | `core/conversation.py` | where the options on the table come from, what a pick does |
+| `HeardValue` | `core/conversation.py` | a parser from words to a value, how the value is read back |
+| `TakeBack` | `core/conversation.py` | the kind of thing held, what taking it back does |
+| `HeldApproval` | `core/conversation.py` | the read-back whose yes is kept through a detour, how it is kept |
+| `Detour` | `core/conversation.py` | the question that ends a prerequisite's check |
+| `Closing` | `core/conversation.py` | the goodbye, the readings to skip on "anything else?" |
+| `Operation` | `core/operations.py` | its arguments and receipt types, the question that authorises it (`proposal`), what the backend does (`_execute`, `_record`), or `needs_approval = False` for an action with no read-back |
+| `Desk` | `core/desk.py` | the call and hand-over types, the action names, what blocks a switch, an optional `Carry` |
+| `AgentBuilder` | `core/steps.py` | the call type, model, settings, action names, `Desk`, `advance` |
+| `Locale` | `core/locale.py` | the four lines the turn engine says itself, in the call's language |
+| `Held` | `core/state.py` | something the caller could still take back, kept on the call by kind |
+
+### What stays code in each use case
+
+- **What the backend does.** Each operation's `_execute` and `_record`.
+- **Where options come from.** A callable, such as the diary's free slots.
+- **Parsers.** Such as a Spanish phone number (`salon/tools/identity.py`).
+- **The words.** Read-backs, receipts and prompts are the use case's own.
+
+### How to check a new one
+
+- **Its behaviour.** Write assert scripts like
+  [tests/test_reuse.py](tests/test_reuse.py). They run the real turn engine
+  with scripted classifier answers and no network.
+- **Its prompts.** `tests/golden/readings.json` and `tests/golden/agents.json`
+  pin every request the salon sends. They cover classifiers and step agents,
+  so any code change that alters a prompt shows as a diff.
+  `BLESS_READINGS=1 uv run python -m tests.test_classifiers` pins them again.
+  Do that only for a change that is meant, and check it live.
+- **Its readings.** Each reading's name is its Langfuse dataset's name
+  (`harness-reading/<name>`). Readings with core's classes (`confirm`,
+  `take_back`, `closing`) share what was measured for the salon.
+
+### Known limits
+
+- Recovering a write whose outcome is unknown is still the salon's code
+  (`salon/tools/writes.py`). It is tied to the diary's operation log.
+- The patterns for a claimed change nothing made (`_CLAIMED`, `_RECORDED` in
+  `salon/models/state.py`) are the salon's, and English.
+- A pick with a condition is read by the pick reading's `named` field
+  (`Offer(named=True)`). The salon turns it on; core leaves it off, because
+  gpt-5.6-luna lost pick accuracy with it. The salon keeps its English word
+  list of times as a second check, which can only refuse.
+- Classifier instructions and class descriptions are English. The fixed lines
+  follow the call's `Locale`, but a conversation in another language needs a
+  live check of the readings on its own dataset.
+- Form-like flows (`StepFlow`: collect, confirm, action) share the confirm
+  request with `ReadBack`, but not the class.
+
+# Layout
 
 ```
 bot.py                  the Pipecat pipeline, and nothing else
 core/
   state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
   graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
+  flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
   classifiers.py        generic Pydantic input/output classification in one request
+  readings.py           narrow readings: one small classifier per act, and the fixed order they act in
+  conversation.py       the acts as classes a use case fills in (ReadBack, Offer, TakeBack, ...) and Conversation
+  desk.py               Desk: hand over, hang up, clarify, switch task, for any use case
+  locale.py             Locale: the lines the turn engine says itself, in one language
+  decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
+  proposals.py          the one question a call waits on, and when it can be answered
+  completion.py         when a step is done: evidence in the facts, never a flag
+  steps.py              typed steps (collect, confirm, action, conversation, end), StepFlow, AgentBuilder
+  flowspec.py           flow files as YAML (or JSON), checked before they run
+  operations.py         Operation: one business action with its checks in a fixed order
+  interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
   policies.py           TurnBudget, the hooks, pick, schema_tool
   history.py            what each provider request is sent
   turn.py               one caller turn as an event stream; imports no Pipecat
@@ -86,405 +844,30 @@ salon/
   models/               shapes, consent, receipts, state
   tools/                identity, booking, complaints, desk, writes, asking, policy
   diary.py              the salon's books, in memory
-  instructions.py       the prompts, compiled against the call at import
-  classification.py     shared model and cached typed interpretation
-  agents.py             advance(), build(), the AGENTS table
-prompts/                one prompt per step, the shared rules, knowledge/
+  flow.yaml             the four steps: prompt, module, exits, requirements
+  prompts/              one prompt per step, the shared rules, knowledge/
+  steps/                one module per step, each giving node(step)
+  nodes.py              BUILDER (core's AgentBuilder), build(), advance()
+  instructions.py       loads flow.yaml; each step's compiled prompt
+  classification.py     the salon's conversation (SALON: its acts and readings), and the opt-in solver
+  baseline.py           the same salon as one prompt on Pipecat's own LLM service (VOICE_HARNESS=pipecat)
+  agents.py             the AGENTS table, compiled from flow.yaml
 utils/observability.py  Langfuse over OTel
-tests/                  thirteen assert scripts
+tests/                  twenty-three assert scripts
+examples/               access (ten steps) and help (one step), on core alone; VOICE_AGENCY=access|help
+evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
+evals/report.py         one result and report shape for every interpreter
 evals/consent.py        explicitly invoked live classifier evaluation
+evals/focused.py        the live failures replayed against the real readings, five times each, with tokens
+evals/readings.py       each reading as a Langfuse dataset and prompt, run on several small models
+evals/ledger.py         requests, tokens, calls in a row, latency and writes, read from any build's traces
+evals/solver.py         explicitly invoked live state-solver evaluation
+evals/compare.py        every interpreter side by side; the rule floor offline, the rest with --live
+evals/rules.py          the no-model floor the others must beat
 ```
 
 `core` knows nothing about the salon, and nothing in `core` but the processor
 knows about Pipecat. `tests/test_core.py` reads the source and checks both.
-
-# Design choices
-
-Each choice below names what it decided, where it lives, and the document it
-rests on. The links are the primary references the design was checked against;
-public documentation changes, so behaviour was verified against the pinned
-versions in `uv.lock` (Pydantic AI 2.46, Pipecat 1.11).
-
-## 1. Pydantic AI as the LLM node of a Pipecat pipeline
-
-A Pipecat LLM node is a frame contract, not a class. On an `LLMContextFrame`
-it pushes `LLMFullResponseStartFrame`, then one `LLMTextFrame` per chunk of
-speech, then `LLMFullResponseEndFrame`. TTS, the assistant aggregator, the
-transcript and the interruption machinery are built on those three frames and
-nothing else, so anything that speaks them can sit in that slot. That is what
-`PydanticAgentProcessor` in `core/processor.py` does, and it is the same shape
-Pipecat's own bridge to an external agent framework takes.
-
-The agents keep their own history as `list[ModelMessage]` on the call.
-Pipecat's `LLMContext` still fills up beside it and is never sent to a model:
-it is the aggregators' record of what was actually *spoken*, which is how the
-processor learns what the caller heard when they talk over the bot.
-
-- Pipecat's external-framework processor, the precedent for this seam:
-  https://github.com/pipecat-ai/pipecat/blob/main/src/pipecat/processors/frameworks/strands_agents.py
-- The frames: https://reference-server.pipecat.ai/en/stable/api/pipecat.frames.frames.html
-
-## 2. How streaming works
-
-`Turn._speak` in `core/turn.py` opens `Agent.run_stream_events` and reads the
-event stream Pydantic AI emits: a `PartStartEvent` whose part is a `TextPart`,
-then `PartDeltaEvent`s carrying `TextPartDelta`s, are speech; a `ToolCallPart`
-is not. Each piece of speech becomes a `TextDelta` event, and the processor
-turns it into an `LLMTextFrame` the moment it arrives. TTS aggregates by token
-rather than by sentence, so the first word is synthesised as soon as the model
-produces it.
-
-```mermaid
-sequenceDiagram
-    participant UA as user aggregator
-    participant P as PydanticAgentProcessor
-    participant T as Turn (core.turn)
-    participant M as model
-    participant TTS as SlngTTS
-    UA->>P: LLMContextFrame
-    P->>T: run_turn(prompt)
-    T-->>P: RunStarted
-    P->>TTS: LLMFullResponseStartFrame
-    T->>M: run_stream_events
-    loop each TextPartDelta
-        M-->>T: PartDeltaEvent
-        T-->>P: TextDelta
-        P->>TTS: LLMTextFrame
-    end
-    M-->>T: AgentRunResultEvent
-    T-->>P: RunEnded
-    P->>TTS: LLMFullResponseEndFrame
-    T-->>P: TurnFinished(status, agent, handoffs, requests)
-```
-
-Three things ride on that stream:
-
-- **Fixed lines** are not generated. A question the application worded, a
-  booking confirmation in the diary's own phrasing, the greeting and the error
-  lines go straight to TTS as `TTSSpeakFrame`s through `CallContext.say` and
-  `speak_now`, and are recorded in the call's speech ledger with who wrote
-  them. A turn's delivered speech is therefore not one string, and a trace can
-  tell a question from an answer.
-- **The clause gate.** On a step that can write (`Node.guarded`), speech is
-  held back a clause at a time until the step has written something. Each
-  clause is checked by `SalonCall.claims_completion` before it goes out, and a
-  clause claiming a change nothing has made is replaced by a correction rather
-  than spoken. It costs one clause of latency on those steps only.
-- **Barge-in.** The processor fires a `Barge` when Pipecat interrupts; the
-  turn cancels the run in flight and stops before starting another. Whatever
-  the run completed is kept: messages are retained from the SDK's own
-  `new_messages()` boundary after teardown, so accepted input and a tool that
-  ran are still in the history, and the assistant aggregator's delivered
-  prefix is used to cut the record down to what the caller actually heard.
-
-- Streaming events and output types: https://pydantic.dev/docs/ai/core-concepts/output/
-- Message history as an explicit input and output of a run: https://pydantic.dev/docs/ai/core-concepts/message-history/
-
-## 3. Nodes and edges: the graph, and where it lives
-
-A step is a `Node` (`core/graph.py`): the agent that runs it, the `Exit`s it
-may take, the state fields it `requires` and the step that `satisfied_by`
-fills them. The whole graph is the `AGENTS` table in `salon/agents.py`:
-
-```python
-'booking': build(
-    'booking',
-    tools=[read_diary],
-    finishers=[save_booking],
-    asks=[ask_booking, offer_times, booking_guidance],
-    guarded=True,
-    exits=(Exit('concierge'), Exit('complaints')),
-    requires=('customer_verified',),
-    satisfied_by='verify',
-),
-```
-
-```mermaid
-stateDiagram-v2
-    [*] --> concierge
-    concierge --> booking: hand_over, or read_diary once verified
-    concierge --> complaints: hand_over
-    concierge --> verify: hand_over, only once verified (a correction)
-    booking --> concierge: hand_over, or save_booking finishes
-    booking --> complaints: hand_over
-    complaints --> concierge: hand_over
-    verify --> concierge: stop_verifying, or hand_over once verified
-    note right of verify
-        Interposed by route() whenever booking or
-        complaints is entered unverified. confirm_customer
-        finishes it and resumes the pending step.
-    end note
-```
-
-Two functions walk the graph and neither runs a model:
-
-- **`route(state, nodes, to)`** decides where a handoff actually puts the
-  caller. If the destination has an unmet prerequisite, the graph records the
-  destination as `pending`, enters the step that satisfies it, and the
-  finisher there calls `resume` to go back. No request decides that, and no
-  prompt states the ordering.
-- **`moved_by(state, node, nodes, succeeded)`** decides where a *successful*
-  borrowed tool has put the caller. A step lends a neighbour's entry tool into
-  its own schema while an `Exit` guard holds (`Exit('booking', verified,
-  via=(read_diary,))`), and calling it *is* the move: the request that moved
-  the caller is the request that did their work. Only tools that returned
-  count; a refused tool is not a move.
-
-Illegal moves are unrepresentable rather than refused. Each step's `hand_over`
-is built by `hand_over_for` with a `Literal` of only that step's destinations,
-and two `prepare` hooks rebuild the offered tools before every provider
-request: `only_reachable` hides a borrowed tool while its guard does not hold,
-and `narrow` rewrites the `hand_over` enum to the exits that are open right
-now. Both are re-checked at execution, because a schema built before the tools
-in the same reply ran is a convenience for the model, never the enforcement.
-
-- Preparing tools and output tools per request: https://pydantic.dev/docs/ai/capabilities/prepare-tools/
-- Programmatic handoff, as distinct from delegation: https://pydantic.dev/docs/ai/guides/multi-agent-applications/
-- Function tools and their schemas: https://pydantic.dev/docs/ai/tools-toolsets/tools/
-
-## 4. Typed state, and how it is updated
-
-`VoiceState` (`core/state.py`) is the business facts of a call and nothing
-else. `SalonState` (`salon/models/state.py`) adds the salon's: the caller's
-number, whether they confirmed it, what the lookup found, the appointment the
-diary holds, how many writes have been accepted, and the one write whose
-outcome is unknown. Every field is a validated shape from
-`salon/models/shapes.py`, so a state cannot hold a phone number that is not a
-Spanish number or a date that is not on the calendar.
-
-Three Pydantic opt-ins are on, and none is on by default: `validate_default`,
-so an authored default that breaks its own type fails at import;
-`validate_assignment`; and `revalidate_instances='always'`, so a nested model
-handed in is revalidated rather than trusted. Each alone leaves a hole the
-other two do not cover.
-
-State is never assigned field by field. `CallContext.commit(**updates)`
-builds one whole candidate from the current values plus the updates and
-validates it; on failure the previous state object is untouched. It is not
-`model_copy(update=...)`, which copies updates in without validating them, and
-a keyword naming no field is refused rather than dropped. A `model_validator`
-on `SalonState` runs on every commit and clears verification that does not
-belong to the number now on the call, so authorisation cannot survive a
-correction and a status nobody earned cannot be constructed.
-
-A commit from a turn the caller has moved on from keeps its business facts and
-loses its flow fields: a booking that landed is a fact whichever turn made it;
-where the caller *is* belongs to the current turn.
-
-- Model configuration, assignment validation: https://pydantic.dev/docs/validation/latest/api/pydantic/config/
-- Models and validation: https://pydantic.dev/docs/validation/latest/concepts/models/
-- `TypeAdapter`, used for tool arguments and the phone shape: https://pydantic.dev/docs/validation/latest/concepts/type_adapter/
-- Dependencies (`deps_type` is typed access, not a runtime validator): https://pydantic.dev/docs/ai/core-concepts/dependencies/
-
-## 5. Typed flow
-
-Typed values were never the hard part. A valid phone number does not establish
-that the caller confirmed it; a valid booking request does not establish
-approval; a successful lookup does not say which pending request to resume.
-The POC connects four contracts, and each has one place in the code:
-
-| Contract | Question it answers | Where |
-|---|---|---|
-| Typed values | Is the value structurally valid? | `salon/models/shapes.py`: `Phone`, `SubmittedPhone`, `Date`, `Time`, `Id` |
-| Typed state | Do the facts remain consistent after an update? | `CallContext.commit`, the `SalonState` identity invariant |
-| Typed flow | Is this action allowed now, and where do we continue? | `route`, `moved_by`, `Exit.guard`, `Node.requires`, the prepare hooks |
-| Typed completion | What evidence is required before success is spoken? | `salon/models/receipts.py`, `salon/tools/writes.py` |
-
-Typed completion is the boundary most often skipped. `Diary` stands in for an
-HTTP service and hands back dicts; every one is parsed into a receipt model
-(`Slots`, `Saved`, `CustomerLookup`, `ComplaintRecord`) before a field is
-read, and a legal-looking receipt is then checked against the *request*: a
-`cancelled` result is not an answer to a `book` request however well-formed it
-is. Every write carries an operation token derived from what the action is,
-and a write whose answer was lost is recorded as `Unresolved` on the state,
-which blocks every other write until the token has been asked what happened.
-
-## 6. The custom logic
-
-Everything the model used to decide that the application now decides, and the
-mechanism for each:
-
-- **One budget per caller turn.** `TurnBudget` (`core/policies.py`) is one
-  tally of provider requests, one tool-call allowance, a fixed number of step
-  runs and one deadline, threaded through every run in the turn. An exhausted
-  turn gets one fixed line and no further request.
-  https://pydantic.dev/docs/ai/api/pydantic-ai/usage/ ·
-  https://pydantic.dev/docs/ai/core-concepts/retries/ ·
-  https://pydantic.dev/docs/ai/core-concepts/timeouts/
-- **One action per model reply.** `one_action_per_reply` reads the whole
-  response in `after_model_request`, in emission order, and picks the one tool
-  call allowed to move the caller or write to the business; `claim_or_refuse`
-  is how an action checks it holds the claim, because `before_tool_execute`
-  does not fire for output tools.
-- **Speak by the third request.** `speak_by` empties the ordinary tool set
-  from a given request on, so a run cannot buy a fourth lookup; its output
-  tools stay, so it can still finish.
-- **A clock per request.** `request_clock` stamps each provider request on
-  the way out, so time to first token is per request and says whether the
-  first thing back was speech or a tool call.
-- **Typed interpretation, guarded execution.** The classifier interprets a
-  reply to a pending question; application guards authorize the exact action.
-  Resolved decisions replace the conversational request. See
-  [the classifier flow and evolution path](#7-typed-classification-and-its-evolution).
-- **Deterministic continuation.** A finisher does its work and returns a
-  `Handoff` whose destination is `call.resume(...)`, which the graph already
-  knows. A prerequisite step reports `completed` or `unserved`, and the
-  engine restores the owner's checkpoint and tells the next agent what
-  happened through an instruction part.
-- **History is projected, not sent raw.** `core/history.py`'s `paired` drops
-  tool calls a cancellation left unanswered and `project` merges the speech
-  ledger into the protocol by segment id, so a model is told what the caller
-  heard and never an assistant message with nothing after it.
-  https://pydantic.dev/docs/ai/capabilities/process-history/
-- **Prompts are compiled against the call.** `salon/instructions.py` builds a
-  `TemplateStr[SalonCall]` per step from `prompts/*.md`, so a placeholder
-  naming no field fails at import, every `{{#if}}` is resolved before the model
-  reads it, and the salon's own documents are substituted in rather than
-  fetched by a retrieval tool. https://pydantic.dev/docs/ai/api/pydantic-ai/template/
-- **The diary computes what a model would guess.** Which day "next Friday"
-  is, whether a slot has already passed, whether two appointments overlap,
-  what a booking sounds like out loud: all `salon/diary.py`, none asked of a
-  model.
-
-## 7. Typed classification and its evolution
-
-The classifier answers a narrow question: how does the caller's reply relate
-to the question they just heard? Today it uses the same Gemini model as the
-conversational agents, through one asynchronous
-[Pydantic AI direct model request](https://pydantic.dev/docs/ai/core-concepts/direct/).
-It has no agent loop, business tools, conversation history or repair requests.
-
-[Classifier](core/classifiers.py) is an ordinary generic Python class:
-`Classifier[InputT, OutputT]`, with both contracts defined by Pydantic models.
-It validates the input, sends its JSON with the output model's JSON Schema,
-and validates the returned answer. The default prompt is just:
-
-> Classify the input using the class descriptions in the output schema.
-
-Class keys and their meanings live together in the output model, using
-`Annotated[Literal[...], Field(description=...)]`. A new use case supplies its
-own input model and output classes. There are no salon rules in `core`.
-
-The salon wiring is in [salon/classification.py](salon/classification.py),
-and its contracts are in [salon/models/consent.py](salon/models/consent.py):
-
-| Contract | Contents |
-|---|---|
-| `ConsentInput` | Accepted utterance, preceding delivered speech, caller identity, pending proposal and any retained complaint approval. |
-| `ReplyClassification` | Confirmation (`accept`, `reject`, `revise`, `conditional`, `unclear`, `not_applicable`), appointment choice (`move`, `add`, `unclear`, `not_applicable`), conversation status and whether retained complaint approval still applies. |
-
-```mermaid
-flowchart LR
-    reply[Caller reply] --> pending{Pending decision?}
-    pending -- Yes --> classify[Typed classifier]
-    pending -- No --> agent[Conversational agent]
-    classify -- Clear decision --> guards[Application guards]
-    guards -- Authorized --> execute[Existing executor]
-    classify -- Unresolved or failed --> agent
-```
-
-Async `advance()` classifies pending confirmations, move/add questions and
-recorded closing questions before the conversational agent runs. Clear
-answers take one classifier request to resolve that decision. Ordinary turns
-skip upfront classification; a tool can request it on demand. Ambiguous
-answers, questions or provider failures can require a second, conversational
-request. Subsequent workflow steps may still need conversation.
-
-Only explicit acceptance can approve a confirmation. Code checks identity,
-freshness, the exact proposal and valid options, then consumes approval once.
-The interpretation is cached within the caller turn and bound to its input
-and proposal. Both paths share request limits and the turn deadline.
-Cancellation retains accepted input, excludes classifier JSON from dialogue
-history and discards superseded results. Pydantic validates the shape of the
-answer; semantic accuracy still needs evaluation.
-
-When `advance()` declines, a step that was just entered can still open
-without a model. Each step declares its `openings` in the `AGENTS` table.
-An opening names the entry it answers (a handoff, or a prerequisite's
-return), a guard over the call, and the executor the model's tool uses.
-
-- `verify`, entered by a handoff: read back the carrier's number, or ask
-  for one when there is none.
-- `booking`, back from verification: offer times for the request the front
-  desk typed into `hand_over(booking=...)`.
-
-The booking prompt also shows the times just offered, with their slot ids.
-So a caller picking one costs one request (`save_booking`), not a diary
-re-read first. One model round trip costs about 0.8s on this setup, so a
-turn only stays under 1.1s with one request at most.
-
-### Next: change the inference engine, preserve the contract
-
-The following are proposed evolutions; this repository currently runs the
-Gemini implementation only. Keep `classify(value, *, usage, usage_limits)`
-and the domain models as the consumer contract. Keep authorization in the
-existing application guards. Changing the classifier must not give a model
-new authority to execute actions.
-
-| Candidate | Integration path | What to establish before using it |
-|---|---|---|
-| A smaller hosted LLM | Inject a different Pydantic AI model and its settings into `Classifier`. | Native JSON Schema support and adequate multilingual classification accuracy. |
-| TypeSafe AI's Jev | Add a focused adapter for typed choice requests, mapping the schema's class keys and descriptions to questions and validating answers back into `OutputT`. | Supported schema mappings, confidence handling, usage accounting and the same cancellation behavior. |
-| A small model running locally | Inject a model connected to a local inference server that supports native JSON Schema output, such as self-hosted Ollama. Use provider-appropriate settings instead of the Google settings. | Accuracy on the target languages, memory requirements and response times on the actual hardware under concurrent calls. |
-
-**Jev has a different response contract.** Pydantic AI's
-[TypeSafe integration](https://pydantic.dev/docs/ai/models/typesafe/) maps
-supported output fields to typed questions and exposes confidence. It does
-not support native text/JSON output, which the current `Classifier` requires.
-That makes this a future adapter change rather than just a model-name change.
-The pinned SDK includes `TypeSafeModel`, but this project does not install its
-optional `typesafe` dependency. The adapter should reuse the schema definitions,
-preserve one request with no business tools, and map insufficient confidence
-to an unresolved result using thresholds chosen from evaluation data.
-
-**Local inference can keep the current request path.** Pydantic AI documents
-[native structured output for self-hosted Ollama](https://pydantic.dev/docs/ai/models/ollama/).
-The selected server and model must accept our actual schema, including nested
-models and descriptions. Local classification could avoid a remote round trip;
-whether it improves voice latency depends on model speed, cold starts and
-contention with other workloads. Moving classification locally leaves the
-conversational model and speech services as separate deployment choices.
-
-### Evaluate before switching
-
-Start with the existing Gemini classifier as the baseline. Explicitly run
-`uv run --env-file .env python -m evals.consent` to make live requests. It
-reports English, Spanish and mixed-language accuracy, false acceptances and
-classifier p50/p95 duration separately from offline flow tests. It currently
-uses the configured salon classifier; it is not yet a multi-provider benchmark.
-
-For each candidate, run the same labeled cases, then expand them with real
-corrections, conditions, ambiguous replies and contextual goodbyes. Compare
-false acceptances and fallback rates as well as overall accuracy. Measure
-end-to-end voice latency under representative load; for local models include
-both cold and warm runs. A possible later step is evaluating candidates beside
-the current classifier without executing their decisions, then selecting one
-once the accuracy and latency results justify it. No Jev or local-model
-measurements have been made in this repository.
-
-## 8. Telemetry
-
-Langfuse over OpenTelemetry. Pydantic AI's instrumentation emits the agent
-runs; Pipecat emits the conversation, the turn, stt and tts; the processor
-emits one span per caller turn, named after the step that answered and typed
-`agent`, parented on Pipecat's open turn span. Pydantic AI's own run and request
-spans get a readable input and output: the input is the prompt as a transcript,
-system prompt first, and the output is the sentence a run produced, where it
-handed the caller, or the text and tool calls a request answered with. Langfuse
-renders neither from Pydantic AI's own attributes, so both are said again in
-`langfuse.observation.*`; the raw messages stay in the observation's metadata.
-`utils/observability.py` does the two things nothing else does: exports the
-non-GenAI spans Langfuse would otherwise drop, and translates Pipecat's
-attributes into `langfuse.observation.*` so a speech span arrives with its
-text and its model rather than empty. Counting provider requests means
-counting `model_requests` on the turn span, not every observation labelled
-a generation: speech services are generations too.
-
-- Langfuse trace structure and counting: https://langfuse.com/docs/observability/best-practices
-
-Classifier request count, duration and fallback are recorded on the turn span
-alongside existing voice latency. Compare complete caller turns, including
-fallback, when evaluating a change of model.
 
 ---
 

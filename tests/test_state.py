@@ -688,6 +688,13 @@ def a_submitted_number_is_not_the_same_type_as_a_stored_one():
     _refused(submitted.validate_python, '')
     assert TypeAdapter(Phone).validate_python('') == ''
 
+    too_long = str(_refused(submitted.validate_python, '+346721273454'))
+    assert '10 digits' in too_long and "'correction'" in too_long, (
+        'a misheard extra digit is not a missing one'
+    )
+    too_short = str(_refused(submitted.validate_python, '+348340464'))
+    assert '7 digits' in too_short and "'incomplete'" in too_short, too_short
+
 
 async def main():
     an_authored_default_is_checked()

@@ -19,7 +19,7 @@ from salon.classification import classify_reply
 from salon.diary import Diary
 from salon.instructions import COMPLAINT_GUIDANCE
 from salon.models.state import open_call
-from salon.tools import complaints, desk
+from salon.tools import booking, complaints, desk
 from tests.classifier_model import classifier_model
 
 PHONE = '+34680840464'
@@ -27,6 +27,13 @@ PHONE = '+34680840464'
 
 books = Diary()
 """This module's salon, emptied by each case that writes to it."""
+
+
+def played_out(call) -> None:
+    """The audio ran out after playing in full. Its start is moved back: a test's start and stop are one instant."""
+    if call._burst != float('inf'):
+        call._burst -= 60
+    call.note_drained()
 
 
 def context(call):
@@ -502,14 +509,22 @@ async def cancelled_queue_keeps_all_accepted_input(fragmented=False):
             await probe.cleanup()
 
 
-async def selected_time_needs_no_extra_confirmation():
-    for words in ('01:00, please.', '1:00 PM', 'one, please.'):
+async def a_selected_time_is_read_back_with_no_model():
+    """A plain pick of an offered time is read back by the application, and only the yes to that books it.
+
+    The graph and LiveKit builds say "choosing a time is not a yes", and the
+    Coval release check asks for a read-back before "booked". The read-back
+    costs no model request: the pick's reading already named the slot.
+    """
+    for words in ('09:30, please.', '9:30 AM', 'half past nine, please.'):
         books.reset()
         books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
         call = open_call(PHONE, diary=books)
         call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
-        slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)['slots']
-        slot = next(s for s in slots if s['time'] == '13:00')
+        call.turn_started('A haircut on Friday.')
+        await booking.offer(call, 'Friday', 'haircut')
+        call.turn_ended(interrupted=False)
+        slot = next(s.model_dump() for s in call.state.offered if (s.time.hour, s.time.minute) == (9, 30))
 
         async def stream(messages, info, slot=slot):
             yield {
@@ -525,29 +540,42 @@ async def selected_time_needs_no_extra_confirmation():
                 )
             }
 
-        with agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=stream)):
-            await Probe(call, agents.AGENTS)._turn(words)
-        assert call.state.writes == 1 and len(call.requests) == 1, words
+        probe = Probe(call, agents.AGENTS)
+        with (
+            classifier_model(),
+            agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=stream)),
+        ):
+            await probe._turn(words)
+            assert call.state.writes == 0, f'{words}: a pick booked before its read-back'
+            assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
+            readback = call.all_spoken[-1].generated
+            assert readback.startswith('Shall I book you in for a haircut, Friday at 9:30 AM'), readback
+            call.note_reached()
+            played_out(call)
+            probe.interrupt()
+            await probe._turn('Yes.')
+        assert call.state.writes == 1, words
+        assert {r.kind for r in call.requests} == {'classifier'}, 'the yes to it needs no model either'
 
 
 async def consent_and_history_boundaries():
     call = open_call(PHONE, diary=books)
     call.note_said('fixed', 'Would you like a redo?')
     call.turn_started('No, thanks.')
-    await classify_reply(call)
-    assert not desk._can_end(call)
+    await classify_reply(call, closing=True)
+    assert not desk.DESK.can_end(call)
     call.note_said('fixed', 'Anything else?')
     call.turn_started('No, thanks.')
-    await classify_reply(call)
-    assert desk._can_end(call)
+    await classify_reply(call, closing=True)
+    assert desk.DESK.can_end(call)
     call.note_model_text('Anything else?')
     call.note_heard('')
     call.turn_started('No, thanks.')
-    await classify_reply(call)
-    assert not desk._can_end(call), 'unheard speech cannot establish permission to hang up'
+    await classify_reply(call, closing=True)
+    assert not desk.DESK.can_end(call), 'unheard speech cannot establish permission to hang up'
     call.turn_started('No thanks, but can you move my booking?')
-    await classify_reply(call)
-    assert not desk._can_end(call)
+    await classify_reply(call, closing=True)
+    assert not desk.DESK.can_end(call)
     call.commit(agent='complaints')
     assert call.claims_completion('I have recorded your request for a redo.')
 
@@ -571,7 +599,7 @@ async def main():
     await complaint_readback_uses_caller_evidence()
     await complaint_preamble_cannot_bypass_structured_speech()
     await complaint_approval_ends_with_its_intent()
-    await selected_time_needs_no_extra_confirmation()
+    await a_selected_time_is_read_back_with_no_model()
     await cancelled_queue_keeps_all_accepted_input()
     await cancelled_queue_keeps_all_accepted_input(fragmented=True)
     print('recovery ok')

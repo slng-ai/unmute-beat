@@ -1,0 +1,1278 @@
+{
+ "requests": {
+  "confirmation": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The receptionist read something back and is waiting for a yes.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `proposal`: The exact proposal the person was read back and asked to confirm.",
+   "output_name": "ConfirmationReading",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "confirmation": {
+      "anyOf": [
+       {
+        "const": "accept",
+        "description": "Clearly approves the exact proposal, without conditions or questions.",
+        "type": "string"
+       },
+       {
+        "const": "reject",
+        "description": "Declines the proposal.",
+        "type": "string"
+       },
+       {
+        "const": "revise",
+        "description": "Asks to change the proposal.",
+        "type": "string"
+       },
+       {
+        "const": "conditional",
+        "description": "Agrees only under an added condition (\"yes, if...\").",
+        "type": "string"
+       },
+       {
+        "const": "unclear",
+        "description": "Asks a question, or the answer is ambiguous or incomplete. An answer put as a question, even one that sounds like a yes, is unclear.",
+        "type": "string"
+       }
+      ],
+      "default": "unclear",
+      "description": "How the answer responds to the read-back in `proposal`.",
+      "title": "Confirmation"
+     }
+    },
+    "title": "ConfirmationReading",
+    "type": "object"
+   },
+   "input_schema": {
+    "additionalProperties": false,
+    "description": "A reply to a read-back: the exact proposal the person was asked to confirm.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "proposal": {
+      "description": "The exact proposal the person was read back and asked to confirm.",
+      "title": "Proposal",
+      "type": "string"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "proposal"
+    ],
+    "title": "ReadBackInput",
+    "type": "object"
+   }
+  },
+  "appointment_choice": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The caller already holds an appointment. Read whether the answer moves it or adds another. A bare yes picks neither.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `options`: The options the person can pick from, each with its `id`.",
+   "output_name": "AppointmentChoiceChoice",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "choice": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer picks or asks for, copied exactly. It still counts when the answer also says thanks or goodbye. Empty if the answer picks none of them, puts a condition on its pick, or could mean more than one.",
+      "title": "Choice",
+      "type": "string"
+     }
+    },
+    "title": "AppointmentChoiceChoice",
+    "type": "object"
+   },
+   "input_schema": {
+    "$defs": {
+     "Option": {
+      "additionalProperties": false,
+      "description": "One option the person can pick, with the id a pick must name.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "said": {
+        "title": "Said",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "said"
+      ],
+      "title": "Option",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "A reply read against the options the person can pick from right now.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "options": {
+      "description": "The options the person can pick from, each with its `id`.",
+      "items": {
+       "$ref": "#/$defs/Option"
+      },
+      "title": "Options",
+      "type": "array"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "options"
+    ],
+    "title": "ChoiceInput",
+    "type": "object"
+   }
+  },
+  "chosen_offer": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The caller was offered appointment times. A time they name, or \"the same time\" as one in `holding`, picks it.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `options`: The options the person can pick from, each with its `id`.\n- `holding`: The appointments the caller already holds, as the salon says them.",
+   "output_name": "ChosenOfferChoice",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "choice": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer picks or asks for, copied exactly. It still counts when the answer also says thanks or goodbye. Empty if the answer picks none of them, puts a condition on its pick, or could mean more than one.",
+      "title": "Choice",
+      "type": "string"
+     },
+     "named": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer names without simply picking it: it puts a condition on it, asks about it, or doubts it. Empty if the answer names none, or picks it plainly.",
+      "title": "Named",
+      "type": "string"
+     }
+    },
+    "title": "ChosenOfferChoice",
+    "type": "object"
+   },
+   "input_schema": {
+    "$defs": {
+     "Option": {
+      "additionalProperties": false,
+      "description": "One option the person can pick, with the id a pick must name.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "said": {
+        "title": "Said",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "said"
+      ],
+      "title": "Option",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "A reply read against the times on the table, and what the caller already holds, for \"the same time\".",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "options": {
+      "description": "The options the person can pick from, each with its `id`.",
+      "items": {
+       "$ref": "#/$defs/Option"
+      },
+      "title": "Options",
+      "type": "array"
+     },
+     "holding": {
+      "default": [],
+      "description": "The appointments the caller already holds, as the salon says them.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Holding",
+      "type": "array"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "options"
+    ],
+    "title": "OfferInput",
+    "type": "object"
+   }
+  },
+  "last_change": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. Earlier in this call the salon booked an appointment for the caller, which they can still take back.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `agreed`: What the person agreed to earlier, or was told had been done, which they could still take back.",
+   "output_name": "LastChangeReading",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "last_change": {
+      "anyOf": [
+       {
+        "const": "keep",
+        "description": "Keeps what is in `agreed`, or does not take it back.",
+        "type": "string"
+       },
+       {
+        "const": "withdraw",
+        "description": "Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they no longer want it. A condition on it is not taking it back.",
+        "type": "string"
+       },
+       {
+        "const": "unclear",
+        "description": "Whether they take it back is unclear, or they put a condition on it (\"only if...\") that has not been answered yet.",
+        "type": "string"
+       }
+      ],
+      "default": "unclear",
+      "description": "Whether the answer takes back what is in `agreed`, which has already been done.",
+      "title": "Last Change"
+     }
+    },
+    "title": "LastChangeReading",
+    "type": "object"
+   },
+   "input_schema": {
+    "additionalProperties": false,
+    "description": "A reply read against something the person agreed to earlier, which they could still take back.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "agreed": {
+      "description": "What the person agreed to earlier, or was told had been done, which they could still take back.",
+      "title": "Agreed",
+      "type": "string"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "agreed"
+    ],
+    "title": "TakeBackInput",
+    "type": "object"
+   }
+  },
+  "retained_approval": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The caller approved a complaint to record, and the salon is checking their number before it records it.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `agreed`: What the person agreed to earlier, or was told had been done, which they could still take back.",
+   "output_name": "RetainedApprovalReading",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "retained_approval": {
+      "anyOf": [
+       {
+        "const": "keep",
+        "description": "Still agrees to it unchanged, or says nothing about it.",
+        "type": "string"
+       },
+       {
+        "const": "withdraw",
+        "description": "Takes it back, changes any part of it, or moves on to something else instead.",
+        "type": "string"
+       },
+       {
+        "const": "unclear",
+        "description": "Whether they still agree is uncertain.",
+        "type": "string"
+       }
+      ],
+      "default": "unclear",
+      "description": "Whether the person still agrees to what is in `agreed`, exactly as it is. It has not been done yet.",
+      "title": "Retained Approval"
+     }
+    },
+    "title": "RetainedApprovalReading",
+    "type": "object"
+   },
+   "input_schema": {
+    "additionalProperties": false,
+    "description": "A reply read against something the person agreed to earlier, which they could still take back.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "agreed": {
+      "description": "What the person agreed to earlier, or was told had been done, which they could still take back.",
+      "title": "Agreed",
+      "type": "string"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "agreed"
+    ],
+    "title": "TakeBackInput",
+    "type": "object"
+   }
+  },
+  "request_change": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The caller asked for something, then the salon stopped to check who they are.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `request`: What the person asked for before the check began, in their words.",
+   "output_name": "RequestChangeReading",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "request_change": {
+      "anyOf": [
+       {
+        "const": "kept",
+        "description": "In `answer` the person only answered what they were asked (a yes or no, a number, a correction of it) and changed or added nothing to `request`.",
+        "type": "string"
+       },
+       {
+        "const": "changed",
+        "description": "Somewhere in `answer` the person changed `request` or asked for something more: another day, time or item, a question, a complaint.",
+        "type": "string"
+       },
+       {
+        "const": "unclear",
+        "description": "It is uncertain.",
+        "type": "string"
+       }
+      ],
+      "default": "unclear",
+      "description": "Whether the person still wants `request` exactly as they asked for it.",
+      "title": "Request Change"
+     }
+    },
+    "title": "RequestChangeReading",
+    "type": "object"
+   },
+   "input_schema": {
+    "additionalProperties": false,
+    "description": "What was said while a prerequisite was checked, and the request that check interrupted.\n\n`question` is everything the agent said during the check and `answer`\neverything the person said, both in order.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "request": {
+      "description": "What the person asked for before the check began, in their words.",
+      "title": "Request",
+      "type": "string"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "request"
+    ],
+    "title": "DetourInput",
+    "type": "object"
+   }
+  },
+  "conversation": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.",
+   "output_name": "ConversationReading",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "conversation": {
+      "anyOf": [
+       {
+        "const": "end",
+        "description": "Ends the whole call with nothing left to ask. A \"no\" to \"anything else?\" ends it.",
+        "type": "string"
+       },
+       {
+        "const": "continue",
+        "description": "Has more to discuss, asks a question, or only declines what was just proposed.",
+        "type": "string"
+       },
+       {
+        "const": "unclear",
+        "description": "Whether they want to end the call is unclear.",
+        "type": "string"
+       }
+      ],
+      "default": "unclear",
+      "description": "Whether the answer ends the whole call.",
+      "title": "Conversation"
+     }
+    },
+    "title": "ConversationReading",
+    "type": "object"
+   },
+   "input_schema": {
+    "additionalProperties": false,
+    "description": "One question put to a person and their answer: what every classification reads.\n\nA business adds its facts as more fields, each with a description. The\nclassifier lists those descriptions to the model, so a fact without one\nis sent but never explained.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     }
+    },
+    "required": [
+     "question",
+     "answer"
+    ],
+    "title": "Exchange",
+    "type": "object"
+   }
+  },
+  "solver": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "Read the caller utterance as exactly one decision about the pending proposal, using the class descriptions in the output schema. Accept only when delivered is true and the caller clearly approves that exact proposal. Use switch_task only for one of the listed destinations. Never invent digits.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `step`: The part of the call the caller is in.\n- `owner`: The caller's phone number, once they have given one. Empty before that.\n- `proposal`: The proposal the salon put to the caller last. Null when there is none.\n- `delivered`: Whether the caller heard the whole proposal before answering.\n- `retained_complaint`: A complaint the caller already approved, kept while their number is checked. Null if none.\n- `destinations`: The tasks the caller could switch to, and what each needs first.",
+   "output_name": "SalonSolution",
+   "output_schema": {
+    "$defs": {
+     "Accept": {
+      "additionalProperties": false,
+      "description": "Clearly approves the exact pending proposal, without conditions or questions.",
+      "properties": {
+       "kind": {
+        "const": "accept",
+        "default": "accept",
+        "title": "Kind",
+        "type": "string"
+       }
+      },
+      "title": "Accept",
+      "type": "object",
+      "required": [
+       "kind"
+      ]
+     },
+     "ChooseAppointment": {
+      "additionalProperties": false,
+      "description": "Chooses between moving the existing appointment and adding another. A bare yes cannot choose.",
+      "properties": {
+       "kind": {
+        "const": "choose_appointment",
+        "default": "choose_appointment",
+        "title": "Kind",
+        "type": "string"
+       },
+       "choice": {
+        "enum": [
+         "move",
+         "add"
+        ],
+        "title": "Choice",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "choice"
+      ],
+      "title": "ChooseAppointment",
+      "type": "object"
+     },
+     "Clarify": {
+      "additionalProperties": false,
+      "description": "The reply is ambiguous or incomplete in a way one short question would settle.",
+      "properties": {
+       "kind": {
+        "const": "clarify",
+        "default": "clarify",
+        "title": "Kind",
+        "type": "string"
+       },
+       "question": {
+        "description": "One short question to settle it. Never claim anything was done.",
+        "maxLength": 160,
+        "title": "Question",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "question"
+      ],
+      "title": "Clarify",
+      "type": "object"
+     },
+     "Conditional": {
+      "additionalProperties": false,
+      "description": "Agrees only under an additional condition.",
+      "properties": {
+       "kind": {
+        "const": "conditional",
+        "default": "conditional",
+        "title": "Kind",
+        "type": "string"
+       }
+      },
+      "title": "Conditional",
+      "type": "object",
+      "required": [
+       "kind"
+      ]
+     },
+     "CorrectPhone": {
+      "additionalProperties": false,
+      "description": "Gives different digits for the number that was read back. Only for a phone readback.",
+      "properties": {
+       "kind": {
+        "const": "correct_phone",
+        "default": "correct_phone",
+        "title": "Kind",
+        "type": "string"
+       },
+       "digits": {
+        "description": "The whole corrected number in E.164, e.g. +34600111234. Keep the read-back digits the caller did not change. If you cannot tell which digits change, use clarify instead.",
+        "title": "Digits",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "digits"
+      ],
+      "title": "CorrectPhone",
+      "type": "object"
+     },
+     "EndCall": {
+      "additionalProperties": false,
+      "description": "Ends the whole call with no remaining request.",
+      "properties": {
+       "kind": {
+        "const": "end_call",
+        "default": "end_call",
+        "title": "Kind",
+        "type": "string"
+       }
+      },
+      "title": "EndCall",
+      "type": "object",
+      "required": [
+       "kind"
+      ]
+     },
+     "NoDecision": {
+      "additionalProperties": false,
+      "description": "Anything else: a question, small talk, or nothing that answers the pending proposal.",
+      "properties": {
+       "kind": {
+        "const": "none",
+        "default": "none",
+        "title": "Kind",
+        "type": "string"
+       }
+      },
+      "title": "NoDecision",
+      "type": "object",
+      "required": [
+       "kind"
+      ]
+     },
+     "Reject": {
+      "additionalProperties": false,
+      "description": "Declines the pending proposal and asks for nothing else.",
+      "properties": {
+       "kind": {
+        "const": "reject",
+        "default": "reject",
+        "title": "Kind",
+        "type": "string"
+       }
+      },
+      "title": "Reject",
+      "type": "object",
+      "required": [
+       "kind"
+      ]
+     },
+     "Revise": {
+      "additionalProperties": false,
+      "description": "Asks to change the pending proposal, for example another day or another outcome.",
+      "properties": {
+       "kind": {
+        "const": "revise",
+        "default": "revise",
+        "title": "Kind",
+        "type": "string"
+       }
+      },
+      "title": "Revise",
+      "type": "object",
+      "required": [
+       "kind"
+      ]
+     },
+     "SalonDecision": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/Accept"
+       },
+       {
+        "$ref": "#/$defs/Reject"
+       },
+       {
+        "$ref": "#/$defs/Revise"
+       },
+       {
+        "$ref": "#/$defs/Conditional"
+       },
+       {
+        "$ref": "#/$defs/Clarify"
+       },
+       {
+        "$ref": "#/$defs/CorrectPhone"
+       },
+       {
+        "$ref": "#/$defs/ChooseAppointment"
+       },
+       {
+        "$ref": "#/$defs/SalonSwitch"
+       },
+       {
+        "$ref": "#/$defs/EndCall"
+       },
+       {
+        "$ref": "#/$defs/NoDecision"
+       }
+      ]
+     },
+     "SalonSwitch": {
+      "additionalProperties": false,
+      "description": "Abandons the current task, without finishing it, to do a different one of the listed destinations.",
+      "properties": {
+       "kind": {
+        "const": "switch_task",
+        "default": "switch_task",
+        "title": "Kind",
+        "type": "string"
+       },
+       "target": {
+        "enum": [
+         "booking",
+         "complaints",
+         "concierge"
+        ],
+        "title": "Target",
+        "type": "string"
+       },
+       "details": {
+        "default": "",
+        "description": "What the caller already said about the new task, in their words, so they are not asked again.",
+        "maxLength": 300,
+        "title": "Details",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "target"
+      ],
+      "title": "SalonSwitch",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The caller's reply read as one decision, with a short reply only when switching task.",
+    "properties": {
+     "decision": {
+      "$ref": "#/$defs/SalonDecision"
+     },
+     "reply": {
+      "default": "",
+      "description": "Only for switch_task: one short sentence to the caller. Otherwise empty. Never claim anything was done.",
+      "maxLength": 200,
+      "title": "Reply",
+      "type": "string"
+     }
+    },
+    "required": [
+     "decision"
+    ],
+    "title": "SalonSolution",
+    "type": "object"
+   },
+   "input_schema": {
+    "$defs": {
+     "Asked": {
+      "description": "A question this call put to the caller, and is waiting on the answer to.\n\nApplication-owned. A tool may propose the question; a separate classifier\ninterprets its answer, and the application checks the exact proposal.\nThe turn it was asked on is part of it, so an agreement two turns later is\nnot an answer to it.",
+      "properties": {
+       "about": {
+        "enum": [
+         "phone",
+         "booking",
+         "move_or_add",
+         "complaint",
+         "closing",
+         "offer"
+        ],
+        "title": "About",
+        "type": "string"
+       },
+       "spoken": {
+        "default": "",
+        "title": "Spoken",
+        "type": "string"
+       },
+       "value": {
+        "default": "",
+        "title": "Value",
+        "type": "string"
+       },
+       "resolution": {
+        "default": "",
+        "title": "Resolution",
+        "type": "string"
+       },
+       "summary": {
+        "default": "",
+        "title": "Summary",
+        "type": "string"
+       },
+       "requested_resolution": {
+        "default": "",
+        "title": "Requested Resolution",
+        "type": "string"
+       },
+       "owner": {
+        "default": "",
+        "title": "Owner",
+        "type": "string"
+       },
+       "action": {
+        "default": "",
+        "enum": [
+         "book",
+         "move",
+         "cancel",
+         ""
+        ],
+        "title": "Action",
+        "type": "string"
+       },
+       "booking_id": {
+        "default": "",
+        "title": "Booking Id",
+        "type": "string"
+       },
+       "turn": {
+        "default": 0,
+        "title": "Turn",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "about"
+      ],
+      "title": "Asked",
+      "type": "object"
+     },
+     "Destination": {
+      "additionalProperties": false,
+      "description": "A task the caller may switch to, and what it needs before it can start.",
+      "properties": {
+       "name": {
+        "enum": [
+         "booking",
+         "complaints",
+         "concierge"
+        ],
+        "title": "Name",
+        "type": "string"
+       },
+       "purpose": {
+        "title": "Purpose",
+        "type": "string"
+       },
+       "needs": {
+        "default": "",
+        "title": "Needs",
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "purpose"
+      ],
+      "title": "Destination",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "A snapshot of the reply and every application-owned fact needed to read it as one decision.\n\n`delivered` is False when the caller spoke over the proposal, so it may be\ncorrected or abandoned but never accepted. Destinations are what the\ncaller could switch to; whether a switch is legal right now is checked\nagain when it is applied.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "step": {
+      "description": "The part of the call the caller is in.",
+      "enum": [
+       "concierge",
+       "verify",
+       "booking",
+       "complaints"
+      ],
+      "title": "Step",
+      "type": "string"
+     },
+     "owner": {
+      "description": "The caller's phone number, once they have given one. Empty before that.",
+      "title": "Owner",
+      "type": "string"
+     },
+     "proposal": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/Asked"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "The proposal the salon put to the caller last. Null when there is none."
+     },
+     "delivered": {
+      "default": false,
+      "description": "Whether the caller heard the whole proposal before answering.",
+      "title": "Delivered",
+      "type": "boolean"
+     },
+     "retained_complaint": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/Asked"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "A complaint the caller already approved, kept while their number is checked. Null if none."
+     },
+     "destinations": {
+      "default": [],
+      "description": "The tasks the caller could switch to, and what each needs first.",
+      "items": {
+       "$ref": "#/$defs/Destination"
+      },
+      "title": "Destinations",
+      "type": "array"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "step",
+     "owner"
+    ],
+    "title": "SolverInput",
+    "type": "object"
+   }
+  },
+  "confirm_step": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {},
+   "instructions": "The person was read back a proposal and is waiting to confirm it.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `proposal`: The exact proposal the person was read back and asked to confirm.",
+   "output_name": "ConfirmationReading",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "confirmation": {
+      "anyOf": [
+       {
+        "const": "accept",
+        "description": "Clearly approves the exact proposal, without conditions or questions.",
+        "type": "string"
+       },
+       {
+        "const": "reject",
+        "description": "Declines the proposal.",
+        "type": "string"
+       },
+       {
+        "const": "revise",
+        "description": "Asks to change the proposal.",
+        "type": "string"
+       },
+       {
+        "const": "conditional",
+        "description": "Agrees only under an added condition (\"yes, if...\").",
+        "type": "string"
+       },
+       {
+        "const": "unclear",
+        "description": "Asks a question, or the answer is ambiguous or incomplete. An answer put as a question, even one that sounds like a yes, is unclear.",
+        "type": "string"
+       }
+      ],
+      "default": "unclear",
+      "description": "How the answer responds to the read-back in `proposal`.",
+      "title": "Confirmation"
+     }
+    },
+    "title": "ConfirmationReading",
+    "type": "object"
+   },
+   "input_schema": {
+    "additionalProperties": false,
+    "description": "A reply to a read-back: the exact proposal the person was asked to confirm.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "proposal": {
+      "description": "The exact proposal the person was read back and asked to confirm.",
+      "title": "Proposal",
+      "type": "string"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "proposal"
+    ],
+    "title": "ReadBackInput",
+    "type": "object"
+   }
+  },
+  "access_confirm": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {},
+   "instructions": "The person was read back a proposal and is waiting to confirm it.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `proposal`: The exact proposal the person was read back and asked to confirm.",
+   "output_name": "ConfirmationReading",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "confirmation": {
+      "anyOf": [
+       {
+        "const": "accept",
+        "description": "Clearly approves the exact proposal, without conditions or questions.",
+        "type": "string"
+       },
+       {
+        "const": "reject",
+        "description": "Declines the proposal.",
+        "type": "string"
+       },
+       {
+        "const": "revise",
+        "description": "Asks to change the proposal.",
+        "type": "string"
+       },
+       {
+        "const": "conditional",
+        "description": "Agrees only under an added condition (\"yes, if...\").",
+        "type": "string"
+       },
+       {
+        "const": "unclear",
+        "description": "Asks a question, or the answer is ambiguous or incomplete. An answer put as a question, even one that sounds like a yes, is unclear.",
+        "type": "string"
+       }
+      ],
+      "default": "unclear",
+      "description": "How the answer responds to the read-back in `proposal`.",
+      "title": "Confirmation"
+     }
+    },
+    "title": "ConfirmationReading",
+    "type": "object"
+   },
+   "input_schema": {
+    "additionalProperties": false,
+    "description": "A reply to a read-back: the exact proposal the person was asked to confirm.",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "proposal": {
+      "description": "The exact proposal the person was read back and asked to confirm.",
+      "title": "Proposal",
+      "type": "string"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "proposal"
+    ],
+    "title": "ReadBackInput",
+    "type": "object"
+   }
+  },
+  "chosen_offer+named": {
+   "model": "gemini-3.5-flash-lite",
+   "settings": {
+    "service_tier": "priority",
+    "google_thinking_config": {
+     "thinking_level": "MINIMAL"
+    }
+   },
+   "instructions": "A caller is on the phone with the receptionist of Sage and Stone, a hair salon. The caller was offered appointment times. A time they name, or \"the same time\" as one in `holding`, picks it.\n\nYou classify the answer to a question. For each output field, choose exactly one class, using the class descriptions in the output schema. Judge only from the input. When the answer does not clearly fit a class, choose the class described for an unclear answer.\n\nThe input:\n- `question`: What the person was last asked, word for word. Empty when nothing was asked.\n- `answer`: What the person said back, as transcribed.\n- `options`: The options the person can pick from, each with its `id`.\n- `holding`: The appointments the caller already holds, as the salon says them.",
+   "output_name": "ChosenOfferChoice",
+   "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "choice": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer picks or asks for, copied exactly. It still counts when the answer also says thanks or goodbye. Empty if the answer picks none of them, puts a condition on its pick, or could mean more than one.",
+      "title": "Choice",
+      "type": "string"
+     },
+     "named": {
+      "default": "",
+      "description": "The `id` of the one option in `options` the answer names without simply picking it: it puts a condition on it, asks about it, or doubts it. Empty if the answer names none, or picks it plainly.",
+      "title": "Named",
+      "type": "string"
+     }
+    },
+    "title": "ChosenOfferChoice",
+    "type": "object"
+   },
+   "input_schema": {
+    "$defs": {
+     "Option": {
+      "additionalProperties": false,
+      "description": "One option the person can pick, with the id a pick must name.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "said": {
+        "title": "Said",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "said"
+      ],
+      "title": "Option",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "A reply read against the times on the table, and what the caller already holds, for \"the same time\".",
+    "properties": {
+     "question": {
+      "description": "What the person was last asked, word for word. Empty when nothing was asked.",
+      "title": "Question",
+      "type": "string"
+     },
+     "answer": {
+      "description": "What the person said back, as transcribed.",
+      "title": "Answer",
+      "type": "string"
+     },
+     "options": {
+      "description": "The options the person can pick from, each with its `id`.",
+      "items": {
+       "$ref": "#/$defs/Option"
+      },
+      "title": "Options",
+      "type": "array"
+     },
+     "holding": {
+      "default": [],
+      "description": "The appointments the caller already holds, as the salon says them.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Holding",
+      "type": "array"
+     }
+    },
+    "required": [
+     "question",
+     "answer",
+     "options"
+    ],
+    "title": "OfferInput",
+    "type": "object"
+   }
+  }
+ },
+ "sent": {
+  "phone_read_back_in_a_detour": {
+   "confirmation": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\",\"proposal\":\"Is it +34 600 111 222?\"}",
+   "appointment_choice": null,
+   "chosen_offer": null,
+   "last_change": null,
+   "retained_approval": null,
+   "request_change": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\",\"request\":\"I want a haircut on Friday.\"}",
+   "conversation": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\"}",
+   "solver": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\",\"step\":\"verify\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"phone\",\"spoken\":\"Is it +34 600 111 222?\",\"value\":\"+34600111222\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+  },
+  "offer_while_holding": {
+   "confirmation": null,
+   "appointment_choice": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"move\",\"said\":\"Move the appointment they already hold to the new time.\"},{\"id\":\"add\",\"said\":\"Keep the appointment they hold and add the new one as well.\"}]}",
+   "chosen_offer": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"2026-09-26T0900|haircut\",\"said\":\"Saturday at 9:00 AM\"},{\"id\":\"2026-09-26T0930|haircut\",\"said\":\"Saturday at 9:30 AM\"}],\"holding\":[\"haircut Friday at 9:00 AM\"]}",
+   "last_change": null,
+   "retained_approval": null,
+   "request_change": null,
+   "conversation": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\"}",
+   "solver": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"step\":\"booking\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"offer\",\"spoken\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"value\":\"2026-09-26T0900|haircut,2026-09-26T0930|haircut\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+  },
+  "move_or_add": {
+   "confirmation": null,
+   "appointment_choice": "{\"question\":\"Would you like to move the appointment you already have, or add another one?\",\"answer\":\"Move it, please.\",\"options\":[{\"id\":\"move\",\"said\":\"Move the appointment they already hold to the new time.\"},{\"id\":\"add\",\"said\":\"Keep the appointment they hold and add the new one as well.\"}]}",
+   "chosen_offer": null,
+   "last_change": null,
+   "retained_approval": null,
+   "request_change": null,
+   "conversation": "{\"question\":\"Would you like to move the appointment you already have, or add another one?\",\"answer\":\"Move it, please.\"}",
+   "solver": "{\"question\":\"Would you like to move the appointment you already have, or add another one?\",\"answer\":\"Move it, please.\",\"step\":\"booking\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"move_or_add\",\"spoken\":\"Would you like to move the appointment you already have, or add another one?\",\"value\":\"2026-09-26T0900|haircut\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"move\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+  },
+  "closing_after_a_booking": {
+   "confirmation": null,
+   "appointment_choice": null,
+   "chosen_offer": null,
+   "last_change": "{\"question\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"answer\":\"How much is that? If it is over 30, leave it.\",\"agreed\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\"}",
+   "retained_approval": null,
+   "request_change": null,
+   "conversation": "{\"question\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"answer\":\"How much is that? If it is over 30, leave it.\"}",
+   "solver": "{\"question\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"answer\":\"How much is that? If it is over 30, leave it.\",\"step\":\"concierge\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"closing\",\"spoken\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"value\":\"\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"}]}"
+  },
+  "complaint_kept_through_verify": {
+   "confirmation": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\",\"proposal\":\"Is it +34 600 111 222?\"}",
+   "appointment_choice": null,
+   "chosen_offer": null,
+   "last_change": null,
+   "retained_approval": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\",\"agreed\":\"A patchy colour. Shall I record that?\"}",
+   "request_change": null,
+   "conversation": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\"}",
+   "solver": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\",\"step\":\"verify\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"phone\",\"spoken\":\"Is it +34 600 111 222?\",\"value\":\"+34600111222\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":2},\"delivered\":true,\"retained_complaint\":{\"about\":\"complaint\",\"spoken\":\"A patchy colour. Shall I record that?\",\"value\":\"\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+  },
+  "nothing_pending": {
+   "confirmation": null,
+   "appointment_choice": null,
+   "chosen_offer": null,
+   "last_change": null,
+   "retained_approval": null,
+   "request_change": null,
+   "conversation": "{\"question\":\"\",\"answer\":\"When do you open?\"}",
+   "solver": "{\"question\":\"\",\"answer\":\"When do you open?\",\"step\":\"concierge\",\"owner\":\"+34600111222\",\"proposal\":null,\"delivered\":false,\"retained_complaint\":null,\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"}]}"
+  }
+ }
+}

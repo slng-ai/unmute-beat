@@ -29,18 +29,28 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
 MODULES = (
     'tests.test_graph',
+    'tests.test_classes',
     'tests.test_salon',
     'tests.test_consent',
     'tests.test_classifiers',
+    'tests.test_replay',
+    'tests.test_solver',
+    'tests.test_examples',
+    'tests.test_flowspec',
     'tests.test_traces',
     'tests.test_state',
     'tests.test_diary',
     'tests.test_flow',
     'tests.test_budget',
     'tests.test_recovery',
+    'tests.test_continuation',
     'tests.test_history',
     'tests.test_optimization',
     'tests.test_core',
+    'tests.test_coval_sim',
+    'tests.test_baseline',
+    'tests.test_ledger',
+    'tests.test_reuse',
 )
 """In the order they are quickest to fail: the graph and the agency first, the engine and the adapter last."""
 

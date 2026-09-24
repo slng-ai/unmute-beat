@@ -6,14 +6,16 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "langfuse>=4.15.4",
-    # `spec` pulls pydantic-handlebars, which compiles prompts/*.md against SalonCall.
+    # `spec` pulls pydantic-handlebars, which compiles salon/prompts/*.md and the examples' prompts against their call types.
     "pydantic-ai-slim[google,openai,spec]>=2.46.0",
     # Google's libphonenumber: a regex cannot know a Spanish number has nine national digits.
     "pydantic-extra-types[phonenumbers]>=2.11.1",
-    "pipecat-ai[runner,silero,webrtc]>=1.11.0",
+    "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",
     "pipecat-slng>=0.5.2",
     "python-dotenv>=1.2.3",
     "websockets>=16.1.1",
+    # Flow files are YAML: core/flowspec.py reads them with safe_load, never load.
+    "pyyaml>=6.0",
 ]
 
 [dependency-groups]

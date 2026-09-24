@@ -10,6 +10,7 @@ Asserts, no pytest, no network.
 """
 
 import asyncio
+import contextvars
 import json
 
 from opentelemetry import trace
@@ -131,6 +132,8 @@ async def one_trace_per_call():
     assert agents.attributes['hops'] == 2, agents.attributes
     assert agents.attributes['handoffs'] == 'concierge', agents.attributes
     assert agents.attributes['interrupted'] is False, agents.attributes
+    assert tuple(agents.attributes['classifier_outcome']) == (), agents.attributes
+    assert agents.attributes['classifier_fallback'] is False, agents.attributes
 
     runs = [span for span in finished if span.instrumentation_scope.name == 'pydantic-ai']
     assert runs, 'pydantic-ai emitted nothing; is instrument_all() still called?'
@@ -298,9 +301,7 @@ def a_call_reads_as_a_call():
     session of Pydantic AI's own invention while the call's own session held
     nothing but Pipecat's spans.
     """
-    _CALL.update({'session.id': 'sess-1', 'trace.name': 'salon call'})
-    speech._call.clear()
-    speech._turn.clear()
+    _CALL.set({'session.id': 'sess-1', 'trace.name': 'salon call'})
 
     tracer = trace.get_tracer('pipecat.turn')
     conversation = tracer.start_span('conversation')
@@ -349,11 +350,119 @@ def a_call_reads_as_a_call():
         assert span['langfuse.trace.name'] == 'salon call', span
 
 
+def two_calls_at_once_stay_apart():
+    """Two calls served side by side keep their own session and their own transcript.
+
+    One runner serves many calls, and their spans end interleaved. The call
+    used to be one process-wide dict, so every span took the session of
+    whichever call started last, and the rolled-up transcript mixed both.
+    """
+    tracer = trace.get_tracer('pipecat.turn')
+
+    def begin(session: str):
+        _CALL.set({'session.id': session, 'trace.name': 'salon call'})
+        conversation = tracer.start_span('conversation')
+        context = TracingContext()
+        context.set_conversation_context(conversation.get_span_context(), session)
+        turn = tracer.start_span('turn', context=context.get_conversation_context())
+        context.set_turn_context(turn.get_span_context())
+        return conversation, turn, context
+
+    def heard(context, words: str):
+        span = tracer.start_span('stt', context=context.get_turn_context())
+        add_stt_span_attributes(span=span, service_name='SlngSTTService', model='m', transcript=words)
+        span.end()
+
+    first_call, second_call = contextvars.copy_context(), contextvars.copy_context()
+    a_conversation, a_turn, a = first_call.run(begin, 'call-a')
+    b_conversation, b_turn, b = second_call.run(begin, 'call-b')
+    first_call.run(heard, a, 'yes please')
+    second_call.run(heard, b, 'cancel it')
+    first_call.run(a_turn.end)
+    second_call.run(b_turn.end)
+    second_call.run(b_conversation.end)
+    first_call.run(a_conversation.end)
+
+    turns = {t.attributes['langfuse.session.id']: t.attributes for t in named('turn')[-2:]}
+    assert turns['call-a']['langfuse.observation.input'] == 'yes please', turns
+    assert turns['call-b']['langfuse.observation.input'] == 'cancel it', turns
+    for span in named('stt')[-2:]:
+        words = span.attributes['langfuse.observation.output']
+        assert span.attributes['langfuse.session.id'] == ('call-a' if words == 'yes please' else 'call-b'), (
+            span
+        )
+    assert not speech._calls and not speech._lines and not speech._turns, 'a finished call left state behind'
+
+
+async def every_write_names_the_question_it_answered():
+    """The harness's writes, model or not, each leave a `write` span naming the question the caller answered.
+
+    Most writes run from `advance` with no model and no tool span, so the
+    traces showed no write at all (24 September). A refused write leaves no
+    span: nothing was attempted.
+    """
+    from datetime import datetime
+
+    from pydantic_ai import ModelRetry, RunContext
+
+    from salon import agents, diary
+    from salon.diary import Diary
+    from salon.tools.booking import write_booking
+    from tests.classifier_model import classifier_model
+
+    books = Diary()
+    books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
+    call = open_call(PHONE, diary=books)
+    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
+    spans.clear()
+    with classifier_model():
+        call.turn_started('A haircut on Friday at nine.')
+        found = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)
+        slot = next(s['slot_id'] for s in found['slots'] if s['time'] == '09:00')
+        try:
+            await write_booking(call, 'book', slot, '')
+        except ModelRetry:
+            pass
+        else:
+            raise AssertionError('a booking nobody agreed to was written')
+        assert not named('write'), 'a refused write left an audit'
+
+        booked = await agents.ask_booking(context, 'book', slot, '')
+        booked.put(call)
+        call.turn_started('Yes.')
+        await write_booking(call, 'book', slot, '')
+        held = books.bookings_for(PHONE, books.now().date())[0]['booking_id']
+        cancel = await agents.ask_booking(context, 'cancel', '', held)
+        cancel.put(call)
+        call.turn_started('Yes.')
+        await write_booking(call, 'cancel', '', held)
+
+        call.commit(agent='complaints')
+        call.turn_started('The last cut was uneven. I would like a redo.')
+        complaint = await agents.ask_complaint(context, 'The last cut was uneven', 'a redo')
+        complaint.put(call)
+        call.turn_started('Absolutely.')
+        await agents.record_complaint(context)
+
+    audits = [json.loads(str(span.attributes['write.audit'])) for span in named('write')]
+    assert [(a['action'], a['args'].get('action'), a['status']) for a in audits] == [
+        ('save_booking', 'book', 'ok'),
+        ('save_booking', 'cancel', 'ok'),
+        ('record_complaint', None, 'ok'),
+    ], audits
+    for audit, asked in zip(audits, (booked, cancel, complaint), strict=True):
+        assert audit['question'] == asked.spoken and audit['asked_turn'] < audit['turn'], audit
+    assert [a['heard'] for a in audits] == ['Yes.', 'Yes.', 'Absolutely.']
+
+
 async def main():
     await one_trace_per_call()
+    await every_write_names_the_question_it_answered()
     agent_output_is_readable()
     speech_reaches_langfuse()
     a_call_reads_as_a_call()
+    two_calls_at_once_stay_apart()
     print('ok')
 
 

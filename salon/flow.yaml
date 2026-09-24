@@ -1,0 +1,53 @@
+# Sage and Stone: four hand-built steps sharing one call.
+#
+# Each step names its prompt and the Python module that builds it. The
+# module decides the step's tools and outputs; this file decides the step's
+# words, where it may send the caller, and what must hold before it runs.
+# Everything is checked when the salon starts, never mid-call.
+
+version: 1
+id: sage-and-stone
+greeting: "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
+call: models/state.py:SalonCall
+voice: prompts/_voice.md
+includes:
+  diary: prompts/_diary.md
+  services: prompts/knowledge/services.md
+  refunds: prompts/knowledge/refunds.md
+quote_caller: true
+
+steps:
+  - id: concierge
+    kind: agent
+    prompt: prompts/concierge.md
+    code: steps/concierge.py
+    exits:
+      - booking
+      - {to: booking, when: verified, via: [read_diary]}
+      - complaints
+      - {to: verify, when: verified}
+
+  - id: verify
+    kind: agent
+    prompt: prompts/verify.md
+    code: steps/verify.py
+    exits:
+      - {to: concierge, when: verified}
+
+  - id: booking
+    kind: agent
+    prompt: prompts/booking.md
+    code: steps/booking.py
+    guarded: true
+    requires: [customer_verified]
+    satisfied_by: verify
+    exits: [concierge, complaints]
+
+  - id: complaints
+    kind: agent
+    prompt: prompts/complaints.md
+    code: steps/complaints.py
+    guarded: true
+    requires: [customer_verified]
+    satisfied_by: verify
+    exits: [concierge]

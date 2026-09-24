@@ -4,6 +4,20 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.classifiers import Exchange
+from core.decisions import (
+    Accept,
+    Clarify,
+    Conditional,
+    Decision,
+    DecisionResult,
+    EndCall,
+    NoDecision,
+    Reject,
+    Revise,
+    SwitchTask,
+)
+from core.readings import ChoiceInput
 from core.state import STRICT
 
 
@@ -18,7 +32,7 @@ class Asked(BaseModel):
 
     model_config = STRICT
 
-    about: Literal['phone', 'booking', 'move_or_add', 'complaint', 'closing']
+    about: Literal['phone', 'booking', 'move_or_add', 'complaint', 'closing', 'offer']
     spoken: str = ''
     value: str = ''
     """The exact thing agreement would be agreement *to*: the number read back, the slot offered, or the complaint summary's digest."""
@@ -33,77 +47,113 @@ class Asked(BaseModel):
     """The caller turn it went out on. Set by `SalonCall.ask`, never by a tool."""
 
 
-class ConsentInput(BaseModel):
-    """A snapshot of the accepted reply and its application-owned context."""
+class OfferInput(ChoiceInput):
+    """A reply read against the times on the table, and what the caller already holds, for "the same time"."""
 
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    utterance: str
-    previous_speech: str
-    owner: str
-    pending: Asked | None = None
-    retained_complaint: Asked | None = None
-
-
-type Confirmation = (
-    Annotated[
-        Literal['accept'],
-        Field(description='Clearly approves the exact pending proposal without conditions or questions.'),
-    ]
-    | Annotated[Literal['reject'], Field(description='Declines the pending proposal.')]
-    | Annotated[Literal['revise'], Field(description='Asks to change the pending proposal.')]
-    | Annotated[Literal['conditional'], Field(description='Agrees only under an additional condition.')]
-    | Annotated[
-        Literal['unclear'], Field(description='Asks a question, or the answer is ambiguous or incomplete.')
-    ]
-    | Annotated[Literal['not_applicable'], Field(description='No confirmation is pending.')]
-)
-
-type AppointmentChoice = (
-    Annotated[Literal['move'], Field(description='Replace an existing appointment with the proposed one.')]
-    | Annotated[Literal['add'], Field(description='Keep the existing appointment and add another.')]
-    | Annotated[
-        Literal['unclear'],
-        Field(description='Both, neither, conditional, or ambiguous; a bare yes cannot choose.'),
-    ]
-    | Annotated[
-        Literal['not_applicable'], Field(description='The answer is unrelated to choosing an appointment.')
-    ]
-)
-
-type Conversation = (
-    Annotated[
-        Literal['end'],
-        Field(
-            description='Ends the whole call with no remaining request; interpret refusals against the previous question.'
-        ),
-    ]
-    | Annotated[
-        Literal['continue'],
-        Field(description='Has more to discuss, asks a question, or only declines a proposal.'),
-    ]
-    | Annotated[Literal['unclear'], Field(description='Whether the caller wants to end the call is unclear.')]
-)
-
-type RetainedApproval = (
-    Annotated[
-        Literal['keep'],
-        Field(description='The approved complaint is unchanged while identity verification continues.'),
-    ]
-    | Annotated[
-        Literal['withdraw'],
-        Field(description='Withdraws or changes the complaint or its resolution, or switches tasks.'),
-    ]
-    | Annotated[
-        Literal['unclear'], Field(description='There is no retained complaint approval, or it is uncertain.')
-    ]
-)
+    holding: tuple[str, ...] = Field(
+        default=(), description='The appointments the caller already holds, as the salon says them.'
+    )
 
 
 class ReplyClassification(BaseModel):
-    """Interpretation only: these labels cannot name or execute a business action."""
+    """This turn's readings, merged into the one view every tool guard reads. Interpretation only.
+
+    Not a model output: each field is one narrow reading's label
+    (`salon.classification.reading_of`), or its default when that reading did
+    not apply, failed or went stale. These labels cannot name or execute a
+    business action.
+    """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
-    confirmation: Confirmation = 'unclear'
-    appointment_choice: AppointmentChoice = 'unclear'
-    conversation: Conversation = 'unclear'
-    retained_approval: RetainedApproval = 'unclear'
+    confirmation: Literal['accept', 'reject', 'revise', 'conditional', 'unclear'] = 'unclear'
+    appointment_choice: Literal['move', 'add', 'unclear'] = 'unclear'
+    conversation: Literal['end', 'continue', 'unclear'] = 'unclear'
+    retained_approval: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
+    last_change: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
+    """Whether the reply takes back the booking made in this call. Only read while the caller holds it."""
+    chosen_offer: str = ''
+    """Checked against the table by the application: a slot that was not on it authorises nothing."""
+
+
+class CorrectPhone(Decision):
+    """Gives different digits for the number that was read back. Only for a phone readback."""
+
+    kind: Literal['correct_phone'] = 'correct_phone'
+    digits: str = Field(
+        description=(
+            'The whole corrected number in E.164, e.g. +34600111234. Keep the read-back digits the caller did '
+            'not change. If you cannot tell which digits change, use clarify instead.'
+        )
+    )
+
+
+class ChooseAppointment(Decision):
+    """Chooses between moving the existing appointment and adding another. A bare yes cannot choose."""
+
+    kind: Literal['choose_appointment'] = 'choose_appointment'
+    choice: Literal['move', 'add']
+
+
+class SalonSwitch(SwitchTask):
+    """Abandons the current task, without finishing it, to do a different one of the listed destinations."""
+
+    target: Literal['booking', 'complaints', 'concierge']
+
+
+type SalonDecision = Annotated[
+    Accept
+    | Reject
+    | Revise
+    | Conditional
+    | Clarify
+    | CorrectPhone
+    | ChooseAppointment
+    | SalonSwitch
+    | EndCall
+    | NoDecision,
+    Field(discriminator='kind'),
+]
+"""Every meaning the salon's solver may return. The application maps each one to its own executor."""
+
+
+class SalonSolution(DecisionResult):
+    """The caller's reply read as one decision, with a short reply only when switching task."""
+
+    decision: SalonDecision
+
+
+class Destination(BaseModel):
+    """A task the caller may switch to, and what it needs before it can start."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+    name: Literal['booking', 'complaints', 'concierge']
+    purpose: str
+    needs: str = ''
+
+
+class SolverInput(Exchange):
+    """A snapshot of the reply and every application-owned fact needed to read it as one decision.
+
+    `delivered` is False when the caller spoke over the proposal, so it may be
+    corrected or abandoned but never accepted. Destinations are what the
+    caller could switch to; whether a switch is legal right now is checked
+    again when it is applied.
+    """
+
+    step: Literal['concierge', 'verify', 'booking', 'complaints'] = Field(
+        description='The part of the call the caller is in.'
+    )
+    owner: str = Field(description="The caller's phone number, once they have given one. Empty before that.")
+    proposal: Asked | None = Field(
+        default=None, description='The proposal the salon put to the caller last. Null when there is none.'
+    )
+    delivered: bool = Field(
+        default=False, description='Whether the caller heard the whole proposal before answering.'
+    )
+    retained_complaint: Asked | None = Field(
+        default=None,
+        description='A complaint the caller already approved, kept while their number is checked. Null if none.',
+    )
+    destinations: tuple[Destination, ...] = Field(
+        default=(), description='The tasks the caller could switch to, and what each needs first.'
+    )

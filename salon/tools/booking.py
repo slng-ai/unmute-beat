@@ -2,9 +2,10 @@
 
 `save_booking` is the only thing that changes an appointment, and it will not
 run on the model's say-so. `_authorised` is what stands between the two: the
-caller either agreed to a readback of this exact write, named exactly one of
-the times just offered to them, or answered the move-or-add question in their
-own words. The model supplies none of those.
+caller either agreed to a readback of this exact write, or answered the
+move-or-add question in their own words. A plain pick of an offered time is
+read back first. The model supplies none of those; the readings interpret the
+reply, and this code checks it against what was on the table.
 
 The step's opening is here too: resumed after verification with the
 request the caller made at the front desk, it offers times for it without a
@@ -13,18 +14,16 @@ model re-reading that request, because the words are already typed.
 
 from __future__ import annotations
 
-import re
 from typing import Literal
 
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.graph import Opening
+from core.operations import Operation, operation_token
 from core.policies import claim_or_refuse, pick
 from core.state import present
-from salon.classification import classify_reply
 from salon.diary import (
-    NEGATED_TIME,
     AlreadyHoldsError,
     RefusedError,
     day_phrases,
@@ -45,12 +44,8 @@ from salon.tools.writes import (
     _settle,
     _unknown,
     close_with,
-    operation_token,
     spoken_service,
 )
-
-_SAME_TIME = re.compile(r'\b(?:same|usual)[\s\u2014\u2013-]+time\b', re.IGNORECASE)
-""" "The same time" names a time exactly, without naming any digits: the one the caller already holds."""
 
 
 async def read_diary(
@@ -139,8 +134,8 @@ async def offer_times(
 ) -> str:
     """Read availability and speak up to three real choices, ending this reply.
 
-    Use when the caller needs to choose a time. For an already authorized same-time
-    move or clear selection, use read_diary then save_booking instead.
+    Use when the caller needs to choose a time. For a same-time move or a
+    time they already picked plainly, use read_diary then ask_booking instead.
 
     Args:
         when: The caller's own day words.
@@ -159,14 +154,17 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
     """Read the diary and speak the first few free times. Shared by `offer_times` and the booking step's opening.
 
     What was spoken is recorded, ids and all, so the turn the caller picks one
-    can go straight to `save_booking` rather than re-reading the diary to find
-    the id of a time they have already been told.
+    can go straight to its read-back rather than re-reading the diary to find
+    the id of a time they have already been told. The offer is also the
+    question the caller's next reply answers: the consent reading names which
+    of these ids they picked, and only an id offered here can count.
     """
     found = await find_times(call, when, service, at)
     spoken = found.slots[:_OFFERED]
     if spoken:
         times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in spoken)
-        text = f'For a {spoken_service(service)} on {found.day}, I have {times}. Which time works for you?'
+        day = found.day if found.day in ('today', 'tomorrow') else f'on {found.day}'
+        text = f'For a {spoken_service(service)} {day}, I have {times}. Which time works for you?'
     else:
         text = {
             'need_day': 'Which day would you like?',
@@ -174,8 +172,18 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
             'closed': 'The salon is closed that day. Which other day works for you?',
         }.get(found.status, 'There are no available times for that request. Which other day works for you?')
     call.commit(offered=spoken)
-    call.answered()
-    await call.speak_now(text, origin='guidance')
+    if spoken:
+        call.ask(
+            Asked(
+                about='offer',
+                spoken=text,
+                value=','.join(slot.slot_id for slot in spoken),
+                owner=call.state.customer_phone,
+            )
+        )
+    else:
+        call.answered()
+    await call.speak_now(text, origin='ask' if spoken else 'guidance')
     return text
 
 
@@ -245,6 +253,60 @@ async def ask_booking(
         booking_id: The booking exactly as the diary returned it. Empty when booking.
     """
     call = ctx.deps
+    names = call.conversation.offer('chosen_offer').named
+    if action in ('book', 'move') and (names or _names_the_time(call, slot_id)):
+        await call.read_reply(usage=ctx.usage, usage_limits=ctx.usage_limits)
+    if action in ('book', 'move') and _named_but_not_picked(call, slot_id):
+        raise ModelRetry(
+            f'Nothing was asked: the caller named that time but did not simply pick it. They said '
+            f'"{call.heard}". Answer their question or condition first; read it back once they pick it plainly.'
+        )
+    return booking_question(call, action, slot_id, booking_id)
+
+
+def _named_but_not_picked(call: SalonCall, slot_id: str) -> bool:
+    """The caller named this slot's time, and the pick reading still found no plain pick: a condition or a doubt.
+
+    Coval run L5RWCS7b, K5: "09:00. But only if it costs less than 30 euros"
+    read as no pick, and the booking model read 9:00 back anyway, leaving the
+    price question unanswered. A yes to a time the model proposed in its own
+    words names no time, and is read back as before. `times_named` only ever
+    refuses here; it never authorises anything.
+
+    With the named pick on (`salon.classification.NAMED_PICK`), the reading
+    itself says which option was named that way (`Offer.refuses`), in any
+    language and with no time said: "the first one, if it is under 30 euros".
+    The word list stays as a second check. It can only refuse, so keeping it
+    costs nothing but English-only coverage.
+    """
+    offer = call.conversation.offer('chosen_offer')
+    if offer.named and offer.refuses(call, slot_id):
+        return True
+    return _names_the_time(call, slot_id) and offer.reading.ran(call) and not call.picked_offer()
+
+
+def _names_the_time(call: SalonCall, slot_id: str) -> bool:
+    offered = call.diary.offer_of(call.id, slot_id, call.state.customer_phone)
+    return bool(offered) and offered['time'] in times_named(call.heard)
+
+
+def booking_question(
+    call: SalonCall, action: Literal['book', 'move', 'cancel'], slot_id: str, booking_id: str
+) -> Ask:
+    """The read-back of one booking, move or cancel, worded from the diary's own record.
+
+    Shared by `ask_booking` and by the pick of an offered time (`salon.nodes`),
+    which is read back like any other proposal: the caller's yes to it is what
+    writes, never the pick.
+
+    It asks from its first word. "So that is a hair colour, tomorrow at 9 AM"
+    sounds like a confirmation, and in Coval run RPH7TzmF (K5) the caller who
+    had picked a time and said goodbye took it as one and hung up with nothing
+    booked. A goodbye read this turn is answered before the question.
+
+    Raises:
+        ModelRetry: If the slot is not one this caller is being offered, or the booking not one they hold.
+    """
     phone = call.state.customer_phone
     if action in ('book', 'move'):
         offered = call.diary.offer_of(call.id, slot_id, phone)
@@ -255,39 +317,80 @@ async def ask_booking(
             )
         service = spoken_service(offered['service'])
         words = (
-            f'So that is a {service}, {offered["spoken"]}. Shall I book that in?'
+            f'Shall I book you in for a {service}, {offered["spoken"]}?'
             if action == 'book'
-            else f'So I will move you to {offered["spoken"]}. Shall I do that?'
+            else f'Shall I move your appointment to {offered["spoken"]}?'
         )
+        if call.classification.conversation == 'end':
+            words = f'Before you go: {words[0].lower()}{words[1:]}'
     else:
-        held = {b['booking_id']: b for b in call.diary.bookings_for(phone, call.diary.now().date())}
-        if booking_id not in held:
-            raise ModelRetry(
-                'Nothing was asked. That is not a booking this caller holds; read the diary to see '
-                'what they actually have.'
-            )
-        one = held[booking_id]
-        words = (
-            f'So that is your {spoken_service(one["service"])} {one["spoken"]} cancelled. Shall I go ahead?'
-        )
+        return cancel_question(call, booking_id)
     return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)
+
+
+async def offer_cancel(ctx: RunContext[SalonCall]) -> Ask:
+    """Offer to cancel the appointment booked earlier in this call, when the caller takes it back.
+
+    For "leave it", "I don't want it after all", "cancel that one". It reads
+    the cancellation back and waits for their yes; nothing is cancelled by this.
+    """
+    call = ctx.deps
+    if not (booking_id := call.undo_booking):
+        raise ModelRetry('Nothing was asked: nothing booked in this call is still held by this caller.')
+    if call.classification.last_change == 'keep':
+        raise ModelRetry(
+            'Nothing was asked: the caller is keeping the appointment. Do not offer to cancel it.'
+        )
+    return cancel_question(call, booking_id)
+
+
+def undo_ready(call: SalonCall) -> bool:
+    """`offer_cancel` is offered only while a booking made in this call is held and the caller has not kept it.
+
+    Coval run ad3n4Vxn, K5: asked whether to keep or cancel, the caller said
+    "Fine, nine o'clock then", the reading said keep, and the model read the
+    cancellation back anyway. The reading is the application's evidence, so
+    it decides whether the offer is on the table at all.
+    """
+    return bool(call.undo_booking) and call.classification.last_change != 'keep'
+
+
+def cancel_question(call: SalonCall, booking_id: str) -> Ask:
+    """The read-back for cancelling one booking this caller holds, worded from the diary's own record.
+
+    Shared by `ask_booking` and by the undo of a booking the caller has just
+    taken back, so both put the same question and the same guard answers it.
+
+    Raises:
+        ModelRetry: If the caller holds no such booking.
+    """
+    phone = call.state.customer_phone
+    held = {b['booking_id']: b for b in call.diary.bookings_for(phone, call.diary.now().date())}
+    if booking_id not in held:
+        raise ModelRetry(
+            'Nothing was asked. That is not a booking this caller holds; read the diary to see '
+            'what they actually have.'
+        )
+    one = held[booking_id]
+    words = f'Shall I cancel your {spoken_service(one["service"])} {one["spoken"]}?'
+    return Ask(about='booking', value='', action='cancel', booking_id=booking_id, spoken=words)
 
 
 def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> bool:
     """Whether the caller authorised this exact write, and whether it is a second appointment.
 
     Refuses by raising, so a write that reaches past here has caller evidence
-    behind it. Three paths, checked against application state:
+    behind it. Two paths, checked against application state:
 
     * They agreed to an `ask_booking` readback of this same action, slot and
       booking, on the turn before this one.
-    * They named a time, and exactly one of the times currently on the table
-      is that time. This is the fast path the booking policy is built on: an
-      unambiguous choice of an offered slot authorises that slot. Not
-      available while they already hold something, because then the
-      unanswered question is whether this replaces it. "The same time" names
-      one time exactly without naming digits: the one they already hold.
     * They answered the move-or-add question in their own words.
+
+    Picking one of the offered times is not one of them. It used to be: a
+    plain choice of an offered slot booked it, one turn faster. The graph and
+    LiveKit builds of this salon say "choosing a time is not a yes", and the
+    Coval release check asks for a read-back and a yes before "booked", so a
+    pick is now read back (`salon.classification._picked`) and only the yes writes.
 
     The boolean it returns is the *second appointment* decision, and it comes
     from what the caller said, never from an argument: a flag the model could
@@ -339,24 +442,6 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
                     'them again in those words.'
                 )
 
-    offered = call.diary.offer_of(call.id, slot_id, phone)
-    named = times_named(call.heard)
-    on_the_table = call.diary.offered_to(call.id, phone)
-    at_that_time = [slot for slot in on_the_table if slot['time'] in named]
-    picked = bool(offered) and offered['time'] in named and len(at_that_time) == 1
-    if action == 'book' and picked and not held:
-        return False
-    if action == 'move' and offered and call.classification.appointment_choice == 'move' and booking_id:
-        moving = next((b for b in held if b['booking_id'] == booking_id), None)
-        same = (
-            bool(moving)
-            and _SAME_TIME.search(call.heard)
-            and not NEGATED_TIME.search(call.heard)
-            and offered['time'] == moving['time']
-        )
-        if moving and (picked or same):
-            return False
-
     if held and action == 'book':
         one = held[0]
         call.ask(Asked(about='move_or_add', value=slot_id, action='move', booking_id=one['booking_id']))
@@ -379,10 +464,10 @@ async def save_booking(
 ) -> str:
     """Write the diary, and finish this step. Nothing is booked, moved or cancelled until this runs.
 
-    Only after the caller has authorised this exact appointment -- by naming
-    one of the times just offered to them, or by agreeing to an `ask_booking`
-    readback of it. It speaks the confirmation itself, so say nothing after
-    calling it.
+    Only after the caller has agreed to an `ask_booking` readback of this
+    exact appointment. Picking one of the offered times is not agreement yet:
+    read it back first. It speaks the confirmation itself, so say nothing
+    after calling it.
 
     Args:
         action: book a new time, move an existing booking, or cancel one.
@@ -395,16 +480,8 @@ async def save_booking(
     )
 
 
-async def write_booking(
-    call: SalonCall,
-    action: Literal['book', 'move', 'cancel'],
-    slot_id: str,
-    booking_id: str,
-    *,
-    usage: RunUsage | None = None,
-    usage_limits: UsageLimits | None = None,
-) -> str:
-    """The write itself, once the caller has authorised it. Shared by the tool and by `advance`.
+class WriteBooking(Operation[SalonCall, BookingCommand, Saved, str]):
+    """Book, move or cancel in the diary, once the caller has authorised it.
 
     An outstanding earlier write is settled first, because until it is every
     other write is a second appointment waiting to be made. The slot is asked
@@ -427,75 +504,120 @@ async def write_booking(
     lands in commit together, and the confirmation is spoken here in the
     diary's own words rather than handed to a model to say.
     """
-    command = BookingCommand(action=action, slot_id=slot_id, booking_id=booking_id)
-    action, slot_id, booking_id = command.action, command.slot_id, command.booking_id
-    if call.state.unresolved:
-        return await _settle(call)
-    if call.pending('booking') or call.pending('move_or_add') or action == 'move':
-        await classify_reply(call, usage=usage, usage_limits=usage_limits)
-    additional = _authorised(call, action, slot_id, booking_id)
-    if not present(call.state.customer_verified):
-        raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
-    offered = call.diary.offer_of(call.id, slot_id, call.state.customer_phone)
-    token = operation_token(
-        call.id,
-        call.state.writes,
-        call.state.customer_phone,
-        action,
-        slot_id,
-        booking_id,
-        additional,
-    )
-    pending = Unresolved(token=token, action=action, booking_id=booking_id, offered=offered)
-    try:
-        written = _answered(
-            call,
-            pending,
-            Saved,
-            lambda: call.diary.save_booking(
-                call.state.customer_phone,
-                action,
-                slot_id,
-                booking_id,
-                additional,
-                call.diary.now(),
-                operation_token=token,
-                offered_to=call.id,
-            ),
-            'diary',
+
+    name = 'save_booking'
+    args_type = BookingCommand
+    receipt_type = Saved
+
+    async def _before(self, call: SalonCall, args: BookingCommand) -> str | None:
+        return await _settle(call) if call.state.unresolved else None
+
+    async def _authorise(
+        self,
+        call: SalonCall,
+        args: BookingCommand,
+        *,
+        usage: RunUsage | None,
+        usage_limits: UsageLimits | None,
+    ) -> bool:
+        """The three ways a caller authorises a write (see `_authorised`); the answer is whether it is an extra booking.
+
+        The reply is read first whenever it could be the authority: a pending
+        read-back or move-or-add question, or a time picked from what is on
+        the table. The reading is cached per snapshot, so a turn that already
+        read the same reply does not pay for it twice.
+        """
+        if args.action in ('book', 'move') or call.pending('booking') or call.pending('move_or_add'):
+            await call.read_reply(usage=usage, usage_limits=usage_limits)
+        additional = _authorised(call, args.action, args.slot_id, args.booking_id)
+        if not present(call.state.customer_verified):
+            raise ModelRetry('Nothing was saved: nobody is identified yet. Hand to the verify agent.')
+        return additional
+
+    async def _execute(self, call: SalonCall, args: BookingCommand, grant: bool) -> Saved:
+        action, slot_id, booking_id = args.action, args.slot_id, args.booking_id
+        offered = call.diary.offer_of(call.id, slot_id, call.state.customer_phone)
+        token = operation_token(
+            call.id,
+            call.state.writes,
+            call.state.customer_phone,
+            action,
+            slot_id,
+            booking_id,
+            grant,
         )
-    except AlreadyHoldsError as refused:
-        call.ask(Asked(about='move_or_add', value=slot_id, action='move'))
-        raise ModelRetry(str(refused)) from None
-    except RefusedError as refused:
-        raise ModelRetry(str(refused)) from None
-    if why := _disagrees(action, booking_id, offered, written):
-        _unknown(call, pending, why)
-    appointment = Appointment(
-        booking_id=written.booking_id,
-        service=written.service,
-        date=written.date,
-        time=written.time,
-        spoken=written.spoken,
-        action=action,
-    )
-    going_back_to = call.resume('concierge')
-    call.commit(
-        appointment=appointment,
-        agent=going_back_to,
-        writes=call.state.writes + 1,
-        unresolved=None,
-        offered=[],
-    )
-    call.retain_action('save_booking', written.model_dump(mode='json'))
-    await close_with(
-        call,
-        pick(f'saved:{written.status}', SAVED[written.status]).format(
-            spoken=written.spoken,
-            service=spoken_service(written.service),
-        ),
-    )
-    return f'{written.status}: {written.spoken}'
+        pending = Unresolved(token=token, action=action, booking_id=booking_id, offered=offered)
+        try:
+            written = _answered(
+                call,
+                pending,
+                Saved,
+                lambda: call.diary.save_booking(
+                    call.state.customer_phone,
+                    action,
+                    slot_id,
+                    booking_id,
+                    grant,
+                    call.diary.now(),
+                    operation_token=token,
+                    offered_to=call.id,
+                ),
+                'diary',
+            )
+        except AlreadyHoldsError as refused:
+            call.ask(Asked(about='move_or_add', value=slot_id, action='move'))
+            raise ModelRetry(str(refused)) from None
+        except RefusedError as refused:
+            raise ModelRetry(str(refused)) from None
+        if why := _disagrees(action, booking_id, offered, written):
+            _unknown(call, pending, why)
+        return written
+
+    async def _record(self, call: SalonCall, args: BookingCommand, receipt: Saved) -> str:
+        appointment = Appointment(
+            booking_id=receipt.booking_id,
+            service=receipt.service,
+            date=receipt.date,
+            time=receipt.time,
+            spoken=receipt.spoken,
+            action=args.action,
+        )
+        going_back_to = call.resume('concierge')
+        call.commit(
+            appointment=appointment,
+            agent=going_back_to,
+            writes=call.state.writes + 1,
+            unresolved=None,
+            offered=[],
+        )
+        if args.action in ('book', 'move'):
+            call.diary.withdraw_offers(call.id)
+        call.retain_action('save_booking', receipt.model_dump(mode='json'))
+        told = pick(f'saved:{receipt.status}', SAVED[receipt.status]).format(
+            spoken=receipt.spoken,
+            service=spoken_service(receipt.service),
+        )
+        if args.action == 'book':
+            call.offer_undo(receipt.booking_id, told)
+        await close_with(call, told)
+        return f'{receipt.status}: {receipt.spoken}'
+
+
+WRITE_BOOKING = WriteBooking()
+
+
+async def write_booking(
+    call: SalonCall,
+    action: Literal['book', 'move', 'cancel'],
+    slot_id: str,
+    booking_id: str,
+    *,
+    usage: RunUsage | None = None,
+    usage_limits: UsageLimits | None = None,
+) -> str:
+    """The write itself, once the caller has authorised it. Shared by the tool and by `advance`."""
+    command = BookingCommand(action=action, slot_id=slot_id, booking_id=booking_id)
+    return await WRITE_BOOKING.run(call, command, usage=usage, usage_limits=usage_limits)
 
 
 def _resuming_a_request(call: SalonCall) -> bool:

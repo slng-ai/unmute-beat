@@ -9,6 +9,7 @@ from datetime import datetime
 from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
 from pydantic import ValidationError
 from pydantic_ai import Agent, ModelResponse, ModelRetry, RunContext, TextPart, UserPromptPart
+from pydantic_ai.messages import SystemPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.graph import Node, model_clients
@@ -83,7 +84,7 @@ async def approvals_and_receipts():
         assert probe._finished.status == 'answered' and probe.requests() == 1
         assert len(books.bookings_for(PHONE, CLOCK.date())) == 1 and call.state.writes == 1
         assert len(call.requests) == 1 and call.requests[0].kind == 'classifier' and len(call.spoken) == 1
-        assert call.turn in call._retained_turns
+        assert call.input_retained
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
         receipt = [
             m for m in call._protocol if (m.metadata or {}).get('application_action') == 'save_booking'
@@ -139,7 +140,7 @@ async def cancellation_keeps_committed_receipt():
     with suppress(asyncio.CancelledError):
         await task
     assert len(books.complaints()) == 1 and call.state.writes == 1
-    assert call.turn in call._retained_turns and not call._complaint
+    assert call.input_retained and call.held('complaint') is None
     receipt = [
         m for m in call._protocol if (m.metadata or {}).get('application_action') == 'record_complaint'
     ]
@@ -261,8 +262,11 @@ async def openings_skip_the_model():
     The trace of 2026-09-23 spent two on each of three turns: verify was run
     only to ask for a number, booking only to offer times for a request the
     caller had already made, and again only to find the id of a time it had
-    just offered. Each is now an opening or a rendered fact, and each is
-    counted here.
+    just offered. Each is now an opening or the consent reading, and each is
+    counted here: a plain pick of an offered time is written from the reading
+    alone, with no model request at all. The return from verification makes
+    two classifier requests, side by side: the consent reading, and whether
+    the caller kept the request verification interrupted.
     """
     books.reset()
     books.set_clock(CLOCK)
@@ -283,7 +287,7 @@ async def openings_skip_the_model():
     assert probe.requests() == 1, probe.requests()
     assert call.state.agent == 'verify' and call.state.pending == 'booking', call.state
     assert call.state.wanted and call.state.wanted.when == 'Friday', call.state.wanted
-    assert 'What phone number should I use' in call.spoken[-1].text, call.spoken
+    assert 'Which phone number should I use' in call.spoken[-1].text, call.spoken
 
     verify, _ = scripted(('ask_number', {'phone': PHONE}))
     with agents.AGENTS['verify'].agent.override(model=verify):
@@ -292,18 +296,66 @@ async def openings_skip_the_model():
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn("Yes, that's right.")
-    assert probe.requests() == 1 and call.requests[0].kind == 'classifier', call.requests
+    assert probe.requests() == 2 and {r.kind for r in call.requests} == {'classifier'}, call.requests
+    assert abs(call.requests[0].started - call.requests[1].started) < 0.05, (
+        'the two readings run side by side'
+    )
     assert call.state.agent == 'booking' and call.state.customer_verified, call.state
     assert call.state.wanted is None and len(call.state.offered) == 3, call.state
     assert call.spoken[-1].text.startswith('For a haircut on Friday, I have 9:00 AM'), call.spoken
 
-    nine = call.state.offered[0].slot_id
-    booking_model, prompts = scripted(('save_booking', {'action': 'book', 'slot_id': nine, 'booking_id': ''}))
-    with agents.AGENTS['booking'].agent.override(model=booking_model):
+    with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn('9:00 AM, please.')
-    assert f'`{nine}`' in prompts[0], 'the offered ids are in the prompt, so no diary read is needed'
-    assert probe.requests() == 1 and call.state.writes == 1, (probe.requests(), call.state)
+        assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
+        assert call.state.writes == 0, 'a pick booked before it was read back'
+        assert call.spoken[-1].text.startswith('Shall I book you in for a haircut, Friday at 9:00 AM'), (
+            call.spoken
+        )
+        await probe._turn('Yes.')
+    assert {r.kind for r in call.requests} == {'classifier'}, 'the yes to it needs no model either'
+    assert call.state.writes == 1, call.state
     assert call.state.offered == [], 'a save takes the offer off the table'
+
+
+async def a_changed_request_runs_the_model():
+    """The caller changes the request while their number is checked: the return opening would offer the old one.
+
+    Live call of 2026-09-23 (core run 2cWX643n), the same shape for a
+    complaint: what the caller said while verify ran never reached the step
+    that needed it. The words are now kept (`keep_detour_words`), and the
+    booking step's model-free opening, which offers times for the request
+    typed before the detour, no longer runs on a request the caller changed.
+    The model runs instead, told what the caller said meanwhile.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('', diary=books)
+    probe = Counter(call, agents.AGENTS)
+    never, _ = scripted()
+    concierge, _ = scripted(
+        (
+            'hand_over',
+            {'to': 'booking', 'because': 'a haircut', 'booking': {'service': 'haircut', 'when': 'Friday'}},
+        )
+    )
+    with (
+        agents.AGENTS['concierge'].agent.override(model=concierge),
+        agents.AGENTS['verify'].agent.override(model=never),
+    ):
+        await probe._turn('I would like to book a haircut for Friday.')
+    verify, _ = scripted(('ask_number', {'phone': PHONE}))
+    with agents.AGENTS['verify'].agent.override(model=verify):
+        await probe._turn(
+            'It is plus three four, six hundred, one one one, two two two. Make it Saturday instead.'
+        )
+    booking_model, seen = scripted(('booking_guidance', {'topic': 'day'}))
+    with agents.AGENTS['booking'].agent.override(model=booking_model):
+        await probe._turn("Yes, that's right.")
+    assert call.state.agent == 'booking' and call.state.customer_verified, call.state
+    assert len(seen) == 1, 'the booking model ran in place of the opening'
+    notes = [p.content for m in call.messages for p in m.parts if isinstance(p, SystemPromptPart)]
+    assert any('Make it Saturday instead.' in n for n in notes), notes
+    assert not any(s.text.startswith('For a haircut on Friday') for s in call.spoken), call.spoken
 
 
 async def openings_decline():
@@ -319,9 +371,13 @@ async def openings_decline():
     call = fresh()
     call.turn_started('Yes.')
     call._entered = 'completed'
+    call._request_kept = True
     assert agents.AGENTS['booking'].opening(call) is None, 'no request was carried'
     call.commit(wanted={'service': 'haircut', 'when': 'Friday'})
     assert agents.AGENTS['booking'].opening(call) is not None
+    call._request_kept = False
+    assert agents.AGENTS['booking'].opening(call) is None, 'no reading found the request unchanged'
+    call._request_kept = True
     call._entered = 'handoff'
     assert agents.AGENTS['booking'].opening(call) is None, 'only a return from verification'
     call._entered = 'completed'
@@ -332,6 +388,7 @@ async def openings_decline():
     call.commit(wanted={'service': 'haircut', 'when': 'next Friday'})
     call.turn_started('Friday, please.')
     call._entered = 'completed'
+    call._request_kept = True
     action = agents.AGENTS['booking'].opening(call)
     assert action is not None
     try:
@@ -370,6 +427,7 @@ async def main():
     await unsupported_booking_speech()
     await phone_and_lifecycle()
     await openings_skip_the_model()
+    await a_changed_request_runs_the_model()
     await openings_decline()
     await warm_up()
     print(

@@ -23,6 +23,7 @@ import asyncio
 import json
 from contextlib import ExitStack
 from datetime import date, datetime
+from typing import Literal
 
 from pipecat.frames.frames import EndWorkerFrame, LLMTextFrame, TTSSpeakFrame
 from pydantic_ai import ModelRetry, RunContext
@@ -105,6 +106,14 @@ def _heard(call) -> list[str]:
 
 def _context(call):
     return RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
+
+
+async def _agree(call, action: Literal['book', 'move'], slot_id: str, booking_id: str = '') -> str:
+    """Read the change back, hear a yes, and write it: a picked time is agreement only once read back."""
+    question = await agents.ask_booking(_context(call), action, slot_id, booking_id)
+    question.put(call)
+    call.turn_started('Yes.')
+    return await agents.save_booking(_context(call), action, slot_id, booking_id)
 
 
 async def _refuses(fn, *args) -> str:
@@ -206,22 +215,27 @@ async def n1_a_move_question_cannot_hang_up():
 
 
 async def n1_the_move_it_asked_for_is_the_move_it_makes():
-    """And the move that question was asking for goes through, in one turn.
+    """And the move that question was asking for goes through, once it is read back and agreed.
 
     "The same time" names a time exactly without naming any digits. Refusing
-    to hang up is worth nothing if the alternative is refusing to help.
+    to hang up is worth nothing if the alternative is refusing to help. The
+    ask names the time, but it is not yet a yes to the move: that is read back.
     """
     call = _salon()
     _heard(call)
     call.turn_started('book me a haircut on Friday at nine')
     friday = _slot(call, 'friday', 'haircut', '09:00')
-    await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
+    await _agree(call, 'book', friday['slot_id'])
     held = books.bookings_for(PHONE, CLOCK.date())
     assert len(held) == 1 and held[0]['date'] == FRIDAY.isoformat(), held
 
     call.turn_started('Can you help me moving it to Saturday, the same time?')
     saturday = _slot(call, 'saturday', 'haircut', '09:00')
-    moved = await agents.save_booking(_context(call), 'move', saturday['slot_id'], held[0]['booking_id'])
+    refusal = await _refuses(
+        agents.save_booking, _context(call), 'move', saturday['slot_id'], held[0]['booking_id']
+    )
+    assert 'Read it back' in refusal, refusal
+    moved = await _agree(call, 'move', saturday['slot_id'], held[0]['booking_id'])
     assert 'moved' in moved, moved
     after = books.bookings_for(PHONE, CLOCK.date())
     assert len(after) == 1, after
@@ -234,7 +248,7 @@ async def go_for_it_approves_only_the_pending_move():
     _heard(call)
     call.turn_started('a haircut on Friday at ten please')
     friday = _slot(call, 'friday', at='10:00')
-    await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
+    await _agree(call, 'book', friday['slot_id'])
     held = books.bookings_for(PHONE, CLOCK.date())[0]
     call.turn_started('Can we move it to next Monday?')
     monday = _slot(call, 'next Monday', at='10:00')
@@ -337,7 +351,7 @@ async def n3_a_flipped_flag_is_not_consent():
     _heard(call)
     call.turn_started('a haircut on Friday at nine please')
     first = _slot(call, 'friday', 'haircut', '09:00')
-    await agents.save_booking(_context(call), 'book', first['slot_id'], '')
+    await _agree(call, 'book', first['slot_id'])
     assert call.state.writes == 1
 
     call.turn_started('and three in the afternoon')
@@ -369,7 +383,7 @@ async def n3_an_answered_question_books_what_they_answered():
     _heard(call)
     call.turn_started('a haircut on Friday at nine please')
     first = _slot(call, 'friday', 'haircut', '09:00')
-    await agents.save_booking(_context(call), 'book', first['slot_id'], '')
+    await _agree(call, 'book', first['slot_id'])
 
     call.turn_started('three in the afternoon as well')
     second = _slot(call, 'friday', 'haircut', '15:00')
@@ -384,7 +398,8 @@ async def n3_an_answered_question_books_what_they_answered():
     held = books.bookings_for(PHONE, CLOCK.date())
     afternoon = next(b for b in held if b['time'] == '15:00')
     later = _slot(call, 'friday', 'haircut', '16:00')
-    await agents.save_booking(_context(call), 'move', later['slot_id'], afternoon['booking_id'])
+    await _refuses(agents.save_booking, _context(call), 'move', later['slot_id'], afternoon['booking_id'])
+    await _agree(call, 'move', later['slot_id'], afternoon['booking_id'])
     after = books.bookings_for(PHONE, CLOCK.date())
     assert len(after) == 2, after
     assert sorted(b['time'] for b in after) == ['09:00', '16:00'], after
@@ -468,7 +483,7 @@ async def earlier_b_a_cancellation_nobody_made_is_not_spoken():
     _heard(call)
     call.turn_started('a haircut on Friday at nine please')
     friday = _slot(call, 'friday', 'haircut', '09:00')
-    await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
+    await _agree(call, 'book', friday['slot_id'])
 
     call.commit(agent='booking')
     probe = Probe(call)
@@ -488,7 +503,7 @@ async def recounting_what_is_really_booked_still_streams():
     _heard(call)
     call.turn_started('a haircut on Friday at nine please')
     friday = _slot(call, 'friday', 'haircut', '09:00')
-    await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
+    await _agree(call, 'book', friday['slot_id'])
 
     call.commit(agent='booking')
     probe = Probe(call)
@@ -516,7 +531,7 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     _heard(call)
     call.turn_started('a haircut on Friday at nine please')
     friday = _slot(call, 'friday', 'haircut', '09:00')
-    await agents.save_booking(_context(call), 'book', friday['slot_id'], '')
+    await _agree(call, 'book', friday['slot_id'])
     held = books.bookings_for(PHONE, CLOCK.date())
     assert len(held) == 1
 

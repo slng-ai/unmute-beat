@@ -15,13 +15,13 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.graph import Opening
+from core.operations import Operation
 from core.policies import claim_or_refuse
-from salon.classification import classify_reply
 from salon.models.receipts import CustomerLookup
 from salon.models.shapes import SubmittedPhone
 from salon.models.state import Handoff, SalonCall
@@ -78,12 +78,18 @@ async def guide(
 
 
 _GUIDANCE = {
-    'number': 'What phone number should I use, including the country code?',
+    'number': 'Which phone number should I use? Please say it with the country code.',
     'country': 'Which country is that phone number from?',
-    'incomplete': 'Could you give me the remaining digits?',
-    'correction': 'Could you repeat the full number, including the country code?',
+    'incomplete': 'Please give me the rest of the digits.',
+    'correction': 'Please say the full number again, with the country code.',
     'unsupported': 'I can look up Spanish phone numbers. Do you have a Spanish number I can use?',
 }
+"""The fixed lines for a missing piece of the number.
+
+A request for digits is worded as a request, never as a yes/no question: asked
+"What phone number should I use, including the country code?", four callers in
+five answered "Yes." first, and that yes cost a turn every time.
+"""
 
 
 async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) -> Handoff:
@@ -99,10 +105,14 @@ async def confirm_customer(ctx: RunContext[SalonCall], phone: SubmittedPhone) ->
     return await lookup_customer(ctx.deps, phone, usage=ctx.usage, usage_limits=ctx.usage_limits)
 
 
-async def lookup_customer(
-    call: SalonCall, phone: str, *, usage: RunUsage | None = None, usage_limits: UsageLimits | None = None
-) -> Handoff:
-    """The lookup, once the caller has agreed to these digits. Shared by the tool and by `advance`.
+class PhoneArgs(BaseModel):
+    """The one argument a lookup takes: the number the caller agreed to."""
+
+    phone: SubmittedPhone
+
+
+class LookupCustomer(Operation[SalonCall, PhoneArgs, CustomerLookup, Handoff]):
+    """Identify the caller by the number they have just agreed to, and finish the verify step.
 
     The caller has to have agreed to *these digits*, last turn, in answer to a
     readback this code put to them; a yes to some other question is not that,
@@ -116,36 +126,57 @@ async def lookup_customer(
     enough". The graph already knows where the caller was heading, so the
     finisher does not ask the model.
     """
-    phone = _PHONE.validate_python(phone)
-    question = call.pending('phone', value=phone)
-    if question is None or (question.owner and question.owner != call.state.customer_phone):
-        raise ModelRetry(
-            'Nothing was looked up: those digits have not been read back to this caller and agreed '
-            f'to. Call `ask_number` with {phone} and wait for their answer.'
+
+    name = 'confirm_customer'
+    args_type = PhoneArgs
+    receipt_type = CustomerLookup
+
+    async def _authorise(
+        self, call: SalonCall, args: PhoneArgs, *, usage: RunUsage | None, usage_limits: UsageLimits | None
+    ) -> None:
+        question = call.pending('phone', value=args.phone)
+        if question is None or (question.owner and question.owner != call.state.customer_phone):
+            raise ModelRetry(
+                'Nothing was looked up: those digits have not been read back to this caller and agreed '
+                f'to. Call `ask_number` with {args.phone} and wait for their answer.'
+            )
+        reply = await call.read_reply(usage=usage, usage_limits=usage_limits)
+        if reply.confirmation != 'accept':
+            raise ModelRetry(
+                'Nothing was looked up: the caller did not agree to the number that was read back. '
+                f'They said "{call.heard}". If those are different digits it is a correction -- read '
+                'the new number back with `ask_number`; otherwise ask again.'
+            )
+        call.answered()
+
+    async def _execute(self, call: SalonCall, args: PhoneArgs, grant: None) -> dict:
+        return call.diary.find_or_create_customer(args.phone)
+
+    async def _record(self, call: SalonCall, args: PhoneArgs, receipt: CustomerLookup) -> Handoff:
+        if receipt.customer_phone != args.phone:
+            raise ModelRetry(
+                'The customer lookup came back about a different number, so nobody was identified '
+                'and nothing was saved. Tell the caller you cannot check who they are just now, and '
+                'do not call this again.'
+            )
+        call.commit(
+            customer_phone=args.phone,
+            phone_confirmed=True,
+            customer_verified=receipt.customer_status,
+            verified_phone=args.phone,
         )
-    reply = await classify_reply(call, usage=usage, usage_limits=usage_limits)
-    if reply.confirmation != 'accept':
-        raise ModelRetry(
-            'Nothing was looked up: the caller did not agree to the number that was read back. '
-            f'They said "{call.heard}". If those are different digits it is a correction -- read '
-            'the new number back with `ask_number`; otherwise ask again.'
-        )
-    call.answered()
-    found = CustomerLookup.model_validate(call.diary.find_or_create_customer(phone))
-    if found.customer_phone != phone:
-        raise ModelRetry(
-            'The customer lookup came back about a different number, so nobody was identified '
-            'and nothing was saved. Tell the caller you cannot check who they are just now, and '
-            'do not call this again.'
-        )
-    call.commit(
-        customer_phone=phone,
-        phone_confirmed=True,
-        customer_verified=found.customer_status,
-        verified_phone=phone,
-    )
-    call.retain_action('confirm_customer', found.model_dump(mode='json'))
-    return Handoff(to=call.resume('concierge'), because='the caller is identified', status='completed')  # ty: ignore[invalid-argument-type]
+        call.retain_action('confirm_customer', receipt.model_dump(mode='json'))
+        return Handoff(to=call.resume('concierge'), because='the caller is identified', status='completed')  # ty: ignore[invalid-argument-type]
+
+
+LOOKUP = LookupCustomer()
+
+
+async def lookup_customer(
+    call: SalonCall, phone: str, *, usage: RunUsage | None = None, usage_limits: UsageLimits | None = None
+) -> Handoff:
+    """The lookup, once the caller has agreed to these digits. Shared by the tool and by `advance`."""
+    return await LOOKUP.run(call, PhoneArgs(phone=phone), usage=usage, usage_limits=usage_limits)
 
 
 async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
@@ -154,13 +185,15 @@ async def stop_verifying(ctx: RunContext[SalonCall], because: str) -> Handoff:
     For a caller who will not confirm a number, or who asks about something
     else entirely. Whatever they were waiting to do that needed identifying is
     given up with it, so use it when they have moved on and not while they are
-    still correcting the digits.
+    still correcting the digits. A change to what they asked for, such as
+    another day, time or service, is not moving on: carry on with the number,
+    and what they said is passed on.
 
     Args:
         because: One short sentence: why this stopped. Never spoken.
     """
     claim_or_refuse(ctx, ACTIONS)
-    ctx.deps._complaint = None
+    ctx.deps.release('complaint')
     ctx.deps.commit(pending=None, wanted=None)
     return Handoff(to='concierge', because=because, status='unserved')
 
@@ -171,6 +204,32 @@ _PHONE_CONTENT = re.compile(
     re.IGNORECASE,
 )
 """Anything in an utterance that might be a number or a correction to one."""
+
+
+_SPANISH_RUN = re.compile(r'\+\s*3\s*4(?:[\s.,-]*\d)+')
+"""A "+34" and the digit groups after it, however the pauses split them: "+34 6. 71. 2. 73. 4. 5. 4."."""
+
+
+def number_heard(words: str) -> str:
+    """The Spanish number the caller said whole, as the last "+34" and exactly nine digits after it, or ''.
+
+    Coval run L5RWCS7b, K3: the caller said "+34 6. 71. 2. / 73. 4. / 5. /
+    4." and then "+34. / 671. / 273. 45. / 4.", nine digits both times, and
+    the model counted neither and asked for "the rest of the digits" twice.
+    Speech-to-text writes digits as numerals, so counting them is code's job.
+    Anything else (ten digits, digits in words, no "+34", a number that is
+    not a real Spanish one) is '' and the model handles it, as before.
+    """
+    runs = _SPANISH_RUN.findall(words)
+    if not runs:
+        return ''
+    digits = re.sub(r'\D', '', runs[-1])
+    if len(digits) != 11:
+        return ''
+    try:
+        return _PHONE.validate_python(f'+{digits}')
+    except ValidationError:
+        return ''
 
 
 def _waiting_for_a_number(call: SalonCall) -> bool:

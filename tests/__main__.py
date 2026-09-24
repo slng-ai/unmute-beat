@@ -51,6 +51,7 @@ MODULES = (
     'tests.test_baseline',
     'tests.test_ledger',
     'tests.test_reuse',
+    'tests.test_faro',
 )
 """In the order they are quickest to fail: the graph and the agency first, the engine and the adapter last."""
 

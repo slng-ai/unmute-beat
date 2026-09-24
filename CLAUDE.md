@@ -21,7 +21,7 @@ its supporting link. Read it before changing how a turn works.
 | `core/policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
 | `core/history.py` | `paired` and `project`: what each provider request is actually sent |
 | `core/turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
-| `core/locale.py` | `Locale`: the four lines the turn engine says itself, in one language; `ENGLISH`. A call picks one by class (`CallContext.locale`) |
+| `core/locale.py` | `Locale`: the four lines the turn engine says itself, in one language; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`) or per call (override the `locale` property) |
 | `core/processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
 | `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `ConsentInput`, `ReplyClassification`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
 | `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`). Each write is an `Operation`: `LOOKUP`, `WRITE_BOOKING`, `WRITE_COMPLAINT` |
@@ -45,11 +45,13 @@ its supporting link. Read it before changing how a turn works.
 | `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
-| `examples/` | `access` (a ten-step request) and `help` (one conversation step), built on `core` alone, each a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`); `VOICE_AGENCY=access` runs one in `bot.py` |
+| `examples/` | `access` (a ten-step request), `help` (one conversation step) and `faro` (a bilingual learning companion: one agent step, its own call type, a SQLite store), built on `core` alone, each a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`); `VOICE_AGENCY=access` runs one in `bot.py`. An example may also give `close_call` (run on disconnect) and `STT_LANGUAGE`/`TTS_LANGUAGE`, and its `GREETING` may be a function of the call |
+| `examples/faro/` | `curriculum` (the versioned placement bank, lessons, level rule, fixed lines), `models`, `store` (SQLite: WAL, `synchronous=FULL`, one worker thread; `fixture`, `backup`, `bench`), `state` (`FaroState`, `FaroCall`), `operations` (one `Operation` per write), `conversation` (`FARO`, `BUILDER`, and Faro's own readings: `GRADE` records every exercise attempt, `ONBOARD` saves setup answers, both by code), `steps/companion.py` (the tools, gated by phase; the agent coaches and never grades) |
 | `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
 | `evals/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
 | `utils/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI |
-| `tests/` | twenty-three assert-script modules, no pytest, no network |
+| `evals/faro.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
+| `tests/` | twenty-four assert-script modules, no pytest, no network |
 
 **The split that matters:** `core/turn.py` runs a turn and knows nothing about
 how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
@@ -74,7 +76,7 @@ or the placeholder `python -m tests` sets.
 
 ```bash
 uv sync                                                  # venv + deps
-uv run python -m tests                                   # all twenty-three modules, offline, no .env
+uv run python -m tests                                   # all twenty-four modules, offline, no .env
 uv run --env-file .env python bot.py                     # voice, http://localhost:7860
 uv run ruff format . && uv run ruff check . && uv run ty check .
 uv run python -m utils.coval_sim run VkpkmRMV            # Coval release check, 18 real calls, billable

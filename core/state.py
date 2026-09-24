@@ -345,7 +345,7 @@ class CallContext(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    locale: ClassVar[Locale] = ENGLISH
+    default_locale: ClassVar[Locale] = ENGLISH
     """The words the turn engine says itself, in this call's language. A use case in another language sets its own."""
 
     state: VoiceState
@@ -458,6 +458,11 @@ class CallContext(BaseModel):
     _spoken_over: str = PrivateAttr(default='')
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
     """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
+
+    @property
+    def locale(self) -> Locale:
+        """This call's fixed lines: the class's `default_locale`, unless a call picks its own, turn by turn."""
+        return self.default_locale
 
     @property
     def entered(self) -> Entry:

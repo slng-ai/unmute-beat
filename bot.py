@@ -19,7 +19,8 @@ from __future__ import annotations
 import contextlib
 import importlib
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -46,7 +47,7 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 
 from core.graph import model_clients
 from core.processor import PydanticAgentProcessor
-from core.state import CallContext
+from core.state import CallContext, Question
 from salon.agents import AGENTS as SALON_AGENTS
 from salon.agents import GREETING as SALON_GREETING
 from salon.diary import Diary
@@ -60,7 +61,7 @@ DIARY_PER_CALL = bool(os.getenv('DIARY_PER_CALL'))
 """Give every call a fresh diary instead. Coval's simulated calls run side by side with one
 phone number, so a shared diary lets one test case's booking change the next case's path."""
 AGENCY = os.getenv('VOICE_AGENCY', 'salon')
-"""Which flow answers: `salon`, or an example under `examples/` (`access`, `help`)."""
+"""Which flow answers: `salon`, or an example under `examples/` (`access`, `help`, `faro`)."""
 FINISH_SECONDS = 8.0
 """How long a turn already running may go on after the caller hangs up: a reading and a write fit in it.
 
@@ -74,20 +75,36 @@ if HARNESS == 'pipecat' and AGENCY != 'salon':
     raise SystemExit('VOICE_HARNESS=pipecat is the salon baseline: run it with VOICE_AGENCY=salon')
 
 
-def agency() -> tuple[str, dict, str, Callable[[str], CallContext]]:
-    """The chosen flow's trace name, steps table, greeting and call factory."""
+type Greeting = Callable[[Any], str | Question]
+"""The opening line for a call: fixed, or written for it, such as a caller ID read back as a question."""
+
+
+def agency() -> tuple[str, dict, Greeting, Callable[[str], CallContext], Any]:
+    """The chosen flow's trace name, steps table, greeting, call factory and module.
+
+    An example's `GREETING` is a string, or a function of the call when the
+    opening depends on it.
+    """
     if AGENCY == 'salon':
         return (
             'salon call',
             SALON_AGENTS,
-            SALON_GREETING,
+            lambda call: SALON_GREETING,
             lambda caller: open_salon_call(caller, diary=Diary() if DIARY_PER_CALL else DIARY),
+            None,
         )
     example = importlib.import_module(f'examples.{AGENCY}')
-    return f'{example.NAME} call', example.AGENTS, example.GREETING, example.open_call
+    line = example.GREETING
+    greeting = line if callable(line) else lambda call: line
+    return f'{example.NAME} call', example.AGENTS, greeting, example.open_call, example
 
 
-NAME, AGENTS, GREETING, OPEN_CALL = agency()
+NAME, AGENTS, GREETING, OPEN_CALL, EXAMPLE = agency()
+CLOSE_CALL: Callable[[Any], Awaitable[None]] | None = getattr(EXAMPLE, 'close_call', None)
+"""Run when the line drops, after the turn under way finished: an example's finaliser, with no model request."""
+STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE') or getattr(EXAMPLE, 'STT_LANGUAGE', 'en')
+TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE') or getattr(EXAMPLE, 'TTS_LANGUAGE', 'en')
+"""One language per call for each speech service: the example's own, unless the environment says otherwise."""
 
 transport_params = {
     'webrtc': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
@@ -111,14 +128,14 @@ def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
         api_key=key,
         base_url=SLNG_HOST,
         model=os.getenv('SLNG_STT_MODEL', 'soniox/speech-ai:rt-v5'),
-        language=Language('en'),
+        language=Language(STT_LANGUAGE),
     )
     tts = SlngTTSService(
         api_key=key,
         base_url=SLNG_HOST,
         model=os.getenv('SLNG_TTS_MODEL', 'cartesia/sonic:3.5'),
         voice=os.getenv('SLNG_TTS_VOICE', '62ae83ad-4f6a-430b-af41-a9bede9286ca'),
-        language=Language('en'),
+        language=Language(TTS_LANGUAGE),
         warm_standby_enabled=True,
         text_aggregation_mode=TextAggregationMode.TOKEN,
     )
@@ -206,7 +223,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
         context, node = baseline.node(Diary() if DIARY_PER_CALL else DIARY, session_id or 'call')
     else:
-        context, node = LLMContext(), PydanticAgentProcessor(OPEN_CALL(os.getenv('CALLER_ID', '')), AGENTS)
+        call = OPEN_CALL(os.getenv('CALLER_ID', ''))
+        context, node = LLMContext(), PydanticAgentProcessor(call, AGENTS)
     user_aggregator, assistant_aggregator = aggregators(context)
     pipeline = Pipeline(
         [transport.input(), stt, user_aggregator, node, tts, transport.output(), assistant_aggregator]
@@ -216,9 +234,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     async def greet() -> None:
         """The fixed opening line: the harness records it as said, Pipecat adds it to the context."""
         if isinstance(node, PydanticAgentProcessor):
-            await node.greet(GREETING)
+            await node.greet(GREETING(call))
         else:
-            await worker.queue_frames([TTSSpeakFrame(GREETING)])
+            await worker.queue_frames([TTSSpeakFrame(SALON_GREETING)])
 
     if isinstance(node, PydanticAgentProcessor):
         playback(node, assistant_aggregator)
@@ -240,6 +258,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         logger.info('client disconnected')
         if isinstance(node, PydanticAgentProcessor):
             await node.finish_turn(FINISH_SECONDS)
+            if CLOSE_CALL is not None:
+                await CLOSE_CALL(call)
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)

@@ -771,6 +771,23 @@ def note_spoken(
     call.note_heard(content, segment_ids=segment_ids, interrupted=interrupted)
 
 
+def greet(call: CallContext, line: str | Question) -> str:
+    """Record the opening line as said, before the caller's first turn, and return its words.
+
+    A `Question` is put on the call first: a caller ID read back in the
+    greeting is then the question the first reply answers, checked like any
+    other (`CallContext.pending`). The line goes into the history as the
+    agent's own response, so the agents know who spoke first.
+    """
+    if not isinstance(line, str):
+        line = line.put(call)
+    call.note_said('fixed', line, origin='entry')
+    call.messages.append(
+        ModelResponse(parts=[TextPart(content=line)], metadata={'speech_ids': [call.spoken[-1].id]})
+    )
+    return line
+
+
 async def take_turn(
     call: CallContext,
     agents: dict[str, Node[Any]],

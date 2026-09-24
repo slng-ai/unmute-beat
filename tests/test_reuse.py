@@ -129,7 +129,7 @@ async def the_engine_speaks_the_calls_own_language():
     """A use case in another language gives its own locale, and the turn engine's own lines follow it."""
 
     class Llamada(ClinicCall):
-        locale = Locale(stumble='Perdone, ¿puede repetirlo?', exhausted='', unbacked='', withheld='')
+        default_locale = Locale(stumble='Perdone, ¿puede repetirlo?', exhausted='', unbacked='', withheld='')
 
     async def broken(messages, info):
         raise RuntimeError('the model is down')

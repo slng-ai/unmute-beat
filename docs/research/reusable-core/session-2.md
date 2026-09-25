@@ -301,7 +301,19 @@ Your review of call 3 (run `RXcDFLJXHnN7dEddsLyptv`) and call 4 (`ZTKVhxqTAhRAek
 | The offer's TTS produced no audio; the caller's repeated "Yes, you've got it right" was read as a pick of 9 AM from an offer they never heard | `Offer._snapshot` (core): no pick is read while the last question was this offer and it was not delivered | `test_recovery.a_selected_time_is_read_back_with_no_model` now delivers its offer first |
 | Nothing told the next reply that the offer never reached the caller (no cut-in, so no "spoken over" note) | `_missed` (core): on a runtime that reports playback, speech whose audio never started is named in the next turn's note ("Your last reply never reached the caller…") | salon and core suites; the rendered-request snapshots are unchanged |
 
-Where Coval's time goes (run log and bot log, call 1): the bot and tunnel were ready about 7 s after launch, Coval dialled in 29 s after launch, the call took 86 s, and the run finished 535 s after launch. The remaining time, about 7 minutes, is Coval's recording, transcription and metric judging after the call. Calls 2 to 4: 597, 553 and 540 s launch to finished. Nothing on our side is slow; running jobs side by side (`coval_sim --port`) is the lever.
+Where Coval's time goes. A code audit of `coval_sim`, the saved bot logs and read-only Coval reads split one run like this:
+
+| Part | Time | Whose |
+|---|---|---|
+| Tunnel, public DNS, bot start | about 12 s | ours |
+| Coval dials in after launch | 13 to 120 s | Coval's queue |
+| The call | 82 to 188 s (calls 3 and 4 hit the 180 s ceiling) | the conversation |
+| Scoring after the call ends | 30 to 100 s on 2026-09-24 (runs `LuGLmxkm`, `DkLvLzC5`, `ad3n4Vxn`, `gdw96FkH`); 5 to 8 minutes on 2026-09-25 (`Li7JG95o`, `BChXtqzg`, `XMnnft82`, `RXcDFLJX`, `ZTKVhxqT`) | Coval |
+| The runner notices the end | up to 15 s (poll interval) | ours |
+
+The five metrics, their versions and the judge model (`gpt-4.1-mini`) are the same in the fast run `LuGLmxkm` and the slow run `BChXtqzg`. Who ended the call does not explain the difference either, and each recording stops at the real end of its call (call 1: 86 s). So the slow part is Coval's scoring, and our code cannot shorten it. If it stays at minutes, ask Coval support, with the run IDs above.
+
+What our code could change: session 1 had removed launch concurrency (`--concurrency 1` was hard-coded in `CovalClient.launch`), so a run of N calls paid Coval's dial and scoring N times. `coval_sim plan|run --concurrency N` brings it back: one job, one bot, one tunnel, N calls at once. `plan` refuses it for a bot with no call limit of its own (salon-pipecat-flows), because the runner's ceiling stops that whole bot one limit after its first call connects. The runner now polls every 5 s. Calls at once share this machine and the speech providers, so their latency is not comparable to a run of one call at a time; `plan` prints that. Example: 8 salon-graph calls one at a time take about 8 x 9.5 = 76 minutes; as one job with `--concurrency 8`, about 10 minutes when Coval is slow and about 4 when it is fast. Checked offline only (`tests.test_coval_sim`, `test_concurrency`); no call was placed.
 
 What the review asked for, left to the next session (no call was run for it):
 
@@ -309,7 +321,7 @@ What the review asked for, left to the next session (no call was run for it):
 2. **STT.** Both stress calls lost SLNG STT (`soniox/speech-ai:rt-v5`) at the same moment. Switch to `deepgram/nova:3-en`, hosted in the EU, through `SLNG_STT_MODEL`, for both builds (the native bot reads the same variable, so its code stays unchanged).
 3. **TTS.** Call 3's offer came back from TTS with no audio ("completed with no audio"), and call 2's receipt was dropped. Switch to `slng/fish/tts:s2.1-pro`, hosted in eu-north or eu-west, through `SLNG_TTS_MODEL` and the region's base URL. Either switch changes the frozen comparison profile: record it, and do not compare latency against session 1 or 2 across it.
 4. **Interruptions in the history.** Today the history keeps only what the caller heard of each reply, and the "spoken over" note reaches only the next turn. Consider keeping it in the call's messages so later turns see it too. It changes what the model is sent, so it needs a live check.
-5. **Rerun the stress case on the harness** once 1 to 3 are in, within the salon-graph allowance (8 calls left for sessions 3 to 6; no native calls remain). Run jobs side by side with `--port`.
+5. **Rerun the stress case on the harness** once 1 to 3 are in, within the salon-graph allowance (8 calls left for sessions 3 to 6; no native calls remain). Run the calls of a test set as one job with `--concurrency`, and separate jobs side by side with `--port`.
 
 ## 11. Checks
 

@@ -309,6 +309,50 @@ def test_call_ceiling() -> None:
         assert 1.4 < time.monotonic() - started < 15, 'stopped before its call connected, or far too late'
 
 
+def test_concurrency() -> None:
+    """Calls at once, the one speed-up on this side: planned, passed to Coval, and refused where it would cut calls."""
+    native = Agent(id='N', display_name='voice-harness-salon-pipecat-flows-pipecat', test_set_ids=['THREE'])
+    check = checker(FakeCoval([*AGENTS, native]))
+
+    def plan(agency: str = 'salon', agent: str = 'S', concurrency: int = 3) -> list[str]:
+        try:
+            job = check.plan(
+                agency,
+                agent,
+                'THREE',
+                'calm',
+                iterations=1,
+                max_simulations=3,
+                label='s',
+                concurrency=concurrency,
+            )
+        except PlanError as error:
+            return error.problems
+        assert f'concurrency  {concurrency}' in job.describe(), job.describe()
+        return []
+
+    assert plan() == [] and plan(concurrency=1) == []
+    assert (
+        plan(concurrency=0)
+        == plan(concurrency=4)
+        == ['concurrency must be from 1 to the 3 simulation(s) planned']
+    )
+    assert 'concurrency 1 only' in plan('salon-pipecat-flows', 'N', 2)[0], 'its ceiling would cut later calls'
+    assert plan('salon-pipecat-flows', 'N', 1) == []
+
+    class Launches(CovalClient):
+        """The real `launch`, with the coval binary replaced by a record of its arguments."""
+
+        def _call(self, *args: str):
+            self.args = args
+            return {'run_id': 'R'}
+
+    coval = Launches(api_key='test', binary='/nonexistent/coval')
+    agent, persona = AGENTS[0], Persona(id='calm', name='Standard Customer')
+    assert coval.launch(agent, persona, 'THREE', iterations=1, concurrency=3, name='n') == 'R'
+    assert coval.args[coval.args.index('--concurrency') + 1] == '3', coval.args
+
+
 if __name__ == '__main__':
     test_call_ceiling()
     test_plan()
@@ -318,4 +362,5 @@ if __name__ == '__main__':
     test_graph_build()
     test_problems()
     test_fallbacks()
+    test_concurrency()
     print('ok')

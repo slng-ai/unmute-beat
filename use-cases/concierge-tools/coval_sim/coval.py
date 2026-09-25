@@ -109,9 +109,15 @@ class CovalClient:
         test_set_id: str,
         *,
         iterations: int,
+        concurrency: int = 1,
         name: str,
     ) -> str:
-        """Start a run of one test set against one agent, one call at a time, with the agent's metrics named.
+        """Start a run of one test set against one agent, `concurrency` calls at once, with the agent's metrics named.
+
+        Calls at once are the one speed-up on this side. Most of a run is
+        Coval's: it dials in 13 to 120 s after launch, and scores a call 30 s
+        (2026-09-24) to 8 minutes (2026-09-25) after it ends, with the same
+        metrics and judge. One call at a time pays both for every call.
 
         The metrics are passed rather than left to Coval's default, so the
         ones `plan` printed are the ones that score. No mutation is passed,
@@ -127,13 +133,13 @@ class CovalClient:
             '--test-set-id', test_set_id,
             '--metric-ids', ','.join(agent.metric_ids),
             '--iterations', str(iterations),
-            '--concurrency', '1',
+            '--concurrency', str(concurrency),
             '--name', name,
             '--tags', 'release-check',
         )  # fmt: skip
         return run['run_id']
 
-    def wait(self, run_id: str, *, timeout_s: float, poll_s: float = 15) -> Run:
+    def wait(self, run_id: str, *, timeout_s: float, poll_s: float = 5) -> Run:
         """Poll a run until Coval stops working on it or the timeout passes."""
         deadline = time.monotonic() + timeout_s
         run = Run.model_validate(self._call('runs', 'get', run_id))

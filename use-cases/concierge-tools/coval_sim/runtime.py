@@ -96,6 +96,10 @@ def ceiling(bot: Process, seconds: float, marker: str = CONNECTED) -> threading.
     For a bot with no limit of its own (salon-pipecat-flows has no
     `MAX_CALL_SECONDS`), so its reference code stays unchanged. Stopping the
     bot drops the call, which ends the simulation at Coval.
+
+    ponytail: one ceiling for the whole bot, from the first call, so `plan`
+    allows such a bot one call at a time. A per-call ceiling (one watch per
+    connection, closing that call's websocket) if its calls ever run at once.
     """
 
     def watch() -> None:

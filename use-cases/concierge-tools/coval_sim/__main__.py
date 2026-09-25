@@ -135,6 +135,8 @@ class Job:
     label: str
     limit: str = 'bot.py (MAX_CALL_SECONDS)'
     """Who ends a call at the limit: the bot itself, or this runner stopping a bot that has no limit."""
+    concurrency: int = 1
+    """How many of the job's calls Coval places at once. Not part of the job's key: the same calls, sooner."""
 
     @property
     def simulations(self) -> int:
@@ -158,6 +160,10 @@ class Job:
             'mutations    none',
             f'simulations  {self.simulations} = {len(self.case_ids)} case(s) x {self.iterations} iteration(s) x 1',
             f'call limit   {MAX_CALL_SECONDS}s each, enforced by {self.limit}',
+            f'concurrency  {self.concurrency}' + (
+                ' at once: the calls share this machine and the speech providers, '
+                'so their latency is not comparable to a run of one call at a time' if self.concurrency > 1 else ''
+            ),
             f'label        {self.label}',
         ])  # fmt: skip
 
@@ -298,6 +304,7 @@ class ReleaseCheck:
         iterations: int,
         max_simulations: int,
         label: str,
+        concurrency: int = 1,
     ) -> Job:
         """The one job these arguments name, checked against what Coval holds. Reads only.
 
@@ -309,6 +316,8 @@ class ReleaseCheck:
             iterations: Times each case runs.
             max_simulations: The most calls this job may place.
             label: What this launch belongs to (a session); the same job twice under one label is refused.
+            concurrency: How many calls Coval places at once. A run of N calls one at a time
+                waits N times for Coval's dial and its scoring after each call; at once, about once.
 
         Raises:
             PlanError: Listing every reason the job is refused.
@@ -350,9 +359,16 @@ class ReleaseCheck:
             if self.repo.limits_itself(agency)
             else f'this runner: the bot has none, and is stopped {MAX_CALL_SECONDS + FINISH_SECONDS:.0f}s after the call connects'
         )
-        job = Job(agency, agent, test_set_id, case_ids, people[0], iterations, label, limit)
+        job = Job(agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency)
         if job.simulations > max_simulations:
             problems.append(f'{job.simulations} simulations planned, allowance is {max_simulations}')
+        if not 1 <= concurrency <= job.simulations:
+            problems.append(f'concurrency must be from 1 to the {job.simulations} simulation(s) planned')
+        if concurrency > 1 and not self.repo.limits_itself(agency):
+            problems.append(
+                f'{agency} has no call limit of its own, and this runner stops its whole bot one limit after '
+                'the first call connects, which would cut later calls short: concurrency 1 only'
+            )
         previous = self.runs.latest(job.key)
         if previous is not None:
             problems.append(self._duplicate(job, previous))
@@ -391,7 +407,12 @@ class ReleaseCheck:
                 self.runs.write(job.key, name=name, status='intent')
                 try:
                     run_id = self.coval.launch(
-                        job.agent, job.persona, job.test_set_id, iterations=job.iterations, name=name
+                        job.agent,
+                        job.persona,
+                        job.test_set_id,
+                        iterations=job.iterations,
+                        concurrency=job.concurrency,
+                        name=name,
                     )
                 except CovalError as error:
                     return self._uncertain(job, name, error, log)
@@ -471,6 +492,12 @@ def _parser() -> argparse.ArgumentParser:
             '--max-simulations', type=int, required=True, help='the most calls this job may place'
         )
         job.add_argument('--label', required=True, help='what this launch belongs to, such as session-1')
+        job.add_argument(
+            '--concurrency',
+            type=int,
+            default=1,
+            help='calls Coval places at once; a bot with its own limit only',
+        )
         job.add_argument('--log', type=Path, default=Path('runs.jsonl'), help='the run log')
         job.add_argument(
             '--port',
@@ -518,6 +545,7 @@ def main(argv: list[str] | None = None) -> int:
             iterations=args.iterations,
             max_simulations=args.max_simulations,
             label=args.label,
+            concurrency=args.concurrency,
         )
         print(job.describe(), flush=True)
         if args.command == 'plan':

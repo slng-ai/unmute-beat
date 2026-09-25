@@ -190,3 +190,29 @@ Used: **60** of 60. No reserve left. Report: [`load/endpointing/report.md`](load
 Direction from 8 calls, not proof, and the load differs (8 at once against 20). The longer wait halves the turns that arrive in pieces and cuts cancelled requests from 30% to 13%, at about +0.55 s on the median turn (p90 is lower). `ArS5ZMnu` (no booking): 129 s went on the phone number; the caller then answered the booking read-back with "9:00 is perfect" instead of a yes, it was asked again, and the call reached 180 s.
 
 The 8 `collect > book_appointment` chains left in the fixed run are not read-backs: in each, code had already read the booking back, the caller said yes, and the model recorded the same slot again before calling the operation (the yes). One redundant `collect` request each; nothing code could skip.
+
+## Stress test (added 2026-09-26)
+
+You approved 60 more calls: gate 1 (20 normal), gate 2 (20 interruptive), and a native comparison (10 + 10). Session cap now **120**; used before this: 60.
+
+Revision under test: `00e476e` plus the script fix below (bot code = `00e476e`). What changed since a04c0ff, each with a test that failed first:
+- Silence reminder: after 8 s of caller silence (Pipecat `on_user_turn_idle`), "Are you still there?" and the open question put again, by code; a goodbye after two unanswered (`tests.test_nodes:silence_gets_a_reminder_then_a_goodbye`).
+- A number with a digit too many: "I heard +34 671 273 454 4 ... ask which part is wrong"; verify.md never asks for the whole number again (`tests.test_state:a_wrong_number_says_what_to_ask`).
+- Shorter read-backs: "Is your number +34 ...?", "Shall I book a haircut, Friday the 2nd at 9:00 AM?".
+- Concierge guarded: a completion claim is withheld before speech (`tests.test_business`, `tests.test_core`).
+- Voice detector waits 0.3 s (was 0.2).
+- `coval_sim --profile` (validated `SpeechProfile`, required) and `--call-seconds`.
+
+Offline: ruff and ty clean in every member; core 11/11, salon-graph 11/11, concierge-tools 5/5, Faro 1/1, salon-pipecat-flows 1/1; N1-N13 harness rows all pass (`session-4/matrix-stress-prep/`; the N7 harness check now matches the new read-back words).
+
+Live text check (`session-4/text-v2/`): T1 and T3 on the new wording. First attempt: T3 never confirmed the number because the scripted caller matched "your number" in "Is your number ...?" as a request for it (script rule order fixed, `evals/calls.py`); T1 got "I'm sorry, I cannot do that right now." from the verify step's first request, with a normal request (session `text-T1.v1-627a44fb`). Second attempt: T1 passed (10 requests), T3 passed (11 requests). The verify refusal is recorded as seen once in two T1 runs. Text spend this session: 92 of 100 requests, about 191,000 of 250,000 tokens.
+
+### Gates, logged before launch
+
+All harness calls: speech profile `session-3/speech-profile.v1.env` (validated by `coval_sim`), call limit 300 s, `--metrics 7VHk6dTjvBcuV6XYPmaeGq`, one bot.
+
+Gate 1, normal (`kQ8b6nMZ`, `MUFJdYAHdBHU6UbRRu4ykM`) x20, concurrency 10, label `session-4-gate1`. Pass: 20 of 20 exactly one booking on the day asked; 0 writes without a matching earlier question; 0 model text beside an operation; 0 caller turns with more than one holding line; turn latency p90 no worse than 2.7 s. A fail stops gate 2 until fixed.
+
+Gate 2, interruptive (`K3Xwqi7g`, `VSruLZYYyz3w7fkdUaheDR`) x20, concurrency 10, label `session-4-gate2`. Target: at least 18 of 20 with exactly one booking on the day the caller finally chose; 0 writes without a matching question. Every failure sorted by cause.
+
+Native (`use-cases/salon-pipecat-flows`, agent `cCQwmuCdjz6twETL6Vj933`), same sets, personas, profile and 300 s limit: 10 normal + 10 interruptive, one call per job (its bot has no call limit of its own, so the runner stops it after its first call), one after another (one Coval agent), labels `session-4-native-n01..n10`, `session-4-native-s01..s10`. It runs alongside the harness gates, one call at a time while the harness runs ten: latency favours native. Its writes are judged from its transcript and trace, since it has no write audit.

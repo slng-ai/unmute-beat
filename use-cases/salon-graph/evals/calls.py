@@ -493,9 +493,10 @@ def lose_first_answer(diary: Diary) -> None:
 
 
 PHONE_RULES = (
+    Rule(('is your number', 'have i got that right'), ("Yes, that's my number.",)),
     Rule(('phone number', 'your number', 'country code'), (SAID_PHONE,)),
-    Rule(('have i got that right',), ("Yes, that's my number.",)),
 )
+"""The read-back first: since session 4 it is "Is your number ...?", which the request rule would also match."""
 GOODBYE = Rule(
     ('anything else', 'what else', 'something else'), ("No, that's everything. Goodbye.",), last=True
 )

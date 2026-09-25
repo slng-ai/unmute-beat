@@ -326,6 +326,13 @@ class ReleaseCheck:
     ) -> None:
         self.port = port
         """The local port of this job's bot and tunnel. Jobs run side by side need one each."""
+        self.wait_s: float = RUN_TIMEOUT_S
+        """How long `run` waits for Coval to finish before reporting the run as still running (`--wait`).
+
+        A queue of one-call jobs sets it short: a simulation Coval leaves in
+        progress after the call ended (session 3's `UAeZiGa`, session 4's
+        `Khs7tVuS`) would otherwise hold the next job for 45 minutes.
+        """
         self.repo = repo
         self.coval = coval
         self.workdir = workdir
@@ -407,7 +414,7 @@ class ReleaseCheck:
         limit = (
             'bot.py (MAX_CALL_SECONDS)'
             if self.repo.limits_itself(agency)
-            else f'this runner: the bot has none, and is stopped {MAX_CALL_SECONDS + FINISH_SECONDS:.0f}s after the call connects'
+            else f'this runner: the bot has none, and is stopped {call_seconds + FINISH_SECONDS:.0f}s after the call connects'
         )
         job = Job(
             agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency, speech, call_seconds
@@ -502,14 +509,14 @@ class ReleaseCheck:
 
     def _result(self, job: Job, run_id: str, name: str, log: Path) -> Row:
         """Wait for the run and judge it. A run still going at the timeout is reported, not failed and not cancelled."""
-        run = self.coval.wait(run_id, timeout_s=RUN_TIMEOUT_S)
+        run = self.coval.wait(run_id, timeout_s=self.wait_s)
         if not run.finished:
             self.runs.write(job.key, name=name, status='launched', run_id=run_id, remote=run.status)
             return Row(
                 job.agency,
                 job.test_set_id,
                 run_id,
-                [f'run still {run.status} after {RUN_TIMEOUT_S}s: not failed, and still running at Coval'],
+                [f'run still {run.status} after {self.wait_s:.0f}s: not failed, and still running at Coval'],
                 log,
                 still_running=True,
             )
@@ -598,6 +605,12 @@ def _parser() -> argparse.ArgumentParser:
         )
         job.add_argument('--host', help='a host `serve` printed: use its bot, start no bot or tunnel')
         job.add_argument(
+            '--wait',
+            type=float,
+            default=RUN_TIMEOUT_S,
+            help='seconds to wait for Coval before reporting a run still running',
+        )
+        job.add_argument(
             '--profile', type=Path, required=True, help='the speech profile env file the bot runs on'
         )
         job.add_argument(
@@ -637,6 +650,7 @@ def main(argv: list[str] | None = None) -> int:
         RunLog(getattr(args, 'log', Path())),
         getattr(args, 'port', PORT),
     )
+    check.wait_s = getattr(args, 'wait', RUN_TIMEOUT_S)
     try:
         if args.command == 'serve':
             signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))

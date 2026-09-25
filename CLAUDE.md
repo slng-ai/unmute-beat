@@ -42,7 +42,7 @@ that member's folder.
 | `desk.py` | `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry` |
 | `interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `tests/` | `test_classes`, `test_history`, `test_reuse`, `test_clock` and `clinic.py` (a clinic built on core alone). No use case code |
+| `tests/` | `test_classes`, `test_history`, `test_reuse`, `test_clock` and `clinic.py` (a clinic built on core alone). No use case code. `defects.py` is outside the suite: known defects that fail on purpose, each with its repair session (`python -m tests.defects`, exit code = defects left) |
 
 **`use-cases/salon-graph/`**, the salon on core.
 
@@ -59,7 +59,7 @@ that member's folder.
 | `salon/classification.py` | `SALON`, the salon's conversation: core's acts given the salon's information, which builds its narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`) and decides on them; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply`. Tools reach it through the call (`SalonCall.read_reply`), never by import |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
-| `evals/` | the classifier evaluations (`cases`, `compare`, `consent`, `focused`, `readings`, `report`, `rules`, `solver`). Live, billable, except the rule floor |
+| `evals/` | the classifier evaluations (`cases`, `compare`, `consent`, `focused`, `readings`, `report`, `rules`, `solver`), and `calls`: the live text checkpoint, four scripted calls (T1-T4) on the real engine, checked on the diary. Live, billable, except the rule floor and `calls --recheck` |
 | `tests/` | fifteen assert-script modules, `classifier_model.py`, and `golden/` (every request the salon sends, pinned) |
 
 **`use-cases/salon-prompt/`**, the same salon as one prompt on Pipecat's own Gemini service: the baseline. No core, no Pydantic AI.
@@ -95,7 +95,8 @@ that member's folder.
 | Path | Owns |
 |---|---|
 | `concierge-tools/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
-| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph, and `graph` the unmute graph build (`GRAPH_BUILD_DIR`) |
+| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. One job per invocation (agent ID, test set, persona, `--max-simulations`), `plan` first; a run log refuses duplicates and uncertain relaunches. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph, and `graph` the unmute graph build (`GRAPH_BUILD_DIR`) |
+| `concierge-tools/audio_timing.py` | who spoke when in a two-channel Coval recording: response latency, overlaps, barge-in stop latency |
 | `faro-tools/bench.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
 
 **The split that matters:** `core.turn` runs a turn and knows nothing about
@@ -127,7 +128,8 @@ cd use-cases/salon-graph && uv run bot.py                # voice, http://localho
 uv run python -m tests                                   # this folder's modules, offline, no .env
 uv run ruff format . && uv run ruff check .              # from the root: every member
 for d in core use-cases/*; do uv run --directory $d ty check .; done
-cd use-cases/concierge-tools && uv run python -m coval_sim run VkpkmRMV   # Coval release check, billable
+cd use-cases/concierge-tools && uv run python -m coval_sim plan --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session>   # then `run`, billable
+cd use-cases/salon-graph && uv run --env-file ../../.env python -m evals.calls   # live text checkpoint, billable
 cd use-cases/concierge-tools && uv run ledger.py harness CA... -- graph trace:...   # cost of calls
 ```
 

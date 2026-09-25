@@ -1,0 +1,259 @@
+{
+  "case": "T2.v1",
+  "session": "text-T2.v1-05ae6c05",
+  "turns": [
+    {
+      "turn": 0,
+      "caller": "",
+      "said": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+      "delivered": [
+        {
+          "id": "ebb9b48d0268:0:1",
+          "origin": "entry",
+          "text": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "caller": "Hi, I'd like a haircut on Tuesday.",
+      "said": "Which phone number should I use? Please say it with the country code.",
+      "delivered": [
+        {
+          "id": "ebb9b48d0268:1:2",
+          "origin": "guidance",
+          "text": "Which phone number should I use? Please say it with the country code.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 1851,
+        "output": 46
+      },
+      "seconds": {
+        "wall": 0.634,
+        "model": 0.609,
+        "backend": 0.0,
+        "core": 0.026
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 2,
+      "caller": "My number is plus three four, six zero zero, one one one, two two two.",
+      "said": "Let me read that back to you: +34 600 111 222. Have I got that right?",
+      "delivered": [
+        {
+          "id": "ebb9b48d0268:2:3",
+          "origin": "ask",
+          "text": "Let me read that back to you: +34 600 111 222. Have I got that right?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 1233,
+        "output": 27
+      },
+      "seconds": {
+        "wall": 0.608,
+        "model": 0.592,
+        "backend": 0.0,
+        "core": 0.017
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 3,
+      "caller": "Yes, that's my number.",
+      "said": "Thanks, I have you. Sorry, I had a problem there. Could you say that again?",
+      "delivered": [
+        {
+          "id": "ebb9b48d0268:3:4",
+          "origin": "entry",
+          "text": "Thanks, I have you.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        },
+        {
+          "id": "ebb9b48d0268:3:5",
+          "origin": "error",
+          "text": "Sorry, I had a problem there. Could you say that again?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "failed",
+      "readings": [
+        {
+          "kind": "classifier",
+          "labels": "{\"confirmation\":\"accept\"}",
+          "outcome": "action",
+          "seconds": 0.5618297499604523
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"request_change\":\"kept\"}",
+          "outcome": "",
+          "seconds": 0.6320095419650897
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"conversation\":\"continue\"}",
+          "outcome": "",
+          "seconds": 0.7127090839785524
+        },
+        {
+          "kind": "",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 4,
+      "tokens": {
+        "input": 1103,
+        "output": 35
+      },
+      "seconds": {
+        "wall": 0.725,
+        "model": 0.714,
+        "backend": 0.0,
+        "core": 0.011
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    }
+  ],
+  "diary_calls": [
+    {
+      "name": "bookings_for",
+      "start": 0.6381998062133789,
+      "returned": true,
+      "end": 0.6382050514221191
+    },
+    {
+      "name": "bookings_for",
+      "start": 1.2463901042938232,
+      "returned": true,
+      "end": 1.2463929653167725
+    },
+    {
+      "name": "find_slots",
+      "start": 1.966958999633789,
+      "error": "KeyError: 'date'",
+      "end": 1.9673848152160645
+    },
+    {
+      "name": "bookings_for",
+      "start": 1.9669671058654785,
+      "returned": true,
+      "end": 1.9669718742370605
+    },
+    {
+      "name": "bookings_for",
+      "start": 1.9715468883514404,
+      "returned": true,
+      "end": 1.9715509414672852
+    },
+    {
+      "name": "bookings_for",
+      "start": 1.9715700149536133,
+      "returned": true,
+      "end": 1.971571922302246
+    }
+  ],
+  "writes": [
+    {
+      "action": "confirm_customer",
+      "args": {
+        "phone": "+34600111222"
+      },
+      "question": "Let me read that back to you: +34 600 111 222. Have I got that right?",
+      "about": "phone",
+      "asked_turn": 2,
+      "turn": 3,
+      "heard": "Yes, that's my number.",
+      "status": "ok",
+      "receipt": {
+        "customer_status": "existing",
+        "customer_phone": "+34600111222"
+      }
+    }
+  ],
+  "final": {
+    "bookings": [],
+    "state": {
+      "agent": "booking",
+      "pending": null,
+      "customer_phone": "+34600111222",
+      "phone_confirmed": true,
+      "customer_verified": "existing",
+      "verified_phone": "+34600111222",
+      "booking_day": null,
+      "offered": [],
+      "wanted": {
+        "service": "haircut",
+        "when": "Tuesday",
+        "at": "",
+        "change": "book"
+      },
+      "appointment": null,
+      "writes": 0,
+      "unresolved": null
+    }
+  },
+  "requests": 6,
+  "tokens": {
+    "input": 4187,
+    "output": 108
+  },
+  "trace_ids": [
+    "5c6558c5688e47ed3ff04c4777a625f6",
+    "3b59599107f6ecad6ee0afc8165ffc58",
+    "267d6a09c48ba0852333c400e0ee5318",
+    "2a50ffc1a8a3013c501f4206a0c5ce29",
+    "7ee39c6089f95da5ed280d008560fe8e",
+    "989974f424aa631b922ce7740281711c",
+    "db733c80b8c63952e3be4926010761b6"
+  ],
+  "result": "off-script",
+  "problems": [
+    "turn 3: the script has no reply to 'Thanks, I have you. Sorry, I had a problem there. Could you say that again?'",
+    "(check, not decisive) expected exactly one booking, found 0: []",
+    "(check, not decisive) the script never reached \"yes, but make it Wednesday\": nothing was tested"
+  ]
+}

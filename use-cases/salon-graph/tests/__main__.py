@@ -41,7 +41,9 @@ MODULES = (
     'tests.test_budget',
     'tests.test_recovery',
     'tests.test_continuation',
+    'tests.test_overlap',
     'tests.test_optimization',
+    'tests.test_calls',
     'tests.test_core',
 )
 """In the order they are quickest to fail: the graph and the agency first, the engine and the adapter last."""

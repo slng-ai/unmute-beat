@@ -70,17 +70,25 @@ class CovalClient:
             self._call('agents', 'update', agent.id, '--metadata', json.dumps(metadata))
         )
 
-    def persona(self, name: str) -> Persona:
-        """The persona with this name.
+    def personas(self) -> list[Persona]:
+        """Every persona in the organization."""
+        return TypeAdapter(list[Persona]).validate_python(self._call('personas', 'list') or [])
 
-        Raises:
-            CovalError: If no persona has that name.
+    def test_case_ids(self, test_set_id: str) -> list[str]:
+        """The test cases in a test set: one simulation each, per iteration.
+
+        ponytail: one page of 100. A set that large is over any allowance
+        this tool is given, and `plan` refuses it on the count.
         """
-        personas = TypeAdapter(list[Persona]).validate_python(self._call('personas', 'list') or [])
-        for persona in personas:
-            if persona.name == name:
-                return persona
-        raise CovalError(f'no Coval persona named {name!r}')
+        cases = self._call('test-cases', 'list', '--test-set-id', test_set_id, '--page-size', '100') or []
+        return [case['id'] for case in cases]
+
+    def find_run(self, agent_id: str, name: str) -> str | None:
+        """The run with this display name among the agent's latest, or None: how an uncertain launch is settled."""
+        runs = self._call(
+            'runs', 'list', '--filter', f'agent_id="{agent_id}"', '--page-size', '50', '--order-by', '-create_time'
+        )  # fmt: skip
+        return next((run['run_id'] for run in runs or [] if run.get('display_name') == name), None)
 
     def composite_ids(self, metric_ids: list[str]) -> set[str]:
         """Which of these metrics are composites, whose score is a fraction of criteria met.
@@ -101,10 +109,13 @@ class CovalClient:
         test_set_id: str,
         *,
         iterations: int,
-        concurrency: int,
-        label: str,
+        name: str,
     ) -> str:
-        """Start a run of one test set against one agent, with the agent's metrics.
+        """Start a run of one test set against one agent, one call at a time, with the agent's metrics named.
+
+        The metrics are passed rather than left to Coval's default, so the
+        ones `plan` printed are the ones that score. No mutation is passed,
+        so every call is the base agent.
 
         Returns:
             The new run's ID.
@@ -114,9 +125,10 @@ class CovalClient:
             '--agent-id', agent.id,
             '--persona-id', persona.id,
             '--test-set-id', test_set_id,
+            '--metric-ids', ','.join(agent.metric_ids),
             '--iterations', str(iterations),
-            '--concurrency', str(concurrency),
-            '--name', label,
+            '--concurrency', '1',
+            '--name', name,
             '--tags', 'release-check',
         )  # fmt: skip
         return run['run_id']

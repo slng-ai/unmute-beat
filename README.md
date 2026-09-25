@@ -67,7 +67,7 @@ a Pydantic graph, including declared exits and prerequisite return paths. It
 can also draw a Mermaid diagram from the same definition:
 
 ```bash
-uv run python -c "from core.flow import Flow; from salon.agents import AGENTS; print(Flow.of(AGENTS).render())"
+uv run python -c "from core.flow import Flow; from salon.app import FLOW; print(Flow.of(FLOW.nodes).render())"
 ```
 
 The original proposal described a small step table. The current
@@ -136,12 +136,20 @@ accepted service result is the evidence that a booking exists.
 
 ### State belongs to the call
 
-Applications extend `VoiceState` with their own fields and validation rules. A
-`CallContext` holds that state together with the call's history, pending
-question and speech records. Agents and tools receive the current call through
+A use case writes one plain Pydantic model for its own facts, named in its
+manifest (`state:` in `agent.yaml`). Core wraps it: `FlowState` adds where the
+call is and how it ended, and `FlowCall` is the one call type every node's
+agent gets, holding the facts together with the call's history, pending
+question and speech records. Agents and tools reach the current call through
 Pydantic AI's dependency mechanism, as `ctx.deps`. Each call carries its own
-data while sharing the same agent definitions. See
+data while sharing the same compiled agents. See
 [Pydantic AI dependencies](https://pydantic.dev/docs/ai/core-concepts/dependencies/).
+
+A use case never subclasses `CallContext` or `VoiceState` by hand to get this.
+Only a use case with a hand-built step does, so its own call type can carry
+whatever that step's Python needs (Faro's `FaroCall` and `FaroState`, in
+`use-cases/faro-language-learning/faro/state.py`) — today that is Faro alone,
+kept as legacy until session 5.
 
 `call.commit(...)` builds and validates a complete candidate state. If
 validation fails, the old state stays intact. This matters when several fields
@@ -153,16 +161,41 @@ do not get strong types automatically. Explicit application state models, as
 in the salon, give the stronger contract.
 
 **Types make rules checkable. They do not make language interpretation
-infallible.** A classifier can return an allowed label and still misunderstand
-the caller. Application checks and conversation evaluations stay necessary.
+infallible.** An agent can call a valid, well-typed tool and still have
+misunderstood the caller. Application checks and live evaluations stay
+necessary.
 
 Implementation: [core/state.py](core/src/core/state.py),
 [core/operations.py](core/src/core/operations.py) and
 [core/completion.py](core/src/core/completion.py).
 
-## 4. Steps, nodes and agents: how they fit together
+## 4. One agent per node: no reader runs before it
 
-These terms describe different layers of the same definition.
+Every conversational node is one Pydantic AI agent. It reads the caller's
+reply itself, in the shared conversation, with the application's current
+facts rendered fresh before each request. Nothing classifies the reply first.
+
+```mermaid
+flowchart LR
+    Caller["Caller's words"] --> Step["The active step's own agent"]
+    Facts["Application state, rendered fresh"] --> Step
+    Step -->|records a field| Field["Typed state"]
+    Step -->|reads back, then a later yes| Op["Operation: validated, authorised, executed"]
+    Step -->|hands over| Next["A declared exit"]
+    Step -->|answers| Caller
+```
+
+1. The caller speaks. The engine does not run a classifier, a solver or any
+   other reader before the step's agent.
+2. The step's own agent gets the whole delivered conversation, plus one block
+   of instructions built fresh from the call's current facts (`core.steps.context`):
+   what is on offer, the question still waiting for an answer and whether the
+   caller heard it, what was done on this call, and where this step may hand
+   the caller.
+3. From this, the agent decides: record a field, read back and later carry
+   out an operation, hand over, or just answer.
+
+These terms describe the layers of one definition:
 
 | Term | Meaning |
 |---|---|
@@ -176,394 +209,300 @@ A step can stay active across many turns. An agent run can make several model
 requests. Moving between steps does not start a separate call or lose the
 shared state.
 
-### Standard steps and custom agent steps
+### Kinds of step
 
-Core offers standard building blocks for common structures:
+| Kind | What it does | Runs a model? |
+|---|---|---|
+| `ConversationStep` | One agent node: answers, records declared `fields`, offers `choices`, reads back and carries out declared `operations`, hands over through `exits`. Stays active across turns until it hands over or the caller says goodbye. | Yes, every turn it is active. |
+| `ActionStep` | Runs one operation with arguments already in the state, and follows a declared branch on the result: onward, `on_error`, or `on_unknown` for an outcome nobody can confirm yet. `returns: true` sends it back to the step that handed the caller in, once it is done, never onward. | No. A model request is never spent choosing where a known result goes. |
+| `CollectStep`, `ConfirmStep`, `End` | The plain form-flow steps: ask for typed fields, read back an exact proposal, or close the call. Used by the public clinic manifests; the salon builds everything from `ConversationStep` and `ActionStep`. | `CollectStep` and `ConfirmStep` run a model; `End` runs one only to answer afterwards. |
+| `AgentStep` | A hand-built step: the flow file names a Python module whose `node(step)` function assembles the agent, its tools and its openings by hand, through `core.desk.AgentBuilder`. Legacy: only Faro uses it, kept until session 5. | Yes. |
 
-| Step type | Responsibility |
-|---|---|
-| `CollectStep` | Collect and validate declared fields. |
-| `ConfirmStep` | Present an exact proposal and handle acceptance, rejection or revision. |
-| `ActionStep` | Run an operation and check its returned result. |
-| `ConversationStep` | Hold an ongoing conversation from instructions and knowledge, with a goodbye output. |
-| `End` | Speak a closing line and record an outcome. |
-| `AgentStep` | Let application Python code assemble the node's tools and behaviour. |
+Recorded facts decide what is done and what comes next; nothing is a flag
+anybody set. Declared dependencies drop derived facts after a correction:
+removing a local fact never undoes a backend action, which needs an explicit
+operation.
 
-Standard steps use recorded facts to skip completed work and choose what comes
-next. Declared dependencies drop derived facts after a correction. Removing a
-local fact does not undo a backend action. That needs an explicit operation.
-
-The salon uses four custom `AgentStep` definitions. Custom steps and standard
-steps both become nodes in the same engine. This is a key reuse point:
-different conversation structures share turn execution, state handling and
-flow machinery.
-
-Every node contains an agent. The engine can still complete a known action
-without running that agent (section 7).
+Every conversational node contains an agent. The engine can still complete a
+known action, or hand a known destination, with no model request at all
+(section 7).
 
 Implementation: [core/steps.py](core/src/core/steps.py).
 
 ## 5. What an author writes: YAML, prompts and Python
 
-An application brings together three kinds of material:
+A use case brings together four kinds of material, all under one manifest,
+`agent.yaml`:
 
-- **YAML describes the structure:** step names, prompt files, code files,
-  requirements and exits.
-- **Prompts describe the conversation:** instructions, knowledge and how to
-  respond.
-- **Python implements behaviour:** typed state, tools, validation,
-  authorization and backend actions.
+- **YAML describes the structure:** step names, prompts, fields, choices,
+  operations, exits, requirements.
+- **Prompts describe the conversation:** instructions and knowledge, one file
+  per step.
+- **A Pydantic model describes the state:** the facts of one call, every
+  field with a default.
+- **Python functions implement the backend:** one typed function per
+  operation, each taking the call's services and a validated argument model,
+  returning a validated receipt.
 
-YAML makes the flow easy to review. Python expresses rules that need
-executable checks. Prompts give the model the context it needs to converse.
-
-For a custom agent step, the connection is explicit:
+YAML makes the flow easy to review. The state model and the functions are
+plain Python, checked by `ty` like any other code. Prompts give the model the
+context it needs to converse.
 
 ```mermaid
 flowchart TD
-    subgraph Application["What the application author supplies"]
-        YAML["flow.yaml: steps, requirements, exits"]
-        Prompt["Prompt files: instructions and knowledge"]
-        Models["Python models: typed call and state"]
-        Code["Step module: node(step)"]
-        Rules["Python tools and business rules"]
-    end
-
-    subgraph Core["How core builds the application"]
-        Spec["FlowSpec: validate references and compile prompts"]
-        Steps["StepFlow: construct each Step"]
-        Builder["AgentBuilder: assemble the agent and node"]
-        Nodes["Node table: one entry per step"]
-        FlowGraph["Flow: build the executable Pydantic graph"]
-    end
-
-    YAML --> Spec
-    Prompt --> Spec
-    Models --> Spec
-    Spec --> Steps
-    Steps -->|"Pass the configured AgentStep"| Code
-    Rules --> Code
-    Code -->|"Supply tools, outputs and entry actions"| Builder
-    Models -->|"Call type configured once"| Builder
-    Builder --> Nodes
-    Nodes --> FlowGraph
+    YAML["agent.yaml: steps, fields, operations, exits"] --> Spec["FlowSpec: check every reference"]
+    Prompt["Prompt files"] --> Spec
+    State["State model (state:)"] --> Spec
+    Funcs["Typed functions (operations:)"] --> Spec
+    Spec -->|"compile(model=...)"| Steps["StepFlow: one Node per step"]
+    Steps --> Graph["Flow: the executable Pydantic graph"]
 ```
 
-`FlowSpec` checks the declared structure and references before any call
-starts. `StepFlow` constructs the steps. For an `AgentStep`, it calls the named
-Python module's `node(step)` function. That function receives the
-YAML-derived configuration and adds the executable behaviour.
-
-The diagram follows the custom-agent path the salon uses. Standard steps build
-their nodes through core's own implementations instead of a `node(step)`
-function. Authors can also construct steps directly in Python.
+`FlowSpec` checks the whole manifest before any call starts: an unknown key, a
+missing prompt file, a prompt naming a field the state does not have, an
+operation argument the state cannot supply, an action reachable without its
+confirmation. `compile(model=...)` only then builds the agents. Nothing here
+is a Pydantic Graph YAML feature; the manifest format is this package's own
+([core/flowspec.py](core/src/core/flowspec.py)).
 
 ### A real step, from declaration to implementation
 
-This is the booking entry in [salon/flow.yaml](use-cases/salon-graph/salon/flow.yaml):
+This is the `booking` step in
+[salon/agent.yaml](use-cases/salon-graph/salon/agent.yaml):
 
 ```yaml
 - id: booking
-  kind: agent
+  kind: conversation
+  agent: robin
   prompt: prompts/booking.md
-  code: steps/booking.py
   guarded: true
-  requires: [customer_verified]
+  requires: [verified_phone]
   satisfied_by: verify
-  exits: [concierge, complaints]
+  fields: [service, booking_day, booking_time, slot, appointment]
+  choices: {slot: functions.py:find_times, appointment: functions.py:held_bookings}
+  operations: [book_appointment, move_appointment, cancel_appointment]
+  reads_back: {book_appointment: [slot]}
+  exits:
+    - {to: complaints, purpose: 'a complaint about a past service'}
+    - {to: concierge, purpose: 'they give up booking, or ask about something unrelated to booking'}
 ```
 
-It names the prompt and the Python implementation. It says that booking needs
-`customer_verified`, that `verify` supplies it, and which exits booking
-offers. `guarded` turns on the engine's guarded speech (section 8).
-Authorization still lives in the operation checks.
+It names the prompt and says: this step needs `verified_phone`, and `verify`
+supplies it; it may record five fields from the caller; it may offer times
+and held bookings, looked up by the two named functions; it may carry out
+three operations, each read back in the application's own words before a
+later yes carries it out; `reads_back` says that a reply which only records
+`slot` gets `book_appointment` read back by code, with no extra request; it
+may hand the caller to `complaints` or back to `concierge`. `guarded` turns on
+clause-at-a-time speech (section 8). No prompt or module chooses any of this;
+core builds the whole node from this declaration.
 
-The referenced [Python module](use-cases/salon-graph/salon/steps/booking.py) supplies this function,
-shown without its imports and docstring:
+`book_appointment` is declared once, under `operations:` in the same file:
+
+```yaml
+operations:
+  book_appointment:
+    function: functions.py:book
+    args: {phone: verified_phone, slot: slot}
+    readback: functions.py:booking_words
+    reconcile: functions.py:find_booking
+    matches: {phone: phone}
+    succeeds: {status: booked}
+    assign: {booked: booking_id, booked_spoken: spoken}
+    say: "You're all set for {spoken}. Anything else I can help with?"
+```
+
+`args` binds every argument to a state field: never to a model's words.
+`function` is an ordinary Python function in
+[salon/functions.py](use-cases/salon-graph/salon/functions.py):
 
 ```python
-def node(step: AgentStep) -> Node[SalonState]:
-    return build(
-        step,
-        tools=[read_diary],
-        finishers=[save_booking],
-        asks=[ask_booking, offer_times, booking_guidance],
-        openings=OPENINGS,
-        structured_speech=True,
-    )
+def book(salon: Salon, args: Booking) -> Written:
+    """Book the offered slot. A caller who already holds a booking was read back a second appointment, and said yes to that."""
+    ...
 ```
 
-Here `build` hands over to core's `AgentBuilder`, configured once with the
-application's call type, model and shared policies. The `step` argument
-carries the YAML settings. The other arguments say what this agent can do:
+Its own signature is the schema: the second parameter's type (`Booking`) is
+what core validates the arguments into, and the return type (`Written`) is
+what it validates the receipt into. Nothing types this twice in the YAML.
+`readback` renders the sentence the caller is asked to agree to; `succeeds`
+says which receipt values mean it worked; `matches` refuses a receipt that
+answers about someone else's phone number; `assign` copies receipt fields
+into state once it succeeds; `say` is the fixed line the receipt itself
+speaks, with no model asked to restate it; `reconcile` looks up what an
+earlier attempt with an unknown outcome actually did, before it is ever tried
+again.
 
-- `tools` return information into the model/tool loop.
-- `finishers` and `asks` are output functions: a successful call ends the
-  agent run with a result or a question.
-- `openings` are actions that can run on entry when the next action is
-  already known.
-- `structured_speech=True` makes this agent speak through
-  application-controlled outputs.
+This keeps **the structure in YAML, the conversation in prompts, and the
+backend in plain typed Python**, with core doing the wiring in between.
 
-Ending an agent run is not ending the phone call. Asking a question ends the
-run so the caller can answer. A handoff can continue into another node.
+## 6. Consent without a classifier
 
-This keeps **the structure in YAML and the behaviour in Python**, joined
-through one small, explicit function. The flow-file format is this package's
-own, implemented in [core/flowspec.py](core/src/core/flowspec.py). It is not a Pydantic
-Graph YAML feature.
-
-## 6. Classifiers and the solver: interpreting the caller
-
-**Both interpret what the caller meant. Python rules decide what to do with
-that interpretation.** The difference is how much each interpretation covers.
-
-`Classifier` ([core/classifiers.py](core/src/core/classifiers.py)) is one reusable core
-component. It takes typed input, makes one structured model request and
-validates the returned data. Both the narrow readings and the solver use it.
-Neither has the conversational agent's tool loop.
-
-Every classification is made of the same five parts:
-
-| Part | Who supplies it |
-|---|---|
-| The question the person was asked | the application, from state |
-| The person's answer | the application, from state |
-| Context: what the classifier is for, in one sentence | the author |
-| The classes | the author |
-| Each class's description | the author |
-
-The instructions are built from these parts by a fixed template, never
-hand-written per business. So the same classifier works for a salon, a clinic
-or a help desk, with only the context sentence and the classes changed.
-
-### Narrow readings: one question at a time
-
-The default approach uses small classifiers, each answering one question. A
-**reading** ([core/readings.py](core/src/core/readings.py)) wraps one classifier with
-the context it needs and a rule for when it applies. Only the readings that
-apply run, side by side, so the caller waits for the slowest one only. Core
-owns the common ones:
-
-| Reading | Classes | Applies when |
-|---|---|---|
-| confirm (`CONFIRM`) | accept, reject, revise, conditional, unclear | a read-back is waiting for an answer |
-| choose (`Choice`) | one option id or none, plus the option named with a condition | options are on the table |
-| take back (`TAKE_BACK`) | keep, withdraw, unclear | a change made in this call can still be undone |
-| still agreed (`STILL_AGREED`) | keep, withdraw, unclear | an approval is held through a detour |
-| closing (`CLOSING`) | end, continue, unclear | the caller was asked "anything else?" |
-| request kept (`REQUEST`) | kept, changed, unclear | a detour, such as a number check, interrupted a request |
-
-Each request sends only the facts its act needs, about 260 to 430 input
-tokens. Each reading has its own Langfuse dataset (`harness-reading/<name>`),
-so it can be measured and tuned on its own (`use-cases/salon-graph/evals/readings.py`).
-
-The results feed `Conversation` ([core/conversation.py](core/src/core/conversation.py)).
-Its Python rules try the acts in one fixed order: answer the pending question,
-then take back, then pick, then goodbye. The first act that decides selects an
-application action. Otherwise the reply goes to the conversational agent.
-
-The acts are core classes. An application gives each one its information:
-
-| Act | Information it takes | What it does |
-|---|---|---|
-| `ReadBack` | the question it answers, the operation a yes runs | runs that operation on a yes to that exact question |
-| `Offer` | where the options come from, what a pick does | reads a plain pick back, never writes it. Refuses a pick with a condition |
-| `FixedChoice` | a fixed question and its options | runs the action for the chosen option, such as "move it or add another?" |
-| `TakeBack` | what can be taken back | offers to undo a change made in this call |
-| `HeldApproval` | the approval to keep | keeps an approval through a detour, drops it on any change |
-| `HeardValue` | a parser from words to a value | reads a value back with no model request, such as a whole phone number |
-| `Detour` | the question that ends a prerequisite | notices when the caller changes the request mid-detour |
-| `Closing` | the goodbye | ends the call once the caller is done |
-
-The salon's whole setup is one declaration, `SALON` in
-[salon/classification.py](use-cases/salon-graph/salon/classification.py). A second use case,
-[tests/clinic.py](core/tests/clinic.py), builds a clinic line on the same classes in
-about 240 lines, with no salon code.
-
-### The solver: one richer decision
-
-The optional salon solver looks at a wider snapshot: the caller's words, the
-current step, identity, the pending proposal, whether it was heard, and the
-possible task destinations. It returns one typed
-[decision](core/src/core/decisions.py), which can carry the information needed to act
-on it.
-
-For example, after a phone read-back, "No, the last two digits are 34" is read
-narrowly as `revise`. That says there is a correction, but not the corrected
-number. The solver can instead return `CorrectPhone` with the full proposed
-number. Python validates that number and reads it back. The correction alone
-does not verify anyone.
-
-Its other decisions are accept, reject, clarify, choose move or add, switch
-task and end the call. "Solver" names this broader strategy: one decision per
-request, not a plan of several actions.
-
-| | Narrow readings (default) | Salon solver (opt-in) |
-|---|---|---|
-| Question | What does this reply mean for one act? | Which supported decision best describes this reply now? |
-| Result | a label or a chosen option | one decision, sometimes with fields such as corrected digits or a destination |
-| Requests | one per applicable, uncached reading, side by side | one per uncached interpretation |
-| Input | only the facts for its act | the wider call snapshot |
-| Application handling | the shared conversation rules choose the action | Python handles correction, switching and clarification directly. Other decisions feed the shared rules |
-| Measured | per reading, on Langfuse datasets, on four models | not yet compared live |
-
-The solver can settle some replies that would otherwise need the
-conversational agent. Its broader task also needs its own accuracy checks. It
-is not automatically faster, more accurate or equal in coverage. Narrow
-readings are the default in code. `SALON_INTERPRETER=solver` selects the
-solver.
-
-### What they share, and where they run
-
-Both use core's **Interpreter** machinery
-([core/interpreters.py](core/src/core/interpreters.py)):
-
-- They share the turn's request budget.
-- An interpretation is cached for the turn, so a tool guard reuses it instead
-  of asking again.
-- A result that no longer matches the call is rejected, never used.
-- A validation or provider failure gives a fallback that authorizes nothing.
-- Some readings can run again when application work puts new options on the
-  table.
-
-They run in the node's `advance` stage, before its conversational agent, when
-the call's state asks for an interpretation. They are two alternative
-strategies, not two stages in a row. A tool can also ask for an
-interpretation when it needs one. Ordinary conversation needs no extra request
-up front.
-
-An interpreted acceptance still passes the operation's authorization. An
-interpreted task switch still passes routing and prerequisites. If the
-interpretation settles nothing, the engine tries an applicable opening, and
-otherwise runs the conversational agent.
-
-A reading that needs a model request takes 0.7 s or more. The agent's first
-request does not wait for it: it goes out at the same time, and the run is
-held at its first event until the readings are done (section 7). A reading
-slower than 1.2 s is sent a second time, and the first answer wins.
-
-### Why not let the model set a flag?
-
-A flag the model sets, such as `confirmed=true` on a tool call, costs no extra
-request. It failed in practice: the one-prompt baseline cancelled a booking and
-recorded a complaint with no read-back. A word list worked, but only in
-English. A reading costs one small request, about 0.8 s, and works across
-languages and businesses. The price is more requests per turn, each smaller: on
-the paired Coval run the harness made 1.85 requests per caller turn against the
-baseline's 1.34, and sent 1,402 input tokens per turn against 3,946.
-
-**This is another reuse boundary.** Core supplies classification,
-interpretation caching and the shared conversation rules. The application
-supplies its facts, its supported decisions and its handlers. The graph and the
-operation checks stay in place whichever strategy is selected.
-
-Implementation: [core/classifiers.py](core/src/core/classifiers.py),
-[core/readings.py](core/src/core/readings.py), [core/interpreters.py](core/src/core/interpreters.py),
-[core/conversation.py](core/src/core/conversation.py), and the salon's solver and
-decision handlers in [salon/classification.py](use-cases/salon-graph/salon/classification.py) and
-[salon/nodes.py](use-cases/salon-graph/salon/nodes.py).
-
-## 7. What happens during a caller turn
-
-The engine starts at the node recorded in the call's state. It first checks
-whether application logic can settle the next action. Otherwise, it runs the
-node's agent.
-
-```mermaid
-flowchart TD
-    Input["Caller input and current call state"] --> Node["Enter the current node"]
-    Node --> Interpret["advance: narrow readings or the solver, when needed"]
-    Interpret --> Rules["Python decision rules, otherwise an opening"]
-    Rules --> Known{"Known action available?"}
-    Known -->|Yes| Direct["Run the application action"]
-    Known -->|No| Agent["Run the agent with current tools and context"]
-    Direct --> Result["Handle the checked result"]
-    Agent --> Result
-    Result --> Move{"Continue in another node?"}
-    Move -->|Yes| Route["Resolve prerequisites and follow a declared route"]
-    Route --> Node
-    Move -->|No| Finish["Finish this turn and keep its results"]
-```
-
-The node's `advance` function gets the first chance to settle the caller's
-answer (section 6). An applicable `opening` is tried next. Both can select a
-`LocalAction`: a named application action to run. Interpretation can use model
-requests even when the conversational agent is skipped.
-
-If conversation is needed, `AgentBuilder` prepares the offered tools and
-handoff destinations from current state before each model request. Shared
-policy allows at most one business-changing or routing action per model reply.
-The executors still check authorization when called.
-
-### Keeping the caller's wait short
+**The step's own agent reads the caller's reply. Code decides whether that
+reading may authorise a write.** No classifier, supervisor or solver runs
+first. This replaced session 3's design, where narrow classifiers read the
+reply before the step's agent ever saw it; that design, and the modules it
+used (`core.classifiers`, `core.readings`, `core.conversation`,
+`core.interpreters`, `core.decisions`), stay in the package only for Faro,
+until session 5. The public path — `import core`, load a manifest, compile it
+— never imports them (`core/tests/test_nodes.py:public_path_loads_no_reader`).
 
 ```mermaid
 sequenceDiagram
     participant C as Caller
-    participant E as Turn engine
-    participant R as Readings
     participant A as Step's agent
-    C->>E: words
-    par side by side
-        E->>R: readings that apply
-    and
-        E->>A: first request, held at its first event
-    end
-    R-->>E: decided nothing
-    E->>A: go on
-    A-->>E: a tool call
-    E-->>C: one holding line, as the second request goes out
-    A-->>C: answer
+    participant Code as Code (ProposalLedger, Operation)
+    C->>A: "Yes, that's right"
+    A->>Code: calls the operation again
+    Code->>Code: check: same question, heard in full, same arguments
+    Code-->>A: authorised: execute, validate receipt, record
+    Code-->>C: the receipt's own words, said by code
 ```
 
-1. The readings and the agent's first request go out together. The run stops
-   at its first event: the SDK's event stream has no buffer, so no tool runs
-   and nothing is said until the readings are done.
-2. If a reading decides an action, the run is dropped and nothing of it is
-   kept. If the readings changed the call, a fresh run starts. Otherwise the
-   run goes on, its first request already answered.
-3. A turn that needs a second step request says one holding line from the
-   call's locale ("Let me have a look.") as that request goes out. It is
-   the slow case: a tool's result going back to the model, a retry, or a
-   hand-over into a step whose model must answer. The answer is still a
-   whole round trip away, so the line never stacks on it.
-4. Any other turn silent for 1.5 s says the same line. Never after the
-   answer started, and never twice. A turn the readings answer, or a plain
-   answer, gets none.
-5. A request that sends nothing in 1.5 s is cancelled and its run tried once
-   more (`TurnBudget.first_part`). A second one gives the fixed "going round
-   in circles" line.
-6. Fewer requests in a row: after a borrowed tool (reading the diary from the
-   front desk) the model is not offered a hand-over for the move it already
-   made, and a hand-over that carries the request lets the next step act on
-   arrival with no model request.
+1. An operation that needs approval is declared with a `readback:` function.
+   The first time the step's agent calls it, code renders that read-back in
+   the application's own words and says it. Nothing is carried out yet.
+2. The caller answers. The same agent, in the same conversation, reads the
+   reply itself and decides whether to call the operation again.
+3. Calling it again is not itself approval. Code checks the call's
+   `ProposalLedger`: is this the same question, for these exact arguments,
+   and did the caller hear it in full? Only then does `CallContext.approve`
+   bind the yes to that one proposal (`ConfirmedOperation._agreed`).
+4. If it is bound, `Operation.run` validates the arguments, executes,
+   validates the receipt, records it, and speaks the receipt's own words
+   (`say:` in the manifest) — never the model's paraphrase of what happened.
+5. A reply that also changes the request (calls `collect` beside the
+   operation) gets a fresh read-back instead: the old proposal no longer
+   matches what is now being asked.
+
+This is why "yes" needs no separate reading: what makes a yes an
+authorisation is never the word itself, it is code matching an exact,
+delivered question against an exact, later reply, in `core.proposals` and
+`core.operations`. A model still supplies a fallible semantic judgement — it
+decides *that* the caller agreed — but it can never itself flip on
+`approved`, and the checks above still run on every path, model-chosen or
+code-chosen alike (`one_action_per_reply`, `claim_or_refuse`).
+
+### Two shortcuts that still cost no model request
+
+- **`reads_back`.** A reply that only records one of an operation's fields
+  (a caller naming a time, nothing else) gets that operation read back by
+  code, with no second request for it — the same read-back the agent would
+  otherwise have had to ask for a request later
+  (`ConversationStep.reads_back`, `Node.reads_back`).
+- **`opens_with`.** A step entered by a hand-over can read back an operation
+  on arrival, by code, when the state already gives its arguments (a carrier's
+  own number) — no model request just to notice the read-back is due
+  (`ConversationStep.opens_with`).
+- **`asks`.** When the state does not give those arguments, the step asks for
+  the first missing field on arrival, in fixed words, also by code
+  (`ConversationStep.asks`). The salon's verify step asks "Which phone number
+  should I use? Please say it with the country code."
+
+### One reply, one write
+
+`speaks_for` (`Node.speaks_for`) says which of a step's outputs say their own
+words. When a reply carries both model text and one of those operation calls
+in the same turn — the model wrote the read-back itself, right beside calling
+it — the model's text is dropped and only the operation's own words are said.
+In the session-4 load baseline this happened 19 times in 10 of 20 calls; after
+the fix, 0.
+
+### Faro still reads before it answers
+
+Faro (legacy until session 5) still uses `core.conversation`'s narrow
+readings and `core.desk.AgentBuilder`. Its two readings are its own, run by
+code rather than words: `GRADE` records every exercise attempt and `ONBOARD`
+saves setup answers. Nothing in the salon, or in the public manifest path,
+depends on this machinery, and it is checked separately
+(`use-cases/faro-language-learning/tests`).
+
+Implementation: [core/proposals.py](core/src/core/proposals.py),
+[core/operations.py](core/src/core/operations.py) and
+[core/steps.py](core/src/core/steps.py) (`ConversationStep`, `ConfirmedOperation`,
+`FunctionOperation`).
+
+## 7. What happens during a caller turn
+
+The engine starts at the node recorded in the call's state.
+
+```mermaid
+flowchart TD
+    Input["Caller input and current call state"] --> Code["Code first: settle any unknown-outcome write, say an unheard receipt again"]
+    Code --> Known{"A code node, or a known action on arrival?"}
+    Known -->|Yes| Direct["Run it: no model request"]
+    Known -->|No| Agent["Run the active step's own agent"]
+    Direct --> Result["Handle the checked result"]
+    Agent --> Result
+    Result --> Move{"Hand over, or a prerequisite completed?"}
+    Move -->|Yes| Route["Resolve prerequisites and follow a declared route"]
+    Route --> Code
+    Move -->|No| Finish["Finish this turn and keep its results"]
+```
+
+1. Before anything else, code checks for work that needs no model at all: an
+   earlier write whose outcome was unknown gets reconciled
+   (`FlowCall.settlement`), and a receipt the caller never heard is said
+   again, word for word (`_say_again`).
+2. If the active step names a known next action with no model needed — an
+   `ActionStep`'s operation, a `ConversationStep`'s `opens_with` or a
+   prerequisite step returning to the one that was waiting, or a `ConfirmStep`
+   re-issuing an expired read-back — that runs directly. No model chooses it.
+3. Otherwise the step's own agent runs, with the offered tools and exits
+   built from current state. Shared policy allows at most one
+   business-changing or routing action per model reply
+   (`one_action_per_reply`); the operation and hand-over executors still
+   check authorisation themselves when called, whichever path reached them.
+
+### Keeping the caller's wait short
+
+A holding line ("Let me have a look.", from the call's `Locale`) is said at
+most once per caller turn, by code, never by a model:
+
+- when the turn needs a second step request — a tool's result going back to
+  the model, a retry, or a hand-over into a step whose agent must now answer;
+  or
+- when work already running (a tool call, an application action) has taken
+  longer than `TurnBudget.hold_after` seconds.
+
+It is never said once the answer has started, and never twice in one turn. A
+request that sends nothing within `TurnBudget.first_part` is cancelled and
+tried once more; a second stall in the same turn gives the fixed "going round
+in circles" line instead.
+
+If the caller goes quiet after an answer has played, `core.turn.remind` steps
+in on Pipecat's own idle timer (8 s by default): "Are you still there?", then
+the open question, word for word, put again — a yes to that copy answers it,
+same as any other delivered question. After two reminders go unanswered, a
+goodbye plays and the call ends. No model is asked whether the silence means
+anything.
 
 ### A yes with more in it
 
 A caller often says more than the yes: "Yes, that's right. Oh, and can we
-make it Saturday instead of Friday?" to their number read back.
+make it Saturday instead of Friday?" to a read-back.
 
 ```mermaid
 flowchart LR
-    R[reply] --> C[confirm reading]
-    C -- accept --> A[action runs]
-    A --> L[short line]
-    L --> O[owner step's model]
-    O --> K[caller hears the rest answered]
+    R["Reply: yes, and a change"] --> A["Step's own agent, one run"]
+    A -->|"records the change first"| Retry["Operation refuses: the arguments just changed"]
+    Retry --> A
+    A -->|"reads back the new proposal"| Q["Caller hears the new question"]
 ```
 
-1. The confirm reading hears the yes. It does not yet always hear one in
-   this sentence: on the phone read-back it answers `revise` (see "Known
-   debt" in `CLAUDE.md`).
-2. The yes runs its action with no model request, such as the phone lookup.
-3. `ReadBack.done` says a short line by code ("Thanks, I have you."). It
-   covers the next request, as the graph build's announcement does.
-4. The rest of the reply goes to a model in the same turn. A check hands the
-   caller back to the step that sent them, and that step's model answers.
-   An action that says nothing and hands over to no one is followed by its
-   own step's model, told the action was done. Without this rule, the turn
-   would end in silence.
+1. Nothing here is decided by a separate reading. The step's own agent reads
+   the whole reply and decides what to do with each part of it, in one run.
+2. If it calls the operation again on arguments a reply in the same turn just
+   changed, the operation refuses: this is no longer the question it was
+   asked to confirm. The agent gets that reason back and can try again in the
+   same run (`ModelRetry`).
+3. It records the change, then reads the operation back again with the new
+   arguments. The caller hears the new proposal, and a later yes to that one
+   is what carries it out.
+
+A plain yes with nothing else runs the operation immediately, with no model
+request beyond the one reply that called it: the receipt's own words
+(`say:`) are what the caller hears next.
 
 ### From words to an authorized action
 
@@ -583,11 +522,14 @@ action is refused, the agent gets the reason and can clarify.
 Prerequisite routing remembers one pending destination. After the
 prerequisite completes, the application resumes that work without asking the
 model to choose the destination again. A changed request is handled by the
-application's conversation rules.
+step's own agent, in the ordinary way, once it is back in that step.
 
-An exit can also declare a `via` tool: a successful call of that tool moves
-the call into the destination node. Core rechecks the route's conditions after
-success.
+A hand-built step (`AgentStep`, legacy: Faro) can also declare an exit with a
+`via` tool: a successful call of that tool moves the call into the
+destination node for free, with no separate hand-over request. Core rechecks
+the route's conditions after success. A `ConversationStep` (the salon's kind)
+moves only through its own `hand_over` output or a prerequisite's return; it
+lends no tools.
 
 The turn engine reports either `Moved` or `Answered` to the graph. The graph
 follows the matching declared branch. An undeclared move raises an error. The
@@ -598,7 +540,7 @@ turns. Durable storage and recovery across separate calls are the
 application's job.
 
 Implementation: [core/turn.py](core/src/core/turn.py),
-[core/conversation.py](core/src/core/conversation.py) and
+[core/graph.py](core/src/core/graph.py) and
 [core/proposals.py](core/src/core/proposals.py).
 
 ## 8. Streaming and interruptions are part of execution
@@ -609,12 +551,12 @@ permitted model text reaches speech synthesis before the whole response
 finishes. See
 [Pydantic AI output and streaming](https://pydantic.dev/docs/ai/core-concepts/output/).
 
-Application-controlled questions and confirmations go straight to speech. In
-the salon, conversational text can stream from the concierge, while
-consequential confirmations are said through controlled outputs. On a guarded
-step, speech goes out a clause at a time, and a clause claiming a change
-nothing made is replaced before it is spoken. Partial tool arguments are never
-treated as completed actions.
+Application-controlled questions and confirmations go straight to speech. On
+a `guarded` step (the salon turns this on for every step that can write),
+speech goes out a clause at a time, and a clause claiming a change nothing
+made is replaced before it is spoken (`Locale.claims`, a pattern list per
+language — see "Known limits"). Partial tool arguments are never treated as
+completed actions.
 
 Interruptions need more than stopping audio. The engine keeps accepted input
 and completed tool results, and uses playback feedback to track what speech
@@ -631,8 +573,25 @@ Pipecat and translates between core events and voice frames. That separation
 makes the engine reusable. Another voice adapter would still have to
 implement and test delivery and interruption behaviour.
 
-Implementation: [core/processor.py](core/src/core/processor.py) and
-[core/history.py](core/src/core/history.py).
+### Session 4's reliability fixes
+
+Session 4 moved reading the caller's reply into the step's own agent
+(section 6). These fixes went with it, each found on a live Coval run and each
+with a regression check:
+
+| Fix | What it stops |
+|---|---|
+| One holding line per caller turn, never per piece of it | A turn joined from several caller pieces (section "seven things that bite" in `CLAUDE.md`) used to say the holding line again on every piece: 4 of 20 calls in one Coval run. |
+| A holding line is never sent to the model as its own earlier words (`core.history.project`) | The model saw "One moment." as words it had said, and wrote it into its own replies: 32 of them in the session-4 baseline, said to the caller twice each time. |
+| `Node.speaks_for`: model text in the same reply as an operation call is dropped | The model wrote the read-back or the receipt itself, right beside calling the operation that then said the same words again: 19 times in 10 of 20 calls before the fix. |
+| `reads_back:` | A reply that only records one of an operation's fields gets that operation read back by code, with no second request only to ask for it. |
+| `asks:` on arrival | With no caller ID, verify's model opened the detour with "I'll connect you with someone" and the caller hung up unbooked (gate 1 rerun). Code now asks for the missing field in fixed words, with no model request. |
+| A goodbye cannot claim a write nothing made (`steps._unbacked_goodbye`) | The model said "your haircut is booked" in a goodbye after a yes it never carried out; the caller hung up believing it (gate 1). Such a goodbye is refused back to the model, which then carries the action out. |
+| Silence reminder (`core.turn.remind`, 20 s) | Two calls sat silent until the call limit, each side waiting on the other. After 20 s of silence the caller hears "Are you still there?" and the open question again; a goodbye after two. At 8 s it talked over slow callers and looped. |
+| A number with a digit too many says what was heard | "Say the whole number again" restarted the number in pieces and cost 85 s in one call. The model now reads back the digits heard and asks which part is wrong. |
+
+Implementation: [core/processor.py](core/src/core/processor.py),
+[core/history.py](core/src/core/history.py) and [core/turn.py](core/src/core/turn.py).
 
 ## 9. Where reuse comes from
 
@@ -640,20 +599,23 @@ Implementation: [core/processor.py](core/src/core/processor.py) and
 meaning in the application.** Core imports no salon code. It receives
 definitions and call data through the interfaces above.
 
-| Reused from core | Supplied by an application |
+| Reused from core | Supplied by a use case |
 |---|---|
-| Step construction, node contract and graph execution | Step definitions, exits and prerequisite rules |
-| Validated state commits and per-call context | State fields, constraints and call creation |
-| Agent construction and request preparation (`AgentBuilder`, `Desk`) | Model, prompts, tools and allowed outputs |
-| Classification, interpretation caching, question tracking and common conversation acts (`Conversation`) | Relevant facts, interpretation strategy, proposals, choices and decision handlers |
-| Operation execution sequence | Authorization, backend integration and recovery |
-| Turn budgets, streaming and interruption handling | Wording (`Locale`), speech policies and voice configuration |
+| Step construction, node contract and graph execution (`StepFlow`, `Flow`) | The manifest: step ids, kinds, exits and prerequisite rules |
+| Validated state commits and per-call context (`FlowCall`) | The state model, its fields and constraints |
+| Agent construction and request preparation, one agent per `ConversationStep` | Prompts, `fields`, `choices`, `operations` and `exits` |
+| Question tracking, the read-back bind and consent checks (`ProposalLedger`, `CallContext.approve`) | Which operations need a read-back (`readback:`), and their arguments |
+| Operation execution sequence (`Operation.run`, `FunctionOperation`) | The typed function itself: what the backend does, and its receipt |
+| Turn budgets, streaming, holding lines and the silence reminder | Wording (`Locale`), speech policies and voice configuration |
 
-An author builds an application by defining its state and operations,
-describing its steps, connecting prompts and Python modules, and passing the
-resulting node table with a fresh call to the processor. Custom state and call
-types need an application call factory. The standard `StepFlow.open_call()`
-creates the generic call type. See [Adding a use case](#adding-a-use-case).
+Faro alone still reuses the legacy path — `AgentBuilder` and `Desk`
+(`core/src/core/desk.py`), narrow readings and `Conversation`
+(`core/src/core/conversation.py`) — kept only until session 5.
+
+A use case builds an application by writing its state model and typed
+functions, describing its steps in `agent.yaml`, and opening a call from the
+compiled flow with its own services. See
+[Adding a use case](#adding-a-use-case).
 
 The engine can be reused without putting new business rules inside it. That
 does not mean configuration alone supplies those rules, or that another
@@ -661,15 +623,19 @@ application's behaviour has already been validated.
 
 ## 10. How this design is checked
 
-The suites have **22 offline test modules**, one suite per folder, with live model requests switched
-off. Scripted responses exercise invalid data, approval checks, routing,
-interruptions, recovery and shared turn limits. Tests also check that direct core execution and the Pipecat adapter
-agree, and pin every request the harness sends (`use-cases/salon-graph/tests/golden/*.json`), so a
-code change that alters a prompt shows as a diff.
+Each member's own offline suite runs with live model requests switched off,
+scripted responses standing in for a provider. Every module prints `ok` or
+raises on its first failure:
 
-Solver tests check how Python handles scripted decisions, including
-corrections and task switches. They check execution behaviour. Whether the
-model chooses the right decision needs a live evaluation.
+| Member | Some of what its suite covers |
+|---|---|
+| `core` (`core/tests`) | `test_authoring` (the manifest contract on all three clinic patterns), `test_session` (atomic state, owned fields, isolation, stale work, evidence), `test_nodes` (P1-P18: no reader runs on the public path, hostile calls are refused, `reads_back`, the silence reminder), `test_delivery`, `test_sdk`, `test_public`, `test_package`, `test_history`, `test_clock`. `defects.py` runs separately: known defects that fail on purpose, one per open repair. |
+| `use-cases/salon-graph` (`tests`) | `test_graph` (legal moves, prerequisite interposition, pinned first requests in `tests/golden/agents.json`), `test_business` (the acceptance matrix, A-L), `test_walkthrough` (one booking call through every boundary), `test_continuation`, `test_overlap` (timed barge-in and delivery replay), `test_state`, `test_diary`, `test_budget`, `test_traces`, `test_core` (direct engine and Pipecat adapter agree), `test_calls` (the live text checkpoint's own machinery, scripted). |
+
+Tests pin every request the harness sends
+(`use-cases/salon-graph/tests/golden/agents.json`), so a code change that
+alters a prompt shows as a diff (`BLESS_AGENTS=1` re-pins it, checked live
+afterwards).
 
 ```bash
 uv run ruff check .
@@ -677,12 +643,23 @@ for d in core use-cases/*; do uv run --directory $d ty check .; done
 for d in core use-cases/*/; do [ -d $d/tests ] && uv run --directory $d python -m tests; done
 ```
 
+`use-cases/concierge-tools/matrix` runs the same N1-N13 scenarios against
+both this harness and the native Pipecat-flows build (`use-cases/salon-pipecat-flows`),
+offline, each arm in its own environment (`uv run python -m matrix run`).
+`use-cases/concierge-tools/load_report.py` reads a batch of Coval calls'
+Langfuse traces and write records — no Coval judge — and reports consent
+(writes with no matching question), speech (repeated lines), request chains
+and latency per call.
+
 We used **Coval and Langfuse to evaluate the feasibility of the package**:
 simulated phone calls scored by Coval, and the traces of the same calls read
-by `use-cases/concierge-tools/ledger.py` for tokens, latency and every write. The same calls were
-run against a one-prompt Pipecat baseline (`use-cases/salon-prompt`,
-[salon/baseline.py](use-cases/salon-prompt/salon/baseline.py)). The figures, with links to every run,
-are in [docs/research/poc-evidence-2026-09-24.md](docs/research/poc-evidence-2026-09-24.md).
+by `use-cases/concierge-tools/ledger.py` for tokens, latency and every write.
+[docs/research/poc-evidence-2026-09-24.md](docs/research/poc-evidence-2026-09-24.md)
+holds that evidence, from the classifier-based design session 4 replaced; it
+is history, not a claim about the current node-agent design. The current
+design's own runs are logged as they happen in
+[docs/research/reusable-core/session-4/ledger.md](docs/research/reusable-core/session-4/ledger.md);
+the "Evidence" section below will summarise them once the stress test is done.
 
 The offline tests check whether the machinery follows its rules. Voice
 evaluations check how the model and audio path behave in the tested
@@ -727,146 +704,120 @@ root `.env` by walking up from its folder.
 
 # Adding a use case
 
-A use case gives core's classes its information, and core's code runs it.
-[core/tests/clinic.py](core/tests/clinic.py) is a complete one: a clinic's booking
-line in about 240 lines, with no salon code. The salon is built the same
-way, in [salon/classification.py](use-cases/salon-graph/salon/classification.py) (`SALON`),
-[salon/tools/desk.py](use-cases/salon-graph/salon/tools/desk.py) (`DESK`) and
-[salon/nodes.py](use-cases/salon-graph/salon/nodes.py) (`BUILDER`).
+A use case is a manifest: `agent.yaml`, its prompts, one Pydantic state model,
+and one typed Python function per business action. Core reads the manifest,
+checks every reference before any call starts, and runs it: no reading or
+solver anywhere, no call class to write.
 
 ```mermaid
 flowchart LR
-  info[Use case information] --> conv[Conversation]
-  info --> desk[Desk]
-  info --> builder[AgentBuilder]
-  conv --> readings[Narrow readings]
-  conv --> acts[Rules in fixed order]
-  acts --> ops[Operations]
-  builder --> steps[Steps]
-  steps --> engine[Turn engine]
+  yaml[agent.yaml: steps, fields, operations, exits] --> spec[FlowSpec: check everything]
+  state[State model] --> spec
+  funcs[Typed functions] --> spec
+  prompts[Prompts] --> spec
+  spec -->|compile| flow[StepFlow: one Node per step]
+  flow --> engine[Turn engine]
 ```
 
 0. The use case is a folder under `use-cases/` with its own `pyproject.toml`
-   (depending on `slng-voice-core`, as salon-graph does) and its own `bot.py`.
-1. The use case writes a call type (`CallContext` subclass) and its state.
-2. It writes one `Operation` per business action: what the backend does, and
-   what the caller hears when it lands.
-3. It gives `Conversation` its acts: which questions are read back and what a
-   yes runs, where the options on the table come from, what a pick and a
-   take-back do, the goodbye.
-4. `Conversation` builds one narrow reading per act. On each turn it runs the
-   readings that apply, side by side, and tries the rules in core's order:
-   answers, then take-backs, then picks, then goodbye.
-5. A rule that decides runs an operation, or a read-back, with no model
-   request. `Operation` checks the caller agreed to that exact question
-   before anything is written, and records a `write` span for the ledger.
-6. `AgentBuilder` builds each step's agent, with the shared `Desk` tools, for
-   whatever no rule decides.
+   (depending on `slng-voice-core`) and its own `bot.py`.
+1. It writes one plain Pydantic model for its state: every field with a
+   default, because a call starts empty.
+2. It writes one typed function per business action: `def book(services, args: Booking) -> Written`.
+   The function's own signature is the schema.
+3. It writes `agent.yaml`: the state model (`state:`), each operation
+   (`operations:`, connecting a function to state fields by name, its
+   `readback:`, `succeeds:`, `assign:` and `say:`), and each step — most
+   often a `ConversationStep` (`kind: conversation`): its prompt, the fields
+   it may record, the operations it may carry out, the steps it may hand the
+   caller to.
+4. It writes one prompt per conversational step: instructions for that one
+   piece of the conversation, nothing more.
+5. `core.load(...).compile(model=...)` builds the whole thing: `FlowSpec`
+   checks every reference, `StepFlow` turns each step into a `Node`, `Flow`
+   builds the graph that walks them.
 
-This is the clinic's whole conversation:
+Section 5 above walks the salon's real `booking` step and its
+`book_appointment` operation end to end. This is the smallest complete
+example, the "controlled" clinic
+([core/tests/clinic_flow/agent.yaml](core/tests/clinic_flow/agent.yaml),
+[clinic.py](core/tests/clinic_flow/clinic.py)): the plain form-flow steps
+(`collect`, `confirm`, `action`, `end`) instead of one open-ended
+conversational step, for a business better described as a fixed sequence.
 
-```python
-Conversation[ClinicCall](
-    context='A patient is on the phone with the front desk of Riverside Clinic.',
-    model=model,
-    read_back_context='The front desk read something back and is waiting for a yes.',
-    read_backs=(
-        ReadBack(about='booking', action='book', run=lambda call, q: BOOK.run(call, Slot(slot=q.value))),
-        ReadBack(about='cancel', action='cancel', run=lambda call, q: CANCEL.run(call, Slot(slot=q.value))),
-        ReadBack(
-            about='patient',
-            action='identify',
-            run=lambda call, q: IDENTIFY.run(call, Patient(patient=q.value)),
-        ),
-    ),
-    offers=(
-        Offer(
-            name='chosen_time',
-            about='offer',
-            options=ClinicCall.table,
-            input_type=ChoiceInput,
-            context='The patient was offered appointment times.',
-            on_pick=_read_back_time,
-        ),
-    ),
-    values=(
-        HeardValue(
-            about='patient',
-            action='ask_patient',
-            parse=_patient_number,
-            read_back=_read_back_patient,
-            when=lambda call: not call.state.patient,
-        ),
-    ),
-    take_backs=(
-        TakeBack(
-            name='undo_booking',
-            kind='undo',
-            on_withdraw=_offer_undo,
-            context='Earlier in this call the clinic booked an appointment for the patient.',
-        ),
-    ),
-    closing=Closing(goodbye=lambda call: DESK.end_conversation(call, 'Goodbye.')),
-)
+```yaml
+operations:
+  book:
+    function: clinic.py:book
+    args: {patient: patient, slot: slot}
+    readback: clinic.py:booking_words
+    reconcile: clinic.py:find_booking
+    succeeds: {status: booked}
+    assign: {reference: reference}
+    say: 'Booked for {when}, reference {reference}.'
+steps:
+  - {id: patient, kind: collect, agent: receptionist, prompt: prompts/patient.md, question: 'What is your patient number?', fields: [patient]}
+  - {id: slot, kind: collect, agent: receptionist, prompt: prompts/slot.md, question: 'I have {options}. Which works for you?', fields: [slot], choices: {slot: clinic.py:free_times}}
+  - {id: confirm, kind: confirm, operation: book, then: book, on_reject: slot, on_revise: slot}
+  - {id: book, kind: action, operation: book, then: done, on_error: failed, on_unknown: unsure}
+  - {id: done, kind: end, outcome: completed, say: 'Anything else?', take_back: undo}
 ```
 
-### What each class takes
-
-| Class | Where | The information a use case gives it |
-|---|---|---|
-| `Conversation` | `core/src/core/conversation.py` | who is talking (one sentence), the model and settings, its acts |
-| `ReadBack` | `core/src/core/conversation.py` | the question it answers, the action a yes runs, when a yes counts |
-| `FixedChoice` | `core/src/core/conversation.py` | the question, its options, the action for each option |
-| `Offer` | `core/src/core/conversation.py` | where the options on the table come from, what a pick does |
-| `HeardValue` | `core/src/core/conversation.py` | a parser from words to a value, how the value is read back |
-| `TakeBack` | `core/src/core/conversation.py` | the kind of thing held, what taking it back does |
-| `HeldApproval` | `core/src/core/conversation.py` | the read-back whose yes is kept through a detour, how it is kept |
-| `Detour` | `core/src/core/conversation.py` | the question that ends a prerequisite's check |
-| `Closing` | `core/src/core/conversation.py` | the goodbye, the readings to skip on "anything else?" |
-| `Operation` | `core/src/core/operations.py` | its arguments and receipt types, the question that authorises it (`proposal`), what the backend does (`_execute`, `_record`), or `needs_approval = False` for an action with no read-back |
-| `Desk` | `core/src/core/desk.py` | the call and hand-over types, the action names, what blocks a switch, an optional `Carry` |
-| `AgentBuilder` | `core/src/core/steps.py` | the call type, model, settings, action names, `Desk`, `advance` |
-| `Locale` | `core/src/core/locale.py` | the lines the turn engine says itself, in the call's language, holding lines included |
-| `Today` | `core/src/core/clock.py` | today's date, weekday and time in the call's timezone, and the days ahead with their labels ("Saturday next week"), read once per call and told to every step's model, as the graph build's pre-fetch does |
-| `Held` | `core/src/core/state.py` | something the caller could still take back, kept on the call by kind |
+Both patterns — one `ConversationStep` doing everything, or a `collect` /
+`confirm` / `action` sequence — compile into the same `Node` table and run on
+the same turn engine, budget and barge-in handling.
 
 ### What stays code in each use case
 
-- **What the backend does.** Each operation's `_execute` and `_record`.
-- **Where options come from.** A callable, such as the diary's free slots.
-- **Parsers.** Such as a Spanish phone number (`salon/tools/identity.py`).
-- **The words.** Read-backs, receipts and prompts are the use case's own.
+- **What the backend does.** Each operation's typed function.
+- **Where options come from.** A callable, such as the diary's free slots or
+  the clinic's `free_times`.
+- **Parsers and validators.** Such as a Spanish phone number
+  (`salon/models/shapes.py`), or the complaint-request word list
+  (`salon/models/state.py`).
+- **The words.** Read-backs (`readback:`), receipts (`say:`) and prompts are
+  the use case's own.
 
 ### How to check a new one
 
 - **Its behaviour.** Write assert scripts like
-  [core/tests/test_reuse.py](core/tests/test_reuse.py). They run the real turn engine
-  with scripted classifier answers and no network.
-- **Its prompts.** `use-cases/salon-graph/tests/golden/readings.json` and `agents.json`
-  pin every request the salon sends. They cover classifiers and step agents,
-  so any code change that alters a prompt shows as a diff.
-  `BLESS_READINGS=1 uv run --directory use-cases/salon-graph/ python -m tests.test_classifiers` pins them again.
-  Do that only for a change that is meant, and check it live.
-- **Its readings.** Each reading's name is its Langfuse dataset's name
-  (`harness-reading/<name>`). Readings with core's classes (`confirm`,
-  `take_back`, `closing`) share what was measured for the salon.
+  [use-cases/salon-graph/tests/test_walkthrough.py](use-cases/salon-graph/tests/test_walkthrough.py).
+  They run the real turn engine with a scripted model and no network.
+- **Its prompts.** `use-cases/salon-graph/tests/golden/agents.json` pins the
+  first request every step sends: its instructions, the tools and the
+  application-state block. Tool docstrings are prompt text, so any change to
+  a tool's docstring or a prompt file shows as a diff.
+  `BLESS_AGENTS=1 uv run --directory use-cases/salon-graph/ python -m tests.test_graph` pins it again.
+  Do that only for a change that is meant, and check it live afterwards
+  (`uv run --env-file ../../.env python -m evals.calls`).
+- **Its manifest.** `FlowSpec.problems()` lists everything wrong with a
+  manifest, with no model and no key: run it in a quick script while editing
+  one.
 
 ### Known limits
 
-- Recovering a write whose outcome is unknown is still the salon's code
-  (`salon/tools/writes.py`). It is tied to the diary's operation log.
-- The patterns for a claimed change nothing made (`_CLAIMED`, `_RECORDED` in
-  `salon/models/state.py`) are the salon's, and English.
-- A pick with a condition is read by the pick reading's `named` field
-  (`Offer(named=True)`). The salon turns it on; core leaves it off, because
-  gpt-5.6-luna lost pick accuracy with it. The salon keeps its English word
-  list of times as a second check, which can only refuse.
-- Classifier instructions and class descriptions are English. The fixed lines
-  follow the call's `Locale`, but a conversation in another language needs a
-  live check of the readings on its own dataset.
-- Form-like flows (`StepFlow`: collect, confirm, action) share the confirm
-  request with `ReadBack`, but not the class.
-
+- Recovering a write whose outcome is unknown is declared per operation
+  (`reconcile:` in `agent.yaml`, a typed function such as
+  `functions.py:find_booking`). Without one, an attempt with an unknown
+  outcome is never retried in that call.
+- The complaint-request word list (`_ASKING_TO_COMPLAIN` in
+  `salon/models/state.py`) is the salon's, and English: it only says a
+  sentence is nothing but "I'd like to complain," never what went wrong.
+- `Locale.claims` (`core/src/core/locale.py`) is the one place a word list
+  still guards speech: one pattern list per language, checked against model
+  text on a `guarded` step before it is said. English and Spanish exist
+  today; a new language needs its own list.
+- Structured output validates shape, not semantic accuracy: a valid class or
+  a valid tool call can still misread the caller. Run a live evaluation
+  before making an accuracy or latency claim (see "How this design is
+  checked").
+- Faro alone still runs on the legacy path — narrow readings, `Conversation`,
+  `AgentBuilder` and `Desk` — kept only until session 5. Nothing on the
+  public manifest path uses it.
+- In one of two live text runs of the new wording, the `verify` step's first
+  request answered "I'm sorry, I cannot do that right now" to an ordinary
+  request; the second run of the same case passed
+  (`docs/research/reusable-core/session-4/ledger.md`).
 
 # Layout
 
@@ -877,36 +828,47 @@ core/                     the harness, a package: slng-voice-core
     state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
     graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
     flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
-    classifiers.py        generic Pydantic input/output classification in one request
-    readings.py           narrow readings: one small classifier per act, and the fixed order they act in
-    conversation.py       the acts as classes a use case fills in (ReadBack, Offer, TakeBack, ...) and Conversation
-    desk.py               Desk: hand over, hang up, clarify, switch task, for any use case
-    locale.py             Locale: the lines the turn engine says itself; ENGLISH and SPANISH
-    decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
+    locale.py             Locale: the lines the turn engine says itself, claims patterns included; ENGLISH and SPANISH
     proposals.py          the one question a call waits on, and when it can be answered
     completion.py         when a step is done: evidence in the facts, never a flag
-    steps.py              typed steps (collect, confirm, action, conversation, end), StepFlow, AgentBuilder
-    flowspec.py           flow files as YAML (or JSON), checked before they run
+    steps.py              CollectStep, ConfirmStep, ActionStep, ConversationStep (one agent per node), End,
+                          AgentStep (legacy), StepFlow, FlowCall, ConfirmedOperation, FunctionOperation
+    flowspec.py           flow files (agent.yaml) as YAML (or JSON), checked before they run
     operations.py         Operation: one business action with its checks in a fixed order
-    interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
     policies.py           TurnBudget, the hooks, pick, schema_tool
     history.py            what each provider request is sent
-    turn.py               one caller turn as an event stream; imports no Pipecat
+    turn.py               one caller turn as an event stream, the holding line, the silence reminder; imports no Pipecat
     processor.py          the Pipecat adapter: events in, frames out
     observability.py      Langfuse over OTel
-  tests/                  core alone: base classes, history, and a clinic built on core (clinic.py)
+    classifiers.py        legacy, Faro only until session 5: generic Pydantic input/output classification
+    readings.py           legacy, Faro only until session 5: narrow readings, one small classifier per act
+    conversation.py       legacy, Faro only until session 5: the acts as classes (ReadBack, Offer, ...), Conversation
+    desk.py               legacy, Faro only until session 5: Desk, and AgentBuilder for a hand-built AgentStep
+    decisions.py          legacy, Faro only until session 5: typed meanings of a reply (Accept, SwitchTask, ...)
+    interpreters.py       legacy, Faro only until session 5: Interpreter, once per turn, cached, budgeted
+  tests/                  core alone: the authoring contract on three clinic manifests, session guarantees,
+                          the node-agent contract (test_nodes.py: no reader on the public path), clinic.py
+                          (the legacy classes, for Faro-style use cases)
 use-cases/
-  salon-graph/            the salon on core: bot.py, salon/, evals/ (classifier evals), tests/
+  salon-graph/            the salon on core: bot.py, salon/agent.yaml, salon/functions.py, salon/app.py, evals/, tests/
   salon-prompt/           the same salon as one prompt on Pipecat's Gemini service, no core
   salon-pipecat-flows/    the same salon on declarative Pipecat flows, the guarantees as app code, no core
-  faro-language-learning/ Faro: a bilingual learning companion on core, with a SQLite store
-  concierge-tools/        coval_sim (Coval calls to any bot.py) and ledger.py (cost of calls from traces)
+  faro-language-learning/ Faro: a bilingual learning companion on core's legacy path, with a SQLite store
+  concierge-tools/        coval_sim (Coval calls to any bot.py), ledger.py and load_report.py (calls judged from traces)
   faro-tools/             bench.py: Faro's live benchmark
 ```
 
 `core` knows nothing about any use case, and nothing in `core` but the
 processor knows about Pipecat. salon-graph's `tests/test_core.py` reads the
-source and checks both.
+source and checks both. `core/tests/test_nodes.py` checks that the public
+path (`import core`, compiling a manifest) never imports the legacy modules
+marked above.
+
+---
+
+# Evidence
+
+<!-- EVIDENCE: filled in from docs/research/reusable-core/session-4.md after the stress test -->
 
 ---
 

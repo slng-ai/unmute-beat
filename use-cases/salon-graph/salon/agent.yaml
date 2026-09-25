@@ -96,6 +96,7 @@ steps:
     operations: [lookup_customer]
     opens_with: lookup_customer
     reads_back: {lookup_customer: [customer_phone]}
+    asks: {customer_phone: "Which phone number should I use? Please say it with the country code."}
     exits:
       - {to: concierge, purpose: 'the caller will not confirm a number, or asks about something else entirely'}
 

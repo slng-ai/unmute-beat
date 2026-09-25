@@ -242,3 +242,21 @@ Offline after the repairs: ruff and ty clean; core 11/11, salon-graph 11/11, con
 ### Gate 1 rerun, logged before launch
 
 You added 20 calls: session cap now **140**. Revision `11dd3eb`, label `session-4-gate1-r2`, same shape and pass criteria as gate 1. Gate 2 runs only if this passes.
+
+### Gate 1 rerun result: failed again, on a new fault (run `e38JbJ9raccRmr4DBd4zwh`, revision 11dd3eb)
+
+Used so far: **100** of 140 plus the native calls landed (the native queue is still running). Report: [`load/gate1-r2/report.md`](load/gate1-r2/report.md).
+
+| Criterion | Result | |
+|---|---|---|
+| 20 of 20 exactly one booking | 19 of 20 | **not met** |
+| 0 writes without a matching earlier question | 0 of 38 | met |
+| 0 model text beside an operation | 0 | met |
+| 0 caller turns with more than one holding line | 0 | met |
+| Turn latency p90 at most 2.7 s | 2.85 s (p50 1.57 s; model request p50 0.83 s) | **not met** |
+
+Both earlier faults are gone: no false claim, no reminder loop (20 s). The new fault, `cBrx4NhR`: with no caller ID, the interposed verify step's model opened with "I'll connect you with someone to help book your haircut for Friday morning." The caller said "alright thank you", verify handed back to the concierge ("the caller acknowledged the transfer"), and the concierge said goodbye. Nothing booked. The text run's "I'm sorry, I cannot do that right now" came from the same moment: verify's first request after being interposed.
+
+Repair (revision below): `asks:` on a conversation step: on arrival by a hand-over, code asks for the first missing field in fixed words, no model request. The salon's verify step asks "Which phone number should I use? Please say it with the country code." (`tests.test_business:a_missing_number_is_asked_for_by_code`, failed first). It also saves one model request on every call without a caller ID.
+
+Offline: ruff and ty clean; core 11/11, salon-graph 11/11, concierge-tools 5/5, Faro 1/1, salon-pipecat-flows 1/1; N1-N13 harness rows all pass. README and CLAUDE.md rewritten for the node-agent architecture.

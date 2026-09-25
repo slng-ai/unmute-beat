@@ -76,6 +76,34 @@ async def a_booking_before_identity_verifies_first():
     assert call.state.agent == 'booking' and booked(diary) == []
 
 
+async def a_missing_number_is_asked_for_by_code():
+    """Gate 1 rerun, cBrx4NhR, and text run 627a44fb: with no caller ID, verify's model opened the detour.
+
+    It said "I'll connect you with someone to help book your haircut" (and,
+    once, "I'm sorry, I cannot do that right now"); the caller said thanks,
+    was handed back and hung up with nothing booked. What verify says first
+    with no number is known, so code says it (`asks:`), with no request.
+    """
+    script, flow, call, _ = opened(phone='')
+    said = await turn(
+        flow,
+        call,
+        script,
+        'A haircut Friday at two, please.',
+        ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': '14:00'}),
+        ('call', 'hand_over', {'to': 'booking', 'because': 'a haircut'}),
+        ('say', "I'll connect you with someone to help book your haircut."),
+    )
+    assert (
+        call.state.agent == 'verify'
+        and said[-1] == 'Which phone number should I use? Please say it with the country code.'
+    ), said
+    assert script.steps == ['concierge', 'concierge'], (
+        'verify asked a model to ask for the number',
+        script.steps,
+    )
+
+
 async def a_pick_is_read_back_and_only_a_heard_yes_books():
     """B, C, I: the pick asks the exact read-back; an unheard one earns nothing; a heard yes books once."""
     script, flow, call, diary = await at_booking()
@@ -538,6 +566,7 @@ async def one_action_per_reply_and_one_budget_per_turn():
 
 async def main() -> None:
     await a_booking_before_identity_verifies_first()
+    await a_missing_number_is_asked_for_by_code()
     await a_pick_is_read_back_and_only_a_heard_yes_books()
     await no_a_condition_or_a_change_writes_nothing()
     await a_move_moves_the_callers_own_booking_once()

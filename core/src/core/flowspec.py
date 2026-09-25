@@ -639,6 +639,8 @@ class ConversationSpec(StepSpec):
     """Fields among `fields` that must be the caller's own words, found in what they said (a complaint)."""
     opens_with: str = ''
     """One of `operations`, read back by code on arrival when the state already gives its arguments."""
+    asks: dict[str, str] = {}
+    """Field -> words: on arrival by a hand-over, code asks for the first of these fields still empty, no model."""
     reads_back: dict[str, list[str]] = {}
     """Operation -> fields: a reply that only records one of them gets the operation read back by code, no request.
 
@@ -668,6 +670,8 @@ class ConversationSpec(StepSpec):
             resolve.fail(self.id, f'quotes {name!r}, which is not one of its fields')
         if self.opens_with and self.opens_with not in self.operations:
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
+        for name in sorted(set(self.asks) - set(self.fields)):
+            resolve.fail(self.id, f'asks for {name!r}, which is not one of its fields')
         for name, fields in self.reads_back.items():
             if name not in self.operations:
                 resolve.fail(self.id, f'reads back {name!r}, which is not one of its operations')
@@ -706,6 +710,7 @@ class ConversationSpec(StepSpec):
             guarded=self.guarded,
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
+            asks=dict(self.asks),
             reads_back={name: tuple(fields) for name, fields in self.reads_back.items()},
             spec=resolve.persona(self.id, self.agent),
         )

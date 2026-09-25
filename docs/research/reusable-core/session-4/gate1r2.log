@@ -1,0 +1,23 @@
+agency       salon (use-cases/salon-graph)
+agent        JxGgSPA55DcFcDcvbKAUQM voice-harness-salon-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   20
+mutations    none
+simulations  20 = 1 case(s) x 20 iteration(s) x 1
+call limit   300s each, enforced by bot.py (MAX_CALL_SECONDS)
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  10 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        session-4-gate1-r2
+launched run e38JbJ9raccRmr4DBd4zwh (session-4-gate1-r2 salon kQ8b6nMZ 454a1d6e)
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 2.4 2.1 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 2.6 2.2 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 2.7 2.3 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 2.3 2.2 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 2.0 2.1 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 1.9 2.1 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 1.9 2.1 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 1.7 2.0 2.0
+run e38JbJ9raccRmr4DBd4zwh IN PROGRESS, load average 2.0 2.1 2.0
+ok    salon  test set kQ8b6nMZ  run e38JbJ9raccRmr4DBd4zwh

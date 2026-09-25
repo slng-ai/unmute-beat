@@ -1018,6 +1018,13 @@ class ConversationStep(Step):
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
     opens_with: Operation | None = None
     """An operation read back on arrival, by code, when its arguments are already known (a carrier's number)."""
+    asks: Mapping[str, str] = field(default_factory=dict)
+    """Field -> words: on arrival by a hand-over, code asks for the first of these fields still empty, no model.
+
+    What a step says first when it lacks a field is known; a model asked to
+    open with it said "I'll connect you with someone" instead (Coval gate 1
+    rerun, cBrx4NhR). Tried after `opens_with`.
+    """
     reads_back: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     """Operation -> fields: a reply that only records one of these fields gets that operation read back by code.
 
@@ -1035,7 +1042,24 @@ class ConversationStep(Step):
         return tuple(dict.fromkeys([*self.exits, *([self.satisfied_by] if self.satisfied_by else [])]))
 
     def opening(self) -> tuple[Opening[Any], ...]:
-        """On arrival by a hand-over, read back `opens_with` if the state already gives its arguments: no model."""
+        """On arrival by a hand-over: read back `opens_with` if the state gives its arguments, else ask (`asks`). No model."""
+        return (*self._read_back_first(), *self._ask_first())
+
+    def _ask_first(self) -> tuple[Opening[Any], ...]:
+        if not self.asks:
+            return ()
+
+        def missing(call: FlowCall[Any]) -> str:
+            return next((name for name in self.asks if not getattr(call.state.facts, name)), '')
+
+        async def ask(call: FlowCall[Any]) -> str:
+            words = self.asks[missing(call)]
+            await call.speak_now(words, origin='ask')
+            return words
+
+        return (Opening('ask', 'handoff', lambda call: bool(missing(call)), ask),)
+
+    def _read_back_first(self) -> tuple[Opening[Any], ...]:
         operation = self.opens_with
         if operation is None:
             return ()

@@ -1,0 +1,1 @@
+serving salon at accepts-relations-bin-berkeley.trycloudflare.com (stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai, calls up to 300s; bot log /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-xb8lko4h/salon-bot.log); stop with SIGTERM or Ctrl-C

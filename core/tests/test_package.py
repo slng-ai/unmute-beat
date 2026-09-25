@@ -27,7 +27,7 @@ def importing_and_checking_loads_nothing_else():
         'reads = []\n'
         'dotenv.load_dotenv = lambda *a, **k: reads.append(1)\n'
         'import core\n'
-        "assert core.load('tests/clinic_flow/flow.yaml').problems() == []\n"
+        "assert core.load('tests/clinic_flow/agent.yaml').problems() == []\n"
         'from opentelemetry import trace\n'
         "outside = ('pipecat', 'langfuse', 'google.genai', 'openai', 'opentelemetry.sdk')\n"
         'found = sorted(m for m in sys.modules if m.split(".")[0] in outside or m.startswith(outside))\n'

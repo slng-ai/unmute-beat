@@ -1,0 +1,26 @@
+# The same clinic as a front desk handing booking to a specialist: one persona, two steps, the same functions.
+version: 1
+id: clinic-handoff
+state: clinic.py:ClinicState
+identity: patient
+services: clinic.py:Backend
+agents:
+  receptionist:
+    prompt: prompts/receptionist.md
+operations:
+  book:
+    function: clinic.py:book
+    args: {patient: patient, slot: slot}
+    readback: clinic.py:booking_words
+    succeeds: {status: booked}
+    assign: {reference: reference}
+    say: 'Booked for {when}, reference {reference}.'
+steps:
+  - {id: front, kind: conversation, agent: receptionist, prompt: prompts/front.md, exits: [booking]}
+  - id: booking
+    kind: conversation
+    agent: receptionist
+    prompt: prompts/booking.md
+    fields: [patient, slot]
+    choices: {slot: clinic.py:free_times}
+    operations: [book]

@@ -69,7 +69,7 @@ async def what_the_caller_keeps_cannot_reach_the_state():
     notes.append('second')
     contact.phone = '555 0199'
     assert call.state.facts.notes == ['first'] and call.state.facts.contact.phone == '555 0100'
-    flow = core.load('tests/clinic_flow/flow.yaml').compile(model=script.model)
+    flow = core.load('tests/clinic_flow/agent.yaml').compile(model=script.model)
     given = ClinicState(notes=['given'])
     session = flow.open(given, services=Backend())
     given.notes.append('later')
@@ -79,7 +79,7 @@ async def what_the_caller_keeps_cannot_reach_the_state():
 async def two_calls_on_one_flow_share_nothing():
     """Two sessions interleaved on one compiled flow: separate proposals, readings, histories, state and receipts."""
     script = Script()
-    flow = core.load('tests/clinic_flow/flow.yaml').compile(model=script.model)
+    flow = core.load('tests/clinic_flow/agent.yaml').compile(model=script.model)
     backend = Backend()
     one, two = flow.open(ClinicState(), services=backend), flow.open(ClinicState(), services=backend)
     delivered(one, await turn(flow, one, script, 'P-1111.', patient='P-1111'))

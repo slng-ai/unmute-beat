@@ -47,22 +47,26 @@ a text field given one of those is refused with the step and field named.
 from __future__ import annotations
 
 import importlib
+import inspect
+import typing
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAliasType, get_args, get_origin, get_type_hints
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from pydantic_ai import TemplateStr
+from pydantic_ai.agent.spec import AgentSpec as NativeSpec
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
 from core.flow import Flow
 from core.graph import Exit
+from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
 from core.state import CallContext
 from core.steps import (
@@ -73,6 +77,7 @@ from core.steps import (
     ConversationStep,
     End,
     FlowCall,
+    FunctionOperation,
     NoFacts,
     Step,
     StepFlow,
@@ -184,9 +189,16 @@ class _Resolver:
         self._prompts: dict[str, str] = {}
         self.interpreter: Any = None
         self.operations: dict[str, Operation] = {}
+        self.explicit_model = False
+        """`compile(model=...)` was given: every persona's own model is set aside for it."""
+        self.assigned: dict[str, set[str]] = {}
+        """Declared operation to the state fields its receipt sets, checked against what the model collects."""
 
     def fail(self, where: str, problem: str) -> None:
-        self.problems.append(f'{where}: {problem}' if where else problem)
+        """Keep a problem once: one missing file named by three references is one thing to fix."""
+        said = f'{where}: {problem}' if where else problem
+        if said not in self.problems:
+            self.problems.append(said)
 
     def _once(self, kind: str, key: str, where: str, find: Callable[[], Any]) -> Any:
         if (kind, key) not in self._cache:
@@ -231,15 +243,25 @@ class _Resolver:
         if name not in self.state_type().model_fields:
             self.fail(step, f'names {name!r}, which the state {self.state_type().__name__} does not have')
 
-    def prompt(self, step: str, ref: str) -> TemplateStr | None:
-        """The step's prompt: its file, the flow's includes and voice, compiled against the call now."""
-        owner = self._prompts.setdefault(ref, step)
-        if owner != step:
-            self.fail(step, f'prompt {ref!r} is already the prompt of {owner}; each step has its own')
+    def prompt(self, step: str, ref: str, agent: str = '') -> TemplateStr | None:
+        """The step's prompt: its agent's shared instructions, its own file, the flow's includes and voice, compiled now.
+
+        A persona's prompt may serve many steps; a step's own prompt belongs to that step alone.
+        """
+        if agent and agent not in self.spec.agents:
+            return None
+        if ref:
+            owner = self._prompts.setdefault(ref, step)
+            if owner != step:
+                self.fail(step, f'prompt {ref!r} is already the prompt of {owner}; each step has its own')
+                return None
+        if not ref and not agent:
+            self.fail(step, 'needs a prompt or an agent')
             return None
 
         def find() -> TemplateStr:
-            text = self.folder.text(ref)
+            parts = [self.folder.text(self.spec.agents[agent].prompt)] if agent else []
+            text = '\n\n'.join([*parts, *([self.folder.text(ref)] if ref else [])])
             for name, include in self.spec.includes.items():
                 text = text.replace(f'<!--{name}-->', self.folder.text(include))
             if self.spec.voice:
@@ -251,12 +273,14 @@ class _Resolver:
             except Exception as error:
                 raise _ProblemError(f'prompt {ref!r} does not fit the call: {error}') from None
 
-        return self._once('prompt', ref, step, find)
+        return self._once('prompt', f'{agent}|{ref}', step, find)
 
     def operation_type(self, step: str, ref: str) -> tuple[Callable[[Any], Operation], Any] | None:
-        """An operation's factory and its module's `accepts`, if it has one."""
+        """An operation's factory and its module's `accepts`, if it has one. A declared name comes first."""
 
         def find() -> tuple[Callable[[Any], Operation], Any]:
+            if ref in self.spec.operations:
+                return self.declared(ref), None
             if is_path(ref):
                 module = self.folder.module(ref)
                 if not callable(getattr(module, 'OPERATION', None)):
@@ -295,6 +319,105 @@ class _Resolver:
     def module(self, step: str, ref: str) -> ModuleType | None:
         return self._once('module', ref, step, lambda: self.folder.module(ref))
 
+    def function(self, where: str, ref: str, arity: int) -> Callable[..., Any] | None:
+        """A plain function from the flow folder (`clinic.py:book`), taking exactly `arity` arguments."""
+
+        def find() -> Callable[..., Any]:
+            found = self.folder.attr(ref)
+            if not callable(found):
+                raise _ProblemError(f'{ref!r} is not a function')
+            if len(inspect.signature(found).parameters) != arity:
+                raise _ProblemError(f'{ref!r} must take {arity} argument{"s" if arity > 1 else ""}')
+            return found
+
+        return self._once('function', ref, where, find)
+
+    def declared(self, name: str) -> type[FunctionOperation]:
+        """A declared operation, as one `FunctionOperation` subclass: every problem with it is kept, none raised.
+
+        The function's signature is the schema: `(services, args: ArgsModel) -> ReceiptModel`.
+        Every argument is bound to a state field, every assignment names a
+        receipt field and a state field, and each pair must hold the same kind
+        of value. Nothing here is typed again in the YAML.
+        """
+        if (cached := self._cache.get(('declared', name))) is not None:
+            return cached
+        decl, where = self.spec.operations[name], f'operation {name}'
+        attrs: dict[str, Any] = {'name': name, 'binds': dict(decl.args), 'assign': dict(decl.assign)}
+        attrs |= {
+            'succeeds': dict(decl.succeeds),
+            'say': decl.say,
+            'needs_approval': decl.approval == 'readback',
+        }
+        function = self.function(where, decl.function, 2)
+        hints = _hints(function) if function is not None else {}
+        params = list(inspect.signature(function).parameters) if function is not None else []
+        args_type, receipt_type = (hints.get(params[1]) if params else None), hints.get('return')
+        if function is not None and not _model(args_type):
+            self.fail(where, f'{decl.function} must annotate its second parameter with a Pydantic model')
+        if function is not None and not _model(receipt_type):
+            self.fail(where, f'{decl.function} must annotate its return with the receipt, a Pydantic model')
+        state = self.state_type().model_fields
+        if _model(args_type):
+            for arg in set(args_type.model_fields) - set(decl.args):
+                self.fail(where, f'argument {arg!r} is not bound to a state field (args: {{{arg}: <field>}})')
+            for arg, field_name in decl.args.items():
+                if arg not in args_type.model_fields:
+                    self.fail(where, f'{args_type.__name__} has no argument {arg!r}')
+                elif field_name not in state:
+                    self.fail(where, f'binds {arg!r} to {field_name!r}, which the state does not have')
+                elif not _fits(state[field_name].annotation, args_type.model_fields[arg].annotation):
+                    self.fail(
+                        where, f'{field_name!r} cannot supply {arg!r}: they hold different kinds of value'
+                    )
+        if _model(receipt_type):
+            for field_name, source in decl.assign.items():
+                if source not in receipt_type.model_fields:
+                    self.fail(where, f'assigns from {source!r}, which {receipt_type.__name__} does not have')
+                elif field_name not in state:
+                    self.fail(where, f'assigns {field_name!r}, which the state does not have')
+                elif not _fits(receipt_type.model_fields[source].annotation, state[field_name].annotation):
+                    self.fail(
+                        where, f'{source!r} cannot set {field_name!r}: they hold different kinds of value'
+                    )
+            for field_name in decl.succeeds:
+                if field_name not in receipt_type.model_fields:
+                    self.fail(
+                        where, f'succeeds on {field_name!r}, which {receipt_type.__name__} does not have'
+                    )
+        self.assigned[name] = set(decl.assign)
+        if decl.approval == 'readback' and not decl.readback:
+            self.fail(where, 'needs approval, so it needs a readback function (readback: file.py:words)')
+        if decl.readback:
+            attrs['readback'] = staticmethod(self.function(where, decl.readback, 1) or (lambda args: ''))
+        if decl.reconcile:
+            attrs['reconcile'] = staticmethod(self.function(where, decl.reconcile, 2) or (lambda s, a: None))
+        attrs['function'] = staticmethod(function or (lambda s, a: None))
+        attrs['args_type'] = args_type if _model(args_type) else NoFacts
+        attrs['receipt_type'] = receipt_type if _model(receipt_type) else NoFacts
+        found = type(f'{name.title().replace("_", "")}Operation', (FunctionOperation,), attrs)
+        self._cache['declared', name] = found
+        return found
+
+    def choices(self, step: str, fields: list[str], refs: Mapping[str, str]) -> dict[str, Callable[..., Any]]:
+        found = {}
+        for name, ref in refs.items():
+            if name not in fields:
+                self.fail(step, f'offers choices for {name!r}, which the step does not ask for')
+            if (choose := self.function(step, ref, 2)) is not None:
+                found[name] = choose
+        return found
+
+    def persona(self, step: str, name: str) -> Any:
+        """A persona's native spec, its model set aside when `compile` was given one explicitly."""
+        if not name:
+            return None
+        if name not in self.spec.agents:
+            self.fail(step, f'names the agent {name!r}, which `agents:` does not declare')
+            return None
+        native = self.spec.agents[name].spec
+        return native.model_copy(update={'model': None}) if self.explicit_model else native
+
 
 class StepSpec(BaseModel, ABC):
     """One step in a flow file."""
@@ -315,19 +438,25 @@ class StepSpec(BaseModel, ABC):
 
 class CollectSpec(StepSpec):
     kind: Literal['collect']
-    prompt: str
+    prompt: str = ''
+    agent: str = ''
+    """A persona from `agents:`: its shared instructions come first, and its native spec builds this step's agent."""
     question: str
     fields: list[str]
     """Fields of the flow's state model this step asks the caller for. Their types and descriptions are the state's."""
+    choices: dict[str, str] = {}
+    """A field picked from options, and the function offering them: `{slot: clinic.py:free_times}`."""
     after: list[str] = []
     lookahead: bool = True
 
     def check(self, resolve: _Resolver) -> None:
-        resolve.prompt(self.id, self.prompt)
+        resolve.prompt(self.id, self.prompt, self.agent)
+        resolve.persona(self.id, self.agent)
         if not self.fields:
             resolve.fail(self.id, 'a collect step needs fields')
         for name in [*self.fields, *self.after]:
             resolve.state_field(self.id, name)
+        resolve.choices(self.id, self.fields, self.choices)
 
     def produces(self, resolve: _Resolver) -> set[str]:
         return set(self.fields)
@@ -340,7 +469,9 @@ class CollectSpec(StepSpec):
             question=self.question,
             after=frozenset(self.after),
             lookahead=self.lookahead,
-            prompt=resolve.prompt(self.id, self.prompt),
+            prompt=resolve.prompt(self.id, self.prompt, self.agent),
+            choices=resolve.choices(self.id, self.fields, self.choices),
+            spec=resolve.persona(self.id, self.agent),
         )
 
 
@@ -363,6 +494,8 @@ class _Operated(StepSpec):
             resolve.fail(self.id, f'code {self.code!r} must be a Python file in the flow folder')
             return
         found = resolve.operation_type(self.id, self.uses)
+        if found is not None and self.uses in resolve.spec.operations:
+            return
         args = getattr(getattr(found[0], 'args_type', None), 'model_fields', {}) if found else {}
         for name in args:
             resolve.state_field(self.id, f'{name}')
@@ -376,6 +509,12 @@ class ConfirmSpec(_Operated):
 
     def destinations(self) -> list[str]:
         return [self.then, self.on_reject, self.on_revise]
+
+    def check(self, resolve: _Resolver) -> None:
+        super().check(resolve)
+        declared = resolve.spec.operations.get(self.uses)
+        if declared is not None and declared.approval != 'readback':
+            resolve.fail(self.id, f'confirms {self.uses!r}, which is declared with no readback to confirm')
 
     def to_step(self, resolve: _Resolver) -> Step:
         return ConfirmStep(
@@ -406,10 +545,13 @@ class ActionSpec(_Operated):
     def to_step(self, resolve: _Resolver) -> Step:
         found = resolve.operation_type(self.id, self.uses)
         accepts = resolve.check(self.id, self.accepts) if self.accepts else (found[1] if found else None)
+        operation = resolve.operation(self.uses)
+        if accepts is None and isinstance(operation, FunctionOperation):
+            accepts = operation.succeeded
         return ActionStep(
             id=self.id,
             then=self.then,
-            operation=resolve.operation(self.uses),
+            operation=operation,
             accepts=accepts or (lambda _: True),
             after=frozenset(self.after),
             on_error=self.on_error,
@@ -418,22 +560,54 @@ class ActionSpec(_Operated):
 
 
 class ConversationSpec(StepSpec):
+    """A step one agent runs in its own words: answering, and, when declared, recording, offering, acting and handing over."""
+
     kind: Literal['conversation']
-    prompt: str
+    prompt: str = ''
+    agent: str = ''
     knowledge: str = ''
     """Added to the end of the prompt: a file in the flow folder, or a registry name."""
+    fields: list[str] = []
+    """State fields this step's agent may record from the caller (`collect`)."""
+    choices: dict[str, str] = {}
+    operations: list[str] = []
+    """Declared operations this step's agent may carry out: each read back, and run only on a heard yes."""
+    exits: list[str] = []
+    """Steps this one may hand the caller to (`hand_over`)."""
+
+    def destinations(self) -> list[str]:
+        return list(self.exits)
 
     def check(self, resolve: _Resolver) -> None:
-        resolve.prompt(self.id, self.prompt)
+        resolve.prompt(self.id, self.prompt, self.agent)
+        resolve.persona(self.id, self.agent)
         if self.knowledge:
             resolve.knowledge(self.id, self.knowledge)
+        for name in self.fields:
+            resolve.state_field(self.id, name)
+        resolve.choices(self.id, self.fields, self.choices)
+        for name in self.operations:
+            if name not in resolve.spec.operations:
+                resolve.fail(self.id, f'carries out {name!r}, which `operations:` does not declare')
+            elif not resolve.spec.operations[name].say:
+                resolve.fail(self.id, f'carries out {name!r}, which has no `say:` for its receipt')
+            else:
+                resolve.declared(name)
 
     def to_step(self, resolve: _Resolver) -> Step:
-        prompt = resolve.prompt(self.id, self.prompt)
+        prompt = resolve.prompt(self.id, self.prompt, self.agent)
         if self.knowledge and prompt is not None:
             knowledge = resolve.knowledge(self.id, self.knowledge) or ''
             prompt = TemplateStr(f'{prompt}\n\nKnowledge:\n{knowledge}', deps_type=resolve.call_type())
-        return ConversationStep(id=self.id, instructions=prompt)
+        return ConversationStep(
+            id=self.id,
+            instructions=prompt,
+            fields=tuple(self.fields),
+            choices=resolve.choices(self.id, self.fields, self.choices),
+            operations=tuple(resolve.operation(name) for name in self.operations),
+            exits=tuple(self.exits),
+            spec=resolve.persona(self.id, self.agent),
+        )
 
 
 class ExitSpec(BaseModel):
@@ -503,9 +677,14 @@ class EndSpec(StepSpec):
     kind: Literal['end']
     outcome: Literal['completed', 'cancelled', 'failed', 'pending']
     say: str
+    take_back: str = ''
+    """Where a caller who takes the result back goes: a confirm step for the undo operation."""
+
+    def destinations(self) -> list[str]:
+        return [self.take_back] if self.take_back else []
 
     def to_step(self, resolve: _Resolver) -> Step:
-        return End(id=self.id, outcome=self.outcome, say=self.say)
+        return End(id=self.id, outcome=self.outcome, say=self.say, take_back=self.take_back)
 
 
 type AnyStep = Annotated[
@@ -514,12 +693,63 @@ type AnyStep = Annotated[
 ]
 
 
+class OperationSpec(BaseModel):
+    """One ordinary business action: a typed function, where its arguments come from, and what its receipt proves.
+
+    The function's signature is the schema (`def book(clinic: Backend, a: Appointment) -> Booked`);
+    this only connects it to the state and the caller.
+    """
+
+    model_config = SPEC
+    function: str
+    """`file.py:name`, taking the call's services and the argument model, returning the receipt model."""
+    args: dict[str, str] = {}
+    """Each argument and the state field it is taken from. Every argument is bound; none is left to a model."""
+    assign: dict[str, str] = {}
+    """State fields set from the receipt, once it validates and succeeds: `{reference: reference}`."""
+    succeeds: dict[str, str | int | bool] = {}
+    """Receipt fields and the values meaning it worked: `{status: booked}`. Anything else is not success."""
+    approval: Literal['readback', 'none'] = 'readback'
+    """`readback`: only after a heard read-back of these exact arguments and a yes. `none`: a read or a lookup."""
+    readback: str = ''
+    """`file.py:words`, taking the arguments, returning the sentence the caller agrees to."""
+    reconcile: str = ''
+    """`file.py:find`, `(services, args) -> receipt | None`: what happened to an attempt with an unknown outcome."""
+    say: str = ''
+    """The receipt's speech, formatted from its fields: `Booked, reference {reference}.`"""
+
+
+class PersonaSpec(BaseModel):
+    """A reusable agent: shared instructions, and the SDK's own agent spec for its model and settings."""
+
+    model_config = SPEC
+    prompt: str
+    spec: NativeSpec = NativeSpec()
+    """Pydantic AI's native `AgentSpec` (model, model_settings, retries...), never retyped here. Its instructions are `prompt`."""
+
+
+LOCALES: dict[str, Locale] = {'english': ENGLISH, 'spanish': SPANISH}
+
+
 class FlowSpec(BaseModel):
-    """A whole flow file."""
+    """A whole flow file: the application's manifest, `agent.yaml`."""
 
     model_config = SPEC
     version: Literal[1]
+    """The manifest format's version."""
     id: str
+    app_version: str = ''
+    """The application's own version, reported by the compiled flow."""
+    entry: str = ''
+    """The step a call starts on. Empty: the first step."""
+    services: str = ''
+    """`file.py:factory`, making one call's services when `open` is given none."""
+    model: str = ''
+    """The default model, like `google-gla:gemini-3.5-flash-lite`. A persona's own model wins; `compile(model=...)` wins over both."""
+    locale: Literal['', 'english', 'spanish'] = ''
+    """The engine's own fixed lines, in this language. Speech settings belong to the voice adapter."""
+    agents: dict[str, PersonaSpec] = {}
+    operations: dict[str, OperationSpec] = {}
     greeting: str = ''
     """The first thing a caller hears."""
     state: str = ''
@@ -555,11 +785,29 @@ class FlowSpec(BaseModel):
         for repeated in sorted({i for i in ids if ids.count(i) > 1}):
             resolve.fail('', f'step id {repeated!r} is used more than once')
         known = set(ids)
+        if self.entry and self.entry not in known:
+            resolve.fail('entry', f'{self.entry!r} is not a step')
+        if self.services:
+            resolve.function('services', self.services, 0)
+        for name, persona in self.agents.items():
+            if persona.spec.instructions is not None:
+                resolve.fail(
+                    f'agent {name}', 'its instructions are its prompt file; leave spec.instructions out'
+                )
+        for name in self.operations:
+            resolve.declared(name)
         for step in self.steps:
             for to in step.destinations():
                 if to not in known:
                     resolve.fail(step.id, f'sends the caller to {to!r}, which is not a step')
             step.check(resolve)
+        spoken = {n for s in self.steps if isinstance(s, CollectSpec | ConversationSpec) for n in s.fields}
+        for name, fields in resolve.assigned.items():
+            for field_name in sorted(fields & spoken):
+                resolve.fail(
+                    f'operation {name}',
+                    f'assigns {field_name!r}, which the caller gives; a receipt may not overwrite it',
+                )
         collected: set[str] = set()
         for step in self.steps:
             if isinstance(step, CollectSpec | ActionSpec):
@@ -620,18 +868,31 @@ class FlowSpec(BaseModel):
         if step is None:
             raise FlowSpecError([f'{step_id!r} is not a step with a prompt'])
         resolve = _Resolver(self, registry or Registry())
-        compiled = resolve.prompt(step_id, step.prompt)
+        compiled = resolve.prompt(step_id, step.prompt, getattr(step, 'agent', ''))
         if compiled is None:
             raise FlowSpecError(resolve.problems)
         return compiled
 
     def compile(
-        self, registry: Registry | None = None, *, model: Model | str, settings: ModelSettings | None = None
+        self,
+        registry: Registry | None = None,
+        *,
+        model: Model | str | None = None,
+        settings: ModelSettings | None = None,
     ) -> StepFlow:
-        """The runnable flow, or `FlowSpecError` with every problem. Compile once per published version."""
+        """The runnable flow, or `FlowSpecError` with every problem. Compile once per published version.
+
+        `model` given here is used by every step, personas included, and by the
+        readings: the explicit override a test or an evaluation passes. Without
+        it, the manifest's `model:` is the default and a persona's own wins.
+        """
         resolve = self._resolver(registry or Registry())
+        if model is None and not self.model:
+            resolve.fail('model', 'no model: set `model:` in the manifest or pass compile(model=...)')
         if resolve.problems:
             raise FlowSpecError(resolve.problems)
+        resolve.explicit_model = model is not None
+        model = model if model is not None else self.model
         resolve.interpreter = confirm_interpreter(model, settings)
         state = resolve.state_type()
         flow = StepFlow(
@@ -642,9 +903,45 @@ class FlowSpec(BaseModel):
             state_type=state,
             identity=self.identity,
             call_type=resolve.call_type() if self.call else None,
+            entry=self.entry,
+            services=resolve.function('services', self.services, 0) if self.services else None,
+            locale=LOCALES.get(self.locale),
+            version=self.app_version,
         )
         Flow.of(flow.nodes)
         return flow
+
+
+def _hints(function: Callable[..., Any]) -> dict[str, Any]:
+    try:
+        return get_type_hints(function)
+    except Exception:
+        return {}
+
+
+def _model(kind: Any) -> typing.TypeIs[type[BaseModel]]:
+    return isinstance(kind, type) and issubclass(kind, BaseModel)
+
+
+def _bare(kind: Any) -> Any:
+    """What a type holds at bottom: aliases resolved, constraints and `None` left out."""
+    while True:
+        if isinstance(kind, TypeAliasType):
+            kind = kind.__value__
+        elif get_origin(kind) is Annotated:
+            kind = get_args(kind)[0]
+        elif get_origin(kind) in (typing.Union, type(int | None)):
+            kept = [a for a in get_args(kind) if a is not type(None)]
+            if len(kept) != 1:
+                return frozenset(_bare(a) for a in kept)
+            kind = kept[0]
+        else:
+            return kind
+
+
+def _fits(source: Any, target: Any) -> bool:
+    """Whether a value of one declared type is the kind the other holds. The whole value is still validated at run time."""
+    return target is Any or _bare(source) == _bare(target)
 
 
 def load(text: str, root: str | Path | None = None) -> FlowSpec:

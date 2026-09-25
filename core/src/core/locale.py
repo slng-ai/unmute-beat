@@ -45,6 +45,8 @@ class Locale:
     Generic on purpose: it promises no work, so it is true before a lookup, a
     hand-over or a cancellation alike. More than one, so it does not repeat.
     """
+    unsettled: str
+    """Said when a business action's outcome is unknown: nothing is claimed, and nothing is tried again until it is settled."""
 
 
 ENGLISH = Locale(
@@ -53,6 +55,7 @@ ENGLISH = Locale(
     unbacked="Sorry, let me correct myself: I haven't actually made that change. Let me check where we are.",
     withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
     holding=('Let me have a look.', 'One moment.'),
+    unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
 )
 
 SPANISH = Locale(
@@ -61,4 +64,5 @@ SPANISH = Locale(
     unbacked='Perdona, me corrijo: todavía no he hecho ese cambio. Déjame ver dónde estamos.',
     withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
     holding=('Déjame mirar.', 'Un momento.'),
+    unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
 )

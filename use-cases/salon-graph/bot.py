@@ -17,6 +17,7 @@ Then open http://localhost:7860 and talk.
 from __future__ import annotations
 
 # ruff: noqa: E402
+import asyncio
 import os
 
 from dotenv import load_dotenv
@@ -66,6 +67,16 @@ FINISH_SECONDS = 8.0
 
 ponytail: a fixed bound. Take it from the turn budget's own deadline if a
 slower model or tool ever needs longer.
+"""
+MAX_CALL_SECONDS = float(os.getenv('MAX_CALL_SECONDS') or 0)
+"""End a call this long after the caller connects. 0, the default, never ends one.
+
+Coval has no per-call duration limit (its API has none, and its polling
+timeout is not one), so a simulated call is capped here, on the transport
+that places the audio. `coval_sim` sets it for every simulated call.
+
+ponytail: the call is torn down the way a hang-up is, turn finished first,
+so it may run up to `FINISH_SECONDS` longer.
 """
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
@@ -216,13 +227,26 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     async def on_client_connected(transport, client):
         """A phone websocket has no RTVI client to say it is ready, so the greeting goes out here."""
         logger.info('client connected')
+        if MAX_CALL_SECONDS:
+            deadline.append(asyncio.create_task(hang_up_after(MAX_CALL_SECONDS)))
         if isinstance(runner_args, WebSocketRunnerArguments):
             await greet()
+
+    deadline: list[asyncio.Task] = []
+
+    async def hang_up_after(seconds: float) -> None:
+        """The call ceiling (`MAX_CALL_SECONDS`): hang up as the caller would."""
+        await asyncio.sleep(seconds)
+        logger.warning(f'call ceiling of {seconds:.0f}s reached: hanging up')
+        await node.finish_turn(FINISH_SECONDS)
+        await worker.cancel()
 
     @transport.event_handler('on_client_disconnected')
     async def on_client_disconnected(transport, client):
         """Let a turn already running finish its write, for a few seconds, before the line is torn down."""
         logger.info('client disconnected')
+        for task in deadline:
+            task.cancel()
         await node.finish_turn(FINISH_SECONDS)
         await worker.cancel()
 

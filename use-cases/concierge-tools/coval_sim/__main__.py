@@ -1,25 +1,37 @@
 """`python -m coval_sim`: let Coval call a use case's `bot.py`, running on this laptop.
 
     cd use-cases/concierge-tools
-    uv run python -m coval_sim run                   # every test set attached to a voice-harness-* agent
-    uv run python -m coval_sim run Ab12Cd34          # only this test set
-    uv run python -m coval_sim run Ab12Cd34 --iterations 3 --persona "Impatient Customer"
+    uv run python -m coval_sim plan --agency salon --agent JxGgSPA55DcFcDcvbKAUQM
+        --test-set Ab12Cd34 --persona MUFJdYAHdBHU6UbRRu4ykM --max-simulations 1 --label session-1
+    uv run python -m coval_sim run  ...the same arguments...   # launches it, billable
     uv run python -m coval_sim add salon-prompt      # create the baseline's Coval agent
     uv run python -m coval_sim add graph             # the other baseline: the unmute graph build of the salon
 
-Everything about what to test lives in Coval. A test set runs against every
-agent named voice-harness-<agency>-pipecat it is attached to, with that agent's
-metrics. The agency names the use case folder that answers: `salon` is
-salon-graph, anything else is the folder of that name. So to cover a flow,
-attach a test set to its agent in Coval.
+One job per invocation: one agent, one test set, one persona. `plan` reads
+Coval and prints what `run` would launch, and how many calls that is; it
+launches nothing. `run` refuses anything `plan` refuses. Nothing is chosen for
+you: no test set means no job, not every job.
+
+A Coval agent named voice-harness-<agency>-pipecat calls the use case folder
+of that agency: `salon` is salon-graph, anything else is the folder of that
+name. The agent is named by its ID and must be the agency's, so a test set
+shared with the baseline's agent can never launch against the baseline by
+accident.
+
+Every launch is written to a local run log (`--log`) before and after it
+happens. A launch whose answer was lost is looked up by its unique name; if
+Coval has no run by that name either, the job is marked uncertain and is never
+launched again by this tool until the line is removed from the log by hand.
 """
 
 import argparse
+import json
 import os
 import sys
 import tempfile
-from collections import defaultdict
+import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,21 +43,27 @@ from coval_sim.runtime import NotReadyError, Process, Tunnel, answers_http
 
 PORT = 7860
 RUN_TIMEOUT_S = 45 * 60
+MAX_CALL_SECONDS = 180
+"""The longest a simulated call may run. Coval cannot cap a call's length, so `bot.py` hangs up at it."""
+STILL_RUNNING = 3
+"""The exit code when a run had not finished by the local timeout: neither passed nor failed, and not cancelled."""
 CALLER = '+15005550006'
 """Twilio's own magic test number, which Coval sends as the caller and the callee.
 `bot.py` never reads it: a simulated call reaches the agent with no caller ID."""
 BOT_ENV = {
     'CALLER_ID': '',
     'DIARY_PER_CALL': '1',
+    'MAX_CALL_SECONDS': str(MAX_CALL_SECONDS),
     'TWILIO_ACCOUNT_SID': 'AC' + '0' * 32,
     'TWILIO_AUTH_TOKEN': 'coval-sim',
 }
 """What the bot gets on top of `.env` for a simulated call.
 
 No caller ID, so the agent has to ask for the number. A fresh diary per call,
-so calls running side by side cannot see each other's bookings. Placeholder
-Twilio credentials, because Pipecat's Twilio serializer refuses to start
-without them; its hang-up request then fails with a logged 401, which is harmless.
+so calls running side by side cannot see each other's bookings. A ceiling on
+the call's length. Placeholder Twilio credentials, because Pipecat's Twilio
+serializer refuses to start without them; its hang-up request then fails with
+a logged 401, which is harmless.
 
 `bot.py` loads `.env` with `override=True`, so do not put any of these names in `.env`.
 """
@@ -90,12 +108,81 @@ def connection(host: str) -> dict[str, Any]:
     }
 
 
+class PlanError(ValueError):
+    """What `plan` refused, every problem at once."""
+
+    def __init__(self, problems: list[str]) -> None:
+        super().__init__('refused:\n' + '\n'.join(f'  - {p}' for p in problems))
+        self.problems = problems
+
+
 @dataclass(frozen=True)
 class Job:
-    """One run to launch: a test set against one agent."""
+    """One run to launch: one test set against one agent, with one persona.
 
+    Coval places cases x iterations x (1 + mutations) calls. This tool passes
+    no mutation, so it is cases x iterations.
+    """
+
+    agency: str
     agent: Agent
     test_set_id: str
+    case_ids: tuple[str, ...]
+    persona: Persona
+    iterations: int
+    label: str
+
+    @property
+    def simulations(self) -> int:
+        """How many calls Coval will place for this job."""
+        return len(self.case_ids) * self.iterations
+
+    @property
+    def key(self) -> str:
+        """What makes two launches the same job: the label, the agent, the test set, the persona, the iterations."""
+        return f'{self.label}|{self.agent.id}|{self.test_set_id}|{self.persona.id}|{self.iterations}'
+
+    def describe(self) -> str:
+        """The plan, as `plan` prints it."""
+        return '\n'.join([
+            f'agency       {self.agency} (use-cases/{FOLDERS.get(self.agency, self.agency)})',
+            f'agent        {self.agent.id} {self.agent.display_name}',
+            f'test set     {self.test_set_id}: {len(self.case_ids)} case(s) {", ".join(self.case_ids)}',
+            f'persona      {self.persona.id} {self.persona.name}',
+            f'metrics      {", ".join(self.agent.metric_ids) or "none"}',
+            f'iterations   {self.iterations}',
+            'mutations    none',
+            f'simulations  {self.simulations} = {len(self.case_ids)} case(s) x {self.iterations} iteration(s) x 1',
+            f'call limit   {MAX_CALL_SECONDS}s each, enforced by bot.py (MAX_CALL_SECONDS)',
+            f'label        {self.label}',
+        ])  # fmt: skip
+
+
+class RunLog:
+    """Every launch this tool attempted, one JSON line per change, newest last.
+
+    The log is the only memory between invocations: a job whose latest line
+    says it was launched, or might have been, is never launched again under
+    the same label.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def latest(self, key: str) -> dict[str, Any] | None:
+        """The newest line for this job, or None if it was never attempted."""
+        if not self.path.exists():
+            return None
+        lines = [json.loads(line) for line in self.path.read_text().splitlines() if line.strip()]
+        return next((line for line in reversed(lines) if line['key'] == key), None)
+
+    def write(self, key: str, **entry: Any) -> None:
+        """Append one line, flushed before this returns: a crash after it still leaves it."""
+        line = {'key': key, 'at': datetime.now(UTC).isoformat(), **entry}
+        with self.path.open('a') as out:
+            out.write(json.dumps(line) + '\n')
+            out.flush()
+            os.fsync(out.fileno())
 
 
 @dataclass
@@ -107,10 +194,11 @@ class Row:
     run_id: str = '-'
     problems: list[str] = field(default_factory=list)
     log: Path | None = None
+    still_running: bool = False
 
     def render(self) -> str:
         """The row, then each problem indented under it."""
-        status = 'FAIL' if self.problems else 'ok  '
+        status = 'WAIT' if self.still_running else 'FAIL' if self.problems else 'ok  '
         lines = [f'{status}  {self.agency}  test set {self.test_set_id}  run {self.run_id}']
         lines += [f'      {problem}' for problem in self.problems]
         if self.problems and self.log:
@@ -166,98 +254,159 @@ class Repository:
 
 
 class ReleaseCheck:
-    """Plans and runs Coval simulations against the bot.
+    """Plans and runs one Coval job against the bot.
 
     Args:
         repo: The checkout holding bot.py.
         coval: The Coval client.
         workdir: Where logs go.
+        runs: The run log.
     """
 
-    def __init__(self, repo: Repository, coval: CovalClient, workdir: Path) -> None:
+    def __init__(self, repo: Repository, coval: CovalClient, workdir: Path, runs: RunLog) -> None:
         self.repo = repo
         self.coval = coval
         self.workdir = workdir
+        self.runs = runs
 
-    def plan(self, test_set_ids: list[str]) -> tuple[dict[str, list[Job]], list[Row]]:
-        """Which runs to launch, grouped by agency, from what Coval holds.
-
-        Args:
-            test_set_ids: The test sets to run. Empty means every test set
-                attached to one of our agents.
-
-        Returns:
-            The jobs per agency, and a failed row for each test set nothing runs.
-        """
-        jobs: dict[str, list[Job]] = defaultdict(list)
-        for agent in self.coval.agents():
-            if agent.agency is None:
-                continue
-            wanted = [t for t in agent.test_set_ids if not test_set_ids or t in test_set_ids]
-            jobs[agent.agency] += [Job(agent, test_set_id) for test_set_id in wanted]
-        covered = {job.test_set_id for agency_jobs in jobs.values() for job in agency_jobs}
-        missing = [
-            Row(
-                '-',
-                test_set_id,
-                problems=['no voice-harness-<agency>-pipecat agent has this test set attached'],
-            )
-            for test_set_id in test_set_ids
-            if test_set_id not in covered
-        ]
-        return {agency: j for agency, j in jobs.items() if j}, missing
-
-    def run(
-        self, plan: dict[str, list[Job]], persona: Persona, iterations: int, concurrency: int
-    ) -> list[Row]:
-        """Open one tunnel, then per agency start the bot, run its jobs and stop it."""
-        env = self.repo.env()
-        rows = []
-        with Tunnel(PORT, self.workdir) as tunnel:
-            for agency, jobs in sorted(plan.items()):
-                try:
-                    rows += self._check(agency, jobs, env, tunnel.host, persona, iterations, concurrency)
-                except (NotReadyError, RuntimeError, ValueError) as error:
-                    rows.append(Row(agency, problems=[str(error)]))
-        return rows
-
-    def _check(
+    def plan(
         self,
         agency: str,
-        jobs: list[Job],
-        env: dict[str, str],
-        host: str,
-        persona: Persona,
+        agent_id: str,
+        test_set_id: str,
+        persona: str,
+        *,
         iterations: int,
-        concurrency: int,
-    ) -> list[Row]:
-        log = self.workdir / f'{agency}-bot.log'
-        launched: list[tuple[Job, str]] = []
-        rows = []
-        with self.repo.bot(agency, env, host, log):
-            for agent in {job.agent.id: job.agent for job in jobs}.values():
-                self.coval.update_connection(agent, connection(host))
-                for job in (j for j in jobs if j.agent.id == agent.id):
+        max_simulations: int,
+        label: str,
+    ) -> Job:
+        """The one job these arguments name, checked against what Coval holds. Reads only.
+
+        Args:
+            agency: The use case the agent must call.
+            agent_id: The Coval agent's exact ID.
+            test_set_id: The one test set to run.
+            persona: The persona's ID, or a name exactly one persona has.
+            iterations: Times each case runs.
+            max_simulations: The most calls this job may place.
+            label: What this launch belongs to (a session); the same job twice under one label is refused.
+
+        Raises:
+            PlanError: Listing every reason the job is refused.
+        """
+        problems = []
+        if not (agency and agent_id and test_set_id and persona and label):
+            raise PlanError(
+                ['agency, agent, test set, persona and label are all required; nothing means all']
+            )
+        agents = self.coval.agents()
+        matches = [a for a in agents if a.id == agent_id]
+        if len(matches) != 1:
+            raise PlanError([f'no Coval agent has the ID {agent_id}'])
+        agent = matches[0]
+        if agent.agency != agency:
+            problems.append(
+                f'agent {agent_id} is {agent.display_name!r}, which calls '
+                f'{agent.agency or "no use case of this repository"}, not {agency}'
+            )
+        namesakes = [a.id for a in agents if a.display_name == agent.display_name]
+        if len(namesakes) > 1:
+            problems.append(
+                f'{len(namesakes)} agents are named {agent.display_name!r}: {", ".join(namesakes)}'
+            )
+        if test_set_id not in agent.test_set_ids:
+            problems.append(f'test set {test_set_id} is not attached to agent {agent_id}')
+        case_ids = tuple(self.coval.test_case_ids(test_set_id))
+        if not case_ids:
+            problems.append(f'test set {test_set_id} has no test cases')
+        people = [p for p in self.coval.personas() if persona in (p.id, p.name)]
+        if len(people) != 1:
+            problems.append(f'{len(people)} personas match {persona!r}; name exactly one, by ID')
+        if iterations < 1:
+            problems.append('iterations must be at least 1')
+        if problems:
+            raise PlanError(problems)
+        job = Job(agency, agent, test_set_id, case_ids, people[0], iterations, label)
+        if job.simulations > max_simulations:
+            problems.append(f'{job.simulations} simulations planned, allowance is {max_simulations}')
+        previous = self.runs.latest(job.key)
+        if previous is not None:
+            problems.append(self._duplicate(job, previous))
+        if problems:
+            raise PlanError(problems)
+        return job
+
+    def _duplicate(self, job: Job, previous: dict[str, Any]) -> str:
+        """Why a job already in the log is refused. A launch that never recorded its outcome is looked up first."""
+        if previous['status'] == 'intent':
+            run_id = self.coval.find_run(job.agent.id, previous['name'])
+            if run_id:
+                self.runs.write(job.key, name=previous['name'], status='launched', run_id=run_id)
+                previous = {**previous, 'status': 'launched', 'run_id': run_id}
+            else:
+                self.runs.write(job.key, name=previous['name'], status='uncertain')
+                previous = {**previous, 'status': 'uncertain'}
+        if previous['status'] == 'uncertain':
+            return (
+                f'an earlier launch of this job ({previous["name"]!r}) has no known outcome. Check Coval '
+                f'for it, then remove its lines from {self.runs.path} to allow another'
+            )
+        return f'this job already ran under label {job.label!r} as run {previous.get("run_id", "?")}; use a new label'
+
+    def run(self, job: Job) -> Row:
+        """Open a tunnel, start the bot, launch the job, wait for it, stop both. Every step is logged first."""
+        env = self.repo.env()
+        log = self.workdir / f'{job.agency}-bot.log'
+        name = f'{job.label} {job.agency} {job.test_set_id} {uuid.uuid4().hex[:8]}'
+        try:
+            with Tunnel(PORT, self.workdir) as tunnel, self.repo.bot(job.agency, env, tunnel.host, log):
+                self.coval.update_connection(job.agent, connection(tunnel.host))
+                self.runs.write(job.key, name=name, status='intent')
+                try:
                     run_id = self.coval.launch(
-                        agent,
-                        persona,
-                        job.test_set_id,
-                        iterations=iterations,
-                        concurrency=concurrency,
-                        label=f'release-check {agency}',
+                        job.agent, job.persona, job.test_set_id, iterations=job.iterations, name=name
                     )
-                    launched.append((job, run_id))
-            for job, run_id in launched:
-                run = self.coval.wait(run_id, timeout_s=RUN_TIMEOUT_S)
-                problems = (
-                    run.problems(
-                        self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
-                    )
-                    if run.finished
-                    else [f'run still {run.status} after {RUN_TIMEOUT_S}s']
-                )
-                rows.append(Row(agency, job.test_set_id, run_id, problems, log))
-        return rows
+                except CovalError as error:
+                    return self._uncertain(job, name, error, log)
+                self.runs.write(job.key, name=name, status='launched', run_id=run_id)
+                print(f'launched run {run_id} ({name})', flush=True)
+                return self._result(job, run_id, name, log)
+        except (NotReadyError, RuntimeError, ValueError) as error:
+            return Row(job.agency, job.test_set_id, problems=[str(error)], log=log)
+
+    def _uncertain(self, job: Job, name: str, error: CovalError, log: Path) -> Row:
+        """A launch that raised may still have started a run: look for it by name before saying anything."""
+        run_id = self.coval.find_run(job.agent.id, name)
+        if run_id:
+            self.runs.write(job.key, name=name, status='launched', run_id=run_id)
+            print(f'launch answered badly, but run {run_id} exists ({name})', flush=True)
+            return self._result(job, run_id, name, log)
+        self.runs.write(job.key, name=name, status='uncertain', error=str(error))
+        return Row(
+            job.agency,
+            job.test_set_id,
+            problems=[f'launch outcome unknown ({error}); no run named {name!r} found. Not retried'],
+            log=log,
+        )
+
+    def _result(self, job: Job, run_id: str, name: str, log: Path) -> Row:
+        """Wait for the run and judge it. A run still going at the timeout is reported, not failed and not cancelled."""
+        run = self.coval.wait(run_id, timeout_s=RUN_TIMEOUT_S)
+        if not run.finished:
+            self.runs.write(job.key, name=name, status='launched', run_id=run_id, remote=run.status)
+            return Row(
+                job.agency,
+                job.test_set_id,
+                run_id,
+                [f'run still {run.status} after {RUN_TIMEOUT_S}s: not failed, and still running at Coval'],
+                log,
+                still_running=True,
+            )
+        self.runs.write(job.key, name=name, status='finished', run_id=run_id, remote=run.status)
+        problems = run.problems(
+            self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
+        )
+        return Row(job.agency, job.test_set_id, run_id, problems, log)
 
     def add(self, agency: str) -> str:
         """Create the Coval agent for a flow, with a placeholder connection.
@@ -279,20 +428,30 @@ def _parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     commands = parser.add_subparsers(dest='command', required=True)
-    run = commands.add_parser('run', help='run test sets against the bot')
-    run.add_argument('test_set_ids', nargs='*', metavar='TEST_SET', help='Coval test set IDs; default is all')
-    run.add_argument(
-        '--persona', default='Standard Customer', help='the Coval persona that places every call'
-    )
-    run.add_argument('--iterations', type=int, default=1, help='times to run each test case')
-    run.add_argument('--concurrency', type=int, default=3, help='calls in flight per run')
+    for command, text in (
+        ('plan', 'print the one job, launch nothing'),
+        ('run', 'launch the one job, billable'),
+    ):
+        job = commands.add_parser(command, help=text)
+        job.add_argument(
+            '--agency', required=True, help='the use case the agent calls: salon for salon-graph'
+        )
+        job.add_argument('--agent', required=True, help="the Coval agent's exact ID")
+        job.add_argument('--test-set', required=True, help='the one Coval test set to run')
+        job.add_argument('--persona', required=True, help='a persona ID, or a name exactly one persona has')
+        job.add_argument('--iterations', type=int, default=1, help='times to run each test case')
+        job.add_argument(
+            '--max-simulations', type=int, required=True, help='the most calls this job may place'
+        )
+        job.add_argument('--label', required=True, help='what this launch belongs to, such as session-1')
+        job.add_argument('--log', type=Path, default=Path('runs.jsonl'), help='the run log')
     add = commands.add_parser('add', help="create a flow's Coval agent")
     add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command line. Returns the exit code: 0 passed, 1 failed."""
+    """Run the command line. Returns the exit code: 0 passed, 1 failed or refused, 3 still running."""
     args = _parser().parse_args(argv)
     try:
         repo = Repository.find(Path.cwd())
@@ -303,7 +462,10 @@ def main(argv: list[str] | None = None) -> int:
     if not env.get('COVAL_API_KEY'):
         print('error: set COVAL_API_KEY in the environment or .env', file=sys.stderr)
         return 1
-    check = ReleaseCheck(repo, CovalClient(env['COVAL_API_KEY']), Path(tempfile.mkdtemp(prefix='coval-sim-')))
+    workdir = Path(tempfile.mkdtemp(prefix='coval-sim-'))
+    check = ReleaseCheck(
+        repo, CovalClient(env['COVAL_API_KEY']), workdir, RunLog(getattr(args, 'log', Path()))
+    )
     try:
         if args.command == 'add':
             line = check.add(args.agency)
@@ -311,17 +473,24 @@ def main(argv: list[str] | None = None) -> int:
             if line.startswith('created'):
                 print('next: attach a test set and metrics to this agent in Coval, then run it')
             return 0
-        plan, rows = check.plan(args.test_set_ids)
-        if not plan and not rows:
-            print('error: no voice-harness-<agency>-pipecat agent has a test set attached', file=sys.stderr)
-            return 1
-        rows += check.run(plan, check.coval.persona(args.persona), args.iterations, args.concurrency)
+        job = check.plan(
+            args.agency,
+            args.agent,
+            args.test_set,
+            args.persona,
+            iterations=args.iterations,
+            max_simulations=args.max_simulations,
+            label=args.label,
+        )
+        print(job.describe(), flush=True)
+        if args.command == 'plan':
+            return 0
+        row = check.run(job)
     except (CovalError, ValueError, RuntimeError) as error:
         print(f'error: {error}', file=sys.stderr)
         return 1
-    for row in rows:
-        print(row.render())
-    return 1 if any(row.problems for row in rows) else 0
+    print(row.render())
+    return STILL_RUNNING if row.still_running else 1 if row.problems else 0
 
 
 if __name__ == '__main__':

@@ -1,0 +1,835 @@
+{
+  "case": "T4.v1",
+  "session": "text-T4.v1-477284b5",
+  "turns": [
+    {
+      "turn": 0,
+      "caller": "",
+      "said": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+      "delivered": [
+        {
+          "id": "499b1758cf37:0:1",
+          "origin": "entry",
+          "text": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "caller": "Hi, I'd like to book a haircut on Friday morning, please.",
+      "said": "Which phone number should I use? Please say it with the country code.",
+      "delivered": [
+        {
+          "id": "499b1758cf37:1:2",
+          "origin": "guidance",
+          "text": "Which phone number should I use? Please say it with the country code.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 1861,
+        "output": 43
+      },
+      "seconds": {
+        "wall": 0.902,
+        "model": 0.873,
+        "backend": 0.0,
+        "core": 0.029
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 2,
+      "caller": "My number is plus three four, six zero zero, one one one, two two two.",
+      "said": "Let me read that back to you: +34 600 111 222. Have I got that right?",
+      "delivered": [
+        {
+          "id": "499b1758cf37:2:3",
+          "origin": "ask",
+          "text": "Let me read that back to you: +34 600 111 222. Have I got that right?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 1235,
+        "output": 27
+      },
+      "seconds": {
+        "wall": 0.675,
+        "model": 0.655,
+        "backend": 0.0,
+        "core": 0.02
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 3,
+      "caller": "Yes, that's my number.",
+      "said": "Thanks, I have you. For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?",
+      "delivered": [
+        {
+          "id": "499b1758cf37:3:4",
+          "origin": "entry",
+          "text": "Thanks, I have you.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        },
+        {
+          "id": "499b1758cf37:3:5",
+          "origin": "ask",
+          "text": "For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "classifier",
+          "labels": "{\"confirmation\":\"accept\"}",
+          "outcome": "action",
+          "seconds": 0.5426282500266097
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"request_change\":\"kept\"}",
+          "outcome": "",
+          "seconds": 0.6903872499824502
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"conversation\":\"continue\"}",
+          "outcome": "",
+          "seconds": 1.210494540981017
+        },
+        {
+          "kind": "tool",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 5,
+      "tokens": {
+        "input": 1108,
+        "output": 35
+      },
+      "seconds": {
+        "wall": 1.219,
+        "model": 1.211,
+        "backend": 0.0,
+        "core": 0.008
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 4,
+      "caller": "The first one, please.",
+      "said": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+      "delivered": [
+        {
+          "id": "499b1758cf37:4:6",
+          "origin": "ask",
+          "text": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "classifier",
+          "labels": "{\"choice\":\"2026-10-02T0900|haircut\",\"named\":\"\"}",
+          "outcome": "action",
+          "seconds": 0.6869377919938415
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"conversation\":\"continue\"}",
+          "outcome": "",
+          "seconds": 0.7489432499860413
+        },
+        {
+          "kind": "",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 3,
+      "tokens": {
+        "input": 841,
+        "output": 45
+      },
+      "seconds": {
+        "wall": 0.756,
+        "model": 0.751,
+        "backend": 0.0,
+        "core": 0.005
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 5,
+      "caller": "Yes, please.",
+      "said": "One moment. I'm so sorry, but I had a technical glitch while trying to save that appointment. Please don't try to book again right now\u2014I'll make sure someone checks on this and confirms it for you shortly.",
+      "delivered": [
+        {
+          "id": "499b1758cf37:5:7",
+          "origin": "tool_filler",
+          "text": "One moment.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        },
+        {
+          "id": "499b1758cf37:5:8",
+          "origin": "model",
+          "text": "I'm so sorry, but I had a technical glitch while trying to save that appointment. Please don't try to book again right now\u2014I'll make sure someone checks on this and confirms it for you shortly.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "classifier",
+          "labels": "{\"confirmation\":\"accept\"}",
+          "outcome": "refused",
+          "seconds": 0.6749779590172693
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"conversation\":\"continue\"}",
+          "outcome": "",
+          "seconds": 0.8105232500238344
+        },
+        {
+          "kind": "",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        },
+        {
+          "kind": "tool",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"choice\":\"\"}",
+          "outcome": "none",
+          "seconds": 0.6890242919907905
+        },
+        {
+          "kind": "classifier",
+          "labels": "{\"choice\":\"\",\"named\":\"\"}",
+          "outcome": "",
+          "seconds": 0.8499777499819174
+        },
+        {
+          "kind": "text",
+          "labels": "",
+          "outcome": "",
+          "seconds": null
+        }
+      ],
+      "requests": 7,
+      "tokens": {
+        "input": 6409,
+        "output": 125
+      },
+      "seconds": {
+        "wall": 2.923,
+        "model": 2.88,
+        "backend": 0.0,
+        "core": 0.042
+      },
+      "bookings_after": 1,
+      "appointment_known": false,
+      "agent_after": "concierge"
+    }
+  ],
+  "diary_calls": [
+    {
+      "name": "bookings_for",
+      "start": 0.9054977893829346,
+      "end": 0.9055027961730957,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 1.5810558795928955,
+      "end": 1.5810627937316895,
+      "returned": true
+    },
+    {
+      "name": "find_slots",
+      "start": 2.79902982711792,
+      "end": 2.7992420196533203,
+      "returned": true,
+      "offered": [
+        [
+          "2026-10-02",
+          "09:00"
+        ],
+        [
+          "2026-10-02",
+          "09:30"
+        ],
+        [
+          "2026-10-02",
+          "10:00"
+        ],
+        [
+          "2026-10-02",
+          "10:30"
+        ],
+        [
+          "2026-10-02",
+          "11:00"
+        ],
+        [
+          "2026-10-02",
+          "11:30"
+        ],
+        [
+          "2026-10-02",
+          "12:00"
+        ],
+        [
+          "2026-10-02",
+          "12:30"
+        ],
+        [
+          "2026-10-02",
+          "13:00"
+        ],
+        [
+          "2026-10-02",
+          "13:30"
+        ],
+        [
+          "2026-10-02",
+          "14:00"
+        ],
+        [
+          "2026-10-02",
+          "14:30"
+        ]
+      ]
+    },
+    {
+      "name": "bookings_for",
+      "start": 2.799031972885132,
+      "end": 2.7990338802337646,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 2.8003649711608887,
+      "end": 2.8003687858581543,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 2.8013808727264404,
+      "end": 2.8013858795166016,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 2.8014168739318848,
+      "end": 2.801417827606201,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 2.801503896713257,
+      "end": 2.8015048503875732,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.4887008666992188,
+      "end": 3.488708734512329,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.551292896270752,
+      "end": 3.5513007640838623,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.551374673843384,
+      "end": 3.5513768196105957,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.551461935043335,
+      "end": 3.551464796066284,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5516107082366943,
+      "end": 3.5516138076782227,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5516738891601562,
+      "end": 3.5516767501831055,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5517418384552,
+      "end": 3.551743984222412,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5518410205841064,
+      "end": 3.5518429279327393,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.551900863647461,
+      "end": 3.551903009414673,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5519628524780273,
+      "end": 3.55196475982666,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5520570278167725,
+      "end": 3.552058696746826,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.552111864089966,
+      "end": 3.5521128177642822,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5521719455718994,
+      "end": 3.552172899246216,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5522758960723877,
+      "end": 3.552278995513916,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5523319244384766,
+      "end": 3.5523340702056885,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5523929595947266,
+      "end": 3.5523948669433594,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.552452802658081,
+      "end": 3.5524559020996094,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5550220012664795,
+      "end": 3.55502986907959,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5551328659057617,
+      "end": 3.5551369190216064,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5552098751068115,
+      "end": 3.5552120208740234,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5552968978881836,
+      "end": 3.5552990436553955,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5566279888153076,
+      "end": 3.5566329956054688,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 4.373363971710205,
+      "end": 4.373370885848999,
+      "returned": true
+    },
+    {
+      "name": "save_booking",
+      "start": 4.3737709522247314,
+      "error": "TimeoutError: the diary did not answer",
+      "end": 4.373826026916504
+    },
+    {
+      "name": "bookings_for",
+      "start": 4.3737757205963135,
+      "end": 4.373780012130737,
+      "returned": true
+    },
+    {
+      "name": "outcome_of",
+      "start": 4.373832941055298,
+      "end": 4.373834848403931,
+      "returned": false
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.336008787155151,
+      "end": 5.336030960083008,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.3362507820129395,
+      "end": 5.336262941360474,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.336449861526489,
+      "end": 5.3364598751068115,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.3373167514801025,
+      "end": 5.337329864501953,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.025738954544067,
+      "end": 6.025753021240234,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.187650918960571,
+      "end": 6.187670946121216,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.187955856323242,
+      "end": 6.187969923019409,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.188140869140625,
+      "end": 6.188153028488159,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.188320875167847,
+      "end": 6.1883320808410645,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.188492059707642,
+      "end": 6.18850302696228,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.188729763031006,
+      "end": 6.1887407302856445,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.188889026641846,
+      "end": 6.188899755477905,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.189062833786011,
+      "end": 6.189073801040649,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.189231872558594,
+      "end": 6.189241886138916,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.189436912536621,
+      "end": 6.189446926116943,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.189589977264404,
+      "end": 6.189598798751831,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.189757823944092,
+      "end": 6.189767837524414,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.189919948577881,
+      "end": 6.189929962158203,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.190113067626953,
+      "end": 6.190122842788696,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.1902618408203125,
+      "end": 6.190270900726318,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.190425872802734,
+      "end": 6.19043493270874,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.190583944320679,
+      "end": 6.190593004226685,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.190800905227661,
+      "end": 6.1908118724823,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.190953969955444,
+      "end": 6.190962791442871,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.1911187171936035,
+      "end": 6.1911280155181885,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.191277980804443,
+      "end": 6.191287040710449,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.47971510887146,
+      "end": 6.479758024215698,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.479801893234253,
+      "end": 6.479820013046265,
+      "returned": true
+    }
+  ],
+  "writes": [
+    {
+      "action": "confirm_customer",
+      "args": {
+        "phone": "+34600111222"
+      },
+      "question": "Let me read that back to you: +34 600 111 222. Have I got that right?",
+      "about": "phone",
+      "asked_turn": 2,
+      "turn": 3,
+      "heard": "Yes, that's my number.",
+      "status": "ok",
+      "receipt": {
+        "customer_status": "existing",
+        "customer_phone": "+34600111222"
+      }
+    },
+    {
+      "action": "save_booking",
+      "args": {
+        "action": "book",
+        "slot_id": "2026-10-02T0900|haircut",
+        "booking_id": ""
+      },
+      "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+      "about": "booking",
+      "asked_turn": 4,
+      "turn": 5,
+      "heard": "Yes, please.",
+      "status": "failed"
+    }
+  ],
+  "final": {
+    "bookings": [
+      {
+        "booking_id": "BK0001",
+        "service": "haircut",
+        "date": "2026-10-02",
+        "time": "09:00",
+        "spoken": "Friday the 2nd at 9:00 AM"
+      }
+    ],
+    "state": {
+      "agent": "concierge",
+      "pending": null,
+      "customer_phone": "+34600111222",
+      "phone_confirmed": true,
+      "customer_verified": "existing",
+      "verified_phone": "+34600111222",
+      "booking_day": "2026-10-02",
+      "offered": [
+        {
+          "slot_id": "2026-10-02T0900|haircut",
+          "service": "haircut",
+          "time": "09:00:00",
+          "spoken": "Friday the 2nd at 9:00 AM"
+        },
+        {
+          "slot_id": "2026-10-02T0930|haircut",
+          "service": "haircut",
+          "time": "09:30:00",
+          "spoken": "Friday the 2nd at 9:30 AM"
+        },
+        {
+          "slot_id": "2026-10-02T1000|haircut",
+          "service": "haircut",
+          "time": "10:00:00",
+          "spoken": "Friday the 2nd at 10:00 AM"
+        }
+      ],
+      "wanted": null,
+      "appointment": null,
+      "writes": 0,
+      "unresolved": {
+        "token": "083145aee8997e75",
+        "action": "book",
+        "booking_id": "",
+        "offered": {
+          "date": "2026-10-02",
+          "time": "09:00",
+          "service": "haircut",
+          "spoken": "Friday the 2nd at 9:00 AM"
+        },
+        "wanted": ""
+      }
+    }
+  },
+  "requests": 17,
+  "tokens": {
+    "input": 11454,
+    "output": 275
+  },
+  "trace_ids": [
+    "7060dc978ffd4731f55e19f1228131e6",
+    "e230380407064e7532a20482afbb68bf",
+    "370a39f769c01430681d7179c9189240",
+    "4f7a01645b1977693715ff07df790121",
+    "923f8db0359511de9da257837b85a7c0",
+    "c96a3ee23f10585beb9689130612ba20",
+    "dc651d682070806ffd19cf39da896bd4",
+    "e7cd26487c37e83b92b84bc666d9084a",
+    "50bfb2987b81a7baa8f5f7c6805409bb",
+    "796a468a299ece5fcbbfa055a44bbf2e",
+    "df7986ced6b97874a46445134049d511",
+    "358957c8baaee3816bcfee8a072fb031",
+    "54f1ae7b125126681b0593e23b3dac38",
+    "7c976add8437265539a50a9e0d453a78",
+    "89cde32b59265523c67993a9efe2a98c",
+    "ac470502736821f9fb831979d04ccb22",
+    "ba729604bb466a5b4505d363de175f4b",
+    "f743a4ea290c385a9a456888b5276b9a",
+    "feed4d0842bdb21da84ce4e69566bdf8"
+  ],
+  "result": "off-script",
+  "problems": [
+    "turn 5: the script has no reply to \"One moment. I'm so sorry, but I had a technical glitch while trying to save that appointment. Please don't try to book again right now\u2014I'll make sure someone checks on this and confirms it for you shortly.\"",
+    "(check, not decisive) the lost outcome was never recovered from the diary"
+  ]
+}

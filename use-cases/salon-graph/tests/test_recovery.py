@@ -253,7 +253,10 @@ async def readback_is_not_discarded_by_handoff():
 
 
 async def apology_alone_needs_a_followup():
-    """The SDK repairs plain text; the adapter never sends it to TTS."""
+    """The SDK repairs plain text; the adapter never sends it to TTS.
+
+    The repair is a second request, so the caller hears the holding line first.
+    """
     for unwanted in (
         "That's not okay, I'm sorry to hear that.",
         'Yes, we can book a free redo. Shall I set that up?',
@@ -274,7 +277,8 @@ async def apology_alone_needs_a_followup():
         with agents.AGENTS['complaints'].agent.override(model=FunctionModel(stream_function=stream)):
             await Probe(call, agents.AGENTS)._turn('My last haircut was uneven.')
         assert requests == 2
-        assert [s.text for s in call.spoken] == [COMPLAINT_GUIDANCE['resolution']]
+        assert [s.text for s in call.spoken][1:] == [COMPLAINT_GUIDANCE['resolution']], call.spoken
+        assert call.spoken[0].text in call.locale.holding, call.spoken
         assert call.state.writes == 0 and call._asked is None
 
 
@@ -304,7 +308,8 @@ async def verification_speech_must_establish_the_question():
 
         with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=stream)):
             await SpeechProbe(call, agents.AGENTS)._turn('Please use the number I called from.')
-        emitted = [f.text for f in frames if isinstance(f, (LLMTextFrame, TTSSpeakFrame))]
+        held, *emitted = [f.text for f in frames if isinstance(f, (LLMTextFrame, TTSSpeakFrame))]
+        assert held in call.locale.holding, 'the repair is a second request, covered'
         assert requests == 2 and len(emitted) == 1, emitted
         assert emitted[0].startswith('Let me read that back to you:')
         assert unwanted not in emitted[0]

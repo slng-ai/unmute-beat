@@ -64,6 +64,10 @@ class TurnBudget:
     hold_after: float = 1.5
     """Seconds a turn may run with nothing said before a holding line goes out (`Locale.holding`).
 
+    The fallback. A turn that sends a second step request says the line
+    then, earlier (`core.turn.Turn._hold`); this covers the other silences,
+    a slow reading or a slow first request.
+
     The graph build covers the same wait with a line as a step starts, and
     its caller's wait ends there. Above a plain answer's p90 (about 1.0 s)
     so a quick turn never gets one.

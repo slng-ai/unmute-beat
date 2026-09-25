@@ -214,7 +214,8 @@ async def the_same_scenarios_both_ways():
 
     Compared on what a caller would notice -- the words, the step they end up
     in, how many model runs it took -- rather than on internals, because the
-    two sides legitimately differ in everything else.
+    two sides legitimately differ in everything else. The holding line is
+    left out: only a call with a runtime has a line to say it on.
     """
     for name, case in SCENARIOS.items():
         direct_call = _fresh(case['verified'])  # ty: ignore[invalid-argument-type]
@@ -226,7 +227,8 @@ async def the_same_scenarios_both_ways():
         with scripted(**case['scripts']()):
             await probe._turn(case['said'])  # ty: ignore[invalid-argument-type]
 
-        assert said == probe.heard(), f'{name}: {said!r} != {probe.heard()!r}'
+        held = ''.join(s.text for s in framed_call.all_spoken if s.origin == 'tool_filler')
+        assert said == probe.heard().removeprefix(held), f'{name}: {said!r} != {probe.heard()!r}'
         assert finished.requests == probe._finished.requests, name
         assert finished.status == probe._finished.status, name
         assert finished.handoffs == probe._finished.handoffs, name

@@ -282,6 +282,8 @@ class Turn:
         self._hops_run = 0
         self._stalls = 0
         """Step requests this turn that sent nothing in time (`TurnBudget.first_part`). The first is tried again."""
+        self._step_requests = 0
+        """Step requests sent this turn, over every run: the second one is when a holding line goes out."""
         self._channel: asyncio.Queue[tuple[object, asyncio.Future[None] | None]] = asyncio.Queue()
 
     def _stale(self) -> bool:
@@ -291,10 +293,17 @@ class Turn:
     async def _hold(self) -> None:
         """Say one holding line (`Locale.holding`), only while nothing has been said in this turn.
 
-        On a timer, not on a tool starting: a tool that speaks its own line
-        would get the holding line in front of it, and the timer already
-        covers any silence that lasts, a tool's, a hand-over's or a slow
-        request's alike.
+        Said when a second step request of the turn goes out (`_speak`), and
+        on the `TurnBudget.hold_after` timer for any other silence that lasts.
+        A second request means a whole model round trip is still ahead: a
+        tool's result going back to the model, a retry, or the step a
+        hand-over just entered: 0.7 s or more before the answer over seven
+        calls of 2026-09-25, and most of the turns that waited long.
+
+        Not when the readings finish, and not when a tool starts. The step's
+        first request goes out with the readings (`_Early`), so its answer is
+        usually ready when they finish; and a tool that speaks its own line
+        would get the holding line right in front of it.
 
         Once per turn, and never after the answer started: the check is on
         the turn's own speech ledger, which records model text before it is
@@ -763,6 +772,9 @@ class Turn:
             nonlocal requested, stall
             requested += 1
             call._response = f'{run_id}:{requested}'
+            if self._step_requests:
+                await self._hold()
+            self._step_requests += 1
             disarm()
             stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
             messages = project(call, request.messages, excluded=excluded)

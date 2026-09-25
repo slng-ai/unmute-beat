@@ -510,9 +510,10 @@ sequenceDiagram
     and
         E->>A: first request, held at its first event
     end
-    Note over E: 1.5 s with nothing said: one holding line
     R-->>E: decided nothing
     E->>A: go on
+    A-->>E: a tool call
+    E-->>C: one holding line, as the second request goes out
     A-->>C: answer
 ```
 
@@ -522,12 +523,18 @@ sequenceDiagram
 2. If a reading decides an action, the run is dropped and nothing of it is
    kept. If the readings changed the call, a fresh run starts. Otherwise the
    run goes on, its first request already answered.
-3. A turn silent for 1.5 s says one holding line from the call's locale
-   ("Let me have a look."). Never after the answer started, and never twice.
-4. A request that sends nothing in 1.5 s is cancelled and its run tried once
+3. A turn that needs a second step request says one holding line from the
+   call's locale ("Let me have a look.") as that request goes out. It is
+   the slow case: a tool's result going back to the model, a retry, or a
+   hand-over into a step whose model must answer. The answer is still a
+   whole round trip away, so the line never stacks on it.
+4. Any other turn silent for 1.5 s says the same line. Never after the
+   answer started, and never twice. A turn the readings answer, or a plain
+   answer, gets none.
+5. A request that sends nothing in 1.5 s is cancelled and its run tried once
    more (`TurnBudget.first_part`). A second one gives the fixed "going round
    in circles" line.
-5. Fewer requests in a row: after a borrowed tool (reading the diary from the
+6. Fewer requests in a row: after a borrowed tool (reading the diary from the
    front desk) the model is not offered a hand-over for the move it already
    made, and a hand-over that carries the request lets the next step act on
    arrival with no model request.

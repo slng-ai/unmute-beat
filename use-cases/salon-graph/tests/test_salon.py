@@ -346,7 +346,8 @@ async def the_diary_is_the_edge():
 
     One run, and two model requests inside it: the tool call and the answer. Before, this was two
     runs and four requests -- the front desk spending one to say "booking" and the booking step
-    spending three more.
+    spending three more. The one fixed line is the holding line, said as the second request goes
+    out.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -365,7 +366,7 @@ async def the_diary_is_the_edge():
     assert call.state.agent == 'booking', call.state.agent
     assert probe.runs() == 1, probe.runs()
     assert len(call.requests) == 2, call.requests
-    assert probe.fixed() == [], probe.fixed()
+    assert len(probe.fixed()) == 1 and probe.fixed()[0] in call.locale.holding, probe.fixed()
 
 
 async def the_diary_is_not_lent_before_verification():
@@ -890,7 +891,9 @@ async def an_empty_number_identifies_nobody():
     assert call.state.phone_confirmed is False, call.state
     assert call.state.verified_phone == '' and call.state.customer_phone == ''
     assert call.state.agent == 'verify', 'nobody was identified, so nobody moved'
-    assert probe.fixed() == ['Which phone number should I use? Please say it with the country code.']
+    held, *asked = probe.fixed()
+    assert held in call.locale.holding, 'the refused value costs a second request, covered'
+    assert asked == ['Which phone number should I use? Please say it with the country code.'], asked
     assert books.find_or_create_customer('')['customer_status'] == 'created'
 
 

@@ -349,6 +349,46 @@ async def a_slow_turn_says_one_holding_line():
     assert not any(s.origin == 'tool_filler' for s in call.spoken), call.spoken
 
 
+async def a_second_request_says_the_holding_line_as_it_goes_out():
+    """A tool's result going back to the model is a whole round trip: the holding line goes out then, not on the timer.
+
+    Not on a turn of one request, and not after a tool that spoke its own line.
+    """
+    budget = TurnBudget(hold_after=10.0)
+
+    def looked_up(speaks: bool) -> dict[str, Node]:
+        async def stream(messages, info):
+            if not any(p.part_kind == 'tool-return' for m in messages for p in m.parts):
+                yield {0: DeltaToolCall(name='look_up', json_args='{}')}
+                return
+            await asyncio.sleep(0.2)
+            yield 'It is 40 euros.'
+
+        agent = Agent[ClinicCall, str](FunctionModel(stream_function=stream), deps_type=ClinicCall)
+
+        @agent.tool
+        async def look_up(ctx) -> str:
+            if speaks:
+                await ctx.deps.say('Let me find the price.', origin='tool_filler')
+            return '40 euros'
+
+        return {'desk': Node(agent)}
+
+    call, heard, _ = opened()
+    said, _ = await take_turn(call, looked_up(speaks=False), 'How much is it?', budget)
+    assert [s.origin for s in call.spoken] == ['tool_filler', 'model'], call.spoken
+    assert heard[-1] in call.locale.holding and said == 'It is 40 euros.', (heard, said)
+
+    call, heard, _ = opened()
+    await take_turn(call, looked_up(speaks=True), 'How much is it?', budget)
+    assert heard[-1] == 'Let me find the price.', heard
+
+    call, heard, agent = opened()
+    with scripted(chosen_time=''):
+        await take_turn(call, desk(FunctionModel(stream_function=agent.stream)), 'Hm.', budget)
+    assert not any(s.origin == 'tool_filler' for s in call.spoken), call.spoken
+
+
 async def a_read_back_that_played_is_answered_on_the_next_turn():
     """Trace fbdd81b6, in the clinic: the runtime's late report cut a read-back that had played out.
 
@@ -483,6 +523,7 @@ async def main():
     await a_reading_that_changes_the_call_gets_a_fresh_run()
     await a_request_that_sends_nothing_is_tried_again()
     await a_slow_turn_says_one_holding_line()
+    await a_second_request_says_the_holding_line_as_it_goes_out()
     await the_engine_speaks_the_calls_own_language()
     no_salon_code_is_loaded()
     print('reuse ok: a second use case on the same core classes, with no salon code')

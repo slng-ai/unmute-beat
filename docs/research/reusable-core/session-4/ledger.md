@@ -111,3 +111,19 @@ Findings:
 Your notes after the baseline: too many holding lines, sentences said more than once, and endpointing may make the bot talk over the caller.
 1. Fixed run: 20 calls, same shape and speech defaults as the baseline, fixes F1-F4 only (52 of 60).
 2. Endpointing run: the 8 reserve calls (4 normal + 4 stress, fixed build), with the silence the voice detector waits before smart-turn decides raised from 0.2 s to 0.6 s (`VAD_STOP_SECS`, new env knob, default unchanged). Question: do fewer caller turns arrive in pieces, fewer requests get cancelled, and fewer turns get interrupted, and at what latency cost?
+
+### Fixed load run, logged before launch
+
+Revision `a04c0ff` (fixes F1-F4, each with a test that failed before it). Offline gates on it: ruff and ty clean in every member; `python -m tests` core 11/11, salon-graph 11/11, concierge-tools 5/5, Faro 1/1, salon-pipecat-flows 1/1; N1-N13 unchanged (`session-4/matrix-fixed/`: every harness row passes, native N9 fails, N13 not exercised); N12 harness turn max 31.8 ms (ceiling 50 ms), trace tolerance still fails as before.
+
+Same shape and speech defaults as the baseline (one bot, `--metrics 7VHk6dTjvBcuV6XYPmaeGq`, normal x10 + stress x10 at concurrency 10). Label `session-4-load-fixed`. Expanded count: 20 (32 -> 52 of 60).
+
+Pass criteria, fixed before launch:
+- 0 writes without a matching question on an earlier turn.
+- Every conclusive call ends with exactly one booking on the day the caller chose.
+- 0 replies with model text beside an operation call.
+- 0 caller turns with more than one holding line.
+- 0 `collect > book_appointment` and `collect > lookup_customer` chains.
+- Completed requests per caller turn below the baseline's 1.78.
+- Turn latency p50 and p90 no worse than the baseline's 1.15 s and 2.62 s (within 0.1 s).
+- No harness error.

@@ -77,12 +77,14 @@ that places the audio. `coval_sim` sets it for every simulated call.
 ponytail: the call is torn down the way a hang-up is, turn finished first,
 so it may run up to `FINISH_SECONDS` longer.
 """
-VAD_STOP_SECONDS = float(os.getenv('VAD_STOP_SECS') or 0.2)
-"""Silence the voice detector waits before smart-turn judges whether the caller is done. 0.2 s by default.
+VAD_STOP_SECONDS = float(os.getenv('VAD_STOP_SECS') or 0.3)
+"""Silence the voice detector waits before smart-turn judges whether the caller is done. 0.3 s by default.
 
-Raised for session 4's endpointing check: 115 of 506 requests in the
-20-call baseline were cancelled because the caller went on after a pause.
-Each extra tenth of a second is added to every turn's wait.
+Session 4 measured both sides of it: at 0.2 s, 30% of model requests were
+cancelled because the caller went on after a pause, and 0.58 runs per caller
+turn answered a piece of a turn already under way; at 0.6 s (8 calls) that
+fell to 13% and 0.29, but the median turn waited 0.55 s longer. 0.3 s is the
+chosen middle, not yet measured on its own.
 """
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')

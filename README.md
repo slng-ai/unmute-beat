@@ -510,7 +510,7 @@ sequenceDiagram
     and
         E->>A: first request, held at its first event
     end
-    Note over E: 1.2 s with nothing said: one holding line
+    Note over E: 1.5 s with nothing said: one holding line
     R-->>E: decided nothing
     E->>A: go on
     A-->>C: answer
@@ -522,7 +522,7 @@ sequenceDiagram
 2. If a reading decides an action, the run is dropped and nothing of it is
    kept. If the readings changed the call, a fresh run starts. Otherwise the
    run goes on, its first request already answered.
-3. A turn silent for 1.2 s says one holding line from the call's locale
+3. A turn silent for 1.5 s says one holding line from the call's locale
    ("Let me have a look."). Never after the answer started, and never twice.
 4. A request that sends nothing in 1.5 s is cancelled and its run tried once
    more (`TurnBudget.first_part`). A second one gives the fixed "going round

@@ -1,0 +1,21 @@
+agency       salon (use-cases/salon-graph)
+agent        JxGgSPA55DcFcDcvbKAUQM voice-harness-salon-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      DWTXGNixUZH86QUSR5Dv72, XjYZ7er6k72ho6d8ccmsPC, ma5psdGKoHbWtdv8BFXGtx, 29BlkepvvX19ebbLDB0y6Q
+iterations   5
+mutations    none
+simulations  5 = 1 case(s) x 5 iteration(s) x 1
+call limit   180s each, enforced by bot.py (MAX_CALL_SECONDS)
+concurrency  5 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        session-4-stress
+launched run StET3kNNbtDswUeoMRWfgZ (session-4-stress salon K3Xwqi7g 614582bd)
+FAIL  salon  test set K3Xwqi7g  run StET3kNNbtDswUeoMRWfgZ
+      call 347RFS8MFxwzmxkbSZGg4T: Harness: expected behaviors scored 0.83
+      call DFMG2uFkuX4gqCM3usiKVu: Harness: expected behaviors scored 0.83
+      call Mm2VjV3LzFDkPqQ8LcWYUw: Answered Question Not Asked Again answered NO
+      call 347RFS8MFxwzmxkbSZGg4T: Answered Question Not Asked Again answered NO
+      call DFMG2uFkuX4gqCM3usiKVu: Answered Question Not Asked Again answered NO
+      call 8Y5mzxVqZXYU35SGPFi8tz: Answered Question Not Asked Again answered NO
+      call d2iF4s2nkV7AnmerVszL6M: Answered Question Not Asked Again answered NO
+      log: /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-4324mfpe/salon-bot.log

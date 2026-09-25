@@ -24,7 +24,7 @@ All green except one inherited lint problem: `docs/research/reusable-core/sessio
 
 ## Coval allowance
 
-Session 4 has its own cap of 20 calls. Used so far: **7** (see the table below).
+Session 4 has its own cap of 20 calls. Used so far: **12** (see the table below).
 
 Inherited run reconciled by ID on 2026-09-25T17:45Z, no relaunch:
 
@@ -46,3 +46,24 @@ Reserve call 2, logged before launch: the same frozen complex case on the repair
 
 Gate before bulk: the complex trigger was exercised and the business outcome passed on the repaired revision (52eb245). The five-call jobs run on that frozen revision.
 | 3-7 | normal (kQ8b6nMZ, MUFJdYAHdBHU6UbRRu4ykM, 5 iterations, concurrency 5), revision 52eb245 | `jCBGSipW7FuUKu4VVtgnin` | 5: `GbULHRHPbL4taaEzHryhbt`, `BsdTQTsZ23otiZg2wHLYnu`, `jEisR2g6VdBaGZ9tjcX3b7`, `nnGmXURQxCYeELXcW46YBx`, `cyYESUGZwB8PjmxpGwmXXh` | **5 of 5 correct.** Each: lookup on a yes to the heard number read-back, exactly one booking (Friday the 2nd 09:00) on a yes to its heard read-back (Langfuse write audits). Expected behaviours 1.0 x5; Changes match agreement YES x5; Answered question not asked again YES x4, NO x1 (jEisR2g6: repeated holding lines talked over the caller's first number, who said it again). Coval latency 1.31-1.70 s (five at once: not comparable to single calls). |
+| 8-12 | stress (K3Xwqi7g, VSruLZYYyz3w7fkdUaheDR, 5 iterations, concurrency 5), revision 52eb245 | `StET3kNNbtDswUeoMRWfgZ` | 5: `d2iF4s2nkV7AnmerVszL6M`, `DFMG2uFkuX4gqCM3usiKVu`, `8Y5mzxVqZXYU35SGPFi8tz`, `347RFS8MFxwzmxkbSZGg4T`, `Mm2VjV3LzFDkPqQ8LcWYUw` | **5 of 5 correct business outcome.** Each: number in pieces, lookup on a yes to the heard read-back, the Saturday change wrote nothing, the date rule asked which Saturday, exactly one booking on a yes to its heard read-back (3 on Saturday the 3rd, 2 on tomorrow the 26th, as the caller chose). Changes match agreement YES x5. Expected behaviours 1.0, 0.83, 1.0, 0.83, 1.0: both 0.83 say "the agent confirmed booking Friday"; the write audits show no Friday write, so a judge error, provoked by the doubled read-back below. Answered question not asked again **NO x5**. Coval latency 1.29-1.73 s (five at once). |
+
+### What the stress review found (Langfuse `tts` and `chat` spans)
+
+Two causes of repeated speech, neither a consent fault:
+
+1. **Re-said after a barge-in.** The caller cut the offer, the read-back or the receipt; core said it again, as it must (a read-back counts only once delivered, a cut receipt is said again). Example: CAf30055 turns 8/9 and 14/15. Correct behaviour, but a judge hears a repeat.
+2. **The model says the application's words itself.** In 4 of 11 calls, a model response carried both text and an operation call, and the text copied the fixed read-back ("One moment.Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?") or a holding line. The operation then said the read-back again 150 ms later. The model also starts replies with "One moment." or "Let me have a look." right after core's own holding line, so the caller hears it twice. Counted with `echo.py` over the call ids: text beside an operation 12 times in 11 calls, a holding line in model text 18 times.
+
+Langfuse ledger (`concierge-tools/ledger.py`, the same tool as session 3's bulk ledgers):
+
+| | Session 3 classifier, normal x4 | Session 4 node agents, normal x5 | Session 3 classifier, stress x3 | Session 4 node agents, stress x5 |
+|---|---|---|---|---|
+| Requests per caller turn | 1.79 | 1.69 | 1.76 | 1.83 |
+| Input tokens per call | 8,887 | 32,702 | 15,177 (3 full calls) | 66,402 |
+| Input tokens per caller turn | 1,226 | 3,406 | 1,314 | 4,676 |
+| Pipeline turn latency p50 / p90 | 1.77 / 3.69 s | 1.14 / 2.62 s | 2.08 / 3.40 s | 1.24 / 2.21 s |
+| Answer time p50 (work start to first speech) | 0.81 s | 0.67 s | 0.88 s | 0.72 s |
+| Waited over 2 s before work started | 8 of 24 turns | 3 of 40 | 6 of 32 | 2 of 63 |
+
+The ledger's write audit line reads the old audit attribute names and says "no application question"; the write audits above were read from the `write` spans directly.

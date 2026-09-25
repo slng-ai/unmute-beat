@@ -264,12 +264,12 @@
       "anyOf": [
        {
         "const": "keep",
-        "description": "Keeps what is in `agreed`, or does not take it back.",
+        "description": "Keeps what is in `agreed`, or does not take it back. A \"no\" or \"no, thanks\" to a question that offers or asks about something else (other times, another service, anything else) declines that, and keeps `agreed`.",
         "type": "string"
        },
        {
         "const": "withdraw",
-        "description": "Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they no longer want it. A condition on it is not taking it back. Asking for it on another day, at another time or as another service is `change`.",
+        "description": "Takes back `agreed` itself: asks to undo or cancel it, says to leave it, or that they no longer want it. A condition on it is not taking it back. Asking for it on another day, at another time or as another service is `change`.",
         "type": "string"
        },
        {

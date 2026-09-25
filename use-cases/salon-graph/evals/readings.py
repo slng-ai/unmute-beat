@@ -126,6 +126,7 @@ FOCUSED_LABELS: dict[str, tuple[str, tuple[str, ...]]] = {
     'condition-after-booking': ('unclear', ('keep',)),
     'withdraw-later': ('withdraw', ()),
     'goodbye-keeps-booking': ('keep', ()),
+    'no-to-a-new-offer': ('keep', ()),
     'change-move': ('change', ()),
     'change-service': ('change', ()),
     'cancel-yes': ('accept', ()),
@@ -288,6 +289,39 @@ OTHER: tuple[tuple[str, str, dict[str, Any], str], ...] = (
             'agreed': "I've reset your password.",
         },
         'keep',
+    ),
+    (
+        'take-back',
+        RESTAURANT
+        + ' Earlier in this call the host booked a table for the guest, which they can still take back.',
+        {
+            'question': 'Would you like to pre-order a dessert for the table?',
+            'answer': "No thanks, we're good.",
+            'agreed': 'Your table for four tonight at 8 is booked.',
+        },
+        'keep',
+    ),
+    (
+        'take-back',
+        CLINIC
+        + ' Earlier in this call the receptionist booked an appointment, which the patient can still take back.',
+        {
+            'question': 'We also have a flu jab slot on Thursday at 10. Would you like it?',
+            'answer': "No, I'm fine, thank you.",
+            'agreed': 'Your cleaning on Tuesday at 4 PM is booked.',
+        },
+        'keep',
+    ),
+    (
+        'take-back',
+        HELPDESK
+        + ' Earlier in this call the agent reset the password, which the employee can still take back.',
+        {
+            'question': "I've reset your password. Anything else?",
+            'answer': 'No, actually, put my old password back.',
+            'agreed': "I've reset your password.",
+        },
+        'withdraw',
     ),
     (
         'still-agreed',

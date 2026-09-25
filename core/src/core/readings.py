@@ -94,8 +94,10 @@ heard and the caller to be the one asked; a model or rule that reaches zero ther
 TAKE_BACK = ClassSet(
     about='Whether the answer takes back what is in `agreed`, which has already been done.',
     classes={
-        'keep': 'Keeps what is in `agreed`, or does not take it back.',
-        'withdraw': 'Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they '
+        'keep': 'Keeps what is in `agreed`, or does not take it back. A "no" or "no, thanks" to a question '
+        'that offers or asks about something else (other times, another service, anything else) declines '
+        'that, and keeps `agreed`.',
+        'withdraw': 'Takes back `agreed` itself: asks to undo or cancel it, says to leave it, or that they '
         'no longer want it. A condition on it is not taking it back. Asking for it on another day, at another '
         'time or as another service is `change`.',
         'change': 'Wants what is in `agreed` done differently: another day, time or service. It is not undone.',
@@ -110,6 +112,14 @@ Version 2 adds `change`. With only keep, withdraw and unclear, "Sorry, can
 you actually move the appointment to Saturday instead?" was read as
 `withdraw` (the user's call of 24 September), and the caller who asked to
 move was offered a cancel.
+
+Version 3 ties `withdraw` to `agreed` itself and says a "no" to something
+else the question offers keeps it. In a replay of 2026-09-25, "No, thanks.
+I'm good." to an offer of Tuesday's times, with a Saturday booking held,
+read as `withdraw` and was answered "Shall I cancel your haircut?". On
+harness-reading/take-back (17 items), false `withdraw` went from 6 to 0 over
+3 runs on each Gemini flash-lite model, and from 1 to 0 over 8 runs on
+gpt-5.6-luna. Correct answers were equal or higher on all four models.
 """
 
 STILL_AGREED = ClassSet(

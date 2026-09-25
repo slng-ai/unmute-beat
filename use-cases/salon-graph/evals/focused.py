@@ -232,6 +232,17 @@ CASES = (
         'not withdraw',
     ),
     Case(
+        'no-to-a-new-offer',
+        LAST_CHANGE,
+        held(
+            "No, thanks. I'm good.",
+            'For Tuesday the 6th, I have 9:00 AM, 9:30 AM, and 10:00 AM. What are you looking to book?',
+            agreed="Lovely, that's your haircut booked for Saturday the 3rd at 9:00 AM.",
+        ),
+        lambda r: r != 'withdraw',
+        'not withdraw',
+    ),
+    Case(
         'cancel-yes',
         CONFIRMATION,
         ReadBackInput(

@@ -351,6 +351,17 @@ class _Resolver:
 
         return self._once('function', ref, where, find)
 
+    def folder_callable(self, where: str, ref: str) -> Callable[..., Any] | None:
+        """A function from the flow folder whose number of arguments the caller checks itself."""
+
+        def find() -> Callable[..., Any]:
+            found = self.folder.attr(ref)
+            if not callable(found):
+                raise _ProblemError(f'{ref!r} is not a function')
+            return found
+
+        return self._once('function', ref, where, find)
+
     def declared(self, name: str) -> type[FunctionOperation]:
         """A declared operation, as one `FunctionOperation` subclass: every problem with it is kept, none raised.
 
@@ -414,7 +425,12 @@ class _Resolver:
         if decl.approval == 'readback' and not decl.readback:
             self.fail(where, 'needs approval, so it needs a readback function (readback: file.py:words)')
         if decl.readback:
-            attrs['readback'] = staticmethod(self.function(where, decl.readback, 1) or (lambda args: ''))
+            found = self.folder_callable(where, decl.readback)
+            takes = _positional(found) if found is not None else 1
+            if found is not None and takes not in (1, 2):
+                self.fail(where, f'{decl.readback!r} must take (args) or (services, args)')
+            attrs['readback'] = staticmethod(found or (lambda args: ''))
+            attrs['readback_uses_services'] = takes == 2
         if decl.reconcile:
             attrs['reconcile'] = staticmethod(self.function(where, decl.reconcile, 2) or (lambda s, a: None))
         attrs['function'] = staticmethod(function or (lambda s, a: None))
@@ -619,6 +635,10 @@ class ConversationSpec(StepSpec):
     satisfied_by: str = ''
     guarded: bool = False
     """Whether model speech here is held a clause at a time and checked against what was done (`Node.guarded`)."""
+    quoted: list[str] = []
+    """Fields among `fields` that must be the caller's own words, found in what they said (a complaint)."""
+    opens_with: str = ''
+    """One of `operations`, read back by code on arrival when the state already gives its arguments."""
 
     @field_validator('exits', mode='before')
     @classmethod
@@ -639,6 +659,10 @@ class ConversationSpec(StepSpec):
                 self.id,
                 'requires and satisfied_by go together: what is needed, and the step that provides it',
             )
+        for name in sorted(set(self.quoted) - set(self.fields)):
+            resolve.fail(self.id, f'quotes {name!r}, which is not one of its fields')
+        if self.opens_with and self.opens_with not in self.operations:
+            resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         if self.knowledge:
             resolve.knowledge(self.id, self.knowledge)
         for name in self.fields:
@@ -668,6 +692,8 @@ class ConversationSpec(StepSpec):
             requires=tuple(self.requires),
             satisfied_by=self.satisfied_by,
             guarded=self.guarded,
+            quoted=tuple(self.quoted),
+            opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             spec=resolve.persona(self.id, self.agent),
         )
 
@@ -972,6 +998,14 @@ class FlowSpec(BaseModel):
         )
         Flow.of(flow.nodes)
         return flow
+
+
+def _positional(function: Callable[..., Any]) -> int:
+    """How many positional arguments a function takes, or 0 when it takes any number."""
+    parameters = inspect.signature(function).parameters.values()
+    if any(p.kind is p.VAR_POSITIONAL for p in parameters):
+        return 0
+    return sum(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in parameters)
 
 
 def _hints(function: Callable[..., Any]) -> dict[str, Any]:

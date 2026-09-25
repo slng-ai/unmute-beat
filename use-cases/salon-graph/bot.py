@@ -1,9 +1,9 @@
 """The salon as a Pydantic AI agency in the LLM node of a Pipecat pipeline.
 
-Pipecat owns the transport, VAD, turn taking, STT and TTS. The agents own the
-conversation: prompts, tools, typed state and which step is running. This file
-only wires the pipeline; the seam between the two is one frame processor,
-`PydanticAgentProcessor`.
+Pipecat owns the transport, VAD, turn taking, STT and TTS. The salon's agent
+nodes own the conversation, compiled from `salon/agent.yaml` (`salon.app`).
+This file only wires the pipeline; the seam between the two is one frame
+processor, `PydanticAgentProcessor`.
 
 Load .env before importing the services and agents: they construct clients
 at import time, and those clients must see the configured credentials. The
@@ -51,9 +51,8 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 from core.graph import model_clients
 from core.observability import setup
 from core.processor import PydanticAgentProcessor
-from salon.agents import AGENTS, GREETING
+from salon.app import FLOW, GREETING, open_call
 from salon.diary import Diary
-from salon.models.state import open_call
 
 NAME = 'salon call'
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
@@ -206,8 +205,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''
     setup(session=session_id, trace_name=NAME)
     stt, tts = speech_services()
-    call = open_call(os.getenv('CALLER_ID', ''), diary=Diary() if DIARY_PER_CALL else DIARY)
-    context, node = LLMContext(), PydanticAgentProcessor(call, AGENTS)
+    call = open_call(FLOW, os.getenv('CALLER_ID', ''), diary=Diary() if DIARY_PER_CALL else DIARY)
+    context, node = LLMContext(), PydanticAgentProcessor(call, FLOW.nodes)
     user_aggregator, assistant_aggregator = aggregators(context)
     pipeline = Pipeline(
         [transport.input(), stt, user_aggregator, node, tts, transport.output(), assistant_aggregator]
@@ -252,7 +251,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
-    async with model_clients(AGENTS, warm=True):
+    async with model_clients(FLOW.nodes, warm=True):
         await runner.run()
 
 

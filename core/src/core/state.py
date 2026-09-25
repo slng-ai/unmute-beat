@@ -931,14 +931,18 @@ class CallContext(BaseModel):
         self._told = (self.turn, words)
 
     def unheard_receipt(self) -> str:
-        """Last turn's receipt speech, if it is known not to have reached the caller: cut, or never started.
+        """The latest receipt speech, if it is known not to have reached the caller: cut, or never started.
+
+        Last turn's, or this turn's when the caller spoke before any of it
+        played: then their words continue the turn it was said in
+        (`continues_turn`), and it is still the thing they have not heard.
 
         Known means evidence, as for the missed-speech note: a copy the caller
         cut in on, or one whose audio never started on a runtime that reports
         playback. No record of the words is not evidence, and gives ''.
         """
         turn, words = self._told
-        if not words or turn != self.turn - 1:
+        if not words or turn not in (self.turn - 1, self.turn) or (turn == self.turn and not self.continuing):
             return ''
         copies = [s for s in self.all_spoken if s.turn == turn and s.generated == words]
         if not copies:
@@ -1197,6 +1201,10 @@ class CallContext(BaseModel):
     def wrote_this_turn(self) -> bool:
         """Whether this turn has already changed the business. Base: it has no business."""
         return False
+
+    def settlement(self) -> Callable[[], Awaitable[object]] | None:
+        """What settles an earlier write whose outcome is unknown, run before any model this turn. Base: none."""
+        return None
 
     def delivered(self, heard: str, excluding: frozenset[int] = frozenset()) -> bool:
         """Whether this utterance reached a model and is in the history it keeps.

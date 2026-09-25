@@ -2,10 +2,11 @@
 
 The same pipeline as `use-cases/salon-pipecat-flows/evals/line.py`, with the
 harness where the native build's LLM and filters stand: the user aggregator,
-`PydanticAgentProcessor` over the real salon `AGENTS`, a `Playout` sink and
-the assistant aggregator. The fakes are Pydantic AI `FunctionModel`s, one for
-every step's agent and one for every reading's classifier, each answering
-after the same fixed delay as the native arm's scripted Gemini.
+`PydanticAgentProcessor` over the salon's compiled flow (`salon.app.FLOW`),
+a `Playout` sink and the assistant aggregator. The fake is one Pydantic AI
+`FunctionModel` standing for every agent node, answering after the same fixed
+delay as the native arm's scripted Gemini. Session 4 removed the readings:
+no request is a classifier's, and none is counted as one.
 
 `Playout` stands for the transport. When `playback` is `full` it reports the
 audio of each answer as started and run out (`BotStartedSpeakingFrame`,
@@ -13,11 +14,10 @@ audio of each answer as started and run out (`BotStartedSpeakingFrame`,
 to TTS whose audio never played. The harness reads those signals; the native
 build does not.
 
-ponytail: the readings' classifiers are module globals, patched per line.
-Two lines open at once share whichever patch came last, and restore them
-out of order, so a patch can outlive both. The matrix runs every check in a
-process of its own; route readings per line (a context variable) if one
-process ever needs several.
+ponytail: the agents are overridden per line, on the one compiled flow two
+lines share; two lines open at once share whichever override came last. The
+matrix runs every check in a process of its own, and `two_calls` scripts both
+lines alike.
 """
 
 import asyncio
@@ -26,7 +26,6 @@ import time
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from typing import Any, Literal
-from unittest.mock import patch
 
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
@@ -45,11 +44,12 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.workers.runner import WorkerRunner
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from core import FlowCall
 from core.processor import PydanticAgentProcessor
-from salon.agents import AGENTS, GREETING
+from salon.app import FLOW, GREETING, open_call
 from salon.diary import Diary
-from salon.models.state import SalonCall, open_call
-from tests.classifier_model import ALL, answered, default_script, reading_asked
+
+AGENTS = FLOW.nodes
 
 
 @dataclass
@@ -61,13 +61,11 @@ class Reply:
 
 
 class Scripted:
-    """Every agent and every reading on one fake provider, each request after `delay` seconds."""
+    """Every agent node on one fake provider, each request after `delay` seconds."""
 
     def __init__(self, delay: float) -> None:
         self.delay = delay
         self.replies: list[Reply] = []
-        self.labels: dict[str, str] = {}
-        """Reading name to label for this turn; anything not named reads by `default_script`."""
         self.requests: list[tuple[str, float]] = []
 
     async def agent(self, messages: Any, info: AgentInfo):
@@ -76,15 +74,11 @@ class Scripted:
         reply = self.replies.pop(0) if self.replies else Reply(text='Sorry, could you say that again?')
         if reply.text or not reply.calls:
             yield reply.text
-        for index, (name, args) in enumerate(reply.calls):
-            yield {index: DeltaToolCall(name=name, json_args=json.dumps(args))}
-
-    async def reading(self, messages: Any, info: AgentInfo):
-        self.requests.append(('classifier', time.perf_counter()))
-        await asyncio.sleep(self.delay)
-        reading, data = reading_asked(messages, info)
-        label = self.labels.get(reading.name, default_script(reading.name, data))
-        return answered(reading, label)
+        if reply.calls:
+            yield {
+                index: DeltaToolCall(name=name, json_args=json.dumps(args))
+                for index, (name, args) in enumerate(reply.calls)
+            }
 
 
 class Playout(FrameProcessor):
@@ -114,7 +108,7 @@ class Line:
 
     def __init__(self, caller: str = '', delay: float = 0.05, diary: Diary | None = None) -> None:
         self.diary = diary or Diary()
-        self.call: SalonCall = open_call(caller, diary=self.diary)
+        self.call: FlowCall = open_call(FLOW, caller, self.diary)
         self.processor = PydanticAgentProcessor(self.call, AGENTS)
         self.context = LLMContext()
         self.pair = LLMContextAggregatorPair(self.context)
@@ -128,11 +122,8 @@ class Line:
 
     async def __aenter__(self) -> Line:
         agent_model = FunctionModel(stream_function=self.model.agent)
-        reading_model = FunctionModel(function=self.model.reading)
         for node in AGENTS.values():
             self._stack.enter_context(node.agent.override(model=agent_model))
-        for reading in ALL:
-            self._stack.enter_context(patch.object(reading.classifier, 'model', reading_model))
         started = asyncio.Event()
 
         @self.worker.event_handler('on_pipeline_started')
@@ -185,9 +176,9 @@ class Line:
             await asyncio.sleep(0.01)
         raise TimeoutError('the harness line never went quiet')
 
-    async def turn(self, words: str, *replies: Reply, **labels: str) -> dict[str, Any]:
-        """One caller turn: the step models' replies and the readings' labels, then everything that came out, timed."""
-        self.model.replies, self.model.labels = list(replies), labels
+    async def turn(self, words: str, *replies: Reply) -> dict[str, Any]:
+        """One caller turn: the agent nodes' replies, then everything that came out, timed."""
+        self.model.replies = list(replies)
         before_heard, before_requests = len(self.playout.heard), len(self.model.requests)
         sent = time.perf_counter()
         await self.worker.queue_frame(

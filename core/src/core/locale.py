@@ -47,6 +47,33 @@ class Locale:
     """
     unsettled: str
     """Said when a business action's outcome is unknown: nothing is claimed, and nothing is tried again until it is settled."""
+    claims: tuple[str, ...] = ()
+    """Patterns for a model telling the caller a business action is done: "I've booked", "your complaint is recorded".
+
+    On a step that can write, a clause matching one is never said: the only
+    words that report a completed action are its receipt's, said by code from
+    the validated result (`say:` in the manifest), so they cannot be about a
+    different action, different arguments or somebody else. "Nothing was
+    saved" and "you're booked for Friday" (recounting what the caller holds)
+    do not match. Case-insensitive.
+
+    ponytail: a pattern list per language, the one place a word list still
+    guards speech. It fails towards silence (the withheld line), never towards
+    a false claim; widen it when a live call shows a phrasing it misses.
+    """
+
+
+_CLAIMS_EN = (
+    r"\b(?:i|we)(?:'ve| have|'ll have| had)?\s+(?:just\s+)?(?:gone\s+ahead\s+and\s+)?"
+    r'(?:cancelled|canceled|booked|moved|rebooked|recorded|logged|filed|saved|noted|written down|registered)\b',
+    r"\bi(?:'ve| have)\s+(?:got\s+)?you\s+(?:down|booked|in)\b",
+    r"\b(?:that|it|this|your (?:complaint|booking|appointment|request))(?:'s| is| has been| was)\s+(?:now\s+)?"
+    r'(?:on record|recorded|logged|filed|saved|booked|cancelled|canceled|moved|confirmed|registered)\b',
+)
+_CLAIMS_ES = (
+    r'\b(?:te\s+|le\s+)?(?:he|hemos)\s+(?:ya\s+)?(?:reservado|cancelado|movido|cambiado|registrado|anotado|guardado|apuntado)\b',
+    r'\b(?:ya\s+)?(?:est[aá]|queda|ha quedado)\s+(?:ya\s+)?(?:reservad[oa]|cancelad[oa]|registrad[oa]|anotad[oa]|guardad[oa]|apuntad[oa]|confirmad[oa])\b',
+)
 
 
 ENGLISH = Locale(
@@ -56,6 +83,7 @@ ENGLISH = Locale(
     withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
     holding=('Let me have a look.', 'One moment.'),
     unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
+    claims=_CLAIMS_EN,
 )
 
 SPANISH = Locale(
@@ -65,4 +93,5 @@ SPANISH = Locale(
     withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
     holding=('Déjame mirar.', 'Un momento.'),
     unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
+    claims=_CLAIMS_ES,
 )

@@ -3,8 +3,9 @@
     uv run --env-file ../../.env python -m evals.calls              # T1 T2 T3 T4, billable
     uv run --env-file ../../.env python -m evals.calls T2 --out /tmp/calls
 
-Each case is one call through `core.turn.run_turn` with the salon's real
-`AGENTS`, a fresh `Diary` on a fixed clock, and no audio. The caller is a
+Each case is one call through `core.turn.run_turn` on the salon's compiled
+flow (`salon.app.FLOW`, from `salon/agent.yaml`), a fresh `Diary` on a fixed
+clock, and no audio. The caller is a
 script that reads only what was delivered to it: each rule names words to
 listen for in the agent's last reply and what to say back. A reply no rule
 matches stops the case as `off-script`: the script did not expect it, which
@@ -48,12 +49,16 @@ from typing import Any
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 
+from core import FlowCall
 from core.observability import setup
 from core.policies import TurnBudget
 from core.turn import FixedSpeech, TextDelta, TurnFinished, greet, receive, run_turn
-from salon.agents import AGENTS, GREETING
+from salon.app import FLOW, GREETING, open_call
 from salon.diary import TZ, Diary
-from salon.models.state import SalonCall, open_call
+
+AGENTS = FLOW.nodes
+WRITES = ('book_appointment', 'move_appointment')
+"""The operations that make or move a booking, by the names the manifest gives them."""
 
 CLOCK = datetime(2026, 9, 28, 8, 30, tzinfo=TZ)
 """Monday 28 September 2026, before opening: Tuesday is the 29th, Wednesday the 30th, Friday 2 October."""
@@ -219,7 +224,7 @@ def reply(rules: tuple[Rule, ...], heard: str, used: dict[int, int]) -> tuple[st
     return None
 
 
-def acknowledge(call: SalonCall) -> list[dict[str, Any]]:
+def acknowledge(call: FlowCall) -> list[dict[str, Any]]:
     """Hand this turn's new speech to the text caller, and say which segment ids that marked heard in full."""
     before = {s.id: s.playback for s in call.spoken}
     receive(call)
@@ -255,7 +260,7 @@ async def run_case(
     diary = Diary(clock=CLOCK)
     case.prepare(diary)
     watch(diary, record, start)
-    call = open_call('', diary=diary)
+    call = open_call(FLOW, '', diary)
     heard: list[str] = []
 
     async def say(text: str) -> None:
@@ -279,10 +284,7 @@ async def run_case(
                 done = event
         turn_end = time.time() - start
         said = ' '.join([*heard[before:], ''.join(parts)]).strip()
-        readings = [
-            {'kind': r.kind, 'labels': r.labels, 'outcome': r.outcome, 'seconds': r.duration}
-            for r in call.requests
-        ]
+        readings = [{'kind': r.kind, 'seconds': r.duration} for r in call.requests]
         delivered = acknowledge(call)
         ended = collector.take()
         requests = [s for s in ended if is_request(s)]
@@ -302,7 +304,7 @@ async def run_case(
             (c['start'], c['end']) for c in record.diary_calls if c['start'] >= turn_start and 'end' in c
         ]
         wall = turn_end - turn_start
-        proven = call.state.appointment is not None
+        proven = any(e.operation in WRITES for e in call.evidence)
         record.turns.append({
             'turn': number,
             'started': round(turn_start, 3),
@@ -347,7 +349,7 @@ async def run_case(
         record.problems.append(f'{max_turns} caller turns used without the call ending')
     record.final = {
         'bookings': diary.bookings_for(PHONE, TODAY),
-        'state': call.state.model_dump(mode='json'),
+        'state': call.state.facts.model_dump(mode='json') | {'agent': call.state.agent},
     }
     found = case.check(record)
     if record.result:
@@ -382,7 +384,7 @@ def one_booking(record: Record, service: str, day: str) -> list[str]:
 
 def booked_on(record: Record) -> list[dict[str, Any]]:
     """The booking writes that landed, each with the question it answered."""
-    return [w for w in record.writes if w.get('action') == 'save_booking' and w.get('status') == 'ok']
+    return [w for w in record.writes if w.get('action') in WRITES and w.get('status') == 'ok']
 
 
 def played(record: Record, words: str) -> bool:
@@ -413,7 +415,7 @@ def check_t2(record: Record) -> list[str]:
         problems.append('the script never reached "yes, but make it Wednesday": nothing was tested')
     elif conditional['bookings_after']:
         problems.append(f'turn {conditional["turn"]}: "yes, but make it Wednesday" booked something')
-    for write in (w for w in record.writes if w.get('action') == 'save_booking'):
+    for write in (w for w in record.writes if w.get('action') in WRITES):
         if '2026-09-29' in json.dumps(write):
             problems.append(f'a write for Tuesday was attempted: {write["args"]}')
     for write in booked_on(record):
@@ -447,7 +449,7 @@ def check_t3(record: Record) -> list[str]:
     problems += [
         f'the booking was authorised by a {w["about"]!r} question, not a booking read-back'
         for w in booked_on(record)
-        if w.get('about') != 'booking'
+        if w.get('about') not in WRITES
     ]
     return problems
 

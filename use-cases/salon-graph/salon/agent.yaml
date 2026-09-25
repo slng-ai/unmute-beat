@@ -1,0 +1,126 @@
+# Sage and Stone on core's public contract: four agent nodes sharing one call's state and conversation.
+#
+# Each step is one agent. It reads the caller's replies itself, in the whole
+# conversation and the application state core shows it, and answers through
+# what is declared here: fields it may record, choices it may offer,
+# operations it may carry out (each read back first, and done only on the
+# caller's yes to that read-back), and steps it may hand the caller to.
+# No reading or classifier runs before it. Everything is checked when the
+# salon starts, never mid-call.
+
+version: 1
+id: sage-and-stone
+app_version: '2026.09.25-s4'
+greeting: "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
+state: models/state.py:SalonState
+identity: customer_phone
+entry: concierge
+locale: english
+model: google-cloud:gemini-3.5-flash-lite
+quote_caller: true
+includes:
+  diary: prompts/_diary.md
+  services: prompts/knowledge/services.md
+  refunds: prompts/knowledge/refunds.md
+  complaint_guidance: prompts/knowledge/complaint-guidance.md
+
+agents:
+  robin:
+    prompt: prompts/_voice.md
+    spec:
+      model_settings:
+        service_tier: priority
+        google_thinking_config: {thinking_level: MINIMAL}
+
+operations:
+  lookup_customer:
+    function: functions.py:lookup_customer
+    args: {phone: customer_phone}
+    readback: functions.py:number_words
+    matches: {customer_phone: phone}
+    assign: {verified_phone: customer_phone, customer_status: customer_status}
+    say: Thanks, I have you.
+  book_appointment:
+    function: functions.py:book
+    args: {phone: verified_phone, slot: slot}
+    readback: functions.py:booking_words
+    reconcile: functions.py:find_booking
+    matches: {phone: phone}
+    succeeds: {status: booked}
+    assign: {booked: booking_id, booked_spoken: spoken}
+    say: "You're all set for {spoken}. Anything else I can help with?"
+  move_appointment:
+    function: functions.py:move
+    args: {phone: verified_phone, slot: slot, booking_id: appointment}
+    readback: functions.py:move_words
+    reconcile: functions.py:find_move
+    matches: {phone: phone, booking_id: booking_id}
+    succeeds: {status: moved}
+    assign: {booked: booking_id, booked_spoken: spoken}
+    say: "That's moved to {spoken}. Anything else I can help with?"
+  cancel_appointment:
+    function: functions.py:cancel
+    args: {phone: verified_phone, booking_id: appointment}
+    readback: functions.py:cancel_words
+    reconcile: functions.py:find_cancel
+    matches: {phone: phone, booking_id: booking_id}
+    succeeds: {status: cancelled}
+    say: "That's cancelled for you. Anything else I can help with?"
+  record_complaint:
+    function: functions.py:record_complaint
+    args: {phone: verified_phone, summary: complaint, requested_resolution: wanted_outcome}
+    readback: functions.py:complaint_words
+    reconcile: functions.py:find_complaint
+    matches: {phone: phone}
+    succeeds: {recorded: true}
+    assign: {complaint_reference: reference}
+    say: '{said}'
+
+steps:
+  - id: concierge
+    kind: conversation
+    agent: robin
+    prompt: prompts/concierge.md
+    fields: [service, booking_day, booking_time]
+    exits:
+      - {to: booking, purpose: 'a new booking, or a change or cancellation of one they hold'}
+      - {to: complaints, purpose: 'a complaint, a refund, a manager, or a free visit because of a past service'}
+      - {to: verify, purpose: 'a correction to a phone number already confirmed'}
+
+  - id: verify
+    kind: conversation
+    agent: robin
+    prompt: prompts/verify.md
+    fields: [customer_phone, service, booking_day, booking_time]
+    operations: [lookup_customer]
+    opens_with: lookup_customer
+    exits:
+      - {to: concierge, purpose: 'the caller will not confirm a number, or asks about something else entirely'}
+
+  - id: booking
+    kind: conversation
+    agent: robin
+    prompt: prompts/booking.md
+    guarded: true
+    requires: [verified_phone]
+    satisfied_by: verify
+    fields: [service, booking_day, booking_time, slot, appointment]
+    choices: {slot: functions.py:find_times, appointment: functions.py:held_bookings}
+    operations: [book_appointment, move_appointment, cancel_appointment]
+    exits:
+      - {to: complaints, purpose: 'a complaint about a past service'}
+      - {to: concierge, purpose: 'a different salon question, or the booking is abandoned'}
+
+  - id: complaints
+    kind: conversation
+    agent: robin
+    prompt: prompts/complaints.md
+    guarded: true
+    requires: [verified_phone]
+    satisfied_by: verify
+    fields: [complaint, wanted_outcome]
+    quoted: [complaint, wanted_outcome]
+    operations: [record_complaint]
+    exits:
+      - {to: booking, purpose: 'they want to book, move or cancel an appointment'}
+      - {to: concierge, purpose: 'a separate salon question, or they abandon the complaint'}

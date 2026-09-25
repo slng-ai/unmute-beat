@@ -36,14 +36,16 @@ from pydantic_ai import RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
+from core import FlowCall as SalonCall
 from core import turn as core
 from core.processor import PydanticAgentProcessor
 from core.state import turn_generation
 from core.turn import EXHAUSTED, UNBACKED, TurnBudget, take_turn
-from salon.agents import AGENTS
+from salon.app import FLOW
 from salon.diary import Diary
-from salon.models.state import Appointment, SalonCall, open_call
-from tests.classifier_model import classifier_model
+from tests.script import open_call
+
+AGENTS = FLOW.nodes
 
 PHONE = '+34600111222'
 
@@ -153,7 +155,8 @@ def reads_then_answers(text):
         if any(t.name == 'read_diary' for t in info.function_tools) and 'read' not in str(messages):
             yield {
                 0: DeltaToolCall(
-                    name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+                    name='collect',
+                    json_args=json.dumps({'values': {'booking_day': 'tomorrow', 'service': 'haircut'}}),
                 )
             }
             return
@@ -205,7 +208,7 @@ def _fresh(verified: bool):
     books.reset()
     call = open_call(PHONE, diary=books)
     if verified:
-        call.commit(customer_verified='existing', verified_phone=PHONE)
+        call.update(customer_status='existing', verified_phone=PHONE)
     return call
 
 
@@ -326,31 +329,17 @@ async def the_ledger_keeps_the_order_the_caller_heard_it_in():
     assert ''.join(s.text for s in call.spoken) == probe.heard(), call.spoken
 
 
-MOVED = Appointment(
-    booking_id='BK0001',
-    service='haircut',
-    date='2026-09-26',
-    time='14:30',
-    spoken='Saturday at 2:30 PM',
-    action='move',
-)
-
-
 async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
     """The model says it cancelled something, and nothing was written.
 
     Reproduced off the live call of 2026-09-21 12:23:22 -- *"I've cancelled
     your appointment, and I have you down for a redo on Saturday at 2:30
-    PM."* The last write in that call was a move, three turns earlier; no
-    `save_booking` ran in that turn or after it. The appointment was still
-    there, there was no redo, and the next turn promised the redo would be
-    free.
-
-    It cannot be unsaid: the words were at TTS before anything could know.
-    What it can do is not leave the caller with them.
+    PM."* No write ran in that turn. It cannot be unsaid: the words were at
+    TTS before anything could know. What it can do is not leave the caller
+    with them, and nothing is invented on the state either.
     """
     call = _fresh(True)
-    call.commit(appointment=MOVED)
+    before = call.state
     probe = Probe(call)
     with scripted(
         concierge=says("I've cancelled your appointment, and I have you down for a redo on Saturday.")
@@ -360,31 +349,22 @@ async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
     assert UNBACKED in probe.heard(), probe.heard()
     kinds = [(s.kind, s.text) for s in call.spoken]
     assert kinds[-1] == ('fixed', UNBACKED), kinds
-    assert call.state.appointment == MOVED, 'and nothing was invented on the state either'
+    assert call.state.facts == before.facts and not call.evidence
 
 
 async def recounting_a_booking_already_made_is_not_a_claim():
     """The guard has to let ordinary speech through, which is most speech.
 
-    An agent answering "what have I got" says the same words in the same
-    tense. What separates them is whether the salon agrees: a booking on the
-    state is the corroboration, and only a *cancellation* nobody recorded,
-    or a booking claimed by a call that holds none, trips it.
-
-    And a cancellation the salon *did* record reads as true.
+    Telling the caller what they hold ("you're booked in for Saturday") is a
+    recount, not a report of work just done, and passes. Session 4 made the
+    first-person report ("I've booked you") a claim wherever it is said: only
+    a receipt, rendered by code from the diary's answer, says an action is
+    done (`core.locale.Locale.claims`).
     """
     held = _fresh(True)
-    held.commit(appointment=MOVED)
     probe = Probe(held)
-    with scripted(concierge=says("I've booked you in for Saturday at 2:30 PM.")):
+    with scripted(concierge=says("You're booked in for Saturday at 2:30 PM.")):
         await probe._turn('what have I got?')
-    assert UNBACKED not in probe.heard(), probe.heard()
-
-    gone = _fresh(True)
-    gone.commit(appointment=MOVED.model_copy(update={'action': 'cancel'}))
-    probe = Probe(gone)
-    with scripted(concierge=says("I've cancelled that for you.")):
-        await probe._turn('cancel it please')
     assert UNBACKED not in probe.heard(), probe.heard()
 
 
@@ -490,7 +470,8 @@ async def a_barge_in_is_reported_as_one():
         barge.fire()
         yield {
             0: DeltaToolCall(
-                name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+                name='collect',
+                json_args=json.dumps({'values': {'booking_day': 'tomorrow', 'service': 'haircut'}}),
             )
         }
 
@@ -504,15 +485,12 @@ async def a_barge_in_is_reported_as_one():
 async def a_barge_in_after_a_tool_still_moves_nobody():
     """The later window: the tool ran, and the caller talked over what came next.
 
-    `read_diary` is borrowed by the front desk, and a *successful* borrowed
-    tool is what takes the free edge into `booking`. That move was committed
-    on a turn the caller had interrupted, so a run that came back
-    `status='interrupted'` had silently moved them into a step whose answer
-    they never heard. The existing barge test fires before the tool runs and
-    cannot see it.
-
-    The diary read itself stands: it wrote nothing, and the work that did
-    happen is not pretended away.
+    Session 2's version borrowed `read_diary` into the front desk, whose
+    success moved the caller: a run that came back `status='interrupted'`
+    had silently moved them into a step whose answer they never heard. The
+    front desk now records the request (`collect`) and hands over explicitly;
+    the rule is the same. The interrupted turn moves nobody, and the request
+    it did record stands.
     """
     call = _fresh(True)
     barge = core.Barge()
@@ -521,12 +499,14 @@ async def a_barge_in_after_a_tool_still_moves_nobody():
         barge.fire()
         yield 'we have nine, ten thirty and'
 
-    with scripted(concierge=then(calls('read_diary', when='tomorrow', service='haircut'), cut_off)):
+    with scripted(
+        concierge=then(calls('collect', values={'booking_day': 'tomorrow', 'service': 'haircut'}), cut_off)
+    ):
         _, finished = await take_turn(call, AGENTS, 'anything tomorrow?', barge=barge)
 
     assert finished.status == 'interrupted', finished
     assert call.state.agent == 'concierge', 'an interrupted turn does not move the caller'
-    assert call.state.booking_day, 'and the diary read it did do is not undone'
+    assert call.state.facts.booking_day == 'tomorrow', 'and the request it did record is not undone'
 
 
 async def an_interrupted_fixed_line_leaves_an_earlier_answer_alone():
@@ -641,19 +621,32 @@ async def the_ledger_is_cut_down_to_what_was_heard():
 
 
 async def a_slow_turn_is_covered_once():
-    """A concierge slow to answer: one holding line goes out first, through the runtime, and then the answer."""
+    """P10 through the Pipecat adapter: slow work gets one holding line, a model merely slow to answer gets none.
+
+    A tool that outlasts `hold_after`: one holding line goes out first,
+    through the runtime as a TTS frame, and then the answer. A model slow to
+    answer with no tool running: nothing but the answer (session 3 heard "One
+    moment" in front of a goodbye from a turn-long timer).
+    """
     call = _fresh(True)
-    probe = Probe(call, budget=TurnBudget(hold_after=0.1))
-
-    async def slow(messages, info):
-        await asyncio.sleep(0.3)
-        yield 'Nine is free.'
-
-    with scripted(concierge=slow):
+    probe = Probe(call, budget=TurnBudget(hold_after=0.01))
+    with scripted(concierge=then(calls('slow_probe', question='tomorrow'), says('Nine is free.'))):
         await probe._turn('anything tomorrow?')
     assert [s.origin for s in call.spoken] == ['tool_filler', 'model'], call.spoken
     fixed = [f.text for f in probe.frames if isinstance(f, TTSSpeakFrame)]
     assert call.spoken[0].text in call.locale.holding and fixed == [call.spoken[0].text], fixed
+
+    call = _fresh(True)
+    probe = Probe(call, budget=TurnBudget(hold_after=0.01))
+
+    async def slow(messages, info):
+        await asyncio.sleep(0.1)
+        yield 'Nine is free.'
+
+    with scripted(concierge=slow):
+        await probe._turn('anything tomorrow?')
+    assert [s.origin for s in call.spoken] == ['model'], call.spoken
+    assert not [f for f in probe.frames if isinstance(f, TTSSpeakFrame)], probe.kinds()
 
 
 async def a_segment_is_timed_from_when_it_started_going_out():
@@ -756,9 +749,10 @@ async def a_late_commit_cannot_move_a_caller_who_moved_on():
 
     call.begin_turn()
 
-    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    call.commit(agent='booking')
+    call.update(customer_status='existing', verified_phone=PHONE)
     assert call.state.agent == 'concierge', 'the move was fenced'
-    assert call.state.customer_verified == 'existing', 'the fact it established was not'
+    assert call.state.facts.customer_status == 'existing', 'the fact it established was not'
 
     call.commit(agent='complaints')
     assert call.state.agent == 'concierge', call.state.agent
@@ -787,7 +781,7 @@ async def a_reset_step_is_sent_none_of_the_conversation():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     seen: dict = {}
 
     async def remember(messages, info: AgentInfo):
@@ -848,7 +842,7 @@ async def every_segment_says_where_it_came_from():
     call.commit(agent='verify')
     probe_it = Probe(call)
 
-    with scripted(verify=calls('ask_number', phone=PHONE)):
+    with scripted(verify=calls('lookup_customer')):
         await probe_it._turn('my number is ' + PHONE)
 
     assert len(call.spoken) == 1, call.spoken
@@ -961,5 +955,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    with classifier_model():
-        asyncio.run(main())
+    asyncio.run(main())

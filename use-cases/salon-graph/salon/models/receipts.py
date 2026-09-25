@@ -11,10 +11,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from core.state import STRICT
 from salon.models.shapes import Date, Id, Phone, Service, Time
+
+STRICT = ConfigDict(validate_default=True, validate_assignment=True, revalidate_instances='always')
+"""Defaults validated too, so an authored default that breaks its own type fails at import, not on a call."""
 
 
 class Held(BaseModel):

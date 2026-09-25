@@ -516,7 +516,9 @@ class Turn:
         action = None
         early: _Early | None = None
         retained_early = retained_before
-        if self._hops_run == 1 and (told := call.unheard_receipt()):
+        if self._hops_run == 1 and (settle := call.settlement()) is not None:
+            action = LocalAction('reconcile', settle)
+        elif self._hops_run == 1 and (told := call.unheard_receipt()):
             action = LocalAction('receipt', lambda: _say_again(call, told))
         if node.advance and action is None:
             state_before, held_before = call.state, dict(call._held)
@@ -766,7 +768,7 @@ class Turn:
         succeeded: set[str] = set()
         output = None
         spoke = False
-        gate: str | None = 'clause' if node.guarded and not call.wrote_this_turn() else None
+        gate: str | None = 'clause' if node.guarded else None
         held = ''
 
         call.attempt_started()

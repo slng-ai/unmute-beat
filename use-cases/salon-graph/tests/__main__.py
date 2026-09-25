@@ -29,25 +29,18 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
 MODULES = (
     'tests.test_graph',
-    'tests.test_salon',
-    'tests.test_consent',
-    'tests.test_classifiers',
-    'tests.test_replay',
-    'tests.test_solver',
-    'tests.test_traces',
     'tests.test_state',
     'tests.test_diary',
-    'tests.test_flow',
+    'tests.test_walkthrough',
+    'tests.test_business',
     'tests.test_budget',
-    'tests.test_recovery',
     'tests.test_continuation',
     'tests.test_overlap',
-    'tests.test_optimization',
+    'tests.test_traces',
     'tests.test_calls',
     'tests.test_core',
-    'tests.test_slice',
 )
-"""In the order they are quickest to fail: the graph and the agency first, the engine and the adapter last."""
+"""In the order they are quickest to fail: the graph and the state first, the engine and the adapter last."""
 
 
 def main() -> int:

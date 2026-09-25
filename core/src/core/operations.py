@@ -169,6 +169,10 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         """The question that would authorise these arguments, worded by the application."""
         raise NotImplementedError(f'{type(self).__name__} has no readback; override proposal or _authorise')
 
+    def proposal_for(self, call: C, args: ArgsT) -> Proposal:
+        """The same question, worded with whatever the call's services know (a slot's spoken time). What is asked."""
+        return self.proposal(args)
+
     async def _agreed(
         self, call: C, question: Proposal, *, usage: RunUsage | None, usage_limits: UsageLimits | None
     ) -> bool:

@@ -20,9 +20,10 @@ from pydantic_ai import Agent
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from evals.calls import CASES, CLOCK, PHONE, Record, Rule, lose_first_answer, run_case, spans, watch
-from salon.agents import AGENTS
+from salon.app import FLOW
 from salon.diary import Diary
-from tests.classifier_model import classifier_model
+
+AGENTS = FLOW.nodes
 
 
 def saying(text: str):
@@ -58,7 +59,6 @@ async def one(case, **limits) -> Record:
     """
     with (
         patch('evals.calls.setup', lambda *a, **k: Agent.instrument_all()),
-        classifier_model(),
         every_agent_says(HELLO),
     ):
         return await run_case(case, spans(), **limits)

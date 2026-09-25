@@ -24,7 +24,7 @@ All green except one inherited lint problem: `docs/research/reusable-core/sessio
 
 ## Coval allowance
 
-Session 4 has its own cap of 20 calls. Used so far: **1** (see the table below).
+Session 4 has its own cap of 20 calls. Used so far: **2** (see the table below).
 
 Inherited run reconciled by ID on 2026-09-25T17:45Z, no relaunch:
 
@@ -42,3 +42,6 @@ The stuck simulation stays inconclusive. The local bot for that run stopped long
 Call 1 stopped further launches. Repairs on the same branch before any other call: core counts a segment that joined playing audio as heard only once its own words had time to play (`CallContext.note_drained`, regression `tests.test_continuation:a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends`, which fails with the rule disabled); `coval_sim` retries a rate-limited read instead of ending the job. Offline suites and N1-N13 rerun clean.
 
 Reserve call 2, logged before launch: the same frozen complex case on the repaired revision. Question: with the read-back delivery repaired, does the fragmented number, the day change at the booking read-back and any interruption end with one Saturday booking and every write on a heard question? Expanded count: 1.
+| 2 | complex stress, reserve 1 (same job), revision 52eb245 | `MQagmvspVLRNbWM3kBtMmu` | 1: `NdkBKGCNZfxfrcsDLXKN8L` (call CA87afaa0f20e84e9faf5665b54829c100) | **Business outcome correct; complex trigger exercised.** Number in two pieces, read back in full, "Yes, that's correct", then the lookup (audit: asked turn 2, answered turn 3). Friday read back; "Actually Saturday morning" wrote nothing; the new date rule asked "tomorrow the 26th or Saturday October 3"; 26th read back, "Yes please, that's perfect", one booking BK0001 Saturday 09:00 (audit: asked turn 8, answered turn 9). The receipt was cut ("...Anything else I can help") and the caller said "Yes, please, that's great": joined to turn 9, the receipt was said again by code, no model request, no move, no second write. Coval: Changes match agreement YES; expected behaviours 0.67 (4 of 6, no explanations from the API); Answered question not asked again NO; Latency 1.79 s; 23 turns. Ended on the 180 s ceiling (Twilio REST hang-up returned 401; the line closed anyway). Finding: a turn continued over several pieces says one holding line per piece. |
+
+Gate before bulk: the complex trigger was exercised and the business outcome passed on the repaired revision (52eb245). The five-call jobs run on that frozen revision.

@@ -1,2 +1,5 @@
 {"key": "session-4-complex|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T19:17:10.372826+00:00", "name": "session-4-complex salon K3Xwqi7g db354f61", "status": "intent"}
 {"key": "session-4-complex|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T19:17:11.114110+00:00", "name": "session-4-complex salon K3Xwqi7g db354f61", "status": "launched", "run_id": "GYZdoiie3dVF9VuguVRyQi"}
+{"key": "session-4-complex-r1|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T19:24:51.043124+00:00", "name": "session-4-complex-r1 salon K3Xwqi7g d4df6ff2", "status": "intent"}
+{"key": "session-4-complex-r1|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T19:24:51.791728+00:00", "name": "session-4-complex-r1 salon K3Xwqi7g d4df6ff2", "status": "launched", "run_id": "MQagmvspVLRNbWM3kBtMmu"}
+{"key": "session-4-complex-r1|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T19:29:13.158511+00:00", "name": "session-4-complex-r1 salon K3Xwqi7g d4df6ff2", "status": "finished", "run_id": "MQagmvspVLRNbWM3kBtMmu", "remote": "COMPLETED"}

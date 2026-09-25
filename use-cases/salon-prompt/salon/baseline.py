@@ -42,8 +42,14 @@ from salon.models.shapes import SubmittedPhone, unsupported_region
 PROMPTS = Path(__file__).resolve().parent / 'prompts'
 GREETING = "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
 """The graph build's opening line (`greeting:` in salon-graph's `flow.yaml`), word for word."""
-MODEL = 'gemini-3.5-flash-lite'
-"""The harness's model (`salon.classification.MODEL`), thinking pinned the same way."""
+MODEL = 'gemini-3.1-flash-lite'
+"""The baseline's model, thinking pinned as the harness pins it.
+
+Not the harness's own (`salon.classification.MODEL`, gemini-3.5-flash-lite):
+Pipecat's Gemini service has problems with 3.5 flash lite, so the Pipecat
+builds (this one and salon-pipecat-flows) run 3.1. A comparison against the
+harness is across models too.
+"""
 
 _tracer = trace.get_tracer('voice.baseline')
 

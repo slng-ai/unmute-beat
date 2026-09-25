@@ -70,6 +70,17 @@ that member's folder.
 | `salon/diary.py`, `salon/models/shapes.py`, `salon/prompts/` | copies of salon-graph's. Change both, or the builds stop being comparable |
 | `utils/observability.py` | core's copy without the Pydantic AI hook |
 
+**`use-cases/salon-pipecat-flows/`**, the same salon on declarative Pipecat flows: the harness's guarantees as plain application code. No core, no Pydantic AI.
+
+| Path | Owns |
+|---|---|
+| `bot.py` | the same pipeline, with `GoogleLLMService`, `ClaimFilter` and `EmptyReplyGuard` where salon-graph has `PydanticAgentProcessor`; `gemini-3.1-flash-lite`; smart-turn's silence fallback at 1.5 s |
+| `flow.yaml`, `prompts/*.yaml` | a Pipecat `FlowConfig`: the nodes, a branch table on `next` for every tool, and the `say` action (never `tts_say`, whose wait a barge-in freezes) |
+| `graph_salon/` | `handlers` (direct functions, `@tool(ArgsModel)`), `flow` (loads and checks `flow.yaml`, `typed` gives each tool its Pydantic schema), `models`, `call` (consent guards, turn, budget), `writes` (`Write.run`), `speech` (fixed lines, `ClaimFilter`, `EmptyReplyGuard`) |
+| `salon/diary.py`, `salon/models/`, `salon/prompts/` | copies of salon-graph's; `receipts.py` writes out `STRICT`, so nothing imports `core`. Change both, or the builds stop being comparable |
+| `utils/observability.py` | salon-prompt's copy |
+| `tests/` | `test_graph_salon`: every guarantee offline, a real `FlowManager` entering every node, and salon-graph's fixed lines read from its source as text |
+
 **`use-cases/faro-language-learning/`**, Faro on core.
 
 | Path | Owns |
@@ -93,7 +104,7 @@ Anything about *running* a turn goes in `turn`, anything about frames goes in
 no `core` module but the processor imports Pipecat.
 
 `core` imports no use case. A use case imports `core` and nothing from another
-use case; salon-prompt imports neither. In salon-graph: `salon.models` imports
+use case; salon-prompt and salon-pipecat-flows import neither. In salon-graph: `salon.models` imports
 `core.state`; `salon.tools` imports models, the diary and `core.policies`, and
 reads a reply through the call; `salon.classification` imports the tools its
 acts run; `salon.agents` imports everything; `bot.py` wires it to Pipecat.

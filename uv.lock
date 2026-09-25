@@ -8,6 +8,7 @@ members = [
     "faro-language-learning",
     "faro-tools",
     "salon-graph",
+    "salon-pipecat-flows",
     "salon-prompt",
     "slng-voice-core",
 ]
@@ -2499,6 +2500,41 @@ requires-dist = [
     { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "slng-voice-core", editable = "core" },
+    { name = "websockets", specifier = ">=16.1.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
+[[package]]
+name = "salon-pipecat-flows"
+version = "0.1.0"
+source = { virtual = "use-cases/salon-pipecat-flows" }
+dependencies = [
+    { name = "langfuse" },
+    { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
+    { name = "pipecat-slng" },
+    { name = "pydantic-extra-types", extra = ["phonenumbers"] },
+    { name = "python-dotenv" },
+    { name = "websockets" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langfuse", specifier = ">=4.15.4" },
+    { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
+    { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "websockets", specifier = ">=16.1.1" },
 ]
 

@@ -17,14 +17,14 @@ from unittest.mock import patch
 
 import httpx2
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from tests.clinic import CLINIC, ClinicCall, desk
 
 from core.graph import Node
 from core.locale import Locale
 from core.policies import TurnBudget
-from core.turn import take_turn
+from core.turn import Turn, take_turn
 
 
 @contextmanager
@@ -321,6 +321,48 @@ async def a_request_that_sends_nothing_is_tried_again():
             assert said == call.locale.exhausted and done.status == 'exhausted', (said, done)
 
 
+async def a_retried_request_ends_on_the_callers_words():
+    """A retry is sent the caller's words last: never the holding line in front of them, never an empty request.
+
+    Replays of 2026-09-25: the holding line said as the retry went out was
+    inserted before the caller's words, and in 3 turns of 24 calls a retry
+    with no prompt went out on a history that ended on a reply, which the
+    SDK refuses ("Processed history must end with a `ModelRequest`"), so the
+    caller heard the stumble line. Both the stall and a history that ends on
+    a reply are built here.
+    """
+    sent: list[list] = []
+
+    async def stream(messages, info):
+        sent.append(messages)
+        if len(sent) == 1:
+            await asyncio.sleep(10)
+        yield 'It is 40 euros.'
+
+    call, heard, _ = opened()
+    nodes = desk(FunctionModel(stream_function=stream))
+    with scripted(chosen_time=''):
+        said, _ = await take_turn(call, nodes, 'How much is it?', TurnBudget(first_part=0.2))
+    last = sent[-1]
+    assert said == 'It is 40 euros.' and heard[-1] in call.locale.holding, (said, heard)
+    said_before = [p.content for m in last for p in m.parts if isinstance(p, TextPart)]
+    assert isinstance(last[-1], ModelRequest) and not set(said_before) & set(call.locale.holding), last
+    assert [p.content for p in last[-1].parts if isinstance(p, UserPromptPart)] == ['How much is it?'], last
+
+    sent.clear()
+    call, _, _ = opened()
+    call.messages = [
+        ModelRequest(parts=[UserPromptPart('Hello.')]),
+        ModelResponse(parts=[TextPart('Hi, how can I help?')]),
+    ]
+    call.begin_turn()
+    call.turn_started('How much is it?')
+    async for _ in Turn(call, nodes, TurnBudget())._speak(nodes['desk'], None):
+        pass
+    assert isinstance(sent[-1][-1], ModelRequest), sent[-1]
+    assert [p.content for p in sent[-1][-1].parts if isinstance(p, UserPromptPart)] == ['How much is it?']
+
+
 async def a_slow_turn_says_one_holding_line():
     """A turn silent for `hold_after` seconds says one holding line, before the answer; a quick one says none.
 
@@ -524,6 +566,7 @@ async def main():
     await a_request_that_sends_nothing_is_tried_again()
     await a_slow_turn_says_one_holding_line()
     await a_second_request_says_the_holding_line_as_it_goes_out()
+    await a_retried_request_ends_on_the_callers_words()
     await the_engine_speaks_the_calls_own_language()
     no_salon_code_is_loaded()
     print('reuse ok: a second use case on the same core classes, with no salon code')

@@ -52,7 +52,10 @@ def project(
     Fixed speech shares its producing response so the following tool result
     stays last. Google rejects requests ending with an assistant message.
     Speech left by cancellation without a protocol response is inserted before
-    the next caller input.
+    the next caller input. Speech filed under the request now going out (a
+    holding line said as it starts) is left out of it: it joins that
+    request's response when there is one. Inserted as a stray response, it
+    went in front of the caller's words.
 
     Caller turn IDs deduplicate reset/handoff inputs: within one turn, caller
     words already sent are not sent again, whether repeated as they were or
@@ -90,7 +93,11 @@ def project(
         if message.parts:
             result.append(message)
     for segment in speech:
-        if segment.id in present or not segment.text:
+        if (
+            segment.id in present
+            or not segment.text
+            or (segment.response and segment.response == call._response)
+        ):
             continue
         message = ModelResponse(parts=[TextPart(segment.text)], metadata={'speech_ids': [segment.id]})
         at = len(result)

@@ -730,6 +730,14 @@ class Turn:
         `new_messages()` boundary after teardown, never by slicing at the
         original history length: SDK normalisation can merge old requests, and
         a cancelled run still heard the caller and may have completed a tool.
+
+        A run with no prompt whose history does not end on a request is sent
+        the caller's words again. The SDK would otherwise send an empty
+        request, which `project` drops, and the provider refuses a history
+        that ends on its own reply. It happened after a stalled request was
+        retried (`TurnBudget.first_part`): 3 turns in 24 replayed calls of
+        2026-09-25 ended in the stumble line. A repeat of the turn's own words
+        is dropped from later requests (`core.history.project`).
         """
         call, barge = self.call, self.barge
         agent: Agent = node.agent
@@ -749,6 +757,8 @@ class Turn:
         streamed = 0
         excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'reset' else frozenset()
         initial = [] if node.history == 'reset' else paired(project(call, call.messages))
+        if accepted_prompt is None and call.heard and not (initial and isinstance(initial[-1], ModelRequest)):
+            accepted_prompt = call.heard
 
         stall: asyncio.TimerHandle | None = None
         stalled = False

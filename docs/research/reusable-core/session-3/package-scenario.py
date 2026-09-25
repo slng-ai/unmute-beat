@@ -21,9 +21,9 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
 
 from clinic_flow.clinic import ClinicState  # noqa: E402
-from tests.slice.slice import Caller  # noqa: E402
 
 import core  # noqa: E402
+from tests.slice.slice import Caller  # noqa: E402
 
 assert 'site-packages' in core.__file__ and '.claude' not in core.__file__, core.__file__
 assert os.getcwd() == '/', os.getcwd()
@@ -68,7 +68,13 @@ async def main() -> None:
         elif manifest == 'one_agent.yaml':
             await say(flow, call, 'P-1234, ten.', *fill)
         else:
-            await say(flow, call, 'P-1234, ten.', ('call', 'hand_over', {'to': 'booking', 'because': 'booking'}), *fill)
+            await say(
+                flow,
+                call,
+                'P-1234, ten.',
+                ('call', 'hand_over', {'to': 'booking', 'because': 'booking'}),
+                *fill,
+            )
         heard = await say(flow, call, 'Yes.', label='accept')
         assert call.services.bookings == {'CL001': ('P-1234', '1000')}, (manifest, call.services.bookings)
         print(manifest, 'booked once:', heard[0])

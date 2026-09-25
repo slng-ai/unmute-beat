@@ -77,6 +77,13 @@ that places the audio. `coval_sim` sets it for every simulated call.
 ponytail: the call is torn down the way a hang-up is, turn finished first,
 so it may run up to `FINISH_SECONDS` longer.
 """
+VAD_STOP_SECONDS = float(os.getenv('VAD_STOP_SECS') or 0.2)
+"""Silence the voice detector waits before smart-turn judges whether the caller is done. 0.2 s by default.
+
+Raised for session 4's endpointing check: 115 of 506 requests in the
+20-call baseline were cancelled because the caller went on after a pause.
+Each extra tenth of a second is added to every turn's wait.
+"""
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
 """One language per call for each speech service."""
@@ -135,7 +142,7 @@ def aggregators(context: LLMContext) -> LLMContextAggregatorPair:
     return LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=VAD_STOP_SECONDS)),
             user_turn_strategies=UserTurnStrategies(
                 stop=[
                     TurnAnalyzerUserTurnStopStrategy(

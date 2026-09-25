@@ -43,7 +43,15 @@ def call(*extra: Obs, chats: list[Obs], segments: list[str], origins: list[str])
     })  # fmt: skip
     return [
         Obs('conv', None, 'SPAN', 'conversation', at(0), at(60)),
-        Obs('t1', 'conv', 'SPAN', 'turn', at(0), at(8), attrs={'turn.user_bot_latency_seconds': 1.2}),
+        Obs(
+            't1',
+            'conv',
+            'SPAN',
+            'turn',
+            at(0),
+            at(8),
+            attrs={'turn.user_bot_latency_seconds': 1.2, 'turn.was_interrupted': 'true'},
+        ),
         engine,
         *chats,
         *extra,
@@ -59,7 +67,12 @@ def a_clean_call_has_no_problem() -> None:
     report = judge('run', SIM, obs)
     assert report.problems == [], report.problems
     assert report.bookings == ['Friday the 2nd at 9:00 AM'] and report.first_booking == 'BK0001'
-    assert report.holding == {2: 1} and report.chains == {} and report.latency == [1.2]
+    assert (
+        report.holding == {2: 1}
+        and report.chains == {}
+        and report.latency == [1.2]
+        and report.interrupted == 1
+    )
     assert [round(t, 2) for t in report.tails] == [0.4], 'the second reply spoke: 0.9 s, first token at 0.5 s'
     assert 'with no problem: 1' in render([report])
 

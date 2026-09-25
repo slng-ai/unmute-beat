@@ -16,7 +16,11 @@ the exact question, runs the operation and checks every move. What is checked:
   error and unknown branches;
 * P18: options looked up for a request the caller has since changed, or in a
   step they have since left, offer nothing;
-* P2/P7: an unheard receipt is said again with no model request and no write.
+* P2/P7: an unheard receipt is said again with no model request and no write;
+* F3: words the model writes beside an operation call are not said: the
+  operation says its own, once;
+* F4: `reads_back`: a reply that only records an operation's field is read
+  back by code, with no second request, and only a heard yes still books.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -45,8 +49,9 @@ HERE = Path(__file__).parent / 'clinic_flow'
 class Script:
     """Each step agent's request takes the next move, and records which step asked. Nothing else may run.
 
-    A move is `('say', words)`, `('call', tool, args)`, or `('calls', [(tool, args), ...])`
-    for one response carrying several tool calls in that order.
+    A move is `('say', words)`, `('call', tool, args)`, `('calls', [(tool, args), ...])`
+    for one response carrying several tool calls in that order, or `('say+call', words, tool, args)`
+    for one response that speaks and then calls a tool.
     """
 
     def __init__(self) -> None:
@@ -71,6 +76,9 @@ class Script:
             yield rest[0]
         elif kind == 'call':
             yield {0: DeltaToolCall(name=rest[0], json_args=json.dumps(rest[1]))}
+        elif kind == 'say+call':
+            yield rest[0]
+            yield {1: DeltaToolCall(name=rest[1], json_args=json.dumps(rest[2]))}
         else:
             yield {
                 i: DeltaToolCall(name=name, json_args=json.dumps(args))
@@ -355,6 +363,92 @@ async def an_unheard_receipt_is_said_again():
             assert len(script.steps) == requests + 1, 'without the rule a model answers, unaware'
 
 
+async def model_words_beside_an_operation_are_not_said():
+    """F3: text in the same reply as an operation call is dropped; the operation says its own words, once.
+
+    Coval runs jCBGSipW and StET3kNN: in 4 of 11 calls the model wrote the
+    read-back itself beside `book_appointment`, and the caller heard it twice.
+    Text beside any other tool (`collect`), or alone, is said as before.
+    """
+    script = Script()
+    flow, call = opened('one_agent.yaml', script)
+    said = await turn(
+        flow, call, script, 'P-1234 at ten.', *FILL, ('say+call', 'One moment. Shall I book ten?', 'book', {})
+    )
+    assert said == ['Shall I book Tuesday at 10:00 AM for P-1234?'], said
+    assert not any('One moment' in s.text for s in call.all_spoken), 'dropped words were recorded as said'
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Actually nine.',
+        ('say+call', 'Nine it is.', 'collect', {'values': {'slot': '0900'}}),
+        ('call', 'book', {}),
+    )
+    assert said == ['Nine it is.', 'Shall I book Tuesday at 9:00 AM for P-1234?'], said
+    said = await turn(flow, call, script, 'How long is it?', ('say', 'Thirty minutes.'))
+    assert said == ['Thirty minutes.'], said
+
+
+async def a_recorded_pick_is_read_back_by_code():
+    """F4: `reads_back`: a reply that only records the slot gets its read-back from code, one request fewer.
+
+    Coval runs jCBGSipW and StET3kNN: 21 turns spent a second request only to
+    have `book_appointment` read back after `collect`. A reply with words of
+    its own is left to the model, and only a heard yes still books.
+    """
+    script = Script()
+    flow, call = opened('reads_back.yaml', script)
+    said = await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+    assert said == ['Shall I book Tuesday at 10:00 AM for P-1234?'], said
+    assert script.steps == ['desk', 'desk'], (
+        'options, then collect: the read-back asked no model',
+        script.steps,
+    )
+    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    assert call.services.bookings == {'CL001': ('P-1234', '1000')}, said
+
+    script = Script()
+    flow, call = opened('reads_back.yaml', script)
+    pick = {'values': {'patient': 'P-1234', 'slot': '1000'}}
+    said = await turn(
+        flow,
+        call,
+        script,
+        'P-1234 at ten. How long is it?',
+        ('call', 'options', {}),
+        ('say+call', 'Thirty minutes.', 'collect', pick),
+        ('call', 'book', {}),
+    )
+    assert said == ['Thirty minutes.', 'Shall I book Tuesday at 10:00 AM for P-1234?'], said
+    assert len(script.steps) == 3, ('words beside the pick: the model reads back', script.steps)
+
+    script = Script()
+    flow, call = opened('reads_back.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL, heard=False)
+    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    assert call.services.calls == 0 and said[-1].startswith('Shall I book'), (
+        'a yes to an unheard read-back booked'
+    )
+
+
+def reads_back_is_checked_at_load():
+    """F4: `reads_back` naming an operation the step does not carry out, or a field it does not record, fails at load."""
+    text = (HERE / 'reads_back.yaml').read_text()
+    for bad, expected in (('{cancel: [slot]}', "'cancel'"), ('{book: [patien]}', "'patien'")):
+        broken = HERE / '_reads_back_broken.yaml'
+        body = text.replace('operations: [book, cancel]', 'operations: [book]') if 'cancel' in bad else text
+        broken.write_text(body.replace('reads_back: {book: [slot]}', f'reads_back: {bad}'))
+        try:
+            core.load(broken).compile(model='test')
+        except core.FlowSpecError as error:
+            assert expected in str(error) and 'reads back' in str(error), str(error)
+        else:
+            raise AssertionError(f'reads_back {bad} was accepted')
+        finally:
+            broken.unlink()
+
+
 async def main() -> None:
     await no_reader_runs_in_any_pattern()
     public_path_loads_no_reader()
@@ -364,8 +458,12 @@ async def main() -> None:
     await a_code_node_returns_with_no_model()
     await late_options_offer_nothing()
     await an_unheard_receipt_is_said_again()
+    await model_words_beside_an_operation_are_not_said()
+    await a_recorded_pick_is_read_back_by_code()
+    reads_back_is_checked_at_load()
     print(
-        'nodes ok: no reader, hostile calls, mixed reply, holding, code node, late options, unheard receipt'
+        'nodes ok: no reader, hostile calls, mixed reply, holding, code node, late options, unheard receipt, '
+        'no echo, code read-back'
     )
 
 

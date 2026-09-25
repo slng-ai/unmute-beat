@@ -298,7 +298,7 @@ Use this with the conversation above, including earlier speech fragments.
 ## Application state
 Written by the application, not by the caller. It is true now; the conversation may be older.
 You are the `booking` step.
-Facts: {"customer_phone":"+34600111222","verified_phone":"+34600111222","customer_status":"existing","service":"haircut","booking_day":"Friday","booking_time":"14:00","slot":"2026-10-02T1430|haircut","appointment":"","booked":"","booked_spoken":"","complaint":"","wanted_outcome":"","complaint_reference":""}
+Facts: {"customer_phone":"+34600111222","verified_phone":"+34600111222","customer_status":"existing","service":"haircut","booking_day":"Friday","booking_time":"14:00","slot":"","appointment":"","booked":"","booked_spoken":"","complaint":"","wanted_outcome":"","complaint_reference":""}
 On offer to the caller now, by id: {"slot": {"2026-10-02T1400|haircut": "haircut Friday the 2nd at 2:00 PM", "2026-10-02T1330|haircut": "haircut Friday the 2nd at 1:30 PM", "2026-10-02T1430|haircut": "haircut Friday the 2nd at 2:30 PM", "2026-10-02T1300|haircut": "haircut Friday the 2nd at 1:00 PM", "2026-10-02T1500|haircut": "haircut Friday the 2nd at 3:00 PM", "2026-10-02T1230|haircut": "haircut Friday the 2nd at 12:30 PM"}}. Only these ids can be picked.
 Done on this call: lookup_customer {"phone": "+34600111222"} -> {"customer_status": "existing", "customer_phone": "+34600111222"}
 You may hand the caller to: complaints (a complaint about a past service); concierge (they give up booking, or ask about something unrelated to booking).

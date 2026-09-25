@@ -309,14 +309,20 @@ class Turn:
         usually ready when they finish; and a tool that speaks its own line
         would get the holding line right in front of it.
 
-        Once per turn, and never after the answer started: the check is on
-        the turn's own speech ledger, which records model text before it is
-        passed on. Origin `tool_filler`, so a caller who cuts in over it is
-        still in the same turn (`CallContext.continues_turn`). Never once the
-        call is ending: a goodbye is the last thing the caller hears.
+        Once per caller turn, and never after the answer started: the check is
+        on the turn's own speech ledger, which records model text before it
+        is passed on, and on every piece of the caller turn. A turn continued
+        over pieces gets a new `Turn` and an empty ledger per piece, and said
+        the line again on each (4 caller turns of 20 in Coval run StET3kNN).
+        A line never played, blanked when the caller went on, does not count.
+        Origin `tool_filler`, so a caller who cuts in over it is still in the
+        same turn (`CallContext.continues_turn`). Never once the call is
+        ending: a goodbye is the last thing the caller hears.
         """
         call = self.call
-        if self._stale() or call.ended or any(s.text for s in call.spoken) or not call.locale.holding:
+        piece = f':{call.turn}:'
+        held = any(s.origin == 'tool_filler' and s.text and piece in s.id for s in call.all_spoken)
+        if self._stale() or call.ended or held or any(s.text for s in call.spoken) or not call.locale.holding:
             return
         await call.say(pick('holding', call.locale.holding), origin='tool_filler')
 
@@ -743,6 +749,17 @@ class Turn:
         layer, and folding them together would let a flaky network buy extra
         attempts at getting a tool call right.
 
+        On a step whose operations speak for themselves (`Node.speaks_for`),
+        a reply's text is held until the reply shows what it calls. Beside one
+        of those operations it is dropped: the operation's read-back or
+        receipt is what the caller hears, once. Beside anything else, or
+        alone, it goes out when the reply is complete: 0.13 s after its first
+        token at the median, 0.21 s at p90, over 121 replies of the baseline.
+
+        A reply that only records fields, and records one a `reads_back` rule
+        names, ends the run there: code reads the operation back (`Node.reads_back`)
+        instead of a second request that would only have asked for it.
+
         Which tools *succeeded* is how a free edge is taken: the result, never
         the call, because the call event fires before the tool runs.
 
@@ -767,9 +784,10 @@ class Turn:
         step = call.state.agent
         succeeded: set[str] = set()
         output = None
-        spoke = False
         gate: str | None = 'clause' if node.guarded else None
         held = ''
+        reply: list[str] = []
+        reply_text, reply_tools, recorded = False, [], 0
 
         call.attempt_started()
         caller_turn = call.turn
@@ -892,18 +910,31 @@ class Turn:
                         disarm()
                         if event.index == 0:
                             streamed += 1
+                            reply_text, reply_tools, recorded = False, [], 0
                         call._response = f'{run_id}:{streamed}'
                         match event.part:
                             case TextPart():
                                 call.note_first_output('text')
-                            case ToolCallPart():
+                            case ToolCallPart(tool_name=name):
                                 call.note_first_output('tool')
+                                reply_tools.append(name)
+                                if name in node.speaks_for:
+                                    if reply or held:
+                                        logger.info(
+                                            'echo dropped beside {}: {!r}', name, ''.join(reply) + held
+                                        )
+                                    reply.clear()
+                                    held = ''
+                                else:
+                                    for text in _release(call, reply):
+                                        yield TextDelta(text, step)
                     if hold is not None and not hold.opened.is_set():
                         await hold.opened.wait()
                         barge.attach(events)
                     if chunk := _speech(event):
                         if not node.model_speech:
                             continue
+                        reply_text = True
                         if gate is not None:
                             held += chunk
                             if not (_CLAUSE.search(held) or len(held) >= _CLAUSE_MAX):
@@ -912,16 +943,18 @@ class Turn:
                             if call.claims_completion(text):
                                 logger.error('withheld an unbacked claim: {!r}', text.strip())
                                 gate = 'blocked'
+                                reply.clear()
                                 break
                         else:
                             text = chunk
-                        call.note_model_text(text)
-                        if not spoke:
-                            spoke = True
-                            call._spoke = True
-                            call._covered = False
-                        yield TextDelta(text, step)
+                        if node.speaks_for:
+                            reply.append(text)
+                            continue
+                        for said in _release(call, [text]):
+                            yield TextDelta(said, step)
                     elif isinstance(event, ToolCallEvent):
+                        for text in _release(call, reply):
+                            yield TextDelta(text, step)
                         self._arm_hold()
                     elif isinstance(event, ToolResultEvent):
                         self._disarm_hold()
@@ -929,7 +962,21 @@ class Turn:
                             event.part, RetryPromptPart
                         ):
                             succeeded.add(event.part.tool_name)
+                            recorded += event.part.tool_name == 'collect'
+                            if (
+                                node.reads_back is not None
+                                and event.part.tool_name == 'collect'
+                                and not reply_text
+                                and set(reply_tools) == {'collect'}
+                                and recorded == len(reply_tools)
+                                and (asked := node.reads_back(call)) is not None
+                            ):
+                                logger.info('read back {} by code after collect', asked.about)
+                                output = asked
+                                events.cancel()
                     elif isinstance(event, AgentRunResultEvent):
+                        for text in _release(call, reply):
+                            yield TextDelta(text, step)
                         retain(event.result.new_messages())
                         output = event.result.output
         except UsageLimitExceeded, TimeoutError:
@@ -952,6 +999,9 @@ class Turn:
                 else:
                     retain(new_messages)
             barge.detach()
+            if reply and not barge.hit and not (hold is not None and hold.dropped):
+                for text in _release(call, reply):
+                    yield TextDelta(text, step)
             if held and gate != 'blocked' and not (hold is not None and hold.dropped):
                 call.note_model_text(held)
                 call._spoke = True
@@ -964,6 +1014,17 @@ class Turn:
             yield FixedSpeech(call.locale.withheld, reason='withheld')
         yield RunEnded(step)
         yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
+
+
+def _release(call: CallContext, reply: list[str]) -> list[str]:
+    """Record held model text as said and hand it out, emptying `reply`: the text a reply keeps (`Node.speaks_for`)."""
+    out = [text for text in reply if text]
+    reply.clear()
+    for text in out:
+        call.note_model_text(text)
+        call._spoke = True
+        call._covered = False
+    return out
 
 
 def run_turn(

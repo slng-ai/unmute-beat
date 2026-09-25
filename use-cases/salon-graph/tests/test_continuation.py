@@ -27,8 +27,10 @@ from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.history import project
+from core.policies import TurnBudget
 from core.processor import PydanticAgentProcessor
 from core.steps import Prompted, _args
+from core.turn import Turn
 from salon import diary
 from salon.app import FLOW
 from salon.diary import Diary
@@ -198,6 +200,57 @@ async def a_holding_line_heard_in_full_keeps_the_turn_open():
     call.note_barge()
     call.turn_started('That sounds perfect.')
     assert call.turn == 2 and call.heard == 'Yes, please. That sounds perfect.', (call.turn, call.heard)
+
+
+async def one_holding_line_per_caller_turn():
+    """A turn continued over several pieces says one holding line, not one per piece.
+
+    Each piece gets a new `Turn`, which opens a new gap (`_covered`), and an
+    empty per-piece ledger, so a check on that ledger alone said "Let me have
+    a look" again on every piece: 4 caller turns in Coval run StET3kNN heard
+    it twice. The next caller turn gets its own.
+    """
+    call = booking_call()
+    Probe(call)
+
+    async def piece(words: str) -> None:
+        """What `Turn.events` does before a piece's work: a new gap, the words, then work that waits."""
+        call._covered = False
+        call.turn_started(words)
+        await Turn(call, FLOW.nodes, TurnBudget())._hold()
+
+    def fillers() -> list[str]:
+        return [s.id for s in call.all_spoken if s.origin == 'tool_filler' and s.text]
+
+    await piece('I would like')
+    call.note_reached()
+    played_out(call)
+    call.note_barge()
+    await piece('a haircut on Friday.')
+    assert call.turn == 1, 'the second piece continues the turn'
+    assert len(fillers()) == 1, [(s.origin, s.text) for s in call.all_spoken]
+
+    await call.speak_now('Which time would you like?', origin='ask')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    await piece('Nine.')
+    assert call.turn == 2 and len(fillers()) == 2, 'a new turn, a new line'
+
+
+async def a_holding_line_is_never_sent_to_the_model():
+    """The model is never shown a holding line as its own words; a read-back the caller heard it is.
+
+    Shown "One moment." as its own, the model opened 32 replies with it in
+    the session-4 baseline, and the caller heard it twice.
+    """
+    call = booking_call()
+    question = await read_back_a_haircut(call, Probe(call))
+    call._covered = False
+    call.turn_started('Yes, please.')
+    await call.say('Let me have a look.', origin='tool_filler')
+    sent = str(project(call, call.messages))
+    assert 'Let me have a look.' not in sent and question in sent, sent
 
 
 async def an_attempted_write_is_never_authorised_twice():
@@ -552,6 +605,8 @@ async def main() -> None:
     await a_reply_after_the_answer_played_is_a_new_turn()
     await speech_nobody_heard_is_recorded_as_unheard()
     await a_holding_line_heard_in_full_keeps_the_turn_open()
+    await one_holding_line_per_caller_turn()
+    await a_holding_line_is_never_sent_to_the_model()
     await an_attempted_write_is_never_authorised_twice()
     await a_read_back_cut_off_is_not_agreed_to()
     await the_next_reply_is_told_what_was_not_heard()

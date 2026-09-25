@@ -84,3 +84,30 @@ Question: under 20 calls at once, does the build we have (bot code identical to 
 This run measures, it does not gate. Its numbers are the baseline for the fixed run's pass criteria (plan step 4).
 
 Attempt 1 (label `session-4-load-baseline`, 2026-09-25T20:44Z): both launches were refused by Coval for the empty metric list, and the runner's lookup for a run that might have started crashed on `--order-by -create_time` (read as a flag). `coval runs list` for the agent shows no run after `StET3kNN`: **no call was placed, none counted.** Fixed: `--metrics` replaces `--no-metrics`, and the lookup sends `--order-by=-create_time` (`tests.test_coval_sim:test_named_metrics`). The two `intent` lines stay in `coval-runs.jsonl`; the relaunch uses label `session-4-load-baseline-b`.
+
+### Baseline load run result (bot code = 52eb245)
+
+| Run | Job | Simulations |
+|---|---|---|
+| `bV22oPLohTsYUqCWBXpzNz` | normal x10, concurrency 10 | 10 |
+| `3hZu7PPkjgn2RyzVVnC8A2` | stress x10, concurrency 10 | 10 |
+
+Used so far: **32** of 60. Report: [`load/baseline/report.md`](load/baseline/report.md) (`load_report.py`, Langfuse and write records only).
+
+**Deviation, found after the run:** `coval_sim serve` was started without the speech profile's env file, so the bot ran on its own defaults (`soniox/speech-ai:rt-v5`, `cartesia/sonic:3.5`, `eu-north`), not `session-3/speech-profile.v1.env` (`deepgram/nova:3`, `slng/fish/tts:s2.1-pro`, `eu-west`) that calls 1-12 used. Engine measures (consent, echo, holding lines, chains, requests per turn) do not depend on the speech provider; latency and misheard digits can. So the fixed run uses the **same defaults** as this baseline, for a clean A/B of the code alone, and neither load run is compared with calls 1-12 on latency.
+
+Findings:
+- 38 writes, **0** without a matching question put on an earlier turn. 19 of 20 calls made exactly one booking; every first booking BK0001 (no shared diary).
+- `Khs7tVuS` (stress): the simulated caller went silent after 31 s and never spoke again; Coval still shows it IN PROGRESS (same as session 3's `UAeZiGa`). Counted **inconclusive**. Harness gap it shows: 150 s of silence with no re-prompt.
+- `UD4fMgUZ` (stress): Friday booked on "Yes. That works for me." to its heard read-back; the caller then asked for Saturday and the call reached 180 s at the move read-back. 85 s went on the phone number: speech-to-text heard "672 1" for "671"; every wrong number was refused, the lookup ran only on "Yes, that's correct".
+- Latency held at 20 at once: turn latency p50 1.15 s, p90 2.62 s (187 turns); model request p50 0.66 s. Load average peaked at 11 on 15 cores.
+- Repeats: model text beside an operation 19 times in 10 calls; replies opening with a holding line 32; caller turns with more than one holding line 8.
+- Chains code could skip: `collect > book_appointment` 24, `collect > lookup_customer` 18, `collect > move_appointment` 1.
+- Requests: 1.78 completed per caller turn; 115 of 506 started were cancelled because the caller went on (endpointing).
+- 19 of 20 calls logged "call ceiling of 180s reached": Pipecat saw 1 client disconnect in 20, so a call whose caller hung up stayed open until the bot's own limit. It inflates call length, not turn latency.
+
+### What changes next, logged before any launch
+
+Your notes after the baseline: too many holding lines, sentences said more than once, and endpointing may make the bot talk over the caller.
+1. Fixed run: 20 calls, same shape and speech defaults as the baseline, fixes F1-F4 only (52 of 60).
+2. Endpointing run: the 8 reserve calls (4 normal + 4 stress, fixed build), with the silence the voice detector waits before smart-turn decides raised from 0.2 s to 0.6 s (`VAD_STOP_SECS`, new env knob, default unchanged). Question: do fewer caller turns arrive in pieces, fewer requests get cancelled, and fewer turns get interrupted, and at what latency cost?

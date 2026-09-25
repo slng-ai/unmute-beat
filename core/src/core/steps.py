@@ -103,6 +103,8 @@ class FlowCall[S: BaseModel](CallContext):
     """State fields a receipt sets (`assign`), each with the state fields its operation's arguments came from."""
     _choices: frozenset[str] = PrivateAttr(default=frozenset())
     """State fields picked from offered ids (`choices`): valid only while the request they were offered for stands."""
+    _recorded: frozenset[str] = PrivateAttr(default=frozenset())
+    """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
 
     @property
     def locale(self) -> Locale:
@@ -996,6 +998,13 @@ class ConversationStep(Step):
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
     opens_with: Operation | None = None
     """An operation read back on arrival, by code, when its arguments are already known (a carrier's number)."""
+    reads_back: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """Operation -> fields: a reply that only records one of these fields gets that operation read back by code.
+
+    The same read-back the model would have asked for with a second request,
+    and the same approval after it: only a later yes, with the model calling
+    the operation, carries it out.
+    """
 
     @property
     def produces(self) -> frozenset[str]:
@@ -1023,6 +1032,46 @@ class ConversationStep(Step):
             return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
 
         return (Opening(operation.name, 'handoff', ready, read_back),)
+
+    def _reads_back(self) -> Callable[[FlowCall[Any]], Prompted | None] | None:
+        """The `reads_back` rule: the operation whose field was just recorded, when it is the only one that could run.
+
+        An operation could run when its arguments are complete, or when the
+        ones missing are choices on offer (a held booking the caller could
+        name). So where a new booking and a move of a held one are both
+        possible, which one the caller means is the model's to read, as
+        before. None as well when that exact question is already waiting.
+        """
+        if not self.reads_back:
+            return None
+
+        def possible(call: FlowCall[Any], operation: Operation) -> bool:
+            try:
+                _args(operation, call)
+            except ValidationError as error:
+                binds = getattr(operation, 'binds', None) or {}
+                missing = {binds.get(str(e['loc'][0]), str(e['loc'][0])) for e in error.errors() if e['loc']}
+                return all(call._offered.get(name) for name in missing)
+            return True
+
+        def read(call: FlowCall[Any]) -> Prompted | None:
+            if [op for op in self.operations if possible(call, op)] != [
+                op for op in self.operations if op.name in self.reads_back and possible(call, op)
+            ]:
+                return None
+            for operation in self.operations:
+                if not call._recorded & set(self.reads_back.get(operation.name, ())):
+                    continue
+                try:
+                    proposal = operation.proposal_for(call, _args(operation, call))
+                except ValidationError:
+                    return None
+                if call.pending(operation.name, value=proposal.value) is not None:
+                    return None
+                return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
+            return None
+
+        return read
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def goodbye(ctx: RunContext[FlowCall[Any]], words: str) -> str:
@@ -1059,6 +1108,7 @@ class ConversationStep(Step):
                 except ValidationError as error:
                     problems = '; '.join(e['msg'] for e in error.errors())
                     raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
+                ctx.deps._recorded = frozenset(proposed)
                 return f'Recorded: {", ".join(sorted(proposed)) or "nothing"}.'
 
             collect.__annotations__ = {'ctx': RunContext[FlowCall], 'values': values_type, 'return': str}
@@ -1121,6 +1171,8 @@ class ConversationStep(Step):
             satisfied_by=self.satisfied_by,
             guarded=self.guarded,
             openings=self.opening(),
+            speaks_for=frozenset(op.name for op in self.operations),
+            reads_back=self._reads_back(),
         )
 
     def _operate(self, flow: StepFlow, operation: Operation, actions: frozenset[str]):

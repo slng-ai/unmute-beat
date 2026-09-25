@@ -314,7 +314,8 @@ async def a_permitted_repair_succeeds():
     Repair is the thing the budget must not forbid: this is the case where
     the second attempt is the right one. The verify agent first records a
     number one digit short; the state refuses it, saying why, and the second
-    attempt is the right number.
+    attempt is the right number. That reply only recorded the number, so code
+    reads it back (`reads_back`): no third request.
     """
     books.reset()
     call = open_call('', diary=books)
@@ -333,7 +334,8 @@ async def a_permitted_repair_succeeds():
     with scripted(verify=wrong_then_right):
         await probe._turn('my number is plus three four, six hundred, one one one, two two two')
 
-    assert len(attempts) == 3, attempts
+    assert len(attempts) == 2, attempts
+    assert call.spoken[-1].text.startswith('Let me read that back to you: +34 600'), call.spoken
     assert any('too few' in r for r in _refusals(call)), 'the model was told what was wrong'
     assert call.state.facts.customer_phone == PHONE, call.state.facts
     assert EXHAUSTED not in probe.fixed(), 'a legitimate repair must not exhaust the turn'

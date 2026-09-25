@@ -17,6 +17,8 @@ and says, per call and in total:
 * latency: turn latency (`turn.user_bot_latency_seconds`), model request
   time, and for each reply that spoke, the time from its first token to its
   end: what holding its text until the reply is complete would cost;
+* endpointing: pieces that continued a caller turn the runtime had already
+  ended (the caller paused and went on), and turns the caller cut into;
 * isolation: every call's first booking is BK0001, its own diary's first.
 
 Writes `report.md` and `report.json` into DIR. Bills nothing: it reads.
@@ -106,6 +108,10 @@ class CallReport:
     requests: list[float] = field(default_factory=list)
     tails: list[float] = field(default_factory=list)
     statuses: dict[str, int] = field(default_factory=dict)
+    pieces: int = 0
+    """Runs that answered a second or later piece of one caller turn (`turn_pieces` over 1)."""
+    interrupted: int = 0
+    """Runtime turns the caller cut into (`turn.was_interrupted`)."""
     problems: list[str] = field(default_factory=list)
 
 
@@ -149,6 +155,7 @@ def judge(run: str, sim: Simulation, obs: list[Obs]) -> CallReport:
         (o for o in obs if o.type == 'AGENT' and 'speech_segments' in o.attrs), key=lambda o: o.start
     ):
         statuses[str(span.attrs.get('status'))] += 1
+        report.pieces += str(span.attrs.get('turn_pieces', '1')) not in ('0', '1')
         for segment, origin in zip(
             _listed(span.attrs.get('speech_segments')),
             _listed(span.attrs.get('speech_origins')),
@@ -176,6 +183,9 @@ def judge(run: str, sim: Simulation, obs: list[Obs]) -> CallReport:
         for o in obs
         if o.name == 'turn' and o.attrs.get('turn.user_bot_latency_seconds') is not None
     ]
+    report.interrupted = sum(
+        1 for o in obs if o.name == 'turn' and str(o.attrs.get('turn.was_interrupted')).lower() == 'true'
+    )
     conversation = next((o for o in obs if o.name == 'conversation'), None)
     report.seconds = _seconds(conversation) if conversation else None
 
@@ -240,6 +250,8 @@ def render(reports: list[CallReport]) -> str:
         f'Requests: {completed} completed over {turns} caller turns '
         f'({completed / turns if turns else 0:.2f} per turn), {started - completed} cancelled of {started} started.',
         f'Chains code could skip: {dict(chains) or "none"}.',
+        f'Endpointing: {sum(r.pieces for r in reports)} runs answered a continuation piece; '
+        f'{sum(r.interrupted for r in reports)} runtime turns were cut into by the caller.',
         f'Turn latency: p50 {_p(every("latency"), 0.5)} s, p90 {_p(every("latency"), 0.9)} s, '
         f'n={len(every("latency"))}.',
         f'Model request time: p50 {_p(every("requests"), 0.5)} s, p90 {_p(every("requests"), 0.9)} s.',

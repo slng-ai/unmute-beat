@@ -57,12 +57,20 @@ def project(
     request's response when there is one. Inserted as a stray response, it
     went in front of the caller's words.
 
+    A holding line (`tool_filler`) is never sent: it answers nothing, and a
+    model that saw "One moment." as its own words wrote it into its replies
+    (32 replies in the 20-call baseline of session 4, then said twice).
+
     Caller turn IDs deduplicate reset/handoff inputs: within one turn, caller
     words already sent are not sent again, whether repeated as they were or
     as the whole turn joined up. A turn that arrived in pieces keeps every
     piece, because each one holds words the others do not.
     """
-    speech = [s for s in call.all_spoken if s.id not in excluded and s.id not in call._hidden_speech]
+    speech = [
+        s
+        for s in call.all_spoken
+        if s.id not in excluded and s.id not in call._hidden_speech and s.origin != 'tool_filler'
+    ]
     by_id = {s.id: s for s in speech}
     result = []
     present = set()

@@ -120,6 +120,20 @@ class Node[S: VoiceState]:
     """
     model_speech: bool = True
     """False for a step that speaks only through output functions, never through provider text."""
+    speaks_for: frozenset[str] = frozenset()
+    """Outputs that say their own words (a step's operations): model text in the same reply is not said.
+
+    The model wrote the application's read-back, or a holding line, beside
+    the operation that then said it again: 19 times in 10 of 20 calls of the
+    session-4 baseline. The turn engine holds a reply's text on such a step
+    until the reply shows whether one of these is called.
+    """
+    reads_back: Callable[[Any], Any] | None = None
+    """What code reads back when a reply that only records fields has just recorded an operation's (`reads_back`).
+
+    Returns the read-back (a `Question`) or None. Saves the second request
+    that only called the operation for its read-back (43 in the baseline).
+    """
     history: Literal['messages', 'reset'] = 'messages'
     """What conversation this step is sent.
 

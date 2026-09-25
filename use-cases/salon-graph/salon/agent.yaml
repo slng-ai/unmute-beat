@@ -94,6 +94,7 @@ steps:
     fields: [customer_phone, service, booking_day, booking_time]
     operations: [lookup_customer]
     opens_with: lookup_customer
+    reads_back: {lookup_customer: [customer_phone]}
     exits:
       - {to: concierge, purpose: 'the caller will not confirm a number, or asks about something else entirely'}
 
@@ -107,6 +108,7 @@ steps:
     fields: [service, booking_day, booking_time, slot, appointment]
     choices: {slot: functions.py:find_times, appointment: functions.py:held_bookings}
     operations: [book_appointment, move_appointment, cancel_appointment]
+    reads_back: {book_appointment: [slot]}
     exits:
       - {to: complaints, purpose: 'a complaint about a past service'}
       - {to: concierge, purpose: 'they give up booking, or ask about something unrelated to booking'}

@@ -24,7 +24,7 @@ All green except one inherited lint problem: `docs/research/reusable-core/sessio
 
 ## Coval allowance
 
-Session 4 has its own cap of 20 calls. Used so far: **2** (see the table below).
+Session 4 has its own cap of 20 calls. Used so far: **7** (see the table below).
 
 Inherited run reconciled by ID on 2026-09-25T17:45Z, no relaunch:
 
@@ -45,3 +45,4 @@ Reserve call 2, logged before launch: the same frozen complex case on the repair
 | 2 | complex stress, reserve 1 (same job), revision 52eb245 | `MQagmvspVLRNbWM3kBtMmu` | 1: `NdkBKGCNZfxfrcsDLXKN8L` (call CA87afaa0f20e84e9faf5665b54829c100) | **Business outcome correct; complex trigger exercised.** Number in two pieces, read back in full, "Yes, that's correct", then the lookup (audit: asked turn 2, answered turn 3). Friday read back; "Actually Saturday morning" wrote nothing; the new date rule asked "tomorrow the 26th or Saturday October 3"; 26th read back, "Yes please, that's perfect", one booking BK0001 Saturday 09:00 (audit: asked turn 8, answered turn 9). The receipt was cut ("...Anything else I can help") and the caller said "Yes, please, that's great": joined to turn 9, the receipt was said again by code, no model request, no move, no second write. Coval: Changes match agreement YES; expected behaviours 0.67 (4 of 6, no explanations from the API); Answered question not asked again NO; Latency 1.79 s; 23 turns. Ended on the 180 s ceiling (Twilio REST hang-up returned 401; the line closed anyway). Finding: a turn continued over several pieces says one holding line per piece. |
 
 Gate before bulk: the complex trigger was exercised and the business outcome passed on the repaired revision (52eb245). The five-call jobs run on that frozen revision.
+| 3-7 | normal (kQ8b6nMZ, MUFJdYAHdBHU6UbRRu4ykM, 5 iterations, concurrency 5), revision 52eb245 | `jCBGSipW7FuUKu4VVtgnin` | 5: `GbULHRHPbL4taaEzHryhbt`, `BsdTQTsZ23otiZg2wHLYnu`, `jEisR2g6VdBaGZ9tjcX3b7`, `nnGmXURQxCYeELXcW46YBx`, `cyYESUGZwB8PjmxpGwmXXh` | **5 of 5 correct.** Each: lookup on a yes to the heard number read-back, exactly one booking (Friday the 2nd 09:00) on a yes to its heard read-back (Langfuse write audits). Expected behaviours 1.0 x5; Changes match agreement YES x5; Answered question not asked again YES x4, NO x1 (jEisR2g6: repeated holding lines talked over the caller's first number, who said it again). Coval latency 1.31-1.70 s (five at once: not comparable to single calls). |

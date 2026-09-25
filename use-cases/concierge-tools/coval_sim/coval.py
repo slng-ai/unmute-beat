@@ -146,12 +146,22 @@ class CovalClient:
         return run['run_id']
 
     def wait(self, run_id: str, *, timeout_s: float, poll_s: float = 5) -> Run:
-        """Poll a run until Coval stops working on it or the timeout passes."""
+        """Poll a run until Coval stops working on it or the timeout passes.
+
+        Every 30 s it prints the run's status and this machine's load average:
+        a load test runs every call's bot here, so a saturated machine is part
+        of what its latency measures.
+        """
         deadline = time.monotonic() + timeout_s
         run = Run.model_validate(self._call('runs', 'get', run_id))
+        polls = 0
         while not run.finished and time.monotonic() < deadline:
             time.sleep(poll_s)
             run = Run.model_validate(self._call('runs', 'get', run_id))
+            polls += 1
+            if polls % max(1, round(30 / poll_s)) == 0:
+                load = ' '.join(f'{x:.1f}' for x in os.getloadavg())
+                print(f'run {run_id} {run.status}, load average {load}', flush=True)
         return run
 
     def simulations(self, run_id: str) -> list[Simulation]:

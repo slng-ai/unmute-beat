@@ -353,6 +353,45 @@ def test_concurrency() -> None:
     assert coval.args[coval.args.index('--concurrency') + 1] == '3', coval.args
 
 
+def test_no_metrics() -> None:
+    """`--no-metrics`: the launch names no metric, and a metric Coval scored anyway fails nothing."""
+    scored = Agent(id='S', display_name='voice-harness-salon-pipecat', test_set_ids=['ONE'], metric_ids=['m'])
+    check = checker(FakeCoval([scored]))
+    job = check.plan('salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='l', metrics=False)
+    assert job.agent.metric_ids == [] and 'metrics      none' in job.describe(), job.describe()
+    kept = check.plan('salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='l')
+    assert kept.agent.metric_ids == ['m'], 'the flag, not the plan, drops them'
+
+    class Launches(CovalClient):
+        def _call(self, *args: str):
+            self.args = args
+            return {'run_id': 'R'}
+
+    coval = Launches(api_key='test', binary='/nonexistent/coval')
+    coval.launch(job.agent, job.persona, 'ONE', iterations=1, name='n')
+    assert coval.args[coval.args.index('--metric-ids') + 1] == '', 'empty, never left to the agent default'
+
+    class Scored(FakeCoval):
+        def wait(self, run_id: str, *, timeout_s: float, poll_s: float = 15) -> Run:
+            return run(m=('Answered Question Not Asked Again', 'x', 'NO'))
+
+        def simulations(self, run_id: str) -> list[Simulation]:
+            return [
+                Simulation(
+                    simulation_id='x',
+                    status='COMPLETED',
+                    transcript=[Message(role='assistant', content='Hi')],
+                )
+            ]
+
+        def composite_ids(self, metric_ids: list[str]) -> set[str]:
+            return set()
+
+    check = checker(Scored([scored]))
+    assert check._result(job, 'R', 'n', Path('log')).problems == []
+    assert check._result(kept, 'R', 'n', Path('log')).problems, 'with metrics, a NO still fails'
+
+
 if __name__ == '__main__':
     test_call_ceiling()
     test_plan()
@@ -363,4 +402,5 @@ if __name__ == '__main__':
     test_problems()
     test_fallbacks()
     test_concurrency()
+    test_no_metrics()
     print('ok')

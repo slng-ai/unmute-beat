@@ -305,6 +305,7 @@ class ReleaseCheck:
         max_simulations: int,
         label: str,
         concurrency: int = 1,
+        metrics: bool = True,
     ) -> Job:
         """The one job these arguments name, checked against what Coval holds. Reads only.
 
@@ -318,6 +319,9 @@ class ReleaseCheck:
             label: What this launch belongs to (a session); the same job twice under one label is refused.
             concurrency: How many calls Coval places at once. A run of N calls one at a time
                 waits N times for Coval's dial and its scoring after each call; at once, about once.
+            metrics: False launches with no metric, so Coval only places and records the calls.
+                Session 4's load test judges calls from Langfuse and the diary instead
+                (`load_report.py`): no judge's noise, and no wait for scoring.
 
         Raises:
             PlanError: Listing every reason the job is refused.
@@ -331,7 +335,7 @@ class ReleaseCheck:
         matches = [a for a in agents if a.id == agent_id]
         if len(matches) != 1:
             raise PlanError([f'no Coval agent has the ID {agent_id}'])
-        agent = matches[0]
+        agent = matches[0] if metrics else matches[0].model_copy(update={'metric_ids': []})
         if agent.agency != agency:
             problems.append(
                 f'agent {agent_id} is {agent.display_name!r}, which calls '
@@ -451,6 +455,8 @@ class ReleaseCheck:
                 still_running=True,
             )
         self.runs.write(job.key, name=name, status='finished', run_id=run_id, remote=run.status)
+        if not job.agent.metric_ids:
+            run = run.model_copy(update={'results': None})
         problems = run.problems(
             self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
         )
@@ -497,6 +503,11 @@ def _parser() -> argparse.ArgumentParser:
             type=int,
             default=1,
             help='calls Coval places at once; a bot with its own limit only',
+        )
+        job.add_argument(
+            '--no-metrics',
+            action='store_true',
+            help='launch with no metric: Coval places and records the calls, and scores nothing',
         )
         job.add_argument('--log', type=Path, default=Path('runs.jsonl'), help='the run log')
         job.add_argument(
@@ -546,6 +557,7 @@ def main(argv: list[str] | None = None) -> int:
             max_simulations=args.max_simulations,
             label=args.label,
             concurrency=args.concurrency,
+            metrics=not args.no_metrics,
         )
         print(job.describe(), flush=True)
         if args.command == 'plan':

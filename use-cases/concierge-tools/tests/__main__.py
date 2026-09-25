@@ -11,7 +11,13 @@ state of the others.
 
 import runpy
 
-MODULES = ('tests.test_coval_sim', 'tests.test_ledger', 'tests.test_audio_timing', 'tests.test_matrix')
+MODULES = (
+    'tests.test_coval_sim',
+    'tests.test_ledger',
+    'tests.test_load_report',
+    'tests.test_audio_timing',
+    'tests.test_matrix',
+)
 
 
 def main() -> int:

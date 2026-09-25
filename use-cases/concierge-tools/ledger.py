@@ -58,8 +58,12 @@ MODELS = ('gemini', 'gpt', 'claude')
 """A generation from one of these is a model request. STT and TTS generations are not."""
 CLASSIFIER = 'You classify the answer to a question'
 """The first words of every harness classifier's instructions (`core.classifiers.TASK`)."""
-TASKS = frozenset({'save_booking', 'record_complaint', 'save_name', 'activate_plan', 'record_answer'})
-"""Tool calls that change the business: the work a call is for. The salon's, then Faro's (`examples/faro`)."""
+TASKS = frozenset({
+    'save_booking', 'record_complaint', 'save_name', 'activate_plan', 'record_answer',
+    'book_appointment', 'move_appointment', 'cancel_appointment',
+})  # fmt: skip
+"""Tool calls that change the business: the work a call is for. The salon's (session 3, then session 4's
+operations), then Faro's (`examples/faro`)."""
 FAILED = ('error', 'nothing was', 'refus', 'not saved')
 """Words in a tool's output that mean the write did not happen."""
 
@@ -181,11 +185,18 @@ class Call:
 
 ANSWERS = {
     'save_booking': ('booking', 'move_or_add'),
-    'record_complaint': ('complaint',),
+    'record_complaint': ('complaint', 'record_complaint'),
+    'book_appointment': ('book_appointment',),
+    'move_appointment': ('move_appointment',),
+    'cancel_appointment': ('cancel_appointment',),
+    'lookup_customer': ('lookup_customer',),
     'confirm_phone': ('phone',),
     'activate_plan': ('plan',),
 }
-"""The questions whose yes can authorise each write. A write not named here needs no yes: it is audited, not matched."""
+"""The questions whose yes can authorise each write. A write not named here needs no yes: it is audited, not matched.
+
+Session 4's operations are asked about under their own name (`about` is the action).
+"""
 
 
 def _matches(audit: dict[str, Any]) -> bool:

@@ -70,6 +70,8 @@ class Simulation(BaseModel):
     status: str
     error_message: str | None = None
     transcript: list[Message] = []
+    call_sid: str | None = None
+    """The Twilio call ID, which is the call's Langfuse session: how `load_report.py` finds its traces."""
 
     @property
     def agent_spoke(self) -> bool:

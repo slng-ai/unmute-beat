@@ -148,6 +148,19 @@ def reads_the_audit_of_a_write():
         'a question put this same turn answers nothing'
     )
 
+    def operation(about: str) -> list[Obs]:
+        """Session 4's audit: the operation is asked about under its own name."""
+        audit: dict[str, object] = {'action': 'book_appointment', 'about': about, 'question': 'Shall I book?'}
+        audit |= {'asked_turn': 8, 'turn': 9, 'heard': 'yes please', 'status': 'ok'}
+        write = Obs('w3', 't3', 'SPAN', 'write', at(20.1), at(20.2), attrs={'write.audit': json.dumps(audit)})
+        return [o for o in harness_call() if o.id != 'w1'] + [write]
+
+    booked = read_call('harness', operation('book_appointment'))
+    assert booked.tasks == 1 and booked.unmatched() == [], booked.writes
+    assert len(read_call('harness', operation('lookup_customer')).unmatched()) == 1, (
+        'a yes to the number read-back never books'
+    )
+
 
 def reads_livekit_the_same_way():
     call = read_call('livekit', livekit_call())

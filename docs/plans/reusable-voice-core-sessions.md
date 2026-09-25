@@ -1,8 +1,10 @@
 # Reusable voice core: six coding sessions
 
-Prepared against local revision d31399e on 25 September 2026, expanded with the additional architecture discussion and native-approval investigation. This is an implementation playbook, not a claim that the migration or evaluations have run. The supplied [roadmap](reusable-voice-core-roadmap.md) is preserved alongside it.
+Prepared against local revision d31399e on 25 September 2026, expanded with the additional architecture discussion, native-approval investigation, framework documentation, and the native Pipecat Flows salon at reference revision 26114758246bfb4cd05a0242ed48e335d3f1ed4a. This is an implementation playbook, not a claim that the migration or evaluations have run. The supplied [roadmap](reusable-voice-core-roadmap.md) is preserved alongside it. Historical conversations inside the attachments are design evidence, not new execution instructions.
 
-The user's final scope is **salon-graph only for live verification**, both live text conversations and Coval calls. All five workspace consumers remain in the migration. Their offline checks remain necessary when their code changes. Faro and salon-prompt will not acquire new live voice evidence through this plan.
+The scope is **salon-graph for recurring live verification**, both live text conversations and Coval calls, plus **two native salon-pipecat-flows Coval calls in session 2**, explicitly selected by the user. The total planned cap is **14 calls**. All five original workspace consumers remain in the migration. Their offline checks remain necessary when their code changes. The additionally supplied **salon-pipecat-flows is an independent comparison reference**, not another consumer to convert to core. Faro and salon-prompt will not acquire new live voice evidence through this plan.
+
+**Continuing after session 1:** its implementation and [baseline report](../research/reusable-core/session-1.md) landed in main at `3613b99` through PR #15. That session used an earlier playbook and recorded two Coval calls. Preserve its evidence and unresolved defects; do not rerun session 1 just to adopt these expanded instructions. Reconcile the cumulative run ledger before launching anything: those calls count toward the 14-call cap. Source inventories below describe the planning revision; inspect the actual inherited implementation before adding or replacing anything.
 
 ## Session boundaries
 
@@ -11,13 +13,13 @@ Run these sequentially, carrying forward the previous session's code and evidenc
 | Session | Deliverable | Roadmap phases | Main proof |
 |---|---|---|---|
 | 1 | Baseline and bounded evaluation tools | 0 + verification foundation | Reproduce current behavior; launch only intended calls |
-| 2 | Installable public boundary, typed session, explicit delivery | 1–2 + delivery prerequisite | Clean installation; atomic state; no approval from unheard speech |
+| 2 | Installable public boundary, typed session, explicit delivery and native-runtime quality gate | 1–2 + delivery prerequisite | Clean installation; native comparison matrix; no approval from unheard speech; measured runtime overhead |
 | 3 | Complete ordinary authoring on the clinic fixture | 3 | Config, data models, prompts and domain functions suffice |
 | 4 | Salon migrated to the public authoring contract | 4 | Existing business behavior through the new entry point |
 | 5 | Faro migrated using the same contract | 5 | Identity and persistence acceptance offline; salon remains sound |
 | 6 | Shared launcher, tooling consumers, compatibility cleanup | 6–7 | All five consumers use useful public imports; isolated installation works |
 
-Every session finishes with deterministic checks, a bounded live text salon evaluation, and a two-call Coval salon checkpoint. Session 1 records the reference result; sessions 2–6 compare against it and the previous accepted checkpoint. A known baseline defect is explicitly recorded and assigned to its repair session, never silently treated as correct behavior.
+Every session finishes with deterministic checks, a bounded live text salon evaluation, and a two-call Coval salon-graph checkpoint. Session 2 also runs two matching native Pipecat calls, for four calls at that checkpoint only. Session 1 records the reference result; sessions 2–6 compare against it and the previous accepted checkpoint. A known baseline defect is explicitly recorded and assigned to its repair session, never silently treated as correct behavior.
 
 ## Decisions carried into the implementation briefs
 
@@ -59,11 +61,94 @@ Framework references sharpen particular decisions:
 
 Check the installed lockfile and corresponding SDK source before using those APIs. Current documentation is guidance, and the prior investigation was not a runtime integration test.
 
+## Harness architecture and framework reuse — required in every session
+
+The product is a versioned Python library for authoring voice agents with **almost no repeated orchestration code**. An application supplies `agent.yaml`, concrete Pydantic models, prompts, typed domain functions, injected services, and custom domain nodes only where needed. It can start as one agent, add specialist handoffs, or constrain one task into collect → confirm → action, using the same state and operations. Agent/persona count and workflow control remain separate decisions.
+
+~~~text
+Application: configuration + models + prompts + domain functions + service wiring
+                              ↓ compile once
+Core definition: agents / standard steps / legal transitions / operation policies
+                              ↓ new session per call
+Core session: validated domain state + evidence + history + delivery + budgets
+                              ↓
+Pydantic AI: agent/model execution, schemas, tools, outputs, hooks, typed templates
+Pydantic Graph: declared workflow execution through the existing core flow driver
+                              ↕ typed turn and delivery events
+Pipecat adapter: transport, audio, STT, endpointing, interruption, TTS and playback
+~~~
+
+This is a responsibility diagram, not a demand for a new class at each line. Extend existing modules. A text caller uses the same session/turn contract with explicit delivery acknowledgements. Pipecat remains responsible for audio; core interprets accepted input and playback evidence into conversation policy. Keep the boundary suitable for a future adapter without implementing LiveKit or replacing Pipecat with Pydantic native realtime in these six sessions.
+
+The library owns proposal freshness, identity-bound approval, invalidation, receipt-controlled completion, stale-result handling, logical-turn continuation, budgets and audit. The SDK's typed output validates structure; the service's receipt establishes a business outcome. Neither a model label nor a populated field establishes permission. Backend idempotency, reconciliation and compensation remain explicit domain contracts.
+
+### Packages, native capabilities and implementation expectations
+
+The versions below were found in this worktree's lockfile; verify them again at execution time. Prefer these installed capabilities before writing equivalents. Record the concrete API used, what custom code it replaces, and the check proving the integration. Adding a library is not itself evidence of reuse.
+
+| Package / feature | Intended use in this harness | Implementation obligation and boundary | Sessions / documentation |
+|---|---|---|---|
+| `pydantic` 2.13.5 | Concrete state, configuration, arguments and receipts; `BaseModel`, `Field`, discriminated unions and reusable `TypeAdapter` instances | Validate whole candidates at trust boundaries. Derive schemas from these types; preserve meaningful false/zero values. Do not replace validation with construction, unvalidated copies or schema-only dictionaries. Internal scheduling can remain ordinary Python. | 2–5: [models](https://pydantic.dev/docs/validation/latest/concepts/models/), [unions](https://pydantic.dev/docs/validation/latest/concepts/unions/), [TypeAdapter](https://pydantic.dev/docs/validation/latest/concepts/type_adapter/) |
+| `pydantic-ai-slim[google,openai,spec]` 2.46.0 | Existing typed agent execution and provider integrations | Keep the SDK's model/tool loop and typed streaming events. Inject services through `deps` / `RunContext`; do not build another provider abstraction or place API clients in domain state. `deps_type` is not an automatic runtime validator. Provider overrides must be explicit and observable. | 2–6: [agents](https://pydantic.dev/docs/ai/core-concepts/agent/), [dependencies](https://pydantic.dev/docs/ai/core-concepts/dependencies/) |
+| Native `AgentSpec`, `Agent.from_spec`, `TemplateStr`; `pydantic-handlebars` 0.2.1 | Agent model/settings/instructions and typed prompt compilation beneath the application manifest | Reuse the supported SDK configuration subset; add only workflow/voice declarations missing from it. Pass concrete dependency/output types. Compile bad template references before connecting providers. Preserve existing rendered prompts and resource loading. The native spec is not the whole voice application. | 2 feasibility, 3 implementation, 4–5 adoption: [Agent Specs](https://pydantic.dev/docs/ai/core-concepts/agent-spec/) |
+| Pydantic AI `Hooks`, capabilities, `FunctionToolset` and preparation hooks | Reusable policy hooks, related domain tools and per-step tool exposure | Wire the hooks already in AgentBuilder. Keep execution authorization behind every exposed tool. Use a toolset where tools are actually shared; a lone function need not gain a wrapper. Keep mutable policy state per session/run when definitions are shared. | 2–5: [hooks](https://pydantic.dev/docs/ai/core-concepts/hooks/), [capabilities](https://pydantic.dev/docs/ai/capabilities/overview/), [toolsets](https://pydantic.dev/docs/ai/tools-toolsets/toolsets/) |
+| On-demand capabilities | Optional specialist instruction/tool bundles for larger agents | First use deterministic step-level selection. Use native deferred loading only for a demonstrated optional bundle; measure any added discovery request. Approval, budgets, history and receipt guards are always active. Do not introduce a discovery step into every booking. | 3 decision, 4–5 only if useful: [on-demand capabilities](https://pydantic.dev/docs/ai/capabilities/on-demand/) |
+| `ToolOutput`, output functions, native deferred tool requests/results | Structured decisions and application-rendered outcomes; optional pause/resume of ordinary function tools | Keep output finishers/direct actions for known workflows. Evaluate native deferral only for dynamic ordinary tools, under the same spoken-consent policy. No approval via corrected arguments that were never read back. Measure post-tool model continuations. | 2 quality checks, 3 integration decision: [outputs](https://pydantic.dev/docs/ai/core-concepts/output/), [deferred tools](https://pydantic.dev/docs/ai/tools-toolsets/deferred-tools/) |
+| `pydantic-graph` 2.46.0 | Existing `GraphBuilder`, typed steps, decisions and legal transitions | Compile the current StepFlow into the existing graph driver. Session owns conversation position/evidence; graph state is not permission to bypass atomic updates. Do not add a second scheduler, or require separate personas for separate stages. | 2–5: [graph](https://pydantic.dev/docs/ai/graph/graph/), [GraphBuilder](https://pydantic.dev/docs/ai/graph/builder/) |
+| `pipecat-ai` 1.11.0 and application `pipecat-slng` | Current pipelines, aggregators, turn strategies, frames, transport and speech services | Keep voice dependencies optional for core. Translate real interruption/playback signals at the adapter boundary. Preserve Pipecat's lifecycle and backpressure; application receipt speech must not trigger an unnecessary model continuation. Read the locked implementation before using current examples. | 1–2, 6: [interruptions](https://docs.pipecat.ai/pipecat/fundamentals/interruptions), [turn strategies](https://docs.pipecat.ai/api-reference/server/utilities/turn-management/user-turn-strategies.md) |
+| Native `pipecat.flows` — `FlowConfig`, `Flow`, `FlowManager` | Independent benchmark of declarative authoring, transitions, tool schemas and response scheduling | The supplied native salon imports these from `pipecat-ai`; do not install the older separate `pipecat-flows` distribution by habit. Compare native behavior and its application-owned guarantees; do not run its scheduler underneath the existing core graph as a second engine. | 1 inventory, **2 quality gate**, 3 authoring comparison: [Flows](https://docs.pipecat.ai/pipecat/flows/introduction), [nodes/messages](https://docs.pipecat.ai/pipecat/flows/nodes-and-messages), [functions](https://docs.pipecat.ai/pipecat/flows/functions) |
+| `pydantic-extra-types[phonenumbers]` 2.11.1 | Existing salon/Faro reusable phone value types | Keep format validation at the domain boundary; a valid phone is neither confirmed identity nor reliable recovery of misheard speech. A generic core does not need a mandatory phone dependency. | 4–5; inspect the existing domain models |
+| PyYAML, `importlib.resources`, `uv_build` / uv | Application manifest, installed prompts/configuration and package distribution | Reuse safe loading and Pydantic validation; no executable expression language or custom templating engine. Build and load from outside the repository. Declare packages imported directly, including graph/template libraries when used directly. | 2–3, 5–6 |
+| Langfuse 4.15.4 + OpenTelemetry + SDK instrumentation | Existing trace backend, request usage, operation and voice correlation | Configure explicitly at startup. Preserve one provider-request count and stable call/operation IDs. Pydantic AI can emit OTel without requiring Logfire; do not add another observability service to follow an example. | All: [SDK observability and OTel](https://pydantic.dev/docs/ai/integrations/logfire/) |
+| Pydantic AI `FunctionModel`, `TestModel`, override and message-history APIs | Offline real-engine checks and cancellation/history inspection | Disable real requests before imports, retain completed messages after cancellation, and distinguish intentionally pending approval calls from abandoned calls. Existing assert-script runners remain. | All: [testing](https://pydantic.dev/docs/ai/guides/testing/), [history](https://pydantic.dev/docs/ai/core-concepts/message-history/) |
+
+**Evaluate, do not install by default:** [Pydantic Evals](https://pydantic.dev/docs/ai/evals/evals/) may help if the existing small runner cannot manage the actual case/report needs; it must not replace the assert suites or imply voice simulation. [Pydantic AI Harness](https://pydantic.dev/docs/ai/harness/) is a separate capability library, not this project's voice core. Reuse a specific needed capability if it removes code after checking version/dependency implications; a coder/researcher harness, shell tools, autonomous planning and generic memory do not belong in the voice default. LiveKit, native speech-to-speech, durable workflow backends and Unmute code generation remain future integrations. Do not add LangChain.
+
+### Native Pipecat reference and session 2 standard
+
+The supplied reference is [salon-pipecat-flows](../../use-cases/salon-pipecat-flows/README.md), inspected at reference revision `26114758246bfb4cd05a0242ed48e335d3f1ed4a`. It is present in main alongside the session-1 work. Use that folder in the actual checkout or a pinned reference checkout. Record the exact source revision and file hashes. Never silently copy a different core from the reference checkout into the migration.
+
+Read its `README.md`, `pyproject.toml`, `bot.py`, `flow.yaml`, `graph_salon/{__init__,flow,call,models,handlers,writes,speech}.py`, and `tests/test_graph_salon.py`. Its `Line` tests exercise real loaded functions/branch tables with a stand-in manager; other checks use real frames and FlowManager. Preserve this distinction when interpreting evidence. Passing handler tests does not prove a complete audio call.
+
+The benchmark is the native build **including its application safeguards**, not bare Pipecat. Its code includes a consent wrapper, Pydantic schema repair, validated receipts, fixed speech, an empty-reply guard and a custom nonblocking speech action. Its own README identifies omissions including paused-input joining, held approval and complaint-excerpt enforcement. `SalonCall.approve` checks proposal kind, caller and turn but does not establish complete playback. Reproduce relevant cases before reporting a difference; these source observations are not new measured results.
+
+### N1–N13 acceptance matrix
+
+Use this matrix in `session-2.md`, with columns for native result, harness result, evidence, measured overhead and status. Results are **pass**, **fail**, **not exercised** or **not comparable**, never a composite score hiding a critical failure.
+
+| ID | Required comparison | Harness acceptance |
+|---|---|---|
+| N1 | Invalid arguments, receipt shape/mismatch, unknown fields, atomic state | No backend dispatch on invalid input; no partial state or claimed success from invalid evidence. Schema sent to the model matches runtime constraints. |
+| N2 | Missing/same-turn/wrong-identity approval, rejection, correction, replay | No unauthorized original write; one effect after delivered current approval. A native gap never relaxes this requirement. |
+| N3 | Verification detour and resumed booking/read | Keep the request and return correctly. Known application continuation does not require another model to rediscover the task. |
+| N4 | Offered choice, booking/move/cancel, complaint | Matching domain outcomes and truthful receipt speech for supported paths. No extra action or lost caller intent. |
+| N5 | One action per reply, tool/request/transition budget | Reject the second conflicting action, enforce whole-turn bounds, and produce bounded recovery rather than loop or silence. |
+| N6 | Model/tool failure, empty output, duplicate answer/receipt | Bounded handling with one truthful audible outcome; no duplicate completion or unbounded retry. Caller interruption is not an empty-model failure to retry. |
+| N7 | Node transition while playback or an action-completion frame is interrupted/missing | No indefinite transition wait; next caller input is accepted and routed correctly. Exercise the native custom-say regression, not just a normal transition. |
+| N8 | Cancellation before dispatch, during uncertain execution, after successful receipt | No pre-approval effect; completed effects retained; unknown remains unknown until reconciled; no automatic duplicate write. Check both semantic state and backend records. |
+| N9 | Same input/output frame timeline; generated, partial, repeated and late playback | No unheard-readback approval; obsolete output stops; paused input survives; old frames cannot approve a new generation. Intentional stronger semantics are documented rather than forced to equal native behavior. |
+| N10 | SDK context containing provider-specific messages / tool call-result pairs | No crashes, orphaned required results, leaked identity context or lost acknowledged result after cancellation. |
+| N11 | Two concurrent sessions; startup/setup failure/disconnect | Isolated state/evidence and bounded cleanup. Shared compiled definitions/clients do not leak mutable call state. |
+| N12 | Request topology, scheduling and local runtime overhead | No unexplained additional model round trip for code-decided continuation or receipt speech. Any classifier request is counted. Measure native and harness on the same deterministic trace before claiming an overhead improvement. |
+| N13 | New application authoring and portable packaging | Session 2 proves the public typed state/session/operation slice without a custom application runtime subclass. Session 3 must complete the manifest/clinic proof, including reusable agents, handoffs and standard steps. Compare domain code separately from orchestration and configuration; do not hide code by moving it. |
+
+Session 2 must pass its applicable runtime rows before the broader authoring migration. It should be at least as capable on common cases, explicitly stronger where required by delivery/evidence rules, and show no unexplained scheduling/request regression. N13's full declarative-authoring proof belongs to session 3 and remains visibly pending until then. A defect in the reference is evidence to describe, not behavior to reproduce or a reason to call the whole harness superior.
+
+**Fair measurements:** the supplied native bot pins `gemini-3.1-flash-lite` and a `TURN_STOP_SECS=1.5` smart-turn fallback; its README contrasts these with the harness model and Pipecat's 3-second default. Resolve actual settings, provider endpoint, thinking, prompts/tools, diary data, VAD/STT/TTS, language and audio format for both arms. Keep original settings as a named product comparison. A controlled runtime comparison must use matched settings or explicitly exclude the unmatched component; never attribute different silence thresholds or model speeds to core.
+
+For cheap runtime measurements, exercise equivalent real dispatch/frame paths with scripted model events and fake service completion, in isolated processes on the same machine. Warm up, run at least 20 paired repetitions in alternating order, record local dispatch-to-output, transition completion and interruption-to-output-stop separately, and retain request counts/raw samples. Use virtual time for ordering assertions and a monotonic wall clock for actual runtime cost. Freeze tolerances before the candidate measurement; the shared provisional threshold is an investigation trigger, not permission to declare equivalence. Do not count simulated provider delay as measured SDK speed. Missing/incomparable measurements keep the corresponding claim pending.
+
+**Live comparison and cost — user selected:** 12 salon-graph calls across six sessions plus two native salon-pipecat-flows calls in session 2. Use the same normal-booking and pause/correction cases and personas for both arms: four calls at that checkpoint, **14 planned calls total**, at most 42 audio minutes if the 180-second ceiling is enforceable. This is not a currency quote. No extra native text/model suite or automatic reruns are bundled into the extension. Record the two exact target IDs, case/persona IDs and per-target allowances before launch; carry this authorization forward without asking again. Existing native recordings may add context only when their versions/settings match. Even the paired two-case checkpoint establishes sampled parity only, not statistical equivalence or general superiority; missing triggers or incomparable settings remain visible gaps.
+
+Before session 1's reference calls, select and record one supported comparison profile for model/provider/thinking and audio/endpointing settings that both controllers can run. Use explicit evaluation overrides without silently changing production defaults, and preserve that salon-graph profile through all six checkpoints. If no shared profile works, run the two configured products with every difference recorded and keep runtime-speed/semantic-attribution claims unproven; do not spend extra calls searching for a favorable configuration. Report which production settings the chosen profile does and does not validate.
+
+For the existing session-1 baseline, that opportunity has already passed: its report records Gemini 3.5 flash lite and a 1.6-second smart-turn fallback. Do not rewrite those observations or silently rerun the baseline to match the native build. Before session 2, record whether the paired checkpoint can retain those settings in both arms. If it cannot, keep the baseline comparison and the native comparison distinct, record any evaluation override, and limit claims to the components/settings actually compared within the assigned allowance.
+
 ## Verification contract — applies to every prompt below
 
 ### Working rules
 
-- Read AGENTS.md, CLAUDE.md, the roadmap, this contract, and the preceding session report. Inspect the current checkout; the planning revision is not a request to reset changes.
+- Read AGENTS.md, CLAUDE.md, the roadmap, the Harness architecture and framework reuse section, this contract, and the preceding session report. Inspect the current checkout; the planning revision is not a request to reset changes.
 - Use the requested pydantic, python-dev, building-pydantic-ai-agents, and ponytail:ponytail skills. The roadmap's explicit instruction to preserve assert-script tests overrides the generic Python skill's pytest recommendation. Use uv, Ruff and ty; do not migrate the test framework.
 - Extend the existing engine. Keep this workspace's Python 3.14 support, distribution name slng-voice-core, and import namespace core. Verify SDK APIs against the installed lockfile before copying newer documentation examples.
 - Use Pydantic for definition/input/state/receipt boundaries and existing classes or stdlib dataclasses for internal scheduling and test events. No generic plugin registry, expression language, persistence framework, second voice adapter, or second conversation engine.
@@ -132,32 +217,32 @@ Use overlapping input/output timelines, not an LLM's textual instruction to “i
 
 ### Bounded live checks
 
-Use only use-cases/salon-graph. The existing Coval convention maps voice-harness-salon-pipecat to that directory; discover and record its actual agent ID.
+Use use-cases/salon-graph for every recurring text/voice checkpoint. The existing Coval convention maps voice-harness-salon-pipecat to that directory; discover and record its actual agent ID. Session 2 alone also permits two calls to the supplied native salon-pipecat-flows reference. Resolve its actual agent ID and launch path explicitly; never infer the native target from the existing salon alias or mix the two salon import packages.
 
 Freeze fixtures, scenario versions, salon model/classifier, prompts, language, STT/TTS settings and personas across checkpoints. Each call starts with reset test diary data, never real customer bookings. Record intentional changes and invalidate affected comparisons.
 
 **Live text checkpoint:** four salon dialogues: normal booking; correction/conditional acceptance; prerequisite detour and return; unknown-write recovery. Inject backend uncertainty through the test service boundary for the last case. One attempt per dialogue, maximum 12 caller turns per dialogue, at most 48 optional adaptive-caller model invocations across the checkpoint, and 100 target model invocations including classifiers across the checkpoint. Scripted caller turns require no caller model requests. Keep target per-turn budgets, cap adaptive caller output, record tokens, and configure a finite token/spend ceiling for the selected provider before running. Stop on explicit completion or budget exhaustion; exhaustion is incomplete evidence, not success. The live target and any adaptive caller incur model costs. Save transcripts for cheap scripted reproduction; rerunning the live target on saved caller text is still billable.
 
-**Coval checkpoint:** at most two simulations, one iteration, one at a time, no mutations or automatic reruns:
+**Regular Coval checkpoint:** at most two salon-graph simulations, one iteration, one at a time, no mutations or automatic reruns. Session 2 repeats these same two cases once on native Pipecat under its separate two-call allowance:
 
 1. **Normal booking:** identify the fixture caller, select an offered appointment, fully hear the readback, explicitly accept, and receive matching confirmation. Exactly one intended booking must exist.
 2. **Pause and correction:** give identity/request in fragments separated by a pause; interrupt the appointment readback to correct it; accept only after hearing the corrected readback. No old/partial proposal may execute; exactly one final correct booking may exist. Record whether premature endpointing, agent-over-user speech and caller barge-in actually occurred.
 
 Freeze these cases in session 1. Reuse a calm persona and a suitable interruptive persona with explicit IDs; do not launch a whole sweep. [Coval personas](https://docs.coval.ai/concepts/personas/overview) offer interruption settings, but configuration is not proof a call contained required overlap. Check recording and event trace. If a trigger did not occur, mark coverage **not exercised**, without automatically spending another call.
 
-Budget: **2 simulations × 6 sessions = 12 maximum planned calls**, including the reference checkpoint. Propose a verified 180-second per-call ceiling: at most 36 audio minutes if enforced. This is not a currency quote and excludes model/TTS/telephony/evaluator charges. Verify account pricing for money estimates. If the service/transport cannot enforce the duration ceiling, report that before launch; polling timeout is not a call-duration cap. Paid retries consume a separately assigned allowance.
+Budget: **2 salon-graph simulations × 6 sessions + 2 native simulations in session 2 = 14 maximum planned calls**, including the reference checkpoint. Propose a verified 180-second per-call ceiling: at most 42 audio minutes if enforced. This is not a currency quote and excludes model/TTS/telephony/evaluator charges. Verify account pricing for money estimates. If the service/transport cannot enforce the duration ceiling, report that before launch; polling timeout is not a call-duration cap. Paid retries consume a separately assigned allowance; unused allowance is not an instruction to launch more variants.
 
-The current coval_sim run defaults to all attached sets, can target several agents sharing a set, and uses one persona per invocation. It does **not** yet implement this narrow gate. Session 1 adds exact target selection, a read-only launch plan and a simulation-count limit. Verify cases and expanded variants immediately before launch. Prefer two explicitly selected one-case sets/persona jobs, or verified exact-case filtering. One iteration does not mean one call. Do not copy the documented VkpkmRMV example: its README describes 18 calls.
+At the original planning revision, coval_sim defaulted to all attached sets and could target several agents sharing a set. Session 1 has since added exact jobs, read-only planning, simulation limits and a run log; inspect and extend that implementation for session 2's native target instead of rebuilding it. Verify cases and expanded variants immediately before launch. Prefer two explicitly selected one-case sets/persona jobs, or verified exact-case filtering. One iteration does not mean one call. Do not copy the historical VkpkmRMV broad-set example, which described 18 calls.
 
 Launch sequentially and review the first result before launching the second. Stop new paid launches on critical failure. Reconcile uncertain launch status by ID before retrying. Verify remote termination and clean up bot/tunnel processes; local polling expiry alone does not cancel a remote run.
 
-Use Coval skills as needed: coval-resources for inventory; build-test-suite, design-persona and configure-metrics for the checkpoint; then **either** quick-eval **or** launch-run → watch-run → get-results. Do not launch twice by invoking both workflows. Use download-audio/trace diagnostics for missing evidence or failures. Accent, noise and broad adversarial sweeps are separate paid expansions. Carry selected IDs and authorization across sessions; only unresolved resources or changed spending scope need new input.
+Use Coval skills as needed: coval-resources for inventory; build-test-suite, design-persona and configure-metrics for the checkpoint; then **either** quick-eval **or** launch-run → watch-run → get-results. Do not launch twice by invoking both workflows. Use coval-compare-runs for matched checkpoints/native comparisons and coval-eval-audit when the evaluation's coverage or score is misleading; these do not authorize new runs. Use download-audio/trace diagnostics for missing evidence or failures. Accent, noise and broad adversarial sweeps are separate paid expansions. Carry selected IDs and authorization across sessions; only unresolved resources or changed spending scope need new input.
 
 ### Passing and stopping rules
 
 - Applicable deterministic and replay checks pass. From session 2 onward, unknown/interrupted delivery cannot authorize consequential action. No unauthorized write, identity leakage, duplicate write, lost acknowledged business result, or unsupported completion claim.
 - All four bounded live text cases meet deterministic business assertions. Inspect semantic failures against delivered transcript and classifier input/output. When interpretation changes, reuse salon's eval machinery for a small supported-language consent set within the recorded model allowance; do not launch its whole model comparison matrix.
-- Both Coval calls meet expected behaviors and have business/audit evidence. COMPLETED status or high composite score is insufficient. Match call IDs to receipts and audio. Trigger-dependent coverage passes only when the trigger occurred and behavior was correct.
+- Both salon-graph Coval calls meet expected behaviors and have business/audit evidence. In session 2, record matched native outcomes independently; a native failure can demonstrate a difference but cannot excuse a harness failure. COMPLETED status or high composite score is insufficient. Match call IDs to receipts and audio. Trigger-dependent coverage passes only when the trigger occurred and behavior was correct.
 - Record caller acoustic speech end, runtime endpoint, transcript availability, model/classifier durations and requests, backend duration, first audible output, interrupting speech start and last audible obsolete output. Use one monotonic clock for local differences and document external audio alignment/error. Endpoint delay = endpoint minus acoustic end; response latency = first audible output minus acoustic end; barge-in stop latency = last obsolete output minus interrupting speech start. Keep these separate from text/token latency.
 - Freeze numeric timing budgets in session 1, using product limits or explicitly provisional limits. A matched live median response/stop latency rise above max(200 ms, 20% of baseline) is a provisional investigation trigger, not statistical proof. Do not widen limits after seeing regression. Report sample count and raw ranges; two calls cannot substantiate p95, reliability or capacity. Negative response latency can indicate agent-over-user speech; do not clamp it away.
 - Missing credentials, unavailable required metrics, absent triggers or exhausted budget mean **incomplete**, not passed. Finish useful offline work, leave live gates pending, and do not claim full verification. Session 1 may record existing defects as baseline debt. Critical approval/delivery debt is due in session 2; all critical debt must be resolved for final acceptance.
@@ -179,7 +264,18 @@ Export evidence before removing temporary runtime directories. Do not commit key
 Copy this complete block into the first coding session.
 
 ~~~text
-Implement session 1 of the reusable voice core migration. This is an implementation task, not another architecture proposal. Read AGENTS.md, CLAUDE.md, README.md sections 7–10, docs/plans/reusable-voice-core-roadmap.md, and the Verification contract in docs/plans/reusable-voice-core-sessions.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Preserve the repository's assert-script tests and use uv, Ruff and ty.
+Implement session 1 of the reusable voice core migration. This is an implementation task, not another architecture proposal. Read AGENTS.md, CLAUDE.md, README.md sections 7–10, docs/plans/reusable-voice-core-roadmap.md, and both Harness architecture and framework reuse and Verification contract in docs/plans/reusable-voice-core-sessions.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Preserve the repository's assert-script tests and use uv, Ruff and ty.
+
+HARNESS VISION AND FRAMEWORK READING
+
+We are extracting repeated voice orchestration into one versioned library. Applications author configuration, Pydantic data, prompts and domain functions. Pydantic AI owns agent execution; Pydantic Graph owns the existing declared graph execution; Pipecat owns audio. Core connects them with evidence, approval, delivery and session policies. Your baseline must measure both reuse and conversational correctness, not just whether the bot responds.
+
+Read these primary references against the locked SDK before writing evaluation adapters:
+- https://pydantic.dev/docs/ai/guides/testing/ — reuse FunctionModel/TestModel and overrides for offline execution.
+- https://pydantic.dev/docs/ai/core-concepts/message-history/ — retain the SDK's actual message/result boundaries when a turn is cancelled.
+- https://docs.pipecat.ai/pipecat/flows/introduction and https://docs.pipecat.ai/pipecat/flows/nodes-and-messages — understand the independent native graph and its speak/wait behavior.
+- https://docs.pipecat.ai/pipecat/fundamentals/interruptions — replay real frame/cancellation behavior rather than a second completed text turn.
+Inventory the package/capability table from the shared architecture section. Do not install Pydantic Evals, Pydantic AI Harness or LangChain just to build the baseline runner.
 
 OBJECTIVE AND BOUNDARY
 
@@ -194,12 +290,15 @@ READ THE EXISTING IMPLEMENTATION FIRST
 - use-cases/salon-graph/bot.py: actual STT/TTS/VAD setup, DIARY_PER_CALL, playback callbacks, call IDs and disconnect handling.
 - use-cases/concierge-tools/coval_sim/{__main__,coval,models,runtime}.py and its tests.
 - use-cases/concierge-tools/ledger.py, plus use-cases/faro-tools/bench.py for its scripted caller/real-target/trace pattern. Reuse the pattern; do not import Faro into the salon evaluator.
+- The supplied reference at use-cases/salon-pipecat-flows: README.md, bot.py, flow.yaml, graph_salon modules and tests/test_graph_salon.py. Pin its revision and inspect the native N1–N13 matrix in the shared architecture section. This is a separate reference, not a sixth migration consumer.
 
 WORK IN THIS ORDER
 
 1. Record the exact starting revision/dirty changes, Python and locked package versions, prompts, model/classifier configuration, voice settings and existing test commands. Inventory each consumer's dependencies and custom orchestration. Identify methods doing generic runtime work versus genuine domain work. Do not transfer old benchmark numbers or zero-model approval claims into this baseline.
 
 2. Run all existing offline suites and per-member ty; capture real outputs and failures. Preserve golden prompt/tool-schema snapshots. Baseline defects must have a reproducible case and owner session. In particular, inspect ProposalLedger.last: absent matching speech currently may count as heard. Capture the desired “unknown delivery cannot authorize” regression without altering production semantics in this session or silently treating it as a passing safety guarantee. Keep that expected failing check separate from the baseline passing suite until session 2 repairs it.
+
+   Establish the native reference offline in its own pinned environment, with no provider/audio network calls. Its salon namespace must never share a Python process/import path with the harness salon. Preserve its sibling-source wording checks against the correct pinned checkout. Reuse native scenarios as comparison inputs, but assert domain outcomes independently instead of treating native output as automatically correct. Record native model, provider/thinking and endpointing differences, which checks use real FlowManager/frame execution, and which use a stand-in manager. Search available local reports for reusable native run IDs; historical IDs in comments alone are not comparable evidence.
 
 3. Extend existing interruption probes only where coverage is missing. Use the real processor and scripted model/classifier outputs, with clock control or synchronization barriers. Cover caller fragments around endpointing, output that has been generated but not played, partial readback, delayed old playback-stop events, and cancellation before/during/after a write. Record event order, input pieces, proposal identity, delivered segment IDs, backend effects and final history. Do not simulate concurrency by awaiting a whole answer before sending the interruption.
 
@@ -213,7 +312,7 @@ WORK IN THIS ORDER
 
    Reset the test diary per case. Acknowledgements identify delivered text segments explicitly. A returned text string is not an audio playback event. Save input, delivered output, typed interpretation, operation attempt/result, final diary/state, request counts and timing. Enforce the contract's turn/request/token limits and no automatic retries. Its no-network self-check must prove that wrong outcomes and budget exhaustion are reported, not accepted.
 
-5. Make the existing Coval runner support the narrow checkpoint before launching it. Read-only planning must resolve one exact salon agent ID, exact test cases/personas/metrics, iterations, mutations and the expanded simulation count. Reject ambiguous agents, accidental baseline/Faro targets, empty selections that mean “all,” and counts above the assigned allowance. The existing test-set selection can match several agents; fix that path once instead of trusting names at the call site. Do not assume one iteration equals one simulation.
+5. Make the existing Coval runner support the narrow checkpoint before launching it. Read-only planning must resolve one exact agent ID and launch path per job, exact test cases/personas/metrics, iterations, mutations and the expanded simulation count. The default target is salon-graph; only session 2 has a separate explicit two-call native salon-pipecat-flows allowance. Reject ambiguous agents, accidental salon-prompt/Faro targets, native launches outside that allowance, empty selections that mean “all,” and counts above the per-checkpoint or global cap of 14. The existing test-set selection can match several agents; fix that path once instead of trusting names at the call site. Do not assume one iteration equals one simulation.
 
    Reuse two explicit one-case jobs if that is simpler than adding sampling. Launch one call, collect/review its result, then launch the next. Preserve the existing tunnel and bot lifecycle. Record the run ID immediately; an uncertain response must be reconciled before considering a retry. A local wait timeout neither proves failure nor cancels the remote call.
 
@@ -242,21 +341,34 @@ After cheap checks, run the four bounded live-text cases and at most TWO Coval s
 
 DELIVER AND STOP
 
-Write docs/research/reusable-core/session-1.md with baseline commands/results, exact reusable evaluation commands, frozen case IDs/configuration, actual run/trace IDs and spend, event coverage, numeric provisional timing budgets, and a method-to-responsibility migration inventory. Report core/model/backend/audio timings separately; two calls establish a smoke baseline, not p95 or reliability.
+Write docs/research/reusable-core/session-1.md with baseline commands/results, exact reusable evaluation commands, frozen case IDs/configuration, actual run/trace IDs and spend, event coverage, numeric provisional timing budgets, and a method-to-responsibility migration inventory. Include a native-reference manifest, initial N1–N13 status, package/API versions and concrete reuse candidates. Freeze native comparison settings/tolerances before candidate measurements and record the user-selected 14-call plan: 12 salon-graph plus two native calls in session 2 only. Report core/model/backend/audio timings separately; two calls establish a smoke baseline, not p95 or reliability.
 
 Session 2 may begin when the baseline is reproducible, evaluation selection is bounded and known defects are explicit. Missing credentials can leave live evidence pending while offline preparation finishes. Do not claim the baseline is fully verified or expand implementation into session 2.
 ~~~
 
-## Prompt 2 — Establish the package, state/session boundary and delivery contract
+## Prompt 2 — Establish the package and pass the native Pipecat quality gate
 
 Copy this complete block after session 1's implementation and report are available.
 
 ~~~text
-Implement session 2 of the reusable voice core migration. Read AGENTS.md, CLAUDE.md, the supplied roadmap, the Verification contract in docs/plans/reusable-voice-core-sessions.md, and session-1.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Continue from the accepted code; do not reset to the planning revision.
+Implement session 2 of the reusable voice core migration. Read AGENTS.md, CLAUDE.md, the supplied roadmap, Harness architecture and framework reuse (including native matrix N1–N13), the Verification contract in docs/plans/reusable-voice-core-sessions.md, and session-1.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Continue from the accepted code; do not reset to the planning revision.
+
+HARNESS VISION AND FRAMEWORK READING
+
+This must be a reusable conversation runtime that earns its abstraction cost against native Pipecat. Keep one Pydantic AI agent/tool loop and the existing Pydantic Graph driver, with Pipecat handling audio. Applications supply declarative data plus domain work, while core owns session/evidence/approval/delivery. A public facade hiding unchanged application runtime subclasses is insufficient.
+
+Use the installed capabilities described by these references:
+- https://pydantic.dev/docs/validation/latest/concepts/models/ and https://pydantic.dev/docs/validation/latest/concepts/type_adapter/ — validated whole-state replacement and reusable boundary adapters, not unvalidated copies.
+- https://pydantic.dev/docs/validation/latest/concepts/unions/ — structural state variants where they remove behavior-heavy validators.
+- https://pydantic.dev/docs/ai/core-concepts/dependencies/ — ordinary injected services and RunContext, separate from domain state.
+- https://pydantic.dev/docs/ai/core-concepts/hooks/ and https://pydantic.dev/docs/ai/core-concepts/message-history/ — reuse hooks and SDK history for budgets, cancellation and completed results.
+- https://pydantic.dev/docs/ai/core-concepts/agent-spec/ and https://pydantic.dev/docs/ai/graph/builder/ — verify the minimal AgentSpec/template/GraphBuilder composition for session 3, with concrete runtime types.
+- https://docs.pipecat.ai/pipecat/flows/functions and https://docs.pipecat.ai/pipecat/flows/nodes-and-messages — benchmark native transitions, tool cancellation and code-owned speech scheduling.
+For each chosen primitive, name the existing custom responsibility it replaces and leave a small executable integration check. Do not add a generic plugin layer or another agent loop.
 
 OBJECTIVE
 
-Make the existing slng-voice-core distribution installable and usable through a small public boundary. Establish a concrete application-state contract independent of core's runtime session and application services. Tighten delivery so unknown or interrupted readbacks cannot authorize consequential actions. Existing salon and Faro entry points must remain runnable during this foundational change.
+Make the existing slng-voice-core distribution installable and usable through a small public boundary. Establish a concrete application-state contract independent of core's runtime session and application services. Tighten delivery so unknown or interrupted readbacks cannot authorize consequential actions. Existing salon and Faro entry points must remain runnable during this foundational change. Prove the runtime meets the native comparison standard; installation and green legacy tests alone cannot pass this session.
 
 STARTING POINTS
 
@@ -303,15 +415,53 @@ REQUIRED NEGATIVE AND POSITIVE CHECKS
 - Cancellation after a matching successful receipt: retain the effect/evidence; do not execute it twice.
 - All old direct-core/Pipecat parity and split-utterance tests retain their business assertions.
 
+NATIVE PIPECAT QUALITY GATE — REQUIRED BEFORE CALLING THIS FOUNDATION READY
+
+Use the pinned salon-pipecat-flows reference recorded by session 1, including its application safeguards. Read graph_salon.flow.load/typed, handlers._dispatch/tool/say/answer, SalonCall.approve/commit/hear, Write.run, ClaimFilter, EmptyReplyGuard, GraphSalon.attach/start and the native tests. Its source is a comparison, not an instruction to replace our engine or weaken our guarantees.
+
+N1–N13 ACCEPTANCE MATRIX
+
+For each row, record native result, harness result, evidence, measured overhead and status in session-2.md. Use pass, fail, not exercised or not comparable. N13 has a foundation check in session 2 and a full authoring check in session 3.
+
+| ID | Required comparison | Harness acceptance |
+|---|---|---|
+| N1 | Invalid arguments, receipt shape/mismatch, unknown fields, atomic state | No backend dispatch on invalid input; no partial state or claimed success from invalid evidence. Schema sent to the model matches runtime constraints. |
+| N2 | Missing/same-turn/wrong-identity approval, rejection, correction, replay | No unauthorized original write; one effect after delivered current approval. A native gap never relaxes this requirement. |
+| N3 | Verification detour and resumed booking/read | Keep the request and return correctly. Known application continuation does not require another model to rediscover the task. |
+| N4 | Offered choice, booking/move/cancel, complaint | Matching domain outcomes and truthful receipt speech for supported paths. No extra action or lost caller intent. |
+| N5 | One action per reply, tool/request/transition budget | Reject the second conflicting action, enforce whole-turn bounds, and produce bounded recovery rather than loop or silence. |
+| N6 | Model/tool failure, empty output, duplicate answer/receipt | Bounded handling with one truthful audible outcome; no duplicate completion or unbounded retry. Caller interruption is not an empty-model failure to retry. |
+| N7 | Node transition while playback or an action-completion frame is interrupted/missing | No indefinite transition wait; next caller input is accepted and routed correctly. Exercise the native custom-say regression, not just a normal transition. |
+| N8 | Cancellation before dispatch, during uncertain execution, after successful receipt | No pre-approval effect; completed effects retained; unknown remains unknown until reconciled; no automatic duplicate write. Check both semantic state and backend records. |
+| N9 | Same input/output frame timeline; generated, partial, repeated and late playback | No unheard-readback approval; obsolete output stops; paused input survives; old frames cannot approve a new generation. Intentional stronger semantics are documented rather than forced to equal native behavior. |
+| N10 | SDK context containing provider-specific messages / tool call-result pairs | No crashes, orphaned required results, leaked identity context or lost acknowledged result after cancellation. |
+| N11 | Two concurrent sessions; startup/setup failure/disconnect | Isolated state/evidence and bounded cleanup. Shared compiled definitions/clients do not leak mutable call state. |
+| N12 | Request topology, scheduling and local runtime overhead | No unexplained additional model round trip for code-decided continuation or receipt speech. Any classifier request is counted. Measure native and harness on the same deterministic trace before claiming an overhead improvement. |
+| N13 | New application authoring and portable packaging | Session 2 proves the public typed state/session/operation slice without a custom application runtime subclass. Session 3 must complete the manifest/clinic proof, including reusable agents, handoffs and standard steps. Compare domain code separately from orchestration and configuration; do not hide code by moving it. |
+
+1. Make N1–N13 an executable comparison/report, reusing existing assert scripts and frame-test utilities. Keep the driver small: one versioned scenario description and separate adapters/processes for the actual native and harness paths. Do not compare two newly written fake engines. Assert diary effects, validated receipts, transition results, delivery records and model-request topology. Mocking interpretation to yes tests authorization, not whether a real model correctly understands consent.
+
+2. Require every applicable common functional case to pass on the harness. Reproduce native failure/unsupported behavior where practical, then document the harness's stronger required contract: interrupted/unknown readback cannot approve, paused utterances remain available, stale work cannot change current routing, and completed writes survive cancellation. Keep zero unauthorized or duplicate writes as a hard gate. Never average these away with latency or a composite evaluation score.
+
+3. Exercise the specific native lessons: a provider-specific context record must not crash a tool; an enum must reach the model schema; a second answer must not speak the receipt again; code-spoken failure/receipt must not invite a model to invent success; empty output must recover within the budget; a node change must not wait forever for an ActionFinishedFrame dropped during barge-in. Use bounded synchronization and actual processor/manager paths, not just direct handler calls. Reuse native facilities that solve a problem in the locked version; retain only the necessary shared workaround when they do not.
+
+4. Compare scheduling and overhead using the shared matched-measurement protocol: warmup, at least 20 paired offline repetitions, common fake provider/service timings, isolated environments and raw samples. Count every request including classifiers, retries and any continuation after a function result. For code-decided transitions and receipt-rendered confirmations, assert no avoidable extra model round trip. Record the costs of required policy checks separately. Investigate a breach of the predeclared tolerance; do not change the tolerance after seeing the candidate. A faster unsafe path is a failure.
+
+5. Prove reuse now with a minimal public Python/definition slice for typed state, injected service, readback, guarded operation and receipt delivery, using the clinic or equivalent existing fixture. No custom application CallContext, approval ledger, history manager or speech filter. Validate a typed native AgentSpec/template integration and use the existing graph execution rather than writing substitutes. Compare the authored orchestration inventory with the native SalonCall/tool wrapper/speech guards. Do not claim the full manifest experience is complete here: session 3 must finish N13 with the external clinic, agent/handoff/typed-flow variants and no core edits.
+
+6. Run the two salon-graph voice cases and the user-selected two additional native calls for those same cases/personas. Launch sequentially in a recorded paired order, such as normal harness → normal native → stress harness → stress native; review each result and stop new launches on critical failure. Session 2 has four calls maximum; the complete plan has 14. No additional native calls are permitted in later sessions. Keep the native reference unchanged and use the comparison profile frozen by session 1, with explicit overrides in isolated launches. Different model/endpointing settings must not yield a runtime-speed claim. Correlate business effects, requests, audio intervals and interruption coverage for each pair. Two paired cases support only a sampled result; missing evidence remains pending without automatic reruns.
+
+If a required runtime behavior is missing, repair it at its shared owner and rerun the affected checks within this session. If measurements or overlap evidence are missing, record the unresolved gate and continue useful offline work; do not label the harness “as good as native” without its evidence. A failure tied to a fundamental API decision must be resolved before expanding the authoring surface in session 3.
+
 PACKAGE PROOF
 
 Use uv to build the core wheel. In a fresh temporary project outside the checkout, install that artifact and only declared dependencies. Clear inherited project paths and keys. Assert the imported module resolves to the installed artifact, not workspace source. Validate a small definition and run an offline scenario. Separately test voice/tracing extras and meaningful missing-extra diagnostics. Record exact commands/artifact hashes and dependency sets. uv sync in the shared workspace is not isolation evidence.
 
-Run common Ruff/format/core/salon commands plus ty/tests in every affected consumer, including temporary compatibility adapters. Then run session 1's four live-text cases and at most TWO frozen Coval salon calls. Keep all evaluation identities/settings fixed; do not tune models or endpointing to hide a regression.
+Run common Ruff/format/core/salon commands plus ty/tests in every affected consumer, including temporary compatibility adapters and the pinned native comparison checks. Then run session 1's four live-text cases and the paired session-2 Coval checkpoint: at most TWO frozen salon-graph calls and TWO matching native calls. These are the same calls specified in the quality gate, not another launch. Keep all evaluation identities/settings fixed; do not tune models or endpointing to hide a regression.
 
 DELIVER AND STOP
 
-Save session-2.md, a concrete public import/session example, the ownership table, and each remaining compatibility consumer. Gate: clean isolated installation, concrete state on the engine, atomic/ownership/isolation checks, repaired unknown-delivery invariant, preserved current apps and documented live results. Leave absent live evidence pending. Do not yet migrate the full salon/Faro authoring or redesign the solver.
+Save session-2.md, a concrete public import/session example, the ownership table, the SDK-reuse decisions and each remaining compatibility consumer. Include the completed N1–N13 comparison with source/test/trace evidence, package/settings hashes, request topology, raw paired timings and remaining gaps. Report foundation correctness, native common-case parity, stronger delivery guarantees, runtime overhead and live audio evidence separately. Gate: clean isolated installation, concrete state on the engine, atomic/ownership/isolation checks, repaired unknown-delivery invariant, preserved current apps, applicable native runtime rows passing and documented live results. N13's full authoring proof is due in session 3. Leave absent live evidence pending; make only dimension-specific supported comparisons. Do not yet migrate the full salon/Faro authoring or redesign the solver.
 ~~~
 
 ## Prompt 3 — Complete the ordinary authoring contract
@@ -320,6 +470,19 @@ Copy this complete block after the package/session boundary is verified.
 
 ~~~text
 Implement session 3 of the reusable voice core migration. Read AGENTS.md, CLAUDE.md, docs/plans/reusable-voice-core-roadmap.md, the Verification contract, and session-2.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Live evaluation remains salon-graph only with the same bounded allowance.
+
+HARNESS VISION AND FRAMEWORK READING
+
+Read Harness architecture and framework reuse in docs/plans/reusable-voice-core-sessions.md. Implement its ordinary authoring contract by composing existing packages: AgentSpec for agent configuration, concrete Pydantic types for runtime validation, typed templates for prompts, SDK tools/hooks for execution policy, and the existing Pydantic Graph driver for declared workflows. Core adds voice/session/evidence semantics; applications add only domain work. The same domain tool must remain usable in one agent, a specialist handoff and a controlled flow.
+
+Read these references and translate each applicable feature into a real implementation decision:
+- https://pydantic.dev/docs/ai/core-concepts/agent-spec/ — compose model/settings/instructions/capabilities with concrete deps_type/output_type; avoid duplicating the native agent schema.
+- https://pydantic.dev/docs/ai/tools-toolsets/toolsets/ and https://pydantic.dev/docs/ai/core-concepts/hooks/ — reusable function toolsets and existing prepare_tools/prepare_output_tools policies.
+- https://pydantic.dev/docs/ai/capabilities/overview/ and https://pydantic.dev/docs/ai/capabilities/on-demand/ — use supported capability composition; defer optional specialist bundles only when useful, with all authorization guards always active.
+- https://pydantic.dev/docs/ai/core-concepts/output/ and https://pydantic.dev/docs/ai/tools-toolsets/deferred-tools/ — preserve output-function/direct completion and the conditional native-approval decision.
+- https://pydantic.dev/docs/ai/graph/builder/ — compile legal routes through the existing typed graph, not another scheduler.
+- https://docs.pipecat.ai/pipecat/flows/introduction — use the native authoring experience as the reference for N13: declarations and plain handlers, with our shared session guarantees replacing its repeated application guards.
+Use installed APIs, not unverified current examples. Document a concrete mismatch before writing custom code for a feature that the SDK already supplies.
 
 OBJECTIVE
 
@@ -350,7 +513,9 @@ STARTUP VALIDATION
 
 Before any provider connection, diagnose unsupported version, unknown fields/kinds, duplicate IDs, missing modules/resources, bad prompt references, incompatible bindings, undeclared edges, illegal protected-field assignments and missing approval paths. Include the application/step/reference in errors. Standard and custom nodes receive the same concrete state. Resources load from the installed package, not relative to the caller's cwd.
 
-Consider native Pydantic AI AgentSpec for supported model/settings/template construction if it actually removes custom plumbing. Do not wrap it merely to add another layer. Native deps_schema/template checking does not validate domain state at runtime; output_schema alone does not replace actual output/receipt Pydantic validation. Existing AgentBuilder already has prepare_tools/prepare_output_tools hooks: connect declarations to them, rather than inventing duplicate preparation.
+Start with native Pydantic AI AgentSpec for the supported model/settings/instructions/capabilities subset and pass the concrete runtime types into construction. The session-2 experiment must show how it composes with existing AgentBuilder hooks and typed templates. Retain only workflow/voice-specific fields in the outer manifest. If the locked API cannot express a required behavior, show the smallest failing example and keep a narrowly scoped existing construction path for that gap; do not invent another complete agent spec. Native deps_schema/template checking does not validate domain state at runtime; output_schema alone does not replace actual output/receipt Pydantic validation. Existing AgentBuilder already has prepare_tools/prepare_output_tools hooks: connect declarations to them, rather than inventing duplicate preparation.
+
+Group genuinely reused ordinary tools with native FunctionToolset where appropriate. Keep output functions distinct from ordinary toolsets so receipt speech still ends the run without another model request. Use current Hooks/capability composition for shared policies instead of per-application subclasses. State how optional specialist instructions are selected; a deterministic step switch is preferable to an extra discovery request for a known booking stage. If demonstrating on-demand loading, assert optional content is absent before loading, present afterward, and that execution guards apply in both states. Do not install the separate Pydantic AI Harness library unless a concrete required capability demonstrably removes custom work and its dependency change is authorized.
 
 GUARDED OPERATIONS AND SPEECH
 
@@ -396,6 +561,8 @@ ACCEPTANCE
 - Ordinary conversation without a pending decision does not pay unnecessary confirmation requests.
 - Ordinary clinic steps require no custom Python step module, runtime subclass or core edit.
 - Installed-package clinic and salon slice run without sibling-source imports or cwd assumptions.
+- Complete N13: show the same clinic's domain functions/state reused across all three agency patterns, no application session/interpreter subclasses, no repeated approval/speech/budget plumbing, typed prompt failures caught at startup and no core edits to add the application. Include an author-file inventory against the native reference, separating domain logic, configuration and shared runtime work.
+- SDK reuse is executable: native spec/template construction, concrete output validation, tool preparation and graph transitions each have a relevant check. Re-run affected N1–N12 cases; a smaller manifest must not regress the native-runtime gate.
 
 Run common checks, affected-member checks, installed-package/resource proof, frozen four-case live-text salon evaluation and at most TWO Coval salon calls. Clinic is offline proof of the new API; salon voice calls verify shared-engine regression. Do not claim voice has exercised an API path that the call did not actually use.
 
@@ -408,6 +575,12 @@ Copy this complete block after the clinic and salon slice prove the authoring co
 
 ~~~text
 Implement session 4 of the reusable voice core migration. Read AGENTS.md, CLAUDE.md, the roadmap, the Verification contract, and session-3.md with its implemented public schema/example. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Preserve assert-script tests. Live target remains ONLY salon-graph.
+
+HARNESS VISION AND FRAMEWORK READING
+
+Read Harness architecture and framework reuse in docs/plans/reusable-voice-core-sessions.md. Salon is the first complete production adoption: its configuration references concrete domain types/functions, while core composes AgentSpec, typed templates, SDK hooks/tools and the existing graph. Do not recreate native salon-pipecat-flows' application consent/speech wrappers in a new salon runtime class.
+
+Use https://pydantic.dev/docs/ai/core-concepts/agent-spec/ for the native agent/template subset, https://pydantic.dev/docs/ai/tools-toolsets/toolsets/ for actual shared tool bundles, https://pydantic.dev/docs/ai/core-concepts/output/ for code-rendered transaction completion, and https://pydantic.dev/docs/ai/graph/builder/ for declared legal transitions. The public contract from session 3 supplies these features; application authors must not repeat their construction. Preserve the native comparison matrix from session 2 and N13 authoring evidence from session 3. A domain-specific function is allowed; a copied generic guard is a migration failure.
 
 OBJECTIVE
 
@@ -479,6 +652,8 @@ uv run --directory use-cases/salon-graph ty check .
 uv run --directory use-cases/salon-graph python -m tests
 Run all affected tooling/compatibility checks, public-entry clinic regression and an isolated salon consumer/resource check.
 
+Re-run the native comparison rows affected by migrated booking, consent, receipt speech or routing, using the same isolated reference and scenario versions. Check request counts on matched application continuations: changing configuration loading must not add a hidden planning/classifier/agent cascade. Update the orchestration inventory to show which native-style application wrappers are now supplied once by core.
+
 Then run the same four bounded live-text cases and at most TWO frozen Coval salon simulations. Prove the entry point actually loaded the migrated manifest and public session, using its recorded version/hash. Inspect audio plus proposal/delivery/operation evidence. Compare rendered prompt changes and provider request counts explicitly; natural-language approval may still require a classifier request. Do not claim zero-model approval from historical numbers.
 
 DELIVER AND STOP
@@ -492,6 +667,12 @@ Copy this complete block after the salon proves the public contract in a real ap
 
 ~~~text
 Implement session 5 of the reusable voice core migration. Read AGENTS.md, CLAUDE.md, the roadmap, Verification contract and session-4.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Keep all live text/Coval verification on salon-graph. Do not launch Faro's live bench.py or any Faro Coval run.
+
+HARNESS VISION AND FRAMEWORK READING
+
+Read Harness architecture and framework reuse in docs/plans/reusable-voice-core-sessions.md. Faro proves the package generalizes beyond booking: one companion persona can serve several typed stages, with learning and persistence expressed as domain functions. It uses the same compiled definitions, session, guarded operations and delivery evidence as salon.
+
+Use https://pydantic.dev/docs/validation/latest/concepts/unions/ and https://pydantic.dev/docs/validation/latest/concepts/type_adapter/ for structural state/value validation; https://pydantic.dev/docs/ai/core-concepts/dependencies/ for Store/clock injection; https://pydantic.dev/docs/ai/core-concepts/agent-spec/ for compiled prompts/configuration; and https://pydantic.dev/docs/ai/graph/builder/ for explicit learning stages. Retain the existing pydantic-extra-types PhoneNumberValidator and SQLite implementation. The grader may use typed Pydantic AI output through the shared invocation boundary; its rubric remains Faro code. Do not add generic agent memory or a durable-workflow package to replace acknowledged domain storage.
 
 OBJECTIVE
 
@@ -563,6 +744,8 @@ Package Faro prompts, voice.md, curriculum/configuration and manifest as resourc
 
 Run common core/salon commands, Faro ty and python -m tests, package-resource checks and offline compatibility checks for faro-tools if imports change. Then run ONLY the frozen salon four-case live-text checkpoint and at most TWO salon Coval calls to detect shared-core regressions. Faro's own evidence in this session is offline.
 
+For shared-core changes required by Faro, re-run affected N1–N12 comparison cases and the external clinic without changing its domain definition. The same service-injection, validation and capability hooks must work for both applications; no conditional core behavior keyed on the application name. Preserve N13 by listing Faro's remaining custom code and why it is domain work.
+
 DELIVER AND STOP
 
 Save session-5.md with phase-to-step and method-to-owner mappings, the final authoring files, full L01–L16/additional check results, persisted-state evidence, resource-install proof and salon regression results. State explicitly: “Faro migrated and checked offline; not newly validated with live models or voice.”
@@ -576,6 +759,12 @@ Copy this complete block after salon and Faro use the public authoring contract.
 
 ~~~text
 Implement session 6 of the reusable voice core migration. Read AGENTS.md, CLAUDE.md, the roadmap, Verification contract and session-5.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Live text and voice evaluation remain salon-graph only, using the final assigned two-call Coval checkpoint.
+
+HARNESS VISION AND FRAMEWORK READING
+
+Read Harness architecture and framework reuse in docs/plans/reusable-voice-core-sessions.md. Finish a versioned, transport-independent conversation core with an optional Pipecat boundary and optional existing tracing. Consumers import useful public capabilities; a future compiler can emit thin definitions for the same package. This session must not introduce a second agent scheduler or fold the independent native comparison into core.
+
+Read https://docs.pipecat.ai/pipecat/fundamentals/interruptions and https://docs.pipecat.ai/pipecat/flows/nodes-and-messages for lifecycle, speak/wait scheduling and interruption behavior. Use https://pydantic.dev/docs/ai/integrations/logfire/ for the SDK's OpenTelemetry integration without requiring Logfire, and https://pydantic.dev/docs/ai/core-concepts/message-history/ for public message/turn boundaries in tooling. Keep Langfuse as the existing backend. Reuse native pipeline/aggregator/transport facilities and stdlib resource loading rather than wrapping every service behind a new plugin abstraction. Check the relevant native N1–N13 evidence after extraction.
 
 OBJECTIVE
 
@@ -630,11 +819,13 @@ Build the core distribution and packaged application resources. Use separate cle
 - concierge-tools: offline Coval/ledger tests and generic new-format operation reporting.
 - faro-tools: declared Faro/core dependencies and scripted text adapter smoke.
 
-Script-only consumers need an isolated dependency environment plus only that member's own sources. Do not add packaging scaffolding where it serves no distribution/import need. Never put the two salon packages in the same environment; their shared import name can conceal a wrong import. Do not rely on editable workspace installs, PYTHONPATH/sys.path injection, sibling bot/tests modules or a repository cwd. Record resolved module/resource locations and wheel hashes.
+Script-only consumers need an isolated dependency environment plus only that member's own sources. Do not add packaging scaffolding where it serves no distribution/import need. Never put the salon packages, including the independent native reference, in the same environment; their shared import name can conceal a wrong import. Do not rely on editable workspace installs, PYTHONPATH/sys.path injection, sibling bot/tests modules or a repository cwd. Record resolved module/resource locations and wheel hashes.
 
 Run root Ruff and formatting checks, per-member ty, every offline assert suite and the new tool smoke checks. Re-run the external clinic authored without core modifications. Confirm import boundaries allow only the implemented adapter/launcher modules to import Pipecat, and no core module imports any use case.
 
 Exercise two interleaved sessions with shared compiled definitions; cancel one and verify the other retains independent state/proposals/history. This proves isolation, not capacity. Check launcher startup, successful shutdown and failing setup cleanup with fake services for all three applications.
+
+Re-run N1–N13 on the final package where applicable, especially N6–N12 after launcher changes. Confirm the native reference remains independent and record any reference drift. Finish the package/capability adoption table with actual imports, locked versions, removed custom machinery and tests. Update CLAUDE.md/README boundaries to match the implemented extras/launcher/public API. No claim of greater reusability is complete without the installed external clinic and both domain migrations using the same API.
 
 FINAL LIVE CHECKPOINT
 
@@ -673,11 +864,24 @@ Use this as the final audit index. The session reports supply actual evidence; t
 | Preserve native salon baseline and domain equivalence | 6 | Controller/prompt/tool/fixture comparison offline |
 | Packaged resources and dependency isolation | 2, 5, 6 | External clean-environment artifact checks |
 | Generic audit reporting and historical trace compatibility | 1, 6 | New operation-name fixture; old trace fixtures; no double counting |
-| Cost-conscious semantic and voice verification | Every session | Four bounded text cases; at most two salon voice calls; real coverage |
+| Cost-conscious semantic and voice verification | Every session | Four bounded text cases; two salon-graph voice calls per session plus two native calls in session 2 only; real coverage |
+| Documented SDK/package reuse and minimal custom runtime | 2–3; adoption 4–6 | AgentSpec/templates, typed validation, hooks/toolsets and graph integration checks; versioned adoption table |
+| At least native-quality runtime and simpler application authoring | 2 runtime; 3 authoring; regression 4–6 | N1–N13 with independent native source, matched cases, actual evidence and explicit gaps |
+| Fair native comparison without uncontrolled paid expansion | 1–2 | Settings/revision manifest; paired offline measurements; user-selected 14-call cap with two native calls in session 2 only |
 | No invented performance or scalability claims | Every session | Raw timing/request/spend evidence, sample counts and explicit limits |
 
 ## Using the prompts
 
-Paste one complete numbered block per coding session, with the roadmap and this document available in the checkout. Each block names the starting files, intended behavior, work sequence, concrete acceptance checks and output report. The shared Verification contract supplies the frozen evaluation details.
+Paste one complete numbered block per coding session, with the roadmap and this complete document available in the checkout. The numbered prompts depend on shared sections: the Harness architecture and framework reuse section and Verification contract are required reading. The N1–N13 matrix is also embedded in prompt 2 so copying that block includes its criteria.
+
+Before starting a session, verify:
+
+- The checkout contains the previous session's implementation commits and the latest planning-document changes. A new worktree from an older base does not inherit another worktree's uncommitted files.
+- Both docs/plans/reusable-voice-core-roadmap.md and docs/plans/reusable-voice-core-sessions.md are readable. Use this repository copy rather than a stale pasted excerpt.
+- The preceding docs/research/reusable-core/session-N.md report and its referenced evidence are available. Carry forward actual failures, pending gates, scenario versions and exact run IDs.
+- The requested skills are available and AGENTS.md/CLAUDE.md have been read. Existing credentials remain in the runtime configuration; never paste secrets into a session prompt.
+- Session 2 can read the independent native reference and knows each job's target, allowed cases and remaining cumulative budget. Existing launches count even if their result failed or was inconclusive; reconcile uncertain launches before any retry.
+
+Each session's opening update should identify its starting revision, the reports/resources it found, unresolved predecessor findings and its assigned evaluation allowance. Missing context is a handoff gap to recover from files/artifacts, not a reason to repeat paid evaluations. If requirements have changed since an earlier checkpoint, record the change and resulting comparison limits.
 
 Carry implementation and evidence forward. If a milestone needs another context, continue that milestone from its report; do not remove checks to fit or start the later migrations from an unmodified baseline. Session 3 proves ordinary authoring; session 6 completes adoption across the repository.

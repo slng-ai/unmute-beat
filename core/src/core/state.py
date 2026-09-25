@@ -77,6 +77,8 @@ ponytail: a fixed rate. Per-segment playout events from the runtime would make i
 """
 CUT_OFF_WINDOW = 1.0
 """Seconds after an early stop in which a cut-in is taken to have caused it (`CallContext._stopped_early`)."""
+PLAYOUT_SLACK = 1.0
+"""Seconds added to a line's own speaking time before it counts as played with no signal. TTS first audio is ~0.2 s."""
 _WORD = re.compile(r"[\w']+")
 
 
@@ -362,6 +364,8 @@ class CallContext(BaseModel):
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
     _covered: bool = PrivateAttr(default=False)
+    _continued_from: list[str] = PrivateAttr(default_factory=list)
+    """For a turn joined to the one before: each of that piece's segments as origin, playback, cut, blank. For the trace."""
     _answers: int = PrivateAttr(default=0)
     """How many lines `speak_now` has put to the caller, heard or not. The turn engine's evidence that an action answered."""
     """Whether the current silence already has a fixed line in it. `say` allows one per gap."""
@@ -580,15 +584,31 @@ class CallContext(BaseModel):
         read as agreement to a question they never heard. What never started
         is recorded as heard by nobody; what was playing keeps its text until
         the runtime says how much of it went out.
+
+        A segment still queued whose words had all the time they need to play
+        (`PLAYOUT_SLACK`), one after another, was heard: its start signal went
+        missing, and a missing signal errs towards a new turn.
+
+        ponytail: time since queuing is a stand-in for a playout event per
+        segment. A line whose audio started far later than it was queued is
+        taken as heard too early. Per-segment playout ids are the upgrade.
         """
         self._interrupted = True
         if not self._playback_known:
             return
+        now = time.perf_counter()
         stopped, early = self._stopped_early
-        if time.perf_counter() - stopped <= CUT_OFF_WINDOW:
+        if now - stopped <= CUT_OFF_WINDOW:
             for segment in early:
                 segment.playback = 'playing'
         self._stopped_early = (float('-inf'), [])
+        ends = float('-inf')
+        for segment in self.all_spoken:
+            if segment.playback != 'queued' or not segment.text:
+                continue
+            ends = max(ends, segment.at) + len(segment.text) / SPEECH_CHARS_PER_SECOND + PLAYOUT_SLACK
+            if ends < now:
+                segment.playback = 'played'
         for segment in self.all_spoken:
             if segment.playback == 'queued' and segment.text:
                 segment.text, segment.interrupted, segment.delivery = '', True, 'runtime-estimate'
@@ -903,6 +923,13 @@ class CallContext(BaseModel):
         Coval run 4bLgLR4t (case 05) the report of an "Anything else?" cut off
         0.2 s in held every word, cleared the cut-in's mark, and the caller's
         next words answered a question they never heard.
+
+        Nor does a report cut a segment whose audio ran out before any cut-in
+        (`playback == 'played'`). The runtime's playback signal is the stronger
+        evidence. Pipecat's aggregator reports any assistant turn still open
+        as interrupted when the caller next speaks, with the words it happened
+        to collect. In trace fbdd81b6 a move-or-add question the caller
+        answered 6.5 s later was taken as never heard, and the answer was lost.
         """
         if not segment_ids:
             segment_ids = tuple(s.id for s in self.spoken[-1:])
@@ -943,6 +970,8 @@ class CallContext(BaseModel):
         if self._open is not None and self._open.id in segment_ids:
             self.close_model_text()
         for segment, text in zip(selected, updates, strict=True):
+            if segment.playback == 'played' and not segment.interrupted:
+                continue
             segment.text = text
             segment.interrupted = segment.interrupted or text != segment.generated
             segment.delivery = 'runtime-estimate'
@@ -1113,6 +1142,14 @@ class CallContext(BaseModel):
         continuing = self.continues_turn()
         self.close_model_text()
         missed = _missed(self._spoken)
+        self._continued_from = (
+            [
+                f'{s.origin}:{s.playback}{":cut" if s.interrupted else ""}{"" if s.text else ":blank"}'
+                for s in self._spoken
+            ]
+            if continuing
+            else []
+        )
         if continuing:
             for segment in self._spoken:
                 if segment.playback != 'played':
@@ -1122,9 +1159,10 @@ class CallContext(BaseModel):
         self._speech_history.extend(self._spoken)
         if continuing:
             logger.info(
-                'turn {} continues with piece {}: the caller went on before any answer played out',
+                'turn {} continues with piece {}: the caller went on before any answer played out ({})',
                 self._turn,
                 len(self._pieces) + 1,
+                ', '.join(self._continued_from) or 'nothing said',
             )
             self._pieces.append(heard)
             self._proposals.rewind(self)

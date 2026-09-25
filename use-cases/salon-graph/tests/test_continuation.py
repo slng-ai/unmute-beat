@@ -573,6 +573,98 @@ async def a_yes_with_a_new_request_is_verified_and_the_rest_answered():
     assert asked is None or asked.about != 'phone', 'the number was asked for again'
 
 
+def a_report_never_unhears_a_line_that_played():
+    """Trace fbdd81b6: a question that played out was taken as unheard, and the answer to it joined the turn before.
+
+    Two ways, both closed: the runtime's report of an assistant turn it still
+    held open cut the line after its audio had run out, and a line whose
+    start signal went missing stayed queued however long ago it was sent.
+    """
+    question = 'Would you like to move the appointment you already have, or add another one?'
+    for missing_signal in (False, True):
+        call = booking_call()
+        call._playback_known = True
+        call.turn_started('Uh, can we do 10:30?')
+        call.note_said('fixed', question, origin='guidance')
+        if missing_signal:
+            call.spoken[-1].at -= 60
+        else:
+            call.note_reached()
+            played_out(call)
+            call.note_heard('', segment_ids=(call.spoken[-1].id,), interrupted=True)
+        call.note_barge()
+        call.turn_started('Uh, add another one.')
+        assert call.turn == 2, (
+            f'a question heard in full was taken as unheard (missing signal: {missing_signal})'
+        )
+
+    call = booking_call()
+    call._playback_known = True
+    call.turn_started('Uh, can we do 10:30?')
+    call.note_said('fixed', question, origin='guidance')
+    call.note_barge()
+    call.turn_started('Uh, add another one.')
+    assert call.turn == 1, 'a line cut off before it could play still continues the turn'
+
+
+async def an_add_answered_to_a_heard_question_books_it():
+    """Trace fbdd81b6, turns 4 and 5: "can we do 10:30?", asked move or add, "add another one" books it.
+
+    The caller already held a 9:00 that Friday. The runtime's report cut the
+    move-or-add question after it played, the answer joined the turn before
+    it, the question it answered was rewound, and the caller was offered the
+    same times again. Now the answer is its own turn, and the add writes.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A haircut on Friday.')
+    await offer(call, 'Friday', 'haircut')
+    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
+    books.save_booking(PHONE, 'book', nine.slot_id, '', False, books.now(), offered_to=call.id)
+    await offer(call, 'Friday', 'haircut')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    later = next(s for s in call.state.offered if s.time.hour >= 10)
+    asked: list[str] = []
+
+    def classify(name, data):
+        if name == 'chosen_offer' and data['answer'] == 'Uh, can we do 10:30?':
+            return later.slot_id
+        if name == 'appointment_choice' and 'add another one' in data['answer']:
+            return 'add'
+        if name == 'conversation':
+            return 'continue'
+        return None
+
+    async def booking(messages, info):
+        asked.append('booking')
+        yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic": "move_or_add"}')}
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=booking if name == 'booking' else other)
+            stack.enter_context(node.agent.override(model=model))
+        probe.interrupt()
+        await probe._turn('Uh, can we do 10:30?')
+        assert probe.fixed()[-1].startswith('Would you like to move'), probe.fixed()
+        call.note_reached()
+        played_out(call)
+        probe.note_spoken('', True, segment_ids=tuple(s.id for s in call.spoken))
+        offers = len([line for line in probe.fixed() if line.startswith('For a haircut')])
+
+        probe.interrupt()
+        await probe._turn('Uh, add another one.')
+    held = books.bookings_for(PHONE, CLOCK.date())
+    assert sorted(b['time'] for b in held) == ['09:00', later.time.strftime('%H:%M')], held
+    assert asked == ['booking'], f'the booking model ran again after the add: {asked}'
+    assert len([line for line in probe.fixed() if line.startswith('For a haircut')]) == offers, probe.fixed()
+
+
 async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
     """The K2 failure: a picked time books at once; "leave it" must not end the call with it still booked.
 
@@ -1229,6 +1321,8 @@ async def main():
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_move_after_a_booking_is_read_back_not_cancelled()
     await a_yes_with_a_new_request_is_verified_and_the_rest_answered()
+    a_report_never_unhears_a_line_that_played()
+    await an_add_answered_to_a_heard_question_books_it()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await a_pick_said_with_a_goodbye_is_asked_before_they_go()

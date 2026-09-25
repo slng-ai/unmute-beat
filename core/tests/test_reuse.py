@@ -15,6 +15,7 @@ import time
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
+import httpx2
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
@@ -348,6 +349,58 @@ async def a_slow_turn_says_one_holding_line():
     assert not any(s.origin == 'tool_filler' for s in call.spoken), call.spoken
 
 
+async def a_read_back_that_played_is_answered_on_the_next_turn():
+    """Trace fbdd81b6, in the clinic: the runtime's late report cut a read-back that had played out.
+
+    The yes then joined the turn before, where nothing was waiting on it, and
+    nothing was booked.
+    """
+    call, heard, agent = opened()
+    nodes = desk(FunctionModel(stream_function=agent.stream))
+    call._playback_known = True
+    with scripted(chosen_time='0900'):
+        await take_turn(call, nodes, 'Nine, please.')
+    assert heard[-1] == 'Shall I book you in for Tuesday at 9:00 AM?', heard
+    read_back = call.spoken[-1]
+    call.note_reached()
+    call._burst -= 60
+    call.note_drained()
+    call.note_heard('', segment_ids=(read_back.id,), interrupted=True)
+    call.note_barge()
+    with scripted(confirmation='accept'):
+        await take_turn(call, nodes, 'Yes.')
+    assert call._book == {'0900': 'walk-in'}, 'a yes to a read-back that played booked nothing'
+
+
+async def a_provider_error_never_silences_the_turn():
+    """Trace fbdd81b6: one reading hit a DNS failure, the error left the turn, and the caller sat in silence.
+
+    A reading that cannot reach its provider reads as its default, and the
+    step answers. An `advance` that raises anyway gives the stumble line.
+    """
+    call, _, agent = opened()
+
+    async def offline(messages, info):
+        raise httpx2.ConnectError('[Errno 8] nodename nor servname provided, or not known')
+
+    with ExitStack() as stack:
+        for reading in (*CLINIC.readings, CLINIC.closing.reading):
+            stack.enter_context(patch.object(reading.classifier, 'model', FunctionModel(offline)))
+        said, done = await take_turn(
+            call, desk(FunctionModel(stream_function=agent.stream)), 'How much is it?'
+        )
+    assert done.status == 'answered' and said == 'It is 40 euros.', (done.status, said)
+
+    call, _, agent = opened()
+
+    async def advance(call, usage, limits):
+        raise RuntimeError('a reading nobody guarded')
+
+    nodes = {'desk': Node(desk(FunctionModel(stream_function=agent.stream))['desk'].agent, advance=advance)}
+    _, done = await take_turn(call, nodes, 'How much is it?')
+    assert done.status == 'failed' and call.spoken[-1].text == call.locale.stumble, (done.status, call.spoken)
+
+
 async def a_value_that_does_not_parse_is_refused_with_its_reason():
     """Five digits after the P: the clinic says why, by code, and the agent is not asked."""
     call = ClinicCall()
@@ -407,6 +460,8 @@ async def main():
     await a_value_said_in_full_is_read_back_by_code()
     await a_yes_with_a_new_request_is_identified_and_the_rest_answered()
     await a_value_that_does_not_parse_is_refused_with_its_reason()
+    await a_provider_error_never_silences_the_turn()
+    await a_read_back_that_played_is_answered_on_the_next_turn()
     await a_reading_and_the_step_run_side_by_side()
     await a_reading_that_decides_drops_the_step_run()
     await a_reading_that_changes_the_call_gets_a_fresh_run()

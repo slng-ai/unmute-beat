@@ -504,6 +504,16 @@ class Turn:
                 if not barge.hit:
                     raise
                 return
+            except UsageLimitExceeded, TimeoutError:
+                if early is not None:
+                    await early.drop()
+                raise
+            except Exception as error:
+                logger.exception('advance failed on {}', call.state.agent)
+                if early is not None:
+                    await early.drop()
+                yield _Failed(f'{type(error).__name__}: {error}')
+                return
             finally:
                 barge.detach()
             if early is not None and (

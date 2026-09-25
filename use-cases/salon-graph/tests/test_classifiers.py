@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 from unittest.mock import patch
 
+import httpx2
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, UserPromptPart
@@ -324,6 +325,22 @@ async def outcome_is_not_fallback():
     ):
         await take_turn(call, agents.AGENTS, 'Yes.')
     assert call.requests[0].fallback and call.requests[0].outcome == 'none'
+
+    call = pending_readback()
+
+    def offline(messages, info):
+        """Trace fbdd81b6: the Google client sends through httpx2, whose errors are not httpx's."""
+        raise httpx2.ConnectError('[Errno 8] nodename nor servname provided, or not known')
+
+    with (
+        classifier_with(FunctionModel(offline)),
+        agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=guidance)),
+    ):
+        _, done = await take_turn(call, agents.AGENTS, 'Yes.')
+    assert done.status == 'answered', 'a reading that could not reach its provider ended the turn'
+    assert call.requests[0].fallback and not call.state.customer_verified, (
+        'a failed reading looked someone up'
+    )
 
 
 async def binding_failures_and_late_results():

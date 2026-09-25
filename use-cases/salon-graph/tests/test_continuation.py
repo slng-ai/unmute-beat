@@ -309,6 +309,57 @@ async def the_next_reply_is_told_what_was_not_heard():
     assert 'spoke over' not in seen[0]
 
 
+async def an_unheard_receipt_is_said_again_and_not_booked_again():
+    """Session 3, A3: the receipt's audio never plays, and the caller says goodbye into the silence.
+
+    Session 2's native call 2 closed on "You're very welcome" over a receipt
+    the caller never heard. Here nothing ends the call by code (the closing
+    question was never delivered), the next run is told what the caller did
+    not hear (the receipt's own words), its history still holds the booking's
+    application result, and nothing is written twice. The turn after the
+    recovery, heard in full, carries no note.
+
+    Session 3's A3 decision rests on this: the one-turn note is enough, so no
+    note is kept in the history for later turns. No reading can answer that
+    next turn by code, because each one needs a delivered question.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    await read_back_a_haircut(call, probe)
+    runs: list[tuple[str, list]] = []
+
+    async def step(messages, info):
+        runs.append((info.instructions or '', project(call, messages)))
+        yield "Sorry, you may have missed that: you're booked for Friday at 9:00 AM. Goodbye."
+
+    async def read(name, data):
+        if name == 'conversation':
+            return 'end' if data['answer'].endswith('Thanks, bye.') else 'continue'
+        return 'accept' if name == 'confirmation' else None
+
+    with scripted_readings(read), ExitStack() as stack:
+        for node in agents.AGENTS.values():
+            stack.enter_context(node.agent.override(model=FunctionModel(stream_function=step)))
+        probe.interrupt()
+        await probe._turn('Yes.')
+        assert call.state.writes == 1, 'the heard read-back and its yes book once'
+        receipt = next(s for s in call.spoken if s.origin != 'ask' and 'Friday' in (s.generated or ''))
+        assert receipt.playback == 'queued', 'the receipt never started playing'
+        await probe._turn('Thanks, bye.')
+        assert call.state.writes == 1, 'the unheard receipt was booked again'
+        assert runs, 'the call was ended by code over a receipt the caller never heard'
+        note, request = runs[-1]
+        assert 'never reached the caller' in note and receipt.generated in note, note
+        results = [str(p.content) for m in request for p in m.parts if isinstance(p, UserPromptPart)]
+        assert any('Application result save_booking' in r and 'BK0001' in r for r in results), results
+        call.note_reached()
+        played_out(call)
+        call.turn_ended(interrupted=False)
+        await probe._turn('Wait, one more thing.')
+    assert call.state.writes == 1
+    assert 'never reached the caller' not in runs[-1][0] and 'spoke over' not in runs[-1][0], runs[-1][0]
+
+
 async def a_number_talked_over_arrives_whole():
     """The K3 loop: the caller goes on with the digits while the agent is asking for the rest.
 
@@ -1579,6 +1630,7 @@ async def main():
     await a_read_back_cut_off_is_not_agreed_to()
     await a_missing_barge_never_merges_turns()
     await the_next_reply_is_told_what_was_not_heard()
+    await an_unheard_receipt_is_said_again_and_not_booked_again()
     await a_number_talked_over_arrives_whole()
     await a_number_in_pieces_is_read_back_without_the_model()
     await a_number_finished_after_the_rest_was_asked_for_is_read_back()

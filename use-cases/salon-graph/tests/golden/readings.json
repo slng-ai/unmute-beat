@@ -1164,7 +1164,7 @@
   "offer_while_holding": {
    "confirmation": null,
    "appointment_choice": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"move\",\"said\":\"Move the appointment they already hold to the new time.\"},{\"id\":\"add\",\"said\":\"Keep the appointment they hold and add the new one as well.\"}]}",
-   "chosen_offer": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"2026-09-26T0900|haircut\",\"said\":\"Saturday at 9:00 AM\"},{\"id\":\"2026-09-26T0930|haircut\",\"said\":\"Saturday at 9:30 AM\"}],\"holding\":[\"haircut Friday at 9:00 AM\"]}",
+   "chosen_offer": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"2026-09-26T0900|haircut\",\"said\":\"Saturday the 26th at 9:00 AM\"},{\"id\":\"2026-09-26T0930|haircut\",\"said\":\"Saturday the 26th at 9:30 AM\"}],\"holding\":[\"haircut Friday the 25th at 9:00 AM\"]}",
    "last_change": null,
    "retained_approval": null,
    "request_change": null,

@@ -307,15 +307,15 @@ async def openings_skip_the_model():
     )
     assert call.state.agent == 'booking' and call.state.customer_verified, call.state
     assert call.state.wanted is None and len(call.state.offered) == 3, call.state
-    assert call.spoken[-1].text.startswith('For a haircut on Friday, I have 9:00 AM'), call.spoken
+    assert call.spoken[-1].text.startswith('For a haircut on Friday the 25th, I have 9:00 AM'), call.spoken
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn('9:00 AM, please.')
         assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
         assert call.state.writes == 0, 'a pick booked before it was read back'
-        assert call.spoken[-1].text.startswith('Shall I book you in for a haircut, Friday at 9:00 AM'), (
-            call.spoken
-        )
+        assert call.spoken[-1].text.startswith(
+            'Shall I book you in for a haircut, Friday the 25th at 9:00 AM'
+        ), call.spoken
         await probe._turn('Yes.')
     assert {r.kind for r in call.requests} == {'classifier'}, 'the yes to it needs no model either'
     assert call.state.writes == 1, call.state

@@ -27,6 +27,7 @@ from salon.diary import (
     AlreadyHoldsError,
     RefusedError,
     day_phrases,
+    names_a_day,
     resolve_day,
     resolve_time,
     times_named,
@@ -62,7 +63,9 @@ async def read_diary(
 
     Args:
         when: The day in the caller's own words -- "tomorrow", "next Friday",
-            "the 25th" -- or an empty string if they have not named one.
+            "Saturday next week", "October the 3rd" -- or its date as
+            YYYY-MM-DD from the calendar in your instructions, or an empty
+            string if they have not named one.
         service: Narrow the free times to one service, or `any` to see them all.
         at: The time or part of day they asked for, in their own words --
             "three", "half past two", "the afternoon" -- or empty if they said
@@ -80,6 +83,12 @@ async def find_times(call: SalonCall, when: str, service: Service | Literal['any
     A new read replaces whatever was on the table, so it empties `offered`,
     and it is what the front desk's carried request was waiting for, so it
     consumes `wanted`.
+
+    A day the caller named that the diary cannot work out goes back to the
+    model once a turn, with the reason: it has the calendar (`core.clock`)
+    and can pass the date. In trace bbe42ad4 the offer spoke "Which day would
+    you like?" straight to a caller who had just named one, twice, and the
+    model never learned why.
     """
     if not present(call.state.customer_verified):
         raise ModelRetry(
@@ -96,6 +105,13 @@ async def find_times(call: SalonCall, when: str, service: Service | Literal['any
             prefer=resolve_time(at or call.heard),
         )
     )
+    if found.status == 'need_day' and names_a_day(when) and call._day_retried != call.turn:
+        call._day_retried = call.turn
+        raise ModelRetry(
+            f'Nothing was read: the diary could not work out which day "{when}" is. Find that day in the '
+            'calendar in your instructions and call this again with its date as YYYY-MM-DD. If it is not '
+            'there, ask the caller which date they mean.'
+        )
     call.commit(booking_day=found.date, offered=[], wanted=None)
     return found
 
@@ -112,12 +128,17 @@ def _same_day_the_caller_named(call: SalonCall, when: str) -> None:
     The lookup is what records the offers and `save_booking` refuses a slot
     from any other one, so `offered_to` is this call, not this number, and
     asking again withdraws whatever the last search offered.
+
+    A day the caller named that the code cannot work out ("the Tuesday after
+    next") could be the one the model's date is for, so nothing is refused
+    then. The offer names the date the caller hears, and the read-back asks
+    before anything is written.
     """
     if (theirs := call.day_words) and (mine := day_phrases(when)):
         today = call.diary.now().date()
-        wanted = {resolve_day(words, today) for words in theirs} - {None}
+        wanted = {resolve_day(words, today) for words in theirs}
         asked_for = resolve_day(mine[-1], today)
-        if wanted and asked_for not in wanted:
+        if None not in wanted and asked_for not in wanted:
             said = '" or "'.join(theirs)
             raise ModelRetry(
                 f'Nothing was looked up. The caller said "{said}" and this asked for "{mine[-1]}", '
@@ -138,7 +159,7 @@ async def offer_times(
     time they already picked plainly, use read_diary then ask_booking instead.
 
     Args:
-        when: The caller's own day words.
+        when: The caller's own day words, or the day's date as YYYY-MM-DD from the calendar in your instructions.
         service: The requested service.
         at: The caller's time or daypart, if given.
     """
@@ -174,7 +195,9 @@ async def offer(
         text = f'For a {spoken_service(service)} {day}, I have {times}. Which time works for you?'
     else:
         text = {
-            'need_day': 'Which day would you like?',
+            'need_day': 'Sorry, which date do you mean?'
+            if names_a_day(when)
+            else 'Which day would you like?',
             'past': 'That date has already passed. Which future day would you like?',
             'closed': 'The salon is closed that day. Which other day works for you?',
         }.get(found.status, 'There are no available times for that request. Which other day works for you?')

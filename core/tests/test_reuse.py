@@ -372,6 +372,21 @@ async def a_read_back_that_played_is_answered_on_the_next_turn():
     assert call._book == {'0900': 'walk-in'}, 'a yes to a read-back that played booked nothing'
 
 
+async def the_step_is_told_the_date_in_its_own_timezone():
+    """Trace bbe42ad4: a step that works with days is told today's date and the week ahead, from core."""
+    call, _, _ = opened()
+    told: list[str] = []
+
+    async def stream(messages, info):
+        told.append(str(info.instructions))
+        yield 'It is 40 euros.'
+
+    with scripted():
+        await take_turn(call, desk(FunctionModel(stream_function=stream)), 'How much is it?')
+    assert told and 'Today is ' in told[0] and '(America/New_York)' in told[0], told
+    assert told[0].count('\n- ') == 7, 'the clinic shows a week'
+
+
 async def a_provider_error_never_silences_the_turn():
     """Trace fbdd81b6: one reading hit a DNS failure, the error left the turn, and the caller sat in silence.
 
@@ -461,6 +476,7 @@ async def main():
     await a_yes_with_a_new_request_is_identified_and_the_rest_answered()
     await a_value_that_does_not_parse_is_refused_with_its_reason()
     await a_provider_error_never_silences_the_turn()
+    await the_step_is_told_the_date_in_its_own_timezone()
     await a_read_back_that_played_is_answered_on_the_next_turn()
     await a_reading_and_the_step_run_side_by_side()
     await a_reading_that_decides_drops_the_step_run()

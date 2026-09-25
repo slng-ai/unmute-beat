@@ -573,6 +573,63 @@ async def a_yes_with_a_new_request_is_verified_and_the_rest_answered():
     assert asked is None or asked.about != 'phone', 'the number was asked for again'
 
 
+async def a_day_next_week_is_offered_at_the_first_try():
+    """Trace bbe42ad4: "I meant Saturday next week, not this Saturday." was answered "Which day would you like?".
+
+    Twice, and "October the 3rd" the same. The diary works the day out now,
+    and each offer names its date. A day the diary still cannot work out goes
+    back to the model with the reason, and the model, which has the calendar,
+    passes the date: nothing is said to the caller in between.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    planned = [
+        ['Saturday'],
+        ['Saturday next week'],
+        ['in two weeks on Tuesday', '2026-10-06'],
+    ]
+    requests: list[str] = []
+
+    def classify(name, data):
+        return 'continue' if name == 'conversation' else None
+
+    async def booking(messages, info):
+        requests.append(f'{messages!r} {info.instructions}')
+        when = planned[0].pop(0)
+        if not planned[0]:
+            planned.pop(0)
+        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
+        yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': when, 'service': 'haircut'}))}
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=booking if name == 'booking' else other)
+            stack.enter_context(node.agent.override(model=model))
+        for words, day in (
+            ('Actually, can we do Saturday?', 'Saturday the 26th'),
+            ('Oh no, sorry, I meant Saturday next week, not this Saturday.', 'Saturday the 3rd'),
+            ('In two weeks on Tuesday, please.', 'Tuesday the 6th'),
+        ):
+            said = len(probe.fixed())
+            requests.clear()
+            probe.interrupt()
+            await probe._turn(words)
+            lines = probe.fixed()[said:]
+            assert lines and lines[-1].startswith(f'For a haircut on {day}, I have'), (words, lines)
+            assert not any('which day' in line.lower() or 'which date' in line.lower() for line in lines), (
+                lines
+            )
+            call.note_reached()
+            played_out(call)
+    assert len(requests) == 2 and 'could not work out which day' in requests[1], requests
+    assert 'Today is Monday 2026-09-21' in requests[0], 'the booking model was not told the date'
+    assert '- Saturday 2026-10-03: Saturday next week' in requests[0], 'nor the calendar'
+
+
 def a_report_never_unhears_a_line_that_played():
     """Trace fbdd81b6: a question that played out was taken as unheard, and the answer to it joined the turn before.
 
@@ -1322,6 +1379,7 @@ async def main():
     await a_move_after_a_booking_is_read_back_not_cancelled()
     await a_yes_with_a_new_request_is_verified_and_the_rest_answered()
     a_report_never_unhears_a_line_that_played()
+    await a_day_next_week_is_offered_at_the_first_try()
     await an_add_answered_to_a_heard_question_books_it()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()

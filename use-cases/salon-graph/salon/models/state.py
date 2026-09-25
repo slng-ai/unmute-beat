@@ -1,14 +1,19 @@
 """What a call to Sage and Stone knows, and the call itself.
 
 Only what the conversation can establish is here. The date, the weekday and
-the salon clock are not: the diary works those out in code, so nothing has to
-be told to the model and nothing can be got wrong.
+the salon clock are not state: the diary decides a day in code
+(`salon.diary.resolve_day`). Every step's model is still told today's date
+and the next two weeks, from the diary's own clock (`core.clock.Today`), so
+it can talk about a day and give its exact date when the caller's words are
+beyond the code. In trace bbe42ad4 it knew none of it, and "Saturday next
+week" was answered with "Which day would you like?" twice.
 """
 
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Literal
+from datetime import datetime, tzinfo
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, computed_field, model_validator
 from pydantic_ai.usage import RunUsage, UsageLimits
@@ -16,7 +21,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from core import state as core
 from core.proposals import Proposal
 from core.readings import Option
-from salon.diary import Diary, day_phrases
+from salon.diary import TZ, Diary, day_phrases
 from salon.models.consent import Asked, ReplyClassification
 from salon.models.receipts import Slot
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
@@ -226,8 +231,14 @@ class SalonCall(core.CallContext):
     wanted the write to go through.
     """
 
+    timezone: ClassVar[tzinfo] = TZ
+    calendar_days: ClassVar[int] = 14
+    """Two weeks: far enough for "Saturday next week" on a Sunday, short enough to read on every request."""
+
     state: SalonState = Field(default_factory=SalonState)
     _diary: Diary = PrivateAttr(default_factory=Diary)
+    _day_retried: int = PrivateAttr(default=-1)
+    """The turn a day the diary could not work out was sent back to the model (`salon.tools.booking.find_times`)."""
     """The salon's books. A private attribute because the prompt templates are compiled against this model's schema."""
     _writes_before: int = PrivateAttr(default=0)
     """What `writes` stood at when this turn began, so "did anything land in this turn" is answerable."""
@@ -244,6 +255,10 @@ class SalonCall(core.CallContext):
     def diary(self) -> Diary:
         """The salon's books this call reads and writes."""
         return self._diary
+
+    def now(self) -> datetime:
+        """The diary's clock, so the date the model is told and the day the diary decides are the same one."""
+        return self._diary.now()
 
     def turn_started(self, heard: str = '') -> None:
         """Also age out a question nobody answered, and mark where the write count stood.

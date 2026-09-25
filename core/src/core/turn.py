@@ -767,7 +767,9 @@ class Turn:
             stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
             messages = project(call, request.messages, excluded=excluded)
             parameters = request.model_request_parameters
-            notes = [note for note in (call.spoken_over, call._return_status) if note]
+            notes = [
+                note for note in (call.today.instructions(), call.spoken_over, call._return_status) if note
+            ]
             if notes:
                 parameters = replace(
                     parameters,

@@ -9,7 +9,9 @@ write audit are core's (`core.conversation`, `core.operations`).
 from __future__ import annotations
 
 import re
-from typing import Any
+from datetime import tzinfo
+from typing import Any, ClassVar
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, PrivateAttr
 from pydantic_ai import Agent
@@ -37,6 +39,8 @@ class ClinicState(VoiceState):
 
 
 class ClinicCall(CallContext):
+    timezone: ClassVar[tzinfo] = ZoneInfo('America/New_York')
+    calendar_days: ClassVar[int] = 7
     state: ClinicState = Field(default_factory=ClinicState)
     _offered: tuple[Option, ...] = PrivateAttr(default=())
     _book: dict[str, str] = PrivateAttr(default_factory=dict)

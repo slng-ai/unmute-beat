@@ -15,6 +15,7 @@ import time
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, tzinfo
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
 
+from core.clock import Today
 from core.locale import ENGLISH, Locale
 
 if TYPE_CHECKING:
@@ -349,6 +351,10 @@ class CallContext(BaseModel):
 
     default_locale: ClassVar[Locale] = ENGLISH
     """The words the turn engine says itself, in this call's language. A use case in another language sets its own."""
+    timezone: ClassVar[tzinfo] = UTC
+    """Where this call's day is counted. A business in one place sets its own (the salon: Europe/Madrid)."""
+    calendar_days: ClassVar[int] = 0
+    """How many days after today each step's model is shown, labelled (`core.clock.Today`). 0: today only."""
 
     state: VoiceState
     messages: list[ModelMessage] = Field(default_factory=list)
@@ -463,6 +469,8 @@ class CallContext(BaseModel):
     _playback_known: bool = PrivateAttr(default=False)
     _leaving: bool = PrivateAttr(default=False)
     """The caller said goodbye in the same reply as the answer this turn runs (`core.readings.Acts`)."""
+    _today: Today | None = PrivateAttr(default=None)
+    """The call's clock, read once (`today`): a call that crosses midnight keeps its day."""
     _spoken_over: str = PrivateAttr(default='')
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
     """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
@@ -471,6 +479,17 @@ class CallContext(BaseModel):
     def locale(self) -> Locale:
         """This call's fixed lines: the class's `default_locale`, unless a call picks its own, turn by turn."""
         return self.default_locale
+
+    def now(self) -> datetime:
+        """The time now, where this call's day is counted. A use case with its own clock overrides it."""
+        return datetime.now(self.timezone)
+
+    @property
+    def today(self) -> Today:
+        """Today's date for this call, read from `now` the first time it is asked for, then kept."""
+        if self._today is None:
+            self._today = Today(self.now(), self.calendar_days)
+        return self._today
 
     @property
     def entered(self) -> Entry:

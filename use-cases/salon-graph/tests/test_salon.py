@@ -66,14 +66,14 @@ TODAY = AT.date()
 assert diary.resolve_day('today', TODAY) == TODAY
 assert diary.resolve_day('tomorrow', TODAY) == TODAY + timedelta(days=1)
 assert diary.resolve_day('friday', TODAY) == date(2026, 9, 25)
-assert diary.resolve_day('next friday', TODAY) == date(2026, 10, 2)
+assert diary.resolve_day('next friday', TODAY) == date(2026, 9, 25), 'on a Saturday, the Friday of next week'
 assert diary.resolve_day('saturday', TODAY) == date(2026, 9, 26)
 assert diary.resolve_day('2026-10-01', TODAY) == date(2026, 10, 1)
 assert diary.resolve_day('whenever suits', TODAY) is None
 assert diary.resolve_day('', TODAY) is None
 
 assert diary.spoken(TODAY, __import__('datetime').time(15, 0), TODAY) == 'today at 3:00 PM'
-assert diary.spoken(MONDAY, __import__('datetime').time(9, 0), TODAY) == 'Monday at 9:00 AM'
+assert diary.spoken(MONDAY, __import__('datetime').time(9, 0), TODAY) == 'Monday the 21st at 9:00 AM'
 
 
 books.reset()
@@ -82,8 +82,8 @@ assert books.find_slots(PHONE, 'sunday', 'haircut', AT)['status'] == 'closed'
 assert books.find_slots(PHONE, 'yesterday', 'haircut', AT)['status'] in ('need_day', 'past')
 
 monday = books.find_slots(PHONE, 'monday', 'haircut', AT)
-assert monday['status'] == 'ok' and monday['day'] == 'Monday' and monday['price_euros'] == 28
-assert monday['slots'][0]['spoken'] == 'Monday at 9:00 AM'
+assert monday['status'] == 'ok' and monday['day'] == 'Monday the 21st' and monday['price_euros'] == 28
+assert monday['slots'][0]['spoken'] == 'Monday the 21st at 9:00 AM'
 
 today_free = books.find_slots(PHONE, 'today', 'haircut', AT)
 """A time already gone past on the salon clock is not offered, however empty the diary looks: at 10:00
@@ -97,7 +97,7 @@ monday = books.find_slots(PHONE, 'monday', 'haircut', AT)
 the table and the last one is over.
 """
 booked = books.save_booking(PHONE, 'book', monday['slots'][0]['slot_id'], '', False, AT)
-assert booked['status'] == 'booked' and booked['spoken'] == 'Monday at 9:00 AM'
+assert booked['status'] == 'booked' and booked['spoken'] == 'Monday the 21st at 9:00 AM'
 assert books.bookings_for(PHONE, TODAY)[0]['booking_id'] == booked['booking_id']
 assert books.find_slots(PHONE, 'monday', 'haircut', AT)['bookings']
 

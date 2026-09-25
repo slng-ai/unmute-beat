@@ -1,0 +1,116 @@
+# Sage and Stone as a Pipecat flow config (pipecat.flows.FlowConfig).
+#
+# This file owns the graph: every node, and every move each tool may make.
+# Code (graph_salon/handlers.py) picks one of the moves by returning its name
+# in the result field `next`; a name no table lists moves nowhere. Pipecat
+# checks at load that every destination below is a node, and
+# graph_salon/flow.py checks that every node is one `NodeName` knows.
+#
+# Each step has two nodes. On `booking` the model speaks as the node is
+# entered; on `booking_listen` code has just spoken (a receipt, a fixed line)
+# and the node waits for the caller. `respond_immediately` and `pre_actions`
+# are fixed per node, so "who speaks next" is a node, not a flag.
+#
+# Code speaks through the custom `say` action (handler `say` in
+# graph_salon/handlers.py), never Pipecat's `tts_say`: `tts_say` holds the
+# node change until a frame that a barge-in drops reaches the end of the
+# pipeline, and the node change then never completes (Langfuse trace 2b75413c).
+#
+# `{{ key }}` is filled from flow_manager.state each time a node is entered:
+# `role`, `diary_rules` (set once), `facts`, `question` (set by every tool).
+# `say` reads `state['say']`, also set by every tool.
+
+initial_node: concierge_listen
+
+nodes:
+  concierge: &concierge
+    role_message: "{{ role }}"
+    task_messages: !include prompts/concierge.yaml
+    functions:
+      - name: read_diary
+        transition_to:
+          field: next
+          cases: {booking: booking, verify_listen: verify_listen, confirm: confirm, concierge_listen: concierge_listen}
+      - name: hand_over
+        transition_to:
+          field: next
+          cases: {verify_listen: verify_listen, confirm: confirm, booking: booking, complaints: complaints, concierge_listen: concierge_listen}
+      - name: end_call
+        transition_to: {field: next, cases: {end: end, concierge_listen: concierge_listen}}
+  concierge_listen:
+    <<: *concierge
+    respond_immediately: false
+    pre_actions: [{type: say, handler: say}]
+
+  verify: &verify
+    task_messages: !include prompts/verify.yaml
+    functions:
+      - name: ask_number
+        transition_to: {field: next, cases: {confirm: confirm, verify_listen: verify_listen}}
+      - name: stop_verifying
+        transition_to: {field: next, cases: {concierge: concierge, verify_listen: verify_listen}}
+      - name: end_call
+        transition_to: {field: next, cases: {end: end, verify_listen: verify_listen}}
+  verify_listen:
+    <<: *verify
+    respond_immediately: false
+    pre_actions: [{type: say, handler: say}]
+
+  confirm:
+    task_messages: !include prompts/confirm.yaml
+    respond_immediately: false
+    pre_actions: [{type: say, handler: say}]
+    functions:
+      - name: answer
+        transition_to:
+          field: next
+          cases:
+            verify: verify
+            booking: booking
+            booking_listen: booking_listen
+            complaints: complaints
+            complaints_listen: complaints_listen
+            concierge: concierge
+            concierge_listen: concierge_listen
+            confirm: confirm
+
+  booking: &booking
+    task_messages: !include prompts/booking.yaml
+    functions:
+      - name: read_diary
+        transition_to: {field: next, cases: {booking_listen: booking_listen}}
+      - name: ask_booking
+        transition_to: {field: next, cases: {confirm: confirm, booking_listen: booking_listen}}
+      - name: hand_over
+        transition_to:
+          field: next
+          cases: {verify_listen: verify_listen, confirm: confirm, complaints: complaints, concierge: concierge, booking_listen: booking_listen}
+      - name: end_call
+        transition_to: {field: next, cases: {end: end, booking_listen: booking_listen}}
+  booking_listen:
+    <<: *booking
+    respond_immediately: false
+    pre_actions: [{type: say, handler: say}]
+
+  complaints: &complaints
+    task_messages: !include prompts/complaints.yaml
+    functions:
+      - name: ask_complaint
+        transition_to: {field: next, cases: {confirm: confirm, complaints_listen: complaints_listen}}
+      - name: hand_over
+        transition_to:
+          field: next
+          cases: {verify_listen: verify_listen, confirm: confirm, booking: booking, concierge: concierge, complaints_listen: complaints_listen}
+      - name: end_call
+        transition_to: {field: next, cases: {end: end, complaints_listen: complaints_listen}}
+  complaints_listen:
+    <<: *complaints
+    respond_immediately: false
+    pre_actions: [{type: say, handler: say}]
+
+  end:
+    task_messages: []
+    respond_immediately: false
+    pre_actions:
+      - {type: say, handler: say}
+      - {type: end_conversation}

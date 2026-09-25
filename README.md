@@ -644,6 +644,7 @@ root `.env` by walking up from its folder.
 |---|---|---|
 | `use-cases/salon-graph` | the salon, as a graph of typed steps on core | [README](use-cases/salon-graph/README.md) |
 | `use-cases/salon-prompt` | the same salon as one prompt on Pipecat's Gemini service: the baseline | [README](use-cases/salon-prompt/README.md) |
+| `use-cases/salon-pipecat-flows` | the same salon on declarative Pipecat flows, the harness's guarantees as plain application code, no core | [README](use-cases/salon-pipecat-flows/README.md) |
 | `use-cases/faro-language-learning` | Faro, a bilingual language-learning companion | [README](use-cases/faro-language-learning/README.md) |
 | `use-cases/concierge-tools` | no bot: Coval calls and the trace ledger, to compare the salon builds | [README](use-cases/concierge-tools/README.md) |
 | `use-cases/faro-tools` | no bot: Faro's live benchmark | [README](use-cases/faro-tools/README.md) |
@@ -822,6 +823,7 @@ core/                     the harness, a package: slng-voice-core
 use-cases/
   salon-graph/            the salon on core: bot.py, salon/, evals/ (classifier evals), tests/
   salon-prompt/           the same salon as one prompt on Pipecat's Gemini service, no core
+  salon-pipecat-flows/    the same salon on declarative Pipecat flows, the guarantees as app code, no core
   faro-language-learning/ Faro: a bilingual learning companion on core, with a SQLite store
   concierge-tools/        coval_sim (Coval calls to any bot.py) and ledger.py (cost of calls from traces)
   faro-tools/             bench.py: Faro's live benchmark

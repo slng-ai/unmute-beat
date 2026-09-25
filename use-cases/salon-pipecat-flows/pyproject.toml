@@ -1,0 +1,21 @@
+[project]
+name = "salon-pipecat-flows"
+version = "0.1.0"
+description = "Sage and Stone, the salon, on declarative Pipecat flows: the harness's guarantees as plain application code, no core."
+requires-python = ">=3.14"
+dependencies = [
+    "langfuse>=4.15.4",
+    # Google's libphonenumber: a regex cannot know a Spanish number has nine national digits.
+    "pydantic-extra-types[phonenumbers]>=2.11.1",
+    "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",
+    "pipecat-slng>=0.5.2",
+    "python-dotenv>=1.2.3",
+    "websockets>=16.1.1",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14", "ty>=0.0.82"]
+
+# Its own ty root: without one, ty walks up to the next pyproject that has a [tool.ty] table.
+[tool.ty.environment]
+python-version = "3.14"

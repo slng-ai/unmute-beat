@@ -1,0 +1,69 @@
+{
+  "aci": "0.1",
+  "ok": true,
+  "resource": "simulations",
+  "operation": "get",
+  "data": {
+    "name": "simulations/UAeZiGa7wzMijRpQmENSLq",
+    "simulation_id": "UAeZiGa7wzMijRpQmENSLq",
+    "run_id": "DDxDkFaSDhpvNc4Yax7vE6",
+    "status": "IN PROGRESS",
+    "create_time": "2026-09-25T15:21:11.518884Z",
+    "test_case_id": "GRdmreeb7SP4G8yegtMntC",
+    "has_audio": false,
+    "agent_id": "JxGgSPA55DcFcDcvbKAUQM",
+    "persona_id": "VSruLZYYyz3w7fkdUaheDR",
+    "test_set_id": "K3Xwqi7g",
+    "transcript": [],
+    "call_sid": "CAd6533bcb01444d4da5b63188ffd39e78",
+    "destination": null,
+    "is_public": false,
+    "metric_values": null,
+    "notes": null,
+    "source": null
+  },
+  "warnings": [],
+  "next_actions": [
+    {
+      "id": "simulations.metrics",
+      "label": "List simulation metrics",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "metrics",
+        "UAeZiGa7wzMijRpQmENSLq"
+      ],
+      "safe": true,
+      "primary": true,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.audio",
+      "label": "Get simulation audio URL",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "audio",
+        "UAeZiGa7wzMijRpQmENSLq"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.context",
+      "label": "simulations context",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "context"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    }
+  ]
+}

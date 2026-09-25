@@ -304,7 +304,26 @@ This measures interpretation on labelled text. It says nothing about speech-to-t
 
 ## 8. Coval
 
-(Filled in after the bulk jobs.)
+Calls used this session: 1 stress repair (sequential) + 4 bulk stress + 4 bulk normal = 9. Ledger: [`session-3/coval-runs.jsonl`](session-3/coval-runs.jsonl). The cap is now 6 + 9 = 15 of the extended 22 (14 planned + 8 you added), with 6 kept for sessions 4–6. Call 1 is in section 2 (A4).
+
+### Bulk stress: run `DDxDkFaSDhpvNc4Yax7vE6`, revision `a8868be`, 4 calls at once
+
+The runner's local wait (2,700 s) ran out while Coval still showed the run as in progress (exit 3). It was not relaunched. Evidence: [bot log](session-3/bulk-stress-bot.log), [ledger](session-3/bulk-stress-ledger.txt), [transcripts](session-3/bulk-stress-simulations/).
+
+| Simulation | Call | Split number | Correction | Writes | Receipt heard | Verdict |
+|---|---|---|---|---|---|---|
+| `E2n7Wg6ZYpzwJgcpvukHnt` | `CA37e3c1…` | joined, read back once | Saturday read back, agreed | 1 (tomorrow 9:00) | yes | pass |
+| `EAZZjLcMCxSoGHjfe7X4kV` | `CA3c66cd…` | the caller restarted "+34 671" and was asked for the rest twice, then it was read back | the agent itself said "that's Saturday the third, not tomorrow"; the read-back was asked twice | 1 (Sat 3 Oct 9:00) | yes | pass on consent; date meaning ambiguous (below) |
+| `L2T4QnHbJcCoUDoKJGScY9` | `CAcbb53e…` | joined, read back once | read back, agreed | 1 (tomorrow 9:00) | yes | pass |
+| `UAeZiGa7wzMijRpQmENSLq` | `CAd6533b…` | – | – | 0 | – | **inconclusive**: 3 caller turns in 180 s, still in progress at Coval |
+
+Every write answered a delivered read-back and a yes: 3 of 3 were one booking. The call-1 fault (a cut receipt, then a move) did not come back, but its trigger (a receipt cut before any audio) did not recur either. So the fix is proven offline, not yet live.
+
+Finding for session 4: "Saturday instead", said after "this Friday" (Friday 2 Oct), was read as tomorrow (Sat 26 Sep) in two calls and as Sat 3 Oct in one. Both are defensible. The diary resolves day words from today, not from the day under discussion. This is domain meaning, not consent.
+
+### Bulk normal
+
+(Below, once run.)
 
 ## 9. Inherited findings
 

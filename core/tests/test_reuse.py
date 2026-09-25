@@ -190,6 +190,37 @@ async def a_value_said_in_full_is_read_back_by_code():
     assert call.state.patient == 'P-1234'
 
 
+async def a_yes_with_a_new_request_is_identified_and_the_rest_answered():
+    """Coval run hdbogMqB, AJ4t, in the clinic: the yes identifies, and the step's model answers the rest.
+
+    Identifying says nothing of its own, so the turn used to end there, in
+    silence, with the move never answered.
+    """
+    call = ClinicCall()
+    heard: list[str] = []
+
+    async def say(text: str) -> None:
+        heard.append(text)
+
+    call._say = say
+    asked: list[str] = []
+
+    async def stream(messages, info):
+        asked.append(f'{messages!r} {info.instructions}')
+        yield 'Thursday, let me look.'
+
+    nodes = desk(FunctionModel(stream_function=stream))
+    with scripted():
+        await take_turn(call, nodes, 'My patient number is P-1234.')
+    assert heard[-1] == 'Is your patient number P-1234?' and not asked, (heard, asked)
+    with scripted(confirmation='accept'):
+        said, _ = await take_turn(call, nodes, 'Yes, that is me. And can we move my cleaning to Thursday?')
+    assert call.state.patient == 'P-1234', 'the yes did not identify'
+    assert heard[-1] == 'Thank you.' and said == 'Thursday, let me look.', (heard, said)
+    assert len(asked) == 1 and 'move my cleaning to Thursday' in asked[0], asked
+    assert 'Application action identify done.' in asked[0], 'the model was not told the yes was acted on'
+
+
 def _said(call: ClinicCall) -> str:
     """Every model response the call kept, as text."""
     return ' '.join(
@@ -374,6 +405,7 @@ async def main():
     await a_pick_with_a_condition_is_left_to_the_model()
     await a_yes_without_its_question_writes_nothing()
     await a_value_said_in_full_is_read_back_by_code()
+    await a_yes_with_a_new_request_is_identified_and_the_rest_answered()
     await a_value_that_does_not_parse_is_refused_with_its_reason()
     await a_reading_and_the_step_run_side_by_side()
     await a_reading_that_decides_drops_the_step_run()

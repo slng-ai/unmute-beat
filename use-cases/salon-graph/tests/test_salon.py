@@ -299,7 +299,8 @@ async def verify_then_book():
 
     verify handed straight to booking, never back through the front desk.
 
-    Routing and lookup stay silent; the actual availability still speaks.
+    Routing stays silent. The lookup says one short line of its own, and the actual availability
+    speaks after it.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -323,8 +324,9 @@ async def verify_then_book():
     assert call.state.pending is None, 'the stack was pushed on the way in and popped on the way out'
     assert probe.spoken() == ''
     assert all(not node.enter for node in AGENTS.values())
-    assert len(probe.fixed()) == 1, probe.fixed()
-    assert probe.fixed()[0].endswith('Which time works for you?')
+    assert len(probe.fixed()) == 2, probe.fixed()
+    assert probe.fixed()[0] in ('Thanks, I have you.', 'Thank you, I have you now.'), probe.fixed()
+    assert probe.fixed()[1].endswith('Which time works for you?'), probe.fixed()
 
 
 async def the_diary_is_the_edge():

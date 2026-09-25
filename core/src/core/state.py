@@ -362,6 +362,8 @@ class CallContext(BaseModel):
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
     _covered: bool = PrivateAttr(default=False)
+    _answers: int = PrivateAttr(default=0)
+    """How many lines `speak_now` has put to the caller, heard or not. The turn engine's evidence that an action answered."""
     """Whether the current silence already has a fixed line in it. `say` allows one per gap."""
     _generation: int = PrivateAttr(default=0)
     """Which accepted caller turn is current.
@@ -1153,6 +1155,7 @@ class CallContext(BaseModel):
 
     async def speak_now(self, text: str, origin: str = 'confirmation') -> None:
         """Say this whatever else was said. For a confirmation, a question or a goodbye, never a filler."""
+        self._answers += 1
         if self._say is not None:
             self.note_said('fixed', text, origin=origin)
             await self._say(text)

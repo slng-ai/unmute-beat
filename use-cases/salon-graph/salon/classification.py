@@ -289,6 +289,7 @@ SALON = SalonConversation(
             action='confirm_customer',
             run=lambda call, question: lookup_customer(call, question.value),
             when=lambda call, question: call.state.agent == 'verify',
+            done=('Thanks, I have you.', 'Thank you, I have you now.'),
         ),
         ReadBack(
             about='booking',

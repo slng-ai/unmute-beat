@@ -208,6 +208,7 @@ def conversation(model: Model | str) -> Conversation[ClinicCall]:
                 about='patient',
                 action='identify',
                 run=lambda call, q: IDENTIFY.run(call, Patient(patient=q.value)),
+                done=('Thank you.',),
             ),
         ),
         offers=(

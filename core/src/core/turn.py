@@ -54,7 +54,7 @@ from core.graph import Node, moved_by, route
 from core.history import paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
-from core.state import CallContext, Checkpoint, Handoff, Question, turn_generation
+from core.state import _FILLERS, CallContext, Checkpoint, Handoff, Question, Spoken, turn_generation
 
 STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
     ENGLISH.stumble,
@@ -541,10 +541,16 @@ class Turn:
                 yield RunEnded(node.agent.name or call.state.agent)
                 return
             decided = classified if classified is not None and not classified.outcome else None
+            answers_before = call._answers
             try:
                 output = await action.run()
                 if decided is not None:
                     decided.outcome = 'action'
+                if _silent(call, output, answers_before):
+                    call._return_status = (
+                        f'{call._return_status} Application action {action.name} done.'.lstrip()
+                    )
+                    output = None
             except ModelRetry as error:
                 if decided is not None:
                     decided.outcome = 'refused'
@@ -607,7 +613,11 @@ class Turn:
             checkpoint = call._checkpoint
             if checkpoint is not None:
                 call._entered = output.status
-                call._hidden_speech.update(s.id for s in call.all_spoken if s.id not in checkpoint.speech_ids)
+                call._hidden_speech.update(
+                    s.id
+                    for s in call.all_spoken
+                    if s.id not in checkpoint.speech_ids and not _covering(call, s)
+                )
                 call.messages = checkpoint.messages
                 call._return_status = (
                     f'Application return: {call.state.agent} {output.status}. '
@@ -917,6 +927,30 @@ def _speech(event) -> str:
         case PartDeltaEvent(delta=TextPartDelta(content_delta=text)):
             return text
     return ''
+
+
+def _silent(call: CallContext, output: object, answers_before: int) -> bool:
+    """Whether an application action left the caller with nothing to hear: no question, no hand-over, no answer.
+
+    The step's model answers then, in the same turn, told what the action did.
+    A yes to a read-back is often not the whole reply ("Yes, that is me. And
+    can we move my cleaning to Thursday?"), and an action that only records
+    the yes would end the turn in silence and drop the rest. A covering line
+    (`CallContext.say`) answers nothing, so only `speak_now` counts.
+    """
+    if output is None or isinstance(output, Question | Handoff):
+        return False
+    return call._answers == answers_before
+
+
+def _covering(call: CallContext, segment: Spoken) -> bool:
+    """A covering line said in this turn, such as a check's "Thanks, I have you".
+
+    The rest of a check is hidden from the step it hands back to, whose
+    history is the one from before the check. This line is not: the caller
+    has just heard it, and the step answering next must not say it again.
+    """
+    return segment.turn == call.turn and segment.origin in _FILLERS
 
 
 def _delivered(call: CallContext) -> str:

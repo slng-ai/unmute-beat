@@ -492,6 +492,87 @@ async def a_move_after_a_booking_is_read_back_not_cancelled():
     assert saturday and asked == {'concierge': 1}, asked
 
 
+AJ4T = "Yes, that's right. Oh, and sorry, can we make it Saturday instead of Friday?"
+"""Coval run hdbogMqB, AJ4t: the caller's answer to their number read back."""
+
+
+async def a_yes_with_a_new_request_is_verified_and_the_rest_answered():
+    """Coval run hdbogMqB, AJ4t: a yes to the number, and a new day in the same breath.
+
+    The yes is the check's: the lookup runs with no model. The new day is the
+    booking step's: the caller goes back to it in the same turn, the Friday
+    times its opening would have offered are skipped because the request
+    changed, and its model is given the whole reply. Nobody asks for the
+    number again.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call(PHONE, diary=books)
+    probe = Probe(call)
+    booking_asked: list[str] = []
+
+    def classify(name, data):
+        if name == 'confirmation':
+            return 'accept' if data['answer'] == AJ4T else None
+        if name == 'request_change':
+            return 'changed'
+        if name == 'conversation':
+            return 'continue'
+        return None
+
+    async def desk(messages, info):
+        yield {
+            0: DeltaToolCall(
+                name='hand_over',
+                json_args=json.dumps(
+                    {
+                        'to': 'booking',
+                        'because': 'wants a haircut on Friday',
+                        'booking': {'service': 'haircut', 'when': 'Friday'},
+                    }
+                ),
+            )
+        }
+
+    async def booking(messages, info):
+        booking_asked.append(f'{messages!r} {info.instructions}')
+        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
+        yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': 'Saturday', 'service': 'haircut'}))}
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    steps = {'concierge': desk, 'booking': booking}
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=steps.get(name, other))
+            stack.enter_context(node.agent.override(model=model))
+        await probe._turn('A haircut on Friday, please.')
+        assert call.state.agent == 'verify', call.state.agent
+        assert probe.fixed() == ['Let me read that back to you: +34 611 111 111. Have I got that right?'], (
+            probe.fixed()
+        )
+        call.note_reached()
+        played_out(call)
+        booking_asked.clear()
+
+        probe.interrupt()
+        await probe._turn(AJ4T)
+    assert call.state.customer_verified and call.state.verified_phone == PHONE, 'the yes did not verify'
+    assert call.state.agent == 'booking', call.state.agent
+    assert len(booking_asked) == 1, 'the booking model did not answer the rest, once'
+    assert 'Saturday instead of Friday' in booking_asked[0], 'the booking model was not given the new day'
+    assert 'verify completed' in booking_asked[0], 'the booking model was not told the check completed'
+    assert not any(line.startswith('For a haircut on Friday') for line in probe.fixed()), probe.fixed()
+    thanks, offered = probe.fixed()[-2:]
+    assert thanks in ('Thanks, I have you.', 'Thank you, I have you now.'), probe.fixed()
+    assert offered.startswith('For a haircut on Saturday'), probe.fixed()
+    assert 'I have you' in booking_asked[0], 'the booking model was not shown the line already said'
+    asked = call.pending_question()
+    assert asked is None or asked.about != 'phone', 'the number was asked for again'
+
+
 async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
     """The K2 failure: a picked time books at once; "leave it" must not end the call with it still booked.
 
@@ -1147,6 +1228,7 @@ async def main():
     await a_number_with_a_digit_too_many_is_refused_with_its_reason()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_move_after_a_booking_is_read_back_not_cancelled()
+    await a_yes_with_a_new_request_is_verified_and_the_rest_answered()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await a_pick_said_with_a_goodbye_is_asked_before_they_go()

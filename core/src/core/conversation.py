@@ -40,6 +40,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.classifiers import ClassSet, Exchange
 from core.graph import LocalAction
+from core.policies import pick
 from core.readings import (
     CLOSING,
     CONFIRM,
@@ -108,6 +109,15 @@ class ReadBack[C: CallContext](Act[C]):
     """What a yes runs, given the question that was agreed to."""
     when: Callable[[C, Any], bool] = _always
     """Whether a yes to this question counts here, given the question."""
+    done: tuple[str, ...] = ()
+    """Said by code once the action has run, before whatever answers next: "Thanks, I have you."
+
+    For an action that does not speak its own result, such as a check that
+    hands the caller back. It covers the request the next step's model makes,
+    as the graph build's announcement does. It is a covering line
+    (`CallContext.say`), so a caller who cuts in still continues the turn, and
+    the next model sees it in its history. Empty says nothing.
+    """
 
     def rule(self, call: C) -> LocalAction | None:
         if self.label(call, 'confirmation') != 'accept':
@@ -115,7 +125,14 @@ class ReadBack[C: CallContext](Act[C]):
         question = call.pending(self.about)
         if question is None or not self.when(call, question):
             return None
-        return LocalAction(self.action, lambda: self.run(call, question))
+        return LocalAction(self.action, lambda: self._run(call, question))
+
+    async def _run(self, call: C, question: Any) -> object:
+        """The action, then its line. A refused action raises, so it says nothing."""
+        result = await self.run(call, question)
+        if self.done:
+            await call.say(pick(f'done:{self.about}', self.done), origin='entry')
+        return result
 
 
 @dataclass(kw_only=True)

@@ -27,7 +27,8 @@ that member's folder.
 | `policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
 | `history.py` | `paired` and `project`: what each provider request is actually sent |
 | `turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
-| `locale.py` | `Locale`: the four lines the turn engine says itself, in one language; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`) or per call (override the `locale` property) |
+| `locale.py` | `Locale`: the lines the turn engine says itself, in one language, holding lines included; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`) or per call (override the `locale` property) |
+| `clock.py` | `Today`: the call's date, weekday, time and the labelled days ahead, read once per call from `CallContext.now` in its `timezone` (`calendar_days`), and sent to every step's model |
 | `processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
 | `classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
 | `decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
@@ -37,11 +38,11 @@ that member's folder.
 | `steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step) and `AgentBuilder` (builds its agent the same way for every use case), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
 | `flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
 | `readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
-| `conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack`, `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
+| `conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack` (with its `done` line), `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
 | `desk.py` | `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry` |
 | `interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `tests/` | `test_classes`, `test_history`, `test_reuse` and `clinic.py` (a clinic built on core alone). No use case code |
+| `tests/` | `test_classes`, `test_history`, `test_reuse`, `test_clock` and `clinic.py` (a clinic built on core alone). No use case code |
 
 **`use-cases/salon-graph/`**, the salon on core.
 
@@ -94,7 +95,7 @@ that member's folder.
 | Path | Owns |
 |---|---|
 | `concierge-tools/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
-| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph |
+| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph, and `graph` the unmute graph build (`GRAPH_BUILD_DIR`) |
 | `faro-tools/bench.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
 
 **The split that matters:** `core.turn` runs a turn and knows nothing about

@@ -826,7 +826,8 @@ Conversation[ClinicCall](
 | `Operation` | `core/src/core/operations.py` | its arguments and receipt types, the question that authorises it (`proposal`), what the backend does (`_execute`, `_record`), or `needs_approval = False` for an action with no read-back |
 | `Desk` | `core/src/core/desk.py` | the call and hand-over types, the action names, what blocks a switch, an optional `Carry` |
 | `AgentBuilder` | `core/src/core/steps.py` | the call type, model, settings, action names, `Desk`, `advance` |
-| `Locale` | `core/src/core/locale.py` | the four lines the turn engine says itself, in the call's language |
+| `Locale` | `core/src/core/locale.py` | the lines the turn engine says itself, in the call's language, holding lines included |
+| `Today` | `core/src/core/clock.py` | today's date, weekday and time in the call's timezone, and the days ahead with their labels ("Saturday next week"), read once per call and told to every step's model, as the graph build's pre-fetch does |
 | `Held` | `core/src/core/state.py` | something the caller could still take back, kept on the call by kind |
 
 ### What stays code in each use case

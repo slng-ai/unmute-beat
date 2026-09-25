@@ -112,6 +112,11 @@ FOCUSED_LABELS: dict[str, tuple[str, tuple[str, ...]]] = {
     'phone-yes-right': ('accept', ()),
     'phone-yes-got-it': ('accept', ()),
     'phone-no': ('revise', ('reject',)),
+    'phone-yes-then-new-day': ('accept', ()),
+    'phone-yes-then-question': ('accept', ()),
+    'booking-yes-price': ('unclear', ('conditional',)),
+    'booking-yes-but-day': ('revise', ('conditional',)),
+    'booking-yes-but-time': ('revise', ('conditional',)),
     'pick-nine': ('2026-09-25T0900|hair_colour', ()),
     'pick-conditional': ('', ()),
     'pick-after-price': ('2026-09-25T0900|hair_colour', ()),
@@ -121,9 +126,15 @@ FOCUSED_LABELS: dict[str, tuple[str, tuple[str, ...]]] = {
     'condition-after-booking': ('unclear', ('keep',)),
     'withdraw-later': ('withdraw', ()),
     'goodbye-keeps-booking': ('keep', ()),
+    'no-to-a-new-offer': ('keep', ()),
+    'change-move': ('change', ()),
+    'change-service': ('change', ()),
     'cancel-yes': ('accept', ()),
     'closing': ('end', ()),
     'closing-question': ('continue', ()),
+    'closing-readback-yes': ('continue', ()),
+    'closing-readback-thanks': ('continue', ()),
+    'closing-readback-goodbye': ('end', ()),
     'choice-move': ('move', ()),
     'choice-add': ('add', ()),
     'choice-bare-yes': ('', ()),
@@ -152,6 +163,16 @@ OTHER: tuple[tuple[str, str, dict[str, Any], str], ...] = (
             'question': "So that's a cleaning with Dr. Park on Tuesday at 4 PM. Shall I book it?",
             'answer': "Yes please, that's perfect.",
             'proposal': "So that's a cleaning with Dr. Park on Tuesday at 4 PM. Shall I book it?",
+        },
+        'accept',
+    ),
+    (
+        'confirm',
+        CLINIC + ' The receptionist read something back and is waiting for a yes.',
+        {
+            'question': 'Is your patient number P-1234?',
+            'answer': 'Yes, that is me. And can we move my cleaning to Thursday?',
+            'proposal': 'Is your patient number P-1234?',
         },
         'accept',
     ),
@@ -238,6 +259,28 @@ OTHER: tuple[tuple[str, str, dict[str, Any], str], ...] = (
     ),
     (
         'take-back',
+        CLINIC
+        + ' Earlier in this call the receptionist booked an appointment, which the patient can still take back.',
+        {
+            'question': 'Your cleaning on Tuesday at 4 PM is booked. Anything else?',
+            'answer': 'Can we do the day after instead?',
+            'agreed': 'Your cleaning on Tuesday at 4 PM is booked.',
+        },
+        'change',
+    ),
+    (
+        'take-back',
+        RESTAURANT
+        + ' Earlier in this call the host booked a table for the guest, which they can still take back.',
+        {
+            'question': 'Your table for four tonight at 8 is booked. Anything else?',
+            'answer': 'Oh, could we make it 9 instead?',
+            'agreed': 'Your table for four tonight at 8 is booked.',
+        },
+        'change',
+    ),
+    (
+        'take-back',
         HELPDESK
         + ' Earlier in this call the agent reset the password, which the employee can still take back.',
         {
@@ -246,6 +289,39 @@ OTHER: tuple[tuple[str, str, dict[str, Any], str], ...] = (
             'agreed': "I've reset your password.",
         },
         'keep',
+    ),
+    (
+        'take-back',
+        RESTAURANT
+        + ' Earlier in this call the host booked a table for the guest, which they can still take back.',
+        {
+            'question': 'Would you like to pre-order a dessert for the table?',
+            'answer': "No thanks, we're good.",
+            'agreed': 'Your table for four tonight at 8 is booked.',
+        },
+        'keep',
+    ),
+    (
+        'take-back',
+        CLINIC
+        + ' Earlier in this call the receptionist booked an appointment, which the patient can still take back.',
+        {
+            'question': 'We also have a flu jab slot on Thursday at 10. Would you like it?',
+            'answer': "No, I'm fine, thank you.",
+            'agreed': 'Your cleaning on Tuesday at 4 PM is booked.',
+        },
+        'keep',
+    ),
+    (
+        'take-back',
+        HELPDESK
+        + ' Earlier in this call the agent reset the password, which the employee can still take back.',
+        {
+            'question': "I've reset your password. Anything else?",
+            'answer': 'No, actually, put my old password back.',
+            'agreed': "I've reset your password.",
+        },
+        'withdraw',
     ),
     (
         'still-agreed',

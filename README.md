@@ -106,8 +106,8 @@ interruption handling. The application supplies the business rules those
 mechanisms apply.
 
 Pipecat supplies the voice layer: audio transport, detecting speaking turns
-(Silero VAD and smart-turn, at Pipecat's recommended defaults), speech
-recognition and speech synthesis (through SLNG). Keeping that work separate
+(Silero VAD and smart-turn, set as the graph build of the same salon sets
+them), speech recognition and speech synthesis (through SLNG). Keeping that work separate
 lets the conversation engine be tested without a microphone or telephone.
 
 ## 3. What "typed conversation" means
@@ -438,6 +438,11 @@ interpreted task switch still passes routing and prerequisites. If the
 interpretation settles nothing, the engine tries an applicable opening, and
 otherwise runs the conversational agent.
 
+A reading that needs a model request takes 0.7 s or more. The agent's first
+request does not wait for it: it goes out at the same time, and the run is
+held at its first event until the readings are done (section 7). A reading
+slower than 1.2 s is sent a second time, and the first answer wins.
+
 ### Why not let the model set a flag?
 
 A flag the model sets, such as `confirmed=true` on a tool call, costs no extra
@@ -490,6 +495,75 @@ If conversation is needed, `AgentBuilder` prepares the offered tools and
 handoff destinations from current state before each model request. Shared
 policy allows at most one business-changing or routing action per model reply.
 The executors still check authorization when called.
+
+### Keeping the caller's wait short
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant E as Turn engine
+    participant R as Readings
+    participant A as Step's agent
+    C->>E: words
+    par side by side
+        E->>R: readings that apply
+    and
+        E->>A: first request, held at its first event
+    end
+    R-->>E: decided nothing
+    E->>A: go on
+    A-->>E: a tool call
+    E-->>C: one holding line, as the second request goes out
+    A-->>C: answer
+```
+
+1. The readings and the agent's first request go out together. The run stops
+   at its first event: the SDK's event stream has no buffer, so no tool runs
+   and nothing is said until the readings are done.
+2. If a reading decides an action, the run is dropped and nothing of it is
+   kept. If the readings changed the call, a fresh run starts. Otherwise the
+   run goes on, its first request already answered.
+3. A turn that needs a second step request says one holding line from the
+   call's locale ("Let me have a look.") as that request goes out. It is
+   the slow case: a tool's result going back to the model, a retry, or a
+   hand-over into a step whose model must answer. The answer is still a
+   whole round trip away, so the line never stacks on it.
+4. Any other turn silent for 1.5 s says the same line. Never after the
+   answer started, and never twice. A turn the readings answer, or a plain
+   answer, gets none.
+5. A request that sends nothing in 1.5 s is cancelled and its run tried once
+   more (`TurnBudget.first_part`). A second one gives the fixed "going round
+   in circles" line.
+6. Fewer requests in a row: after a borrowed tool (reading the diary from the
+   front desk) the model is not offered a hand-over for the move it already
+   made, and a hand-over that carries the request lets the next step act on
+   arrival with no model request.
+
+### A yes with more in it
+
+A caller often says more than the yes: "Yes, that's right. Oh, and can we
+make it Saturday instead of Friday?" to their number read back.
+
+```mermaid
+flowchart LR
+    R[reply] --> C[confirm reading]
+    C -- accept --> A[action runs]
+    A --> L[short line]
+    L --> O[owner step's model]
+    O --> K[caller hears the rest answered]
+```
+
+1. The confirm reading hears the yes. It does not yet always hear one in
+   this sentence: on the phone read-back it answers `revise` (see "Known
+   debt" in `CLAUDE.md`).
+2. The yes runs its action with no model request, such as the phone lookup.
+3. `ReadBack.done` says a short line by code ("Thanks, I have you."). It
+   covers the next request, as the graph build's announcement does.
+4. The rest of the reply goes to a model in the same turn. A check hands the
+   caller back to the step that sent them, and that step's model answers.
+   An action that says nothing and hands over to no one is followed by its
+   own step's model, told the action was done. Without this rule, the turn
+   would end in silence.
 
 ### From words to an authorized action
 
@@ -752,7 +826,8 @@ Conversation[ClinicCall](
 | `Operation` | `core/src/core/operations.py` | its arguments and receipt types, the question that authorises it (`proposal`), what the backend does (`_execute`, `_record`), or `needs_approval = False` for an action with no read-back |
 | `Desk` | `core/src/core/desk.py` | the call and hand-over types, the action names, what blocks a switch, an optional `Carry` |
 | `AgentBuilder` | `core/src/core/steps.py` | the call type, model, settings, action names, `Desk`, `advance` |
-| `Locale` | `core/src/core/locale.py` | the four lines the turn engine says itself, in the call's language |
+| `Locale` | `core/src/core/locale.py` | the lines the turn engine says itself, in the call's language, holding lines included |
+| `Today` | `core/src/core/clock.py` | today's date, weekday and time in the call's timezone, and the days ahead with their labels ("Saturday next week"), read once per call and told to every step's model, as the graph build's pre-fetch does |
 | `Held` | `core/src/core/state.py` | something the caller could still take back, kept on the call by kind |
 
 ### What stays code in each use case

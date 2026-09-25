@@ -21,14 +21,27 @@ from typing import cast, final
 from httpx import HTTPError
 from loguru import logger
 from pydantic import BaseModel, ValidationError
-from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai import UnexpectedModelBehavior
+from pydantic_ai.exceptions import ModelAPIError
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.classifiers import Classifier, Exchange
 from core.state import CallContext, Interpretation, Request
 
-FAILURES = (ValidationError, UnexpectedModelBehavior, ModelHTTPError, HTTPError)
-"""What becomes the safe default instead of an error. Cancellation and budget exhaustion are never in here."""
+try:
+    from httpx2 import HTTPError as HTTPError2
+except ImportError:
+    HTTPError2 = HTTPError
+
+FAILURES = (ValidationError, UnexpectedModelBehavior, ModelAPIError, HTTPError, HTTPError2)
+"""What becomes the safe default instead of an error. Cancellation and budget exhaustion are never in here.
+
+`ModelAPIError` covers every provider error Pydantic AI raises, `ModelHTTPError`
+included. The two `HTTPError`s are what a client raises before any answer
+comes back: the Google client sends through `httpx2`, Pydantic's fork of
+httpx, whose errors are not `httpx` errors. Without it, a DNS failure on one
+reading (trace fbdd81b6, 2026-09-25) ended the whole turn in silence.
+"""
 
 
 class Interpreter[C: CallContext, InputT: BaseModel, OutputT: BaseModel](ABC):

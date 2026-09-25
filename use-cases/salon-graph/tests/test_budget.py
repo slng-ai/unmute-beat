@@ -290,6 +290,28 @@ async def a_slow_tool_hits_the_turn_deadline():
     assert EXHAUSTED in probe.fixed(), probe.fixed()
 
 
+async def a_request_that_sends_nothing_is_tried_again():
+    """The concierge's request sends nothing within `first_part`: it is cancelled, and the run is tried once more."""
+    books.reset()
+    call = open_call(PHONE, diary=books)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    probe = Probe(call, budget=TurnBudget(first_part=0.2))
+    tries: list[int] = []
+
+    async def stalls_once(messages, info: AgentInfo):
+        tries.append(1)
+        if len(tries) == 1:
+            await asyncio.sleep(10)
+        yield 'We open at nine.'
+
+    started = asyncio.get_running_loop().time()
+    with scripted(concierge=stalls_once):
+        await probe._turn('When do you open?')
+    took = asyncio.get_running_loop().time() - started
+    assert len(tries) == 2 and took < 1, (tries, took)
+    assert EXHAUSTED not in probe.fixed() and call.spoken[-1].text == 'We open at nine.', call.spoken
+
+
 async def a_permitted_repair_succeeds():
     """A tool refuses, the model corrects itself, the turn completes.
 
@@ -508,6 +530,7 @@ async def main():
     await the_request_limit_stops_a_turn_that_never_hops()
     await the_tool_limit_is_its_own_number()
     await a_slow_tool_hits_the_turn_deadline()
+    await a_request_that_sends_nothing_is_tried_again()
     await a_permitted_repair_succeeds()
     await repair_retries_are_bounded()
     print('ok')

@@ -286,14 +286,17 @@ async def n2_friday_is_not_next_friday():
 
     Their own words go through, and resolve to the day they named.
 
-    And the modifier is not forbidden -- it is only forbidden when the caller did not say it. A
-    caller who says "next Friday" gets next Friday.
+    A lookup for another day is no longer refused (trace 9195116: the model,
+    which now has the calendar, worked "the day after" out right and was sent
+    back three times). It goes ahead, and the model is told to say both days,
+    so the week's difference is heard before any yes.
     """
     call = _salon()
     _heard(call)
     call.turn_started('I would like a haircut on Friday please')
-    refusal = await _refuses(agents.read_diary, _context(call), 'next Friday', 'haircut')
-    assert 'friday' in refusal.lower() and 'next friday' in refusal.lower(), refusal
+    other = await agents.read_diary(_context(call), 'next Friday', 'haircut')
+    assert other.date == NEXT_FRIDAY, other.date
+    assert 'The caller said Friday the 25th; this is Friday the 2nd.' in other.note, other.note
     assert books.bookings_for(PHONE, CLOCK.date()) == [], 'nothing may be written'
 
     found = await agents.read_diary(_context(call), 'Friday', 'haircut')
@@ -321,7 +324,8 @@ async def n2_the_day_survives_the_verification_detour():
     call.turn_started('yes, that is my number')
     assert call.day_words == ('friday',), call.day_words
     call.commit(customer_verified='existing', verified_phone=PHONE, agent='booking')
-    assert 'friday' in (await _refuses(agents.read_diary, _context(call), 'next Friday', 'haircut')).lower()
+    other = await agents.read_diary(_context(call), 'next Friday', 'haircut')
+    assert 'The caller said Friday the 25th' in other.note, 'the day said before verifying was forgotten'
 
 
 async def n3_a_flipped_flag_is_not_consent():

@@ -94,15 +94,33 @@ heard and the caller to be the one asked; a model or rule that reaches zero ther
 TAKE_BACK = ClassSet(
     about='Whether the answer takes back what is in `agreed`, which has already been done.',
     classes={
-        'keep': 'Keeps what is in `agreed`, or does not take it back.',
-        'withdraw': 'Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they '
-        'no longer want it. A condition on it is not taking it back.',
+        'keep': 'Keeps what is in `agreed`, or does not take it back. A "no" or "no, thanks" to a question '
+        'that offers or asks about something else (other times, another service, anything else) declines '
+        'that, and keeps `agreed`.',
+        'withdraw': 'Takes back `agreed` itself: asks to undo or cancel it, says to leave it, or that they '
+        'no longer want it. A condition on it is not taking it back. Asking for it on another day, at another '
+        'time or as another service is `change`.',
+        'change': 'Wants what is in `agreed` done differently: another day, time or service. It is not undone.',
         'unclear': 'Whether they take it back is unclear, or they put a condition on it ("only if...") that '
         'has not been answered yet.',
     },
     default='unclear',
 )
-"""For a change already made that the person can still undo. Asking to change it is not taking it back."""
+"""For a change already made that the person can still undo. Asking to change it is not taking it back.
+
+Version 2 adds `change`. With only keep, withdraw and unclear, "Sorry, can
+you actually move the appointment to Saturday instead?" was read as
+`withdraw` (the user's call of 24 September), and the caller who asked to
+move was offered a cancel.
+
+Version 3 ties `withdraw` to `agreed` itself and says a "no" to something
+else the question offers keeps it. In a replay of 2026-09-25, "No, thanks.
+I'm good." to an offer of Tuesday's times, with a Saturday booking held,
+read as `withdraw` and was answered "Shall I cancel your haircut?". On
+harness-reading/take-back (17 items), false `withdraw` went from 6 to 0 over
+3 runs on each Gemini flash-lite model, and from 1 to 0 over 8 runs on
+gpt-5.6-luna. Correct answers were equal or higher on all four models.
+"""
 
 STILL_AGREED = ClassSet(
     about='Whether the person still agrees to what is in `agreed`, exactly as it is. It has not been done yet.',
@@ -118,12 +136,22 @@ STILL_AGREED = ClassSet(
 CLOSING = ClassSet(
     about='Whether the answer ends the whole call.',
     classes={
-        'end': 'Ends the whole call with nothing left to ask. A "no" to "anything else?" ends it.',
+        'end': 'Ends the whole call with nothing left to ask: a goodbye, "that\'s all", or a "no" to "anything '
+        'else?". Thanks on their own, or a yes to what was proposed, do not end it.',
         'continue': 'Has more to discuss, asks a question, or only declines what was just proposed.',
         'unclear': 'Whether they want to end the call is unclear.',
     },
     default='unclear',
 )
+"""Version 3 names what ends a call and says a yes or thanks alone do not.
+
+The closing reading now also runs beside a read-back (`Conversation.read`).
+On version 1, "Yes, that's perfect, thank you." read as `end` on gpt-6-luna in
+3 of 3 runs, on gpt-5.6-luna and gemini-3.1-flash-lite in 1 of 3. Version 2
+("a yes or a thank-you ... does not, unless ...") fixed the GPT models and
+broke gemini-3.5-flash-lite, 3 of 3. Version 3: 1.00 on 18 items, 3 runs on
+each of the 4 models, no false `end` (harness-reading/closing, 24 September).
+"""
 
 
 class DetourInput(Exchange):
@@ -341,6 +369,13 @@ class Acts[C: CallContext]:
        question pending.
     4. `goodbye`: the call is over. Last, so "Yes, go ahead, bye" does the
        yes before it hangs up.
+
+    An answer and a goodbye in the same reply are both done: the answer
+    first, then the goodbye, as one action. "Yes, that's perfect. I do not
+    need anything else. Goodbye." (Coval run 4bLgLR4t, case 09) used to book
+    and then ask "Anything else?". While the answer runs the call is marked
+    as leaving (`CallContext.leaving`), so its confirmation asks nothing more.
+    A refused answer is not followed by the goodbye.
     """
 
     answer: Sequence[Rule[C]] = ()
@@ -350,7 +385,23 @@ class Acts[C: CallContext]:
 
     def decide(self, call: C) -> LocalAction | None:
         """The first action any rule takes, in the fixed order, or None to let the step's model answer."""
-        for rule in (*self.answer, *self.take_back, *self.pick, *self.goodbye):
+        for rule in self.answer:
+            if (action := rule(call)) is not None:
+                bye = next((b for r in self.goodbye if (b := r(call)) is not None), None)
+                return action if bye is None else _then_goodbye(call, action, bye)
+        for rule in (*self.take_back, *self.pick, *self.goodbye):
             if (action := rule(call)) is not None:
                 return action
         return None
+
+
+def _then_goodbye(call: CallContext, answer: LocalAction, goodbye: LocalAction) -> LocalAction:
+    """The answer, said as a caller who is leaving hears it, then the goodbye."""
+
+    async def both() -> object:
+        call._leaving = True
+        done = await answer.run()
+        await goodbye.run()
+        return done
+
+    return LocalAction(answer.name, both)

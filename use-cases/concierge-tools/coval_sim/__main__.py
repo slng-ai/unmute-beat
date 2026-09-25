@@ -5,6 +5,7 @@
     uv run python -m coval_sim run Ab12Cd34          # only this test set
     uv run python -m coval_sim run Ab12Cd34 --iterations 3 --persona "Impatient Customer"
     uv run python -m coval_sim add salon-prompt      # create the baseline's Coval agent
+    uv run python -m coval_sim add graph             # the other baseline: the unmute graph build of the salon
 
 Everything about what to test lives in Coval. A test set runs against every
 agent named voice-harness-<agency>-pipecat it is attached to, with that agent's
@@ -48,6 +49,20 @@ without them; its hang-up request then fails with a logged 401, which is harmles
 
 `bot.py` loads `.env` with `override=True`, so do not put any of these names in `.env`.
 """
+GRAPH = 'graph'
+"""The agency name of the baseline: the unmute graph build of the same salon, on Pipecat Flows.
+
+Coval calls it through its own agent, voice-harness-graph-pipecat, on the same
+test sets, so both builds answer the same cases.
+"""
+GRAPH_BUILD = Path(
+    os.environ.get(
+        'GRAPH_BUILD_DIR', Path.home() / 'Documents/GitHub/unmute_cli/examples/salon-concierge/build/pipecat'
+    )
+)
+"""Where the graph build's `bot.py` lives. It runs in its own project, with its own lock file."""
+GRAPH_ENV = {'MANAGER_PHONE_NUMBER': '+34600000000', 'TWILIO_PHONE_NUMBER': CALLER}
+"""Placeholders the graph build refuses to start without on a phone route. No simulated call reaches them."""
 
 
 def connection(host: str) -> dict[str, Any]:
@@ -127,12 +142,12 @@ class Repository:
         return {**values, **os.environ}
 
     def use_case(self, agency: str) -> Path:
-        """The folder whose `bot.py` answers an agency's calls.
+        """The folder whose `bot.py` answers an agency's calls: the graph build's own for `graph`.
 
         Raises:
             ValueError: If that folder has no bot.py.
         """
-        folder = self.root / 'use-cases' / FOLDERS.get(agency, agency)
+        folder = GRAPH_BUILD if agency == GRAPH else self.root / 'use-cases' / FOLDERS.get(agency, agency)
         if not (folder / 'bot.py').exists():
             raise ValueError(f'agency {agency}: no bot.py in {folder}')
         return folder
@@ -143,7 +158,7 @@ class Repository:
             'Pipecat bot',
             ['uv', 'run', 'python', 'bot.py', '-t', 'twilio', '-x', host, '--port', str(PORT)],
             self.use_case(agency),
-            {**env, **BOT_ENV},
+            {**env, **BOT_ENV, **(GRAPH_ENV if agency == GRAPH else {})},
             log,
         )
         bot.wait_until(lambda: answers_http(f'http://127.0.0.1:{PORT}/'), 600)
@@ -272,7 +287,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument('--iterations', type=int, default=1, help='times to run each test case')
     run.add_argument('--concurrency', type=int, default=3, help='calls in flight per run')
     add = commands.add_parser('add', help="create a flow's Coval agent")
-    add.add_argument('agency', help='a use case folder under use-cases/, or salon for salon-graph')
+    add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
     return parser
 
 

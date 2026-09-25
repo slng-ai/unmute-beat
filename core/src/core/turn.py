@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -54,7 +54,7 @@ from core.graph import Node, moved_by, route
 from core.history import paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
-from core.state import CallContext, Checkpoint, Handoff, Question, turn_generation
+from core.state import _FILLERS, CallContext, Checkpoint, Handoff, Question, Spoken, turn_generation
 
 STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
     ENGLISH.stumble,
@@ -66,6 +66,12 @@ STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
 _CLAUSE = re.compile(r'[.!?,;:]')
 _CLAUSE_MAX = 60
 """Where one clause ends, and the cap that stops a model that never punctuates from holding the whole answer."""
+EARLY_AFTER = 0.05
+"""Seconds `advance` may take before the step's run is started beside it (`_Early`).
+
+A decision made by code is back well inside this; one waiting on a model
+reading takes 0.7 s or more, and that is the wait the early run overlaps.
+"""
 
 
 @dataclass(frozen=True)
@@ -148,6 +154,71 @@ class Barge:
             self._events.cancel()  # ty: ignore[unresolved-attribute]
 
 
+@dataclass
+class _Hold:
+    """Internal: what keeps an early run quiet until the readings have decided nothing."""
+
+    opened: asyncio.Event = field(default_factory=asyncio.Event)
+    dropped: bool = False
+    """The readings decided something: the run is cancelled, and nothing it produced is kept or said."""
+
+
+_DONE = object()
+
+
+class _Early:
+    """Internal: the step's run, started while `advance` waits on its readings.
+
+    A reading takes 0.7 s or more, and a turn it does not decide used to pay
+    for it and then for the step's first request, one after the other. Here
+    the request goes out at the same time. The run stops at its first event
+    and waits (`_Hold`): the SDK's event stream has no buffer, so the run can
+    get no further, and no tool or output function runs, no speech is
+    recorded and nothing reaches the caller until the readings are done. If
+    they decide an action, the run is dropped; if they decide nothing, it goes
+    on from where it stopped, its first request already answered.
+
+    ponytail: a dropped run's request is still billed for its input. That is
+    the price of the overlap, paid only on the turns a reading decides.
+    """
+
+    def __init__(self, run: Callable[[_Hold], AsyncIterator[object]]) -> None:
+        self.hold = _Hold()
+        self._queue: asyncio.Queue[object] = asyncio.Queue()
+
+        async def pump() -> None:
+            try:
+                async for event in run(self.hold):
+                    await self._queue.put(event)
+            finally:
+                self._queue.put_nowait(_DONE)
+
+        self._task = asyncio.ensure_future(pump())
+
+    async def drop(self) -> None:
+        """Cancel the run and keep nothing of it."""
+        self.hold.dropped = True
+        self._task.cancel()
+        with suppress(asyncio.CancelledError):
+            await self._task
+
+    async def events(self) -> AsyncIterator[object]:
+        """Let the run go on, and pass its events out as they come. Its errors are raised here."""
+        self.hold.opened.set()
+        try:
+            while (event := await self._queue.get()) is not _DONE:
+                yield event
+            await self._task
+        finally:
+            if not self._task.done():
+                await self.drop()
+
+
+@dataclass(frozen=True)
+class _Stalled:
+    """Internal: a step request sent nothing within `TurnBudget.first_part`, so its run was cancelled."""
+
+
 @dataclass(frozen=True)
 class _Exhausted:
     """Internal: the hop loop ran out. Not part of the public stream."""
@@ -209,11 +280,45 @@ class Turn:
         self.flow = flow if flow is not None else Flow.of(nodes)
         """The steps table as a Pydantic graph: it walks the hops and refuses a move the table does not allow."""
         self._hops_run = 0
+        self._stalls = 0
+        """Step requests this turn that sent nothing in time (`TurnBudget.first_part`). The first is tried again."""
+        self._step_requests = 0
+        """Step requests sent this turn, over every run: the second one is when a holding line goes out."""
         self._channel: asyncio.Queue[tuple[object, asyncio.Future[None] | None]] = asyncio.Queue()
 
     def _stale(self) -> bool:
         """Whether this turn may no longer decide where the caller is."""
         return self.barge.hit or not self.call.is_current(self.generation)
+
+    async def _hold(self) -> None:
+        """Say one holding line (`Locale.holding`), only while nothing has been said in this turn.
+
+        Said when a second step request of the turn goes out (`_speak`), and
+        on the `TurnBudget.hold_after` timer for any other silence that lasts.
+        A second request means a whole model round trip is still ahead: a
+        tool's result going back to the model, a retry, or the step a
+        hand-over just entered: 0.7 s or more before the answer over seven
+        calls of 2026-09-25, and most of the turns that waited long.
+
+        Not when the readings finish, and not when a tool starts. The step's
+        first request goes out with the readings (`_Early`), so its answer is
+        usually ready when they finish; and a tool that speaks its own line
+        would get the holding line right in front of it.
+
+        Once per turn, and never after the answer started: the check is on
+        the turn's own speech ledger, which records model text before it is
+        passed on. Origin `tool_filler`, so a caller who cuts in over it is
+        still in the same turn (`CallContext.continues_turn`).
+        """
+        call = self.call
+        if self._stale() or any(s.text for s in call.spoken) or not call.locale.holding:
+            return
+        await call.say(pick('holding', call.locale.holding), origin='tool_filler')
+
+    async def _hold_after(self) -> None:
+        """The holding line for a turn still silent after `TurnBudget.hold_after` seconds."""
+        await asyncio.sleep(self.budget.hold_after)
+        await self._hold()
 
     async def events(self, prompt: str | None) -> AsyncIterator[TurnEvent]:
         """Run the turn, yielding what a runtime needs to voice it, and finish with how it ended.
@@ -236,6 +341,7 @@ class Turn:
 
         spent = ''
         failure = ''
+        holding = asyncio.ensure_future(self._hold_after())
         try:
             async with asyncio.timeout(self.budget.seconds):
                 async for event in self._hops(prompt):
@@ -249,6 +355,8 @@ class Turn:
             spent = f'the {self.budget.seconds:g}s turn deadline'
         except UsageLimitExceeded as over:
             spent = str(over)
+        finally:
+            holding.cancel()
 
         if failure:
             call.note_said('fixed', call.locale.stumble, origin='error')
@@ -386,17 +494,47 @@ class Turn:
         retained_before = call.input_retained
         requests_before = len(call.requests)
         action = None
+        early: _Early | None = None
+        retained_early = retained_before
         if node.advance:
+            state_before, held_before = call.state, dict(call._held)
             task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
             barge.attach(task)
             try:
+                done, _ = await asyncio.wait({task}, timeout=EARLY_AFTER)
+                if not done:
+                    retained_early = call.input_retained
+                    sent = None if retained_early else prompt
+                    early = _Early(lambda hold: self._speak(node, sent, hold))
                 action = await task
             except asyncio.CancelledError:
+                if early is not None:
+                    await early.drop()
                 if not barge.hit:
                     raise
                 return
+            except UsageLimitExceeded, TimeoutError:
+                if early is not None:
+                    await early.drop()
+                raise
+            except Exception as error:
+                logger.exception('advance failed on {}', call.state.agent)
+                if early is not None:
+                    await early.drop()
+                yield _Failed(f'{type(error).__name__}: {error}')
+                return
             finally:
                 barge.detach()
+            if early is not None and (
+                action is not None
+                or self._stale()
+                or node.opening(call) is not None
+                or call.state is not state_before
+                or call._held != held_before
+                or call.input_retained != retained_early
+            ):
+                await early.drop()
+                early = None
         if self._stale():
             return
         if not retained_before and call.input_retained:
@@ -422,10 +560,16 @@ class Turn:
                 yield RunEnded(node.agent.name or call.state.agent)
                 return
             decided = classified if classified is not None and not classified.outcome else None
+            answers_before = call._answers
             try:
                 output = await action.run()
                 if decided is not None:
                     decided.outcome = 'action'
+                if _silent(call, output, answers_before):
+                    call._return_status = (
+                        f'{call._return_status} Application action {action.name} done.'.lstrip()
+                    )
+                    output = None
             except ModelRetry as error:
                 if decided is not None:
                     decided.outcome = 'refused'
@@ -440,18 +584,32 @@ class Turn:
             yield RunEnded(node.agent.name or call.state.agent)
         if action is None or output is None:
             failed: _Failed | None = None
-            async for event in self._speak(node, prompt):
+            run = early.events() if early is not None else self._speak(node, prompt)
+            while True:
+                stalled = False
+                async for event in run:
+                    if failed is not None:
+                        continue
+                    if isinstance(event, _Outcome):
+                        output, succeeded = event.output, event.succeeded
+                    elif isinstance(event, _Stalled):
+                        stalled = True
+                    elif isinstance(event, _Failed):
+                        failed = event
+                    else:
+                        yield event
                 if failed is not None:
-                    continue
-                if isinstance(event, _Outcome):
-                    output, succeeded = event.output, event.succeeded
-                elif isinstance(event, _Failed):
-                    failed = event
-                else:
-                    yield event
-            if failed is not None:
-                yield failed
-                return
+                    yield failed
+                    return
+                if not stalled:
+                    break
+                if self._stale():
+                    return
+                if self._stalls:
+                    yield _Exhausted('a second step request that sent nothing')
+                    return
+                self._stalls += 1
+                run = self._speak(node, None if call.input_retained else prompt)
 
         call._return_status, call._entered = '', ''
         if isinstance(output, Question) and not barge.hit:
@@ -474,7 +632,11 @@ class Turn:
             checkpoint = call._checkpoint
             if checkpoint is not None:
                 call._entered = output.status
-                call._hidden_speech.update(s.id for s in call.all_spoken if s.id not in checkpoint.speech_ids)
+                call._hidden_speech.update(
+                    s.id
+                    for s in call.all_spoken
+                    if s.id not in checkpoint.speech_ids and not _covering(call, s)
+                )
                 call.messages = checkpoint.messages
                 call._return_status = (
                     f'Application return: {call.state.agent} {output.status}. '
@@ -528,8 +690,15 @@ class Turn:
             await call.say(pick(f'enter:{output.to}', lines), origin='entry')
         yield _Continue(prompt)
 
-    async def _speak(self, node: Node, prompt: str | None) -> AsyncIterator[object]:
+    async def _speak(
+        self, node: Node, prompt: str | None, hold: _Hold | None = None
+    ) -> AsyncIterator[object]:
         """Run one step's agent, streaming whatever it says.
+
+        With `hold`, this is an early run (`_Early`): it stops at its first
+        event until the readings have decided nothing, and a dropped one keeps
+        nothing. The barge signal is attached only once it goes on, because
+        until then the signal belongs to `advance`.
 
         `Node.outputs` builds the run's `output_type` from the live state; the
         per-request narrowing that keeps it honest across several requests
@@ -561,6 +730,14 @@ class Turn:
         `new_messages()` boundary after teardown, never by slicing at the
         original history length: SDK normalisation can merge old requests, and
         a cancelled run still heard the caller and may have completed a tool.
+
+        A run with no prompt whose history does not end on a request is sent
+        the caller's words again. The SDK would otherwise send an empty
+        request, which `project` drops, and the provider refuses a history
+        that ends on its own reply. It happened after a stalled request was
+        retried (`TurnBudget.first_part`): 3 turns in 24 replayed calls of
+        2026-09-25 ended in the stumble line. A repeat of the turn's own words
+        is dropped from later requests (`core.history.project`).
         """
         call, barge = self.call, self.barge
         agent: Agent = node.agent
@@ -580,14 +757,41 @@ class Turn:
         streamed = 0
         excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'reset' else frozenset()
         initial = [] if node.history == 'reset' else paired(project(call, call.messages))
+        if accepted_prompt is None and call.heard and not (initial and isinstance(initial[-1], ModelRequest)):
+            accepted_prompt = call.heard
+
+        stall: asyncio.TimerHandle | None = None
+        stalled = False
+
+        def give_up() -> None:
+            nonlocal stalled
+            stalled = True
+            logger.warning(
+                'step request {}:{} sent nothing in {:g}s', run_id, requested, self.budget.first_part
+            )
+            if events is not None:
+                events.cancel()
+
+        def disarm() -> None:
+            nonlocal stall
+            if stall is not None:
+                stall.cancel()
+                stall = None
 
         async def prepare(ctx, request):
-            nonlocal requested
+            nonlocal requested, stall
             requested += 1
             call._response = f'{run_id}:{requested}'
+            if self._step_requests:
+                await self._hold()
+            self._step_requests += 1
+            disarm()
+            stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
             messages = project(call, request.messages, excluded=excluded)
             parameters = request.model_request_parameters
-            notes = [note for note in (call.spoken_over, call._return_status) if note]
+            notes = [
+                note for note in (call.today.instructions(), call.spoken_over, call._return_status) if note
+            ]
             if notes:
                 parameters = replace(
                     parameters,
@@ -599,6 +803,7 @@ class Turn:
             return replace(request, messages=messages, model_request_parameters=parameters)
 
         async def tag(ctx, *, request_context, response):
+            disarm()
             response.metadata = (response.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
             return response
 
@@ -616,6 +821,8 @@ class Turn:
             """
             nonlocal retained_run
             retained_run = True
+            if hold is not None and hold.dropped:
+                return
             overlap = next(
                 (
                     k
@@ -656,9 +863,11 @@ class Turn:
                 usage_limits=self.limits,
                 retries=self.budget.repair_retries,
             ) as events:
-                barge.attach(events)
+                if hold is None:
+                    barge.attach(events)
                 async for event in events:
                     if isinstance(event, PartStartEvent):
+                        disarm()
                         if event.index == 0:
                             streamed += 1
                         call._response = f'{run_id}:{streamed}'
@@ -667,6 +876,9 @@ class Turn:
                                 call.note_first_output('text')
                             case ToolCallPart():
                                 call.note_first_output('tool')
+                    if hold is not None and not hold.opened.is_set():
+                        await hold.opened.wait()
+                        barge.attach(events)
                     if chunk := _speech(event):
                         if not node.model_speech:
                             continue
@@ -703,6 +915,7 @@ class Turn:
             yield _Failed(f'{type(error).__name__}: {error}')
             return
         finally:
+            disarm()
             if events is not None and not retained_run:
                 try:
                     new_messages = events.new_messages()
@@ -711,7 +924,7 @@ class Turn:
                 else:
                     retain(new_messages)
             barge.detach()
-            if held and gate != 'blocked':
+            if held and gate != 'blocked' and not (hold is not None and hold.dropped):
                 call.note_model_text(held)
                 call._spoke = True
                 yield TextDelta(held, step)
@@ -722,7 +935,7 @@ class Turn:
             call.note_said('fixed', call.locale.withheld, origin='error')
             yield FixedSpeech(call.locale.withheld, reason='withheld')
         yield RunEnded(step)
-        yield _Outcome(output, succeeded)
+        yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
 
 
 def run_turn(
@@ -748,6 +961,30 @@ def _speech(event) -> str:
         case PartDeltaEvent(delta=TextPartDelta(content_delta=text)):
             return text
     return ''
+
+
+def _silent(call: CallContext, output: object, answers_before: int) -> bool:
+    """Whether an application action left the caller with nothing to hear: no question, no hand-over, no answer.
+
+    The step's model answers then, in the same turn, told what the action did.
+    A yes to a read-back is often not the whole reply ("Yes, that is me. And
+    can we move my cleaning to Thursday?"), and an action that only records
+    the yes would end the turn in silence and drop the rest. A covering line
+    (`CallContext.say`) answers nothing, so only `speak_now` counts.
+    """
+    if output is None or isinstance(output, Question | Handoff):
+        return False
+    return call._answers == answers_before
+
+
+def _covering(call: CallContext, segment: Spoken) -> bool:
+    """A covering line said in this turn, such as a check's "Thanks, I have you".
+
+    The rest of a check is hidden from the step it hands back to, whose
+    history is the one from before the check. This line is not: the caller
+    has just heard it, and the step answering next must not say it again.
+    """
+    return segment.turn == call.turn and segment.origin in _FILLERS
 
 
 def _delivered(call: CallContext) -> str:

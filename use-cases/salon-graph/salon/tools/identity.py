@@ -71,7 +71,11 @@ async def guide(
     call: SalonCall, topic: Literal['number', 'country', 'incomplete', 'correction', 'unsupported']
 ) -> str:
     """Say the fixed question for a missing piece of the number. Shared by the tool and the step's opening."""
-    text = _GUIDANCE[topic]
+    return await say_guidance(call, _GUIDANCE[topic])
+
+
+async def say_guidance(call: SalonCall, text: str) -> str:
+    """Say one line asking for the number, and consume the question it replaces."""
     call.answered()
     await call.speak_now(text, origin='guidance')
     return text
@@ -230,6 +234,25 @@ def number_heard(words: str) -> str:
         return _PHONE.validate_python(f'+{digits}')
     except ValidationError:
         return ''
+
+
+def number_problem(words: str) -> str:
+    """Why the "+34" number the caller said is not a number, as a line to say, or ''.
+
+    Only too many digits: a Spanish number has nine after "+34", and speech
+    to text sometimes hears one more (Coval run 4bLgLR4t, cases 06 and 13:
+    "672. 1. 273"). Too few is a caller still going, and stays with the model.
+    """
+    runs = _SPANISH_RUN.findall(words)
+    if not runs:
+        return ''
+    after = len(re.sub(r'\D', '', runs[-1])) - 2
+    if after <= 9:
+        return ''
+    return (
+        f'I heard {after} digits after +34, and a Spanish number has nine. '
+        'Could you say the whole number again, please?'
+    )
 
 
 def _waiting_for_a_number(call: SalonCall) -> bool:

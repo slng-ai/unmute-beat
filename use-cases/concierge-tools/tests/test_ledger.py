@@ -159,6 +159,34 @@ def reads_livekit_the_same_way():
     assert write.status == 'unknown' and write.said_before == 'Shall I book it?' and call.tasks == 1
 
 
+def splits_latency_into_turn_taking_and_answer():
+    """The same split for both builds: from the work that answered to the first speech.
+
+    The harness's first piece started a run the caller then talked over; the
+    answer is timed from the piece that answered, not from that one.
+    """
+    harness = [
+        Obs('t', None, 'SPAN', 'turn', at(0), at(9), attrs={'turn.user_bot_latency_seconds': 4.4}),
+        Obs('p', 't', 'AGENT', 'booking', at(1.0), at(1.4), attrs={'turn_pieces': '1'}),
+        gen('x', 'p', 1.01, 1.4, {}),
+        Obs('a', 't', 'AGENT', 'booking', at(3.2), at(4.5), attrs={'turn_pieces': '2'}),
+        gen('c', 'a', 3.21, 4.1, {'input': 380, 'output': 11}, input=CLASSIFY),
+        Obs('s', 't', 'GENERATION', 'tts', at(4.2), at(4.5), 'sonic', 'Shall I book it?'),
+    ]
+    graph = [
+        Obs('t', None, 'SPAN', 'turn', at(0), at(9), attrs={'turn.user_bot_latency_seconds': 1.3}),
+        gen('g', 't', 0.1, 0.9, {'input': 4000, 'output': 30}, name='llm', model='gemini-3.1-flash-lite'),
+        Obs('s', 't', 'GENERATION', 'tts', at(0.8), at(1.2), 'sonic', 'Let me have a look.'),
+    ]
+    (slow,) = read_call('harness', harness).turns
+    (fast,) = read_call('graph', graph).turns
+    assert slow.answer is not None and abs(slow.answer - 1.0) < 1e-6, slow
+    assert fast.answer is not None and abs(fast.answer - 0.7) < 1e-6, fast
+    lines = summary('both', [read_call('harness', harness), read_call('graph', graph)])
+    assert any('answer time (answering work to first speech): p50' in line for line in lines), lines
+    assert any('turn taking): 1 of 2 turns' in line for line in lines), lines
+
+
 def reports_what_it_cannot_measure():
     lines = summary('none', [read_call('empty', [Obs('t', None, 'SPAN', 'turn', at(0), at(1))])])
     assert any('undefined, no task completed' in line for line in lines), lines
@@ -180,6 +208,7 @@ def main():
     counts_every_request_once()
     reads_the_audit_of_a_write()
     reads_livekit_the_same_way()
+    splits_latency_into_turn_taking_and_answer()
     reports_what_it_cannot_measure()
     print('ledger ok')
 

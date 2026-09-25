@@ -264,12 +264,17 @@
       "anyOf": [
        {
         "const": "keep",
-        "description": "Keeps what is in `agreed`, or does not take it back.",
+        "description": "Keeps what is in `agreed`, or does not take it back. A \"no\" or \"no, thanks\" to a question that offers or asks about something else (other times, another service, anything else) declines that, and keeps `agreed`.",
         "type": "string"
        },
        {
         "const": "withdraw",
-        "description": "Takes back what is in `agreed`: asks to undo or cancel it, says to leave it, or that they no longer want it. A condition on it is not taking it back.",
+        "description": "Takes back `agreed` itself: asks to undo or cancel it, says to leave it, or that they no longer want it. A condition on it is not taking it back. Asking for it on another day, at another time or as another service is `change`.",
+        "type": "string"
+       },
+       {
+        "const": "change",
+        "description": "Wants what is in `agreed` done differently: another day, time or service. It is not undone.",
         "type": "string"
        },
        {
@@ -468,7 +473,7 @@
       "anyOf": [
        {
         "const": "end",
-        "description": "Ends the whole call with nothing left to ask. A \"no\" to \"anything else?\" ends it.",
+        "description": "Ends the whole call with nothing left to ask: a goodbye, \"that's all\", or a \"no\" to \"anything else?\". Thanks on their own, or a yes to what was proposed, do not end it.",
         "type": "string"
        },
        {
@@ -852,6 +857,11 @@
         "title": "Booking Id",
         "type": "string"
        },
+       "additional": {
+        "default": false,
+        "title": "Additional",
+        "type": "boolean"
+       },
        "turn": {
         "default": 0,
         "title": "Turn",
@@ -1149,17 +1159,17 @@
    "retained_approval": null,
    "request_change": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\",\"request\":\"I want a haircut on Friday.\"}",
    "conversation": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\"}",
-   "solver": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\",\"step\":\"verify\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"phone\",\"spoken\":\"Is it +34 600 111 222?\",\"value\":\"+34600111222\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+   "solver": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, and make it Saturday instead.\",\"step\":\"verify\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"phone\",\"spoken\":\"Is it +34 600 111 222?\",\"value\":\"+34600111222\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"additional\":false,\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
   },
   "offer_while_holding": {
    "confirmation": null,
    "appointment_choice": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"move\",\"said\":\"Move the appointment they already hold to the new time.\"},{\"id\":\"add\",\"said\":\"Keep the appointment they hold and add the new one as well.\"}]}",
-   "chosen_offer": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"2026-09-26T0900|haircut\",\"said\":\"Saturday at 9:00 AM\"},{\"id\":\"2026-09-26T0930|haircut\",\"said\":\"Saturday at 9:30 AM\"}],\"holding\":[\"haircut Friday at 9:00 AM\"]}",
+   "chosen_offer": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"options\":[{\"id\":\"2026-09-26T0900|haircut\",\"said\":\"Saturday the 26th at 9:00 AM\"},{\"id\":\"2026-09-26T0930|haircut\",\"said\":\"Saturday the 26th at 9:30 AM\"}],\"holding\":[\"haircut Friday the 25th at 9:00 AM\"]}",
    "last_change": null,
    "retained_approval": null,
    "request_change": null,
    "conversation": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\"}",
-   "solver": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"step\":\"booking\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"offer\",\"spoken\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"value\":\"2026-09-26T0900|haircut,2026-09-26T0930|haircut\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+   "solver": "{\"question\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"answer\":\"Nine, same as the other one.\",\"step\":\"booking\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"offer\",\"spoken\":\"For a haircut on Saturday, I have 9:00 AM and 9:30 AM. Which time works for you?\",\"value\":\"2026-09-26T0900|haircut,2026-09-26T0930|haircut\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"additional\":false,\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
   },
   "move_or_add": {
    "confirmation": null,
@@ -1169,7 +1179,7 @@
    "retained_approval": null,
    "request_change": null,
    "conversation": "{\"question\":\"Would you like to move the appointment you already have, or add another one?\",\"answer\":\"Move it, please.\"}",
-   "solver": "{\"question\":\"Would you like to move the appointment you already have, or add another one?\",\"answer\":\"Move it, please.\",\"step\":\"booking\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"move_or_add\",\"spoken\":\"Would you like to move the appointment you already have, or add another one?\",\"value\":\"2026-09-26T0900|haircut\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"move\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+   "solver": "{\"question\":\"Would you like to move the appointment you already have, or add another one?\",\"answer\":\"Move it, please.\",\"step\":\"booking\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"move_or_add\",\"spoken\":\"Would you like to move the appointment you already have, or add another one?\",\"value\":\"2026-09-26T0900|haircut\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"move\",\"booking_id\":\"\",\"additional\":false,\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
   },
   "closing_after_a_booking": {
    "confirmation": null,
@@ -1179,7 +1189,7 @@
    "retained_approval": null,
    "request_change": null,
    "conversation": "{\"question\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"answer\":\"How much is that? If it is over 30, leave it.\"}",
-   "solver": "{\"question\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"answer\":\"How much is that? If it is over 30, leave it.\",\"step\":\"concierge\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"closing\",\"spoken\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"value\":\"\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"}]}"
+   "solver": "{\"question\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"answer\":\"How much is that? If it is over 30, leave it.\",\"step\":\"concierge\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"closing\",\"spoken\":\"You're booked for Monday the 28th at 9:00 AM. Anything else?\",\"value\":\"\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"additional\":false,\"turn\":1},\"delivered\":true,\"retained_complaint\":null,\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"}]}"
   },
   "complaint_kept_through_verify": {
    "confirmation": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\",\"proposal\":\"Is it +34 600 111 222?\"}",
@@ -1189,7 +1199,7 @@
    "retained_approval": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\",\"agreed\":\"A patchy colour. Shall I record that?\"}",
    "request_change": null,
    "conversation": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\"}",
-   "solver": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\",\"step\":\"verify\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"phone\",\"spoken\":\"Is it +34 600 111 222?\",\"value\":\"+34600111222\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":2},\"delivered\":true,\"retained_complaint\":{\"about\":\"complaint\",\"spoken\":\"A patchy colour. Shall I record that?\",\"value\":\"\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"turn\":1},\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
+   "solver": "{\"question\":\"Is it +34 600 111 222?\",\"answer\":\"Yes, go ahead.\",\"step\":\"verify\",\"owner\":\"+34600111222\",\"proposal\":{\"about\":\"phone\",\"spoken\":\"Is it +34 600 111 222?\",\"value\":\"+34600111222\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"additional\":false,\"turn\":2},\"delivered\":true,\"retained_complaint\":{\"about\":\"complaint\",\"spoken\":\"A patchy colour. Shall I record that?\",\"value\":\"\",\"resolution\":\"\",\"summary\":\"\",\"requested_resolution\":\"\",\"owner\":\"+34600111222\",\"action\":\"\",\"booking_id\":\"\",\"additional\":false,\"turn\":1},\"destinations\":[{\"name\":\"booking\",\"purpose\":\"Book, move or cancel an appointment.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"complaints\",\"purpose\":\"Record a complaint about a past visit.\",\"needs\":\"The caller is identified by phone number first.\"},{\"name\":\"concierge\",\"purpose\":\"General questions: opening hours, prices, services, location.\",\"needs\":\"\"}]}"
   },
   "nothing_pending": {
    "confirmation": null,

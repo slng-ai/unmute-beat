@@ -43,6 +43,8 @@ class Asked(BaseModel):
     """The caller identity the question was put under. A question put to one number is not answered by another."""
     action: Literal['book', 'move', 'cancel', ''] = ''
     booking_id: str = ''
+    additional: bool = False
+    """The read-back said this is a second appointment, so the yes to it adds one to what the caller holds."""
     turn: int = 0
     """The caller turn it went out on. Set by `SalonCall.ask`, never by a tool."""
 
@@ -69,7 +71,7 @@ class ReplyClassification(BaseModel):
     appointment_choice: Literal['move', 'add', 'unclear'] = 'unclear'
     conversation: Literal['end', 'continue', 'unclear'] = 'unclear'
     retained_approval: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
-    last_change: Literal['keep', 'withdraw', 'unclear'] = 'unclear'
+    last_change: Literal['keep', 'withdraw', 'change', 'unclear'] = 'unclear'
     """Whether the reply takes back the booking made in this call. Only read while the caller holds it."""
     chosen_offer: str = ''
     """Checked against the table by the application: a slot that was not on it authorises nothing."""

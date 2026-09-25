@@ -24,7 +24,10 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from loguru import logger
+from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import LLMFullResponseStartFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -39,6 +42,8 @@ from pipecat.services.tts_service import TextAggregationMode
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
+from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
@@ -105,16 +110,30 @@ def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
 def aggregators(context: LLMContext) -> LLMContextAggregatorPair:
     """The pair that decides when the caller has finished and records what the bot said.
 
-    Pipecat's recommended turn taking, unchanged: Silero VAD, and its default
-    strategies, which end a turn with the smart-turn v3 model on its default
-    parameters. When the caller goes on after a turn ended, the harness joins
-    the pieces (`CallContext.continues_turn`); how the turn ends is Pipecat's.
+    Pipecat's own turn taking, set exactly as the baseline sets it (the unmute
+    graph build of this salon, on Pipecat Flows): Silero VAD with a 0.2 s
+    silence window, and the smart-turn v3 stop strategy with a 1.6 s ceiling.
+    The same settings on both sides, so a comparison measures the builds and
+    not their end-of-turn timing.
 
-    ponytail: the defaults are what Pipecat measured. Tune end-of-turn timing
-    later, in the stop strategy as Pipecat recommends, from traces.
+    The ceiling is how long a pause may last once smart-turn has judged the
+    caller not finished. Left at its 3 s default, it was the whole tail: in
+    Coval run 4bLgLR4t, 29 turns ended on it, each one about 3 s before the
+    harness even started. When the caller goes on after a turn ended, the
+    harness joins the pieces (`CallContext.continues_turn`).
     """
     return LLMContextAggregatorPair(
-        context, user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer())
+        context,
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            user_turn_strategies=UserTurnStrategies(
+                stop=[
+                    TurnAnalyzerUserTurnStopStrategy(
+                        turn_analyzer=LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=1.6))
+                    )
+                ]
+            ),
+        ),
     )
 
 

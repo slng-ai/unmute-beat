@@ -41,8 +41,10 @@ browser client, so there is nothing else to start.
 
 All of these are optional: `uv run bot.py` on its own is a live-clock
 call, from an anonymous number, into the salon as the last call left it. The
-remaining dials are in the root `.env.example`. Turn taking is Pipecat's recommended
-default (Silero VAD and smart-turn v3), with no dial of ours.
+remaining dials are in the root `.env.example`. Turn taking is Pipecat's (Silero VAD
+and smart-turn v3), with the graph build's settings: a 0.2 s silence window
+and a 1.6 s ceiling on a turn smart-turn thinks is not finished. At the 3 s
+default, the ceiling was the whole tail of the caller's wait.
 
 A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
 hands the caller to booking; booking needs an identified caller, so the graph

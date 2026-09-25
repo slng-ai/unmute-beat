@@ -27,13 +27,15 @@ from salon.diary import (
     AlreadyHoldsError,
     RefusedError,
     day_phrases,
+    names_a_day,
     resolve_day,
     resolve_time,
+    spoken_day,
     times_named,
 )
 from salon.models.consent import Asked
 from salon.models.receipts import BookingCommand, Held, Saved, Slots
-from salon.models.shapes import Service
+from salon.models.shapes import Date, Service
 from salon.models.state import Appointment, SalonCall, Unresolved
 from salon.tools.asking import Ask
 from salon.tools.policy import ACTIONS
@@ -62,7 +64,9 @@ async def read_diary(
 
     Args:
         when: The day in the caller's own words -- "tomorrow", "next Friday",
-            "the 25th" -- or an empty string if they have not named one.
+            "Saturday next week", "October the 3rd" -- or its date as
+            YYYY-MM-DD from the calendar in your instructions, or an empty
+            string if they have not named one.
         service: Narrow the free times to one service, or `any` to see them all.
         at: The time or part of day they asked for, in their own words --
             "three", "half past two", "the afternoon" -- or empty if they said
@@ -80,12 +84,18 @@ async def find_times(call: SalonCall, when: str, service: Service | Literal['any
     A new read replaces whatever was on the table, so it empties `offered`,
     and it is what the front desk's carried request was waiting for, so it
     consumes `wanted`.
+
+    A day the caller named that the diary cannot work out goes back to the
+    model once a turn, with the reason: it has the calendar (`core.clock`)
+    and can pass the date. In trace bbe42ad4 the offer spoke "Which day would
+    you like?" straight to a caller who had just named one, twice, and the
+    model never learned why.
     """
     if not present(call.state.customer_verified):
         raise ModelRetry(
             'The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.'
         )
-    _same_day_the_caller_named(call, when)
+    theirs = _day_they_said(call, when)
     found = Slots.model_validate(
         call.diary.find_slots(
             call.state.customer_phone,
@@ -96,34 +106,46 @@ async def find_times(call: SalonCall, when: str, service: Service | Literal['any
             prefer=resolve_time(at or call.heard),
         )
     )
+    if found.status == 'need_day' and names_a_day(when) and call._day_retried != call.turn:
+        call._day_retried = call.turn
+        raise ModelRetry(
+            f'Nothing was read: the diary could not work out which day "{when}" is. Find that day in the '
+            'calendar in your instructions and call this again with its date as YYYY-MM-DD. If it is not '
+            'there, ask the caller which date they mean.'
+        )
+    call._said_day = ''
+    if theirs is not None and found.date is not None and found.date != theirs:
+        call._said_day = spoken_day(theirs, call.diary.now().date())
+        contrast = f'The caller said {call._said_day}; this is {found.day}. Say both when you offer it.'
+        found = found.model_copy(update={'note': f'{found.note} {contrast}'.strip()})
     call.commit(booking_day=found.date, offered=[], wanted=None)
     return found
 
 
-def _same_day_the_caller_named(call: SalonCall, when: str) -> None:
-    """Refuse a lookup for a day the caller never said.
+def _day_they_said(call: SalonCall, when: str) -> Date | None:
+    """The day the caller named, when this lookup is for another one. None when it is theirs, or cannot be told.
 
-    The caller's words for the day, against the ones this call was given. The
-    resolver is right; what it can be given is the wrong input: the caller
-    says "Friday", the lookup asks for "next Friday", and under a Monday clock
-    those are a week apart. The whole difference is a modifier the model added,
-    so the check is on the words and not on the date they resolve to.
+    Live call N2: the caller said "Friday", the model looked up "next Friday",
+    and the booking landed a week late. The lookup used to be refused. Now the
+    model has the calendar and works days out from context ("the day after
+    the one you proposed"), and in trace 9195116 the refusal sent three right
+    dates back until the caller said "Saturday the 3rd". So the lookup goes
+    ahead, and the offer says both days: "That's Saturday the 3rd, not
+    tomorrow". Heard side by side, a week's difference is not missed the way
+    one date on its own was.
 
-    The lookup is what records the offers and `save_booking` refuses a slot
-    from any other one, so `offered_to` is this call, not this number, and
-    asking again withdraws whatever the last search offered.
+    The last of the caller's days that differs is the one named. A day they
+    named that the code cannot work out ("in two weeks on Tuesday") could be
+    the one the model's date is for, so then nothing is said.
     """
-    if (theirs := call.day_words) and (mine := day_phrases(when)):
-        today = call.diary.now().date()
-        wanted = {resolve_day(words, today) for words in theirs} - {None}
-        asked_for = resolve_day(mine[-1], today)
-        if wanted and asked_for not in wanted:
-            said = '" or "'.join(theirs)
-            raise ModelRetry(
-                f'Nothing was looked up. The caller said "{said}" and this asked for "{mine[-1]}", '
-                f'which is a different day. Call this again with their words. If you think they '
-                'meant another day, ask them which one.'
-            )
+    if not (theirs := call.day_words) or not (mine := day_phrases(when)):
+        return None
+    today = call.diary.now().date()
+    wanted = [resolve_day(words, today) for words in theirs]
+    asked_for = resolve_day(mine[-1], today)
+    if None in wanted or asked_for is None or asked_for in wanted:
+        return None
+    return wanted[-1]
 
 
 async def offer_times(
@@ -138,7 +160,7 @@ async def offer_times(
     time they already picked plainly, use read_diary then ask_booking instead.
 
     Args:
-        when: The caller's own day words.
+        when: The caller's own day words, or the day's date as YYYY-MM-DD from the calendar in your instructions.
         service: The requested service.
         at: The caller's time or daypart, if given.
     """
@@ -150,7 +172,9 @@ _OFFERED = 3
 """How many times one offer speaks. More is a list nobody on a phone remembers."""
 
 
-async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> str:
+async def offer(
+    call: SalonCall, when: str, service: Service, at: str = '', *, move: str = '', found: Slots | None = None
+) -> str:
     """Read the diary and speak the first few free times. Shared by `offer_times` and the booking step's opening.
 
     What was spoken is recorded, ids and all, so the turn the caller picks one
@@ -158,16 +182,25 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
     the id of a time they have already been told. The offer is also the
     question the caller's next reply answers: the consent reading names which
     of these ids they picked, and only an id offered here can count.
+
+    `move` is the booking the caller asked to move, so a pick of one of these
+    times is read back as that move (`salon.classification._picked`), not
+    asked about again. `found` is a diary read already made for this request.
     """
-    found = await find_times(call, when, service, at)
+    if found is None:
+        found = await find_times(call, when, service, at)
     spoken = found.slots[:_OFFERED]
     if spoken:
         times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in spoken)
         day = found.day if found.day in ('today', 'tomorrow') else f'on {found.day}'
         text = f'For a {spoken_service(service)} {day}, I have {times}. Which time works for you?'
+        if call._said_day:
+            text = f"That's {found.day}, not {call._said_day}: for a {spoken_service(service)}, I have {times}. Which time works for you?"
     else:
         text = {
-            'need_day': 'Which day would you like?',
+            'need_day': 'Sorry, which date do you mean?'
+            if names_a_day(when)
+            else 'Which day would you like?',
             'past': 'That date has already passed. Which future day would you like?',
             'closed': 'The salon is closed that day. Which other day works for you?',
         }.get(found.status, 'There are no available times for that request. Which other day works for you?')
@@ -179,6 +212,8 @@ async def offer(call: SalonCall, when: str, service: Service, at: str = '') -> s
                 spoken=text,
                 value=','.join(slot.slot_id for slot in spoken),
                 owner=call.state.customer_phone,
+                action='move' if move else '',
+                booking_id=move,
             )
         )
     else:
@@ -304,10 +339,18 @@ def booking_question(
     had picked a time and said goodbye took it as one and hung up with nothing
     booked. A goodbye read this turn is answered before the question.
 
+    To a caller who already holds a booking, a booking is read back as a
+    second appointment, and the yes to it is the yes to that (`Asked.additional`).
+    In trace fbdd81b6 a plain "Shall I book you in for a haircut, Friday at
+    11:00?" went to a caller holding the 9:00. The yes could never be
+    carried out: the diary refused a second booking nobody had asked for,
+    and the caller heard "going round in circles".
+
     Raises:
         ModelRetry: If the slot is not one this caller is being offered, or the booking not one they hold.
     """
     phone = call.state.customer_phone
+    held: list[dict] = []
     if action in ('book', 'move'):
         offered = call.diary.offer_of(call.id, slot_id, phone)
         if not offered:
@@ -316,16 +359,31 @@ def booking_question(
                 'read the diary again and offer a time it actually returned.'
             )
         service = spoken_service(offered['service'])
-        words = (
-            f'Shall I book you in for a {service}, {offered["spoken"]}?'
-            if action == 'book'
-            else f'Shall I move your appointment to {offered["spoken"]}?'
-        )
+        held = call.diary.bookings_for(phone, call.diary.now().date()) if action == 'book' else []
+        if len(held) == 1:
+            also = f'your {spoken_service(held[0]["service"])} {held[0]["spoken"]}'
+        else:
+            also = 'the appointments you already have'
+        if action == 'move':
+            words = f'Shall I move your appointment to {offered["spoken"]}?'
+        elif held:
+            words = (
+                f'Shall I book you a second appointment, a {service} {offered["spoken"]}, as well as {also}?'
+            )
+        else:
+            words = f'Shall I book you in for a {service}, {offered["spoken"]}?'
         if call.classification.conversation == 'end':
             words = f'Before you go: {words[0].lower()}{words[1:]}'
     else:
         return cancel_question(call, booking_id)
-    return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)
+    return Ask(
+        about='booking',
+        value=slot_id,
+        action=action,
+        booking_id=booking_id,
+        additional=bool(held),
+        spoken=words,
+    )
 
 
 async def offer_cancel(ctx: RunContext[SalonCall]) -> Ask:
@@ -408,7 +466,9 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
                 'Nothing was saved: the caller did not agree to what was read back to them. They '
                 f'said "{call.heard}". Answer what they actually asked.'
             )
-        additional = action == 'book' and call.classification.appointment_choice == 'add'
+        additional = action == 'book' and (
+            question.additional or call.classification.appointment_choice == 'add'
+        )
         call.answered()
         return additional
 
@@ -629,12 +689,42 @@ def _resuming_a_request(call: SalonCall) -> bool:
     )
 
 
-async def offer_wanted(call: SalonCall) -> str:
-    """Offer times for the request the caller made before they were verified."""
+def _handed_a_request(call: SalonCall) -> bool:
+    """Handed over by the front desk with a request typed from the caller's words, the caller already verified."""
+    return present(call.state.customer_verified) and call.state.wanted is not None
+
+
+def _only_booking(call: SalonCall) -> str:
+    """The one booking this caller holds, by id, or '' when they hold none or more than one."""
+    held = call.diary.bookings_for(call.state.customer_phone, call.diary.now().date())
+    return held[0]['booking_id'] if len(held) == 1 else ''
+
+
+async def offer_wanted(call: SalonCall) -> str | Ask:
+    """Act on the request the front desk carried: offer times, or read a move back when its time is free.
+
+    A move of the one booking the caller holds, to a time the diary has free
+    exactly as they named it, is read back at once: "Shall I move your
+    appointment to Saturday at 9:00 AM?". Otherwise the free times are
+    offered, marked as a move, so the time they pick is read back as one.
+    The user's call of 24 September spent six requests in a row on "same
+    time" after "move it to Saturday"; this is none.
+    """
     wanted = call.state.wanted
     assert wanted is not None
-    return await offer(call, wanted.when, wanted.service, wanted.at)
+    move = _only_booking(call) if wanted.change == 'move' else ''
+    if not move:
+        return await offer(call, wanted.when, wanted.service, wanted.at)
+    found = await find_times(call, wanted.when, wanted.service, wanted.at)
+    named = resolve_time(wanted.at)
+    exact = next((slot for slot in found.slots if slot.time.strftime('%H:%M') == named), None)
+    if exact is not None:
+        return booking_question(call, 'move', exact.slot_id, move)
+    return await offer(call, wanted.when, wanted.service, wanted.at, move=move, found=found)
 
 
-OPENINGS = (Opening('offer_times', 'completed', _resuming_a_request, offer_wanted),)
-"""The booking step's arrival back from verification: offer times for what the caller already asked for."""
+OPENINGS = (
+    Opening('offer_times', 'completed', _resuming_a_request, offer_wanted),
+    Opening('offer_times', 'handoff', _handed_a_request, offer_wanted),
+)
+"""The booking step's arrival with a request already known: back from verification, or handed over by the front desk."""

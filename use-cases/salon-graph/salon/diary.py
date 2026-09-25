@@ -26,6 +26,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date as Date  # noqa: N812
 from datetime import datetime, time, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo('Europe/Madrid')
@@ -124,14 +125,14 @@ def spoken_day(day: Date, today: Date) -> str:
     """The way a person names a day, which depends on how far away it is.
 
     Computed rather than asked of the model, so there is only ever one string
-    to say for a given day.
+    to say for a given day. Past tomorrow a day always carries its date, so
+    "Saturday the 26th" and "Saturday the 3rd" can never sound alike: in
+    trace bbe42ad4 the caller had to say "not this Saturday".
     """
     if day == today:
         return 'today'
     if day == today + timedelta(days=1):
         return 'tomorrow'
-    if (day - today).days < 7:
-        return WEEKDAYS[day.weekday()]
     return f'{WEEKDAYS[day.weekday()]} the {_ordinal(day.day)}'
 
 
@@ -148,9 +149,46 @@ agent asks; it is never guessed. A small deliberate policy, not language
 understanding.
 """
 
-_ISO = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+_ISO = re.compile(r'\b(\d{4}-\d{2}-\d{2})\b')
+"""A date as YYYY-MM-DD, anywhere in the words: a model passing "Saturday 2026-10-03" means the date."""
 _WEEKDAY = {name: re.compile(rf'\b{name.casefold()}\b') for name in WEEKDAYS}
 """Whole words: a substring match would read "satur" out of the middle of another word."""
+_DAYNAMES = '|'.join(w.casefold() for w in WEEKDAYS)
+MONTHS = (
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
+)
+_MONTH_NUMBER = (
+    {name: n for n, name in enumerate(MONTHS, 1)}
+    | {name[:3]: n for n, name in enumerate(MONTHS, 1)}
+    | {'sept': 9}
+)
+_MONTHS = '|'.join(sorted(_MONTH_NUMBER, key=len, reverse=True))
+_NTH = r'(\d{1,2})(?:st|nd|rd|th)?'
+_MONTH_DAY = re.compile(rf'\b({_MONTHS})\.?\s+(?:the\s+)?{_NTH}\b', re.IGNORECASE)
+"""October 3rd, October the 3rd, Oct 3."""
+_DAY_MONTH = re.compile(rf'\b(?:the\s+)?{_NTH}\s+(?:of\s+)?({_MONTHS})\b', re.IGNORECASE)
+"""The 3rd of October, 3rd October, 3 Oct."""
+_NEXT_WEEK = re.compile(
+    rf'\b({_DAYNAMES})\s+next\s+week\b|\bnext\s+week\s+(?:on\s+)?({_DAYNAMES})\b', re.IGNORECASE
+)
+"""Saturday next week, next week on Saturday: that weekday in the Monday-to-Sunday week after this one."""
+_WEEK_ON = re.compile(rf'\ba\s+week\s+(?:on|from)\s+({_DAYNAMES})\b', re.IGNORECASE)
+"""A week on Saturday: seven days after the coming Saturday."""
+_THE_NTH = re.compile(r'\bthe\s+(\d{1,2})(?:st|nd|rd|th)\b', re.IGNORECASE)
+"""The 3rd, with no month: the next 3rd from today. It needs "the" and the suffix, so "at 3" is never a day."""
+_BESIDE = re.compile(r'\bthe\s+day\s+(after|before)\b(.*)$', re.IGNORECASE)
+"""The day after (or before) another day: that day, plus or minus one. With no day after it, it names none."""
 _UNHANDLED = re.compile(
     r'\b(week on|weeks?|fortnight|after next|the one after|following|in \d|in (two|three|four))\b'
 )
@@ -158,18 +196,38 @@ _UNHANDLED = re.compile(
 
 Without them "a week on Tuesday" matched the weekday and returned the *next*
 Tuesday, a confidently wrong day. Asking costs a turn; a wrong day costs an
-appointment. Anything added to `resolve_day` comes off this list.
+appointment. What `resolve_day` does implement ("Saturday next week", "a week
+on Saturday") is matched before this list is checked.
 """
-_PHRASE = re.compile(
-    r'\b((?:this|next)\s+)?(' + '|'.join(w.casefold() for w in WEEKDAYS) + r')\b'
-    r'|\b(today|tomorrow)\b'
-    r'|\b(\d{4}-\d{2}-\d{2})\b',
+_AFTER_NEXT = re.compile(rf'\bthe\s+({_DAYNAMES})\s+after\s+next\b', re.IGNORECASE)
+"""The Tuesday after next: that weekday in the week after next week."""
+_REFUSED = re.compile(
+    rf'\bthe\s+following\s+(?:{_DAYNAMES})\b'
+    rf'|\bin\s+(?:a\s+fortnight|(?:\d|two|three|four)\s+weeks?)(?:\s+on\s+(?:{_DAYNAMES}))?\b',
     re.IGNORECASE,
 )
-"""The caller's own day words, lifted out of a whole utterance.
+"""A day named in a form `resolve_day` refuses, captured whole so its weekday is not read on its own.
 
-"this"/"next" are captured because they are the whole difference between two
-Fridays a week apart.
+Without it "in two weeks on Friday" would reach the lookup check as "friday",
+and the right date the model passed for it would be refused as a day never said.
+"""
+_ANCHOR = (
+    '|'.join(p.pattern for p in (_MONTH_DAY, _DAY_MONTH, _AFTER_NEXT, _NEXT_WEEK, _WEEK_ON, _THE_NTH))
+    + rf'|\b(?:(?:this|next)\s+)?(?:{_DAYNAMES})(?:\s+the\s+\d{{1,2}}(?:st|nd|rd|th))?\b'
+    r'|\b(?:today|tomorrow)\b'
+    r'|\b\d{4}-\d{2}-\d{2}\b'
+)
+_PHRASE = re.compile(
+    rf'\bthe\s+day\s+(?:after|before)(?:\s+(?:{_ANCHOR}))?'
+    r'|\bthe\s+(?:next|following)\s+day\b' + f'|{_REFUSED.pattern}|{_ANCHOR}',
+    re.IGNORECASE,
+)
+"""The caller's own day words, lifted out of a whole utterance, longest form first.
+
+"this"/"next" and "next week" are captured because they are the whole
+difference between two Saturdays a week apart. "The day after tomorrow" is
+captured whole for the same reason: read as "tomorrow" it is a day early.
+A weekday with its date ("Saturday the 3rd") is one day, so one phrase.
 """
 
 
@@ -188,13 +246,89 @@ def day_phrases(heard: str) -> list[str]:
     which of two named days they meant is the model's, and the readback before
     the write is where it is caught.
     """
-    found = []
-    for hit in _PHRASE.finditer(heard):
-        if hit.group(2):
-            found.append(f'{(hit.group(1) or "").strip()} {hit.group(2)}'.strip().casefold())
-        else:
-            found.append((hit.group(3) or hit.group(4) or '').casefold())
-    return found
+    return [' '.join(hit.group(0).casefold().split()) for hit in _PHRASE.finditer(heard)]
+
+
+_MONTH_WORD = re.compile(rf'\b({_MONTHS})\b', re.IGNORECASE)
+
+
+def anchored(words: str, on: Date | None) -> str:
+    """A day phrase, with "the day after" and the like fixed to the day the conversation was on when it was said.
+
+    "The day after", "the next day" and "the day before" name a day only
+    beside another one. Said while Friday the 2nd is on the table, "the day
+    after" is Saturday the 3rd, and stays so when the table moves on. So it is
+    kept as that date. With no day on the table it is kept as said, and names
+    no day.
+    """
+    text = ' '.join(words.casefold().split())
+    if on is None:
+        return words
+    if text in ('the day after', 'the next day', 'the following day'):
+        return (on + timedelta(days=1)).isoformat()
+    if text == 'the day before':
+        return (on - timedelta(days=1)).isoformat()
+    return words
+
+
+def names_a_day(words: str) -> bool:
+    """Whether these words try to name a day, resolvable or not: a weekday, a month, "next week", "the 3rd".
+
+    "Whenever suits you" names none, so it is simply asked about. "The
+    Tuesday after next" names one this policy refuses, so the model is told
+    and can pass the date instead.
+    """
+    return bool(day_phrases(words) or _UNHANDLED.search(words.casefold()) or _MONTH_WORD.search(words))
+
+
+def _dated(year: int, month: int, day: int) -> Date | None:
+    try:
+        return Date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _on(month: int, day: int, today: Date) -> Date | None:
+    """That day of that month, this year, or next year when it has passed. February 30th is None."""
+    this_year = _dated(today.year, month, day)
+    if this_year is not None and this_year >= today:
+        return this_year
+    return _dated(today.year + 1, month, day)
+
+
+def _nth(day: int, today: Date) -> Date | None:
+    """The next day-of-month `day` from today: this month's if still to come, else next month's."""
+    if day >= today.day and (found := _dated(today.year, today.month, day)) is not None:
+        return found
+    month, year = (1, today.year + 1) if today.month == 12 else (today.month + 1, today.year)
+    return _dated(year, month, day)
+
+
+def _exact(text: str, today: Date) -> Date | Literal[False] | None:
+    """The date these words give exactly, False when they give one that is refused, None when they give none.
+
+    Refused: a date that does not exist ("2026-02-30"), or one beside a
+    weekday it does not fall on ("Friday the 3rd", when the 3rd is a
+    Saturday). Two days that disagree are asked about, never picked from.
+    """
+    if hit := _ISO.search(text):
+        try:
+            day = Date.fromisoformat(hit.group(1))
+        except ValueError:
+            return False
+    elif hit := _MONTH_DAY.search(text):
+        day = _on(_MONTH_NUMBER[hit.group(1)], int(hit.group(2)), today)
+    elif hit := _DAY_MONTH.search(text):
+        day = _on(_MONTH_NUMBER[hit.group(2)], int(hit.group(1)), today)
+    elif hit := _THE_NTH.search(text):
+        day = _nth(int(hit.group(1)), today)
+    else:
+        return None
+    if day is None or any(
+        _WEEKDAY[name].search(text) for name in WEEKDAYS if name != WEEKDAYS[day.weekday()]
+    ):
+        return False
+    return day
 
 
 def resolve_day(words: str, today: Date) -> Date | None:
@@ -202,30 +336,62 @@ def resolve_day(words: str, today: Date) -> Date | None:
 
     Code, not the model: working out that "next Friday" is the 25th is
     arithmetic. "Monday" said on a Monday means the next one; "next Friday"
-    means the week after when this Friday is still to come; "2026-02-30" is the
-    right shape and not a day, so it is refused rather than rounded.
+    is the Friday of next week, a Monday-to-Sunday week, the same day the
+    calendar each step is shown labels "Friday next week" (`core.clock`);
+    "2026-02-30" is the right shape and not a day, so it is refused rather
+    than rounded.
+
+    ponytail: "next Monday" said on a Sunday is tomorrow by this rule. Some
+    callers mean the Monday after; the offer names the date they hear.
+
+    Trace bbe42ad4 (2026-09-25): "Saturday next week" and "October the 3rd"
+    were both outside the policy, and the caller was asked "Which day would
+    you like?" twice. Both are in it now: a date by its month ("October the
+    3rd", "the 3rd of October"), "the 3rd" alone, "Saturday next week",
+    "a week on Saturday" and "the Tuesday after next". "In two weeks", "the
+    following Monday" and the like are still refused.
+
+    An exact date decides, wherever it is in the words. In the replay of
+    2026-09-25 the model passed "Saturday 2026-10-03", the right day, and the
+    weekday rule read it as tomorrow (3 of 8 runs). A weekday beside a date it
+    does not fall on is refused. "The day after Friday" is the Saturday, and
+    "the day after tomorrow" two days on. "The day after" on its own names no
+    day in its words: the model works it out from the calendar.
     """
-    text = words.strip().casefold()
+    text = ' '.join(words.strip().casefold().split())
     if not text:
         return None
-    if _ISO.match(text):
-        try:
-            return Date.fromisoformat(text)
-        except ValueError:
+    if hit := _BESIDE.search(text):
+        rest = hit.group(2).strip(' ,.?!')
+        anchor = day_phrases(rest)
+        day = (resolve_day(rest, today) if rest else None) or (
+            resolve_day(anchor[0], today) if anchor else None
+        )
+        if day is None:
             return None
+        return day + timedelta(days=1 if hit.group(1) == 'after' else -1)
     if text in TODAY_WORDS:
         return today
     if text in TOMORROW_WORDS:
         return today + timedelta(days=1)
+    if (exact := _exact(text, today)) is not None:
+        return exact or None
+    if hit := _AFTER_NEXT.search(text):
+        index = WEEKDAYS.index(hit.group(1).capitalize())
+        return today + timedelta(days=14 - today.weekday() + index)
+    if hit := _NEXT_WEEK.search(text):
+        index = WEEKDAYS.index((hit.group(1) or hit.group(2)).capitalize())
+        return today + timedelta(days=7 - today.weekday() + index)
+    if hit := _WEEK_ON.search(text):
+        index = WEEKDAYS.index(hit.group(1).capitalize())
+        return today + timedelta(days=((index - today.weekday()) % 7 or 7) + 7)
     if _UNHANDLED.search(text):
         return None
     for index, name in enumerate(WEEKDAYS):
         if _WEEKDAY[name].search(text):
-            ahead = (index - today.weekday()) % 7
-            ahead = ahead or 7
-            if 'next' in text and ahead < 7:
-                ahead += 7
-            return today + timedelta(days=ahead)
+            if 'next' in text:
+                return today + timedelta(days=7 - today.weekday() + index)
+            return today + timedelta(days=(index - today.weekday()) % 7 or 7)
     return None
 
 

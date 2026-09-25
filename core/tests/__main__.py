@@ -31,6 +31,7 @@ MODULES = (
     'tests.test_classes',
     'tests.test_history',
     'tests.test_reuse',
+    'tests.test_clock',
 )
 
 

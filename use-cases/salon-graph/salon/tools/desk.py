@@ -13,10 +13,11 @@ from salon.models.state import BookingRequest, Handoff, SalonCall
 from salon.tools.policy import ACTIONS
 
 _BOOKING_ARG = (
-    '    booking: Only with to="booking", for a new appointment the caller\n'
-    '        has asked for: the service, their own day words, and their\n'
-    '        time words if they gave any. Leave it out if they named no\n'
-    '        service or no day.'
+    '    booking: Only with to="booking", for an appointment the caller has\n'
+    '        asked for, or asked to move: the service, their own day words,\n'
+    '        and their time words if they gave any ("the same time" is the\n'
+    '        time of the appointment they hold). Leave it out if they named\n'
+    '        no service or no day.'
 )
 """The `booking` argument's description, appended to `hand_over`'s Args only where the argument exists."""
 

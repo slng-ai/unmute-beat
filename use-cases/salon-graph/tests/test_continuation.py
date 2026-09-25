@@ -15,8 +15,9 @@ Scripted models, no audio, no network. Asserts, no pytest, same as the rest.
 """
 
 import asyncio
+import json
 from contextlib import ExitStack, contextmanager, suppress
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import patch
 
 from pipecat.clocks.system_clock import SystemClock
@@ -212,6 +213,20 @@ async def speech_nobody_heard_is_recorded_as_unheard():
     assert 'Let me check that.' not in str(project(call, call.messages))
 
 
+async def a_holding_line_heard_in_full_keeps_the_turn_open():
+    """A holding line answers nothing: a caller who goes on after hearing all of it is still in the same turn."""
+    call = booking_call()
+    probe = Probe(call)
+    await read_back_a_haircut(call, probe)
+    call.turn_started('Yes, please.')
+    await call.say('Let me have a look.', origin='tool_filler')
+    call.note_reached()
+    played_out(call)
+    call.note_barge()
+    call.turn_started('That sounds perfect.')
+    assert call.turn == 2 and call.heard == 'Yes, please. That sounds perfect.', (call.turn, call.heard)
+
+
 async def an_attempted_write_is_never_authorised_twice():
     """If the first piece already acted on the answer, the continuation cannot spend the same answer again."""
     call = booking_call()
@@ -326,6 +341,36 @@ async def a_number_talked_over_arrives_whole():
     assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 111 111. Have I got that right?'
 
 
+async def a_number_with_a_digit_too_many_is_refused_with_its_reason():
+    """Coval run 4bLgLR4t, cases 06 and 13: speech to text heard one digit too many after "+34".
+
+    The agent said "Please say the full number again" with no reason, and the
+    caller said the same number again. Now the count is said, by code.
+    """
+    from salon.tools.identity import number_problem
+
+    assert number_problem('+34 672. 1. 273. 45. 4.') == (
+        'I heard 10 digits after +34, and a Spanish number has nine. Could you say the whole number again, please?'
+    )
+    assert number_problem("It's +34 6. 71. 2.") == '', 'too few is a caller still going'
+    assert number_problem("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.") == '', 'a whole number has no problem'
+
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('', diary=books)
+    call.commit(agent='verify', pending='booking')
+    probe = Probe(call)
+
+    async def verify(messages, info):
+        raise AssertionError('the model was asked to explain a count the application had')
+        yield ''
+
+    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
+        await probe._turn('+34 672. 1. 273. 45. 4.')
+    assert probe.fixed()[-1].startswith('I heard 10 digits after +34'), probe.fixed()
+    assert call.requests == [], 'saying why costs no request'
+
+
 async def a_number_in_pieces_is_read_back_without_the_model():
     """Coval run L5RWCS7b, K3: nine digits said in pauses, and the model asked for "the rest" three times.
 
@@ -355,6 +400,387 @@ async def a_number_in_pieces_is_read_back_without_the_model():
         await probe._turn("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.")
     assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 273 454. Have I got that right?'
     assert call.requests == [], 'reading a whole number back costs no request'
+
+
+async def a_move_after_a_booking_is_read_back_not_cancelled():
+    """The user's call of 24 September (trace cd3c08fa), turns 6 to 9: book, then move it to Saturday, same time.
+
+    "Move it to Saturday instead" was read as taking the booking back, and the
+    caller was offered a cancel. Then "Same time." cost six requests in a row
+    and a refused save. Now the take-back reading says `change`, the front
+    desk hands the move over in one request, booking offers Saturday's times
+    marked as a move with no model, the pick is read back as the move with no
+    model, and the yes moves it.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A haircut on Friday.')
+    await offer(call, 'Friday', 'haircut')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    friday = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
+    saturday: list[str] = []
+
+    def classify(name, data):
+        answer = data['answer']
+        if name == 'chosen_offer' and answer == "Nine o'clock works.":
+            return friday.slot_id
+        if name == 'chosen_offer' and answer == 'Same time.':
+            nine = next(o for o in data['options'] if '9:00' in o['said'])
+            saturday.append(nine['id'])
+            return nine['id']
+        if name == 'confirmation' and answer in ('Yes.', 'Yes, please.'):
+            return 'accept'
+        if name == 'last_change' and 'Saturday' in answer:
+            return 'change'
+        if name == 'conversation':
+            return 'continue'
+        return None
+
+    asked: dict[str, int] = {}
+
+    async def desk(messages, info):
+        asked['concierge'] = asked.get('concierge', 0) + 1
+        yield {
+            0: DeltaToolCall(
+                name='hand_over',
+                json_args=json.dumps(
+                    {
+                        'to': 'booking',
+                        'because': 'move the haircut to Saturday',
+                        'booking': {'service': 'haircut', 'when': 'Saturday', 'change': 'move'},
+                    }
+                ),
+            )
+        }
+
+    async def other(messages, info):
+        asked['step'] = asked.get('step', 0) + 1
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=desk if name == 'concierge' else other)
+            stack.enter_context(node.agent.override(model=model))
+        await agreed_to_a_pick(call, probe, "Nine o'clock works.")
+        (held,) = books.bookings_for(PHONE, CLOCK.date())
+        asked.clear()
+
+        probe.interrupt()
+        await probe._turn('Sorry, can you actually move the appointment to Saturday instead?')
+        offered = probe.fixed()[-1]
+        assert 'cancel' not in offered.lower(), 'a caller who asked to move was offered a cancel'
+        assert offered.startswith('For a haircut on Saturday'), offered
+        assert asked == {'concierge': 1}, asked
+        call.note_reached()
+        played_out(call)
+
+        probe.interrupt()
+        await probe._turn('Same time.')
+        assert probe.fixed()[-1].startswith('Shall I move your appointment to Saturday'), probe.fixed()[-1]
+        assert asked == {'concierge': 1}, f'the pick of a move cost a model request: {asked}'
+        call.note_reached()
+        played_out(call)
+
+        probe.interrupt()
+        await probe._turn('Yes.')
+    (moved,) = books.bookings_for(PHONE, CLOCK.date())
+    assert moved['booking_id'] == held['booking_id'], 'the booking held was moved, not a second one added'
+    assert date.fromisoformat(moved['date']).weekday() == 5 and moved['time'] == '09:00', (held, moved)
+    assert saturday and asked == {'concierge': 1}, asked
+
+
+AJ4T = "Yes, that's right. Oh, and sorry, can we make it Saturday instead of Friday?"
+"""Coval run hdbogMqB, AJ4t: the caller's answer to their number read back."""
+
+
+async def a_yes_with_a_new_request_is_verified_and_the_rest_answered():
+    """Coval run hdbogMqB, AJ4t: a yes to the number, and a new day in the same breath.
+
+    The yes is the check's: the lookup runs with no model. The new day is the
+    booking step's: the caller goes back to it in the same turn, the Friday
+    times its opening would have offered are skipped because the request
+    changed, and its model is given the whole reply. Nobody asks for the
+    number again.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call(PHONE, diary=books)
+    probe = Probe(call)
+    booking_asked: list[str] = []
+
+    def classify(name, data):
+        if name == 'confirmation':
+            return 'accept' if data['answer'] == AJ4T else None
+        if name == 'request_change':
+            return 'changed'
+        if name == 'conversation':
+            return 'continue'
+        return None
+
+    async def desk(messages, info):
+        yield {
+            0: DeltaToolCall(
+                name='hand_over',
+                json_args=json.dumps(
+                    {
+                        'to': 'booking',
+                        'because': 'wants a haircut on Friday',
+                        'booking': {'service': 'haircut', 'when': 'Friday'},
+                    }
+                ),
+            )
+        }
+
+    async def booking(messages, info):
+        booking_asked.append(f'{messages!r} {info.instructions}')
+        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
+        yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': 'Saturday', 'service': 'haircut'}))}
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    steps = {'concierge': desk, 'booking': booking}
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=steps.get(name, other))
+            stack.enter_context(node.agent.override(model=model))
+        await probe._turn('A haircut on Friday, please.')
+        assert call.state.agent == 'verify', call.state.agent
+        assert probe.fixed() == ['Let me read that back to you: +34 611 111 111. Have I got that right?'], (
+            probe.fixed()
+        )
+        call.note_reached()
+        played_out(call)
+        booking_asked.clear()
+
+        probe.interrupt()
+        await probe._turn(AJ4T)
+    assert call.state.customer_verified and call.state.verified_phone == PHONE, 'the yes did not verify'
+    assert call.state.agent == 'booking', call.state.agent
+    assert len(booking_asked) == 1, 'the booking model did not answer the rest, once'
+    assert 'Saturday instead of Friday' in booking_asked[0], 'the booking model was not given the new day'
+    assert 'verify completed' in booking_asked[0], 'the booking model was not told the check completed'
+    assert not any(line.startswith('For a haircut on Friday') for line in probe.fixed()), probe.fixed()
+    thanks, offered = probe.fixed()[-2:]
+    assert thanks in ('Thanks, I have you.', 'Thank you, I have you now.'), probe.fixed()
+    assert offered.startswith('For a haircut on Saturday'), probe.fixed()
+    assert 'I have you' in booking_asked[0], 'the booking model was not shown the line already said'
+    asked = call.pending_question()
+    assert asked is None or asked.about != 'phone', 'the number was asked for again'
+
+
+async def a_day_next_week_is_offered_at_the_first_try():
+    """Trace bbe42ad4: "I meant Saturday next week, not this Saturday." was answered "Which day would you like?".
+
+    Twice, and "October the 3rd" the same. The diary works the day out now,
+    and each offer names its date. A day the diary still cannot work out goes
+    back to the model with the reason, and the model, which has the calendar,
+    passes the date: nothing is said to the caller in between.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    planned = [
+        ['Saturday'],
+        ['Saturday next week'],
+        ['in two weeks on Tuesday', '2026-10-06'],
+    ]
+    requests: list[str] = []
+
+    def classify(name, data):
+        return 'continue' if name == 'conversation' else None
+
+    async def booking(messages, info):
+        requests.append(f'{messages!r} {info.instructions}')
+        when = planned[0].pop(0)
+        if not planned[0]:
+            planned.pop(0)
+        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
+        yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': when, 'service': 'haircut'}))}
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=booking if name == 'booking' else other)
+            stack.enter_context(node.agent.override(model=model))
+        for words, day in (
+            ('Actually, can we do Saturday?', 'Saturday the 26th'),
+            ('Oh no, sorry, I meant Saturday next week, not this Saturday.', 'Saturday the 3rd'),
+            ('In two weeks on Tuesday, please.', 'Tuesday the 6th'),
+        ):
+            said = len(probe.fixed())
+            requests.clear()
+            probe.interrupt()
+            await probe._turn(words)
+            lines = probe.fixed()[said:]
+            assert lines and lines[-1].startswith(f'For a haircut on {day}, I have'), (words, lines)
+            assert not any('which day' in line.lower() or 'which date' in line.lower() for line in lines), (
+                lines
+            )
+            call.note_reached()
+            played_out(call)
+    assert len(requests) == 2 and 'could not work out which day' in requests[1], requests
+    assert 'Today is Monday 2026-09-21' in requests[0], 'the booking model was not told the date'
+    assert '- Saturday 2026-10-03: Saturday next week' in requests[0], 'nor the calendar'
+
+
+async def the_day_after_the_one_offered_is_offered_with_both_days():
+    """Trace 9195116 (Friday 2026-09-25): "can you look at the day after?", then "What I meant is Saturday".
+
+    The model passed the right date, Saturday the 3rd, each time, and the day
+    guard sent it back: the caller had said "Friday", then a plain "Saturday",
+    which is tomorrow. It took three turns and "Saturday the 3rd" to get
+    there. Now the lookup goes ahead at once.
+
+    "The day after", said while Friday the 2nd is on the table, is Saturday
+    the 3rd (`diary.anchored`). So a lookup for that day is offered plainly,
+    however the model wrote it: "2026-10-03" or, as in the replay of
+    2026-09-25, "Saturday 2026-10-03", which used to be read as tomorrow. A
+    lookup for tomorrow instead says both days.
+    """
+    for when, first in (
+        ('2026-10-03', 'For a haircut on Saturday the 3rd, I have'),
+        ('Saturday 2026-10-03', 'For a haircut on Saturday the 3rd, I have'),
+        ('tomorrow', "That's tomorrow, not Saturday the 3rd: for a haircut, I have"),
+    ):
+        call = booking_call()
+        books.set_clock(datetime(2026, 9, 25, 9, 30, tzinfo=diary.TZ))
+        call.turn_started('I would like a haircut on Friday.')
+        await offer(call, 'Friday', 'haircut')
+        call.note_reached()
+        played_out(call)
+        call.turn_ended(interrupted=False)
+        probe = Probe(call)
+        asked: list[str] = []
+
+        def classify(name, data):
+            return 'continue' if name == 'conversation' else None
+
+        async def booking(messages, info, when=when, asked=asked):
+            asked.append(when)
+            (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
+            yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': when, 'service': 'haircut'}))}
+
+        async def other(messages, info):
+            yield 'Anything else?'
+
+        with ExitStack() as stack:
+            stack.enter_context(scripted_readings(classify))
+            for name, node in agents.AGENTS.items():
+                model = FunctionModel(stream_function=booking if name == 'booking' else other)
+                stack.enter_context(node.agent.override(model=model))
+            for words, line_starts in (
+                ('Um, 9:00 AM. Actually, can you look at the day after?', first),
+                ('What I meant is Saturday.', 'For a haircut on Saturday the 3rd, I have'),
+            ):
+                asked.clear()
+                probe.interrupt()
+                await probe._turn(words)
+                line = probe.fixed()[-1]
+                if when == 'tomorrow' and words.startswith('What'):
+                    line_starts = 'For a haircut tomorrow, I have'
+                assert line.startswith(line_starts), (when, words, line)
+                assert len(asked) == 1, f'the date was sent back: {asked}'
+                call.note_reached()
+                played_out(call)
+
+
+def a_report_never_unhears_a_line_that_played():
+    """Trace fbdd81b6: a question that played out was taken as unheard, and the answer to it joined the turn before.
+
+    Two ways, both closed: the runtime's report of an assistant turn it still
+    held open cut the line after its audio had run out, and a line whose
+    start signal went missing stayed queued however long ago it was sent.
+    """
+    question = 'Would you like to move the appointment you already have, or add another one?'
+    for missing_signal in (False, True):
+        call = booking_call()
+        call._playback_known = True
+        call.turn_started('Uh, can we do 10:30?')
+        call.note_said('fixed', question, origin='guidance')
+        if missing_signal:
+            call.spoken[-1].at -= 60
+        else:
+            call.note_reached()
+            played_out(call)
+            call.note_heard('', segment_ids=(call.spoken[-1].id,), interrupted=True)
+        call.note_barge()
+        call.turn_started('Uh, add another one.')
+        assert call.turn == 2, (
+            f'a question heard in full was taken as unheard (missing signal: {missing_signal})'
+        )
+
+    call = booking_call()
+    call._playback_known = True
+    call.turn_started('Uh, can we do 10:30?')
+    call.note_said('fixed', question, origin='guidance')
+    call.note_barge()
+    call.turn_started('Uh, add another one.')
+    assert call.turn == 1, 'a line cut off before it could play still continues the turn'
+
+
+async def an_add_answered_to_a_heard_question_books_it():
+    """Trace fbdd81b6, turns 4 and 5: "can we do 10:30?", asked move or add, "add another one" books it.
+
+    The caller already held a 9:00 that Friday. The runtime's report cut the
+    move-or-add question after it played, the answer joined the turn before
+    it, the question it answered was rewound, and the caller was offered the
+    same times again. Now the answer is its own turn, and the add writes.
+    """
+    call = booking_call()
+    probe = Probe(call)
+    call.turn_started('A haircut on Friday.')
+    await offer(call, 'Friday', 'haircut')
+    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
+    books.save_booking(PHONE, 'book', nine.slot_id, '', False, books.now(), offered_to=call.id)
+    await offer(call, 'Friday', 'haircut')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    later = next(s for s in call.state.offered if s.time.hour >= 10)
+    asked: list[str] = []
+
+    def classify(name, data):
+        if name == 'chosen_offer' and data['answer'] == 'Uh, can we do 10:30?':
+            return later.slot_id
+        if name == 'appointment_choice' and 'add another one' in data['answer']:
+            return 'add'
+        if name == 'conversation':
+            return 'continue'
+        return None
+
+    async def booking(messages, info):
+        asked.append('booking')
+        yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic": "move_or_add"}')}
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=booking if name == 'booking' else other)
+            stack.enter_context(node.agent.override(model=model))
+        probe.interrupt()
+        await probe._turn('Uh, can we do 10:30?')
+        assert probe.fixed()[-1].startswith('Would you like to move'), probe.fixed()
+        call.note_reached()
+        played_out(call)
+        probe.note_spoken('', True, segment_ids=tuple(s.id for s in call.spoken))
+        offers = len([line for line in probe.fixed() if line.startswith('For a haircut')])
+
+        probe.interrupt()
+        await probe._turn('Uh, add another one.')
+    held = books.bookings_for(PHONE, CLOCK.date())
+    assert sorted(b['time'] for b in held) == ['09:00', later.time.strftime('%H:%M')], held
+    assert asked == ['booking'], f'the booking model ran again after the add: {asked}'
+    assert len([line for line in probe.fixed() if line.startswith('For a haircut')]) == offers, probe.fixed()
 
 
 async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
@@ -918,6 +1344,43 @@ async def a_question_cut_off_as_the_audio_stops_is_not_heard():
     assert asked is not None and asked.about == 'closing', 'a question that played out in full was heard'
 
 
+async def a_cut_off_question_reported_in_full_is_still_cut_off():
+    """Coval run 4bLgLR4t, case 05 (call CA6912853c): "That's perfect." hung up on an "Anything else?" cut off.
+
+    The bot log: the line started at 44.830, the caller cut in at 45.034,
+    the audio stopped at 45.084. Between the cut-in and the stop, Pipecat's
+    assistant aggregator reported what was spoken, and that report held the
+    whole line, because the TTS had been handed all of it. The report cleared
+    the cut-in's mark, the stop then counted the line as played, and the next
+    piece began a new turn that answered the unheard question.
+    """
+    from core import turn as engine
+    from salon.tools.writes import close_with
+
+    async def line(text):
+        """The call's line to the caller: without one, nothing said is recorded."""
+
+    words = "You're all set for Friday at 9:00 AM. Anything else I can help with?"
+    orders = (('barge', 'report', 'stop'), ('stop', 'barge', 'report'), ('barge', 'stop', 'report'))
+    for order in orders:
+        call = booking_call()
+        call._say = line
+        call.turn_started('Yes, please.')
+        await close_with(call, words)
+        call.turn_ended(interrupted=False)
+        call.note_reached()
+        for signal in order:
+            if signal == 'barge':
+                call.note_barge()
+            elif signal == 'report':
+                engine.note_spoken(call, words, interrupted=True)
+            else:
+                call.note_drained()
+        call.turn_started("That's perfect.")
+        assert call.pending_question() is None, (order, 'answered a question the caller never heard')
+        assert call.heard == "Yes, please. That's perfect.", (order, call.heard)
+
+
 def heard_is_matched_by_words():
     """What the runtime says went out is matched word by word, and an interruption always cuts."""
     call = booking_call()
@@ -965,13 +1428,21 @@ async def main():
     await a_reply_split_by_a_pause_is_one_answer()
     await a_reply_after_the_answer_played_is_a_new_turn()
     await speech_nobody_heard_is_recorded_as_unheard()
+    await a_holding_line_heard_in_full_keeps_the_turn_open()
     await an_attempted_write_is_never_authorised_twice()
     await a_read_back_cut_off_is_not_agreed_to()
     await a_missing_barge_never_merges_turns()
     await the_next_reply_is_told_what_was_not_heard()
     await a_number_talked_over_arrives_whole()
     await a_number_in_pieces_is_read_back_without_the_model()
+    await a_number_with_a_digit_too_many_is_refused_with_its_reason()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
+    await a_move_after_a_booking_is_read_back_not_cancelled()
+    await a_yes_with_a_new_request_is_verified_and_the_rest_answered()
+    a_report_never_unhears_a_line_that_played()
+    await a_day_next_week_is_offered_at_the_first_try()
+    await the_day_after_the_one_offered_is_offered_with_both_days()
+    await an_add_answered_to_a_heard_question_books_it()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
     await a_pick_said_with_a_goodbye_is_asked_before_they_go()
@@ -984,6 +1455,7 @@ async def main():
     await a_yes_said_as_the_line_drops_still_counts()
     a_read_back_said_again_in_full_can_be_answered()
     await a_question_cut_off_as_the_audio_stops_is_not_heard()
+    await a_cut_off_question_reported_in_full_is_still_cut_off()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
     print('continuation ok')

@@ -47,7 +47,7 @@ from salon.instructions import instructions
 from salon.models.consent import Asked
 from salon.models.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
 from salon.tools import complaints
-from salon.tools.booking import read_diary
+from salon.tools.booking import booking_question, read_diary
 from salon.tools.complaints import _record_complaint
 from salon.tools.writes import MANAGER_CALLS, REPLY_SOON
 from tests.classifier_model import classifier_model
@@ -66,14 +66,14 @@ TODAY = AT.date()
 assert diary.resolve_day('today', TODAY) == TODAY
 assert diary.resolve_day('tomorrow', TODAY) == TODAY + timedelta(days=1)
 assert diary.resolve_day('friday', TODAY) == date(2026, 9, 25)
-assert diary.resolve_day('next friday', TODAY) == date(2026, 10, 2)
+assert diary.resolve_day('next friday', TODAY) == date(2026, 9, 25), 'on a Saturday, the Friday of next week'
 assert diary.resolve_day('saturday', TODAY) == date(2026, 9, 26)
 assert diary.resolve_day('2026-10-01', TODAY) == date(2026, 10, 1)
 assert diary.resolve_day('whenever suits', TODAY) is None
 assert diary.resolve_day('', TODAY) is None
 
 assert diary.spoken(TODAY, __import__('datetime').time(15, 0), TODAY) == 'today at 3:00 PM'
-assert diary.spoken(MONDAY, __import__('datetime').time(9, 0), TODAY) == 'Monday at 9:00 AM'
+assert diary.spoken(MONDAY, __import__('datetime').time(9, 0), TODAY) == 'Monday the 21st at 9:00 AM'
 
 
 books.reset()
@@ -82,8 +82,8 @@ assert books.find_slots(PHONE, 'sunday', 'haircut', AT)['status'] == 'closed'
 assert books.find_slots(PHONE, 'yesterday', 'haircut', AT)['status'] in ('need_day', 'past')
 
 monday = books.find_slots(PHONE, 'monday', 'haircut', AT)
-assert monday['status'] == 'ok' and monday['day'] == 'Monday' and monday['price_euros'] == 28
-assert monday['slots'][0]['spoken'] == 'Monday at 9:00 AM'
+assert monday['status'] == 'ok' and monday['day'] == 'Monday the 21st' and monday['price_euros'] == 28
+assert monday['slots'][0]['spoken'] == 'Monday the 21st at 9:00 AM'
 
 today_free = books.find_slots(PHONE, 'today', 'haircut', AT)
 """A time already gone past on the salon clock is not offered, however empty the diary looks: at 10:00
@@ -97,7 +97,7 @@ monday = books.find_slots(PHONE, 'monday', 'haircut', AT)
 the table and the last one is over.
 """
 booked = books.save_booking(PHONE, 'book', monday['slots'][0]['slot_id'], '', False, AT)
-assert booked['status'] == 'booked' and booked['spoken'] == 'Monday at 9:00 AM'
+assert booked['status'] == 'booked' and booked['spoken'] == 'Monday the 21st at 9:00 AM'
 assert books.bookings_for(PHONE, TODAY)[0]['booking_id'] == booked['booking_id']
 assert books.find_slots(PHONE, 'monday', 'haircut', AT)['bookings']
 
@@ -299,13 +299,14 @@ async def verify_then_book():
 
     verify handed straight to booking, never back through the front desk.
 
-    Routing and lookup stay silent; the actual availability still speaks.
+    Routing stays silent. The lookup says one short line of its own, and the actual availability
+    speaks after it.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
     probe = Probe(call, budget=TurnBudget(step_runs=4))
 
-    day = diary.spoken_day(books.now().date() + timedelta(days=2), books.now().date())
+    day = diary.spoken_day(open_days()[-1], books.now().date())
     call.ask(Asked(about='phone', value=PHONE))
     with scripted(
         concierge=then(
@@ -323,8 +324,9 @@ async def verify_then_book():
     assert call.state.pending is None, 'the stack was pushed on the way in and popped on the way out'
     assert probe.spoken() == ''
     assert all(not node.enter for node in AGENTS.values())
-    assert len(probe.fixed()) == 1, probe.fixed()
-    assert probe.fixed()[0].endswith('Which time works for you?')
+    assert len(probe.fixed()) == 2, probe.fixed()
+    assert probe.fixed()[0] in ('Thanks, I have you.', 'Thank you, I have you now.'), probe.fixed()
+    assert probe.fixed()[1].endswith('Which time works for you?'), probe.fixed()
 
 
 async def the_diary_is_the_edge():
@@ -344,14 +346,15 @@ async def the_diary_is_the_edge():
 
     One run, and two model requests inside it: the tool call and the answer. Before, this was two
     runs and four requests -- the front desk spending one to say "booking" and the booking step
-    spending three more.
+    spending three more. The one fixed line is the holding line, said as the second request goes
+    out.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
-    day = diary.spoken_day(books.now().date() + timedelta(days=2), books.now().date())
+    day = diary.spoken_day(open_days()[-1], books.now().date())
     with scripted(
         concierge=then(
             tool_call('read_diary', when=day, service='haircut'), says('I can do that. Which suits you?')
@@ -363,7 +366,7 @@ async def the_diary_is_the_edge():
     assert call.state.agent == 'booking', call.state.agent
     assert probe.runs() == 1, probe.runs()
     assert len(call.requests) == 2, call.requests
-    assert probe.fixed() == [], probe.fixed()
+    assert len(probe.fixed()) == 1 and probe.fixed()[0] in call.locale.holding, probe.fixed()
 
 
 async def the_diary_is_not_lent_before_verification():
@@ -485,6 +488,9 @@ async def correction_refuses_stale_slot():
 
     The refusal came back inside the same run, so the caller waited for one turn rather than two. No
     prompt sentence and no model request was involved in noticing the day had changed.
+
+    The first day's slot was read back last turn: `save_booking` is offered only while a read-back
+    waits, and a caller who changes the day in answer to one is exactly this case.
     """
     books.reset()
     call = open_call(PHONE, diary=books)
@@ -495,6 +501,7 @@ async def correction_refuses_stale_slot():
     today = books.now().date()
     said_first, said_second = diary.spoken_day(first, today), diary.spoken_day(second, today)
     stale = books.find_slots(PHONE, first.isoformat(), 'haircut', books.now())['slots'][0]
+    call.ask(Asked(about='booking', value=stale['slot_id'], action='book'))
 
     with scripted(
         booking=then(
@@ -666,7 +673,9 @@ async def the_note_is_said_once():
     assert books.complaints()[0]['reference'] in said, said
     assert REPLY_SOON in said and MANAGER_CALLS not in said, said
     assert not probe.spoken(), probe.spoken()
-    assert len(call.requests) == 1 and call.requests[0].kind == 'classifier', call.requests
+    assert [r.kind for r in call.requests] == ['classifier', 'classifier'], (
+        'confirm and closing, side by side'
+    )
 
 
 async def a_tool_result_is_never_a_script():
@@ -716,34 +725,54 @@ async def a_tool_result_is_never_a_script():
             )
 
 
+async def a_diary_read_from_the_desk_is_the_move():
+    """The front desk reads the diary, which moves the caller: it is not offered `hand_over` after it.
+
+    The user's call of 24 September read the diary from the desk, then handed
+    over to booking as well, one request more for a move already made.
+    """
+    books.reset()
+    call = open_call(PHONE, diary=books)
+    call.commit(customer_verified='existing', verified_phone=PHONE)
+    probe = Probe(call)
+    offered: list[list[str]] = []
+    day = diary.spoken_day(open_days(1)[0], books.now().date())
+
+    async def after_read(messages, info: AgentInfo):
+        offered.append([t.name for t in info.output_tools])
+        yield 'I have nine or ten.'
+
+    with scripted(concierge=then(tool_call('read_diary', when=day, service='haircut'), after_read)):
+        await probe._turn(f'What do you have for a haircut {day}?')
+    assert offered and 'hand_over' not in offered[-1], offered
+    assert call.state.agent == 'booking', 'the diary read moved the caller'
+
+
 async def refusal_retries():
+    """With no read-back waiting, `save_booking` is not offered at all: a save nobody agreed to cannot be tried.
+
+    It used to be offered and refused, which cost a request on the turn: the
+    user's call of 24 September tried a move nothing had read back.
+    """
     books.reset()
     call = open_call(PHONE, diary=books)
     call.commit(customer_verified='existing', verified_phone=PHONE)
     call.commit(agent='booking')
     probe = Probe(call)
-    seen = []
+    offered: list[list[str]] = []
 
-    async def unauthorised_then_ask(messages, info: AgentInfo):
-        if not seen:
-            seen.append('tried')
-            yield {
-                0: DeltaToolCall(
-                    name=_output_tool(info, 'save_booking'),
-                    json_args=json.dumps({'action': 'book', 'slot_id': 'x', 'booking_id': ''}),
-                )
-            }
-        else:
-            yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
+    async def ask(messages, info: AgentInfo):
+        offered.append([t.name for t in info.output_tools])
+        yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
 
-    with scripted(booking=unauthorised_then_ask):
+    with scripted(booking=ask):
         await probe._turn('monday morning')
 
-    assert call.state.appointment is None, 'a save nobody agreed to must write nothing'
-    assert call.state.agent == 'booking', 'the step stays open so the model can fix it'
+    assert offered and all('save_booking' not in names for names in offered), offered
+    assert call.state.appointment is None and call.state.agent == 'booking'
     assert probe.spoken() == ''
     assert probe.fixed() == ['Which time would you like?']
-    assert probe.runs() == 1, 'a retry is the same run, not a second turn'
+    assert probe.runs() == 1
 
 
 async def hangs_up():
@@ -862,7 +891,9 @@ async def an_empty_number_identifies_nobody():
     assert call.state.phone_confirmed is False, call.state
     assert call.state.verified_phone == '' and call.state.customer_phone == ''
     assert call.state.agent == 'verify', 'nobody was identified, so nobody moved'
-    assert probe.fixed() == ['Which phone number should I use? Please say it with the country code.']
+    held, *asked = probe.fixed()
+    assert held in call.locale.holding, 'the refused value costs a second request, covered'
+    assert asked == ['Which phone number should I use? Please say it with the country code.'], asked
     assert books.find_or_create_customer('')['customer_status'] == 'created'
 
 
@@ -1402,6 +1433,41 @@ async def correcting_the_number_withdraws_the_old_identity_offers():
     assert books.offer_of(call.id, slot, OTHER) == {}
 
 
+async def a_second_appointment_is_read_back_as_one():
+    """Trace fbdd81b6: "Shall I book you in for a haircut, Friday at 11:00?" to a caller holding the 9:00.
+
+    The yes to it could never be carried out, because the diary refuses a
+    second booking nobody asked for. Read back as a second appointment, the
+    yes is the ask, and it books. A caller with nothing booked hears the
+    plain read-back, and a "no" to the second one writes nothing.
+    """
+    for answer, writes in (('No, move it instead.', 1), ('Yes.', 2)):
+        books.reset()
+        call = open_call(PHONE, diary=books)
+        call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+        probe = Probe(call)
+        day = open_days()[-1].strftime('%A')
+        slots = books.find_slots(PHONE, day, 'haircut', books.now(), offered_to=call.id)['slots']
+        first, second = slots[0], slots[-1]
+        plain = booking_question(call, 'book', first['slot_id'], '')
+        assert plain.spoken.startswith('Shall I book you in for a haircut') and not plain.additional, plain
+        books.save_booking(PHONE, 'book', first['slot_id'], '', False, books.now(), offered_to=call.id)
+
+        question = booking_question(call, 'book', second['slot_id'], '')
+        assert question.spoken.startswith('Shall I book you a second appointment'), question.spoken
+        assert question.additional and 'as well as your haircut' in question.spoken, question.spoken
+        call.turn_started('Book another one.')
+        await call.speak_now(question.put(call), origin='ask')
+        call.note_reached()
+        call._burst -= 60
+        call.note_drained()
+        with scripted(booking=outputs('booking_guidance', topic='time')):
+            await probe._turn(answer)
+        held = books.bookings_for(PHONE, books.now().date())
+        assert len(held) == writes, (answer, held, probe.fixed()[-1])
+        assert probe._finished.status == 'answered', probe._finished
+
+
 async def main():
     """The `additional` flag that this used to check is gone from `save_booking` altogether: a second
     appointment is now decided by the caller's answer to the question the refusal asks, not by an
@@ -1409,6 +1475,7 @@ async def main():
     `tests.test_consent`, as `n3_a_flipped_flag_is_not_consent`.
     """
     await verify_then_book()
+    await a_second_appointment_is_read_back_as_one()
     await the_diary_is_the_edge()
     await the_diary_is_not_lent_before_verification()
     await interpose_costs_one_run()
@@ -1438,6 +1505,7 @@ async def main():
     await the_note_is_said_once()
     await a_tool_result_is_never_a_script()
     await refusal_retries()
+    await a_diary_read_from_the_desk_is_the_move()
     await hangs_up()
     print('ok')
 

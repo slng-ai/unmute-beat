@@ -287,25 +287,106 @@ def the_supported_phrases_resolve():
     assert diary.resolve_day('next friday', TODAY) == date(2026, 10, 2)
 
 
+def the_phrases_of_trace_bbe42ad4_resolve():
+    """Said on Friday 2026-09-25: "Saturday next week", then "October the 3rd". Both used to be need_day.
+
+    Every form of a date by its month, "the 3rd" alone, and a weekday of next
+    week or a week on. Monday-to-Sunday weeks, so on a Sunday "Saturday next
+    week" is six days away and "a week on Saturday" thirteen.
+    """
+    friday, sunday = date(2026, 9, 25), date(2026, 9, 27)
+    october_3rd = date(2026, 10, 3)
+    for words in (
+        'Saturday next week',
+        'next week Saturday',
+        'next week on Saturday',
+        'next Saturday',
+        'a week on Saturday',
+        'a week from Saturday',
+        'October the 3rd',
+        'October 3rd',
+        'Oct 3',
+        'the 3rd of October',
+        '3rd October',
+        'the 3rd',
+        '2026-10-03',
+    ):
+        assert diary.resolve_day(words, friday) == october_3rd, words
+    assert diary.resolve_day('Saturday', friday) == date(2026, 9, 26)
+    assert diary.resolve_day('this Saturday', friday) == date(2026, 9, 26)
+    assert diary.resolve_day('January 5th', friday) == date(2027, 1, 5), 'a month already past is next year'
+    assert diary.resolve_day('the 31st', friday) == date(2026, 10, 31), 'September has no 31st'
+    assert diary.resolve_day('February 30th', friday) is None
+    assert diary.resolve_day('at 3', friday) is None, 'a bare number is a time, not a day'
+    assert diary.resolve_day('next Tuesday', friday) == date(2026, 9, 29), 'the Tuesday of next week'
+    assert diary.resolve_day('Tuesday next week', friday) == date(2026, 9, 29)
+    assert diary.resolve_day('the Tuesday after next', friday) == date(2026, 10, 6)
+    assert diary.resolve_day('next Monday', sunday) == date(2026, 9, 28), 'next week starts tomorrow'
+    assert diary.resolve_day('Saturday next week', sunday) == date(2026, 10, 3)
+    assert diary.resolve_day('a week on Saturday', sunday) == date(2026, 10, 10)
+    assert diary.day_phrases('Oh no, sorry, I meant Saturday next week, not this Saturday.') == [
+        'saturday next week',
+        'this saturday',
+    ]
+    assert diary.day_phrases('I think October the 3rd. Something like this?') == ['october the 3rd']
+
+
+def an_exact_date_decides_and_a_day_after_counts_from_its_day():
+    """Replay of 2026-09-25, on Friday the 25th: the model passed "Saturday 2026-10-03" and tomorrow was offered.
+
+    The weekday rule read "Saturday" before the date. Now the date decides,
+    and a weekday it does not fall on is refused. "The day after X" is X plus
+    one; with no day after it, the words name none and the model uses its
+    calendar.
+    """
+    friday = date(2026, 9, 25)
+    for words, day in (
+        ('Saturday 2026-10-03', date(2026, 10, 3)),
+        ('October 3rd, Saturday', date(2026, 10, 3)),
+        ('Saturday the 3rd', date(2026, 10, 3)),
+        ('the day after Friday', date(2026, 10, 3)),
+        ('the day before Saturday the 3rd', date(2026, 10, 2)),
+        ('the day after tomorrow', date(2026, 9, 27)),
+        ('the day after tomorrow at 3', date(2026, 9, 27)),
+    ):
+        assert diary.resolve_day(words, friday) == day, (words, diary.resolve_day(words, friday))
+    for refused in (
+        'Friday 2026-10-03',
+        'Friday the 3rd',
+        'the day after',
+        'the next day',
+        'the day after next',
+    ):
+        assert diary.resolve_day(refused, friday) is None, refused
+        assert diary.names_a_day(refused), f'{refused!r} names a day, so the model is sent to its calendar'
+    assert diary.day_phrases('Could we do the day after tomorrow?') == ['the day after tomorrow']
+    assert diary.day_phrases('Can you look at the day after?') == ['the day after']
+    on_the_table = date(2026, 10, 2)
+    assert diary.anchored('the day after', on_the_table) == '2026-10-03'
+    assert diary.anchored('the next day', on_the_table) == '2026-10-03'
+    assert diary.anchored('the day before', on_the_table) == '2026-10-01'
+    assert diary.anchored('the day after', None) == 'the day after', 'no day on the table: no day named'
+    assert diary.anchored('friday', on_the_table) == 'friday'
+
+
 def anything_outside_the_policy_is_asked_about():
     """Not guessed. The agent gets `need_day` and asks which day."""
-    for outside in ('whenever suits', 'the 25th', 'in a fortnight', ''):
+    for outside in ('whenever suits', 'in a fortnight', ''):
         assert diary.resolve_day(outside, TODAY) is None, outside
     assert books.find_slots(ALICE, 'whenever suits', 'haircut', AT)['status'] == 'need_day'
 
 
 def a_modifier_the_policy_cannot_do_is_asked_about():
-    """ "A week on Tuesday" is not next Tuesday, and must not be answered as it.
+    """ "In two weeks on Friday" is not next Friday, and must not be answered as it.
 
-    A weekday match on its own found "Tuesday" here and returned the next one:
-    seven days early, a real date, and silent. The phrases this policy does
-    not implement are named and refused, so the agent asks.
+    A weekday match on its own found "Tuesday" in "a week on Tuesday" and
+    returned the next one: seven days early, a real date, and silent. The
+    phrases this policy does not implement are named and refused, so the agent
+    asks. "A week on Tuesday" and "the Tuesday after next" are implemented now.
 
     The plain forms it does implement still work.
     """
     for shifted in (
-        'a week on Tuesday',
-        'the Tuesday after next',
         'in two weeks on Friday',
         'the following Monday',
         'in 3 weeks',
@@ -313,6 +394,8 @@ def a_modifier_the_policy_cannot_do_is_asked_about():
         assert diary.resolve_day(shifted, TODAY) is None, shifted
     assert diary.resolve_day('tuesday', TODAY) == date(2026, 9, 22)
     assert diary.resolve_day('next tuesday', TODAY) == date(2026, 9, 29)
+    assert diary.resolve_day('a week on Tuesday', TODAY) == date(2026, 9, 29)
+    assert diary.resolve_day('the Tuesday after next', TODAY) == date(2026, 10, 6)
 
 
 def a_weekday_must_be_a_whole_word():
@@ -352,7 +435,7 @@ def a_day_more_than_a_week_off_is_read_as_an_ordinal():
     the 3 at 9:00 AM". Same reason `spoken_time` says "9:00 AM" and not
     "09:00" -- these strings are read out, not printed.
 
-    Inside the week it is still just the weekday, and today is still today.
+    Inside the week it carries its date too, since trace bbe42ad4, and today is still today.
     """
     monday = date(2026, 9, 21)
     assert diary.spoken_day(date(2026, 10, 3), monday) == 'Saturday the 3rd'
@@ -360,7 +443,7 @@ def a_day_more_than_a_week_off_is_read_as_an_ordinal():
     assert diary.spoken_day(date(2026, 10, 2), monday) == 'Friday the 2nd'
     assert diary.spoken_day(date(2026, 10, 12), monday) == 'Monday the 12th'
     assert diary.spoken_day(date(2026, 10, 21), monday) == 'Wednesday the 21st'
-    assert diary.spoken_day(date(2026, 9, 26), monday) == 'Saturday'
+    assert diary.spoken_day(date(2026, 9, 26), monday) == 'Saturday the 26th'
     assert diary.spoken_day(monday, monday) == 'today'
 
 
@@ -568,6 +651,8 @@ async def main():
     one_call_does_not_wipe_another()
     two_calls_from_one_phone_are_two_conversations()
     the_supported_phrases_resolve()
+    the_phrases_of_trace_bbe42ad4_resolve()
+    an_exact_date_decides_and_a_day_after_counts_from_its_day()
     anything_outside_the_policy_is_asked_about()
     a_modifier_the_policy_cannot_do_is_asked_about()
     a_weekday_must_be_a_whole_word()

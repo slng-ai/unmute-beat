@@ -40,6 +40,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.classifiers import ClassSet, Exchange
 from core.graph import LocalAction
+from core.policies import pick
 from core.readings import (
     CLOSING,
     CONFIRM,
@@ -73,6 +74,10 @@ def _no_facts(call: Any) -> Mapping[str, Any]:
     return {}
 
 
+def _no_reason(words: str) -> str:
+    return ''
+
+
 @dataclass(kw_only=True)
 class Act[C: CallContext]:
     """One conversational act. `Conversation` attaches it once, which is when its reading is built."""
@@ -104,6 +109,15 @@ class ReadBack[C: CallContext](Act[C]):
     """What a yes runs, given the question that was agreed to."""
     when: Callable[[C, Any], bool] = _always
     """Whether a yes to this question counts here, given the question."""
+    done: tuple[str, ...] = ()
+    """Said by code once the action has run, before whatever answers next: "Thanks, I have you."
+
+    For an action that does not speak its own result, such as a check that
+    hands the caller back. It covers the request the next step's model makes,
+    as the graph build's announcement does. It is a covering line
+    (`CallContext.say`), so a caller who cuts in still continues the turn, and
+    the next model sees it in its history. Empty says nothing.
+    """
 
     def rule(self, call: C) -> LocalAction | None:
         if self.label(call, 'confirmation') != 'accept':
@@ -111,7 +125,14 @@ class ReadBack[C: CallContext](Act[C]):
         question = call.pending(self.about)
         if question is None or not self.when(call, question):
             return None
-        return LocalAction(self.action, lambda: self.run(call, question))
+        return LocalAction(self.action, lambda: self._run(call, question))
+
+    async def _run(self, call: C, question: Any) -> object:
+        """The action, then its line. A refused action raises, so it says nothing."""
+        result = await self.run(call, question)
+        if self.done:
+            await call.say(pick(f'done:{self.about}', self.done), origin='entry')
+        return result
 
 
 @dataclass(kw_only=True)
@@ -231,10 +252,25 @@ class HeardValue[C: CallContext](Act[C]):
     """The value in the caller's words, or '' when there is none. Code, never a model."""
     read_back: Callable[[C, str], Awaitable[object]]
     when: Callable[[C], bool] = _always
+    why_not: Callable[[str], str] = _no_reason
+    """Why the caller's words hold something like the value but not a value, as a line to say, or ''.
+
+    Code, like `parse`. With a line, it is said with no model request: "Please
+    say the full number again" with no reason, after a transcript with one
+    digit too many, left the caller repeating the same number (Coval run
+    4bLgLR4t, cases 06 and 13).
+    """
+    say_why: Callable[[C, str], Awaitable[object]] | None = None
+    """How that line is said. Without it, a value that does not parse is left to the step's model."""
 
     def rule(self, call: C) -> LocalAction | None:
-        if not self.when(call) or not (value := self.parse(call.heard)):
+        if not self.when(call):
             return None
+        if not (value := self.parse(call.heard)):
+            say_why, why = self.say_why, self.why_not(call.heard)
+            if say_why is None or not why:
+                return None
+            return LocalAction(self.action, lambda: say_why(call, why))
         asked = call.last_proposal()
         if asked is not None and asked[0].about == self.about and asked[0].value == value:
             return None
@@ -243,7 +279,12 @@ class HeardValue[C: CallContext](Act[C]):
 
 @dataclass(kw_only=True)
 class TakeBack[C: CallContext](Act[C]):
-    """Something done in this call that the caller can still take back, on whatever turn they do."""
+    """Something done in this call that the caller can still take back, on whatever turn they do.
+
+    Only `withdraw` acts. A `change` (the same thing, another day, time or
+    service) is left to the step's model, which can move it; offering the
+    undo there was offering a cancel to a caller who asked to move.
+    """
 
     name: str
     kind: str
@@ -537,17 +578,18 @@ class Conversation[C: CallContext]:
     ) -> None:
         """Run every reading that applies to this turn, side by side. Each runs at most once per turn.
 
-        Whether the call is over is read on its own only while a question other
-        than a read-back waits ("anything else?", an offer, a fixed choice). A
-        reply to a read-back is read only as that; if it also says goodbye, the
-        step's model hangs up, and `closing` reads it then.
+        Whether the call is over is read beside every other reading whenever a
+        question waits, a read-back included: a yes and a goodbye in one reply
+        are both acted on (`Acts.decide`). It costs one more small request on
+        a read-back turn, side by side, so no longer a wait. `closing` reads it
+        with no question waiting, when the step's model asks to hang up.
 
         `before_model` is a turn read before any model runs: on the closing
         question it leaves out the readings `Closing.skip_before_model` names,
         which a tool that needs them still runs itself.
         """
         question = call.pending_question()
-        ending = closing or (question is not None and question.about not in self.read_back_abouts)
+        ending = closing or question is not None
         deferred = before_model and question is not None and question.about == self.closing.about
         readings = [r for r in self.readings if not (deferred and r.name in self.closing.skip_before_model)]
         await read(

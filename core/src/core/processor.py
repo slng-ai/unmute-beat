@@ -370,6 +370,8 @@ class PydanticAgentProcessor(FrameProcessor):
                             span.set_attribute('speech_segments', [s.id for s in spoken])
                             span.set_attribute('attempt', self._call.attempt)
                             span.set_attribute('turn_pieces', len(self._call._pieces))
+                            if self._call._continued_from:
+                                span.set_attribute('continued_from', self._call._continued_from)
                             if spoken:
                                 span.set_attribute(
                                     'turn_first_text_out',

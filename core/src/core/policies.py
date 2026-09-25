@@ -54,6 +54,31 @@ class TurnBudget:
     tool_calls: int = 8
     seconds: float = 20.0
     repair_retries: int = 2
+    first_part: float = 1.5
+    """Seconds a step request may go without its first part before it is cancelled and its run tried again, once.
+
+    Over Coval run 4bLgLR4t, step requests had their first part at p50 0.74 s
+    and p99 1.20 s. One request in the user's call of 24 September sent
+    nothing for 8.49 s; the caller heard nothing until they spoke again.
+    """
+    hold_after: float = 1.5
+    """Seconds a turn may run with nothing said before a holding line goes out (`Locale.holding`).
+
+    The fallback. A turn that sends a second step request says the line
+    then, earlier (`core.turn.Turn._hold`); this covers the other silences,
+    a slow reading or a slow first request.
+
+    The graph build covers the same wait with a line as a step starts, and
+    its caller's wait ends there. Above a plain answer's p90 (about 1.0 s)
+    so a quick turn never gets one.
+
+    1.5 s, not 1.2 s: over six calls of 2026-09-25, 4 of 14 holding lines
+    were followed by the answer within 0.2 s ("One moment. Shall I book you
+    in...?"). A reading that answers just after 1.2 s is common, because the
+    classifier sends its second copy then (`core.classifiers.HEDGE_AFTER`).
+    Every other line came 0.57 s or more before the answer, so all ten still
+    go out, 0.3 s later.
+    """
 
     def account(self) -> tuple[RunUsage, UsageLimits]:
         """A fresh tally and the limits to read it against, for one turn."""

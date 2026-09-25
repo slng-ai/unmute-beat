@@ -8,19 +8,21 @@ from datetime import datetime
 
 from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
 from pydantic import ValidationError
-from pydantic_ai import Agent, ModelResponse, ModelRetry, RunContext, TextPart, UserPromptPart
+from pydantic_ai import Agent, ModelResponse, RunContext, TextPart, UserPromptPart
 from pydantic_ai.messages import SystemPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.graph import Node, model_clients
 from core.policies import TurnBudget
 from core.processor import PydanticAgentProcessor
-from core.turn import Barge, RunStarted, run_turn
+from core.turn import Barge, RunStarted, run_turn, take_turn
 from salon import agents, diary
 from salon.diary import Diary
+from salon.models.consent import Asked
 from salon.models.state import open_call
 from salon.tools import booking
 from tests.classifier_model import classifier_model
+from tests.classifier_model import scripted as scripted_readings
 
 PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
@@ -81,9 +83,11 @@ async def approvals_and_receipts():
         call = await offered()
         probe = Counter(call, agents.AGENTS)
         await probe._turn(answer)
-        assert probe._finished.status == 'answered' and probe.requests() == 1
+        assert probe._finished.status == 'answered' and probe.requests() == 2, (
+            'confirm and closing, side by side'
+        )
         assert len(books.bookings_for(PHONE, CLOCK.date())) == 1 and call.state.writes == 1
-        assert len(call.requests) == 1 and call.requests[0].kind == 'classifier' and len(call.spoken) == 1
+        assert [r.kind for r in call.requests] == ['classifier', 'classifier'] and len(call.spoken) == 1
         assert call.input_retained
         assert sum(isinstance(p, UserPromptPart) for m in call._protocol for p in m.parts) == 1
         receipt = [
@@ -265,8 +269,9 @@ async def openings_skip_the_model():
     just offered. Each is now an opening or the consent reading, and each is
     counted here: a plain pick of an offered time is written from the reading
     alone, with no model request at all. The return from verification makes
-    two classifier requests, side by side: the consent reading, and whether
-    the caller kept the request verification interrupted.
+    three classifier requests, side by side: the consent reading, whether the
+    caller kept the request verification interrupted, and whether they said
+    goodbye with it.
     """
     books.reset()
     books.set_clock(CLOCK)
@@ -296,21 +301,21 @@ async def openings_skip_the_model():
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn("Yes, that's right.")
-    assert probe.requests() == 2 and {r.kind for r in call.requests} == {'classifier'}, call.requests
-    assert abs(call.requests[0].started - call.requests[1].started) < 0.05, (
-        'the two readings run side by side'
+    assert probe.requests() == 3 and {r.kind for r in call.requests} == {'classifier'}, call.requests
+    assert max(r.started for r in call.requests) - min(r.started for r in call.requests) < 0.05, (
+        'the three readings run side by side'
     )
     assert call.state.agent == 'booking' and call.state.customer_verified, call.state
     assert call.state.wanted is None and len(call.state.offered) == 3, call.state
-    assert call.spoken[-1].text.startswith('For a haircut on Friday, I have 9:00 AM'), call.spoken
+    assert call.spoken[-1].text.startswith('For a haircut on Friday the 25th, I have 9:00 AM'), call.spoken
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn('9:00 AM, please.')
         assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
         assert call.state.writes == 0, 'a pick booked before it was read back'
-        assert call.spoken[-1].text.startswith('Shall I book you in for a haircut, Friday at 9:00 AM'), (
-            call.spoken
-        )
+        assert call.spoken[-1].text.startswith(
+            'Shall I book you in for a haircut, Friday the 25th at 9:00 AM'
+        ), call.spoken
         await probe._turn('Yes.')
     assert {r.kind for r in call.requests} == {'classifier'}, 'the yes to it needs no model either'
     assert call.state.writes == 1, call.state
@@ -379,7 +384,9 @@ async def openings_decline():
     assert agents.AGENTS['booking'].opening(call) is None, 'no reading found the request unchanged'
     call._request_kept = True
     call._entered = 'handoff'
-    assert agents.AGENTS['booking'].opening(call) is None, 'only a return from verification'
+    assert agents.AGENTS['booking'].opening(call) is not None, (
+        'a hand-over that carried a request opens on it'
+    )
     call._entered = 'completed'
     call.commit(customer_phone='+34934567890')
     assert agents.AGENTS['booking'].opening(call) is None, 'the identity changed, so nobody is verified'
@@ -391,13 +398,41 @@ async def openings_decline():
     call._request_kept = True
     action = agents.AGENTS['booking'].opening(call)
     assert action is not None
-    try:
-        await action.run()
-    except ModelRetry:
-        pass
-    else:
-        raise AssertionError('a carried day the caller never said was looked up')
-    assert call.state.wanted is not None and not call.state.offered, 'a refused read changes nothing'
+    await action.run()
+    offer = call.pending_question() or call._asked
+    assert offer.spoken.startswith("That's Friday the 2nd, not Friday the 25th: for a haircut"), offer.spoken
+
+
+async def a_slow_reading_does_not_delay_the_answer():
+    """On "anything else?" a question is read by the closing reading and answered by the concierge, side by side.
+
+    Coval run 4bLgLR4t: a reading takes 0.7 to 1.8 s, and a turn it does not
+    decide used to wait for it before the step's first request. Now both go
+    out together, and the turn waits for the slower one.
+    """
+    call = fresh('concierge')
+    call.ask(Asked(about='closing', spoken='Anything else?', owner=PHONE))
+    call.note_said('fixed', 'Anything else?', origin='ask')
+    asked: list[str] = []
+
+    async def speak(messages, info):
+        asked.append('concierge')
+        await asyncio.sleep(0.4)
+        yield 'We open at nine.'
+
+    async def slow(name, data):
+        await asyncio.sleep(0.4)
+        return 'continue' if name == 'conversation' else None
+
+    with (
+        scripted_readings(slow),
+        agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=speak)),
+    ):
+        started = asyncio.get_running_loop().time()
+        said, done = await take_turn(call, agents.AGENTS, 'When do you open tomorrow?')
+        took = asyncio.get_running_loop().time() - started
+    assert said == 'We open at nine.' and asked == ['concierge'] and done.status == 'answered', (said, asked)
+    assert took < 0.7, f'{took:.2f}s: the reading and the concierge ran one after the other'
 
 
 async def warm_up():
@@ -429,6 +464,7 @@ async def main():
     await openings_skip_the_model()
     await a_changed_request_runs_the_model()
     await openings_decline()
+    await a_slow_reading_does_not_delay_the_answer()
     await warm_up()
     print(
         'optimization ok: single-request approvals, openings, validation, retention, fencing, lifecycle, warm-up'

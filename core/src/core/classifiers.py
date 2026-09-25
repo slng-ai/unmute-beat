@@ -15,18 +15,20 @@ The request says the same fixed task for every classifier. Nothing in here
 knows a business: a new one brings its own context, facts and classes.
 """
 
-from collections.abc import Mapping
+import asyncio
+from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
-from pydantic_ai import ModelRequest, UnexpectedModelBehavior
+from pydantic_ai import ModelRequest, ModelResponse, UnexpectedModelBehavior
 from pydantic_ai.direct import model_request
 from pydantic_ai.messages import TextPart, ThinkingPart
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.output import OutputObjectDefinition
 from pydantic_ai.settings import ModelSettings
-from pydantic_ai.usage import RunUsage, UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimitExceeded, UsageLimits
 
 TASK = (
     'You classify the answer to a question. For each output field, choose exactly one class, using the class '
@@ -34,6 +36,14 @@ TASK = (
     'class, choose the class described for an unclear answer.'
 )
 """The task every classifier is given. The author's context and the facts' descriptions are added to it."""
+HEDGE_AFTER = 1.2
+"""Seconds a classifier request may take before the same request is sent again, and the first answer wins.
+
+Over 133 requests in Coval run 4bLgLR4t: p50 0.91 s, p90 1.14 s, p99 1.30 s,
+and one at 2.71 s. A slow request is the provider, not the question, so the
+second copy usually answers in the ordinary 0.9 s. About one request in ten
+is sent twice, a few hundred tokens each.
+"""
 
 
 class Exchange(BaseModel):
@@ -97,6 +107,7 @@ class Classifier[InputT: Exchange, OutputT: BaseModel]:
         output_type: type[OutputT],
         context: str = '',
         model_settings: ModelSettings | None = None,
+        hedge_after: float = HEDGE_AFTER,
     ) -> None:
         self.model = model
         self.input_type = input_type
@@ -104,6 +115,7 @@ class Classifier[InputT: Exchange, OutputT: BaseModel]:
         self.context = context
         """The author's words on what this classifier is for. The only part of the instructions a business writes."""
         self.model_settings = model_settings
+        self.hedge_after = hedge_after
         self.instructions = self._instructions()
 
     def _instructions(self) -> str:
@@ -171,18 +183,26 @@ class Classifier[InputT: Exchange, OutputT: BaseModel]:
         value = self.input_type.model_validate(value.model_dump())
         schema = self.json_schema()
         account = usage if usage is not None else RunUsage()
-        if usage_limits is not None:
-            usage_limits.check_before_request(account)
-        account.requests += 1
-        response = await model_request(
-            self.model,
-            [ModelRequest.user_text_prompt(value.model_dump_json(), instructions=self.instructions)],
-            model_settings=self.model_settings,
-            model_request_parameters=ModelRequestParameters(
-                output_mode='native',
-                output_object=OutputObjectDefinition(json_schema=schema, name=self.output_type.__name__),
-            ),
-        )
+
+        def ask() -> asyncio.Future[ModelResponse]:
+            if usage_limits is not None:
+                usage_limits.check_before_request(account)
+            account.requests += 1
+            return asyncio.ensure_future(
+                model_request(
+                    self.model,
+                    [ModelRequest.user_text_prompt(value.model_dump_json(), instructions=self.instructions)],
+                    model_settings=self.model_settings,
+                    model_request_parameters=ModelRequestParameters(
+                        output_mode='native',
+                        output_object=OutputObjectDefinition(
+                            json_schema=schema, name=self.output_type.__name__
+                        ),
+                    ),
+                )
+            )
+
+        response = await self._hedged(ask)
         account.incr(response.usage)
         if usage_limits is not None:
             usage_limits.check_tokens(account)
@@ -194,3 +214,26 @@ class Classifier[InputT: Exchange, OutputT: BaseModel]:
         ):
             raise UnexpectedModelBehavior('Classifier must return exactly one complete JSON text answer.')
         return self.output_type.model_validate_json(parts[0].content)
+
+    async def _hedged(self, ask: Callable[[], asyncio.Future[ModelResponse]]) -> ModelResponse:
+        """The first answer of one request, or of a second copy sent if the first is slow (`HEDGE_AFTER`).
+
+        A copy that fails while the other is still out is waited past; the
+        loser is cancelled, and a cancelled classification cancels both. A
+        turn with no requests left sends no copy and waits for the first.
+        """
+        out = [ask()]
+        try:
+            done, _ = await asyncio.wait(out, timeout=self.hedge_after)
+            if not done:
+                with suppress(UsageLimitExceeded):
+                    out.append(ask())
+            while True:
+                done, pending = await asyncio.wait(out, return_when=asyncio.FIRST_COMPLETED)
+                answered = [t for t in done if t.exception() is None]
+                if answered or not pending:
+                    return (answered or list(done))[0].result()
+                out = list(pending)
+        finally:
+            for task in out:
+                task.cancel()

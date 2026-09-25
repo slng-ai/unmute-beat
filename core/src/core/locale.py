@@ -1,8 +1,8 @@
 """The words core says itself, in one language. A use case in another language gives its own `Locale`.
 
 Everything else a caller hears is the use case's: its prompts, its
-read-backs, its receipts. These four are said by the turn engine when
-something went wrong, so no use case wrote them. A call picks its locale by
+read-backs, its receipts. These are said by the turn engine: while a turn
+takes a while, or when something went wrong, so no use case wrote them. A call picks its locale by
 class (`CallContext.default_locale`), or per call by overriding `locale`, as a
 bilingual use case does (`use-cases/faro-language-learning`).
 
@@ -39,6 +39,12 @@ class Locale:
     Unlike `unbacked`, these words were caught before they reached TTS, so
     nothing has to be taken back.
     """
+    holding: tuple[str, ...]
+    """Said once in a turn that is taking a while, before anything else: a tool is running, or nothing was said yet.
+
+    Generic on purpose: it promises no work, so it is true before a lookup, a
+    hand-over or a cancellation alike. More than one, so it does not repeat.
+    """
 
 
 ENGLISH = Locale(
@@ -46,6 +52,7 @@ ENGLISH = Locale(
     exhausted="Sorry, I'm going round in circles there. Could you say that again?",
     unbacked="Sorry, let me correct myself: I haven't actually made that change. Let me check where we are.",
     withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
+    holding=('Let me have a look.', 'One moment.'),
 )
 
 SPANISH = Locale(
@@ -53,4 +60,5 @@ SPANISH = Locale(
     exhausted='Perdona, me estoy liando. ¿Me lo repites?',
     unbacked='Perdona, me corrijo: todavía no he hecho ese cambio. Déjame ver dónde estamos.',
     withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
+    holding=('Déjame mirar.', 'Un momento.'),
 )

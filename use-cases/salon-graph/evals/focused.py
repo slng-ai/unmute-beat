@@ -62,6 +62,13 @@ def phone(answer: str) -> ReadBackInput:
     return ReadBackInput(question=READBACK, answer=answer, proposal=READBACK)
 
 
+BOOKING_READBACK = 'Shall I book you in for a haircut, Saturday at 9:00 AM?'
+
+
+def booking(answer: str) -> ReadBackInput:
+    return ReadBackInput(question=BOOKING_READBACK, answer=answer, proposal=BOOKING_READBACK)
+
+
 def offer(answer: str, question: str = TIMES) -> OfferInput:
     return OfferInput(question=question, answer=answer, options=SLOTS)
 
@@ -90,6 +97,41 @@ CASES = (
     ),
     Case(
         'phone-no', CONFIRMATION, phone('No, the last digit is five.'), lambda r: r != 'accept', 'not accept'
+    ),
+    Case(
+        'phone-yes-then-new-day',
+        CONFIRMATION,
+        phone("Yes, that's right. Oh, and sorry, can we make it Saturday instead of Friday?"),
+        lambda r: r == 'accept',
+        'accept',
+    ),
+    Case(
+        'phone-yes-then-question',
+        CONFIRMATION,
+        phone("Yes, that's the one. How much is a haircut, by the way?"),
+        lambda r: r == 'accept',
+        'accept',
+    ),
+    Case(
+        'booking-yes-price',
+        CONFIRMATION,
+        booking('Yes. How much is it?'),
+        lambda r: r != 'accept',
+        'not accept',
+    ),
+    Case(
+        'booking-yes-but-day',
+        CONFIRMATION,
+        booking('Yes, but make it Sunday.'),
+        lambda r: r != 'accept',
+        'not accept',
+    ),
+    Case(
+        'booking-yes-but-time',
+        CONFIRMATION,
+        booking('Yes, but at ten instead.'),
+        lambda r: r != 'accept',
+        'not accept',
     ),
     Case('pick-nine', CHOSEN_OFFER, offer("Nine o'clock works for me."), lambda r: r == NINE, 'nine'),
     Case(
@@ -157,12 +199,45 @@ CASES = (
         'withdraw',
     ),
     Case(
+        'change-move',
+        LAST_CHANGE,
+        held(
+            'Sorry, can you actually move the appointment to Saturday instead?',
+            "You're all set for tomorrow at 9:00 AM. Anything else I can help with?",
+            agreed="You're all set for tomorrow at 9:00 AM.",
+        ),
+        lambda r: r == 'change',
+        'change',
+    ),
+    Case(
+        'change-service',
+        LAST_CHANGE,
+        held(
+            'Actually, could it be a blowout instead of the haircut?',
+            'Done, tomorrow at 9:00 AM. Anything else?',
+            agreed='Done, tomorrow at 9:00 AM.',
+        ),
+        lambda r: r == 'change',
+        'change',
+    ),
+    Case(
         'goodbye-keeps-booking',
         LAST_CHANGE,
         held(
             "No, that's all, thanks. Bye.",
             'Done, tomorrow at 9:00 AM. Anything else?',
             agreed='Done, tomorrow at 9:00 AM.',
+        ),
+        lambda r: r != 'withdraw',
+        'not withdraw',
+    ),
+    Case(
+        'no-to-a-new-offer',
+        LAST_CHANGE,
+        held(
+            "No, thanks. I'm good.",
+            'For Tuesday the 6th, I have 9:00 AM, 9:30 AM, and 10:00 AM. What are you looking to book?',
+            agreed="Lovely, that's your haircut booked for Saturday the 3rd at 9:00 AM.",
         ),
         lambda r: r != 'withdraw',
         'not withdraw',
@@ -182,6 +257,33 @@ CASES = (
         'closing',
         CONVERSATION,
         Exchange(question='Done, tomorrow at 9:00 AM. Anything else?', answer="No, that's all, thanks. Bye."),
+        lambda r: r == 'end',
+        'end',
+    ),
+    Case(
+        'closing-readback-yes',
+        CONVERSATION,
+        Exchange(question='Shall I book you in for a haircut, tomorrow at 9:00 AM?', answer='Yes, please.'),
+        lambda r: r != 'end',
+        'not end',
+    ),
+    Case(
+        'closing-readback-thanks',
+        CONVERSATION,
+        Exchange(
+            question='Shall I book you in for a haircut, tomorrow at 9:00 AM?',
+            answer="Yes, that's perfect, thank you.",
+        ),
+        lambda r: r != 'end',
+        'not end',
+    ),
+    Case(
+        'closing-readback-goodbye',
+        CONVERSATION,
+        Exchange(
+            question='Shall I book you in for a haircut, tomorrow at 9:00 AM?',
+            answer="Yes, that's perfect. Thank you. I do not need anything else. Goodbye.",
+        ),
         lambda r: r == 'end',
         'end',
     ),

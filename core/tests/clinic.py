@@ -9,7 +9,9 @@ write audit are core's (`core.conversation`, `core.operations`).
 from __future__ import annotations
 
 import re
-from typing import Any
+from datetime import tzinfo
+from typing import Any, ClassVar
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, PrivateAttr
 from pydantic_ai import Agent
@@ -37,6 +39,8 @@ class ClinicState(VoiceState):
 
 
 class ClinicCall(CallContext):
+    timezone: ClassVar[tzinfo] = ZoneInfo('America/New_York')
+    calendar_days: ClassVar[int] = 7
     state: ClinicState = Field(default_factory=ClinicState)
     _offered: tuple[Option, ...] = PrivateAttr(default=())
     _book: dict[str, str] = PrivateAttr(default_factory=dict)
@@ -88,9 +92,14 @@ class Book(Operation[ClinicCall, Slot, Receipt, str]):
 
     async def _record(self, call: ClinicCall, args: Slot, receipt: Receipt) -> str:
         call.commit(booked=receipt.slot)
-        told = f'Booked for {TIMES[receipt.slot]}. Anything else?'
+        told = f'Booked for {TIMES[receipt.slot]}.'
         call.hold('undo', Held(key=receipt.slot, told=told))
-        await call.speak_now(Prompted(about='closing', spoken=told).put(call), origin='confirmation')
+        if call.leaving:
+            await call.speak_now(told, origin='confirmation')
+            return told
+        await call.speak_now(
+            Prompted(about='closing', spoken=f'{told} Anything else?').put(call), origin='confirmation'
+        )
         return told
 
 
@@ -176,6 +185,18 @@ def _patient_number(words: str) -> str:
     return found[-1] if found else ''
 
 
+def _patient_problem(words: str) -> str:
+    """A patient number with too many digits, said back as the reason it cannot be used."""
+    if _PATIENT.search(words) or not re.search(r'\bP-\d{5,}\b', words):
+        return ''
+    return 'A patient number has four digits after the P. Could you say it again?'
+
+
+async def _say_problem(call: ClinicCall, why: str) -> str:
+    await call.speak_now(why, origin='guidance')
+    return why
+
+
 def conversation(model: Model | str) -> Conversation[ClinicCall]:
     """The clinic, as information given to core's acts."""
     return Conversation[ClinicCall](
@@ -191,6 +212,7 @@ def conversation(model: Model | str) -> Conversation[ClinicCall]:
                 about='patient',
                 action='identify',
                 run=lambda call, q: IDENTIFY.run(call, Patient(patient=q.value)),
+                done=('Thank you.',),
             ),
         ),
         offers=(
@@ -210,6 +232,8 @@ def conversation(model: Model | str) -> Conversation[ClinicCall]:
                 parse=_patient_number,
                 read_back=_read_back_patient,
                 when=lambda call: not call.state.patient,
+                why_not=_patient_problem,
+                say_why=_say_problem,
             ),
         ),
         take_backs=(

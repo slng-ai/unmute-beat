@@ -8,7 +8,7 @@ import re
 from collections.abc import Collection
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 AGENT_NAME = re.compile(r'^voice-harness-(?P<agency>[a-z][a-z-]*)-pipecat$')
 """A Coval agent this tool drives is named after the flow it calls: voice-harness-salon-pipecat.
@@ -61,6 +61,29 @@ class Message(BaseModel):
 
     role: str
     content: str | None = None
+
+
+class SpeechProfile(BaseModel):
+    """The speech settings a bot runs on: one env file, every name required, nothing else.
+
+    Session 4's first load runs started without the session's profile and
+    ran on the bot's own defaults (a different speech-to-text and voice), so
+    their latency could not be compared with the calls before. A job now
+    names its profile, and a file missing a name or carrying a stray one is
+    refused before any bot starts.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    SLNG_BASE_URL: str = Field(min_length=1)
+    SLNG_STT_MODEL: str = Field(min_length=1)
+    SLNG_STT_LANGUAGE: str = Field(min_length=1)
+    SLNG_TTS_MODEL: str = Field(min_length=1)
+    SLNG_TTS_VOICE: str = Field(min_length=1)
+    SLNG_TTS_LANGUAGE: str = Field(min_length=1)
+
+    def describe(self) -> str:
+        return f'stt {self.SLNG_STT_MODEL}, tts {self.SLNG_TTS_MODEL}, host {self.SLNG_BASE_URL}'
 
 
 class Simulation(BaseModel):

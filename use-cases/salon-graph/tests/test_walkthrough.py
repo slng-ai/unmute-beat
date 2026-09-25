@@ -53,7 +53,7 @@ async def the_booking_walkthrough():
     )
     assert script.steps == ['concierge', 'concierge'], script.steps
     assert call.state.agent == 'verify' and call.state.pending == 'booking', call.state
-    assert said == ['Let me read that back to you: +34 600 11 12 22. Have I got that right?'], said
+    assert said == ['Is your number +34 600 11 12 22?'], said
     facts = call.state.facts
     assert (facts.service, facts.booking_day, facts.booking_time) == ('haircut', 'Friday', '14:00')
     assert not facts.verified_phone, 'a number from the carrier is not an identity'
@@ -105,7 +105,7 @@ async def the_booking_walkthrough():
         ('collect', {'slot': later}),
         ('call', 'book_appointment'),
     )
-    assert said == ['Shall I book you in for a haircut, Friday the 2nd at 2:30 PM?'], said
+    assert said == ['Shall I book a haircut, Friday the 2nd at 2:30 PM?'], said
     assert call.state.agent == 'booking' and diary.bookings_for(PHONE, TODAY) == [], 'D4: the pick is no yes'
     sections.append(snapshot(script, 'At the pending read-back: the pick recorded, its read-back asked'))
 

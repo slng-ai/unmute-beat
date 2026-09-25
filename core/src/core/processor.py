@@ -236,6 +236,15 @@ class PydanticAgentProcessor(FrameProcessor):
         finally:
             self._idle.set()
 
+    async def remind(self) -> None:
+        """The caller was silent for the runtime's idle timeout after our last words played (`core.turn.remind`).
+
+        Pipecat's `on_user_turn_idle` calls this. Nothing while a turn is
+        still running: silence while the agents work is not the caller's.
+        """
+        if self._idle.is_set():
+            await core.remind(self._call)
+
     async def finish_turn(self, timeout: float) -> None:
         """Wait, for up to `timeout` seconds, for a turn already running to finish.
 

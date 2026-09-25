@@ -20,7 +20,10 @@ the exact question, runs the operation and checks every move. What is checked:
 * F3: words the model writes beside an operation call are not said: the
   operation says its own, once;
 * F4: `reads_back`: a reply that only records an operation's field is read
-  back by code, with no second request, and only a heard yes still books.
+  back by code, with no second request, and only a heard yes still books;
+* silence: a caller quiet after a read-back is asked if they are still there
+  and hears the read-back again, a yes to that copy books, and silence that
+  goes on ends the call with a goodbye.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -38,9 +41,10 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 from core.flow import Flow
+from core.locale import ENGLISH
 from core.policies import TurnBudget
 from core.steps import ConversationStep, StepFlow, _offer
-from core.turn import take_turn
+from core.turn import REMINDERS, remind, take_turn
 from tests.clinic_flow.clinic import Backend, ClinicState
 
 HERE = Path(__file__).parent / 'clinic_flow'
@@ -449,6 +453,44 @@ def reads_back_is_checked_at_load():
             broken.unlink()
 
 
+async def silence_gets_a_reminder_then_a_goodbye():
+    """Coval runs 3hZu7PPk and np7G4Hty: a question, then a caller who said nothing until the call limit.
+
+    "Are you still there?" and the read-back again, word for word, as a new
+    copy of the same question: the caller's yes to it books, with no model
+    request for the reminder. Silence that goes on gets a goodbye and the
+    line closes. Speaking resets the count.
+    """
+    script = Script()
+    flow, call = opened('one_agent.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}))
+    closed = []
+
+    async def hang_up() -> None:
+        closed.append(True)
+
+    call._end = hang_up
+    before, requests = len(call.spoken), len(script.steps)
+    await remind(call)
+    reminded = call.spoken[before:]
+    assert [s.text for s in reminded] == [
+        ENGLISH.still_there,
+        'Shall I book Tuesday at 10:00 AM for P-1234?',
+    ], [s.text for s in reminded]
+    assert len(script.steps) == requests, 'a reminder asked a model'
+    call.acknowledge(*(s.id for s in reminded))
+    await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    assert call.services.bookings == {'CL001': ('P-1234', '1000')}, 'the yes to the repeated read-back books'
+
+    for _ in range(REMINDERS):
+        await remind(call)
+    assert not call.ended and call.spoken[-1].text == ENGLISH.still_there, (
+        'nothing left to ask: just the check'
+    )
+    await remind(call)
+    assert call.ended == 'abandoned' and closed and call.spoken[-1].text == ENGLISH.idle_goodbye, call.ended
+
+
 async def main() -> None:
     await no_reader_runs_in_any_pattern()
     public_path_loads_no_reader()
@@ -461,6 +503,7 @@ async def main() -> None:
     await model_words_beside_an_operation_are_not_said()
     await a_recorded_pick_is_read_back_by_code()
     reads_back_is_checked_at_load()
+    await silence_gets_a_reminder_then_a_goodbye()
     print(
         'nodes ok: no reader, hostile calls, mixed reply, holding, code node, late options, unheard receipt, '
         'no echo, code read-back'

@@ -335,7 +335,7 @@ async def a_permitted_repair_succeeds():
         await probe._turn('my number is plus three four, six hundred, one one one, two two two')
 
     assert len(attempts) == 2, attempts
-    assert call.spoken[-1].text.startswith('Let me read that back to you: +34 600'), call.spoken
+    assert call.spoken[-1].text.startswith('Is your number +34 600'), call.spoken
     assert any('too few' in r for r in _refusals(call)), 'the model was told what was wrong'
     assert call.state.facts.customer_phone == PHONE, call.state.facts
     assert EXHAUSTED not in probe.fixed(), 'a legitimate repair must not exhaust the turn'

@@ -119,7 +119,7 @@ def lookup_customer(salon: Salon, args: PhoneArgs) -> CustomerLookup:
 
 
 def number_words(args: PhoneArgs) -> str:
-    return f'Let me read that back to you: {Spoken.validate_python(args.phone)}. Have I got that right?'
+    return f'Is your number {Spoken.validate_python(args.phone)}?'
 
 
 OFFER_AT_MOST = 6
@@ -432,7 +432,7 @@ def booking_words(salon: Salon, args: Booking) -> str:
             else 'the appointments you already have'
         )
         return f'Shall I book you a second appointment, a {service} {when}, as well as {also}?'
-    return f'Shall I book you in for a {service}, {when}?'
+    return f'Shall I book a {service}, {when}?'
 
 
 def move_words(salon: Salon, args: Move) -> str:

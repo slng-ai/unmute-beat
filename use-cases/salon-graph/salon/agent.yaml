@@ -81,6 +81,7 @@ steps:
     kind: conversation
     agent: robin
     prompt: prompts/concierge.md
+    guarded: true
     fields: [service, booking_day, booking_time]
     exits:
       - {to: booking, purpose: 'a new booking, or a change or cancellation of one they hold'}

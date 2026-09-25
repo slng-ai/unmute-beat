@@ -424,6 +424,8 @@ class CallContext(BaseModel):
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
     _covered: bool = PrivateAttr(default=False)
+    _reminders: int = PrivateAttr(default=0)
+    """Silence reminders since the caller last spoke (`core.turn.remind`)."""
     _continued_from: list[str] = PrivateAttr(default_factory=list)
     """For a turn joined to the one before: each of that piece's segments as origin, playback, cut, blank. For the trace."""
     _answers: int = PrivateAttr(default=0)
@@ -907,6 +909,11 @@ class CallContext(BaseModel):
     def pending(self, about: str, **fields: str) -> Any:
         """The question the caller is answering right now, if it is this one."""
         return self._proposals.pending_about(self, about, **fields)
+
+    def open_question(self) -> Any:
+        """The question put to the caller on this turn, if any: what a reminder says again."""
+        asked = self._proposals.asked
+        return asked if asked is not None and asked.turn == self._turn else None
 
     def last_proposal(self) -> tuple[Any, bool] | None:
         """Last turn's question and whether it was heard in full. For interpretation only, never authorisation."""
@@ -1424,6 +1431,7 @@ class CallContext(BaseModel):
         self._spoken.clear()
         self._open = None
         self._spoke = False
+        self._reminders = 0
         self._held = {
             name: held for name, held in self._held.items() if held.lasts is None or held.lasts(self)
         }

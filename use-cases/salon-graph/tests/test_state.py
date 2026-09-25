@@ -137,15 +137,22 @@ def numbers_from_any_country_and_never_completed():
 
 
 def a_wrong_number_says_what_to_ask():
-    """The reason reaches the verify agent through `collect`, worded as the next question, never a tool name."""
+    """The reason reaches the verify agent through `collect`, worded as the next question, never a tool name.
+
+    A number with a digit too many says the digits heard and asks which part
+    is wrong: "say the whole number again" cost 85 s in Coval call UD4fMgUZ,
+    the caller starting over in pieces that were each too short.
+    """
     for bad, says in (
         ('600111222', 'Ask which country'),
         ('+3467127345', 'Ask for the rest of the digits'),
-        ('+346712734544', 'ask for the whole number again'),
+        ('+346712734544', 'I heard +34 671 273 454 4'),
+        ('+346712734544', 'ask which part is wrong'),
         ('+999123456789', 'Ask for the whole number again'),
     ):
         error = str(refused(SalonState, customer_phone=bad))
         assert says in error, (bad, error)
+    assert 'whole number again' not in str(refused(SalonState, customer_phone='+346712734544'))
     submitted = TypeAdapter(SubmittedPhone)
     assert 'never look up an empty number' in str(refused(submitted.validate_python, ''))
     assert TypeAdapter(Phone).validate_python('') == ''

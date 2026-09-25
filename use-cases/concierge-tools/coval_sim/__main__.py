@@ -43,7 +43,7 @@ from typing import Any
 from dotenv import dotenv_values
 
 from coval_sim.coval import CovalClient, CovalError
-from coval_sim.models import FOLDERS, Agent, Persona
+from coval_sim.models import FOLDERS, Agent, Persona, SpeechProfile
 from coval_sim.runtime import NotReadyError, Process, Tunnel, answers_http, ceiling
 
 PORT = 7860
@@ -142,6 +142,10 @@ class Job:
     """Who ends a call at the limit: the bot itself, or this runner stopping a bot that has no limit."""
     concurrency: int = 1
     """How many of the job's calls Coval places at once. Not part of the job's key: the same calls, sooner."""
+    profile: SpeechProfile | None = None
+    """The speech settings the bot gets (`--profile`)."""
+    call_seconds: int = MAX_CALL_SECONDS
+    """The longest a call may run before the bot hangs up (`--call-seconds`)."""
 
     @property
     def simulations(self) -> int:
@@ -164,13 +168,26 @@ class Job:
             f'iterations   {self.iterations}',
             'mutations    none',
             f'simulations  {self.simulations} = {len(self.case_ids)} case(s) x {self.iterations} iteration(s) x 1',
-            f'call limit   {MAX_CALL_SECONDS}s each, enforced by {self.limit}',
+            f'call limit   {self.call_seconds}s each, enforced by {self.limit}',
+            f'speech       {self.profile.describe() if self.profile else "none named"}',
             f'concurrency  {self.concurrency}' + (
                 ' at once: the calls share this machine and the speech providers, '
                 'so their latency is not comparable to a run of one call at a time' if self.concurrency > 1 else ''
             ),
             f'label        {self.label}',
         ])  # fmt: skip
+
+
+def load_profile(path: Path) -> SpeechProfile:
+    """A speech profile env file, validated whole: every name present, no other name.
+
+    Raises:
+        OSError: If the file cannot be read.
+        ValueError: A `ValidationError` listing what is missing or extra.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f'no such file: {path}')
+    return SpeechProfile.model_validate(dotenv_values(path))
 
 
 class RunLog:
@@ -259,7 +276,16 @@ class Repository:
         """Whether the agency's `bot.py` ends its own calls at `MAX_CALL_SECONDS`."""
         return 'MAX_CALL_SECONDS' in (self.use_case(agency) / 'bot.py').read_text()
 
-    def bot(self, agency: str, env: dict[str, str], host: str, log: Path, port: int = PORT) -> Process:
+    def bot(
+        self,
+        agency: str,
+        env: dict[str, str],
+        host: str,
+        log: Path,
+        port: int = PORT,
+        profile: SpeechProfile | None = None,
+        call_seconds: int = MAX_CALL_SECONDS,
+    ) -> Process:
         """Start the agency's `bot.py`, from its own folder, on the runner's Twilio route; return once it answers HTTP.
 
         A bot with no call limit of its own is stopped from outside once a
@@ -270,12 +296,18 @@ class Repository:
             'Pipecat bot',
             ['uv', 'run', 'python', 'bot.py', '-t', 'twilio', '-x', host, '--port', str(port)],
             self.use_case(agency),
-            {**env, **BOT_ENV, **(GRAPH_ENV if agency == GRAPH else {})},
+            {
+                **env,
+                **BOT_ENV,
+                'MAX_CALL_SECONDS': str(call_seconds),
+                **(profile.model_dump() if profile else {}),
+                **(GRAPH_ENV if agency == GRAPH else {}),
+            },
             log,
         )
         bot.wait_until(lambda: answers_http(f'http://127.0.0.1:{port}/'), 600)
         if not self.limits_itself(agency):
-            ceiling(bot, MAX_CALL_SECONDS + FINISH_SECONDS)
+            ceiling(bot, call_seconds + FINISH_SECONDS)
         return bot
 
 
@@ -311,6 +343,8 @@ class ReleaseCheck:
         label: str,
         concurrency: int = 1,
         metrics: list[str] | None = None,
+        profile: Path | None = None,
+        call_seconds: int = MAX_CALL_SECONDS,
     ) -> Job:
         """The one job these arguments name, checked against what Coval holds. Reads only.
 
@@ -362,6 +396,12 @@ class ReleaseCheck:
             problems.append(f'{len(people)} personas match {persona!r}; name exactly one, by ID')
         if iterations < 1:
             problems.append('iterations must be at least 1')
+        speech = None
+        if profile is not None:
+            try:
+                speech = load_profile(profile)
+            except (OSError, ValueError) as error:
+                problems.append(f'speech profile {profile}: {error}')
         if problems:
             raise PlanError(problems)
         limit = (
@@ -369,7 +409,9 @@ class ReleaseCheck:
             if self.repo.limits_itself(agency)
             else f'this runner: the bot has none, and is stopped {MAX_CALL_SECONDS + FINISH_SECONDS:.0f}s after the call connects'
         )
-        job = Job(agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency)
+        job = Job(
+            agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency, speech, call_seconds
+        )  # fmt: skip
         if job.simulations > max_simulations:
             problems.append(f'{job.simulations} simulations planned, allowance is {max_simulations}')
         if not 1 <= concurrency <= job.simulations:
@@ -418,7 +460,11 @@ class ReleaseCheck:
             with contextlib.ExitStack() as stack:
                 if host is None:
                     tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
-                    stack.enter_context(self.repo.bot(job.agency, env, tunnel.host, log, self.port))
+                    stack.enter_context(
+                        self.repo.bot(
+                            job.agency, env, tunnel.host, log, self.port, job.profile, job.call_seconds
+                        )
+                    )
                     host = tunnel.host
                 self.coval.update_connection(job.agent, connection(host))
                 self.runs.write(job.key, name=name, status='intent')
@@ -473,7 +519,7 @@ class ReleaseCheck:
         )
         return Row(job.agency, job.test_set_id, run_id, problems, log)
 
-    def serve(self, agency: str) -> None:
+    def serve(self, agency: str, profile: Path, call_seconds: int = MAX_CALL_SECONDS) -> None:
         """Start the agency's bot behind a tunnel, print the host, and keep both up until stopped.
 
         One bot for several jobs at once (`run --host`), so every call of a
@@ -482,13 +528,17 @@ class ReleaseCheck:
         """
         if not self.repo.limits_itself(agency):
             raise ValueError(f'{agency} has no call limit of its own; serve only a bot with MAX_CALL_SECONDS')
+        speech = load_profile(profile)
         log = self.workdir / f'{agency}-bot.log'
+        env = self.repo.env()
         with (
             Tunnel(self.port, self.workdir) as tunnel,
-            self.repo.bot(agency, self.repo.env(), tunnel.host, log, self.port),
+            self.repo.bot(agency, env, tunnel.host, log, self.port, speech, call_seconds),
         ):
             print(
-                f'serving {agency} at {tunnel.host} (bot log {log}); stop with SIGTERM or Ctrl-C', flush=True
+                f'serving {agency} at {tunnel.host} ({speech.describe()}, calls up to {call_seconds}s; bot log '
+                f'{log}); stop with SIGTERM or Ctrl-C',
+                flush=True,
             )
             threading.Event().wait()
 
@@ -547,9 +597,21 @@ def _parser() -> argparse.ArgumentParser:
             help='the local port for this bot and tunnel; one per job run at once',
         )
         job.add_argument('--host', help='a host `serve` printed: use its bot, start no bot or tunnel')
+        job.add_argument(
+            '--profile', type=Path, required=True, help='the speech profile env file the bot runs on'
+        )
+        job.add_argument(
+            '--call-seconds', type=int, default=MAX_CALL_SECONDS, help='the longest a call may run'
+        )
     serve = commands.add_parser('serve', help='one bot and tunnel for several jobs, until stopped')
     serve.add_argument('--agency', required=True, help='the use case to serve: salon for salon-graph')
     serve.add_argument('--port', type=int, default=PORT, help='the local port for the bot and tunnel')
+    serve.add_argument(
+        '--profile', type=Path, required=True, help='the speech profile env file the bot runs on'
+    )
+    serve.add_argument(
+        '--call-seconds', type=int, default=MAX_CALL_SECONDS, help='the longest a call may run'
+    )
     add = commands.add_parser('add', help="create a flow's Coval agent")
     add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
     return parser
@@ -579,7 +641,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == 'serve':
             signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
             with contextlib.suppress(KeyboardInterrupt):
-                check.serve(args.agency)
+                check.serve(args.agency, args.profile, args.call_seconds)
             return 0
         if args.command == 'add':
             line = check.add(args.agency)
@@ -597,6 +659,8 @@ def main(argv: list[str] | None = None) -> int:
             label=args.label,
             concurrency=args.concurrency,
             metrics=args.metrics,
+            profile=args.profile,
+            call_seconds=args.call_seconds,
         )
         print(job.describe(), flush=True)
         if args.command == 'plan':

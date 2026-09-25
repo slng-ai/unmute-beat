@@ -515,7 +515,7 @@ def a_read_back_said_again_in_full_can_be_answered():
     call = open_call('', diary=books)
     call.commit(agent='verify')
     call.turn_started("It's plus three four, six seven one, two seven three, four five four.")
-    readback = 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
+    readback = 'Is your number +34 671 27 34 54?'
     Prompted(about='lookup_customer', spoken=readback, value='+34671273454').put(call)
     call.note_said('fixed', readback, origin='ask')
     call.note_heard('Let me read that', segment_ids=(call.spoken[-1].id,), interrupted=True)

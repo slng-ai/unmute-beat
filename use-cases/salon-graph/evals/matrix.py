@@ -232,7 +232,7 @@ async def barge_during_entry_line() -> dict[str, Any]:
         await asyncio.sleep(0.1)
         turn = await line.turn('+34 600 111 222', Reply(calls=[NUMBER, ('lookup_customer', {})]))
         return {
-            'passed': turn['node'] == 'verify' and 'read that back' in turn['heard'],
+            'passed': turn['node'] == 'verify' and turn['heard'].startswith('Is your number +34'),
             'node': turn['node'],
             'heard': turn['heard'],
         }

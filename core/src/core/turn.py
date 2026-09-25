@@ -1016,6 +1016,34 @@ class Turn:
         yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
 
 
+REMINDERS = 2
+"""Reminders before the line is closed. With Pipecat's 8 s idle timer, 24 s of silence ends a call."""
+
+
+async def remind(call: CallContext) -> None:
+    """The caller has said nothing for a while after the last answer played: prompt them, by code.
+
+    "Are you still there?", then the question they were asked, word for word
+    and put again: a yes after the reminder answers a copy they heard in full.
+    After `REMINDERS` unanswered, a goodbye and the line closes. No model
+    request: nothing about silence needs reading. The count starts again
+    whenever the caller speaks (`CallContext.turn_started`).
+    """
+    if call.ended or not call.locale.still_there:
+        return
+    call._reminders += 1
+    if call._reminders > REMINDERS:
+        call.end_requested('abandoned')
+        if call.locale.idle_goodbye:
+            await call.speak_now(call.locale.idle_goodbye, origin='goodbye')
+        await call.end_call()
+        return
+    await call.speak_now(call.locale.still_there, origin='clarify')
+    if (asked := call.open_question()) is not None and asked.spoken:
+        call.ask(asked)
+        await call.speak_now(asked.spoken, origin='ask')
+
+
 def _release(call: CallContext, reply: list[str]) -> list[str]:
     """Record held model text as said and hand it out, emptying `reply`: the text a reply keeps (`Node.speaks_for`)."""
     out = [text for text in reply if text]

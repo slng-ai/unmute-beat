@@ -80,7 +80,7 @@ async def a_pick_is_read_back_and_only_a_heard_yes_books():
     """B, C, I: the pick asks the exact read-back; an unheard one earns nothing; a heard yes books once."""
     script, flow, call, diary = await at_booking()
     said = await read_back(flow, call, script, heard=False)
-    assert said[-1] == 'Shall I book you in for a haircut, Friday the 2nd at 2:00 PM?' and booked(diary) == []
+    assert said[-1] == 'Shall I book a haircut, Friday the 2nd at 2:00 PM?' and booked(diary) == []
     await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
     assert booked(diary) == [], 'a yes to a read-back nobody heard booked'
     said = await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
@@ -116,7 +116,7 @@ async def no_a_condition_or_a_change_writes_nothing():
         ('call', 'book_appointment'),
     )
     assert booked(diary) == [], 'P5: booked the old time before the change'
-    assert said[-1] == 'Shall I book you in for a haircut, Friday the 2nd at 2:30 PM?', said
+    assert said[-1] == 'Shall I book a haircut, Friday the 2nd at 2:30 PM?', said
 
 
 async def a_move_moves_the_callers_own_booking_once():
@@ -470,6 +470,18 @@ async def model_speech_never_claims_a_completed_action():
         'Ya está registrada.'
     )
     assert not call.claims_completion('No se ha guardado nada.')
+
+    script, flow, call, diary = opened(verified_phone=PHONE, customer_status='existing')
+    said = await turn(
+        flow,
+        call,
+        script,
+        'A haircut on Friday morning, please.',
+        ('say', "I've got you down for a haircut this Friday morning. Which time suits you?"),
+    )
+    assert call.state.agent == 'concierge' and "I've got you down" not in ' '.join(said), (
+        'the concierge said a booking was made before anything was (Coval call b7BSSwtX)'
+    )
 
 
 async def one_action_per_reply_and_one_budget_per_turn():

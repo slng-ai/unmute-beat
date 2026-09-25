@@ -86,6 +86,8 @@ turn answered a piece of a turn already under way; at 0.6 s (8 calls) that
 fell to 13% and 0.29, but the median turn waited 0.55 s longer. 0.3 s is the
 chosen middle, not yet measured on its own.
 """
+IDLE_SECONDS = 8.0
+"""Silence after the bot's last words before the caller is asked if they are still there (`core.turn.remind`)."""
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
 """One language per call for each speech service."""
@@ -144,6 +146,7 @@ def aggregators(context: LLMContext) -> LLMContextAggregatorPair:
     return LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
+            user_idle_timeout=IDLE_SECONDS,
             vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=VAD_STOP_SECONDS)),
             user_turn_strategies=UserTurnStrategies(
                 stop=[
@@ -217,6 +220,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     call = open_call(FLOW, os.getenv('CALLER_ID', ''), diary=Diary() if DIARY_PER_CALL else DIARY)
     context, node = LLMContext(), PydanticAgentProcessor(call, FLOW.nodes)
     user_aggregator, assistant_aggregator = aggregators(context)
+
+    @user_aggregator.event_handler('on_user_turn_idle')
+    async def on_user_turn_idle(aggregator):
+        await node.remind()
+
     pipeline = Pipeline(
         [transport.input(), stt, user_aggregator, node, tts, transport.output(), assistant_aggregator]
     )

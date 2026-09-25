@@ -337,19 +337,30 @@ async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
     PM."* No write ran in that turn. It cannot be unsaid: the words were at
     TTS before anything could know. What it can do is not leave the caller
     with them, and nothing is invented on the state either.
+
+    On a step that holds speech a clause at a time (`guarded`, every salon
+    step but verify since session 4), the claim is withheld instead and never
+    reaches the caller; verify, which cannot be guarded without delaying the
+    number read-back, still gets the correction out loud.
     """
+    claim = "I've cancelled your appointment, and I have you down for a redo on Saturday."
     call = _fresh(True)
     before = call.state
     probe = Probe(call)
-    with scripted(
-        concierge=says("I've cancelled your appointment, and I have you down for a redo on Saturday.")
-    ):
+    with scripted(concierge=says(claim)):
         await probe._turn('can you cancel it and do the redo instead?')
+    assert "I've cancelled" not in probe.heard() and call.locale.withheld in probe.heard(), probe.heard()
+    assert call.state.facts == before.facts and not call.evidence
 
+    call = _fresh(False)
+    call.commit(agent='verify')
+    probe = Probe(call)
+    with scripted(verify=says(claim)):
+        await probe._turn('can you cancel it and do the redo instead?')
     assert UNBACKED in probe.heard(), probe.heard()
     kinds = [(s.kind, s.text) for s in call.spoken]
     assert kinds[-1] == ('fixed', UNBACKED), kinds
-    assert call.state.facts == before.facts and not call.evidence
+    assert not call.evidence
 
 
 async def recounting_a_booking_already_made_is_not_a_claim():

@@ -61,6 +61,14 @@ class Locale:
     guards speech. It fails towards silence (the withheld line), never towards
     a false claim; widen it when a live call shows a phrasing it misses.
     """
+    still_there: str = ''
+    """Said when the caller has been silent a while after the last answer played (`core.turn.remind`).
+
+    Empty turns reminders off. Two Coval calls of session 4 sat in silence
+    until the call limit, the bot waiting on a question, the caller on nothing.
+    """
+    idle_goodbye: str = ''
+    """Said before the line is closed, once reminders went unanswered."""
 
 
 _CLAIMS_EN = (
@@ -84,6 +92,8 @@ ENGLISH = Locale(
     holding=('Let me have a look.', 'One moment.'),
     unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
     claims=_CLAIMS_EN,
+    still_there='Are you still there?',
+    idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
 )
 
 SPANISH = Locale(
@@ -94,4 +104,6 @@ SPANISH = Locale(
     holding=('Déjame mirar.', 'Un momento.'),
     unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
     claims=_CLAIMS_ES,
+    still_there='¿Sigues ahí?',
+    idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
 )

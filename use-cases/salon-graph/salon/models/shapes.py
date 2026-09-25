@@ -88,6 +88,18 @@ def digits_after_code(value: str) -> str:
     return f'{len(phonenumbers.national_significant_number(number))} digits after +{number.country_code}'
 
 
+def heard(value: str) -> str:
+    """The digits as heard, the country code apart and the rest in threes: "+34 671 273 454 4"."""
+    digits = ''.join(c for c in value if c.isdigit())
+    try:
+        code = str(phonenumbers.parse(value, None).country_code)
+    except phonenumbers.NumberParseException:
+        code = ''
+    code = code if code and digits.startswith(code) else ''
+    rest = digits[len(code) :]
+    return '+' + ' '.join(filter(None, [code, *(rest[i : i + 3] for i in range(0, len(rest), 3))]))
+
+
 def _real_or_absent(value: str) -> str:
     """A real number from any country, or '' for no number yet, which is the field's only absence.
 
@@ -120,8 +132,9 @@ def _real_and_present(value: str) -> str:
     match phone_length(value):
         case 'too long':
             raise ValueError(
-                f'that is {digits_after_code(value)}, too many for its country: a digit was misheard or '
-                'repeated. Nothing is missing, so do not ask for the rest; ask for the whole number again.'
+                f'I heard {heard(value)}: that is {digits_after_code(value)}, too many for its country, so a '
+                'digit was misheard or repeated. Say those digits back to the caller and ask which part is '
+                'wrong. Nothing is missing, so do not ask for the rest.'
             )
         case 'too short':
             raise ValueError(

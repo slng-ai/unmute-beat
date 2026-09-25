@@ -6,7 +6,12 @@ everything hangs from, Pipecat's stt and tts spans must be said again in the
 attribute keys Langfuse renders, the session and trace name must be on every
 span rather than the root alone, and what each agent run and model request
 produced must be readable at a glance rather than a dump of parts. Credentials
-come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`.
+come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`,
+which the application's launcher loads (each `bot.py` reads `.env` first). Importing
+this module reads no file and sets nothing up: every offline run that imported core
+used to pick up the checkout's `.env` and export its spans.
+
+Needs the `tracing` extra: `slng-voice-core[tracing]`.
 """
 
 import json
@@ -14,14 +19,17 @@ import os
 import sys
 from contextvars import ContextVar
 
-from dotenv import load_dotenv
-from langfuse import Langfuse
 from opentelemetry import trace
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from pydantic_ai import Agent
 
-load_dotenv()
+try:
+    from langfuse import Langfuse
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+except ImportError as missing:
+    raise ImportError(
+        f'core.observability needs the tracing extra: install slng-voice-core[tracing] ({missing})'
+    ) from missing
 
 _SPEECH = {'stt': ('output', 'user'), 'tts': ('input', 'assistant')}
 """STT turns audio into text and TTS the reverse, so the one string each span carries belongs on the opposite side, and to the opposite speaker in the transcript."""

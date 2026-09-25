@@ -8,7 +8,10 @@ and nothing here starts the coval binary: every method that would is replaced.
 Asserts, no pytest, no fixtures, same as the rest.
 """
 
+import os
+import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +37,7 @@ from coval_sim.models import (
     RunResults,
     Simulation,
 )
+from coval_sim.runtime import CONNECTED, Process, ceiling
 
 
 class FakeCoval(CovalClient):
@@ -86,7 +90,7 @@ AGENTS = [
 
 def checker(coval: FakeCoval | None = None, log: Path | None = None) -> ReleaseCheck:
     log = log or Path(tempfile.mkdtemp()) / 'runs.jsonl'
-    return ReleaseCheck(Repository(Path('.')), coval or FakeCoval(AGENTS), Path('.'), RunLog(log))
+    return ReleaseCheck(Repository.find(Path.cwd()), coval or FakeCoval(AGENTS), Path('.'), RunLog(log))
 
 
 def refused(
@@ -286,7 +290,27 @@ def test_fallbacks() -> None:
     assert spoke('a').fallbacks == []
 
 
+def test_call_ceiling() -> None:
+    """A bot with no call limit of its own is stopped from outside, counted from when its call connects."""
+    repo = Repository.find(Path.cwd())
+    assert repo.limits_itself('salon') and not repo.limits_itself('salon-pipecat-flows')
+    with tempfile.TemporaryDirectory() as folder:
+        program = f'import time; time.sleep(0.5); print({CONNECTED!r}, flush=True); time.sleep(60)'
+        bot = Process(
+            'sleeper',
+            [sys.executable, '-c', program],
+            Path(folder),
+            dict(os.environ),
+            Path(folder) / 'bot.log',
+        )
+        started = time.monotonic()
+        ceiling(bot, 1.0).join(15)
+        assert bot._proc.poll() is not None, 'the bot outlived its ceiling'
+        assert 1.4 < time.monotonic() - started < 15, 'stopped before its call connected, or far too late'
+
+
 if __name__ == '__main__':
+    test_call_ceiling()
     test_plan()
     test_run_log()
     test_still_running()

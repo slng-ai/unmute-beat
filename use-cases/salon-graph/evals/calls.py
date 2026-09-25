@@ -14,10 +14,11 @@ Nothing the models say decides a case. Its check reads the diary, the
 evaluator's own record of every diary call, and the `write` spans core leaves
 for every attempted write.
 
-Delivery is acknowledged explicitly. After each turn the evaluator plays the
-turn's new speech segments to the caller (`note_reached`, then
-`note_drained`, the transport's own playback signals) and records which
-segment ids that marked played. A returned string is never treated as heard.
+Delivery is acknowledged explicitly. After each turn the evaluator hands the
+turn's new speech segments to the text caller and acknowledges each by id
+(`CallContext.acknowledge`, the text runtime's playback signal), and records
+which segment ids that marked delivered. A returned string is never treated
+as heard.
 
 Limits, from the Verification contract (`docs/plans/reusable-voice-core-sessions.md`):
 12 caller turns per case, 100 target model requests and 250,000 tokens across
@@ -49,7 +50,7 @@ from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 
 from core.observability import setup
 from core.policies import TurnBudget
-from core.turn import FixedSpeech, TextDelta, TurnFinished, greet, run_turn
+from core.turn import FixedSpeech, TextDelta, TurnFinished, greet, receive, run_turn
 from salon.agents import AGENTS, GREETING
 from salon.diary import TZ, Diary
 from salon.models.state import SalonCall, open_call
@@ -219,10 +220,9 @@ def reply(rules: tuple[Rule, ...], heard: str, used: dict[int, int]) -> tuple[st
 
 
 def acknowledge(call: SalonCall) -> list[dict[str, Any]]:
-    """Play this turn's new speech to the text caller, and say which segment ids that marked heard in full."""
+    """Hand this turn's new speech to the text caller, and say which segment ids that marked heard in full."""
     before = {s.id: s.playback for s in call.spoken}
-    call.note_reached()
-    call.note_drained()
+    receive(call)
     return [
         {
             'id': s.id,
@@ -231,6 +231,7 @@ def acknowledge(call: SalonCall) -> list[dict[str, Any]]:
             'before': before.get(s.id),
             'after': s.playback,
             'interrupted': s.interrupted,
+            'delivered': s.delivered,
         }
         for s in call.spoken
     ]

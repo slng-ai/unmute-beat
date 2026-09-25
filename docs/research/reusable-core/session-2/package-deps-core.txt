@@ -1,0 +1,24 @@
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+genai-prices==0.1.9
+griffelib==2.3.0
+h11==0.16.0
+httpcore==1.0.9
+httpcore2==2.13.1
+httpx==0.28.1
+httpx2==2.13.1
+idna==3.20
+logfire-api==5.1.1
+loguru==0.7.3
+opentelemetry-api==1.45.0
+pydantic==2.13.5
+pydantic-ai-slim==2.50.0
+pydantic-core==2.46.5
+pydantic-graph==2.50.0
+pydantic-handlebars==0.2.1
+pyyaml==6.0.3
+slng-voice-core @ file:///private/tmp/claude-501/s2/pkg/run1/dist/slng_voice_core-0.1.0-py3-none-any.whl
+truststore==0.10.4
+typing-extensions==4.16.0
+typing-inspection==0.4.4

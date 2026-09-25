@@ -21,7 +21,8 @@ that member's folder.
 
 | Path | Owns |
 |---|---|
-| `state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question`, `Held` (what the caller could still take back, `hold`/`held`/`release`) |
+| `__init__.py` | the public boundary: `load`, `FlowSpec`, `StepFlow` (`compile`, `open`), `FlowCall`, `text_turn`, `TextReply`, `greet`, `Operation`, `ConfirmedOperation`, `BaseProposal`, `TurnBudget`. Imports no Pipecat, Langfuse, `.env` or provider |
+| `state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger (`Spoken.delivered`: delivered, interrupted or unknown; `acknowledge` for text), `Evidence` (every validated receipt, append-only), `Handoff`, `Question`, `Held` (what the caller could still take back, `hold`/`held`/`release`) |
 | `graph.py` | `Node`, `Exit`, `LocalAction`, `Opening`, `route`, `moved_by`, `lent`, `model_clients` |
 | `flow.py` | `Flow`: the steps table as a `pydantic_graph` graph with each step's legal moves; it walks every turn and refuses an undeclared move; `render()` draws it |
 | `policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
@@ -29,20 +30,20 @@ that member's folder.
 | `turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
 | `locale.py` | `Locale`: the lines the turn engine says itself, in one language, holding lines included; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`) or per call (override the `locale` property) |
 | `clock.py` | `Today`: the call's date, weekday, time and the labelled days ahead, read once per call from `CallContext.now` in its `timezone` (`calendar_days`), and sent to every step's model |
-| `processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
+| `processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat (the `voice` extra) |
 | `classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
 | `decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
 | `proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
 | `operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record; `needs_approval` says whether a read-back yes is required; `operation_token` |
 | `completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
-| `steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step) and `AgentBuilder` (builds its agent the same way for every use case), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
-| `flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
+| `steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step) and `AgentBuilder` (builds its agent the same way for every use case), `End`, compiled by `StepFlow` into a nodes table; `FlowState[S]` and `FlowCall[S]`, the session around an application's own state model (`update`, `collect`, `services`), `receipt_for`, `ConfirmedOperation` |
+| `flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), `state:` naming the application's model and `identity:` its caller field, each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
 | `readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
 | `conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack` (with its `done` line), `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
 | `desk.py` | `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry` |
 | `interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
-| `observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `tests/` | `test_classes`, `test_history`, `test_reuse`, `test_clock` and `clinic.py` (a clinic built on core alone). No use case code. `defects.py` is outside the suite: known defects that fail on purpose, each with its repair session (`python -m tests.defects`, exit code = defects left) |
+| `observability.py` | Langfuse over OTel (the `tracing` extra); call `setup()` once, before any agent is built. Reads no `.env`: the launcher does |
+| `tests/` | `test_classes`, `test_history`, `test_reuse`, `test_clock`, `clinic.py` (a clinic built on core's classes), and the public boundary: `clinic_flow/` (a clinic written on `import core` alone), `test_public`, `test_session` (atomic state, owned fields, isolation, stale work, evidence), `test_delivery`, `test_sdk`, `test_package`. No use case code. `defects.py` is outside the suite: known defects that fail on purpose, each with its repair session (`python -m tests.defects`, exit code = defects left) |
 
 **`use-cases/salon-graph/`**, the salon on core.
 
@@ -59,7 +60,7 @@ that member's folder.
 | `salon/classification.py` | `SALON`, the salon's conversation: core's acts given the salon's information, which builds its narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`) and decides on them; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply`. Tools reach it through the call (`SalonCall.read_reply`), never by import |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
-| `evals/` | the classifier evaluations (`cases`, `compare`, `consent`, `focused`, `readings`, `report`, `rules`, `solver`), and `calls`: the live text checkpoint, four scripted calls (T1-T4) on the real engine, checked on the diary. Live, billable, except the rule floor and `calls --recheck` |
+| `evals/` | the classifier evaluations (`cases`, `compare`, `consent`, `focused`, `readings`, `report`, `rules`, `solver`), and `calls`: the live text checkpoint, four scripted calls (T1-T4) on the real engine, checked on the diary. Live, billable, except the rule floor and `calls --recheck`. `line` and `matrix`: the harness arm of the N1-N13 native comparison, offline, on the real pipeline |
 | `tests/` | fifteen assert-script modules, `classifier_model.py`, and `golden/` (every request the salon sends, pinned) |
 
 **`use-cases/salon-prompt/`**, the same salon as one prompt on Pipecat's own Gemini service: the baseline. No core, no Pydantic AI.
@@ -81,6 +82,7 @@ that member's folder.
 | `salon/diary.py`, `salon/models/`, `salon/prompts/` | copies of salon-graph's; `receipts.py` writes out `STRICT`, so nothing imports `core`. Change both, or the builds stop being comparable |
 | `utils/observability.py` | salon-prompt's copy |
 | `tests/` | `test_graph_salon`: every guarantee offline, a real `FlowManager` entering every node, and salon-graph's fixed lines read from its source as text |
+| `evals/` | `line` and `matrix`: the native arm of the N1-N13 comparison, this build on its real pipeline with a scripted Gemini at the network boundary. Drives the reference; changes none of it |
 
 **`use-cases/faro-language-learning/`**, Faro on core.
 
@@ -95,7 +97,8 @@ that member's folder.
 | Path | Owns |
 |---|---|
 | `concierge-tools/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
-| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. One job per invocation (agent ID, test set, persona, `--max-simulations`), `plan` first; a run log refuses duplicates and uncertain relaunches. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph, and `graph` the unmute graph build (`GRAPH_BUILD_DIR`) |
+| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. One job per invocation (agent ID, test set, persona, `--max-simulations`), `plan` first; a run log refuses duplicates and uncertain relaunches. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph, and `graph` the unmute graph build (`GRAPH_BUILD_DIR`). A bot with no `MAX_CALL_SECONDS` of its own (salon-pipecat-flows) is stopped by the runner 188 s after its call connects. `--port` gives a job its own bot and tunnel port, so jobs can run side by side |
+| `concierge-tools/matrix/` | the N1-N13 native comparison: `scenarios.v1.json` (the rows, the checks each arm runs, the pinned native digest, the frozen N12 protocol), `run_checks.py` (one check in one member's own environment) and the driver, which writes `matrix.json`, `matrix.md` and `timing.json` |
 | `concierge-tools/audio_timing.py` | who spoke when in a two-channel Coval recording: response latency, overlaps, barge-in stop latency |
 | `faro-tools/bench.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
 
@@ -131,6 +134,8 @@ for d in core use-cases/*; do uv run --directory $d ty check .; done
 cd use-cases/concierge-tools && uv run python -m coval_sim plan --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session>   # then `run`, billable
 cd use-cases/salon-graph && uv run --env-file ../../.env python -m evals.calls   # live text checkpoint, billable
 cd use-cases/concierge-tools && uv run ledger.py harness CA... -- graph trace:...   # cost of calls
+cd use-cases/concierge-tools && uv run python -m matrix run      # N1-N13, both arms, offline; `time` for N12
+docs/research/reusable-core/session-2/package-proof.sh         # the wheel, installed outside the checkout
 ```
 
 `uv run python -m tests` turns `ALLOW_MODEL_REQUESTS` off *before* any module
@@ -196,11 +201,15 @@ all clean, in every member you touched. Paste the real output; don't round up.
    end is still talking, so the piece continues the same turn
    (`CallContext.continues_turn`): same turn number, `heard` joined, the
    question ledger rewound, speech kept as far as it was heard. A segment is
-   heard in full only if its audio ran out (`BotStoppedSpeakingFrame`) before
-   the caller cut in. Without playback signals the engine errs towards a new
-   turn. A runtime text report never cuts a segment whose audio already ran
-   out, and a queued segment whose words had time to play counts as played.
-   A joined turn's span says why (`continued_from`).
+   heard in full only on evidence (`Spoken.delivered`): its audio ran out
+   (`BotStoppedSpeakingFrame`) before the caller cut in, or a text reader
+   acknowledged it (`CallContext.acknowledge`). Only a delivered copy of a
+   question can be answered; no record, a queued copy or a cut one never can,
+   and copies belong to a question by its serial, not its words. Without
+   playback signals the engine errs towards a new turn. A runtime text report
+   never cuts a segment whose audio already ran out, and a queued segment
+   whose words had time to play counts as played for turn-taking only, never
+   for approval. A joined turn's span says why (`continued_from`).
 
 ## Known debt
 

@@ -4,15 +4,26 @@ version = "0.1.0"
 description = "A Pydantic AI agency standing where Pipecat's LLM service would: the agents own the conversation, Pipecat owns the audio."
 requires-python = ">=3.14"
 dependencies = [
-    "langfuse>=4.15.4",
+    # Imported directly by core: `interpreters` catches `httpx.HTTPError`.
+    "httpx>=0.28.1",
+    # `state`, `turn`, `graph` and `interpreters` log through loguru.
+    "loguru>=0.7.3",
+    # `operations` names its write spans through the OpenTelemetry API; no tracer is configured here.
+    "opentelemetry-api>=1.44.0",
+    "pydantic>=2.13.5",
     # `spec` pulls pydantic-handlebars, which compiles each use case's prompts against its call type.
-    "pydantic-ai-slim[google,openai,spec]>=2.46.0",
-    # Only `core.processor` imports Pipecat: the frames it reads and writes.
-    "pipecat-ai>=1.11.0",
-    "python-dotenv>=1.2.3",
+    # Provider packages (`google`, `openai`) belong to the application that picks the model.
+    "pydantic-ai-slim[spec]>=2.46.0",
+    "pydantic-graph>=2.46.0",
     # Flow files are YAML: `core.flowspec` reads them with safe_load, never load.
     "pyyaml>=6.0",
 ]
+
+[project.optional-dependencies]
+# Only `core.processor` imports Pipecat: the frames it reads and writes.
+voice = ["pipecat-ai>=1.11.0"]
+# Only `core.observability` imports Langfuse and the OpenTelemetry SDK.
+tracing = ["langfuse>=4.15.4", "opentelemetry-sdk>=1.44.0"]
 
 [dependency-groups]
 dev = ["ruff>=0.14", "ty>=0.0.82"]

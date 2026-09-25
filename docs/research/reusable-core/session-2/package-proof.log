@@ -1,0 +1,90 @@
+== build
+60778b25ca345c9b3709def0d326dca29ce4d87916ade3e48723fe1225aab1ca  /private/tmp/claude-501/s2/pkg/run1/dist/slng_voice_core-0.1.0-py3-none-any.whl
+== fresh project, core only
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+genai-prices==0.1.9
+griffelib==2.3.0
+h11==0.16.0
+httpcore==1.0.9
+httpcore2==2.13.1
+httpx==0.28.1
+httpx2==2.13.1
+idna==3.20
+logfire-api==5.1.1
+loguru==0.7.3
+opentelemetry-api==1.45.0
+pydantic==2.13.5
+pydantic-ai-slim==2.50.0
+pydantic-core==2.46.5
+pydantic-graph==2.50.0
+pydantic-handlebars==0.2.1
+pyyaml==6.0.3
+slng-voice-core @ file:///private/tmp/claude-501/s2/pkg/run1/dist/slng_voice_core-0.1.0-py3-none-any.whl
+truststore==0.10.4
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+core from /private/tmp/claude-501/s2/pkg/run1/app/.venv/lib/python3.14/site-packages/core/__init__.py
+installed scenario ok: Booked for 1000, reference CL001. Goodbye.
+== missing extras
+ImportError: core.processor needs the voice extra: install slng-voice-core[voice] (No module named 'pipecat')
+ImportError: core.observability needs the tracing extra: install slng-voice-core[tracing] (No module named 'langfuse')
+== with the voice and tracing extras
+added: aiofiles==25.1.0
+added: aiohappyeyeballs==2.7.1
+added: aiohttp==3.14.3
+added: aiosignal==1.4.0
+added: attrs==26.1.0
+added: audioop-lts==0.2.2
+added: backoff==2.2.1
+added: cffi==2.1.1
+added: click==8.5.0
+added: cloudpickle==3.1.2
+added: defusedxml==0.7.1
+added: docopt==0.6.2
+added: docstring-parser==0.18.0
+added: flatbuffers==25.12.19
+added: frozenlist==1.8.0
+added: googleapis-common-protos==1.75.4
+added: jiter==0.17.0
+added: joblib==1.6.0
+added: langfuse==4.15.6
+added: llvmlite==0.49.0
+added: loudness==0.2.0
+added: markdown==3.10.3
+added: mpmath==1.3.0
+added: multidict==6.9.1
+added: nltk==3.10.3
+added: num2words==0.5.14
+added: numba==0.67.0
+added: numpy==2.5.3
+added: onnxruntime==1.24.4
+added: openai==3.19.2
+added: opentelemetry-exporter-http-transport==0.66b0
+added: opentelemetry-exporter-otlp-common==0.66b0
+added: opentelemetry-exporter-otlp-proto-common==1.45.0
+added: opentelemetry-exporter-otlp-proto-http==1.45.0
+added: opentelemetry-proto==1.45.0
+added: opentelemetry-sdk==1.45.0
+added: opentelemetry-semantic-conventions==0.66b0
+added: packaging==26.3
+added: pillow==12.3.0
+added: pipecat-ai==1.11.0
+added: propcache==0.5.4
+added: protobuf==6.33.6
+added: pycparser==3.0
+added: python-dotenv==1.2.3
+added: regex==2026.9.10
+added: resampy==0.4.3
+added: sniffio==1.3.1
+added: soundfile==0.13.1
+added: soxr==1.0.0
+added: sympy==1.14.0
+added: tqdm==4.70.1
+added: urllib3==2.8.0
+added: websockets==17.1
+added: wrapt==2.4.1
+added: yarl==1.25.1
+voice and tracing import
+package proof ok, in /private/tmp/claude-501/s2/pkg/run1

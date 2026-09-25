@@ -1295,6 +1295,7 @@ def a_read_back_said_again_in_full_can_be_answered():
     call.note_heard('Let me read that', segment_ids=(call.spoken[-1].id,), interrupted=True)
     Ask(about='phone', value='+34671273454', spoken=readback).put(call)
     call.note_said('fixed', readback, origin='ask')
+    call.acknowledge(call.spoken[-1].id)
     call.turn_started("Yes. That's right.")
     assert call.pending('phone') is not None, 'the read-back heard in full is waiting on this answer'
 

@@ -42,6 +42,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel 
 Agent.instrument_all()
 
 from core.processor import PydanticAgentProcessor  # noqa: E402
+from core.turn import read_out  # noqa: E402
 from salon.agents import AGENTS  # noqa: E402
 from salon.models.state import open_call  # noqa: E402
 
@@ -429,19 +430,19 @@ async def every_write_names_the_question_it_answered():
         assert not named('write'), 'a refused write left an audit'
 
         booked = await agents.ask_booking(context, 'book', slot, '')
-        booked.put(call)
+        read_out(call, booked)
         call.turn_started('Yes.')
         await write_booking(call, 'book', slot, '')
         held = books.bookings_for(PHONE, books.now().date())[0]['booking_id']
         cancel = await agents.ask_booking(context, 'cancel', '', held)
-        cancel.put(call)
+        read_out(call, cancel)
         call.turn_started('Yes.')
         await write_booking(call, 'cancel', '', held)
 
         call.commit(agent='complaints')
         call.turn_started('The last cut was uneven. I would like a redo.')
         complaint = await agents.ask_complaint(context, 'The last cut was uneven', 'a redo')
-        complaint.put(call)
+        read_out(call, complaint)
         call.turn_started('Absolutely.')
         await agents.record_complaint(context)
 

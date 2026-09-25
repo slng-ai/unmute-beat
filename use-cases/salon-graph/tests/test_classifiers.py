@@ -6,6 +6,7 @@ import json
 import os
 from contextlib import suppress
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 from unittest.mock import patch
@@ -22,7 +23,8 @@ from core.interpreters import RuleInterpreter
 from core.policies import TurnBudget
 from core.readings import Reading
 from core.state import Checkpoint
-from core.turn import Barge, take_turn
+from core.turn import Barge, read_out
+from core.turn import take_turn as unread_turn
 from salon import agents, diary
 from salon.classification import classify_reply
 from salon.models.consent import Asked
@@ -30,6 +32,9 @@ from salon.models.receipts import Slots
 from salon.models.state import SalonCall, open_call
 from salon.tools.asking import Ask
 from tests.classifier_model import ALL, classifier_model, classifier_with, scripted
+
+take_turn = partial(unread_turn, received=True)
+"""A turn whose every word reached the caller: these are text conversations, each line read in full."""
 
 
 class Input(Exchange):
@@ -194,7 +199,7 @@ PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
 
 
-def pending_booking():
+def pending_booking(*, received: bool = True):
     books = diary.Diary()
     books.set_clock(CLOCK)
     call = open_call(PHONE, diary=books)
@@ -204,7 +209,10 @@ def pending_booking():
         about='booking', value=slot['slot_id'], action='book', owner=PHONE, spoken='Shall I book Friday?'
     )
     call.ask(question)
-    call.note_said('fixed', question.spoken, origin='ask')
+    if received:
+        read_out(call, question.spoken)
+    else:
+        call.note_said('fixed', question.spoken, origin='ask')
     return call, slot
 
 
@@ -275,8 +283,7 @@ async def a_yes_and_a_goodbye_are_both_done():
 def pending_readback():
     call = open_call(PHONE)
     call.commit(agent='verify')
-    Ask(about='phone', value=PHONE, spoken='Is that right?').put(call)
-    call.note_said('fixed', 'Is that right?', origin='ask')
+    read_out(call, Ask(about='phone', value=PHONE, spoken='Is that right?'))
     return call
 
 
@@ -345,7 +352,7 @@ async def outcome_is_not_fallback():
 
 async def binding_failures_and_late_results():
     with classifier_model():
-        call, _ = pending_booking()
+        call, _ = pending_booking(received=False)
         call.note_heard('Shall I')
         call.turn_started('Yes.')
         assert call.pending_question() is None
@@ -511,9 +518,9 @@ def _request(classifier: Classifier) -> dict[str, Any]:
 
 
 def _next_turn(call: SalonCall, heard: str, said: str = '') -> None:
-    """The agent says `said` and the caller answers `heard`: a new turn, as a runtime with no playback signal counts it."""
+    """The agent says `said`, the caller reads all of it, and answers `heard`: a new turn."""
     if said:
-        call.note_said('fixed', said, origin='ask')
+        read_out(call, said)
     call.turn_started(heard)
 
 

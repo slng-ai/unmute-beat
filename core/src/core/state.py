@@ -174,6 +174,25 @@ class Spoken:
     it. A segment still `queued` or `playing` when the caller cuts in was not
     heard in full, however the runtime's later text report lines up.
     """
+    heard_by: Literal['', 'signal', 'ack', 'estimate'] = ''
+    """What says it played: the runtime's stop signal, a text consumer's acknowledgement, or only elapsed time."""
+    proposal: int = 0
+    """The serial of the question this segment carried (`ProposalLedger.bind`), 0 for none."""
+
+    @property
+    def delivered(self) -> Literal['delivered', 'interrupted', 'unknown']:
+        """Whether the caller got all of it, as far as evidence goes.
+
+        Only a signal or an acknowledgement makes it delivered. Handing text to
+        TTS, a run finishing, or enough time passing proves nothing about what
+        reached the caller, so a segment with no such evidence is unknown, and
+        unknown never authorises anything.
+        """
+        if self.interrupted:
+            return 'interrupted'
+        if self.playback == 'played' and self.heard_by in ('signal', 'ack'):
+            return 'delivered'
+        return 'unknown'
 
 
 @dataclass
@@ -232,6 +251,30 @@ class Checkpoint:
     heard: str
     turn: int = 0
     """The caller turn the detour began on. Everything the caller said after it was said to the prerequisite."""
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """What a service did, as its validated receipt said, and the answer that authorised it.
+
+    Filed by `Operation.run` the moment the receipt validates, and never
+    removed: a correction, a new topic or a stale generation can make it no
+    longer count for the current request, but the effect happened and stays
+    on record for reconciliation.
+    """
+
+    operation: str
+    args: dict[str, Any]
+    receipt: dict[str, Any]
+    identity: str
+    """Who the call took the caller to be when it ran."""
+    turn: int
+    generation: int
+    """The turn generation whose work produced it: a superseded one still counts as an effect."""
+    proposal: int = 0
+    """The serial of the question whose answer authorised it, 0 when none was needed."""
+    segments: tuple[str, ...] = ()
+    """The segments that carried that question to the caller."""
 
 
 @dataclass(frozen=True)
@@ -433,6 +476,12 @@ class CallContext(BaseModel):
     _checkpoint: Checkpoint | None = PrivateAttr(default=None)
     _held: dict[str, Held] = PrivateAttr(default_factory=dict)
     """What the caller could still take back, by kind. See `hold`."""
+    _clock: Callable[[], datetime] | None = PrivateAttr(default=None)
+    """The clock a session was opened with, a service like any other. None reads the wall clock."""
+    _began_as: dict[int, str] = PrivateAttr(default_factory=dict)
+    """The identity each turn generation began under, so late work can tell it now speaks for somebody else."""
+    _evidence: list[Evidence] = PrivateAttr(default_factory=list)
+    """Every validated receipt of the call, oldest first. Append-only. See `note_evidence`."""
     _request_kept: bool = PrivateAttr(default=False)
     """Whether a reading of this turn found the detour's request unchanged. See `note_request_kept`."""
     _return_status: str = PrivateAttr(default='')
@@ -481,8 +530,8 @@ class CallContext(BaseModel):
         return self.default_locale
 
     def now(self) -> datetime:
-        """The time now, where this call's day is counted. A use case with its own clock overrides it."""
-        return datetime.now(self.timezone)
+        """The time now, where this call's day is counted: the injected clock (`clock`), or the wall clock."""
+        return self._clock() if self._clock is not None else datetime.now(self.timezone)
 
     @property
     def today(self) -> Today:
@@ -580,7 +629,7 @@ class CallContext(BaseModel):
             )
         ]
         for segment in ended:
-            segment.playback = 'played'
+            segment.playback, segment.heard_by = 'played', 'signal'
         now = time.perf_counter()
         spoken_for = sum(len(s.text) for s in ended) / SPEECH_CHARS_PER_SECOND
         if ended and now - self._burst < spoken_for / 2:
@@ -588,6 +637,28 @@ class CallContext(BaseModel):
         else:
             self._stopped_early = (float('-inf'), [])
         self._burst = float('inf')
+
+    def acknowledge(self, *segment_ids: str, heard: str | None = None) -> bool:
+        """A text consumer received these segments: the text runtime's playback signal.
+
+        Nothing else marks text as heard: a turn returning or a model finishing
+        is not the caller reading it. `heard` is what actually reached them,
+        when that was less than all of it; the segments are then cut to it, as
+        a runtime's interrupted report cuts them. Unknown ids change nothing.
+        Returns whether the acknowledgement applied.
+        """
+        by_id = {s.id: s for s in self.all_spoken}
+        if not segment_ids or any(i not in by_id for i in segment_ids):
+            return False
+        if heard is not None and not self.note_heard(heard, segment_ids=segment_ids, interrupted=True):
+            return False
+        self._playback_known = True
+        if self._open is not None and self._open.id in segment_ids:
+            self.close_model_text()
+        for segment in (by_id[i] for i in segment_ids):
+            if not segment.interrupted:
+                segment.playback, segment.heard_by = 'played', 'ack'
+        return True
 
     def turn_ended(self, *, interrupted: bool) -> None:
         """The run for this piece is over. `interrupted` is whether the caller cut it off by speaking again."""
@@ -608,6 +679,12 @@ class CallContext(BaseModel):
         (`PLAYOUT_SLACK`), one after another, was heard: its start signal went
         missing, and a missing signal errs towards a new turn.
 
+        That estimate decides whether the caller's words start a new turn. It
+        never authorises: an estimated segment is `unknown`, not `delivered`
+        (`Spoken.delivered`). The audio burst ends here too, so a stop signal
+        arriving late for the audio the caller cut off cannot count a line
+        queued after the cut-in as played.
+
         ponytail: time since queuing is a stand-in for a playout event per
         segment. A line whose audio started far later than it was queued is
         taken as heard too early. Per-segment playout ids are the upgrade.
@@ -627,12 +704,13 @@ class CallContext(BaseModel):
                 continue
             ends = max(ends, segment.at) + len(segment.text) / SPEECH_CHARS_PER_SECOND + PLAYOUT_SLACK
             if ends < now:
-                segment.playback = 'played'
+                segment.playback, segment.heard_by = 'played', 'estimate'
         for segment in self.all_spoken:
             if segment.playback == 'queued' and segment.text:
                 segment.text, segment.interrupted, segment.delivery = '', True, 'runtime-estimate'
             elif segment.playback == 'playing':
                 segment.interrupted = True
+        self._burst = float('inf')
 
     def continues_turn(self) -> bool:
         """Whether the caller's next words continue this turn: they cut in before any answer to it had played to its end.
@@ -812,6 +890,40 @@ class CallContext(BaseModel):
         """
         raise NotImplementedError(f'{type(self).__name__} reads its replies with no conversation')
 
+    def answering(self) -> tuple[int, tuple[str, ...]]:
+        """The recorded question's serial and the ids of the segments that carried it, for an audit."""
+        return self._proposals.serial, tuple(s.id for s in self._proposals.copies(self))
+
+    def note_evidence(
+        self,
+        operation: str,
+        args: dict[str, Any],
+        receipt: dict[str, Any],
+        *,
+        proposal: int = 0,
+        segments: tuple[str, ...] = (),
+    ) -> None:
+        """File a validated receipt. Called by `Operation.run` before anything can be cancelled."""
+        running = turn_generation.get()
+        generation = running[1] if running is not None and running[0] == self._id else self._generation
+        self._evidence.append(
+            Evidence(
+                operation,
+                deepcopy(args),
+                deepcopy(receipt),
+                self.identity(),
+                self.turn,
+                generation,
+                proposal,
+                segments,
+            )
+        )
+
+    @property
+    def evidence(self) -> tuple[Evidence, ...]:
+        """Every validated receipt on this call, oldest first, whatever happened since."""
+        return tuple(self._evidence)
+
     def hold(self, kind: str, held: Held) -> None:
         """Keep this, of this kind, until it is released or its `lasts` says no. One of each kind at a time."""
         self._held = {**self._held, kind: held}
@@ -863,20 +975,20 @@ class CallContext(BaseModel):
         """
         if text:
             self.close_model_text()
-            self._spoken.append(
-                Spoken(
-                    kind,
-                    text,
-                    at=time.perf_counter() if at is None else at,
-                    origin=origin or ('model' if kind == 'model' else 'confirmation'),  # ty: ignore[invalid-argument-type]
-                    id=self.next_segment(),
-                    attempt=self._attempt,
-                    turn=self._turn,
-                    response=self._response,
-                    generated=text,
-                    tool_call_id=tool_call_id,
-                )
+            segment = Spoken(
+                kind,
+                text,
+                at=time.perf_counter() if at is None else at,
+                origin=origin or ('model' if kind == 'model' else 'confirmation'),  # ty: ignore[invalid-argument-type]
+                id=self.next_segment(),
+                attempt=self._attempt,
+                turn=self._turn,
+                response=self._response,
+                generated=text,
+                tool_call_id=tool_call_id,
             )
+            self._proposals.bind(self, segment)
+            self._spoken.append(segment)
 
     def next_segment(self) -> str:
         """One id for the next stretch of speech, stable within this call."""
@@ -914,6 +1026,7 @@ class CallContext(BaseModel):
                 turn=self._turn,
                 response=self._response,
             )
+            self._proposals.bind(self, self._open)
         self._open.text += text
         self._open.generated += text
 
@@ -1071,6 +1184,7 @@ class CallContext(BaseModel):
         without knowing why.
         """
         self._generation += 1
+        self._began_as[self._generation] = self.identity()
         return self._generation
 
     def is_current(self, generation: int) -> bool:
@@ -1090,8 +1204,14 @@ class CallContext(BaseModel):
         ignores an extra keyword by default, so a typo in a tool would become a
         state write that silently did not happen.
 
+        The updates are copied first, so a list or model the caller keeps and
+        changes later cannot reach into the saved state, and the candidate is
+        validated with unknown nested keys refused, not dropped.
+
         A commit from a turn the caller has moved on from keeps its business
-        facts and loses its flow fields. Where the caller *is* belongs to the
+        facts and loses its flow fields, and loses everything if the caller is
+        now somebody else: their visible state is not the old caller's to
+        write. What the service did is on record either way (`evidence`). Where the caller *is* belongs to the
         current turn and a stale answer about it is wrong by definition; a
         booking that really happened is a fact whichever turn made it, and
         refusing to record it would leave the diary holding an appointment the
@@ -1101,12 +1221,16 @@ class CallContext(BaseModel):
             raise ValueError(f'no such field on {type(self.state).__name__}: {", ".join(sorted(unknown))}')
         running = turn_generation.get()
         if running is not None and running[0] == self._id and running[1] != self._generation:
+            if self._began_as.get(running[1], self.identity()) != self.identity():
+                logger.info('fenced a late commit from turn {}: the caller is now somebody else', running[1])
+                return
             if late := set(updates) & self.state.flow_fields():
                 logger.info('fenced a late commit of {} from turn {}', ', '.join(sorted(late)), running[1])
                 updates = {name: value for name, value in updates.items() if name not in late}
             if not updates:
                 return
-        self.state = type(self.state)(**(self.state.model_dump() | updates))
+        candidate = self.state.model_dump() | deepcopy(updates)
+        self.state = type(self.state).model_validate(candidate, extra='forbid')
 
     async def say(self, text: str, origin: str = 'entry', tool_call_id: str = '') -> None:
         """Speak one fixed line now, without waiting for the model.
@@ -1211,10 +1335,15 @@ class CallContext(BaseModel):
         }
 
     async def speak_now(self, text: str, origin: str = 'confirmation') -> None:
-        """Say this whatever else was said. For a confirmation, a question or a goodbye, never a filler."""
+        """Say this whatever else was said. For a confirmation, a question or a goodbye, never a filler.
+
+        Recorded even with no runtime attached: the words were decided and
+        handed on, and whether anyone received them is a separate fact
+        (`Spoken.delivered`), unknown until a signal or an acknowledgement.
+        """
         self._answers += 1
+        self.note_said('fixed', text, origin=origin)
         if self._say is not None:
-            self.note_said('fixed', text, origin=origin)
             await self._say(text)
 
     def end_requested(self, why: Literal['caller', 'abandoned', 'transport', 'error']) -> None:

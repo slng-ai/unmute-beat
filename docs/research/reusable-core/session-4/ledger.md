@@ -238,3 +238,7 @@ Repairs (revision below), each with a test that failed first:
 - Silence reminder after 20 s (was 8 s).
 
 Offline after the repairs: ruff and ty clean; core 11/11, salon-graph 11/11, concierge-tools 5/5, Faro 1/1.
+
+### Gate 1 rerun, logged before launch
+
+You added 20 calls: session cap now **140**. Revision `11dd3eb`, label `session-4-gate1-r2`, same shape and pass criteria as gate 1. Gate 2 runs only if this passes.

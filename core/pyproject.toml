@@ -1,0 +1,34 @@
+[project]
+name = "slng-voice-core"
+version = "0.1.0"
+description = "A Pydantic AI agency standing where Pipecat's LLM service would: the agents own the conversation, Pipecat owns the audio."
+requires-python = ">=3.14"
+dependencies = [
+    "langfuse>=4.15.4",
+    # `spec` pulls pydantic-handlebars, which compiles each use case's prompts against its call type.
+    "pydantic-ai-slim[google,openai,spec]>=2.46.0",
+    # Only `core.processor` imports Pipecat: the frames it reads and writes.
+    "pipecat-ai>=1.11.0",
+    "python-dotenv>=1.2.3",
+    # Flow files are YAML: `core.flowspec` reads them with safe_load, never load.
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14", "ty>=0.0.82"]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "core"
+
+[[tool.ty.overrides]]
+# Scripted tests pass `None` for a model and a usage they never read.
+include = ["tests/**"]
+
+[tool.ty.overrides.rules]
+call-non-callable = "ignore"
+unresolved-attribute = "ignore"
+not-subscriptable = "ignore"

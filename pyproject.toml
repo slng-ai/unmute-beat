@@ -1,25 +1,10 @@
-[project]
-name = "slng-voice-harness"
-version = "0.1.0"
-description = "A Pydantic AI agency standing where Pipecat's LLM service would: the agents own the conversation, Pipecat owns the audio."
-readme = "README.md"
-requires-python = ">=3.14"
-dependencies = [
-    "langfuse>=4.15.4",
-    # `spec` pulls pydantic-handlebars, which compiles salon/prompts/*.md and the examples' prompts against their call types.
-    "pydantic-ai-slim[google,openai,spec]>=2.46.0",
-    # Google's libphonenumber: a regex cannot know a Spanish number has nine national digits.
-    "pydantic-extra-types[phonenumbers]>=2.11.1",
-    "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",
-    "pipecat-slng>=0.5.2",
-    "python-dotenv>=1.2.3",
-    "websockets>=16.1.1",
-    # Flow files are YAML: core/flowspec.py reads them with safe_load, never load.
-    "pyyaml>=6.0",
-]
+# The workspace: `core` and every folder under `use-cases/`, one lock, one `.venv` at the root.
+# Each member has its own pyproject; run a use case from its folder with `uv run bot.py`.
+[tool.uv.workspace]
+members = ["core", "use-cases/*"]
 
 [dependency-groups]
-# No pytest: tests/ are assert scripts run as modules.
+# No pytest: every `tests/` folder holds assert scripts run as modules.
 dev = [
     "ruff>=0.14",
     "ty>=0.0.82",
@@ -27,6 +12,8 @@ dev = [
 
 [tool.ruff]
 line-length = 110
+# Each use case is its own import root, so isort sees `salon`, `faro` and `evals` as first-party.
+src = ["core/src", "use-cases/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "B", "C4", "UP", "SIM", "RUF", "D"]
@@ -49,12 +36,3 @@ extend-immutable-calls = ["core.policies.TurnBudget"]
 
 [tool.ruff.format]
 quote-style = "single"
-
-[[tool.ty.overrides]]
-# Scripted tests pass `None` for a model and a usage they never read.
-include = ["tests/**"]
-
-[tool.ty.overrides.rules]
-call-non-callable = "ignore"
-unresolved-attribute = "ignore"
-not-subscriptable = "ignore"

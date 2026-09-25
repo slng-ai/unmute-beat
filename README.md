@@ -6,11 +6,12 @@ core is to make those rules executable.** The model interprets language. Typed
 data, declared steps and Python checks connect that interpretation to the
 application's actions.
 
-This guide explains the architecture implemented in `core/`. It follows the
+This guide explains the architecture implemented in `core/` (the package `core/src/core/`). It follows the
 original goal of **typed conversations**: typed variables, typed steps and
 controlled flow, with the same execution machinery reusable across
-applications. The salon receptionist in `salon/` is the first application
-built on it.
+applications. The salon receptionist in `use-cases/salon-graph/` is the first application
+built on it. Faro, a language-learning companion in
+`use-cases/faro-language-learning/`, is the second.
 
 ## 1. Start with a graph: a map of the conversation
 
@@ -78,7 +79,7 @@ guards, Python conditions checked against current state, decide whether a
 route or action is permitted now. Both are needed: a connection can exist in
 the graph while being unavailable to this caller.
 
-Implementation: [core/flow.py](core/flow.py) and [core/graph.py](core/graph.py).
+Implementation: [core/flow.py](core/src/core/flow.py) and [core/graph.py](core/src/core/graph.py).
 
 ## 2. Why these libraries have separate jobs
 
@@ -155,9 +156,9 @@ in the salon, give the stronger contract.
 infallible.** A classifier can return an allowed label and still misunderstand
 the caller. Application checks and conversation evaluations stay necessary.
 
-Implementation: [core/state.py](core/state.py),
-[core/operations.py](core/operations.py) and
-[core/completion.py](core/completion.py).
+Implementation: [core/state.py](core/src/core/state.py),
+[core/operations.py](core/src/core/operations.py) and
+[core/completion.py](core/src/core/completion.py).
 
 ## 4. Steps, nodes and agents: how they fit together
 
@@ -195,13 +196,12 @@ local fact does not undo a backend action. That needs an explicit operation.
 The salon uses four custom `AgentStep` definitions. Custom steps and standard
 steps both become nodes in the same engine. This is a key reuse point:
 different conversation structures share turn execution, state handling and
-flow machinery. The `examples/` folder has two flows built from standard
-steps alone: `access`, a ten-step request, and `help`, one conversation step.
+flow machinery.
 
 Every node contains an agent. The engine can still complete a known action
 without running that agent (section 7).
 
-Implementation: [core/steps.py](core/steps.py).
+Implementation: [core/steps.py](core/src/core/steps.py).
 
 ## 5. What an author writes: YAML, prompts and Python
 
@@ -260,7 +260,7 @@ function. Authors can also construct steps directly in Python.
 
 ### A real step, from declaration to implementation
 
-This is the booking entry in [salon/flow.yaml](salon/flow.yaml):
+This is the booking entry in [salon/flow.yaml](use-cases/salon-graph/salon/flow.yaml):
 
 ```yaml
 - id: booking
@@ -278,7 +278,7 @@ It names the prompt and the Python implementation. It says that booking needs
 offers. `guarded` turns on the engine's guarded speech (section 8).
 Authorization still lives in the operation checks.
 
-The referenced [Python module](salon/steps/booking.py) supplies this function,
+The referenced [Python module](use-cases/salon-graph/salon/steps/booking.py) supplies this function,
 shown without its imports and docstring:
 
 ```python
@@ -310,7 +310,7 @@ run so the caller can answer. A handoff can continue into another node.
 
 This keeps **the structure in YAML and the behaviour in Python**, joined
 through one small, explicit function. The flow-file format is this package's
-own, implemented in [core/flowspec.py](core/flowspec.py). It is not a Pydantic
+own, implemented in [core/flowspec.py](core/src/core/flowspec.py). It is not a Pydantic
 Graph YAML feature.
 
 ## 6. Classifiers and the solver: interpreting the caller
@@ -318,7 +318,7 @@ Graph YAML feature.
 **Both interpret what the caller meant. Python rules decide what to do with
 that interpretation.** The difference is how much each interpretation covers.
 
-`Classifier` ([core/classifiers.py](core/classifiers.py)) is one reusable core
+`Classifier` ([core/classifiers.py](core/src/core/classifiers.py)) is one reusable core
 component. It takes typed input, makes one structured model request and
 validates the returned data. Both the narrow readings and the solver use it.
 Neither has the conversational agent's tool loop.
@@ -340,7 +340,7 @@ or a help desk, with only the context sentence and the classes changed.
 ### Narrow readings: one question at a time
 
 The default approach uses small classifiers, each answering one question. A
-**reading** ([core/readings.py](core/readings.py)) wraps one classifier with
+**reading** ([core/readings.py](core/src/core/readings.py)) wraps one classifier with
 the context it needs and a rule for when it applies. Only the readings that
 apply run, side by side, so the caller waits for the slowest one only. Core
 owns the common ones:
@@ -356,9 +356,9 @@ owns the common ones:
 
 Each request sends only the facts its act needs, about 260 to 430 input
 tokens. Each reading has its own Langfuse dataset (`harness-reading/<name>`),
-so it can be measured and tuned on its own (`evals/readings.py`).
+so it can be measured and tuned on its own (`use-cases/salon-graph/evals/readings.py`).
 
-The results feed `Conversation` ([core/conversation.py](core/conversation.py)).
+The results feed `Conversation` ([core/conversation.py](core/src/core/conversation.py)).
 Its Python rules try the acts in one fixed order: answer the pending question,
 then take back, then pick, then goodbye. The first act that decides selects an
 application action. Otherwise the reply goes to the conversational agent.
@@ -377,8 +377,8 @@ The acts are core classes. An application gives each one its information:
 | `Closing` | the goodbye | ends the call once the caller is done |
 
 The salon's whole setup is one declaration, `SALON` in
-[salon/classification.py](salon/classification.py). A second use case,
-[tests/clinic.py](tests/clinic.py), builds a clinic line on the same classes in
+[salon/classification.py](use-cases/salon-graph/salon/classification.py). A second use case,
+[tests/clinic.py](core/tests/clinic.py), builds a clinic line on the same classes in
 about 240 lines, with no salon code.
 
 ### The solver: one richer decision
@@ -386,7 +386,7 @@ about 240 lines, with no salon code.
 The optional salon solver looks at a wider snapshot: the caller's words, the
 current step, identity, the pending proposal, whether it was heard, and the
 possible task destinations. It returns one typed
-[decision](core/decisions.py), which can carry the information needed to act
+[decision](core/src/core/decisions.py), which can carry the information needed to act
 on it.
 
 For example, after a phone read-back, "No, the last two digits are 34" is read
@@ -417,7 +417,7 @@ solver.
 ### What they share, and where they run
 
 Both use core's **Interpreter** machinery
-([core/interpreters.py](core/interpreters.py)):
+([core/interpreters.py](core/src/core/interpreters.py)):
 
 - They share the turn's request budget.
 - An interpretation is cached for the turn, so a tool guard reuses it instead
@@ -453,11 +453,11 @@ interpretation caching and the shared conversation rules. The application
 supplies its facts, its supported decisions and its handlers. The graph and the
 operation checks stay in place whichever strategy is selected.
 
-Implementation: [core/classifiers.py](core/classifiers.py),
-[core/readings.py](core/readings.py), [core/interpreters.py](core/interpreters.py),
-[core/conversation.py](core/conversation.py), and the salon's solver and
-decision handlers in [salon/classification.py](salon/classification.py) and
-[salon/nodes.py](salon/nodes.py).
+Implementation: [core/classifiers.py](core/src/core/classifiers.py),
+[core/readings.py](core/src/core/readings.py), [core/interpreters.py](core/src/core/interpreters.py),
+[core/conversation.py](core/src/core/conversation.py), and the salon's solver and
+decision handlers in [salon/classification.py](use-cases/salon-graph/salon/classification.py) and
+[salon/nodes.py](use-cases/salon-graph/salon/nodes.py).
 
 ## 7. What happens during a caller turn
 
@@ -523,9 +523,9 @@ Each caller turn is one short graph run. The call keeps its position between
 turns. Durable storage and recovery across separate calls are the
 application's job.
 
-Implementation: [core/turn.py](core/turn.py),
-[core/conversation.py](core/conversation.py) and
-[core/proposals.py](core/proposals.py).
+Implementation: [core/turn.py](core/src/core/turn.py),
+[core/conversation.py](core/src/core/conversation.py) and
+[core/proposals.py](core/src/core/proposals.py).
 
 ## 8. Streaming and interruptions are part of execution
 
@@ -557,8 +557,8 @@ Pipecat and translates between core events and voice frames. That separation
 makes the engine reusable. Another voice adapter would still have to
 implement and test delivery and interruption behaviour.
 
-Implementation: [core/processor.py](core/processor.py) and
-[core/history.py](core/history.py).
+Implementation: [core/processor.py](core/src/core/processor.py) and
+[core/history.py](core/src/core/history.py).
 
 ## 9. Where reuse comes from
 
@@ -587,11 +587,10 @@ application's behaviour has already been validated.
 
 ## 10. How this design is checked
 
-The suite has **23 offline test modules**, with live model requests switched
+The suites have **22 offline test modules**, one suite per folder, with live model requests switched
 off. Scripted responses exercise invalid data, approval checks, routing,
-interruptions, recovery and shared turn limits. Tests also compare YAML and
-Python definitions, check that direct core execution and the Pipecat adapter
-agree, and pin every request the harness sends (`tests/golden/*.json`), so a
+interruptions, recovery and shared turn limits. Tests also check that direct core execution and the Pipecat adapter
+agree, and pin every request the harness sends (`use-cases/salon-graph/tests/golden/*.json`), so a
 code change that alters a prompt shows as a diff.
 
 Solver tests check how Python handles scripted decisions, including
@@ -600,15 +599,15 @@ model chooses the right decision needs a live evaluation.
 
 ```bash
 uv run ruff check .
-uv run ty check .
-uv run python -m tests
+for d in core use-cases/*; do uv run --directory $d ty check .; done
+for d in core use-cases/*/; do [ -d $d/tests ] && uv run --directory $d python -m tests; done
 ```
 
 We used **Coval and Langfuse to evaluate the feasibility of the package**:
 simulated phone calls scored by Coval, and the traces of the same calls read
-by `evals/ledger.py` for tokens, latency and every write. The same calls were
-run against a one-prompt Pipecat baseline (`VOICE_HARNESS=pipecat`,
-[salon/baseline.py](salon/baseline.py)). The figures, with links to every run,
+by `use-cases/concierge-tools/ledger.py` for tokens, latency and every write. The same calls were
+run against a one-prompt Pipecat baseline (`use-cases/salon-prompt`,
+[salon/baseline.py](use-cases/salon-prompt/salon/baseline.py)). The figures, with links to every run,
 are in [docs/research/poc-evidence-2026-09-24.md](docs/research/poc-evidence-2026-09-24.md).
 
 The offline tests check whether the machinery follows its rules. Voice
@@ -627,64 +626,38 @@ The full design notes, with every mechanism and its references, are in
 # Running it
 
 You need **uv** (`brew install uv`, or https://docs.astral.sh/uv/ — it installs
-the right Python itself, this project pins 3.14) and a `.env` holding the two
-keys at the bottom of this file. Nothing else.
+the right Python itself, this project pins 3.14) and a `.env` at the repository
+root holding the two keys at the bottom of this file. Nothing else.
+
+Each use case is its own folder with its own `pyproject.toml` and `bot.py`.
+Run one from its folder:
 
 ```bash
-CALLER_ID=+34600111222 \
-SALON_FIXTURE=fresh \
-SALON_CLOCK=2026-09-21T10:00:00+02:00 \
-uv run bot.py -t webrtc --host localhost --port 7861
+uv sync --all-packages                 # once, from the repository root
+cd use-cases/salon-graph && uv run bot.py
 ```
 
-Then open **http://localhost:7861** and click connect. The runner serves a
-browser client, so there is nothing else to start.
+Then open **http://localhost:7860** and click connect. Each `bot.py` finds the
+root `.env` by walking up from its folder.
 
-```
-🚀 Bot ready!
-   → Open: http://localhost:7861
-   → Enabled transports: webrtc
-```
-
-| | |
-|---|---|
-| `CALLER_ID` | the number a phone call would arrive with; read back and confirmed before it is trusted |
-| `SALON_FIXTURE` | `fresh` empties the diary first, so every call starts from the same salon. `continue`, the default, is what a real salon does: the last call's booking is still there |
-| `SALON_CLOCK` | pins the salon's idea of now, so "tomorrow" resolves to the same day on every run. No offset means the salon's own timezone |
-| `-t webrtc` | one transport instead of all of them |
-| `--host` / `--port` | Pipecat's runner flags. `uv run bot.py --help` for the rest |
-| `VOICE_AGENCY` | which flow answers: `salon` (default), `access`, `help` or `faro`. See section 4 and "Faro" below |
-| `SALON_INTERPRETER` | `solver` reads replies with one state-solver request instead of the narrow readings. See section 6 |
-| `SALON_NAMED_PICK` | `0` turns off the pick reading's `named` field (on by default for the salon). See section 6 |
-| `VOICE_HARNESS` | `pipecat` swaps the harness for the one-prompt baseline (`salon/baseline.py`): the same pipeline, diary and model, with Pipecat's own Gemini service |
-
-All of these are optional: `uv run bot.py` on its own is a live-clock
-call, from an anonymous number, into the salon as the last call left it. The
-remaining dials are in `.env.example`. Turn taking is Pipecat's recommended
-default (Silero VAD and smart-turn v3), with no dial of ours.
-
-A booking, end to end: *"Hi, can I book a haircut for Friday?"* The front desk
-hands the caller to booking; booking needs an identified caller, so the graph
-interposes verification, which reads the caller ID back. *"Yes, that's right."*
-One classifier request interprets the approval; application guards authorize
-the lookup, the graph resumes booking, and the diary's free times are offered. *"Three o'clock."* The
-application reads the time back: *"Shall I book you in for a haircut, Friday
-at 3:00 PM?"* *"Yes."* Only that yes writes, and the confirmation is
-spoken in the diary's own words. Neither turn needs a model request beyond the
-one classifier. *"That's all, thanks, bye."* The line closes.
-
-Tests: `uv run python -m tests`. Offline, no `.env`, no network.
+| Folder | What answers | README |
+|---|---|---|
+| `use-cases/salon-graph` | the salon, as a graph of typed steps on core | [README](use-cases/salon-graph/README.md) |
+| `use-cases/salon-prompt` | the same salon as one prompt on Pipecat's Gemini service: the baseline | [README](use-cases/salon-prompt/README.md) |
+| `use-cases/faro-language-learning` | Faro, a bilingual language-learning companion | [README](use-cases/faro-language-learning/README.md) |
+| `use-cases/concierge-tools` | no bot: Coval calls and the trace ledger, to compare the salon builds | [README](use-cases/concierge-tools/README.md) |
+| `use-cases/faro-tools` | no bot: Faro's live benchmark | [README](use-cases/faro-tools/README.md) |
 
 ---
 
 # Adding a use case
 
 A use case gives core's classes its information, and core's code runs it.
-[tests/clinic.py](tests/clinic.py) is a complete one: a clinic's booking
+[core/tests/clinic.py](core/tests/clinic.py) is a complete one: a clinic's booking
 line in about 240 lines, with no salon code. The salon is built the same
-way, in [salon/classification.py](salon/classification.py) (`SALON`),
-[salon/tools/desk.py](salon/tools/desk.py) (`DESK`) and
-[salon/nodes.py](salon/nodes.py) (`BUILDER`).
+way, in [salon/classification.py](use-cases/salon-graph/salon/classification.py) (`SALON`),
+[salon/tools/desk.py](use-cases/salon-graph/salon/tools/desk.py) (`DESK`) and
+[salon/nodes.py](use-cases/salon-graph/salon/nodes.py) (`BUILDER`).
 
 ```mermaid
 flowchart LR
@@ -698,6 +671,8 @@ flowchart LR
   steps --> engine[Turn engine]
 ```
 
+0. The use case is a folder under `use-cases/` with its own `pyproject.toml`
+   (depending on `slng-voice-core`, as salon-graph does) and its own `bot.py`.
 1. The use case writes a call type (`CallContext` subclass) and its state.
 2. It writes one `Operation` per business action: what the backend does, and
    what the caller hears when it lands.
@@ -764,20 +739,20 @@ Conversation[ClinicCall](
 
 | Class | Where | The information a use case gives it |
 |---|---|---|
-| `Conversation` | `core/conversation.py` | who is talking (one sentence), the model and settings, its acts |
-| `ReadBack` | `core/conversation.py` | the question it answers, the action a yes runs, when a yes counts |
-| `FixedChoice` | `core/conversation.py` | the question, its options, the action for each option |
-| `Offer` | `core/conversation.py` | where the options on the table come from, what a pick does |
-| `HeardValue` | `core/conversation.py` | a parser from words to a value, how the value is read back |
-| `TakeBack` | `core/conversation.py` | the kind of thing held, what taking it back does |
-| `HeldApproval` | `core/conversation.py` | the read-back whose yes is kept through a detour, how it is kept |
-| `Detour` | `core/conversation.py` | the question that ends a prerequisite's check |
-| `Closing` | `core/conversation.py` | the goodbye, the readings to skip on "anything else?" |
-| `Operation` | `core/operations.py` | its arguments and receipt types, the question that authorises it (`proposal`), what the backend does (`_execute`, `_record`), or `needs_approval = False` for an action with no read-back |
-| `Desk` | `core/desk.py` | the call and hand-over types, the action names, what blocks a switch, an optional `Carry` |
-| `AgentBuilder` | `core/steps.py` | the call type, model, settings, action names, `Desk`, `advance` |
-| `Locale` | `core/locale.py` | the four lines the turn engine says itself, in the call's language |
-| `Held` | `core/state.py` | something the caller could still take back, kept on the call by kind |
+| `Conversation` | `core/src/core/conversation.py` | who is talking (one sentence), the model and settings, its acts |
+| `ReadBack` | `core/src/core/conversation.py` | the question it answers, the action a yes runs, when a yes counts |
+| `FixedChoice` | `core/src/core/conversation.py` | the question, its options, the action for each option |
+| `Offer` | `core/src/core/conversation.py` | where the options on the table come from, what a pick does |
+| `HeardValue` | `core/src/core/conversation.py` | a parser from words to a value, how the value is read back |
+| `TakeBack` | `core/src/core/conversation.py` | the kind of thing held, what taking it back does |
+| `HeldApproval` | `core/src/core/conversation.py` | the read-back whose yes is kept through a detour, how it is kept |
+| `Detour` | `core/src/core/conversation.py` | the question that ends a prerequisite's check |
+| `Closing` | `core/src/core/conversation.py` | the goodbye, the readings to skip on "anything else?" |
+| `Operation` | `core/src/core/operations.py` | its arguments and receipt types, the question that authorises it (`proposal`), what the backend does (`_execute`, `_record`), or `needs_approval = False` for an action with no read-back |
+| `Desk` | `core/src/core/desk.py` | the call and hand-over types, the action names, what blocks a switch, an optional `Carry` |
+| `AgentBuilder` | `core/src/core/steps.py` | the call type, model, settings, action names, `Desk`, `advance` |
+| `Locale` | `core/src/core/locale.py` | the four lines the turn engine says itself, in the call's language |
+| `Held` | `core/src/core/state.py` | something the caller could still take back, kept on the call by kind |
 
 ### What stays code in each use case
 
@@ -789,12 +764,12 @@ Conversation[ClinicCall](
 ### How to check a new one
 
 - **Its behaviour.** Write assert scripts like
-  [tests/test_reuse.py](tests/test_reuse.py). They run the real turn engine
+  [core/tests/test_reuse.py](core/tests/test_reuse.py). They run the real turn engine
   with scripted classifier answers and no network.
-- **Its prompts.** `tests/golden/readings.json` and `tests/golden/agents.json`
+- **Its prompts.** `use-cases/salon-graph/tests/golden/readings.json` and `agents.json`
   pin every request the salon sends. They cover classifiers and step agents,
   so any code change that alters a prompt shows as a diff.
-  `BLESS_READINGS=1 uv run python -m tests.test_classifiers` pins them again.
+  `BLESS_READINGS=1 uv run --directory use-cases/salon-graph/ python -m tests.test_classifiers` pins them again.
   Do that only for a change that is meant, and check it live.
 - **Its readings.** Each reading's name is its Langfuse dataset's name
   (`harness-reading/<name>`). Readings with core's classes (`confirm`,
@@ -816,259 +791,45 @@ Conversation[ClinicCall](
 - Form-like flows (`StepFlow`: collect, confirm, action) share the confirm
   request with `ReadBack`, but not the class.
 
-# Faro: a language-learning companion
-
-Faro is a third use case, built to show the harness is not only for short
-bookings. One bilingual voice companion helps adults practise English or
-Spanish. It knows learners by phone number, signs up new ones, runs a short
-placement, agrees a plan, teaches lessons, and carries on where the learner
-stopped, even after the application restarts.
-
-```bash
-VOICE_AGENCY=faro CALLER_ID=+34600555666 uv run bot.py -t webrtc --host localhost --port 7861
-```
-
-Profiles, assessments, agreed plans, session summaries and exercise checkpoints
-are persisted in a local SQLite database. Reconnect using the same phone number
-and database path to continue, including after restarting the application.
-Onboarding can also resume. Normal startup never resets existing progress.
-A crash may replay the last prompt, but must not discard acknowledged answers.
-This is a local benchmark demo with phone matching, not production authentication.
-LLM and speech services still use their configured remote providers.
-
-| | |
-|---|---|
-| `VOICE_AGENCY=faro` | selects Faro. The salon stays the default |
-| `CALLER_ID` | the number the call arrives with. Faro reads it back and asks the caller to confirm it before it looks anything up |
-| `LEARNING_DB_PATH` | the database file. Default `data/language_companion.sqlite3`, which Git ignores |
-| `SLNG_STT_LANGUAGE`, `SLNG_TTS_LANGUAGE` | speech languages. Faro's defaults: recognition `es` (the answers), voice `en` (Faro speaks the learner's language) |
-
-The database starts with three synthetic learners. Their numbers are
-test-format Spanish numbers, not numbers to call.
-
-| Learner | Phone | Learning | Where they are |
-|---|---|---|---|
-| Lucía | `+34600111222` | English A2 for travel, explained in Spanish | lesson 2 (ordering at a café), exercise 2 waiting |
-| Diego | `+34600333444` | English B1 for work, explained in Spanish | lesson 3 (describing a project) ready; past tense on review |
-| Emma | `+34600555666` | Spanish A1 for daily life, explained in English | lesson 2 (shopping), exercise 1 waiting |
-
-`+34600777888` is unknown, for sign-up.
-
-```bash
-uv run python -m examples.faro fixture data/bench.sqlite3        # a new disposable DB: exactly the three seeds
-uv run python -m examples.faro backup data/language_companion.sqlite3 data/backup.sqlite3
-uv run python -m examples.faro bench data/bench-perf.sqlite3     # p50/p95 lookup and checkpoint
-```
-
-`fixture` refuses a path that exists. Nothing resets a database on startup:
-to start over, point `LEARNING_DB_PATH` at a new fixture. `backup` uses
-SQLite's backup API, so it is safe while the bot runs.
-
-## Try a call
-
-Start from a fresh fixture, so every try begins at the same place:
-
-```bash
-uv run python -m examples.faro fixture data/try.sqlite3
-LEARNING_DB_PATH=data/try.sqlite3 VOICE_AGENCY=faro CALLER_ID=+34600555666 \
-  uv run --env-file .env bot.py -t webrtc --host localhost --port 7861
-```
-
-Open http://localhost:7861 and click connect. Faro speaks first, in English.
-The call is one Langfuse trace named `faro call`. `fixture` refuses a file
-that exists, so delete `data/try.sqlite3` or pick a new name before the next
-try.
-
-Faro gives every instruction in your own language and you answer in the
-language you learn. It records every attempt itself, right or wrong, and
-tells you what to fix before the next exercise.
-
-### Script 1: a returning learner
-
-Emma, `CALLER_ID=+34600555666`: speaks English, learns Spanish.
-
-| Faro says | You say |
-|---|---|
-| "…Can you confirm your number is +34 600 555 666?" | "Yes." |
-| "Hi, Emma. You were practising shopping… Shall we carry on, or would you like a recap first?" | "Let's carry on." |
-| "Shopping, first exercise. Answer in Spanish: Ask for a kilo of apples at the market." | "Un kilo de manzanas, por favor." |
-| "…Answer in Spanish: Ask how much it costs." | "¿Cuánto cuesta?" |
-| "…Answer in Spanish: Buy bread and milk and ask how much it is in total." | "Quiero pan y leche. ¿Cuánto es en total?" |
-| "Lesson complete: shopping… Shall we go on, or stop here for today?" | "That's all for today, bye." |
-
-Try a question in the middle ("How do I say apples?") or a wrong answer ("Un
-kilo de manzana"): Faro corrects you with the right sentence, records the
-try, and asks the same exercise again, briefly. It moves on only when you say
-it right.
-
-Then call again with the same command. Faro should say shopping is finished
-and "talking about your routine" is next. That shows the progress survived
-the call.
-
-### Script 2: sign-up
-
-The unknown number, `CALLER_ID=+34600777888`.
-
-1. Say "Yes" to confirm the number.
-2. Say "Yes" to create a profile.
-3. Give a name: "Call me Nico".
-4. Answer the onboarding questions: "Spanish", then "For travel", then "Ten minutes".
-5. Answer the three placement tasks in Spanish. Faro describes each one in English.
-6. Say "Yes" to the plan. Faro says it is active and offers the first lesson.
-
-To test a refusal, say "French" when Faro asks which language you want to
-learn. Or say "yes, but only five minutes" when it presents the plan: nothing
-is activated, and Faro presents the revised plan. To be a Spanish speaker
-learning English instead, say "¿Podemos hablar en español?" at any point.
-
-### What to watch
-
-- Speech recognition is hinted to Spanish (`es`), for your answers; in a live
-  call it also transcribed English well. Faro's voice is English (`en`), so
-  Spanish feedback is read with an English voice. Change either with
-  `SLNG_STT_LANGUAGE` and `SLNG_TTS_LANGUAGE`.
-- One voice call has been made so far (trace `34e4fe68`, before these
-  fixes). The text runs in `evals/faro.py` are what has been measured.
-
-## How Faro is built
-
-```mermaid
-flowchart TD
-    Caller[Caller line] --> Readings[Readings: yes, next step, grade]
-    Readings -->|clear yes| Operation[Operation]
-    Readings -->|an attempt| Operation
-    Readings -->|anything else| Agent[Companion agent]
-    Agent -->|tools for this phase| Operation
-    Operation --> Store[(SQLite store)]
-    Operation --> Words[Words written by code]
-    Agent --> Speech[Guarded speech]
-```
-
-1. Every turn starts with the readings, side by side. Three questions wait on a yes: the phone read-back, the sign-up offer and the plan proposal. "Carry on, or recap?" is a fixed choice. While an exercise or placement task waits, the grading reading judges the reply.
-2. A clear yes runs its `Operation` with no agent request. "Maybe", "yes, but only five minutes", or a yes to a proposal the caller talked over, activates nothing.
-3. An attempt at an exercise is recorded by code, right or wrong. Only a correct sentence moves on. A wrong or partly right one is corrected (what was wrong, then the right sentence) and the same exercise is asked again, briefly and without its name, until it is said right. A goodbye while an exercise waits ends the call instead of being corrected. The companion never grades, so an answer can no longer be praised and left unsaved.
-4. Anything else goes to one companion agent: questions, "slower, please", hesitation, onboarding answers. The phases are application state, not steps. Each tool is offered only in its phases, and each operation checks the phase again.
-5. Every write goes through the store and commits before the tool returns. A replayed answer finds its first record and counts once.
-6. The step is guarded: a sentence that says "saved" or "guardado" on a turn with no save is held back before it reaches speech.
-
-It is one flow folder, `examples/faro/`, on `core` alone:
-
-| File | What it holds |
-|---|---|
-| `flow.yaml` | one `agent` step on its own call type (`state.py:FaroCall`) |
-| `curriculum.py` | the versioned placement bank, the lessons, the level rule, and every line code says |
-| `store.py` | SQLite in WAL mode with `synchronous=FULL`, three tables, one worker thread |
-| `state.py` | `FaroState` (refuses learner data before a confirmed phone) and `FaroCall` |
-| `operations.py` | one `Operation` per write |
-| `conversation.py` | the three read-backs, the spoken phone number, the goodbye |
-| `steps/companion.py` | the model-facing tools and their phase gates |
-
-What the harness needed, all generic:
-
-- `core/locale.py` gained `SPANISH`. A call can now pick its fixed lines per call, not only per class (`CallContext.locale`).
-- A greeting can be a question (`core.turn.greet`), so a caller ID read back in the greeting is answered like any other read-back.
-- `bot.py` takes a greeting written for the call, an optional `close_call` run when the line drops, and a speech language per flow.
-- `evals/ledger.py` counts Faro's writes and checks its two consent writes against their questions.
-
-## How Faro is checked
-
-- `tests/test_faro.py`: the acceptance cases L01 to L16 offline, on a real SQLite file, with scripted models. One case kills a process right after an acknowledged save and checks the next process.
-- `evals/faro.py`: the same cases as live scripted text calls on the real model. Each call runs in its own process and is one Langfuse session. Billable.
-
-```bash
-uv run --env-file .env python -m evals.faro
-uv run --env-file .env python -m evals.ledger faro session:faro-L03-ES-... session:...
-```
-
-Results of 24 September 2026, gemini-3.5-flash-lite, one pass per case:
-
-| What | Result |
-|---|---|
-| Offline acceptance cases (`tests/test_faro.py`) | 21 checks, all pass |
-| Live cases (`evals/faro.py`) | 23 of 23 pass, 29 calls, 160 caller turns. No line said three times in a row |
-| Consent writes (ledger write audit) | 36 of 36 answered a matching question put on an earlier turn |
-| Model requests | 1.76 per caller turn. 132 of 160 turns needed only one classifier request and no agent |
-| Engine time, text in to first speech out | p50 0.92 s, p90 1.59 s, max 2.61 s. No STT or TTS: this is not voice latency |
-| Store, 10,000 learners, 1,000 operations (Apple M5 Pro) | lookup p95 0.45 ms, checkpoint p95 0.72 ms |
-
-L13 (replay, failed write, stale checkpoint) and L16 (fixture versus restart)
-are checked offline only: a live model cannot trigger them. L11 (barge-in) is
-simulated by marking the proposal as cut off, because text calls have no
-audio. One pass per case finds failures; it is not a pass rate.
-
-### What the first voice call and the runs found
-
-A voice call (trace `34e4fe68`) and the live runs found these, now fixed:
-
-1. The model chose when to record an answer. It praised a right answer and saved nothing, so the same exercise came back. Now the grading reading records every attempt and the model only coaches.
-2. Instructions were in the language being learnt. Now every instruction is in the learner's own language, and they answer in the target language.
-3. A retry repeated the whole exercise introduction. Now a retry is short: feedback, then "Try again, in Spanish: …".
-4. Onboarding questions were asked twice: once by code, once by the model. Now the onboarding reading saves answers and code alone asks.
-5. After a talked-over plan, the model re-read it in its own words, so the next "yes" counted for nothing. Now code repeats it word for word.
-6. The model added +34 to a number the caller said without it. Now a number is read back only if the caller said the country code.
-7. Asking to switch language used up the turn and the waiting question expired. Now the question is asked again in the new language.
-
-## Faro's known limits
-
-- The SQLite bundled with the project's Python is 3.50.4. SQLite documents a WAL-reset bug before 3.51.3 with concurrent connections. Faro keeps all database work on one thread, so it never opens two connections at once.
-- Voice is wired but not tested live: one STT and one TTS language per call, Spanish by default. Mixed English and Spanish audio is not verified.
-- Classifier instructions are English. Spanish replies are checked only by the live runs.
-- The level rule is a mean over the placement results. It proposes a starting difficulty and is no CEFR claim. Answers are graded by the model, with no separate accuracy check and no pronunciation scoring.
-- One active call per learner, in one process.
 
 # Layout
 
 ```
-bot.py                  the Pipecat pipeline, and nothing else
-core/
-  state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
-  graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
-  flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
-  classifiers.py        generic Pydantic input/output classification in one request
-  readings.py           narrow readings: one small classifier per act, and the fixed order they act in
-  conversation.py       the acts as classes a use case fills in (ReadBack, Offer, TakeBack, ...) and Conversation
-  desk.py               Desk: hand over, hang up, clarify, switch task, for any use case
-  locale.py             Locale: the lines the turn engine says itself; ENGLISH and SPANISH
-  decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
-  proposals.py          the one question a call waits on, and when it can be answered
-  completion.py         when a step is done: evidence in the facts, never a flag
-  steps.py              typed steps (collect, confirm, action, conversation, end), StepFlow, AgentBuilder
-  flowspec.py           flow files as YAML (or JSON), checked before they run
-  operations.py         Operation: one business action with its checks in a fixed order
-  interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
-  policies.py           TurnBudget, the hooks, pick, schema_tool
-  history.py            what each provider request is sent
-  turn.py               one caller turn as an event stream; imports no Pipecat
-  processor.py          the Pipecat adapter: events in, frames out
-salon/
-  models/               shapes, consent, receipts, state
-  tools/                identity, booking, complaints, desk, writes, asking, policy
-  diary.py              the salon's books, in memory
-  flow.yaml             the four steps: prompt, module, exits, requirements
-  prompts/              one prompt per step, the shared rules, knowledge/
-  steps/                one module per step, each giving node(step)
-  nodes.py              BUILDER (core's AgentBuilder), build(), advance()
-  instructions.py       loads flow.yaml; each step's compiled prompt
-  classification.py     the salon's conversation (SALON: its acts and readings), and the opt-in solver
-  baseline.py           the same salon as one prompt on Pipecat's own LLM service (VOICE_HARNESS=pipecat)
-  agents.py             the AGENTS table, compiled from flow.yaml
-utils/observability.py  Langfuse over OTel
-tests/                  twenty-four assert scripts
-examples/               access (ten steps), help (one step), faro (a bilingual learning companion on SQLite), on core alone; VOICE_AGENCY=access|help|faro
-evals/cases.py          reviewed reply cases, shared by the live evaluation and tests/test_replay.py
-evals/report.py         one result and report shape for every interpreter
-evals/consent.py        explicitly invoked live classifier evaluation
-evals/focused.py        the live failures replayed against the real readings, five times each, with tokens
-evals/readings.py       each reading as a Langfuse dataset and prompt, run on several small models
-evals/ledger.py         requests, tokens, calls in a row, latency and writes, read from any build's traces
-evals/solver.py         explicitly invoked live state-solver evaluation
-evals/compare.py        every interpreter side by side; the rule floor offline, the rest with --live
-evals/rules.py          the no-model floor the others must beat
-evals/faro.py           Faro's benchmark cases as live scripted text calls, one Langfuse session per call
+pyproject.toml            the uv workspace: core and every folder in use-cases/, one lock
+core/                     the harness, a package: slng-voice-core
+  src/core/
+    state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
+    graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
+    flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
+    classifiers.py        generic Pydantic input/output classification in one request
+    readings.py           narrow readings: one small classifier per act, and the fixed order they act in
+    conversation.py       the acts as classes a use case fills in (ReadBack, Offer, TakeBack, ...) and Conversation
+    desk.py               Desk: hand over, hang up, clarify, switch task, for any use case
+    locale.py             Locale: the lines the turn engine says itself; ENGLISH and SPANISH
+    decisions.py          typed meanings of a reply: Accept, Reject, SwitchTask, ...
+    proposals.py          the one question a call waits on, and when it can be answered
+    completion.py         when a step is done: evidence in the facts, never a flag
+    steps.py              typed steps (collect, confirm, action, conversation, end), StepFlow, AgentBuilder
+    flowspec.py           flow files as YAML (or JSON), checked before they run
+    operations.py         Operation: one business action with its checks in a fixed order
+    interpreters.py       Interpreter: once per turn, cached, budgeted, never stale
+    policies.py           TurnBudget, the hooks, pick, schema_tool
+    history.py            what each provider request is sent
+    turn.py               one caller turn as an event stream; imports no Pipecat
+    processor.py          the Pipecat adapter: events in, frames out
+    observability.py      Langfuse over OTel
+  tests/                  core alone: base classes, history, and a clinic built on core (clinic.py)
+use-cases/
+  salon-graph/            the salon on core: bot.py, salon/, evals/ (classifier evals), tests/
+  salon-prompt/           the same salon as one prompt on Pipecat's Gemini service, no core
+  faro-language-learning/ Faro: a bilingual learning companion on core, with a SQLite store
+  concierge-tools/        coval_sim (Coval calls to any bot.py) and ledger.py (cost of calls from traces)
+  faro-tools/             bench.py: Faro's live benchmark
 ```
 
-`core` knows nothing about the salon, and nothing in `core` but the processor
-knows about Pipecat. `tests/test_core.py` reads the source and checks both.
+`core` knows nothing about any use case, and nothing in `core` but the
+processor knows about Pipecat. salon-graph's `tests/test_core.py` reads the
+source and checks both.
 
 ---
 

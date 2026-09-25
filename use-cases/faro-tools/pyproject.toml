@@ -1,0 +1,16 @@
+[project]
+name = "faro-tools"
+version = "0.1.0"
+description = "Faro's live benchmark: scripted text calls on the real model, one process and one Langfuse session per call."
+requires-python = ">=3.14"
+dependencies = ["faro-language-learning"]
+
+[dependency-groups]
+dev = ["ruff>=0.14", "ty>=0.0.82"]
+
+[tool.uv.sources]
+faro-language-learning = { workspace = true }
+
+# Its own ty root: without one, ty walks up to the next pyproject that has a [tool.ty] table.
+[tool.ty.environment]
+python-version = "3.14"

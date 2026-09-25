@@ -2,6 +2,22 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
+[manifest]
+members = [
+    "concierge-tools",
+    "faro-language-learning",
+    "faro-tools",
+    "salon-graph",
+    "salon-prompt",
+    "slng-voice-core",
+]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
 [[package]]
 name = "agent-detector"
 version = "2.0.0"
@@ -437,6 +453,35 @@ wheels = [
 ]
 
 [[package]]
+name = "concierge-tools"
+version = "0.1.0"
+source = { virtual = "use-cases/concierge-tools" }
+dependencies = [
+    { name = "langfuse" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langfuse", specifier = ">=4.15.4" },
+    { name = "pydantic", specifier = ">=2.12" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
+[[package]]
 name = "cryptography"
 version = "50.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -548,6 +593,64 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f5/22/900cb125c76b7aaa450ce02fd727f452243f2e91a61af068b40adba60ea9/email_validator-2.3.0.tar.gz", hash = "sha256:9fc05c37f2f6cf439ff414f8fc46d917929974a82244c20eb10231ba60c54426", size = 51238, upload-time = "2025-08-26T13:09:06.831Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/15/545e2b6cf2e3be84bc1ed85613edd75b8aea69807a71c26f4ca6a9258e82/email_validator-2.3.0-py3-none-any.whl", hash = "sha256:80f13f623413e6b197ae73bb10bf4eb0908faf509ad8362c5edeb0be7fd450b4", size = 35604, upload-time = "2025-08-26T13:09:05.858Z" },
+]
+
+[[package]]
+name = "faro-language-learning"
+version = "0.1.0"
+source = { editable = "use-cases/faro-language-learning" }
+dependencies = [
+    { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
+    { name = "pipecat-slng" },
+    { name = "pydantic-extra-types", extra = ["phonenumbers"] },
+    { name = "python-dotenv" },
+    { name = "slng-voice-core" },
+    { name = "websockets" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
+    { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "slng-voice-core", editable = "core" },
+    { name = "websockets", specifier = ">=16.1.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
+[[package]]
+name = "faro-tools"
+version = "0.1.0"
+source = { virtual = "use-cases/faro-tools" }
+dependencies = [
+    { name = "faro-language-learning" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "faro-language-learning", editable = "use-cases/faro-language-learning" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
 ]
 
 [[package]]
@@ -2371,6 +2474,76 @@ wheels = [
 ]
 
 [[package]]
+name = "salon-graph"
+version = "0.1.0"
+source = { virtual = "use-cases/salon-graph" }
+dependencies = [
+    { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
+    { name = "pipecat-slng" },
+    { name = "pydantic-extra-types", extra = ["phonenumbers"] },
+    { name = "python-dotenv" },
+    { name = "slng-voice-core" },
+    { name = "websockets" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
+    { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "slng-voice-core", editable = "core" },
+    { name = "websockets", specifier = ">=16.1.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
+[[package]]
+name = "salon-prompt"
+version = "0.1.0"
+source = { virtual = "use-cases/salon-prompt" }
+dependencies = [
+    { name = "langfuse" },
+    { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
+    { name = "pipecat-slng" },
+    { name = "pydantic-extra-types", extra = ["phonenumbers"] },
+    { name = "python-dotenv" },
+    { name = "websockets" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langfuse", specifier = ">=4.15.4" },
+    { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
+    { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "websockets", specifier = ">=16.1.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
+[[package]]
 name = "sentry-sdk"
 version = "2.69.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2393,18 +2566,15 @@ wheels = [
 ]
 
 [[package]]
-name = "slng-voice-harness"
+name = "slng-voice-core"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "core" }
 dependencies = [
     { name = "langfuse" },
-    { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
-    { name = "pipecat-slng" },
+    { name = "pipecat-ai" },
     { name = "pydantic-ai-slim", extra = ["google", "openai", "spec"] },
-    { name = "pydantic-extra-types", extra = ["phonenumbers"] },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -2416,13 +2586,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "langfuse", specifier = ">=4.15.4" },
-    { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
-    { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pipecat-ai", specifier = ">=1.11.0" },
     { name = "pydantic-ai-slim", extras = ["google", "openai", "spec"], specifier = ">=2.46.0" },
-    { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "websockets", specifier = ">=16.1.1" },
 ]
 
 [package.metadata.requires-dev]

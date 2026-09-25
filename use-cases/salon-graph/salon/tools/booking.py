@@ -43,9 +43,9 @@ from salon.tools.writes import (
     SAVED,
     _answered,
     _disagrees,
-    _settle,
     _unknown,
     close_with,
+    settle,
     spoken_service,
 )
 
@@ -570,7 +570,7 @@ class WriteBooking(Operation[SalonCall, BookingCommand, Saved, str]):
     receipt_type = Saved
 
     async def _before(self, call: SalonCall, args: BookingCommand) -> str | None:
-        return await _settle(call) if call.state.unresolved else None
+        return await settle(call) if call.state.unresolved else None
 
     async def _authorise(
         self,

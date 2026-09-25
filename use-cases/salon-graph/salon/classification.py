@@ -29,6 +29,7 @@ instead, and writes into the same view, so no guard changes either way.
 import os
 from typing import Literal
 
+from pydantic_ai import ModelRetry
 from pydantic_ai.models import infer_model
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
@@ -100,6 +101,26 @@ On for the salon since 24 September. On `harness-reading/choose`, 3 runs of
 false accept, named 1.00, as production. It is not on in core by default:
 gpt-5.6-luna fell to 0.95, 0.95 and 0.86. `SALON_NAMED_PICK=0` turns it off.
 """
+
+
+async def _book_approved(call: SalonCall, question: Asked) -> object:
+    """The approved write, by code; an outcome the diary leaves unknown is said in core's fixed words.
+
+    Live text T4.v2, session 3: the refusal went to the booking model, which
+    told the caller about "a little hiccup" in its own words and never checked
+    the diary. Nothing is claimed either way; the next turn settles it
+    (`nodes.advance`) before anything else can write.
+    """
+    action = question.action
+    if action == '':
+        raise ModelRetry('Nothing was written: the read-back named no booking action.')
+    try:
+        return await write_booking(call, action, question.value, question.booking_id)
+    except ModelRetry:
+        if call.state.unresolved is None:
+            raise
+        await call.speak_now(call.locale.unsettled, origin='confirmation')
+        return call.locale.unsettled
 
 
 def _verified(call: SalonCall) -> bool:
@@ -294,9 +315,7 @@ SALON = SalonConversation(
         ReadBack(
             about='booking',
             action='save_booking',
-            run=lambda call, question: write_booking(
-                call, question.action, question.value, question.booking_id
-            ),
+            run=lambda call, question: _book_approved(call, question),
             when=lambda call, question: _verified(call) and question.action in ('book', 'move', 'cancel'),
         ),
         ReadBack(

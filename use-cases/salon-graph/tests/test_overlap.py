@@ -28,7 +28,6 @@ from dataclasses import dataclass, field
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from salon import agents
-from salon.tools.writes import _settle
 from tests.classifier_model import classifier_model
 from tests.test_continuation import (
     PHONE,
@@ -253,11 +252,13 @@ def watch_saves() -> list[str]:
 
 
 async def barge_while_the_outcome_is_unknown():
-    """The write lands, its answer is lost, and the caller barges while the step's model is being asked what to say.
+    """The write lands, its answer is lost, and the caller barges over what they are told.
 
-    The outcome is recorded as unknown, nothing is claimed, the turn's
-    cancellation does not repeat the write, and the next write settles it from
-    the diary before anything else.
+    The outcome is recorded as unknown and said in core's fixed words
+    (`Locale.unsettled`), with no step model; nothing is claimed, the barge
+    does not repeat the write, and the caller's next words settle it from the
+    diary before anything else, by code (`nodes.advance`). Session 3 moved both
+    to code: live text T4.v2 left the wording, and so the settling, to a model.
     """
     call = booking_call()
     probe = Probe(call)
@@ -277,12 +278,11 @@ async def barge_while_the_outcome_is_unknown():
         return None if len(asked) == 1 else real_outcome(token)
 
     books.save_booking, books.outcome_of = save_booking, outcome_of  # ty: ignore[invalid-assignment]
-    gate = asyncio.Event()
+    asked_model: list[str] = []
 
     async def booking(messages, info):
-        gate.set()
-        await asyncio.Event().wait()
-        yield ''
+        asked_model.append(call.heard)
+        yield 'Let me see.'
 
     try:
         with (
@@ -290,20 +290,20 @@ async def barge_while_the_outcome_is_unknown():
             agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking)),
         ):
             probe.interrupt()
-            turn = asyncio.create_task(probe._turn('Yes.'))
-            await asyncio.wait_for(gate.wait(), 3)
-            assert saves and not turn.done(), 'the write went out and the turn is still running'
+            await asyncio.wait_for(probe._turn('Yes.'), 3)
+            assert probe.fixed()[-1] == call.locale.unsettled, probe.fixed()
+            assert not asked_model, 'an unknown outcome is said by code, not worded by a model'
             probe.interrupt()
-            await asyncio.wait_for(turn, 3)
-        assert len(saves) == 1, 'the barge did not repeat the write'
-        assert call.state.unresolved is not None and call.state.appointment is None, (
-            'unknown, and nothing claimed'
-        )
-        assert len(books.bookings_for(PHONE, books.now().date())) == 1, 'it did land'
-        said = await _settle(call)
-        assert said.startswith('booked'), said
+            assert len(saves) == 1, 'the barge did not repeat the write'
+            assert call.state.unresolved is not None and call.state.appointment is None, (
+                'unknown, and nothing claimed'
+            )
+            assert len(books.bookings_for(PHONE, books.now().date())) == 1, 'it did land'
+            await asyncio.wait_for(probe._turn('Okay, can you check?'), 3)
+        assert 'Friday the 25th at 9:00 AM' in probe.fixed()[-1], probe.fixed()
         assert len(saves) == 1 and len(asked) == 2, 'settled by asking, not by writing again'
         assert call.state.appointment is not None and call.state.unresolved is None
+        assert not asked_model, 'settling the next turn costs no model request'
     finally:
         del books.save_booking, books.outcome_of
 

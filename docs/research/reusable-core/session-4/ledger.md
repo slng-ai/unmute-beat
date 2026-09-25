@@ -73,7 +73,7 @@ The ledger's write audit line reads the old audit attribute names and says "no a
 Allowance: you added 20 + 20 calls, so the session cap is now **60**. Used so far: 12. The 8 reserve calls from the first 20 stay in reserve.
 
 Setup, the same for both load runs:
-- Coval places and records the calls, and scores nothing (`coval_sim run --no-metrics`). Each call is judged by `concierge-tools/load_report.py` from its Langfuse session and its write records.
+- Coval places and records the calls. Coval refuses a launch with no metric (`metric_id "" must be exactly 22 characters`) and scores the agent's four when none is named, so each run names Turn Count alone (`--metrics 7VHk6dTjvBcuV6XYPmaeGq`): a count, no judge. Each call is judged by `concierge-tools/load_report.py` from its Langfuse session and its write records.
 - Two jobs side by side, 20 calls at once, all into **one bot process** behind one tunnel (`coval_sim serve`, then `run --host`): normal (`kQ8b6nMZ`, `MUFJdYAHdBHU6UbRRu4ykM`) x10 at `--concurrency 10`, and stress (`K3Xwqi7g`, `VSruLZYYyz3w7fkdUaheDR`) x10 at `--concurrency 10`. Changed from the plan's two bots: both jobs use one Coval agent, and each `run` points that agent at its own tunnel, so a second tunnel could take the first job's later calls.
 - Every call gets its own diary (`DIARY_PER_CALL=1`, checked offline by `tests.test_diary:calls_with_a_diary_each_share_nothing`, and live by every first booking being BK0001).
 
@@ -82,3 +82,5 @@ Setup, the same for both load runs:
 Question: under 20 calls at once, does the build we have (bot code identical to 52eb245; `git diff 52eb245 HEAD -- core use-cases/salon-graph/salon use-cases/salon-graph/bot.py` is empty) keep every write on a heard yes, book once per call, and how do latency, repeats and request chains look? Expanded count: 20 (12 -> 32 of 60).
 
 This run measures, it does not gate. Its numbers are the baseline for the fixed run's pass criteria (plan step 4).
+
+Attempt 1 (label `session-4-load-baseline`, 2026-09-25T20:44Z): both launches were refused by Coval for the empty metric list, and the runner's lookup for a run that might have started crashed on `--order-by -create_time` (read as a flag). `coval runs list` for the agent shows no run after `StET3kNN`: **no call was placed, none counted.** Fixed: `--metrics` replaces `--no-metrics`, and the lookup sends `--order-by=-create_time` (`tests.test_coval_sim:test_named_metrics`). The two `intent` lines stay in `coval-runs.jsonl`; the relaunch uses label `session-4-load-baseline-b`.

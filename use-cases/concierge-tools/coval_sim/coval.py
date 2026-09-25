@@ -92,7 +92,7 @@ class CovalClient:
     def find_run(self, agent_id: str, name: str) -> str | None:
         """The run with this display name among the agent's latest, or None: how an uncertain launch is settled."""
         runs = self._call(
-            'runs', 'list', '--filter', f'agent_id="{agent_id}"', '--page-size', '50', '--order-by', '-create_time'
+            'runs', 'list', '--filter', f'agent_id="{agent_id}"', '--page-size', '50', '--order-by=-create_time'
         )  # fmt: skip
         return next((run['run_id'] for run in runs or [] if run.get('display_name') == name), None)
 

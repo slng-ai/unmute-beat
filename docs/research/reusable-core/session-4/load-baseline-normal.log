@@ -1,0 +1,18 @@
+agency       salon (use-cases/salon-graph)
+agent        JxGgSPA55DcFcDcvbKAUQM voice-harness-salon-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      none
+iterations   10
+mutations    none
+simulations  10 = 1 case(s) x 10 iteration(s) x 1
+call limit   180s each, enforced by bot.py (MAX_CALL_SECONDS)
+concurrency  10 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        session-4-load-baseline
+FAIL  salon  test set kQ8b6nMZ  run -
+      coval runs list: error: unexpected argument '-c' found
+
+Usage: coval runs list [OPTIONS]
+
+For more information, try '--help'.
+      log: /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-8wpfjfva/salon-bot.log

@@ -274,6 +274,8 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
     """State field to the receipt field it is set from."""
     succeeds: ClassVar[Mapping[str, Any]] = {}
     """Receipt fields and the values that mean it worked, like `{status: booked}`. Empty: a valid receipt is success."""
+    matches: ClassVar[Mapping[str, str]] = {}
+    """Receipt fields that must equal an argument, like `{customer_phone: phone}`: a receipt about someone else is refused."""
     readback: ClassVar[Callable[[Any], str] | None] = None
     reconcile: ClassVar[Callable[..., Any] | None] = None
     """`(services, args) -> receipt | None`: what the service did with an attempt whose outcome was unknown."""
@@ -314,7 +316,16 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         except OutcomeUnknownError:
             call._unknown.add(self._token(call, args))
             raise
-        return raw.model_dump() if isinstance(raw, BaseModel) else raw
+        data = raw.model_dump() if isinstance(raw, BaseModel) else raw
+        given = args.model_dump()
+        if wrong := [
+            f for f, arg in self.matches.items() if not isinstance(data, Mapping) or data.get(f) != given[arg]
+        ]:
+            raise ModelRetry(
+                f'Nothing was done: the {self.name} service answered about a different {", ".join(wrong)}. '
+                'Do not say it was done.'
+            )
+        return data
 
     async def _record(self, call: FlowCall[Any], args: BaseModel, receipt: BaseModel) -> Any:
         data = receipt.model_dump()

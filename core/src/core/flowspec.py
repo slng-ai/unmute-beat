@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import sys
 import typing
 from abc import ABC, abstractmethod
 from collections import deque
@@ -139,7 +140,7 @@ class Folder:
             while (here / '__init__.py').exists():
                 parts.insert(0, here.name)
                 here = here.parent
-            self.package = '.'.join(parts)
+            self.package = '.'.join(_on_path(parts, here))
 
     def path(self, ref: str) -> Path:
         if self.root is None:
@@ -175,6 +176,21 @@ class Folder:
         if not hasattr(module, name):
             raise _ProblemError(f'{file!r} has no {name!r}')
         return getattr(module, name)
+
+
+def _on_path(parts: list[str], here: Path) -> list[str]:
+    """The package's full dotted name, through any namespace packages (folders with no `__init__.py`) above it.
+
+    salon-graph's `tests` is one: `tests/slice` is imported as `tests.slice`,
+    not `slice`. Folders are added until the one above is on `sys.path`; with
+    none found, the `__init__.py` chain alone is the name, as before.
+    """
+    entries = {Path(entry or '.').resolve() for entry in sys.path}
+    named, above = list(parts), here
+    while above not in entries and above.parent != above:
+        named.insert(0, above.name)
+        above = above.parent
+    return named if above in entries else parts
 
 
 class _Resolver:
@@ -320,14 +336,18 @@ class _Resolver:
         return self._once('module', ref, step, lambda: self.folder.module(ref))
 
     def function(self, where: str, ref: str, arity: int) -> Callable[..., Any] | None:
-        """A plain function from the flow folder (`clinic.py:book`), taking exactly `arity` arguments."""
+        """A plain function (or class) from the flow folder, callable with exactly `arity` positional arguments."""
 
         def find() -> Callable[..., Any]:
             found = self.folder.attr(ref)
             if not callable(found):
                 raise _ProblemError(f'{ref!r} is not a function')
-            if len(inspect.signature(found).parameters) != arity:
-                raise _ProblemError(f'{ref!r} must take {arity} argument{"s" if arity > 1 else ""}')
+            try:
+                inspect.signature(found).bind(*range(arity))
+            except TypeError:
+                raise _ProblemError(
+                    f'{ref!r} must be callable with {arity} argument{"" if arity == 1 else "s"}'
+                ) from None
             return found
 
         return self._once('function', ref, where, find)
@@ -348,6 +368,7 @@ class _Resolver:
             'succeeds': dict(decl.succeeds),
             'say': decl.say,
             'needs_approval': decl.approval == 'readback',
+            'matches': dict(decl.matches),
         }
         function = self.function(where, decl.function, 2)
         hints = _hints(function) if function is not None else {}
@@ -380,6 +401,11 @@ class _Resolver:
                     self.fail(
                         where, f'{source!r} cannot set {field_name!r}: they hold different kinds of value'
                     )
+            for field_name, arg in decl.matches.items():
+                if field_name not in receipt_type.model_fields:
+                    self.fail(where, f'matches {field_name!r}, which {receipt_type.__name__} does not have')
+                elif _model(args_type) and arg not in args_type.model_fields:
+                    self.fail(where, f'matches {field_name!r} to {arg!r}, which is not an argument')
             for field_name in decl.succeeds:
                 if field_name not in receipt_type.model_fields:
                     self.fail(
@@ -709,6 +735,8 @@ class OperationSpec(BaseModel):
     """State fields set from the receipt, once it validates and succeeds: `{reference: reference}`."""
     succeeds: dict[str, str | int | bool] = {}
     """Receipt fields and the values meaning it worked: `{status: booked}`. Anything else is not success."""
+    matches: dict[str, str] = {}
+    """Receipt fields that must equal an argument: `{customer_phone: phone}`. A receipt about someone else counts for nothing."""
     approval: Literal['readback', 'none'] = 'readback'
     """`readback`: only after a heard read-back of these exact arguments and a yes. `none`: a read or a lookup."""
     readback: str = ''
@@ -940,8 +968,20 @@ def _bare(kind: Any) -> Any:
 
 
 def _fits(source: Any, target: Any) -> bool:
-    """Whether a value of one declared type is the kind the other holds. The whole value is still validated at run time."""
-    return target is Any or _bare(source) == _bare(target)
+    """Whether every value of one declared type is a value the other holds. The whole value is still validated at run time.
+
+    Checked on what the types hold at bottom (`_bare`): the same type, or a
+    set of literals inside another set, or inside the type they are values of.
+    """
+    if target is Any:
+        return True
+    given, held = _bare(source), _bare(target)
+    if get_origin(given) is Literal:
+        values = get_args(given)
+        if get_origin(held) is Literal:
+            return set(values) <= set(get_args(held))
+        return isinstance(held, type) and all(isinstance(value, held) for value in values)
+    return given == held
 
 
 def load(text: str, root: str | Path | None = None) -> FlowSpec:

@@ -132,7 +132,7 @@ def definitions_fail_before_any_model():
             "'slot' is not bound",
         ),
         (
-            base.replace('args: {patient: patient, slot: slot}', 'args: {patient: slot, slot: slot}'),
+            base.replace('args: {patient: patient, slot: slot}', 'args: {patient: patient, slot: notes}'),
             'different kinds',
         ),
         (

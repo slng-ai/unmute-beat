@@ -1,0 +1,222 @@
+{
+  "aci": "0.1",
+  "ok": true,
+  "resource": "simulations",
+  "operation": "get",
+  "data": {
+    "name": "simulations/7kYgV9kZLXV9GYeDTHZrPe",
+    "simulation_id": "7kYgV9kZLXV9GYeDTHZrPe",
+    "run_id": "BVqdGEunV3avnHrHVwq4oE",
+    "status": "COMPLETED",
+    "create_time": "2026-09-25T14:34:01.527083Z",
+    "test_case_id": "GRdmreeb7SP4G8yegtMntC",
+    "has_audio": true,
+    "agent_id": "JxGgSPA55DcFcDcvbKAUQM",
+    "persona_id": "VSruLZYYyz3w7fkdUaheDR",
+    "test_set_id": "K3Xwqi7g",
+    "transcript": [
+      {
+        "role": "assistant",
+        "content": "Hi. Reached Sage and Stone."
+      },
+      {
+        "role": "assistant",
+        "content": "Robin speaking. What can I do for you?"
+      },
+      {
+        "role": "user",
+        "content": "Hi Robin! I’d like to book a haircut for this Friday morning, please."
+      },
+      {
+        "role": "assistant",
+        "content": "Which phone number should I use?"
+      },
+      {
+        "role": "assistant",
+        "content": "Please say it with the country code."
+      },
+      {
+        "role": "user",
+        "content": "Sure, it’s plus three four, six seven one—"
+      },
+      {
+        "role": "assistant",
+        "content": "Please give me the rest of the digits."
+      },
+      {
+        "role": "user",
+        "content": "Two seven three, four five four."
+      },
+      {
+        "role": "assistant",
+        "content": "Let me read that back to you."
+      },
+      {
+        "role": "assistant",
+        "content": "34671273454."
+      },
+      {
+        "role": "assistant",
+        "content": "Have I got that right?"
+      },
+      {
+        "role": "user",
+        "content": "Yes, that’s correct."
+      },
+      {
+        "role": "assistant",
+        "content": "Thanks."
+      },
+      {
+        "role": "assistant",
+        "content": "Have you."
+      },
+      {
+        "role": "assistant",
+        "content": "For a haircut on Friday the second"
+      },
+      {
+        "role": "assistant",
+        "content": "I have 9AM, 09:30AM,"
+      },
+      {
+        "role": "assistant",
+        "content": "10AM."
+      },
+      {
+        "role": "assistant",
+        "content": "Which time works for you?"
+      },
+      {
+        "role": "user",
+        "content": "Nine AM works for me, thanks."
+      },
+      {
+        "role": "assistant",
+        "content": "Shall I book you in for a haircut?"
+      },
+      {
+        "role": "assistant",
+        "content": "Friday the second at 9AM?"
+      },
+      {
+        "role": "user",
+        "content": "Actually, can we make it Saturday morning instead?"
+      },
+      {
+        "role": "assistant",
+        "content": "For a haircut tomorrow, I have nine AM 09:30AM, 10AM."
+      },
+      {
+        "role": "assistant",
+        "content": "Which time works for you?"
+      },
+      {
+        "role": "user",
+        "content": "Nine AM tomorrow works for me."
+      },
+      {
+        "role": "assistant",
+        "content": "Shall I book you in for a haircut?"
+      },
+      {
+        "role": "assistant",
+        "content": "Tomorrow at 9AM?"
+      },
+      {
+        "role": "user",
+        "content": "Yes, please. That’s perfect."
+      },
+      {
+        "role": "user",
+        "content": "Yes, tomorrow at nine AM. That’s great."
+      },
+      {
+        "role": "assistant",
+        "content": "For a haircut tomorrow, I have ten AM 10:30AM, 11AM,"
+      },
+      {
+        "role": "assistant",
+        "content": "Which time works for you?"
+      },
+      {
+        "role": "user",
+        "content": "Oh, sorry—I thought nine AM was available. In that case, ten AM tomorrow works for me."
+      },
+      {
+        "role": "assistant",
+        "content": "Shall I move your appointment to tomorrow at 10AM?"
+      },
+      {
+        "role": "tool",
+        "content": "{\"function\": \"silence_tool\", \"arguments\": {\"duration_seconds\": 3, \"reason\": \"Waiting for the agent to confirm the ten AM booking and read it back for final confirmation.\"}, \"result\": {\"status\": \"success\", \"duration_seconds\": 3, \"next_action\": \"Do not mention or describe the completed wait. Respond only with new, substantive conversational content; otherwise call silence_tool again.\"}}"
+      },
+      {
+        "role": "user",
+        "content": "Yes, please—tomorrow at ten AM is perfect."
+      },
+      {
+        "role": "assistant",
+        "content": "Let's move to tomorrow at 10AM. Anything else I can help with?"
+      },
+      {
+        "role": "user",
+        "content": "No, that’s everything I needed. Thanks so much! Goodbye."
+      },
+      {
+        "role": "assistant",
+        "content": "Thanks for calling. Goodbye."
+      }
+    ],
+    "call_sid": "CA7ca49095d1194811a5bab4c274a58b00",
+    "destination": null,
+    "is_public": false,
+    "metric_values": null,
+    "notes": null,
+    "source": null
+  },
+  "warnings": [],
+  "next_actions": [
+    {
+      "id": "simulations.metrics",
+      "label": "List simulation metrics",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "metrics",
+        "7kYgV9kZLXV9GYeDTHZrPe"
+      ],
+      "safe": true,
+      "primary": true,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.audio",
+      "label": "Get simulation audio URL",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "audio",
+        "7kYgV9kZLXV9GYeDTHZrPe"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.context",
+      "label": "simulations context",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "context"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    }
+  ]
+}

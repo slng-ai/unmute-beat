@@ -313,10 +313,18 @@ def booking_question(
     had picked a time and said goodbye took it as one and hung up with nothing
     booked. A goodbye read this turn is answered before the question.
 
+    To a caller who already holds a booking, a booking is read back as a
+    second appointment, and the yes to it is the yes to that (`Asked.additional`).
+    In trace fbdd81b6 a plain "Shall I book you in for a haircut, Friday at
+    11:00?" went to a caller holding the 9:00. The yes could never be
+    carried out: the diary refused a second booking nobody had asked for,
+    and the caller heard "going round in circles".
+
     Raises:
         ModelRetry: If the slot is not one this caller is being offered, or the booking not one they hold.
     """
     phone = call.state.customer_phone
+    held: list[dict] = []
     if action in ('book', 'move'):
         offered = call.diary.offer_of(call.id, slot_id, phone)
         if not offered:
@@ -325,16 +333,31 @@ def booking_question(
                 'read the diary again and offer a time it actually returned.'
             )
         service = spoken_service(offered['service'])
-        words = (
-            f'Shall I book you in for a {service}, {offered["spoken"]}?'
-            if action == 'book'
-            else f'Shall I move your appointment to {offered["spoken"]}?'
-        )
+        held = call.diary.bookings_for(phone, call.diary.now().date()) if action == 'book' else []
+        if len(held) == 1:
+            also = f'your {spoken_service(held[0]["service"])} {held[0]["spoken"]}'
+        else:
+            also = 'the appointments you already have'
+        if action == 'move':
+            words = f'Shall I move your appointment to {offered["spoken"]}?'
+        elif held:
+            words = (
+                f'Shall I book you a second appointment, a {service} {offered["spoken"]}, as well as {also}?'
+            )
+        else:
+            words = f'Shall I book you in for a {service}, {offered["spoken"]}?'
         if call.classification.conversation == 'end':
             words = f'Before you go: {words[0].lower()}{words[1:]}'
     else:
         return cancel_question(call, booking_id)
-    return Ask(about='booking', value=slot_id, action=action, booking_id=booking_id, spoken=words)
+    return Ask(
+        about='booking',
+        value=slot_id,
+        action=action,
+        booking_id=booking_id,
+        additional=bool(held),
+        spoken=words,
+    )
 
 
 async def offer_cancel(ctx: RunContext[SalonCall]) -> Ask:
@@ -417,7 +440,9 @@ def _authorised(call: SalonCall, action: str, slot_id: str, booking_id: str) -> 
                 'Nothing was saved: the caller did not agree to what was read back to them. They '
                 f'said "{call.heard}". Answer what they actually asked.'
             )
-        additional = action == 'book' and call.classification.appointment_choice == 'add'
+        additional = action == 'book' and (
+            question.additional or call.classification.appointment_choice == 'add'
+        )
         call.answered()
         return additional
 

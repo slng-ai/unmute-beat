@@ -47,7 +47,7 @@ from salon.instructions import instructions
 from salon.models.consent import Asked
 from salon.models.state import Appointment, SalonCall, SalonState, open_call, prefetch_number
 from salon.tools import complaints
-from salon.tools.booking import read_diary
+from salon.tools.booking import booking_question, read_diary
 from salon.tools.complaints import _record_complaint
 from salon.tools.writes import MANAGER_CALLS, REPLY_SOON
 from tests.classifier_model import classifier_model
@@ -1430,6 +1430,41 @@ async def correcting_the_number_withdraws_the_old_identity_offers():
     assert books.offer_of(call.id, slot, OTHER) == {}
 
 
+async def a_second_appointment_is_read_back_as_one():
+    """Trace fbdd81b6: "Shall I book you in for a haircut, Friday at 11:00?" to a caller holding the 9:00.
+
+    The yes to it could never be carried out, because the diary refuses a
+    second booking nobody asked for. Read back as a second appointment, the
+    yes is the ask, and it books. A caller with nothing booked hears the
+    plain read-back, and a "no" to the second one writes nothing.
+    """
+    for answer, writes in (('No, move it instead.', 1), ('Yes.', 2)):
+        books.reset()
+        call = open_call(PHONE, diary=books)
+        call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+        probe = Probe(call)
+        day = open_days()[-1].strftime('%A')
+        slots = books.find_slots(PHONE, day, 'haircut', books.now(), offered_to=call.id)['slots']
+        first, second = slots[0], slots[-1]
+        plain = booking_question(call, 'book', first['slot_id'], '')
+        assert plain.spoken.startswith('Shall I book you in for a haircut') and not plain.additional, plain
+        books.save_booking(PHONE, 'book', first['slot_id'], '', False, books.now(), offered_to=call.id)
+
+        question = booking_question(call, 'book', second['slot_id'], '')
+        assert question.spoken.startswith('Shall I book you a second appointment'), question.spoken
+        assert question.additional and 'as well as your haircut' in question.spoken, question.spoken
+        call.turn_started('Book another one.')
+        await call.speak_now(question.put(call), origin='ask')
+        call.note_reached()
+        call._burst -= 60
+        call.note_drained()
+        with scripted(booking=outputs('booking_guidance', topic='time')):
+            await probe._turn(answer)
+        held = books.bookings_for(PHONE, books.now().date())
+        assert len(held) == writes, (answer, held, probe.fixed()[-1])
+        assert probe._finished.status == 'answered', probe._finished
+
+
 async def main():
     """The `additional` flag that this used to check is gone from `save_booking` altogether: a second
     appointment is now decided by the caller's answer to the question the refusal asks, not by an
@@ -1437,6 +1472,7 @@ async def main():
     `tests.test_consent`, as `n3_a_flipped_flag_is_not_consent`.
     """
     await verify_then_book()
+    await a_second_appointment_is_read_back_as_one()
     await the_diary_is_the_edge()
     await the_diary_is_not_lent_before_verification()
     await interpose_costs_one_run()

@@ -43,6 +43,8 @@ class Asked(BaseModel):
     """The caller identity the question was put under. A question put to one number is not answered by another."""
     action: Literal['book', 'move', 'cancel', ''] = ''
     booking_id: str = ''
+    additional: bool = False
+    """The read-back said this is a second appointment, so the yes to it adds one to what the caller holds."""
     turn: int = 0
     """The caller turn it went out on. Set by `SalonCall.ask`, never by a tool."""
 

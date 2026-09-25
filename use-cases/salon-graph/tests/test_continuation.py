@@ -636,48 +636,59 @@ async def the_day_after_the_one_offered_is_offered_with_both_days():
     The model passed the right date, Saturday the 3rd, each time, and the day
     guard sent it back: the caller had said "Friday", then a plain "Saturday",
     which is tomorrow. It took three turns and "Saturday the 3rd" to get
-    there. Now the lookup goes ahead at once, and the offer says both days.
+    there. Now the lookup goes ahead at once.
+
+    "The day after", said while Friday the 2nd is on the table, is Saturday
+    the 3rd (`diary.anchored`). So a lookup for that day is offered plainly,
+    however the model wrote it: "2026-10-03" or, as in the replay of
+    2026-09-25, "Saturday 2026-10-03", which used to be read as tomorrow. A
+    lookup for tomorrow instead says both days.
     """
-    call = booking_call()
-    books.set_clock(datetime(2026, 9, 25, 9, 30, tzinfo=diary.TZ))
-    call.turn_started('I would like a haircut on Friday.')
-    await offer(call, 'Friday', 'haircut')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    probe = Probe(call)
-    asked: list[int] = []
+    for when, first in (
+        ('2026-10-03', 'For a haircut on Saturday the 3rd, I have'),
+        ('Saturday 2026-10-03', 'For a haircut on Saturday the 3rd, I have'),
+        ('tomorrow', "That's tomorrow, not Saturday the 3rd: for a haircut, I have"),
+    ):
+        call = booking_call()
+        books.set_clock(datetime(2026, 9, 25, 9, 30, tzinfo=diary.TZ))
+        call.turn_started('I would like a haircut on Friday.')
+        await offer(call, 'Friday', 'haircut')
+        call.note_reached()
+        played_out(call)
+        call.turn_ended(interrupted=False)
+        probe = Probe(call)
+        asked: list[str] = []
 
-    def classify(name, data):
-        return 'continue' if name == 'conversation' else None
+        def classify(name, data):
+            return 'continue' if name == 'conversation' else None
 
-    async def booking(messages, info):
-        asked.append(1)
-        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
-        yield {
-            0: DeltaToolCall(name=tool, json_args=json.dumps({'when': '2026-10-03', 'service': 'haircut'}))
-        }
+        async def booking(messages, info, when=when, asked=asked):
+            asked.append(when)
+            (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
+            yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': when, 'service': 'haircut'}))}
 
-    async def other(messages, info):
-        yield 'Anything else?'
+        async def other(messages, info):
+            yield 'Anything else?'
 
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name, node in agents.AGENTS.items():
-            model = FunctionModel(stream_function=booking if name == 'booking' else other)
-            stack.enter_context(node.agent.override(model=model))
-        for words, theirs in (
-            ('Um, 9:00 AM. Actually, can you look at the day after?', 'Friday the 2nd'),
-            ('What I meant is Saturday.', 'tomorrow'),
-        ):
-            asked.clear()
-            probe.interrupt()
-            await probe._turn(words)
-            line = probe.fixed()[-1]
-            assert line.startswith(f"That's Saturday the 3rd, not {theirs}: for a haircut, I have"), line
-            assert asked == [1], f'the right date was sent back: {len(asked)} requests'
-            call.note_reached()
-            played_out(call)
+        with ExitStack() as stack:
+            stack.enter_context(scripted_readings(classify))
+            for name, node in agents.AGENTS.items():
+                model = FunctionModel(stream_function=booking if name == 'booking' else other)
+                stack.enter_context(node.agent.override(model=model))
+            for words, line_starts in (
+                ('Um, 9:00 AM. Actually, can you look at the day after?', first),
+                ('What I meant is Saturday.', 'For a haircut on Saturday the 3rd, I have'),
+            ):
+                asked.clear()
+                probe.interrupt()
+                await probe._turn(words)
+                line = probe.fixed()[-1]
+                if when == 'tomorrow' and words.startswith('What'):
+                    line_starts = 'For a haircut tomorrow, I have'
+                assert line.startswith(line_starts), (when, words, line)
+                assert len(asked) == 1, f'the date was sent back: {asked}'
+                call.note_reached()
+                played_out(call)
 
 
 def a_report_never_unhears_a_line_that_played():

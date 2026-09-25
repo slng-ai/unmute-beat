@@ -331,6 +331,44 @@ def the_phrases_of_trace_bbe42ad4_resolve():
     assert diary.day_phrases('I think October the 3rd. Something like this?') == ['october the 3rd']
 
 
+def an_exact_date_decides_and_a_day_after_counts_from_its_day():
+    """Replay of 2026-09-25, on Friday the 25th: the model passed "Saturday 2026-10-03" and tomorrow was offered.
+
+    The weekday rule read "Saturday" before the date. Now the date decides,
+    and a weekday it does not fall on is refused. "The day after X" is X plus
+    one; with no day after it, the words name none and the model uses its
+    calendar.
+    """
+    friday = date(2026, 9, 25)
+    for words, day in (
+        ('Saturday 2026-10-03', date(2026, 10, 3)),
+        ('October 3rd, Saturday', date(2026, 10, 3)),
+        ('Saturday the 3rd', date(2026, 10, 3)),
+        ('the day after Friday', date(2026, 10, 3)),
+        ('the day before Saturday the 3rd', date(2026, 10, 2)),
+        ('the day after tomorrow', date(2026, 9, 27)),
+        ('the day after tomorrow at 3', date(2026, 9, 27)),
+    ):
+        assert diary.resolve_day(words, friday) == day, (words, diary.resolve_day(words, friday))
+    for refused in (
+        'Friday 2026-10-03',
+        'Friday the 3rd',
+        'the day after',
+        'the next day',
+        'the day after next',
+    ):
+        assert diary.resolve_day(refused, friday) is None, refused
+        assert diary.names_a_day(refused), f'{refused!r} names a day, so the model is sent to its calendar'
+    assert diary.day_phrases('Could we do the day after tomorrow?') == ['the day after tomorrow']
+    assert diary.day_phrases('Can you look at the day after?') == ['the day after']
+    on_the_table = date(2026, 10, 2)
+    assert diary.anchored('the day after', on_the_table) == '2026-10-03'
+    assert diary.anchored('the next day', on_the_table) == '2026-10-03'
+    assert diary.anchored('the day before', on_the_table) == '2026-10-01'
+    assert diary.anchored('the day after', None) == 'the day after', 'no day on the table: no day named'
+    assert diary.anchored('friday', on_the_table) == 'friday'
+
+
 def anything_outside_the_policy_is_asked_about():
     """Not guessed. The agent gets `need_day` and asks which day."""
     for outside in ('whenever suits', 'in a fortnight', ''):
@@ -614,6 +652,7 @@ async def main():
     two_calls_from_one_phone_are_two_conversations()
     the_supported_phrases_resolve()
     the_phrases_of_trace_bbe42ad4_resolve()
+    an_exact_date_decides_and_a_day_after_counts_from_its_day()
     anything_outside_the_policy_is_asked_about()
     a_modifier_the_policy_cannot_do_is_asked_about()
     a_weekday_must_be_a_whole_word()

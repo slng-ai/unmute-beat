@@ -21,7 +21,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from core import state as core
 from core.proposals import Proposal
 from core.readings import Option
-from salon.diary import TZ, Diary, day_phrases
+from salon.diary import TZ, Diary, anchored, day_phrases
 from salon.models.consent import Asked, ReplyClassification
 from salon.models.receipts import Slot
 from salon.models.shapes import AgentName, Date, Id, Phone, Service, Time, Verification
@@ -277,7 +277,8 @@ class SalonCall(core.CallContext):
         super().turn_started(heard)
         if not self.continuing:
             self._writes_before = self.state.writes
-        for words in day_phrases(heard):
+        for said in day_phrases(heard):
+            words = anchored(said, self.state.booking_day)
             if words not in self._day_words:
                 self._day_words = [*self._day_words, words][-_DAYS_REMEMBERED:]
 

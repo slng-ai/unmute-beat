@@ -195,7 +195,9 @@ all clean, in every member you touched. Paste the real output; don't round up.
    question ledger rewound, speech kept as far as it was heard. A segment is
    heard in full only if its audio ran out (`BotStoppedSpeakingFrame`) before
    the caller cut in. Without playback signals the engine errs towards a new
-   turn.
+   turn. A runtime text report never cuts a segment whose audio already ran
+   out, and a queued segment whose words had time to play counts as played.
+   A joined turn's span says why (`continued_from`).
 
 ## Known debt
 

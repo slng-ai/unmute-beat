@@ -1,0 +1,39 @@
+[project]
+name = "faro-language-learning"
+version = "0.1.0"
+description = "Faro: a bilingual language-learning companion on core, with a SQLite store."
+requires-python = ">=3.14"
+dependencies = [
+    "slng-voice-core",
+    "pydantic-extra-types[phonenumbers]>=2.11.1",
+    "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",
+    "pipecat-slng>=0.5.2",
+    "python-dotenv>=1.2.3",
+    "websockets>=16.1.1",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14", "ty>=0.0.82"]
+
+[tool.uv.sources]
+slng-voice-core = { workspace = true }
+
+# A package, so `faro-tools` can import `faro`.
+# ponytail: module-root is this folder, so an editable install also puts `bot` and `tests` on the path
+# of anything that depends on it. Move `faro/` under `src/` if a dependent ever has its own `tests`.
+[build-system]
+requires = ["uv_build>=0.9,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "faro"
+module-root = ""
+
+[[tool.ty.overrides]]
+# Scripted tests pass `None` for a model and a usage they never read.
+include = ["tests/**"]
+
+[tool.ty.overrides.rules]
+call-non-callable = "ignore"
+unresolved-attribute = "ignore"
+not-subscriptable = "ignore"

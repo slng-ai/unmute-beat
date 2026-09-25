@@ -8,6 +8,10 @@ rests on. The links are the primary references the design was checked against;
 public documentation changes, so behaviour was verified against the pinned
 versions in `uv.lock` (Pydantic AI 2.46, Pipecat 1.11).
 
+Paths below are written from before the repository split into `core/` and
+`use-cases/` on 25 September 2026. `core/x.py` is now `core/src/core/x.py`.
+`salon/...`, `tests/...` and `evals/...` are now under `use-cases/salon-graph/`.
+
 ## 1. Pydantic AI as the LLM node of a Pipecat pipeline
 
 A Pipecat LLM node is a frame contract, not a class. On an `LLMContextFrame`
@@ -221,6 +225,11 @@ its flow as a short, ordered list of **typed steps** instead, in Python or in
 a YAML file, and run it on the same engine. The Pydantic graph then checks,
 while the call runs, that every move from one step to the next is one the
 flow allows.
+
+The two demo flows this section quotes, `examples/access` (ten steps) and
+`examples/help` (one step), were removed on 25 September 2026. The snippets
+stay as design notes. The code is in the git history before that date. The
+machinery they used (`StepFlow`, `FlowSpec`) is still in core.
 
 ### From a list of steps to a running call
 
@@ -533,18 +542,6 @@ Then it builds the `StepFlow` and its graph once; every call shares them. A
 `Registry` is still accepted for things a platform wants to name rather than
 ship as files (`operation: submit`, `knowledge: library`).
 
-### Running the examples
-
-```bash
-VOICE_AGENCY=access uv run bot.py -t webrtc   # the ten-step access request
-VOICE_AGENCY=help uv run bot.py -t webrtc     # the library help line
-```
-
-Both examples import nothing from the salon. `tests/test_examples.py` walks
-them through the real engine; `tests/test_flowspec.py` checks that each flow
-file behaves exactly like its Python version, that YAML and JSON load to the
-same flow, and that every broken file is refused.
-
 - Pydantic graph: https://pydantic.dev/docs/ai/graph/graph/
 - Discriminated unions, for step kinds: https://pydantic.dev/docs/validation/latest/concepts/unions/#discriminated-unions
 - Validation context, for checks that read other facts: https://pydantic.dev/docs/validation/latest/concepts/validators/
@@ -606,7 +603,7 @@ conversational agents, through one asynchronous
 [Pydantic AI direct model request](https://pydantic.dev/docs/ai/core-concepts/direct/).
 It has no agent loop, business tools, conversation history or repair requests.
 
-[Classifier](../core/classifiers.py) is an ordinary generic Python class:
+[Classifier](../core/src/core/classifiers.py) is an ordinary generic Python class:
 `Classifier[InputT, OutputT]`, with both contracts defined by Pydantic models.
 Every classification is made of the same five things:
 
@@ -630,7 +627,7 @@ in `core`.
 ### Narrow readings: one small classifier per act
 
 A reply can do a handful of things every voice agent has to hear. Each one
-is its own reading ([core/readings.py](../core/readings.py)), and a reading runs
+is its own reading ([core/readings.py](../core/src/core/readings.py)), and a reading runs
 only when the call's state says its act can happen this turn:
 
 ```mermaid
@@ -656,12 +653,12 @@ flowchart LR
 Core owns the inputs, the classes and their descriptions (`CONFIRM`,
 `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`, and `Choice` for picking
 one of the options by id). Core also owns the acts themselves, as classes in
-[core/conversation.py](../core/conversation.py): `ReadBack`, `FixedChoice`,
+[core/conversation.py](../core/src/core/conversation.py): `ReadBack`, `FixedChoice`,
 `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`, put
 together by `Conversation`. A business gives each one its information: the
 question it answers, one context sentence, where its options come from, and
 the action each answer takes. The salon's is one declaration, `SALON` in
-[salon/classification.py](../salon/classification.py). The tool guards read one
+[salon/classification.py](../use-cases/salon-graph/salon/classification.py). The tool guards read one
 merged view of this turn's labels, `SalonCall.classification`.
 
 A request sends 270 to 430 input tokens, against about 2,300 for the one
@@ -715,8 +712,8 @@ second check, which can only refuse.
 ### The state solver (opt-in)
 
 `SALON_INTERPRETER=solver` swaps the narrow readings for a
-[state solver](../salon/classification.py): one structured request that reads the
-reply as exactly one [decision](../core/decisions.py) (accept, reject, revise,
+[state solver](../use-cases/salon-graph/salon/classification.py): one structured request that reads the
+reply as exactly one [decision](../core/src/core/decisions.py) (accept, reject, revise,
 conditional, clarify, correct the number, choose move or add, switch task,
 end the call, or nothing). The three the classifier cannot say are applied
 by existing executors: a corrected number is read back with `readback_number`,

@@ -1,0 +1,17 @@
+[project]
+name = "concierge-tools"
+version = "0.1.0"
+description = "Compare the salon builds: Coval calls to any use case's bot.py, and the cost of calls from Langfuse traces."
+requires-python = ">=3.14"
+dependencies = [
+    "langfuse>=4.15.4",
+    "pydantic>=2.12",
+    "python-dotenv>=1.2.3",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14", "ty>=0.0.82"]
+
+# Its own ty root: without one, ty walks up to the next pyproject that has a [tool.ty] table.
+[tool.ty.environment]
+python-version = "3.14"

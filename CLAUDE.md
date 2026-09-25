@@ -12,17 +12,42 @@ its supporting link. Read it before changing how a turn works.
 
 ## Layout
 
+A uv workspace. The root `pyproject.toml` lists the members and holds the ruff
+config; there is one `uv.lock` and one `.venv` at the root, and one `.env`.
+Every member has its own `pyproject.toml`. Paths in each table are relative to
+that member's folder.
+
+**`core/`**, the package `slng-voice-core`. The code is in `core/src/core/`.
+
 | Path | Owns |
 |---|---|
-| `bot.py` | the Pipecat pipeline: STT, VAD and smart-turn, TTS, transport, tracing worker, greeting. The only runnable entry point |
-| `core/state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question`, `Held` (what the caller could still take back, `hold`/`held`/`release`) |
-| `core/graph.py` | `Node`, `Exit`, `LocalAction`, `Opening`, `route`, `moved_by`, `lent`, `model_clients` |
-| `core/flow.py` | `Flow`: the steps table as a `pydantic_graph` graph with each step's legal moves; it walks every turn and refuses an undeclared move; `render()` draws it |
-| `core/policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
-| `core/history.py` | `paired` and `project`: what each provider request is actually sent |
-| `core/turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
-| `core/locale.py` | `Locale`: the four lines the turn engine says itself, in one language; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`) or per call (override the `locale` property) |
-| `core/processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
+| `state.py` | what every agency shares: `STRICT`, `VoiceState`, `CallContext` and its speech ledger, `Handoff`, `Question`, `Held` (what the caller could still take back, `hold`/`held`/`release`) |
+| `graph.py` | `Node`, `Exit`, `LocalAction`, `Opening`, `route`, `moved_by`, `lent`, `model_clients` |
+| `flow.py` | `Flow`: the steps table as a `pydantic_graph` graph with each step's legal moves; it walks every turn and refuses an undeclared move; `render()` draws it |
+| `policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
+| `history.py` | `paired` and `project`: what each provider request is actually sent |
+| `turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
+| `locale.py` | `Locale`: the four lines the turn engine says itself, in one language; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`) or per call (override the `locale` property) |
+| `processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat |
+| `classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
+| `decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
+| `proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
+| `operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record; `needs_approval` says whether a read-back yes is required; `operation_token` |
+| `completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
+| `steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step) and `AgentBuilder` (builds its agent the same way for every use case), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
+| `flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
+| `readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
+| `conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack`, `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
+| `desk.py` | `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry` |
+| `interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
+| `observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
+| `tests/` | `test_classes`, `test_history`, `test_reuse` and `clinic.py` (a clinic built on core alone). No use case code |
+
+**`use-cases/salon-graph/`**, the salon on core.
+
+| Path | Owns |
+|---|---|
+| `bot.py` | the Pipecat pipeline around the salon: STT, VAD and smart-turn, TTS, transport, tracing worker, greeting |
 | `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `ConsentInput`, `ReplyClassification`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
 | `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`). Each write is an `Operation`: `LOOKUP`, `WRITE_BOOKING`, `WRITE_COMPLAINT` |
 | `salon/diary.py` | `Diary`: customers, slots, offers, bookings, complaints, in memory, and the oracle that says no |
@@ -31,38 +56,47 @@ its supporting link. Read it before changing how a turn works.
 | `salon/nodes.py` | `BUILDER` (core's `AgentBuilder`, given the salon's information) and `build()`, `advance()`, `decided()`, `solve()`, the guards |
 | `salon/instructions.py` | loads `flow.yaml` as `SPEC`; `instructions(name)` is a step's compiled prompt; `GREETING`; `COMPLAINT_GUIDANCE` |
 | `salon/classification.py` | `SALON`, the salon's conversation: core's acts given the salon's information, which builds its narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`) and decides on them; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply`. Tools reach it through the call (`SalonCall.read_reply`), never by import |
-| `salon/baseline.py` | the same salon as one prompt on Pipecat's own Gemini service, the tools on the same `Diary`; `VOICE_HARNESS=pipecat` puts it in `bot.py` in place of the harness |
-| `core/classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
-| `core/decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
-| `core/proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
-| `core/operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record; `needs_approval` says whether a read-back yes is required; `operation_token` |
-| `core/completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
-| `core/steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step) and `AgentBuilder` (builds its agent the same way for every use case), `End`, compiled by `StepFlow` into a nodes table; `FlowCall`, `ConfirmedOperation` |
-| `core/flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), each step naming its prompt file and `code:` module inside the folder; `FlowSpecError` listing every problem |
-| `core/readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
-| `core/conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack`, `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
-| `core/desk.py` | `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry` |
-| `core/interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
 | `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
 | `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
-| `examples/` | `access` (a ten-step request), `help` (one conversation step) and `faro` (a bilingual learning companion: one agent step, its own call type, a SQLite store), built on `core` alone, each a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`); `VOICE_AGENCY=access` runs one in `bot.py`. An example may also give `close_call` (run on disconnect) and `STT_LANGUAGE`/`TTS_LANGUAGE`, and its `GREETING` may be a function of the call |
-| `examples/faro/` | `curriculum` (the versioned placement bank, lessons, level rule, fixed lines), `models`, `store` (SQLite: WAL, `synchronous=FULL`, one worker thread; `fixture`, `backup`, `bench`), `state` (`FaroState`, `FaroCall`), `operations` (one `Operation` per write), `conversation` (`FARO`, `BUILDER`, and Faro's own readings: `GRADE` records every exercise attempt, `ONBOARD` saves setup answers, both by code), `steps/companion.py` (the tools, gated by phase; the agent coaches and never grades) |
-| `utils/observability.py` | Langfuse over OTel; call `setup()` once, before any agent is built |
-| `evals/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
-| `utils/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI |
-| `evals/faro.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
-| `tests/` | twenty-four assert-script modules, no pytest, no network |
+| `evals/` | the classifier evaluations (`cases`, `compare`, `consent`, `focused`, `readings`, `report`, `rules`, `solver`). Live, billable, except the rule floor |
+| `tests/` | fifteen assert-script modules, `classifier_model.py`, and `golden/` (every request the salon sends, pinned) |
 
-**The split that matters:** `core/turn.py` runs a turn and knows nothing about
-how it reaches a person; `core/processor.py` is the Pipecat adapter over it.
+**`use-cases/salon-prompt/`**, the same salon as one prompt on Pipecat's own Gemini service: the baseline. No core, no Pydantic AI.
+
+| Path | Owns |
+|---|---|
+| `bot.py` | the same pipeline, with `GoogleLLMService` where salon-graph has `PydanticAgentProcessor` |
+| `salon/baseline.py` | the one prompt, the tools on the same `Diary`, the greeting |
+| `salon/diary.py`, `salon/models/shapes.py`, `salon/prompts/` | copies of salon-graph's. Change both, or the builds stop being comparable |
+| `utils/observability.py` | core's copy without the Pydantic AI hook |
+
+**`use-cases/faro-language-learning/`**, Faro on core.
+
+| Path | Owns |
+|---|---|
+| `bot.py` | the same pipeline as salon-graph's, with Faro's greeting (a function of the call), `close_call` on disconnect, and its own speech languages |
+| `faro/` | a flow folder (`flow.yaml`, `voice.md`, `prompts/`, `steps/`) and a package, so faro-tools can import it. `curriculum` (the versioned placement bank, lessons, level rule, fixed lines), `models`, `store` (SQLite: WAL, `synchronous=FULL`, one worker thread; `fixture`, `backup`, `bench`), `state` (`FaroState`, `FaroCall`), `operations` (one `Operation` per write), `conversation` (`FARO`, `BUILDER`, and Faro's own readings: `GRADE` records every exercise attempt, `ONBOARD` saves setup answers, both by code), `steps/companion.py` (the tools, gated by phase; the agent coaches and never grades) |
+| `tests/` | `test_faro`: the acceptance cases offline, on a real SQLite file |
+
+**`use-cases/concierge-tools/`** and **`use-cases/faro-tools/`**, tools that import no build.
+
+| Path | Owns |
+|---|---|
+| `concierge-tools/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
+| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph |
+| `faro-tools/bench.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
+
+**The split that matters:** `core.turn` runs a turn and knows nothing about
+how it reaches a person; `core.processor` is the Pipecat adapter over it.
 Anything about *running* a turn goes in `turn`, anything about frames goes in
-`processor`. `tests/test_core.py` asserts the two agree and that no `core`
-module but the processor imports Pipecat.
+`processor`. salon-graph's `tests/test_core.py` asserts the two agree and that
+no `core` module but the processor imports Pipecat.
 
-`core` imports nothing from `salon`. `salon.models` imports `core.state`;
-`salon.tools` imports models, the diary and `core.policies`, and reads a reply
-through the call; `salon.classification` imports the tools its acts run;
-`salon.agents` imports everything; `bot.py` wires it to Pipecat.
+`core` imports no use case. A use case imports `core` and nothing from another
+use case; salon-prompt imports neither. In salon-graph: `salon.models` imports
+`core.state`; `salon.tools` imports models, the diary and `core.policies`, and
+reads a reply through the call; `salon.classification` imports the tools its
+acts run; `salon.agents` imports everything; `bot.py` wires it to Pipecat.
 
 State is replaced wholesale via `call.commit(**updates)`: one validated
 candidate or nothing, never field-by-field assignment. Tools live with the step
@@ -71,25 +105,31 @@ they belong to and bind to `RunContext[SalonCall]`. The model-facing tool has a
 
 ## Commands
 
-Everything that builds an agent needs a model key at import: `--env-file .env`,
-or the placeholder `python -m tests` sets.
+Everything that builds an agent needs a model key at import: the root `.env`,
+which each `bot.py` finds by walking up, or the placeholder `python -m tests`
+sets. Run a member's commands from its folder, or with `uv run --directory`.
 
 ```bash
-uv sync                                                  # venv + deps
-uv run python -m tests                                   # all twenty-four modules, offline, no .env
-uv run --env-file .env python bot.py                     # voice, http://localhost:7860
-uv run ruff format . && uv run ruff check . && uv run ty check .
-uv run python -m utils.coval_sim run VkpkmRMV            # Coval release check, 18 real calls, billable
-uv run --env-file .env python -m evals.ledger harness CA... -- graph trace:...   # cost of calls, from traces
+uv sync --all-packages                                   # the whole workspace, from the root
+cd use-cases/salon-graph && uv run bot.py                # voice, http://localhost:7860
+uv run python -m tests                                   # this folder's modules, offline, no .env
+uv run ruff format . && uv run ruff check .              # from the root: every member
+for d in core use-cases/*; do uv run --directory $d ty check .; done
+cd use-cases/concierge-tools && uv run python -m coval_sim run VkpkmRMV   # Coval release check, billable
+cd use-cases/concierge-tools && uv run ledger.py harness CA... -- graph trace:...   # cost of calls
 ```
 
 `uv run python -m tests` turns `ALLOW_MODEL_REQUESTS` off *before* any module
 is imported, so a test that forgot to override an agent raises instead of
 billing. One module alone needs a key in the environment:
-`GOOGLE_API_KEY=x uv run python -m tests.test_salon`.
+`GOOGLE_API_KEY=x uv run python -m tests.test_salon`, from salon-graph.
+
+ty runs per member: each member's `pyproject.toml` has a `[tool.ty]` table, so
+ty takes that folder as its root. Without one, ty walks up to the next
+pyproject that has one.
 
 Before calling anything done: `ruff check`, `ty check` and `python -m tests`
-all clean. Paste the real output; don't round up.
+all clean, in every member you touched. Paste the real output; don't round up.
 
 ## Conventions
 

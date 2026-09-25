@@ -238,6 +238,8 @@ class SalonCall(core.CallContext):
     state: SalonState = Field(default_factory=SalonState)
     _diary: Diary = PrivateAttr(default_factory=Diary)
     _day_retried: int = PrivateAttr(default=-1)
+    _said_day: str = PrivateAttr(default='')
+    """The caller's own day, spoken, when the last diary read was for another one (`salon.tools.booking`)."""
     """The turn a day the diary could not work out was sent back to the model (`salon.tools.booking.find_times`)."""
     """The salon's books. A private attribute because the prompt templates are compiled against this model's schema."""
     _writes_before: int = PrivateAttr(default=0)

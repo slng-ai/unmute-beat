@@ -8,7 +8,7 @@ from datetime import datetime
 
 from pipecat.frames.frames import LLMTextFrame, TTSSpeakFrame
 from pydantic import ValidationError
-from pydantic_ai import Agent, ModelResponse, ModelRetry, RunContext, TextPart, UserPromptPart
+from pydantic_ai import Agent, ModelResponse, RunContext, TextPart, UserPromptPart
 from pydantic_ai.messages import SystemPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
@@ -398,13 +398,9 @@ async def openings_decline():
     call._request_kept = True
     action = agents.AGENTS['booking'].opening(call)
     assert action is not None
-    try:
-        await action.run()
-    except ModelRetry:
-        pass
-    else:
-        raise AssertionError('a carried day the caller never said was looked up')
-    assert call.state.wanted is not None and not call.state.offered, 'a refused read changes nothing'
+    await action.run()
+    offer = call.pending_question() or call._asked
+    assert offer.spoken.startswith("That's Friday the 2nd, not Friday the 25th: for a haircut"), offer.spoken
 
 
 async def a_slow_reading_does_not_delay_the_answer():

@@ -630,6 +630,56 @@ async def a_day_next_week_is_offered_at_the_first_try():
     assert '- Saturday 2026-10-03: Saturday next week' in requests[0], 'nor the calendar'
 
 
+async def the_day_after_the_one_offered_is_offered_with_both_days():
+    """Trace 9195116 (Friday 2026-09-25): "can you look at the day after?", then "What I meant is Saturday".
+
+    The model passed the right date, Saturday the 3rd, each time, and the day
+    guard sent it back: the caller had said "Friday", then a plain "Saturday",
+    which is tomorrow. It took three turns and "Saturday the 3rd" to get
+    there. Now the lookup goes ahead at once, and the offer says both days.
+    """
+    call = booking_call()
+    books.set_clock(datetime(2026, 9, 25, 9, 30, tzinfo=diary.TZ))
+    call.turn_started('I would like a haircut on Friday.')
+    await offer(call, 'Friday', 'haircut')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    probe = Probe(call)
+    asked: list[int] = []
+
+    def classify(name, data):
+        return 'continue' if name == 'conversation' else None
+
+    async def booking(messages, info):
+        asked.append(1)
+        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
+        yield {
+            0: DeltaToolCall(name=tool, json_args=json.dumps({'when': '2026-10-03', 'service': 'haircut'}))
+        }
+
+    async def other(messages, info):
+        yield 'Anything else?'
+
+    with ExitStack() as stack:
+        stack.enter_context(scripted_readings(classify))
+        for name, node in agents.AGENTS.items():
+            model = FunctionModel(stream_function=booking if name == 'booking' else other)
+            stack.enter_context(node.agent.override(model=model))
+        for words, theirs in (
+            ('Um, 9:00 AM. Actually, can you look at the day after?', 'Friday the 2nd'),
+            ('What I meant is Saturday.', 'tomorrow'),
+        ):
+            asked.clear()
+            probe.interrupt()
+            await probe._turn(words)
+            line = probe.fixed()[-1]
+            assert line.startswith(f"That's Saturday the 3rd, not {theirs}: for a haircut, I have"), line
+            assert asked == [1], f'the right date was sent back: {len(asked)} requests'
+            call.note_reached()
+            played_out(call)
+
+
 def a_report_never_unhears_a_line_that_played():
     """Trace fbdd81b6: a question that played out was taken as unheard, and the answer to it joined the turn before.
 
@@ -1380,6 +1430,7 @@ async def main():
     await a_yes_with_a_new_request_is_verified_and_the_rest_answered()
     a_report_never_unhears_a_line_that_played()
     await a_day_next_week_is_offered_at_the_first_try()
+    await the_day_after_the_one_offered_is_offered_with_both_days()
     await an_add_answered_to_a_heard_question_books_it()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
     await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()

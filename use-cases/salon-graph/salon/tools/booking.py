@@ -30,11 +30,12 @@ from salon.diary import (
     names_a_day,
     resolve_day,
     resolve_time,
+    spoken_day,
     times_named,
 )
 from salon.models.consent import Asked
 from salon.models.receipts import BookingCommand, Held, Saved, Slots
-from salon.models.shapes import Service
+from salon.models.shapes import Date, Service
 from salon.models.state import Appointment, SalonCall, Unresolved
 from salon.tools.asking import Ask
 from salon.tools.policy import ACTIONS
@@ -94,7 +95,7 @@ async def find_times(call: SalonCall, when: str, service: Service | Literal['any
         raise ModelRetry(
             'The diary is read under a confirmed phone number and nobody is identified yet. Hand to the verify agent.'
         )
-    _same_day_the_caller_named(call, when)
+    theirs = _day_they_said(call, when)
     found = Slots.model_validate(
         call.diary.find_slots(
             call.state.customer_phone,
@@ -112,39 +113,39 @@ async def find_times(call: SalonCall, when: str, service: Service | Literal['any
             'calendar in your instructions and call this again with its date as YYYY-MM-DD. If it is not '
             'there, ask the caller which date they mean.'
         )
+    call._said_day = ''
+    if theirs is not None and found.date is not None and found.date != theirs:
+        call._said_day = spoken_day(theirs, call.diary.now().date())
+        contrast = f'The caller said {call._said_day}; this is {found.day}. Say both when you offer it.'
+        found = found.model_copy(update={'note': f'{found.note} {contrast}'.strip()})
     call.commit(booking_day=found.date, offered=[], wanted=None)
     return found
 
 
-def _same_day_the_caller_named(call: SalonCall, when: str) -> None:
-    """Refuse a lookup for a day the caller never said.
+def _day_they_said(call: SalonCall, when: str) -> Date | None:
+    """The day the caller named, when this lookup is for another one. None when it is theirs, or cannot be told.
 
-    The caller's words for the day, against the ones this call was given. The
-    resolver is right; what it can be given is the wrong input: the caller
-    says "Friday", the lookup asks for "next Friday", and under a Monday clock
-    those are a week apart. The whole difference is a modifier the model added,
-    so the check is on the words and not on the date they resolve to.
+    Live call N2: the caller said "Friday", the model looked up "next Friday",
+    and the booking landed a week late. The lookup used to be refused. Now the
+    model has the calendar and works days out from context ("the day after
+    the one you proposed"), and in trace 9195116 the refusal sent three right
+    dates back until the caller said "Saturday the 3rd". So the lookup goes
+    ahead, and the offer says both days: "That's Saturday the 3rd, not
+    tomorrow". Heard side by side, a week's difference is not missed the way
+    one date on its own was.
 
-    The lookup is what records the offers and `save_booking` refuses a slot
-    from any other one, so `offered_to` is this call, not this number, and
-    asking again withdraws whatever the last search offered.
-
-    A day the caller named that the code cannot work out ("the Tuesday after
-    next") could be the one the model's date is for, so nothing is refused
-    then. The offer names the date the caller hears, and the read-back asks
-    before anything is written.
+    The last of the caller's days that differs is the one named. A day they
+    named that the code cannot work out ("in two weeks on Tuesday") could be
+    the one the model's date is for, so then nothing is said.
     """
-    if (theirs := call.day_words) and (mine := day_phrases(when)):
-        today = call.diary.now().date()
-        wanted = {resolve_day(words, today) for words in theirs}
-        asked_for = resolve_day(mine[-1], today)
-        if None not in wanted and asked_for not in wanted:
-            said = '" or "'.join(theirs)
-            raise ModelRetry(
-                f'Nothing was looked up. The caller said "{said}" and this asked for "{mine[-1]}", '
-                f'which is a different day. Call this again with their words. If you think they '
-                'meant another day, ask them which one.'
-            )
+    if not (theirs := call.day_words) or not (mine := day_phrases(when)):
+        return None
+    today = call.diary.now().date()
+    wanted = [resolve_day(words, today) for words in theirs]
+    asked_for = resolve_day(mine[-1], today)
+    if None in wanted or asked_for is None or asked_for in wanted:
+        return None
+    return wanted[-1]
 
 
 async def offer_times(
@@ -193,6 +194,8 @@ async def offer(
         times = ', '.join(s.time.strftime('%I:%M %p').lstrip('0') for s in spoken)
         day = found.day if found.day in ('today', 'tomorrow') else f'on {found.day}'
         text = f'For a {spoken_service(service)} {day}, I have {times}. Which time works for you?'
+        if call._said_day:
+            text = f"That's {found.day}, not {call._said_day}: for a {spoken_service(service)}, I have {times}. Which time works for you?"
     else:
         text = {
             'need_day': 'Sorry, which date do you mean?'

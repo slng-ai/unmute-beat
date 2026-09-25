@@ -1,0 +1,48 @@
+agency       salon (use-cases/salon-graph)
+agent        JxGgSPA55DcFcDcvbKAUQM voice-harness-salon-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   10
+mutations    none
+simulations  10 = 1 case(s) x 10 iteration(s) x 1
+call limit   180s each, enforced by bot.py (MAX_CALL_SECONDS)
+concurrency  10 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        session-4-load-fixed
+launched run np7G4HtyL4n9jcwRn9Uk5V (session-4-load-fixed salon K3Xwqi7g a8b003f3)
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.5 1.4 1.8
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.6 1.4 1.8
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 2.0 1.5 1.8
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 2.1 1.6 1.8
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.7 1.6 1.8
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 2.0 1.6 1.8
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.5 1.5 1.8
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.3 1.5 1.7
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.4 1.5 1.7
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.2 1.4 1.7
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.3 1.7
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.1 1.3 1.6
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.1 1.3 1.6
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.2 1.6
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.4 1.3 1.6
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.1 1.2 1.5
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.2 1.2 1.5
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.3 1.2 1.5
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.1 1.2 1.5
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.2 1.5
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.1 1.2 1.4
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.1 1.4
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.1 1.4
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 0.8 1.1 1.4
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 0.9 1.0 1.3
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.1 1.3
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.1 1.3
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.0 1.1 1.3
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 0.8 1.0 1.3
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 0.7 1.0 1.2
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 0.8 0.9 1.2
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.1 1.0 1.2
+run np7G4HtyL4n9jcwRn9Uk5V IN PROGRESS, load average 1.1 1.0 1.2
+FAIL  salon  test set K3Xwqi7g  run np7G4HtyL4n9jcwRn9Uk5V
+      call b7BSSwtXQyeaRdc95tBbdy: the harness said its UNBACKED (claimed a change nothing made) line
+      log: /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-dotkc5z1/salon-bot.log

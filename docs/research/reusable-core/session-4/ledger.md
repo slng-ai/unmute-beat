@@ -127,3 +127,43 @@ Pass criteria, fixed before launch:
 - Completed requests per caller turn below the baseline's 1.78.
 - Turn latency p50 and p90 no worse than the baseline's 1.15 s and 2.62 s (within 0.1 s).
 - No harness error.
+
+### Fixed load run result (revision a04c0ff)
+
+| Run | Job | Simulations |
+|---|---|---|
+| `oPhvY4RQy2VZWfWVQph65Z` | normal x10, concurrency 10 | 10 |
+| `np7G4HtyL4n9jcwRn9Uk5V` | stress x10, concurrency 10 | 10 |
+
+Used so far: **52** of 60. Report: [`load/fixed/report.md`](load/fixed/report.md). The baseline stress runner ended with exit 3 (still IN PROGRESS at Coval after 45 min, the stuck `Khs7tVuS`); not relaunched.
+
+| Measure | Baseline (52eb245) | Fixed (a04c0ff) | Criterion |
+|---|---|---|---|
+| Writes without a matching earlier question | 0 of 38 | 0 of 35 | met |
+| Calls with exactly one booking | 19 of 20 (normal 10, stress 9) | 16 of 20 (normal 10, stress 6) | **not met** |
+| Model text beside an operation | 19 in 10 calls | 0 | met |
+| Replies opening with a holding line | 32 | 0 | met |
+| Caller turns with more than one holding line | 8 | 0 | met |
+| `collect > lookup_customer` / `collect > book_appointment` | 18 / 24 | 0 / 8 | half met |
+| Completed requests per caller turn | 1.78 | 1.56 | met |
+| Turn latency p50 / p90 | 1.15 / 2.62 s | 1.29 / 2.68 s | **p50 not met** |
+| Model request time p50 / p90 | 0.66 / 0.83 s | 0.80 / 0.98 s | (not a criterion) |
+| Continuation pieces answered / turns cut into | 121 / 64 | 118 / 63 | (endpointing, unchanged) |
+| Input tokens per call | 45,683 | 35,547 | |
+
+The four stress calls with no booking, read from Langfuse and Coval:
+- `QeJTxmKm`: the caller said "Nine o'clock is perfect" and "Yes" before any read-back; code read the booking back (correct: a yes counts only after a heard question); the simulated caller then stayed silent for 70 s until the 180 s limit. A deadlock: question asked, caller silent.
+- `gyaSM3Ax`, `Dui5EEvb`: still mid-conversation at 180 s (17 and 13 caller turns; `Dui5EEvb` ran out as the caller said yes).
+- `7oRuKHUE`: the simulated caller answered "Of course" and "The rest of the number" instead of digits; the bot said "Please give me the rest of the digits" three times; the caller hung up at 128 s.
+
+No wrong write in any of them. The latency p50 rose by 0.14 s, the same as the model's own request time; the fixes add no request, and F3 holds text on operation steps (0.16 s p50, 0.22 s p90, first token to end of reply), so part of the rise may be F3. Not separable from this run.
+
+Other finding: `b7BSSwtX` (booked correctly): the concierge said "I've got you down for a haircut this Friday morning" before any booking; the unbacked-claim check caught it and said the withheld line. Honest, but it sounds clumsy.
+
+The remaining `collect > book_appointment` chains (8): not investigated yet.
+
+### Endpointing run, logged before launch
+
+Revision a04c0ff with `VAD_STOP_SECS=0.6` (was 0.2). Normal x4 + stress x4, concurrency 4 each, one bot, `--metrics 7VHk6dTjvBcuV6XYPmaeGq`, label `session-4-load-endpointing`. Expanded count: 8 (52 -> 60 of 60; no reserve left after this).
+
+Question: per caller turn, do fewer runs answer a continuation piece (fixed: 118 over 202 caller turns), fewer runtime turns get cut into (63), and fewer requests get cancelled (132 of 447), and what does turn latency cost (fixed: p50 1.29 s)? 8 calls is a direction, not proof.

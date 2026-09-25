@@ -51,3 +51,30 @@ run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.2 1.5 2.0
 run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.1 1.4 1.9
 run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.3 1.5 1.9
 run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.1 1.4 1.9
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.0 1.3 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.1 1.3 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.7 1.4 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 2.1 1.5 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.8 1.5 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.7 1.6 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.9 1.6 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.6 1.6 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.2 1.5 1.8
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.1 1.4 1.7
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.2 1.4 1.7
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.0 1.4 1.7
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.0 1.3 1.6
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.1 1.3 1.6
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.1 1.3 1.6
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.0 1.2 1.6
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.3 1.3 1.6
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.2 1.2 1.5
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.2 1.2 1.5
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.2 1.2 1.5
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.0 1.2 1.5
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.2 1.2 1.5
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.1 1.2 1.4
+run 3hZu7PPkjgn2RyzVVnC8A2 IN PROGRESS, load average 1.0 1.1 1.4
+WAIT  salon  test set K3Xwqi7g  run 3hZu7PPkjgn2RyzVVnC8A2
+      run still IN PROGRESS after 2700s: not failed, and still running at Coval
+      log: /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-r7e6_r0h/salon-bot.log

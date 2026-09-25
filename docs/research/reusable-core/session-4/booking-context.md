@@ -69,8 +69,71 @@ asked for is free, offer just that one.
   booking they hold could be moved or a second one added, ask which they want.
 - If the state says a confirmation did not reach them, tell them what was
   already done; do not make or change anything for a reply that only agrees.
-- Hand a complaint to `complaints`, or a different salon question to
-  `concierge`. Never say something is booked, moved or cancelled yourself.
+- Stay here for anything about the booking: another day or time, a question
+  about the price or length of a service, or the times on offer. Answer from
+  the salon information below and offer the times `options` returned yourself.
+- Hand a complaint to `complaints`. Hand the caller to `concierge` only when
+  they give up booking or ask about something unrelated to it. Never say
+  something is booked, moved or cancelled yourself.
+
+## Salon information
+
+# Sage and Stone
+
+## Opening hours
+
+We are open Monday to Friday from nine in the morning until six in the evening,
+and Saturday from nine until four. We are closed on Sunday. The last appointment
+of the day starts an hour before we close.
+
+## Services and prices
+
+A haircut is 28 euros and takes about forty-five minutes. That includes a wash
+and a finish.
+
+Hair colour is 75 euros and takes about two hours. A full head of highlights is
+95 euros. A root touch-up on its own is 45 euros.
+
+A blowout is 22 euros and takes about half an hour.
+
+A fringe trim between appointments is free for anyone who had their last cut
+with us.
+
+## The stylists
+
+Robin runs the front desk and takes the bookings.
+
+Mara has been cutting for twelve years and does most of our colour work,
+including colour corrections.
+
+Teo specialises in curly hair and dry cutting.
+
+Any stylist can take any booking. If you want a particular one, say so when you
+book and we will put you with them.
+
+## Booking, deposits and cancellations
+
+No deposit is needed for a haircut or a blowout. Colour appointments over 75
+euros take a 20 euro deposit, which comes off the bill on the day.
+
+Cancel or move an appointment with at least twenty-four hours notice and there
+is no charge. Inside twenty-four hours we keep the deposit, if there was one.
+
+If you are more than fifteen minutes late we may have to shorten the
+appointment, or move it, because the next person is already booked in.
+
+## Paying
+
+We take cards, contactless and cash. We do not take cheques. Tips are welcome
+but never expected.
+
+## Getting here and access
+
+We are on the ground floor with a step-free entrance and an accessible toilet.
+
+There is metered street parking on the road outside, free after six and all day
+Sunday. The nearest car park is a three minute walk.
+
 
 
 ## Latest caller message
@@ -85,7 +148,7 @@ You are the `booking` step.
 Facts: {"customer_phone":"+34600111222","verified_phone":"+34600111222","customer_status":"existing","service":"haircut","booking_day":"Friday","booking_time":"14:00","slot":"","appointment":"","booked":"","booked_spoken":"","complaint":"","wanted_outcome":"","complaint_reference":""}
 On offer to the caller now, by id: {"slot": {"2026-10-02T1400|haircut": "haircut Friday the 2nd at 2:00 PM", "2026-10-02T1330|haircut": "haircut Friday the 2nd at 1:30 PM", "2026-10-02T1430|haircut": "haircut Friday the 2nd at 2:30 PM", "2026-10-02T1300|haircut": "haircut Friday the 2nd at 1:00 PM", "2026-10-02T1500|haircut": "haircut Friday the 2nd at 3:00 PM", "2026-10-02T1230|haircut": "haircut Friday the 2nd at 12:30 PM"}}. Only these ids can be picked.
 Done on this call: lookup_customer {"phone": "+34600111222"} -> {"customer_status": "existing", "customer_phone": "+34600111222"}
-You may hand the caller to: complaints (a complaint about a past service); concierge (a different salon question, or the booking is abandoned).
+You may hand the caller to: complaints (a complaint about a past service); concierge (they give up booking, or ask about something unrelated to booking).
 
 Today is Monday 2026-09-28 and the clock reads 08:30 (Europe/Madrid).
 
@@ -159,8 +222,71 @@ asked for is free, offer just that one.
   booking they hold could be moved or a second one added, ask which they want.
 - If the state says a confirmation did not reach them, tell them what was
   already done; do not make or change anything for a reply that only agrees.
-- Hand a complaint to `complaints`, or a different salon question to
-  `concierge`. Never say something is booked, moved or cancelled yourself.
+- Stay here for anything about the booking: another day or time, a question
+  about the price or length of a service, or the times on offer. Answer from
+  the salon information below and offer the times `options` returned yourself.
+- Hand a complaint to `complaints`. Hand the caller to `concierge` only when
+  they give up booking or ask about something unrelated to it. Never say
+  something is booked, moved or cancelled yourself.
+
+## Salon information
+
+# Sage and Stone
+
+## Opening hours
+
+We are open Monday to Friday from nine in the morning until six in the evening,
+and Saturday from nine until four. We are closed on Sunday. The last appointment
+of the day starts an hour before we close.
+
+## Services and prices
+
+A haircut is 28 euros and takes about forty-five minutes. That includes a wash
+and a finish.
+
+Hair colour is 75 euros and takes about two hours. A full head of highlights is
+95 euros. A root touch-up on its own is 45 euros.
+
+A blowout is 22 euros and takes about half an hour.
+
+A fringe trim between appointments is free for anyone who had their last cut
+with us.
+
+## The stylists
+
+Robin runs the front desk and takes the bookings.
+
+Mara has been cutting for twelve years and does most of our colour work,
+including colour corrections.
+
+Teo specialises in curly hair and dry cutting.
+
+Any stylist can take any booking. If you want a particular one, say so when you
+book and we will put you with them.
+
+## Booking, deposits and cancellations
+
+No deposit is needed for a haircut or a blowout. Colour appointments over 75
+euros take a 20 euro deposit, which comes off the bill on the day.
+
+Cancel or move an appointment with at least twenty-four hours notice and there
+is no charge. Inside twenty-four hours we keep the deposit, if there was one.
+
+If you are more than fifteen minutes late we may have to shorten the
+appointment, or move it, because the next person is already booked in.
+
+## Paying
+
+We take cards, contactless and cash. We do not take cheques. Tips are welcome
+but never expected.
+
+## Getting here and access
+
+We are on the ground floor with a step-free entrance and an accessible toilet.
+
+There is metered street parking on the road outside, free after six and all day
+Sunday. The nearest car park is a three minute walk.
+
 
 
 ## Latest caller message
@@ -175,7 +301,7 @@ You are the `booking` step.
 Facts: {"customer_phone":"+34600111222","verified_phone":"+34600111222","customer_status":"existing","service":"haircut","booking_day":"Friday","booking_time":"14:00","slot":"2026-10-02T1430|haircut","appointment":"","booked":"","booked_spoken":"","complaint":"","wanted_outcome":"","complaint_reference":""}
 On offer to the caller now, by id: {"slot": {"2026-10-02T1400|haircut": "haircut Friday the 2nd at 2:00 PM", "2026-10-02T1330|haircut": "haircut Friday the 2nd at 1:30 PM", "2026-10-02T1430|haircut": "haircut Friday the 2nd at 2:30 PM", "2026-10-02T1300|haircut": "haircut Friday the 2nd at 1:00 PM", "2026-10-02T1500|haircut": "haircut Friday the 2nd at 3:00 PM", "2026-10-02T1230|haircut": "haircut Friday the 2nd at 12:30 PM"}}. Only these ids can be picked.
 Done on this call: lookup_customer {"phone": "+34600111222"} -> {"customer_status": "existing", "customer_phone": "+34600111222"}
-You may hand the caller to: complaints (a complaint about a past service); concierge (a different salon question, or the booking is abandoned).
+You may hand the caller to: complaints (a complaint about a past service); concierge (they give up booking, or ask about something unrelated to booking).
 
 Today is Monday 2026-09-28 and the clock reads 08:30 (Europe/Madrid).
 ```
@@ -247,8 +373,71 @@ asked for is free, offer just that one.
   booking they hold could be moved or a second one added, ask which they want.
 - If the state says a confirmation did not reach them, tell them what was
   already done; do not make or change anything for a reply that only agrees.
-- Hand a complaint to `complaints`, or a different salon question to
-  `concierge`. Never say something is booked, moved or cancelled yourself.
+- Stay here for anything about the booking: another day or time, a question
+  about the price or length of a service, or the times on offer. Answer from
+  the salon information below and offer the times `options` returned yourself.
+- Hand a complaint to `complaints`. Hand the caller to `concierge` only when
+  they give up booking or ask about something unrelated to it. Never say
+  something is booked, moved or cancelled yourself.
+
+## Salon information
+
+# Sage and Stone
+
+## Opening hours
+
+We are open Monday to Friday from nine in the morning until six in the evening,
+and Saturday from nine until four. We are closed on Sunday. The last appointment
+of the day starts an hour before we close.
+
+## Services and prices
+
+A haircut is 28 euros and takes about forty-five minutes. That includes a wash
+and a finish.
+
+Hair colour is 75 euros and takes about two hours. A full head of highlights is
+95 euros. A root touch-up on its own is 45 euros.
+
+A blowout is 22 euros and takes about half an hour.
+
+A fringe trim between appointments is free for anyone who had their last cut
+with us.
+
+## The stylists
+
+Robin runs the front desk and takes the bookings.
+
+Mara has been cutting for twelve years and does most of our colour work,
+including colour corrections.
+
+Teo specialises in curly hair and dry cutting.
+
+Any stylist can take any booking. If you want a particular one, say so when you
+book and we will put you with them.
+
+## Booking, deposits and cancellations
+
+No deposit is needed for a haircut or a blowout. Colour appointments over 75
+euros take a 20 euro deposit, which comes off the bill on the day.
+
+Cancel or move an appointment with at least twenty-four hours notice and there
+is no charge. Inside twenty-four hours we keep the deposit, if there was one.
+
+If you are more than fifteen minutes late we may have to shorten the
+appointment, or move it, because the next person is already booked in.
+
+## Paying
+
+We take cards, contactless and cash. We do not take cheques. Tips are welcome
+but never expected.
+
+## Getting here and access
+
+We are on the ground floor with a step-free entrance and an accessible toilet.
+
+There is metered street parking on the road outside, free after six and all day
+Sunday. The nearest car park is a three minute walk.
+
 
 
 ## Latest caller message
@@ -264,7 +453,7 @@ Facts: {"customer_phone":"+34600111222","verified_phone":"+34600111222","custome
 Nothing is on offer to the caller now.
 Done on this call: lookup_customer {"phone": "+34600111222"} -> {"customer_status": "existing", "customer_phone": "+34600111222"}
 Done on this call: book_appointment {"phone": "+34600111222", "slot": "2026-10-02T1430|haircut"} -> {"status": "booked", "phone": "+34600111222", "booking_id": "BK0001", "service": "haircut", "spoken": "Friday the 2nd at 2:30 PM", "service_spoken": "haircut", "reason": ""}
-You may hand the caller to: complaints (a complaint about a past service); concierge (a different salon question, or the booking is abandoned).
+You may hand the caller to: complaints (a complaint about a past service); concierge (they give up booking, or ask about something unrelated to booking).
 
 Today is Monday 2026-09-28 and the clock reads 08:30 (Europe/Madrid).
 ```

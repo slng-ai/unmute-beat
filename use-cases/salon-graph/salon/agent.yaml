@@ -109,7 +109,7 @@ steps:
     operations: [book_appointment, move_appointment, cancel_appointment]
     exits:
       - {to: complaints, purpose: 'a complaint about a past service'}
-      - {to: concierge, purpose: 'a different salon question, or the booking is abandoned'}
+      - {to: concierge, purpose: 'they give up booking, or ask about something unrelated to booking'}
 
   - id: complaints
     kind: conversation

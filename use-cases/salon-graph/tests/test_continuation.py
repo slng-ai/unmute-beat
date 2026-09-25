@@ -365,6 +365,52 @@ async def a_yes_with_a_new_request_is_verified_and_the_rest_kept():
     assert call.state.agent == 'booking', call.state.agent
 
 
+async def a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends():
+    """Session 4, Coval run GYZdoiie (simulation fymMyWTi): the number was looked up on a read-back nobody heard.
+
+    The verify agent's `collect` armed the holding line; the read-back was
+    queued while "Let me have a look." played; that line's audio ended half a
+    second later and the read-back was counted as heard with it. The caller,
+    who heard almost none of it, cut in and restated the digits, and the
+    agent's yes to that looked the number up. A segment that joins playing
+    audio is heard only once its own words had time to play.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('+34671273454', diary=books)
+    call.commit(agent='verify', pending='booking')
+    call_of[0] = call
+    probe = Probe(call)
+
+    async def line(text):
+        """The call's line to the caller: without one, a covering line is not recorded."""
+
+    call._say = line
+    call.turn_started('Two seven three, four five four.')
+    await call.say('Let me have a look.', origin='tool_filler')
+    call.note_reached()
+    lookup = FLOW.by_id['verify'].operations[0]
+    proposal = lookup.proposal_for(call, _args(lookup, call))
+    await call.speak_now(Prompted(proposal.about, proposal.spoken, proposal.value).put(call), origin='ask')
+    call.note_drained()
+    readback = next(s for s in call.spoken if s.generated == proposal.spoken)
+    assert readback.playback == 'queued', ('counted as heard with the line it was queued behind', readback)
+    call.note_barge()
+    call.turn_ended(interrupted=True)
+
+    async def verify(call):
+        return ('call', 'lookup_customer')
+
+    with steps(verify=verify):
+        probe.interrupt()
+        await probe._turn("That's two seven three, four five four.")
+    assert call.state.facts.verified_phone == '', 'looked up on a read-back the caller never heard'
+    assert any(s.generated == proposal.spoken for s in call.spoken), (
+        'the number is read back again',
+        call.spoken,
+    )
+
+
 def a_report_never_unhears_a_line_that_played():
     """Trace fbdd81b6: a question that played out was taken as unheard, and the answer to it joined the turn before.
 
@@ -511,6 +557,7 @@ async def main() -> None:
     await the_next_reply_is_told_what_was_not_heard()
     await an_unheard_receipt_is_said_again_and_not_booked_again()
     await a_yes_with_a_new_request_is_verified_and_the_rest_kept()
+    await a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends()
     a_report_never_unhears_a_line_that_played()
     await a_missing_barge_never_merges_turns()
     a_read_back_said_again_in_full_can_be_answered()

@@ -24,7 +24,7 @@ All green except one inherited lint problem: `docs/research/reusable-core/sessio
 
 ## Coval allowance
 
-Session 4 has its own cap of 20 calls. Used so far: **0**.
+Session 4 has its own cap of 20 calls. Used so far: **1** (see the table below).
 
 Inherited run reconciled by ID on 2026-09-25T17:45Z, no relaunch:
 
@@ -37,3 +37,8 @@ The stuck simulation stays inconclusive. The local bot for that run stopped long
 
 | # | Job | Run | Simulations | Result |
 |---|---|---|---|---|
+| 1 | complex stress (K3Xwqi7g, VSruLZYYyz3w7fkdUaheDR, 1x1, concurrency 1), revision 044057e | `GYZdoiie3dVF9VuguVRyQi` | 1: `fymMyWTiyz6eqfK3RwRTRX` (call CA09f5c0958d564d9782dc10947e8e421c) | **Failed, critical.** The number read-back was queued behind the new holding line, counted as heard when that line's audio ended, and cut by the caller about 2 s in; their restated digits then authorised the lookup (write audit: question asked turn 3, segment `5a0c789242ed:3:8`, heard "that's two seven three four five four"). Also: the runner exited on a Coval HTTP 429 during a status poll and took the bot down 68 s into the call (at booking). No booking was made. |
+
+Call 1 stopped further launches. Repairs on the same branch before any other call: core counts a segment that joined playing audio as heard only once its own words had time to play (`CallContext.note_drained`, regression `tests.test_continuation:a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends`, which fails with the rule disabled); `coval_sim` retries a rate-limited read instead of ending the job. Offline suites and N1-N13 rerun clean.
+
+Reserve call 2, logged before launch: the same frozen complex case on the repaired revision. Question: with the read-back delivery repaired, does the fragmented number, the day change at the booking read-back and any interruption end with one Saturday booking and every write on a heard question? Expanded count: 1.

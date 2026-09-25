@@ -35,8 +35,11 @@ class CovalClient:
         Only reads: a launch or an update sent twice could start two runs.
         A 25-minute run used to be lost to one dropped poll (the baseline's
         first Coval call, 2026-09-24), though the call itself had finished.
+        Coval's rate limit (HTTP 429) is a read tried again too, with a longer
+        wait: session 4's run GYZdoiie lost its bot mid-call when one poll was
+        refused, because the runner took the refusal as the run failing.
         """
-        for attempt in range(4):
+        for attempt in range(6):
             out = subprocess.run(
                 [self._binary, '--format', 'json', *args],
                 capture_output=True,
@@ -44,12 +47,15 @@ class CovalClient:
                 env=self._env,
                 check=False,
             )
+            limited = '429' in out.stderr or 'Too Many Requests' in out.stderr
             retry = (
-                out.returncode != 0 and 'Network error' in out.stderr and args[1:2] in (('get',), ('list',))
+                out.returncode != 0
+                and ('Network error' in out.stderr or limited)
+                and args[1:2] in (('get',), ('list',))
             )
-            if not retry or attempt == 3:
+            if not retry or attempt == 5:
                 break
-            time.sleep(5 * (attempt + 1))
+            time.sleep((15 if limited else 5) * (attempt + 1))
         if out.returncode != 0:
             raise CovalError(f'coval {" ".join(args[:2])}: {out.stderr.strip()}')
         return json.loads(out.stdout) if out.stdout.strip() else None

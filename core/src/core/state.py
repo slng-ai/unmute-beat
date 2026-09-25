@@ -627,29 +627,39 @@ class CallContext(BaseModel):
 
         Speech handed to TTS while audio was already going out never gets a
         start signal of its own, because the sound never stopped; it counts
-        as part of the stretch it joined.
+        as part of the stretch it joined, but only once its own words have had
+        time to play since it was handed on. Session 4's Coval run GYZdoiie
+        queued a number read-back behind a holding line; the holding line's
+        audio ended half a second later, and the read-back, of which the
+        caller heard almost nothing before cutting in, was counted as heard.
+        Their next words then agreed to it. Now it stays queued: its own start
+        signal, or a later end once its words could have played, decides.
 
-        ponytail: a segment submitted in the moment between the audio running
-        out and the runtime saying so is counted as played. The ceiling is the
-        runtime's stop delay; the upgrade path is per-segment playout events.
+        ponytail: time is estimated from the text (`SPEECH_CHARS_PER_SECOND`),
+        not measured per segment; the upgrade path is per-segment playout events.
 
         A segment the caller already cut off stays cut off: the audio stopping
         after a cut-in is the cut-in, not the end of the words. Audio that
         stopped in under half the time its words take is remembered, so a
         cut-in arriving just after the stop still cuts it (`_stopped_early`).
         """
+        now = time.perf_counter()
         ended = [
             segment
             for segment in self.all_spoken
             if not segment.interrupted
             and (
                 segment.playback == 'playing'
-                or (segment.playback == 'queued' and segment.text and segment.at >= self._burst)
+                or (
+                    segment.playback == 'queued'
+                    and segment.text
+                    and segment.at >= self._burst
+                    and now - segment.at >= len(segment.text) / SPEECH_CHARS_PER_SECOND
+                )
             )
         ]
         for segment in ended:
             segment.playback, segment.heard_by = 'played', 'signal'
-        now = time.perf_counter()
         spoken_for = sum(len(s.text) for s in ended) / SPEECH_CHARS_PER_SECOND
         if ended and now - self._burst < spoken_for / 2:
             self._stopped_early = (now, ended)

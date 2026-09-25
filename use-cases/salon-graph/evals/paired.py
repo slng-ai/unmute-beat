@@ -108,7 +108,7 @@ class Candidate:
         )
 
     def operation(self, step: str, name: str):
-        return next(op for op in self.flow.by_id[step].operations if op.name == name)
+        return next(op for op in getattr(self.flow.by_id[step], 'operations', ()) if op.name == name)
 
     async def booking_readback(self, day: str, at: str) -> None:
         call = self.open(True)
@@ -174,11 +174,11 @@ class Control:
     name = 'control'
 
     def __init__(self) -> None:
-        from salon.agents import AGENTS
-        from salon.tools.booking import booking_question, offer
-        from salon.tools.identity import readback_number
+        from salon.agents import AGENTS  # ty: ignore[unresolved-import]
+        from salon.tools.booking import booking_question, offer  # ty: ignore[unresolved-import]
+        from salon.tools.identity import readback_number  # ty: ignore[unresolved-import]
 
-        from salon.models.state import BookingRequest, open_call
+        from salon.models.state import BookingRequest, open_call  # ty: ignore[unresolved-import]
 
         self.nodes, self.open_call, self.request = AGENTS, open_call, BookingRequest
         self.booking_question, self.offer_times, self.readback_number = (
@@ -229,7 +229,7 @@ class Control:
         await self.offer_times(call, day, service, '')
 
     async def booked(self, day: str, at: str) -> None:
-        from tests.classifier_model import default_script, scripted
+        from tests.classifier_model import default_script, scripted  # ty: ignore[unresolved-import]
 
         await self.booking_readback(day, at)
         self.heard()
@@ -397,7 +397,7 @@ def dry_run(arm) -> None:
     for node in arm.nodes.values():
         stack.enter_context(node.agent.override(model=FunctionModel(stream_function=ok)))
     if arm.name == 'control':
-        from tests.classifier_model import classifier_model
+        from tests.classifier_model import classifier_model  # ty: ignore[unresolved-import]
 
         stack.enter_context(classifier_model())
     arm.dry = stack

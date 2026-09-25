@@ -6,6 +6,8 @@
     uv run python -m coval_sim run  ...the same arguments...   # launches it, billable
     uv run python -m coval_sim add salon-prompt      # create the baseline's Coval agent
     uv run python -m coval_sim add graph             # the other baseline: the unmute graph build of the salon
+    uv run python -m coval_sim serve --agency salon  # one bot and tunnel for several jobs, until stopped
+    uv run python -m coval_sim run ... --host <the host serve printed>
 
 One job per invocation: one agent, one test set, one persona. `plan` reads
 Coval and prints what `run` would launch, and how many calls that is; it
@@ -25,10 +27,13 @@ launched again by this tool until the line is removed from the log by hand.
 """
 
 import argparse
+import contextlib
 import json
 import os
+import signal
 import sys
 import tempfile
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -397,17 +402,24 @@ class ReleaseCheck:
             )
         return f'this job already ran under label {job.label!r} as run {previous.get("run_id", "?")}; use a new label'
 
-    def run(self, job: Job) -> Row:
-        """Open a tunnel, start the bot, launch the job, wait for it, stop both. Every step is logged first."""
+    def run(self, job: Job, host: str | None = None) -> Row:
+        """Open a tunnel, start the bot, launch the job, wait for it, stop both. Every step is logged first.
+
+        With `host`, a bot is already answering there (`serve`), and this only
+        points the agent at it, launches and waits. Two jobs on one Coval agent
+        must share one host: each points the agent's connection at its own
+        host, so a second tunnel would take the first job's later calls.
+        """
         env = self.repo.env()
         log = self.workdir / f'{job.agency}-bot.log'
         name = f'{job.label} {job.agency} {job.test_set_id} {uuid.uuid4().hex[:8]}'
         try:
-            with (
-                Tunnel(self.port, self.workdir) as tunnel,
-                self.repo.bot(job.agency, env, tunnel.host, log, self.port),
-            ):
-                self.coval.update_connection(job.agent, connection(tunnel.host))
+            with contextlib.ExitStack() as stack:
+                if host is None:
+                    tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
+                    stack.enter_context(self.repo.bot(job.agency, env, tunnel.host, log, self.port))
+                    host = tunnel.host
+                self.coval.update_connection(job.agent, connection(host))
                 self.runs.write(job.key, name=name, status='intent')
                 try:
                     run_id = self.coval.launch(
@@ -461,6 +473,25 @@ class ReleaseCheck:
             self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
         )
         return Row(job.agency, job.test_set_id, run_id, problems, log)
+
+    def serve(self, agency: str) -> None:
+        """Start the agency's bot behind a tunnel, print the host, and keep both up until stopped.
+
+        One bot for several jobs at once (`run --host`), so every call of a
+        load test lands on one process. Only a bot that ends its own calls:
+        the runner's outside ceiling stops a whole bot after its first call.
+        """
+        if not self.repo.limits_itself(agency):
+            raise ValueError(f'{agency} has no call limit of its own; serve only a bot with MAX_CALL_SECONDS')
+        log = self.workdir / f'{agency}-bot.log'
+        with (
+            Tunnel(self.port, self.workdir) as tunnel,
+            self.repo.bot(agency, self.repo.env(), tunnel.host, log, self.port),
+        ):
+            print(
+                f'serving {agency} at {tunnel.host} (bot log {log}); stop with SIGTERM or Ctrl-C', flush=True
+            )
+            threading.Event().wait()
 
     def add(self, agency: str) -> str:
         """Create the Coval agent for a flow, with a placeholder connection.
@@ -516,6 +547,10 @@ def _parser() -> argparse.ArgumentParser:
             default=PORT,
             help='the local port for this bot and tunnel; one per job run at once',
         )
+        job.add_argument('--host', help='a host `serve` printed: use its bot, start no bot or tunnel')
+    serve = commands.add_parser('serve', help='one bot and tunnel for several jobs, until stopped')
+    serve.add_argument('--agency', required=True, help='the use case to serve: salon for salon-graph')
+    serve.add_argument('--port', type=int, default=PORT, help='the local port for the bot and tunnel')
     add = commands.add_parser('add', help="create a flow's Coval agent")
     add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
     return parser
@@ -542,6 +577,11 @@ def main(argv: list[str] | None = None) -> int:
         getattr(args, 'port', PORT),
     )
     try:
+        if args.command == 'serve':
+            signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+            with contextlib.suppress(KeyboardInterrupt):
+                check.serve(args.agency)
+            return 0
         if args.command == 'add':
             line = check.add(args.agency)
             print(line)
@@ -562,7 +602,7 @@ def main(argv: list[str] | None = None) -> int:
         print(job.describe(), flush=True)
         if args.command == 'plan':
             return 0
-        row = check.run(job)
+        row = check.run(job, args.host)
     except (CovalError, ValueError, RuntimeError) as error:
         print(f'error: {error}', file=sys.stderr)
         return 1

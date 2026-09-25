@@ -67,3 +67,18 @@ Langfuse ledger (`concierge-tools/ledger.py`, the same tool as session 3's bulk 
 | Waited over 2 s before work started | 8 of 24 turns | 3 of 40 | 6 of 32 | 2 of 63 |
 
 The ledger's write audit line reads the old audit attribute names and says "no application question"; the write audits above were read from the `write` spans directly.
+
+## Load test (added 2026-09-26)
+
+Allowance: you added 20 + 20 calls, so the session cap is now **60**. Used so far: 12. The 8 reserve calls from the first 20 stay in reserve.
+
+Setup, the same for both load runs:
+- Coval places and records the calls, and scores nothing (`coval_sim run --no-metrics`). Each call is judged by `concierge-tools/load_report.py` from its Langfuse session and its write records.
+- Two jobs side by side, 20 calls at once, all into **one bot process** behind one tunnel (`coval_sim serve`, then `run --host`): normal (`kQ8b6nMZ`, `MUFJdYAHdBHU6UbRRu4ykM`) x10 at `--concurrency 10`, and stress (`K3Xwqi7g`, `VSruLZYYyz3w7fkdUaheDR`) x10 at `--concurrency 10`. Changed from the plan's two bots: both jobs use one Coval agent, and each `run` points that agent at its own tunnel, so a second tunnel could take the first job's later calls.
+- Every call gets its own diary (`DIARY_PER_CALL=1`, checked offline by `tests.test_diary:calls_with_a_diary_each_share_nothing`, and live by every first booking being BK0001).
+
+### Baseline load run, logged before launch
+
+Question: under 20 calls at once, does the build we have (bot code identical to 52eb245; `git diff 52eb245 HEAD -- core use-cases/salon-graph/salon use-cases/salon-graph/bot.py` is empty) keep every write on a heard yes, book once per call, and how do latency, repeats and request chains look? Expanded count: 20 (12 -> 32 of 60).
+
+This run measures, it does not gate. Its numbers are the baseline for the fixed run's pass criteria (plan step 4).

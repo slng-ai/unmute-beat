@@ -392,6 +392,27 @@ def test_no_metrics() -> None:
     assert check._result(kept, 'R', 'n', Path('log')).problems, 'with metrics, a NO still fails'
 
 
+def test_shared_host() -> None:
+    """`run --host`: no tunnel, no bot, the agent pointed at the host `serve` holds. `serve` needs a self-limiting bot."""
+
+    class Pointed(FakeCoval):
+        def update_connection(self, agent: Agent, metadata: dict[str, Any]) -> Agent:
+            self.voice_url = metadata['voice_url']
+            return agent
+
+    coval = Pointed(AGENTS)
+    check = checker(coval)
+    job = check.plan('salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='shared')
+    row = check.run(job, 'already-up.trycloudflare.com')
+    assert coval.voice_url == 'https://already-up.trycloudflare.com/' and coval.launches == 1, row.render()
+    try:
+        check.serve('salon-pipecat-flows')
+    except ValueError as error:
+        assert 'no call limit of its own' in str(error)
+    else:
+        raise AssertionError('served a bot the outside ceiling would stop after one call')
+
+
 if __name__ == '__main__':
     test_call_ceiling()
     test_plan()
@@ -403,4 +424,5 @@ if __name__ == '__main__':
     test_fallbacks()
     test_concurrency()
     test_no_metrics()
+    test_shared_host()
     print('ok')

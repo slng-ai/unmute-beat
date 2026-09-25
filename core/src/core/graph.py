@@ -131,6 +131,12 @@ class Node[S: VoiceState]:
     """Resolve a decision within the shared budget, or return None to run the conversational agent."""
     openings: tuple[Opening[Any], ...] = ()
     """What this step does on arrival without a model, tried in order after `advance` declines."""
+    returns: bool = False
+    """Whether a caller handed here goes back to the step that handed them over once it is done (a code node).
+
+    Recorded like a prerequisite's waiting step (`route`), so the return is
+    code, never a model's choice, and the graph allows it (`legal_moves`).
+    """
     shares_detour: bool = False
     """Whether, as a prerequisite, this step hands the caller's words on to the step it was serving.
 
@@ -214,11 +220,22 @@ def route[S: VoiceState](state: S, nodes: dict[str, Node[S]], to: str) -> tuple[
     becomes a stack and `resume` needs a matching loop.
     """
     node = nodes[to]
-    if node.satisfied_by and not all(present(getattr(state, field, None)) for field in node.requires):
+    if node.satisfied_by and not holds(state, node.requires):
         return node.satisfied_by, to
-    if state.agent != to and any(other.satisfied_by == to for other in nodes.values()):
+    if state.agent != to and (node.returns or any(other.satisfied_by == to for other in nodes.values())):
         return to, state.agent
     return to, state.pending
+
+
+def holds(state: VoiceState, requires: tuple[str, ...]) -> bool:
+    """Whether every required fact is present, on the state or, for a configured flow, on its application facts."""
+    facts = getattr(state, 'facts', None)
+    return all(
+        present(getattr(state, name))
+        if name in type(state).model_fields
+        else present(getattr(facts, name, None))
+        for name in requires
+    )
 
 
 def lent[S: VoiceState](exits: tuple[Exit[S], ...]) -> dict[str, Exit[S]]:
@@ -251,11 +268,7 @@ def moved_by[S: VoiceState](state: S, node: Node[S], nodes: dict[str, Node[S]], 
         if exit is None or not exit.guard(state):
             continue
         destination = nodes.get(exit.to)
-        if (
-            destination is not None
-            and destination.requires
-            and not all(present(getattr(state, field, None)) for field in destination.requires)
-        ):
+        if destination is not None and destination.requires and not holds(state, destination.requires):
             continue
         return exit.to
     return state.agent

@@ -443,8 +443,16 @@ class CallContext(BaseModel):
     read by every action that could be the second one. `None` means this
     response proposed no such action.
     """
+    _changing: set[str] = PrivateAttr(default_factory=set)
+    """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
+    _unapplied: set[str] = PrivateAttr(default_factory=set)
+    """Fields the current model response changes after its action: not yet run when the action does."""
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
     """The one question this call is waiting on an answer to. See `core.proposals`."""
+    _told: tuple[int, str] = PrivateAttr(default=(0, ''))
+    """The turn and words of the latest receipt speech (`note_receipt`)."""
+    _approved: tuple[int, int] = PrivateAttr(default=(0, -1))
+    """The question serial the active step's agent approved, and the turn generation that did. See `approve`."""
     _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
     """Each interpreter's answer for this turn, by interpreter name. See `core.interpreters`."""
     _requests: list[Request] = PrivateAttr(default_factory=list)
@@ -897,6 +905,56 @@ class CallContext(BaseModel):
     def answered(self) -> None:
         """Consume the pending question. One answer authorises one action."""
         self._proposals.consume()
+        self._approved = (0, -1)
+
+    def approve(self, about: str, **fields: str) -> bool:
+        """The active step's agent read the caller's reply as a yes to the pending question: bind it to that question.
+
+        Only the question this turn can answer counts (`pending`: last turn's,
+        same identity, heard in full), with these exact field values. What is
+        kept is the question's serial and the turn generation that approved
+        it, both the runtime's: nothing the model sends can name either. An
+        operation's `_agreed` reads it back (`approved`), so a yes from a turn
+        the caller has moved on from, to a question since replaced, or to
+        different arguments authorises nothing. False when there is nothing
+        this reply can approve.
+        """
+        if self._proposals.pending_about(self, about, **fields) is None:
+            return False
+        running = turn_generation.get()
+        generation = running[1] if running is not None and running[0] == self._id else self._generation
+        self._approved = (self._proposals.serial, generation)
+        return True
+
+    def note_receipt(self, words: str) -> None:
+        """These words just told the caller what the business did. Kept so they can be said again if unheard."""
+        self._told = (self.turn, words)
+
+    def unheard_receipt(self) -> str:
+        """Last turn's receipt speech, if it is known not to have reached the caller: cut, or never started.
+
+        Known means evidence, as for the missed-speech note: a copy the caller
+        cut in on, or one whose audio never started on a runtime that reports
+        playback. No record of the words is not evidence, and gives ''.
+        """
+        turn, words = self._told
+        if not words or turn != self.turn - 1:
+            return ''
+        copies = [s for s in self.all_spoken if s.turn == turn and s.generated == words]
+        if not copies:
+            return ''
+        last = copies[-1]
+        return words if last.interrupted or (self._playback_known and last.playback == 'queued') else ''
+
+    def approved(self) -> bool:
+        """Whether the pending question was approved by the active step, in the current turn generation."""
+        serial, generation = self._approved
+        return (
+            bool(serial)
+            and serial == self._proposals.serial
+            and generation == self._generation
+            and self.pending_question() is not None
+        )
 
     @property
     def conversation(self) -> Conversation[Any]:
@@ -1339,6 +1397,7 @@ class CallContext(BaseModel):
         self._interrupted = False
         self._reached = False
         self._leaving = False
+        self._changing = set()
         self._request_kept = False
         self._response = ''
         self._entered = ''

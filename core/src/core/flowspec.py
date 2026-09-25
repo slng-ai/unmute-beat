@@ -82,7 +82,6 @@ from core.steps import (
     NoFacts,
     Step,
     StepFlow,
-    confirm_interpreter,
 )
 
 SPEC = ConfigDict(extra='forbid', frozen=True)
@@ -105,11 +104,12 @@ class FlowSpecError(ValueError):
 class Registry:
     """Code shared by several flows, named by a plain word instead of a path.
 
-    `operations` maps a name to a factory taking the flow's confirmation
-    interpreter (an `Operation` subclass, typically).
+    `operations` maps a name to a factory taking no arguments (an `Operation`
+    subclass, typically). An operation is authorised by the active step's
+    agent's yes to its read-back, never by a reading of its own.
     """
 
-    operations: Mapping[str, Callable[[Any], Operation]] = field(default_factory=dict)
+    operations: Mapping[str, Callable[[], Operation]] = field(default_factory=dict)
     knowledge: Mapping[str, str] = field(default_factory=dict)
     checks: Mapping[str, Callable[[Mapping[str, Any]], bool]] = field(default_factory=dict)
     """Named receipt checks for an action's `accepts`: `eligible`, `matched`."""
@@ -203,7 +203,6 @@ class _Resolver:
         self.problems: list[str] = []
         self._cache: dict[tuple[str, str], Any] = {}
         self._prompts: dict[str, str] = {}
-        self.interpreter: Any = None
         self.operations: dict[str, Operation] = {}
         self.explicit_model = False
         """`compile(model=...)` was given: every persona's own model is set aside for it."""
@@ -291,10 +290,10 @@ class _Resolver:
 
         return self._once('prompt', f'{agent}|{ref}', step, find)
 
-    def operation_type(self, step: str, ref: str) -> tuple[Callable[[Any], Operation], Any] | None:
+    def operation_type(self, step: str, ref: str) -> tuple[Callable[[], Operation], Any] | None:
         """An operation's factory and its module's `accepts`, if it has one. A declared name comes first."""
 
-        def find() -> tuple[Callable[[Any], Operation], Any]:
+        def find() -> tuple[Callable[[], Operation], Any]:
             if ref in self.spec.operations:
                 return self.declared(ref), None
             if is_path(ref):
@@ -313,7 +312,7 @@ class _Resolver:
         if ref not in self.operations:
             found = self.operation_type('', ref)
             assert found is not None
-            self.operations[ref] = found[0](self.interpreter)
+            self.operations[ref] = found[0]()
         return self.operations[ref]
 
     def check(self, step: str, name: str) -> Callable[[Mapping[str, Any]], bool] | None:
@@ -559,6 +558,8 @@ class ActionSpec(_Operated):
     after: list[str] = []
     on_error: str = ''
     on_unknown: str = ''
+    returns: bool = False
+    """A code node: on success, back to the step that handed the caller here (`ActionStep.returns`)."""
 
     def destinations(self) -> list[str]:
         return [*super().destinations(), *(to for to in (self.on_error, self.on_unknown) if to)]
@@ -582,11 +583,24 @@ class ActionSpec(_Operated):
             after=frozenset(self.after),
             on_error=self.on_error,
             on_unknown=self.on_unknown,
+            returns=self.returns,
         )
 
 
+class HandoverSpec(BaseModel):
+    """One step a conversation step may hand the caller to, and what for: the agent is shown the purpose."""
+
+    model_config = SPEC
+    to: str
+    purpose: str = ''
+
+
 class ConversationSpec(StepSpec):
-    """A step one agent runs in its own words: answering, and, when declared, recording, offering, acting and handing over."""
+    """An agent node: one agent in its own words, answering, and, when declared, recording, offering, acting and handing over.
+
+    Its agent reads every reply itself; no reading runs before it. `requires`
+    and `satisfied_by` interpose a prerequisite step and come back by code.
+    """
 
     kind: Literal['conversation']
     prompt: str = ''
@@ -597,16 +611,34 @@ class ConversationSpec(StepSpec):
     """State fields this step's agent may record from the caller (`collect`)."""
     choices: dict[str, str] = {}
     operations: list[str] = []
-    """Declared operations this step's agent may carry out: each read back, and run only on a heard yes."""
-    exits: list[str] = []
-    """Steps this one may hand the caller to (`hand_over`)."""
+    """Declared operations this step's agent may carry out: each read back, and run only on its yes to a heard read-back."""
+    exits: list[HandoverSpec] = []
+    """Steps this one may hand the caller to (`hand_over`): `[booking]`, or `[{to: booking, purpose: ...}]`."""
+    requires: list[str] = []
+    """State facts this step needs before it runs; `satisfied_by` is interposed until they hold."""
+    satisfied_by: str = ''
+    guarded: bool = False
+    """Whether model speech here is held a clause at a time and checked against what was done (`Node.guarded`)."""
+
+    @field_validator('exits', mode='before')
+    @classmethod
+    def _plain_names(cls, exits: Any) -> Any:
+        """`exits: [booking]` is short for `exits: [{to: booking}]`."""
+        return [{'to': exit} if isinstance(exit, str) else exit for exit in exits or []]
 
     def destinations(self) -> list[str]:
-        return list(self.exits)
+        return [*(exit.to for exit in self.exits), *([self.satisfied_by] if self.satisfied_by else [])]
 
     def check(self, resolve: _Resolver) -> None:
         resolve.prompt(self.id, self.prompt, self.agent)
         resolve.persona(self.id, self.agent)
+        for name in self.requires:
+            resolve.state_field(self.id, name)
+        if bool(self.requires) != bool(self.satisfied_by):
+            resolve.fail(
+                self.id,
+                'requires and satisfied_by go together: what is needed, and the step that provides it',
+            )
         if self.knowledge:
             resolve.knowledge(self.id, self.knowledge)
         for name in self.fields:
@@ -631,7 +663,11 @@ class ConversationSpec(StepSpec):
             fields=tuple(self.fields),
             choices=resolve.choices(self.id, self.fields, self.choices),
             operations=tuple(resolve.operation(name) for name in self.operations),
-            exits=tuple(self.exits),
+            exits=tuple(exit.to for exit in self.exits),
+            purposes={exit.to: exit.purpose for exit in self.exits if exit.purpose},
+            requires=tuple(self.requires),
+            satisfied_by=self.satisfied_by,
+            guarded=self.guarded,
             spec=resolve.persona(self.id, self.agent),
         )
 
@@ -921,12 +957,10 @@ class FlowSpec(BaseModel):
             raise FlowSpecError(resolve.problems)
         resolve.explicit_model = model is not None
         model = model if model is not None else self.model
-        resolve.interpreter = confirm_interpreter(model, settings)
         state = resolve.state_type()
         flow = StepFlow(
             [step.to_step(resolve) for step in self.steps],
             model=model,
-            interpreter=resolve.interpreter,
             settings=settings,
             state_type=state,
             identity=self.identity,

@@ -35,7 +35,8 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.decisions import Clarify
 from core.graph import Exit, LocalAction, Node
-from core.steps import AgentBuilder, AgentStep
+from core.desk import AgentBuilder
+from core.steps import AgentStep
 from salon import classification
 from salon.classification import MODEL, SALON, SETTINGS, SOLVER, classify_reply
 from salon.models.consent import CorrectPhone, SalonSwitch

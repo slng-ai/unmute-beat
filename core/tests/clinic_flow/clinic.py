@@ -130,6 +130,25 @@ def cancel(clinic: Backend, cancellation: Cancellation) -> Cancelled:
     return Cancelled.model_validate(clinic.cancel(cancellation.reference))
 
 
+class PatientRef(BaseModel):
+    patient: PatientId
+
+
+class Found(BaseModel):
+    patient: PatientId
+    reference: str
+    status: Literal['found', 'none']
+
+
+def look_up(clinic: Backend, ref: PatientRef) -> Found:
+    """The patient's booking, if the diary has one: a read, so it needs no read-back (`code_node.yaml`)."""
+    if clinic.failing:
+        clinic.failing = False
+        raise OutcomeUnknownError('the diary did not answer')
+    held = next((code for code, (patient, _) in clinic.bookings.items() if patient == ref.patient), '')
+    return Found(patient=ref.patient, reference=held, status='found' if held else 'none')
+
+
 def free_times(clinic: Backend, state: ClinicState) -> dict[str, str]:
     """The two times offered, by id, as they are said. A taken time is not offered."""
     taken = {slot for _, slot in clinic.bookings.values()}

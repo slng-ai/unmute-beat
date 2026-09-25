@@ -134,7 +134,7 @@ def claim_or_refuse(ctx, actions: frozenset[str]) -> None:
         raise ModelRetry(CONFLICT.format(other=claim))
 
 
-def one_action_per_reply(actions: frozenset[str]) -> Hooks:
+def one_action_per_reply(actions: frozenset[str], updates: frozenset[str] = frozenset()) -> Hooks:
     """One flow-changing or business-mutating action per model response.
 
     Two of them in one reply is the model proposing two futures. Letting both
@@ -151,16 +151,43 @@ def one_action_per_reply(actions: frozenset[str]) -> Hooks:
     `before_tool_execute` covers ordinary tools and does not fire for output
     tools at all. Output tools call `claim_or_refuse` themselves on their first
     line, which is the same refusal at the same point.
+
+    `updates` names tools that change what the caller asked for (`collect`,
+    whose `values` name the fields). Every field one of them tries to set in
+    this caller turn is noted (`CallContext._changing`), from the whole
+    response and before anything runs, whether or not the change is then
+    accepted. An action whose arguments rest on one of those fields asks
+    again instead of acting on the old read-back: "yes, nine, actually make it
+    ten" is a change whatever order the two calls came in, and a change the
+    state refused is still not a yes to the old time. A change to something
+    else ("yes, that number is right, and make it Saturday") leaves the
+    number's yes standing. A change emitted *after* the action in the same
+    response has not run yet when the action does (`_unapplied`), so the
+    action refuses with a retry and is called again once it has.
     """
     hooks = Hooks()
 
     @hooks.on.after_model_request
     async def choose(ctx, *, request_context, response):
         ctx.deps._claim = None
-        for part in response.parts:
-            if isinstance(part, ToolCallPart) and part.tool_name in actions:
+        calls = [part for part in response.parts if isinstance(part, ToolCallPart)]
+        for part in calls:
+            if part.tool_name in actions:
                 ctx.deps._claim = part.tool_call_id
                 break
+        ctx.deps._unapplied = set()
+        claimed = False
+        for part in calls:
+            claimed = claimed or part.tool_call_id == ctx.deps._claim
+            if part.tool_name in updates:
+                try:
+                    values = part.args_as_dict().get('values') or {}
+                except ValueError:
+                    values = {}
+                fields = set(values) if isinstance(values, dict) else set()
+                ctx.deps._changing |= fields
+                if claimed:
+                    ctx.deps._unapplied |= fields
         return response
 
     @hooks.on.before_tool_execute

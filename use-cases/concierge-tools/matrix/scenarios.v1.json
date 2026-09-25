@@ -193,13 +193,25 @@
       ]
     },
     "N13": {
-      "title": "New application authoring and portable packaging (session 2 foundation)",
+      "title": "New application authoring and portable packaging (session 2 foundation, session 3 manifest)",
       "native_expect": "pass",
       "native": [],
       "harness": [
         "core/tests.test_public:one_booking_through_the_public_boundary",
         "core/tests.test_public:what_the_application_wrote",
-        "core/tests.test_package:importing_and_checking_loads_nothing_else"
+        "core/tests.test_package:importing_and_checking_loads_nothing_else",
+        "core/tests.test_authoring:definitions_fail_before_any_model",
+        "core/tests.test_authoring:the_controlled_clinic_books_and_takes_back",
+        "core/tests.test_authoring:only_an_offered_time_can_be_picked",
+        "core/tests.test_authoring:a_receipt_that_says_no_completes_nothing",
+        "core/tests.test_authoring:an_unknown_outcome_is_settled_not_repeated",
+        "core/tests.test_authoring:every_pattern_books_once_on_a_heard_yes",
+        "core/tests.test_authoring:the_model_path_refuses_what_the_direct_path_refuses",
+        "core/tests.test_authoring:ordinary_conversation_reads_nothing",
+        "core/tests.test_authoring:the_manifest_reaches_the_session",
+        "core/tests.test_authoring:what_the_application_wrote",
+        "tests.test_slice:a_number_is_looked_up_once_after_its_heard_read_back",
+        "tests.test_slice:a_receipt_about_another_number_verifies_nobody"
       ]
     }
   },

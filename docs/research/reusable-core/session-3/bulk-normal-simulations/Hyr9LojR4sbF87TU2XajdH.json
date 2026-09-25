@@ -1,0 +1,166 @@
+{
+  "aci": "0.1",
+  "ok": true,
+  "resource": "simulations",
+  "operation": "get",
+  "data": {
+    "name": "simulations/Hyr9LojR4sbF87TU2XajdH",
+    "simulation_id": "Hyr9LojR4sbF87TU2XajdH",
+    "run_id": "ZxwAUevQMgwM52hBVVxqfs",
+    "status": "COMPLETED",
+    "create_time": "2026-09-25T16:09:51.953768Z",
+    "test_case_id": "M5Z8LjVyQZPuhSubmt26w7",
+    "has_audio": true,
+    "agent_id": "JxGgSPA55DcFcDcvbKAUQM",
+    "persona_id": "MUFJdYAHdBHU6UbRRu4ykM",
+    "test_set_id": "kQ8b6nMZ",
+    "transcript": [
+      {
+        "role": "assistant",
+        "content": "Hi. You've reached Sage and Stone."
+      },
+      {
+        "role": "assistant",
+        "content": "Robin speaking. What can I do for you?"
+      },
+      {
+        "role": "user",
+        "content": "Hi, Robin. I’d like to book a haircut for this Friday morning, please."
+      },
+      {
+        "role": "assistant",
+        "content": "Which phone number should I use?"
+      },
+      {
+        "role": "assistant",
+        "content": "Please say it with the country code."
+      },
+      {
+        "role": "user",
+        "content": "Sure, it’s plus three four, six seven one, two seven three, four five four."
+      },
+      {
+        "role": "assistant",
+        "content": "Let me read that back to you."
+      },
+      {
+        "role": "assistant",
+        "content": "34671273454."
+      },
+      {
+        "role": "assistant",
+        "content": "Have I got that right?"
+      },
+      {
+        "role": "user",
+        "content": "Yes, that’s correct."
+      },
+      {
+        "role": "assistant",
+        "content": "Thanks."
+      },
+      {
+        "role": "assistant",
+        "content": "Have you."
+      },
+      {
+        "role": "assistant",
+        "content": "For a haircut on Friday the second,"
+      },
+      {
+        "role": "assistant",
+        "content": "I have 9AM, 09:30AM, AM."
+      },
+      {
+        "role": "assistant",
+        "content": "Which time works for you?"
+      },
+      {
+        "role": "user",
+        "content": "Nine AM works for me, thank you."
+      },
+      {
+        "role": "assistant",
+        "content": "Shall I book you in for a haircut,"
+      },
+      {
+        "role": "assistant",
+        "content": "Friday the second at 9AM?"
+      },
+      {
+        "role": "user",
+        "content": "Yes, please. That’s perfect."
+      },
+      {
+        "role": "assistant",
+        "content": "Lovely. That's your haircut booked for Friday the second at 9AM."
+      },
+      {
+        "role": "assistant",
+        "content": "What else can I do?"
+      },
+      {
+        "role": "user",
+        "content": "No, that’s all, thanks. Goodbye!"
+      },
+      {
+        "role": "assistant",
+        "content": "Thanks for calling."
+      },
+      {
+        "role": "assistant",
+        "content": "Goodbye."
+      }
+    ],
+    "call_sid": "CA629d63c71d374712be0c3be7e0cd33cb",
+    "destination": null,
+    "is_public": false,
+    "metric_values": null,
+    "notes": null,
+    "source": null
+  },
+  "warnings": [],
+  "next_actions": [
+    {
+      "id": "simulations.metrics",
+      "label": "List simulation metrics",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "metrics",
+        "Hyr9LojR4sbF87TU2XajdH"
+      ],
+      "safe": true,
+      "primary": true,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.audio",
+      "label": "Get simulation audio URL",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "audio",
+        "Hyr9LojR4sbF87TU2XajdH"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.context",
+      "label": "simulations context",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "context"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    }
+  ]
+}

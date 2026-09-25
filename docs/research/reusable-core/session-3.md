@@ -264,6 +264,8 @@ Package proof ([script](session-3/package-proof.sh), [output](session-3/package-
 | N1–N8, N10, N11 | pass | pass | as session 2 | pass |
 | N9 | fail | pass | 0/2 / 11/11 | pass (the stronger contract) |
 | N6 | pass | pass | 5/5 / 5/5 | pass; `empty_output` harness 4 requests (was 5), native 2 |
+
+Final run on the finished code: [`session-3/matrix-final`](session-3/matrix-final), exit 0.
 | N13 | not exercised | pass | 0/0 / 15/15 | **complete**: manifest, three patterns, salon slice, early diagnostics |
 
 Native move/cancel and disconnect coverage stay partial, as recorded in session 2. N12's timing protocol was not repeated. The turn path changed only in the retry budget and in a code path taken only after a cut receipt or an unknown write. The warm hand-over finding stands.
@@ -304,7 +306,7 @@ This measures interpretation on labelled text. It says nothing about speech-to-t
 
 ## 8. Coval
 
-Calls used this session: 1 stress repair (sequential) + 4 bulk stress + 4 bulk normal = 9. Ledger: [`session-3/coval-runs.jsonl`](session-3/coval-runs.jsonl). The cap is now 6 + 9 = 15 of the extended 22 (14 planned + 8 you added), with 6 kept for sessions 4–6. Call 1 is in section 2 (A4).
+Calls used this session: 1 stress repair (sequential) + 4 bulk stress + 4 bulk normal = 9. Ledger: [`session-3/coval-runs.jsonl`](session-3/coval-runs.jsonl). That makes 6 + 9 = 15 used of 21 in total (14 planned, less call 2, which the bulk runs replace, plus the 8 you added), with 6 kept for sessions 4–6. Call 1 is in section 2 (A4).
 
 ### Bulk stress: run `DDxDkFaSDhpvNc4Yax7vE6`, revision `a8868be`, 4 calls at once
 
@@ -321,9 +323,29 @@ Every write answered a delivered read-back and a yes: 3 of 3 were one booking. T
 
 Finding for session 4: "Saturday instead", said after "this Friday" (Friday 2 Oct), was read as tomorrow (Sat 26 Sep) in two calls and as Sat 3 Oct in one. Both are defensible. The diary resolves day words from today, not from the day under discussion. This is domain meaning, not consent.
 
-### Bulk normal
+### Bulk normal: run `ZxwAUevQMgwM52hBVVxqfs`, revision `a8868be`, 4 calls at once
 
-(Below, once run.)
+Runner: `ok`. Evidence: [bot log](session-3/bulk-normal-bot.log), [ledger](session-3/bulk-normal-ledger.txt), [transcripts](session-3/bulk-normal-simulations/).
+
+| Simulation | Identity | Writes | Receipt heard |
+|---|---|---|---|
+| `4T627bwsjkN57RXkhiv3cs` | read back, agreed | 1 (Fri 2 Oct 9:00) | yes: "Done. Friday the second at 9AM." |
+| `P8xjBDBP9sxJ4yZrtWCRbq` | read back, agreed | 1 | yes |
+| `8P9kp8wek2h7zM7ofd5KWi` | read back, agreed | 1 | yes |
+| `Hyr9LojR4sbF87TU2XajdH` | read back, agreed | 1 | yes |
+
+All 4 pass: one booking each, on a delivered read-back and a yes, and the confirmation was heard. In `4T627bws…` a holding line ("Let me have a look") went out just before the goodbye. That is harmless, but it is the holding line firing on a slow closing turn. Pipeline turn latency across the four: p50 1.77 s, p90 3.69 s (ledger, not audio). These calls ran at the same time, so their audio latency is not compared.
+
+### Voice summary
+
+| | Calls | Correct outcome | Receipt heard | Notes |
+|---|---|---|---|---|
+| Stress, sequential (call 1) | 1 | no (booking moved) | no (cut) | fixed in core, offline |
+| Stress, bulk | 4 | 3 | 3 | 1 inconclusive (stalled at Coval) |
+| Normal, bulk | 4 | 4 | 4 | |
+| **Total** | 9 | 7 of 8 conclusive | 7 of 8 | no consent failure in any call |
+
+Triggers: a premature endpoint was exercised in every stress call. No barge-in into the read-back was seen in call 1's audio; the bulk audio was not analysed, because its timing is not comparable. A receipt cut before it played occurred only in call 1.
 
 ## 9. Inherited findings
 
@@ -353,4 +375,4 @@ Finding for session 4: "Saturday instead", said after "this Friday" (Friday 2 Oc
 | Implementation | Phase A and Phase B done |
 | Deterministic | pass: every suite, matrix, package proof |
 | Semantic (live text) | T1, T2, T4 pass; T3 is the known session-4 failure |
-| Voice | see section 8 |
+| Voice | 7 of 8 conclusive calls correct; the one failure (call 1) is fixed offline and its trigger did not recur live; 1 call inconclusive |

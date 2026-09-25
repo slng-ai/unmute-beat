@@ -532,6 +532,32 @@ sequenceDiagram
    made, and a hand-over that carries the request lets the next step act on
    arrival with no model request.
 
+### A yes with more in it
+
+A caller often says more than the yes: "Yes, that's right. Oh, and can we
+make it Saturday instead of Friday?" to their number read back.
+
+```mermaid
+flowchart LR
+    R[reply] --> C[confirm reading]
+    C -- accept --> A[action runs]
+    A --> L[short line]
+    L --> O[owner step's model]
+    O --> K[caller hears the rest answered]
+```
+
+1. The confirm reading hears the yes. It does not yet always hear one in
+   this sentence: on the phone read-back it answers `revise` (see "Known
+   debt" in `CLAUDE.md`).
+2. The yes runs its action with no model request, such as the phone lookup.
+3. `ReadBack.done` says a short line by code ("Thanks, I have you."). It
+   covers the next request, as the graph build's announcement does.
+4. The rest of the reply goes to a model in the same turn. A check hands the
+   caller back to the step that sent them, and that step's model answers.
+   An action that says nothing and hands over to no one is followed by its
+   own step's model, told the action was done. Without this rule, the turn
+   would end in silence.
+
 ### From words to an authorized action
 
 `ProposalLedger` tracks the one question awaiting an answer, and whether the

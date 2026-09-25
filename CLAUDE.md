@@ -208,3 +208,11 @@ times a diary read prefers. The complaint word list in
 `salon/models/state.py` remain language-specific heuristics. Structured output
 validates shape, not semantic accuracy; run the explicit live evaluation
 before making accuracy or latency claims.
+
+The shared confirm reading (`CONFIRM`, Langfuse `harness-reading/confirm`
+v3) reads "Yes, that's right. Oh, and can we make it Saturday instead?" to a
+phone read-back as `revise` (Coval run hdbogMqB, AJ4t). Three rewordings
+(v5, v6, v7, the last with the proposal's parts as input) fixed it and made
+a yes followed by a price question read as accept, so none shipped. The path
+after an accept is built and tested (`ReadBack.done`, a silent action
+followed by the step's model).

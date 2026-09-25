@@ -535,9 +535,9 @@ def _parser() -> argparse.ArgumentParser:
             help='calls Coval places at once; a bot with its own limit only',
         )
         job.add_argument(
-            '--no-metrics',
-            action='store_true',
-            help='launch with no metric: Coval places and records the calls, and scores nothing',
+            '--metrics',
+            type=lambda text: [m for m in text.split(',') if m],
+            help="comma-separated metric IDs to score instead of the agent's own; Coval needs at least one",
         )
         job.add_argument('--log', type=Path, default=Path('runs.jsonl'), help='the run log')
         job.add_argument(

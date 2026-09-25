@@ -24,6 +24,7 @@ from coval_sim.__main__ import (
     ReleaseCheck,
     Repository,
     RunLog,
+    _parser,
 )
 from coval_sim.coval import CovalClient, CovalError
 from coval_sim.models import (
@@ -372,6 +373,9 @@ def test_named_metrics() -> None:
     coval = Launches(api_key='test', binary='/nonexistent/coval')
     coval.launch(job.agent, job.persona, 'ONE', iterations=1, name='n')
     assert coval.args[coval.args.index('--metric-ids') + 1] == 'count', coval.args
+    parsed = _parser().parse_args(['run', '--agency', 'salon', '--agent', 'S', '--test-set', 'ONE', '--persona', 'calm',
+                                   '--max-simulations', '1', '--label', 'l', '--metrics', 'a,b'])  # fmt: skip
+    assert parsed.metrics == ['a', 'b'], 'the command line reaches plan (a missed parser edit, 2026-09-26)'
     coval.find_run('S', 'n')
     assert '--order-by=-create_time' in coval.args, 'a bare -create_time is read as a flag (2026-09-26)'
 

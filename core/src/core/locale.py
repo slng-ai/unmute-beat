@@ -61,6 +61,13 @@ class Locale:
     guards speech. It fails towards silence (the withheld line), never towards
     a false claim; widen it when a live call shows a phrasing it misses.
     """
+    recounts: tuple[str, ...] = ()
+    """Patterns for telling the caller they hold something: "you're booked", "you're all set".
+
+    True after a write on the call, so never withheld in speech; a goodbye
+    saying it with no such write on the call is refused (Coval gate 1,
+    cYMMixAc: "your haircut is booked" and nothing was).
+    """
     still_there: str = ''
     """Said when the caller has been silent a while after the last answer played (`core.turn.remind`).
 
@@ -75,6 +82,7 @@ _CLAIMS_EN = (
     r"\b(?:i|we)(?:'ve| have|'ll have| had)?\s+(?:just\s+)?(?:gone\s+ahead\s+and\s+)?"
     r'(?:cancelled|canceled|booked|moved|rebooked|recorded|logged|filed|saved|noted|written down|registered)\b',
     r"\bi(?:'ve| have)\s+(?:got\s+)?you\s+(?:down|booked|in)\b",
+    r"\byour\s+\w+(?:\s+\w+)?(?:'s| is| has been| was)\s+(?:now\s+|all\s+)?(?:booked|cancelled|canceled|moved|rebooked)\b",
     r"\b(?:that|it|this|your (?:complaint|booking|appointment|request))(?:'s| is| has been| was)\s+(?:now\s+)?"
     r'(?:on record|recorded|logged|filed|saved|booked|cancelled|canceled|moved|confirmed|registered)\b',
 )
@@ -92,6 +100,7 @@ ENGLISH = Locale(
     holding=('Let me have a look.', 'One moment.'),
     unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
     claims=_CLAIMS_EN,
+    recounts=(r"\byou(?:'re| are)\s+(?:all\s+set|booked|confirmed)\b",),
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
 )
@@ -104,6 +113,7 @@ SPANISH = Locale(
     holding=('Déjame mirar.', 'Un momento.'),
     unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
     claims=_CLAIMS_ES,
+    recounts=(r'\bya\s+tienes\s+(?:tu\s+|la\s+)?cita\b',),
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
 )

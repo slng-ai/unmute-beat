@@ -512,6 +512,26 @@ def _optional(info: FieldInfo) -> Any:
     return kind | None  # ty: ignore[unsupported-operator]
 
 
+def _unbacked_goodbye(call: FlowCall[Any], words: str, operations: frozenset[str]) -> bool:
+    """Whether a goodbye claims a change, or a booking held, when this step's operations made none on the call.
+
+    A goodbye's words are spoken as they are, with no clause check, so this
+    is their only one. A recap after a real write ("you're booked for
+    Friday") is true and goes out.
+
+    ponytail: "made on the call" is any receipt from one of this step's
+    operations; a step whose only operation is a lookup could still recap a
+    booking it never made. Key it on the operations that change the business
+    if a use case ever needs that.
+    """
+    if any(e.operation in operations for e in call.evidence):
+        return False
+    text = ' '.join(words.split())
+    return call.claims_completion(text) or any(
+        re.search(pattern, text, re.IGNORECASE) for pattern in call.locale.recounts
+    )
+
+
 def _args(operation: Operation, call: FlowCall[Any]) -> BaseModel:
     """An operation's arguments, taken field by field from the application state, validated whole.
 
@@ -1080,11 +1100,18 @@ class ConversationStep(Step):
             Args:
                 words: The goodbye. It is the last thing they hear.
             """
-            ctx.deps.end_requested('caller')
-            await ctx.deps.speak_now(words, origin='goodbye')
-            await ctx.deps.end_call()
+            call = ctx.deps
+            if _unbacked_goodbye(call, words, ours):
+                raise ModelRetry(
+                    'Nothing was said: no booking, change or record was made on this call, so the goodbye '
+                    'cannot say one was. If the caller just said yes to a read-back, carry that action out now.'
+                )
+            call.end_requested('caller')
+            await call.speak_now(words, origin='goodbye')
+            await call.end_call()
             return words
 
+        ours = frozenset(op.name for op in self.operations)
         actions = frozenset(op.name for op in self.operations) | (
             {'hand_over'} if self.exits else frozenset()
         )

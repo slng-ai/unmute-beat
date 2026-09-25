@@ -86,8 +86,14 @@ turn answered a piece of a turn already under way; at 0.6 s (8 calls) that
 fell to 13% and 0.29, but the median turn waited 0.55 s longer. 0.3 s is the
 chosen middle, not yet measured on its own.
 """
-IDLE_SECONDS = 8.0
-"""Silence after the bot's last words before the caller is asked if they are still there (`core.turn.remind`)."""
+IDLE_SECONDS = 20.0
+"""Silence after the bot's last words before the caller is asked if they are still there (`core.turn.remind`).
+
+At 8 s it talked over Coval's simulated callers, who often answer 9 to 13 s
+after a read-back: the reminder said the read-back again, their yes cut into
+that copy, so it was asked again, up to five times (gate 1, BWqBhyLj). The
+calls that really stalled were silent for 70 to 150 s.
+"""
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
 """One language per call for each speech service."""

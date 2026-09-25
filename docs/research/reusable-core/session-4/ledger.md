@@ -216,3 +216,25 @@ Gate 1, normal (`kQ8b6nMZ`, `MUFJdYAHdBHU6UbRRu4ykM`) x20, concurrency 10, label
 Gate 2, interruptive (`K3Xwqi7g`, `VSruLZYYyz3w7fkdUaheDR`) x20, concurrency 10, label `session-4-gate2`. Target: at least 18 of 20 with exactly one booking on the day the caller finally chose; 0 writes without a matching question. Every failure sorted by cause.
 
 Native (`use-cases/salon-pipecat-flows`, agent `cCQwmuCdjz6twETL6Vj933`), same sets, personas, profile and 300 s limit: 10 normal + 10 interruptive, one call per job (its bot has no call limit of its own, so the runner stops it after its first call), one after another (one Coval agent), labels `session-4-native-n01..n10`, `session-4-native-s01..s10`. It runs alongside the harness gates, one call at a time while the harness runs ten: latency favours native. Its writes are judged from its transcript and trace, since it has no write audit.
+
+### Gate 1 result: failed (run `57wWUrMHSP7T3wbMFHsR5x`, 20 normal calls, revision 3fd1bea)
+
+Used so far: **80** of 120 (60 before, gate 1 20; the native queue is running, its calls counted as they land). Report: [`load/gate1/report.md`](load/gate1/report.md).
+
+| Criterion | Result | |
+|---|---|---|
+| 20 of 20 exactly one booking | 19 of 20 | **not met** |
+| 0 writes without a matching earlier question | 0 of 39 | met |
+| 0 model text beside an operation (spoken) | 1 in the model's output, dropped by F3 | met |
+| 0 caller turns with more than one holding line | 0 | met |
+| Turn latency p90 at most 2.7 s | 2.72 s (p50 1.48 s) | **marginal miss** |
+
+Two faults, both found in Langfuse:
+1. **False booking claim in a goodbye (`cYMMixAc`, critical).** The caller said "yes please, that's perfect" to the booking read-back; the model called `goodbye` with "Great, your haircut is booked for Friday the 2nd at 9:00 AM. See you then!". Nothing was booked. A goodbye's words were spoken with no claim check, and "your haircut is booked" also slipped the English claim patterns. The caller hung up believing they had a booking.
+2. **The 8 s silence reminder looped with Coval's slow callers (`BWqBhyLj` and others; 32 reminders in 20 calls).** The simulated caller answers 9 to 13 s after a read-back. At 8 s the reminder said the read-back again; the caller's yes cut into that copy, so it did not count and was asked again, up to five times in one call. Correct under the consent rule, harmful to the conversation.
+
+Repairs (revision below), each with a test that failed first:
+- A goodbye that claims a change, or a booking held, when this step's operations made no write on the call is refused back to the model with a retry message (`steps._unbacked_goodbye`, `tests.test_business:a_goodbye_never_claims_a_booking_nothing_made`). New English claim pattern `your <thing> is booked|cancelled|moved`; new `Locale.recounts` ("you're booked", "you're all set"; Spanish "ya tienes cita"), true after a write, refused in a goodbye without one.
+- Silence reminder after 20 s (was 8 s).
+
+Offline after the repairs: ruff and ty clean; core 11/11, salon-graph 11/11, concierge-tools 5/5, Faro 1/1.

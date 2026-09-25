@@ -484,6 +484,32 @@ async def model_speech_never_claims_a_completed_action():
     )
 
 
+async def a_goodbye_never_claims_a_booking_nothing_made():
+    """Coval gate 1, call cYMMixAc: the caller said yes to the read-back; the model said goodbye instead.
+
+    Its words were "Great, your haircut is booked for Friday the 2nd at
+    9:00 AM. See you then!" and nothing was booked: a goodbye's words were
+    spoken with no claim check. Now such a goodbye is refused back to the
+    model, which then carries the booking out; after a real booking, the same
+    recap is said.
+    """
+    script, flow, call, diary = await at_booking()
+    await read_back(flow, call, script)
+    false_goodbye = (
+        'call',
+        'goodbye',
+        {'words': 'Great, your haircut is booked for Friday at two. See you then!'},
+    )
+    said = await turn(
+        flow, call, script, 'Yes please, that is perfect.', false_goodbye, ('call', 'book_appointment')
+    )
+    assert booked(diary) == [('haircut', FRIDAY, '14:00')], booked(diary)
+    assert not call.ended and 'See you then' not in ' '.join(said), said
+    recap = ('call', 'goodbye', {'words': "You're booked for Friday at two. Goodbye!"})
+    said = await turn(flow, call, script, "That's all, thanks.", recap)
+    assert call.ended and said[-1] == "You're booked for Friday at two. Goodbye!", said
+
+
 async def one_action_per_reply_and_one_budget_per_turn():
     """L: a reply with two actions runs only the first; a turn that never ends is stopped with no business work."""
     script, flow, call, diary = await at_booking()
@@ -524,6 +550,7 @@ async def main() -> None:
     await an_identity_is_the_lookup_of_the_number_agreed_to()
     await a_bare_weekday_beside_another_week_is_asked_about()
     await model_speech_never_claims_a_completed_action()
+    await a_goodbye_never_claims_a_booking_nothing_made()
     await one_action_per_reply_and_one_budget_per_turn()
     print('business ok: A-L on the diary, identity, dates, claims')
 

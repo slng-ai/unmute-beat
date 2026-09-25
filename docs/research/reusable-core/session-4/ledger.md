@@ -260,3 +260,7 @@ Both earlier faults are gone: no false claim, no reminder loop (20 s). The new f
 Repair (revision below): `asks:` on a conversation step: on arrival by a hand-over, code asks for the first missing field in fixed words, no model request. The salon's verify step asks "Which phone number should I use? Please say it with the country code." (`tests.test_business:a_missing_number_is_asked_for_by_code`, failed first). It also saves one model request on every call without a caller ID.
 
 Offline: ruff and ty clean; core 11/11, salon-graph 11/11, concierge-tools 5/5, Faro 1/1, salon-pipecat-flows 1/1; N1-N13 harness rows all pass. README and CLAUDE.md rewritten for the node-agent architecture.
+
+### Gate 2, logged before launch
+
+Your choice: gate 2 on the fixed build without a third gate 1 run. Revision `83d4be8`, label `session-4-gate2`, interruptive x20, concurrency 10, profile, 300 s. Target as logged: at least 18 of 20 with exactly one booking on the day the caller finally chose; 0 writes without a matching question. It also checks the `asks:` opening live, since no Coval call has a caller ID.

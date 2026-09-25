@@ -105,9 +105,20 @@ def _first_words(text: str, count: int) -> str:
     return text[:end]
 
 
-def _missed(segments: list[Spoken]) -> str:
-    """The note for speech the caller cut off: what they heard of it and what they did not."""
+def _missed(segments: list[Spoken], playback_known: bool = False) -> str:
+    """The note for speech the caller did not hear in full: what they heard of it and what they did not.
+
+    With a runtime that reports playback, speech whose audio never started
+    is missed too, cut in on or not: in Coval run RXcDFLJX an offer's audio
+    never played, the caller spoke into the silence, and nothing told the
+    next reply that the offer had not been heard.
+    """
+    never = [
+        s for s in segments if playback_known and s.playback == 'queued' and s.text and not s.interrupted
+    ]
     cut = [s for s in segments if s.interrupted and s.generated]
+    if never and not cut:
+        return f'Your last reply never reached the caller. They did not hear: "{" ".join(s.text for s in never)}".'
     if not cut:
         return ''
     heard = ' '.join(s.text for s in cut if s.text).strip()
@@ -752,6 +763,12 @@ class CallContext(BaseModel):
         """What the caller asked for when a prerequisite interrupted it. Empty while no step is waiting."""
         return self._checkpoint.heard if self._checkpoint is not None else ''
 
+    def heard_since(self, turn: int) -> str:
+        """Everything the caller said from that caller turn to this one, in order, one turn after another."""
+        return ' '.join(
+            words for t in range(max(turn, 1), self._turn + 1) if (words := self._inputs.get(t, '').strip())
+        )
+
     def detour_words(self, checkpoint: Checkpoint | None = None) -> list[str]:
         """What the caller has said to a prerequisite since its detour began, a turn per item, oldest first.
 
@@ -1284,7 +1301,7 @@ class CallContext(BaseModel):
         """
         continuing = self.continues_turn()
         self.close_model_text()
-        missed = _missed(self._spoken)
+        missed = _missed(self._spoken, self._playback_known)
         self._continued_from = (
             [
                 f'{s.origin}:{s.playback}{":cut" if s.interrupted else ""}{"" if s.text else ":blank"}'

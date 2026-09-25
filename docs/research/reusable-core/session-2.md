@@ -291,6 +291,26 @@ Trigger coverage:
 
 Spend: 4 calls, 537 s (about 9 minutes) of simulated audio; Gemini tokens as above; no provider bill was read, so no money figure is stated. No call was retried. Rerunning the stress pair needs an allowance beyond this session's four calls.
 
+## 10b. After the review of the stress calls
+
+Your review of call 3 (run `RXcDFLJXHnN7dEddsLyptv`) and call 4 (`ZTKVhxqTAhRAekBhG9jAsC`): the interruptive-speaker case must work on the harness, starting with a number the caller gives in pieces. Repaired in this session, offline, no new call:
+
+| Gap | Repair | Check |
+|---|---|---|
+| "+34 671", the rest asked for and heard in full, then "273 454": two turns, neither a whole number, so the rest was asked for again (also session 1's call 2) | `HeardValue.turns` (core): when this turn alone holds no value, the pieces since the value's last read-back, over at most `turns` turns, are read together (`CallContext.heard_since`). Salon's phone value uses `turns=3` | `test_continuation.a_number_finished_after_the_rest_was_asked_for_is_read_back`; fails with `turns=1` |
+| The offer's TTS produced no audio; the caller's repeated "Yes, you've got it right" was read as a pick of 9 AM from an offer they never heard | `Offer._snapshot` (core): no pick is read while the last question was this offer and it was not delivered | `test_recovery.a_selected_time_is_read_back_with_no_model` now delivers its offer first |
+| Nothing told the next reply that the offer never reached the caller (no cut-in, so no "spoken over" note) | `_missed` (core): on a runtime that reports playback, speech whose audio never started is named in the next turn's note ("Your last reply never reached the caller…") | salon and core suites; the rendered-request snapshots are unchanged |
+
+Where Coval's time goes (run log and bot log, call 1): the bot and tunnel were ready about 7 s after launch, Coval dialled in 29 s after launch, the call took 86 s, and the run finished 535 s after launch. The remaining time, about 7 minutes, is Coval's recording, transcription and metric judging after the call. Calls 2 to 4: 597, 553 and 540 s launch to finished. Nothing on our side is slow; running jobs side by side (`coval_sim --port`) is the lever.
+
+What the review asked for, left to the next session (no call was run for it):
+
+1. **Every number, by validation.** The phone read-back still recognises only "+34" and nine digits (`salon.tools.identity.number_heard`). At scale it should take any number the caller gives, digits joined across pieces, and let the Pydantic phone type (`salon.models.shapes`, `pydantic-extra-types` phone numbers) decide whether it is a valid number in the right format, not a Spanish-only regex.
+2. **STT.** Both stress calls lost SLNG STT (`soniox/speech-ai:rt-v5`) at the same moment. Switch to `deepgram/nova:3-en`, hosted in the EU, through `SLNG_STT_MODEL`, for both builds (the native bot reads the same variable, so its code stays unchanged).
+3. **TTS.** Call 3's offer came back from TTS with no audio ("completed with no audio"), and call 2's receipt was dropped. Switch to `slng/fish/tts:s2.1-pro`, hosted in eu-north or eu-west, through `SLNG_TTS_MODEL` and the region's base URL. Either switch changes the frozen comparison profile: record it, and do not compare latency against session 1 or 2 across it.
+4. **Interruptions in the history.** Today the history keeps only what the caller heard of each reply, and the "spoken over" note reaches only the next turn. Consider keeping it in the call's messages so later turns see it too. It changes what the model is sent, so it needs a live check.
+5. **Rerun the stress case on the harness** once 1 to 3 are in, within the salon-graph allowance (8 calls left for sessions 3 to 6; no native calls remain). Run jobs side by side with `--port`.
+
 ## 11. Checks
 
 From the root, keys unset, at the end of the session:

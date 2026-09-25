@@ -402,6 +402,44 @@ async def a_number_in_pieces_is_read_back_without_the_model():
     assert call.requests == [], 'reading a whole number back costs no request'
 
 
+async def a_number_finished_after_the_rest_was_asked_for_is_read_back():
+    """Coval run RXcDFLJX (session 2) and session 1's call 2: "+34 671", the rest asked for, then "273 454".
+
+    The request for the rest played out in full, so "273 454" is a new turn,
+    and neither turn alone holds nine digits after "+34". The model was left
+    to join them and asked for the rest again. Read together, the pieces since
+    the number was last read back are one number, read back with no request.
+    A piece that is part of no number (a second "+34" start) is left alone.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('', diary=books)
+    call.commit(agent='verify', pending='booking')
+    probe = Probe(call)
+
+    async def asks_for_the_rest(messages, info):
+        yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"incomplete"}')}
+
+    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=asks_for_the_rest)):
+        await probe._turn("Sure, it's +34 671.")
+    assert probe.fixed()[-1] == 'Please give me the rest of the digits.', probe.fixed()
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    requests = len(call.requests)
+
+    async def never(messages, info):
+        raise AssertionError('the model was asked to join digits the application had')
+        yield ''
+
+    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=never)):
+        await probe._turn('273 454.')
+    assert call.turn == 2, 'a new turn: the request for the rest was heard in full'
+    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 273 454. Have I got that right?'
+    assert call.requests == [] and requests >= 0, 'joining the pieces costs no request'
+    assert call._asked.about == 'phone' and call._asked.value == '+34671273454'
+
+
 async def a_move_after_a_booking_is_read_back_not_cancelled():
     """The user's call of 24 September (trace cd3c08fa), turns 6 to 9: book, then move it to Saturday, same time.
 
@@ -1436,6 +1474,7 @@ async def main():
     await the_next_reply_is_told_what_was_not_heard()
     await a_number_talked_over_arrives_whole()
     await a_number_in_pieces_is_read_back_without_the_model()
+    await a_number_finished_after_the_rest_was_asked_for_is_read_back()
     await a_number_with_a_digit_too_many_is_refused_with_its_reason()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_move_after_a_booking_is_read_back_not_cancelled()

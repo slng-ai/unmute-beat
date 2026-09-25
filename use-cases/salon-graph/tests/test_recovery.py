@@ -14,7 +14,7 @@ from pydantic_ai import ModelRequest, ModelResponse, ModelRetry, RunContext, Tex
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.processor import PydanticAgentProcessor
-from core.turn import read_out
+from core.turn import read_out, receive
 from salon import agents, diary
 from salon.classification import classify_reply
 from salon.diary import Diary
@@ -538,6 +538,7 @@ async def a_selected_time_is_read_back_with_no_model():
         call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
         call.turn_started('A haircut on Friday.')
         await booking.offer(call, 'Friday', 'haircut')
+        receive(call)
         call.turn_ended(interrupted=False)
         slot = next(s.model_dump() for s in call.state.offered if (s.time.hour, s.time.minute) == (9, 30))
 

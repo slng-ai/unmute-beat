@@ -179,6 +179,9 @@ class Offer[C: CallContext, InputT: ChoiceInput](Act[C]):
 
     A pick is not a yes: `on_pick` normally reads the option back. Only an
     id among the options the reading was sent counts (`ChoiceReading.picked`).
+    Nor is a reply a pick when the offer never reached the caller: in Coval
+    run RXcDFLJX the offer's audio never played, the caller repeated "Yes,
+    you've got it right", and that was read as the first time on the table.
     """
 
     name: str
@@ -211,6 +214,9 @@ class Offer[C: CallContext, InputT: ChoiceInput](Act[C]):
     def _snapshot(self, call: C) -> InputT | None:
         question = call.pending_question()
         if question is not None and question.about not in (self.about, *self.also_on):
+            return None
+        last = call.last_proposal()
+        if last is not None and last[0].about == self.about and not last[1]:
             return None
         if not (table := self.options(call)):
             return None
@@ -262,11 +268,31 @@ class HeardValue[C: CallContext](Act[C]):
     """
     say_why: Callable[[C, str], Awaitable[object]] | None = None
     """How that line is said. Without it, a value that does not parse is left to the step's model."""
+    turns: int = 1
+    """How many caller turns the value may take to arrive.
+
+    A caller who stops halfway ("+34 671..."), is asked for the rest and hears
+    that question to its end, gives the rest on a new turn ("273 454"), and
+    neither turn alone holds the value. With `turns` above one, the pieces said
+    since the value's last read-back, over at most that many turns, are read
+    together when this turn's words alone hold nothing (Coval run
+    RXcDFLJXHnN7dEddsLyptv: "Please give me the rest of the digits", twice).
+    """
+
+    def words(self, call: C) -> str:
+        """The caller's words the value is read from: this turn's, or the pieces over the last `turns` turns."""
+        if self.turns <= 1 or self.parse(call.heard):
+            return call.heard
+        first = call.turn - self.turns + 1
+        asked = call._asked
+        if asked is not None and asked.about == self.about:
+            first = max(first, asked.turn + 1)
+        return call.heard_since(first)
 
     def rule(self, call: C) -> LocalAction | None:
         if not self.when(call):
             return None
-        if not (value := self.parse(call.heard)):
+        if not (value := self.parse(self.words(call))):
             say_why, why = self.say_why, self.why_not(call.heard)
             if say_why is None or not why:
                 return None

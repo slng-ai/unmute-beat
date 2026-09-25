@@ -167,3 +167,26 @@ The remaining `collect > book_appointment` chains (8): not investigated yet.
 Revision a04c0ff with `VAD_STOP_SECS=0.6` (was 0.2). Normal x4 + stress x4, concurrency 4 each, one bot, `--metrics 7VHk6dTjvBcuV6XYPmaeGq`, label `session-4-load-endpointing`. Expanded count: 8 (52 -> 60 of 60; no reserve left after this).
 
 Question: per caller turn, do fewer runs answer a continuation piece (fixed: 118 over 202 caller turns), fewer runtime turns get cut into (63), and fewer requests get cancelled (132 of 447), and what does turn latency cost (fixed: p50 1.29 s)? 8 calls is a direction, not proof.
+
+### Endpointing run result (a04c0ff, `VAD_STOP_SECS=0.6`)
+
+| Run | Job | Simulations |
+|---|---|---|
+| `CdR8tupvBsxEYD8Lqhfies` | normal x4, concurrency 4 | 4 |
+| `Qprjd3ZJzBe2k4yZNmNuQi` | stress x4, concurrency 4 | 4 |
+
+Used: **60** of 60. No reserve left. Report: [`load/endpointing/report.md`](load/endpointing/report.md).
+
+| Per caller turn | Fixed, 0.2 s (20 calls at once) | Endpointing, 0.6 s (8 calls at once) |
+|---|---|---|
+| Runs answering a continuation piece | 0.58 (118 / 202) | 0.29 (24 / 84) |
+| Runtime turns cut into by the caller | 0.31 (63 / 202) | 0.27 (23 / 84) |
+| Requests cancelled | 30% (132 / 447) | 13% (20 / 154) |
+| Completed requests per caller turn | 1.56 | 1.60 |
+| Turn latency p50 / p90 | 1.29 / 2.68 s | 1.84 / 2.47 s |
+| Writes without a matching earlier question | 0 of 35 | 0 of 15 |
+| Calls with exactly one booking | 16 of 20 | 7 of 8 |
+
+Direction from 8 calls, not proof, and the load differs (8 at once against 20). The longer wait halves the turns that arrive in pieces and cuts cancelled requests from 30% to 13%, at about +0.55 s on the median turn (p90 is lower). `ArS5ZMnu` (no booking): 129 s went on the phone number; the caller then answered the booking read-back with "9:00 is perfect" instead of a yes, it was asked again, and the call reached 180 s.
+
+The 8 `collect > book_appointment` chains left in the fixed run are not read-backs: in each, code had already read the booking back, the caller said yes, and the model recorded the same slot again before calling the operation (the yes). One redundant `collect` request each; nothing code could skip.

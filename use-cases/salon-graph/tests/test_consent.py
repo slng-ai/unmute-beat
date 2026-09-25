@@ -440,7 +440,7 @@ async def n4_a_yes_about_spain_verifies_nobody():
 
     call.turn_started('my number is six eight zero, eight four zero, four six four')
     question = await agents.ask_number(_context(call), PHONE)
-    assert '+34 680 840 464' in question.spoken, question.spoken
+    assert '+34 680 84 04 64' in question.spoken, question.spoken
     read_out(call, question)
     call.turn_started("yes, that's right")
     handoff = await agents.confirm_customer(_context(call), PHONE)

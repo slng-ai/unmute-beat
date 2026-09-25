@@ -338,7 +338,7 @@ async def a_number_talked_over_arrives_whole():
         await probe._turn('611 111 111.')
     assert call.turn == 1 and call.heard == "It's +34. 611 111 111.", (call.turn, call.heard)
     assert heard_by_model == ["It's +34."], 'the whole number is read back by code, not counted by the model'
-    assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 111 111. Have I got that right?'
+    assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 11 11 11. Have I got that right?'
 
 
 async def a_number_with_a_digit_too_many_is_refused_with_its_reason():
@@ -350,7 +350,7 @@ async def a_number_with_a_digit_too_many_is_refused_with_its_reason():
     from salon.tools.identity import number_problem
 
     assert number_problem('+34 672. 1. 273. 45. 4.') == (
-        'I heard 10 digits after +34, and a Spanish number has nine. Could you say the whole number again, please?'
+        'I heard 10 digits after +34, which is more than a number there has. Could you say the whole number again, please?'
     )
     assert number_problem("It's +34 6. 71. 2.") == '', 'too few is a caller still going'
     assert number_problem("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.") == '', 'a whole number has no problem'
@@ -398,7 +398,7 @@ async def a_number_in_pieces_is_read_back_without_the_model():
 
     with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
         await probe._turn("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.")
-    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 273 454. Have I got that right?'
+    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
     assert call.requests == [], 'reading a whole number back costs no request'
 
 
@@ -435,9 +435,116 @@ async def a_number_finished_after_the_rest_was_asked_for_is_read_back():
     with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=never)):
         await probe._turn('273 454.')
     assert call.turn == 2, 'a new turn: the request for the rest was heard in full'
-    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 273 454. Have I got that right?'
+    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
     assert call.requests == [] and requests >= 0, 'joining the pieces costs no request'
     assert call._asked.about == 'phone' and call._asked.value == '+34671273454'
+    assert '+34671273454' not in books._customers, 'read back, not yet agreed to: nothing is looked up'
+
+
+async def a_number_from_any_country_is_looked_up_once_after_its_heard_read_back():
+    """Session 3, A1: any country's number, read back by code, looked up once, and only after a heard yes.
+
+    Each case counts the diary's lookups: none before the read-back of those
+    exact digits has played and been agreed to, exactly one after. A yes to
+    a read-back that never played, a correction and a replayed yes each look
+    nothing up. Digits with no "+" and a number with a digit too many are
+    never read back.
+    """
+    lookups: list[str] = []
+    real = books.find_or_create_customer
+
+    def counted(phone: str) -> dict:
+        lookups.append(phone)
+        return real(phone)
+
+    asked_model: list[str] = []
+
+    async def never(messages, info):
+        """The processor turns a model error into a spoken apology, so the call is recorded, not raised."""
+        asked_model.append(call.heard)
+        yield 'Right.'
+
+    async def asks_country(messages, info):
+        yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"country"}')}
+
+    async def says_ok(messages, info):
+        yield 'Right.'
+
+    @contextmanager
+    def models(verify):
+        """Every agent scripted: `verify` for the number, a short line wherever the caller goes after it."""
+        with ExitStack() as stack:
+            for name, node in agents.AGENTS.items():
+                model = FunctionModel(stream_function=verify if name == 'verify' else says_ok)
+                stack.enter_context(node.agent.override(model=model))
+            yield
+
+    def fresh() -> tuple:
+        books.reset()
+        books.set_clock(CLOCK)
+        lookups.clear()
+        call = open_call('', diary=books)
+        call.commit(agent='verify', pending='booking')
+        return call, Probe(call)
+
+    def heard_in_full(call) -> None:
+        call.note_reached()
+        played_out(call)
+        call.turn_ended(interrupted=False)
+
+    labels = {'Yes.': 'accept', 'No, it ends in 0959.': 'revise'}
+    with (
+        patch.object(books, 'find_or_create_customer', counted),
+        models(never),
+        classifier(labels),
+    ):
+        for said, phone, spoken in (
+            ('+1 202 555 0123.', '+12025550123', '+1 202-555-0123'),
+            ('Plus 353 86 123 4567.', '+353861234567', '+353 86 123 4567'),
+        ):
+            call, probe = fresh()
+            await probe._turn(said)
+            assert probe.fixed()[-1] == f'Let me read that back to you: {spoken}. Have I got that right?'
+            assert call._asked.value == phone and lookups == [], (said, lookups)
+            call.turn_ended(interrupted=False)
+            await probe._turn('Yes.')
+            assert lookups == [], 'a yes to a read-back that never played looked the number up'
+            heard_in_full(call)
+            await probe._turn(said)
+            heard_in_full(call)
+            await probe._turn('Yes.')
+            assert lookups == [phone], (said, lookups)
+            assert call.state.customer_phone == phone and call.state.customer_verified == 'created'
+            heard_in_full(call)
+            await probe._turn('Yes.')
+            assert lookups == [phone], 'a replayed yes looked the number up again'
+
+        call, probe = fresh()
+        await probe._turn('+44 20 7946 0958.')
+        heard_in_full(call)
+        await probe._turn('No, it ends in 0959.')
+        assert lookups == [], 'a correction is not an agreement'
+        heard_in_full(call)
+        await probe._turn('+44 20 7946 0959.')
+        assert probe.fixed()[-1] == 'Let me read that back to you: +44 20 7946 0959. Have I got that right?'
+        heard_in_full(call)
+        await probe._turn('Yes.')
+        assert lookups == ['+442079460959'], lookups
+
+        call, probe = fresh()
+        await probe._turn('+34 671 273 4540.')
+        assert probe.fixed()[-1].startswith('I heard 10 digits after +34'), probe.fixed()
+        assert call._asked is None and lookups == [] and call.requests == []
+        assert not [w for w in asked_model if '+' in w], ('a number was left to the model', asked_model)
+
+    call, probe = fresh()
+    with (
+        patch.object(books, 'find_or_create_customer', counted),
+        models(asks_country),
+    ):
+        await probe._turn('202 555 0123.')
+    assert probe.fixed()[-1] == 'Which country is that phone number from?', probe.fixed()
+    assert call._asked is None and lookups == [], 'no country code is guessed, and nothing is read back'
 
 
 async def a_move_after_a_booking_is_read_back_not_cancelled():
@@ -588,7 +695,7 @@ async def a_yes_with_a_new_request_is_verified_and_the_rest_answered():
             stack.enter_context(node.agent.override(model=model))
         await probe._turn('A haircut on Friday, please.')
         assert call.state.agent == 'verify', call.state.agent
-        assert probe.fixed() == ['Let me read that back to you: +34 611 111 111. Have I got that right?'], (
+        assert probe.fixed() == ['Let me read that back to you: +34 611 11 11 11. Have I got that right?'], (
             probe.fixed()
         )
         call.note_reached()
@@ -1327,7 +1434,7 @@ def a_read_back_said_again_in_full_can_be_answered():
     call = open_call('', diary=books)
     call.commit(agent='verify')
     call.turn_started("It's plus three four, six seven one, two seven three, four five four.")
-    readback = 'Let me read that back to you: +34 671 273 454. Have I got that right?'
+    readback = 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
     Ask(about='phone', value='+34671273454', spoken=readback).put(call)
     call.note_said('fixed', readback, origin='ask')
     call.note_heard('Let me read that', segment_ids=(call.spoken[-1].id,), interrupted=True)
@@ -1475,6 +1582,7 @@ async def main():
     await a_number_talked_over_arrives_whole()
     await a_number_in_pieces_is_read_back_without_the_model()
     await a_number_finished_after_the_rest_was_asked_for_is_read_back()
+    await a_number_from_any_country_is_looked_up_once_after_its_heard_read_back()
     await a_number_with_a_digit_too_many_is_refused_with_its_reason()
     await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
     await a_move_after_a_booking_is_read_back_not_cancelled()

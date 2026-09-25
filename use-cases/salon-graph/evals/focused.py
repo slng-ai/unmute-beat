@@ -35,7 +35,7 @@ from salon.classification import (
 )
 from salon.models.consent import OfferInput
 
-READBACK = 'Let me read that back to you: +34 671 273 454. Have I got that right?'
+READBACK = 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
 ASK_NUMBER = 'Which phone number should I use? Please say it with the country code.'
 TIMES = 'For a haircut tomorrow, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?'
 SLOTS = tuple(

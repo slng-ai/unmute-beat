@@ -1,7 +1,7 @@
 """The validated value types a salon call is made of.
 
 Each one refuses what a plain `str` would accept: a phone number that is the
-right length and still not a Spanish number, a date that exists as a shape and
+right length and still not a real number, a date that exists as a shape and
 not on a calendar, a time with a timezone or a stray second on it. A tool
 argument or a state field typed with one of these cannot hold a wrong value,
 so nothing downstream has to check.
@@ -42,27 +42,58 @@ def _shape(pattern: str, message: str):
     return AfterValidator(check)
 
 
-_spanish = TypeAdapter(
-    Annotated[
-        str | phonenumbers.PhoneNumber,
-        PhoneNumberValidator(number_format='E164', supported_regions=['ES']),
-    ]
+_international = TypeAdapter(
+    Annotated[str | phonenumbers.PhoneNumber, PhoneNumberValidator(number_format='E164')]
 )
-"""Spain only, and Google's libphonenumber rather than a regex of our own.
+"""Any country, and Google's libphonenumber rather than a regex of our own.
 
 A regex cannot know that +348340464 is eight national digits short of a real
 Spanish number, or that a range of the right length is not one anybody has. No
 `default_region`: with one, a bare "600111222" would be silently completed to
-+34600111222, which is exactly the guess the verify step must never make.
+some country's number, which is exactly the guess the verify step must never
+make. So a number is only ever what follows the caller's own "+".
 """
 
 
-def _spanish_or_absent(value: str) -> str:
-    """A real Spanish number, or '' for no number yet, which is the field's only absence."""
-    return value if value == '' else _spanish.validate_python(value)
+def phone_length(value: str) -> str:
+    """What is wrong with the length of a number that starts with "+", in words, or '' when nothing is.
+
+    libphonenumber's own reasons, so every country is counted by its own rule:
+    too long is a digit misheard or repeated, too short is a caller not yet
+    done. A number of a possible length that is still not valid is '' here,
+    and the validator refuses it. "Not a number" from the parser is a "+" with
+    too few digits after it yet ("+34"): also too short.
+    """
+    try:
+        number = phonenumbers.parse(value, None)
+    except phonenumbers.NumberParseException as error:
+        return {
+            phonenumbers.NumberParseException.INVALID_COUNTRY_CODE: 'unknown country code',
+            phonenumbers.NumberParseException.TOO_LONG: 'too long',
+        }.get(error.error_type, 'too short' if value[1:].isdigit() else '')
+    reason = phonenumbers.is_possible_number_with_reason(number)
+    return {
+        phonenumbers.ValidationResult.TOO_LONG: 'too long',
+        phonenumbers.ValidationResult.TOO_SHORT: 'too short',
+        phonenumbers.ValidationResult.INVALID_COUNTRY_CODE: 'unknown country code',
+    }.get(reason, '')
 
 
-def _spanish_and_present(value: str) -> str:
+def digits_after_code(value: str) -> str:
+    """How many digits follow the country code, in words ("10 digits after +34"), or all the digits when none parses."""
+    try:
+        number = phonenumbers.parse(value, None)
+    except phonenumbers.NumberParseException:
+        return f'{sum(c.isdigit() for c in value)} digits'
+    return f'{len(phonenumbers.national_significant_number(number))} digits after +{number.country_code}'
+
+
+def _real_or_absent(value: str) -> str:
+    """A real number from any country, or '' for no number yet, which is the field's only absence."""
+    return value if value == '' else _international.validate_python(value)
+
+
+def _real_and_present(value: str) -> str:
     """A number somebody actually gave us. Absence is not one of them.
 
     The state's `Phone` has to permit '', because that is what the field holds
@@ -71,26 +102,34 @@ def _spanish_and_present(value: str) -> str:
     if it were a number would create an empty customer record and verify the
     caller as nobody. Same digits, different question, so a different type.
 
-    A Spanish number with the wrong count of digits says which way it is
-    wrong. Coval run RPH7TzmF, K3: speech-to-text heard "six seven one, two
-    seven three" as "672. 1. 273.", ten digits, and the model answered the
-    bare validation error with "Please give me the rest of the digits".
+    A number with the wrong count of digits says which way it is wrong. Coval
+    run RPH7TzmF, K3: speech-to-text heard "six seven one, two seven three" as
+    "672. 1. 273.", ten digits, and the model answered the bare validation
+    error with "Please give me the rest of the digits".
     """
     if not value:
         raise ValueError('no number was given. Ask the caller for one; never look up an empty number')
-    national = re.sub(r'\D', '', value)[2:] if value.startswith('+34') else ''
-    if national and len(national) > 9:
+    if not value.startswith('+'):
         raise ValueError(
-            f'that is {len(national)} digits after +34, and a Spanish number has 9: a digit was misheard or '
-            "repeated. Nothing is missing, so do not ask for the rest; use verification_guidance 'correction' "
-            'to ask for the whole number again.'
+            "that number has no country code. Use verification_guidance 'country'; never guess a country code"
         )
-    if national and len(national) < 9:
-        raise ValueError(
-            f'that is only {len(national)} digits after +34, and a Spanish number has 9. Use '
-            "verification_guidance 'incomplete' to ask for the rest."
-        )
-    return _spanish.validate_python(value)
+    match phone_length(value):
+        case 'too long':
+            raise ValueError(
+                f'that is {digits_after_code(value)}, too many for its country: a digit was misheard or '
+                "repeated. Nothing is missing, so do not ask for the rest; use verification_guidance 'correction' "
+                'to ask for the whole number again.'
+            )
+        case 'too short':
+            raise ValueError(
+                f'that is only {digits_after_code(value)}, too few for its country. Use verification_guidance '
+                "'incomplete' to ask for the rest."
+            )
+        case 'unknown country code':
+            raise ValueError(
+                "no country has that code. Use verification_guidance 'correction' to ask for the whole number."
+            )
+    return _international.validate_python(value)
 
 
 def _one_day(value: object) -> _date:
@@ -130,14 +169,12 @@ def _one_time(value: object) -> _time:
     return value
 
 
-Phone = Annotated[
-    str,
-    AfterValidator(_spanish_or_absent),
-    Field(
-        description='A Spanish phone number the caller said, in full international form: +34 then nine digits.'
-    ),
-]
-"""A state field: a Spanish number, or '' before anybody has given one.
+_DESCRIPTION = (
+    'A phone number the caller said, in full international form: a plus, the country code, then the number.'
+)
+
+Phone = Annotated[str, AfterValidator(_real_or_absent), Field(description=_DESCRIPTION)]
+"""A state field: a real number from any country, or '' before anybody has given one.
 
 An `AfterValidator` over a plain `str`, never the `PhoneNumber` type itself and
 never a `pattern=` constraint: both put a keyword in the schema the model is
@@ -151,21 +188,9 @@ Date = Annotated[_date, BeforeValidator(_one_day)]
 Time = Annotated[_time, BeforeValidator(_one_time)]
 """Native `date` and `time`, validated by Pydantic, so a comparison is of days and not of spellings."""
 Id = Annotated[str, _shape(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', 'expected an identifier')]
-SubmittedPhone = Annotated[
-    str,
-    AfterValidator(_spanish_and_present),
-    Field(
-        description='A Spanish phone number the caller said, in full international form: +34 then nine digits.'
-    ),
-]
-"""A tool argument: a number being submitted for a lookup. Never for state; see `_spanish_and_present`."""
+SubmittedPhone = Annotated[str, AfterValidator(_real_and_present), Field(description=_DESCRIPTION)]
+"""A tool argument: a number being submitted for a lookup. Never for state; see `_real_and_present`."""
 
 
-def unsupported_region(error: Exception) -> bool:
-    """Whether a rejected number was well-formed but not Spanish.
-
-    A number from another country is a question, which country are you calling
-    from; a malformed one is a re-ask. libphonenumber distinguishes them and
-    the only carrier of that distinction is the message.
-    """
-    return 'not from a supported region' in str(error)
+Spoken = TypeAdapter(Annotated[str, PhoneNumberValidator(number_format='INTERNATIONAL')])
+"""A number as a person reads it out, grouped by libphonenumber for its own country: "+34 671 27 34 54"."""

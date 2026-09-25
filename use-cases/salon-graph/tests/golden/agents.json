@@ -113,7 +113,7 @@
      "additionalProperties": false,
      "properties": {
       "phone": {
-       "description": "A Spanish phone number the caller said, in full international form: +34 then nine digits.",
+       "description": "A phone number the caller said, in full international form: a plus, the country code, then the number.",
        "type": "string"
       }
      },
@@ -149,7 +149,7 @@
      "additionalProperties": false,
      "properties": {
       "phone": {
-       "description": "A Spanish phone number the caller said, in full international form: +34 then nine digits.",
+       "description": "A phone number the caller said, in full international form: a plus, the country code, then the number.",
        "type": "string"
       }
      },
@@ -171,8 +171,7 @@
         "number",
         "country",
         "incomplete",
-        "correction",
-        "unsupported"
+        "correction"
        ],
        "type": "string"
       }

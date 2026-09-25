@@ -1,8 +1,8 @@
 """The words core says itself, in one language. A use case in another language gives its own `Locale`.
 
 Everything else a caller hears is the use case's: its prompts, its
-read-backs, its receipts. These four are said by the turn engine when
-something went wrong, so no use case wrote them. A call picks its locale by
+read-backs, its receipts. These are said by the turn engine: while a turn
+takes a while, or when something went wrong, so no use case wrote them. A call picks its locale by
 class (`CallContext.default_locale`), or per call by overriding `locale`, as a
 bilingual use case does (`use-cases/faro-language-learning`).
 
@@ -60,4 +60,5 @@ SPANISH = Locale(
     exhausted='Perdona, me estoy liando. ¿Me lo repites?',
     unbacked='Perdona, me corrijo: todavía no he hecho ese cambio. Déjame ver dónde estamos.',
     withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
+    holding=('Déjame mirar.', 'Un momento.'),
 )

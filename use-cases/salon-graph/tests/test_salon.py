@@ -306,7 +306,7 @@ async def verify_then_book():
     call = open_call(PHONE, diary=books)
     probe = Probe(call, budget=TurnBudget(step_runs=4))
 
-    day = diary.spoken_day(books.now().date() + timedelta(days=2), books.now().date())
+    day = diary.spoken_day(open_days()[-1], books.now().date())
     call.ask(Asked(about='phone', value=PHONE))
     with scripted(
         concierge=then(
@@ -354,7 +354,7 @@ async def the_diary_is_the_edge():
     call.commit(customer_verified='existing', verified_phone=PHONE)
     probe = Probe(call)
 
-    day = diary.spoken_day(books.now().date() + timedelta(days=2), books.now().date())
+    day = diary.spoken_day(open_days()[-1], books.now().date())
     with scripted(
         concierge=then(
             tool_call('read_diary', when=day, service='haircut'), says('I can do that. Which suits you?')

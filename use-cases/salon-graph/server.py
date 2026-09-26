@@ -367,6 +367,15 @@ async def media(websocket: WebSocket) -> None:
         await asyncio.to_thread(ADMISSION.release, call_sid, why)
 
 
+def _local(request: Request) -> bool:
+    """Whether a request came from this host, not through the tunnel: cloudflared forwards with these headers.
+
+    `/ready`, `/stats` and `/calls` carry callers' numbers and the runner's
+    state, so only a local reader (the load driver, `coval_sim`) gets them.
+    """
+    return not any(h in request.headers for h in ('cf-connecting-ip', 'x-forwarded-for', 'cf-ray'))
+
+
 def _fds() -> int:
     """Open file descriptors of this process (macOS and Linux both list them in /dev/fd)."""
     return len(os.listdir('/dev/fd'))
@@ -374,6 +383,8 @@ def _fds() -> int:
 
 @app.get('/ready')
 async def ready(request: Request) -> JSONResponse:
+    if not _local(request):
+        return JSONResponse({}, status_code=404)
     return JSONResponse(
         {'pid': os.getpid(), 'warmed': request.app.state.warmed, 'started': request.app.state.started}
     )
@@ -382,6 +393,8 @@ async def ready(request: Request) -> JSONResponse:
 @app.get('/stats')
 async def stats(request: Request, reset: bool = False) -> JSONResponse:
     """This worker now: its calls, tasks, descriptors and loop lag since the last reset."""
+    if not _local(request):
+        return JSONResponse({}, status_code=404)
     found = _stats() | {'warmed': request.app.state.warmed}
     if reset:
         LAG.clear()
@@ -412,6 +425,8 @@ def _stats() -> dict[str, Any]:
 
 
 @app.get('/calls')
-async def calls() -> JSONResponse:
+async def calls(request: Request) -> JSONResponse:
     """The runner's call record, over every worker."""
+    if not _local(request):
+        return JSONResponse({}, status_code=404)
     return JSONResponse(await asyncio.to_thread(ADMISSION.calls))

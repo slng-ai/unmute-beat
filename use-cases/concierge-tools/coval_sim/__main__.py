@@ -8,6 +8,15 @@
     uv run python -m coval_sim add graph             # the other baseline: the unmute graph build of the salon
     uv run python -m coval_sim serve --agency salon  # one bot and tunnel for several jobs, until stopped
     uv run python -m coval_sim run ... --host <the host serve printed>
+    uv run python -m coval_sim serve --agency salon --phone-number +447427919928 --campaign c-1 --profile ...
+        # a campaign on a real phone line: salon-graph's runner (`server.py`), and the number owned until
+        # every call is over; each `run --host` job on it leaves the number alone
+
+A real phone line is owned by one campaign at a time (`runtime.Campaign`):
+pointed once when it starts, given back once after every call has ended,
+and only if nobody changed it since. Each job's calls are the runner's own
+record of the campaign's calls, and each simulation is bound to its call by
+evidence (`runtime.correlate`, with `--fixtures`), never by log order.
 
 One job per invocation: one agent, one test set, one persona. `plan` reads
 Coval and prints what `run` would launch, and how many calls that is; it
@@ -45,14 +54,14 @@ from dotenv import dotenv_values
 from coval_sim.coval import CovalClient, CovalError
 from coval_sim.models import FOLDERS, Agent, Persona, SpeechProfile
 from coval_sim.runtime import (
+    Campaign,
     NotReadyError,
     Process,
     Tunnel,
     answers_http,
     call_sids,
     ceiling,
-    shown,
-    twilio_voice_url,
+    correlate,
 )
 
 PORT = 7860
@@ -333,6 +342,63 @@ class Repository:
             ceiling(bot, call_seconds + FINISH_SECONDS)
         return bot
 
+    def serves_many(self, agency: str) -> bool:
+        """Whether the agency has a multi-worker runner (`server.py`), which a real phone line uses."""
+        return (self.use_case(agency) / 'server.py').exists()
+
+    def runner(
+        self,
+        agency: str,
+        env: dict[str, str],
+        host: str,
+        log: Path,
+        port: int,
+        profile: SpeechProfile | None,
+        call_seconds: int,
+        state: Path,
+        workers: int,
+    ) -> Process:
+        """The agency's runner (`server.py` under uvicorn, `workers` processes) on one port, for a real phone line.
+
+        Its diary and call record are files in `state`, kept after the run: the
+        diary's bookings and intents and the runner's calls are the evidence a
+        campaign's calls are judged and correlated on. Real Twilio returns
+        marks, so delivery is `marks`, never simulated.
+        """
+        state.mkdir(parents=True, exist_ok=True)
+        runner = Process(
+            'voice runner',
+            [
+                'uv',
+                'run',
+                'uvicorn',
+                'server:app',
+                '--workers',
+                str(workers),
+                '--host',
+                '127.0.0.1',
+                '--port',
+                str(port),
+                '--timeout-graceful-shutdown',
+                str(call_seconds + 30),
+            ],
+            self.use_case(agency),
+            {
+                **env,
+                **{k: v for k, v in BOT_ENV.items() if k != 'DIARY_PER_CALL'},
+                'TWILIO_MARKS': 'echoed',
+                'DELIVERY': 'marks',
+                'MAX_CALL_SECONDS': str(call_seconds),
+                'PUBLIC_HOST': host,
+                'DIARY_PATH': str(state / 'diary.db'),
+                'RUNNER_DB': str(state / 'runner.db'),
+                **(profile.model_dump() if profile else {}),
+            },
+            log,
+        )
+        runner.wait_until(lambda: answers_http(f'http://127.0.0.1:{port}/ready'), 600)
+        return runner
+
 
 class ReleaseCheck:
     """Plans and runs one Coval job against the bot.
@@ -360,6 +426,14 @@ class ReleaseCheck:
         self.coval = coval
         self.workdir = workdir
         self.runs = runs
+        self.records = runs.path.parent / 'campaigns'
+        """Where a campaign's ownership record of a phone number lives (`Campaign`), beside the run log."""
+        self.state: Path = workdir
+        """Where a runner's diary and call record are kept (`--state`)."""
+        self.workers = 2
+        """The runner's worker processes (`--workers`)."""
+        self.fixtures: dict[str, str] = {}
+        """Test case id to the caller's phone it gives (`--fixtures`): how a simulation is bound to its call."""
 
     def plan(
         self,
@@ -486,30 +560,49 @@ class ReleaseCheck:
         env = self.repo.env()
         log = self.workdir / f'{job.agency}-bot.log'
         name = f'{job.label} {job.agency} {job.test_set_id} {uuid.uuid4().hex[:8]}'
+        record: dict[str, Any] = {}
         try:
             with contextlib.ExitStack() as stack:
                 if host is None:
                     tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
-                    stack.enter_context(
-                        self.repo.bot(
-                            job.agency,
-                            env,
-                            tunnel.host,
-                            log,
-                            self.port,
-                            job.profile,
-                            job.call_seconds,
-                            marks='echoed' if job.agent.phone_line else 'absent',
+                    if job.agent.phone_line and self.repo.serves_many(job.agency):
+                        stack.enter_context(
+                            self.repo.runner(
+                                job.agency,
+                                env,
+                                tunnel.host,
+                                log,
+                                self.port,
+                                job.profile,
+                                job.call_seconds,
+                                self.state,
+                                self.workers,
+                            )
                         )
-                    )
+                    else:
+                        stack.enter_context(
+                            self.repo.bot(
+                                job.agency,
+                                env,
+                                tunnel.host,
+                                log,
+                                self.port,
+                                job.profile,
+                                job.call_seconds,
+                                marks='echoed' if job.agent.phone_line else 'absent',
+                            )
+                        )
                     host = tunnel.host
-                if job.agent.phone_line:
-                    previous = stack.enter_context(
-                        twilio_voice_url(job.agent.phone_number, f'https://{host}/')
-                    )
-                    print(f'{job.agent.phone_number} voice URL was {shown(previous)}; put back after the job')
-                else:
+                    if job.agent.phone_line:
+                        record = stack.enter_context(
+                            self._campaign(job.agent.phone_number, host, job.label)
+                        )._record
+                elif job.agent.phone_line:
+                    record = Campaign.owning(job.agent.phone_number, host, self.records)
+                    print(f'{job.agent.phone_number} is owned by campaign {record["label"]!r}: left as it is')
+                if not job.agent.phone_line:
                     self.coval.update_connection(job.agent, connection(host))
+                launched_at = datetime.now(UTC).timestamp()
                 self.runs.write(job.key, name=name, status='intent')
                 try:
                     run_id = self.coval.launch(
@@ -521,20 +614,38 @@ class ReleaseCheck:
                         name=name,
                     )
                 except CovalError as error:
-                    return self._uncertain(job, name, error, log)
+                    return self._uncertain(job, name, error, log, record, launched_at)
                 self.runs.write(job.key, name=name, status='launched', run_id=run_id)
                 print(f'launched run {run_id} ({name})', flush=True)
-                return self._result(job, run_id, name, log)
+                return self._result(job, run_id, name, log, record, launched_at)
         except (NotReadyError, RuntimeError, ValueError) as error:
             return Row(job.agency, job.test_set_id, problems=[str(error)], log=log)
 
-    def _uncertain(self, job: Job, name: str, error: CovalError, log: Path) -> Row:
+    def _campaign(self, number: str, host: str, label: str) -> Campaign:
+        return Campaign(
+            number,
+            host,
+            label,
+            self.records,
+            runner_db=self.state / 'runner.db',
+            diary=self.state / 'diary.db',
+        )
+
+    def _uncertain(
+        self,
+        job: Job,
+        name: str,
+        error: CovalError,
+        log: Path,
+        record: dict[str, Any] | None = None,
+        since: float = 0.0,
+    ) -> Row:
         """A launch that raised may still have started a run: look for it by name before saying anything."""
         run_id = self.coval.find_run(job.agent.id, name)
         if run_id:
             self.runs.write(job.key, name=name, status='launched', run_id=run_id)
             print(f'launch answered badly, but run {run_id} exists ({name})', flush=True)
-            return self._result(job, run_id, name, log)
+            return self._result(job, run_id, name, log, record, since)
         self.runs.write(job.key, name=name, status='uncertain', error=str(error))
         return Row(
             job.agency,
@@ -543,8 +654,23 @@ class ReleaseCheck:
             log=log,
         )
 
-    def _result(self, job: Job, run_id: str, name: str, log: Path) -> Row:
-        """Wait for the run and judge it. A run still going at the timeout is reported, not failed and not cancelled."""
+    def _result(
+        self,
+        job: Job,
+        run_id: str,
+        name: str,
+        log: Path,
+        record: dict[str, Any] | None = None,
+        since: float = 0.0,
+    ) -> Row:
+        """Wait for the run and judge it. A run still going at the timeout is reported, not failed and not cancelled.
+
+        On a phone line the calls are the runner's own record of this
+        campaign's calls since the launch, never a log scraped for CallSids,
+        and each simulation is bound to one by evidence (`correlate`). A bot
+        with no runner file is read from its log only for a job of one call
+        at a time; otherwise its calls are unknown.
+        """
         run = self.coval.wait(run_id, timeout_s=self.wait_s)
         if not run.finished:
             self.runs.write(job.key, name=name, status='launched', run_id=run_id, remote=run.status)
@@ -556,34 +682,117 @@ class ReleaseCheck:
                 log,
                 still_running=True,
             )
-        calls = call_sids(log) if job.agent.phone_line else []
-        self.runs.write(job.key, name=name, status='finished', run_id=run_id, remote=run.status, calls=calls)
-        if calls:
-            print(f'bot calls {" ".join(calls)} (for load_report --call SIMULATION=CALL_SID)', flush=True)
-        problems = run.problems(
-            self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
+        simulations = self.coval.simulations(run_id)
+        calls, bound = self._calls(job, log, record or {}, since, simulations)
+        self.runs.write(
+            job.key, name=name, status='finished', run_id=run_id, remote=run.status, calls=calls, bound=bound
         )
+        for sim, call in bound.items():
+            print(
+                f'simulation {sim} = call {call}' + (' (for load_report --call)' if call != 'unknown' else '')
+            )
+        problems = run.problems(simulations, self.coval.composite_ids(job.agent.metric_ids))
         return Row(job.agency, job.test_set_id, run_id, problems, log)
 
-    def serve(self, agency: str, profile: Path, call_seconds: int = MAX_CALL_SECONDS) -> None:
+    def _calls(
+        self, job: Job, log: Path, record: dict[str, Any], since: float, simulations: list[Any]
+    ) -> tuple[list[str], dict[str, str]]:
+        """This job's calls and which simulation each was: the runner's record when there is one."""
+        if not job.agent.phone_line:
+            return [], {}
+        runner_db, diary = Path(record.get('runner_db') or '-'), Path(record.get('diary') or '-')
+        if not runner_db.exists():
+            calls = call_sids(log) if job.concurrency == 1 else []
+            return calls, {s.simulation_id: calls[0] if len(calls) == 1 else 'unknown' for s in simulations}
+        import sqlite3
+
+        db = sqlite3.connect(runner_db)
+        try:
+            calls = [
+                sid
+                for (sid,) in db.execute(
+                    'SELECT call_sid FROM calls WHERE campaign = ? AND admitted_at >= ? ORDER BY admitted_at',
+                    (record.get('label', ''), since - 5),
+                )
+            ]
+        finally:
+            db.close()
+        acted: dict[str, set[str]] = {sid: set() for sid in calls}
+        if diary.exists():
+            db = sqlite3.connect(diary)
+            try:
+                for session, subject in db.execute('SELECT session, subject FROM intents'):
+                    if session in acted:
+                        acted[session].add(subject)
+            finally:
+                db.close()
+        sims = [
+            {'simulation_id': s.simulation_id, 'test_case_id': s.test_case_id, 'call_sid': s.call_sid}
+            for s in simulations
+        ]
+        return calls, correlate(sims, acted, self.fixtures)
+
+    def serve(
+        self,
+        agency: str,
+        profile: Path,
+        call_seconds: int = MAX_CALL_SECONDS,
+        *,
+        phone_number: str = '',
+        campaign: str = '',
+    ) -> None:
         """Start the agency's bot behind a tunnel, print the host, and keep both up until stopped.
 
         One bot for several jobs at once (`run --host`), so every call of a
         load test lands on one process. Only a bot that ends its own calls:
         the runner's outside ceiling stops a whole bot after its first call.
+
+        With `phone_number`, this is a campaign: the agency's multi-worker
+        runner, when it has one (`server.py`), and the number owned for the
+        whole of it (`Campaign`). Jobs sent at it (`run --host`) never touch
+        the number; it is given back once, after every call is over.
         """
         if not self.repo.limits_itself(agency):
             raise ValueError(f'{agency} has no call limit of its own; serve only a bot with MAX_CALL_SECONDS')
+        if phone_number and not campaign:
+            raise ValueError('a phone line is served as a campaign: name it with --campaign')
         speech = load_profile(profile)
         log = self.workdir / f'{agency}-bot.log'
         env = self.repo.env()
-        with (
-            Tunnel(self.port, self.workdir) as tunnel,
-            self.repo.bot(agency, env, tunnel.host, log, self.port, speech, call_seconds),
-        ):
+        with contextlib.ExitStack() as stack:
+            tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
+            if phone_number and self.repo.serves_many(agency):
+                stack.enter_context(
+                    self.repo.runner(
+                        agency,
+                        env,
+                        tunnel.host,
+                        log,
+                        self.port,
+                        speech,
+                        call_seconds,
+                        self.state,
+                        self.workers,
+                    )
+                )
+            else:
+                stack.enter_context(
+                    self.repo.bot(
+                        agency,
+                        env,
+                        tunnel.host,
+                        log,
+                        self.port,
+                        speech,
+                        call_seconds,
+                        marks='echoed' if phone_number else 'absent',
+                    )
+                )
+            if phone_number:
+                stack.enter_context(self._campaign(phone_number, tunnel.host, campaign))
             print(
-                f'serving {agency} at {tunnel.host} ({speech.describe()}, calls up to {call_seconds}s; bot log '
-                f'{log}); stop with SIGTERM or Ctrl-C',
+                f'serving {agency} at {tunnel.host} ({speech.describe()}, calls up to {call_seconds}s; log '
+                f'{log}; state {self.state}); stop with SIGTERM or Ctrl-C',
                 flush=True,
             )
             threading.Event().wait()
@@ -655,6 +864,13 @@ def _parser() -> argparse.ArgumentParser:
         job.add_argument(
             '--call-seconds', type=int, default=MAX_CALL_SECONDS, help='the longest a call may run'
         )
+        job.add_argument(
+            '--workers', type=int, default=2, help="the runner's worker processes, on a phone line"
+        )
+        job.add_argument('--state', type=Path, help="where the runner's diary and call record are kept")
+        job.add_argument(
+            '--fixtures', type=Path, help='JSON: test case id to the caller phone it gives, to bind calls'
+        )
     serve = commands.add_parser('serve', help='one bot and tunnel for several jobs, until stopped')
     serve.add_argument('--agency', required=True, help='the use case to serve: salon for salon-graph')
     serve.add_argument('--port', type=int, default=PORT, help='the local port for the bot and tunnel')
@@ -663,6 +879,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     serve.add_argument(
         '--call-seconds', type=int, default=MAX_CALL_SECONDS, help='the longest a call may run'
+    )
+    serve.add_argument('--phone-number', default='', help='own this Twilio number for the whole campaign')
+    serve.add_argument('--campaign', default='', help="the campaign's label, carried by every call")
+    serve.add_argument('--workers', type=int, default=2, help="the runner's worker processes")
+    serve.add_argument('--state', type=Path, help="where the runner's diary and call record are kept")
+    serve.add_argument(
+        '--log', type=Path, default=Path('runs.jsonl'), help='the run log, beside the campaigns'
     )
     add = commands.add_parser('add', help="create a flow's Coval agent")
     add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
@@ -690,11 +913,22 @@ def main(argv: list[str] | None = None) -> int:
         getattr(args, 'port', PORT),
     )
     check.wait_s = getattr(args, 'wait', RUN_TIMEOUT_S)
+    check.workers = getattr(args, 'workers', 2)
+    if getattr(args, 'state', None):
+        check.state = args.state.resolve()
+    if getattr(args, 'fixtures', None):
+        check.fixtures = {str(k): str(v) for k, v in json.loads(args.fixtures.read_text()).items()}
     try:
         if args.command == 'serve':
             signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
             with contextlib.suppress(KeyboardInterrupt):
-                check.serve(args.agency, args.profile, args.call_seconds)
+                check.serve(
+                    args.agency,
+                    args.profile,
+                    args.call_seconds,
+                    phone_number=args.phone_number,
+                    campaign=args.campaign,
+                )
             return 0
         if args.command == 'add':
             line = check.add(args.agency)

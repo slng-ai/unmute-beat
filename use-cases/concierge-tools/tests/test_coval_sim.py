@@ -10,6 +10,8 @@ Asserts, no pytest, no fixtures, same as the rest.
 
 import json
 import os
+import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -39,7 +41,7 @@ from coval_sim.models import (
     RunResults,
     Simulation,
 )
-from coval_sim.runtime import CONNECTED, Process, call_sids, ceiling, shown, twilio_voice_url
+from coval_sim.runtime import CONNECTED, Campaign, Process, call_sids, ceiling, correlate, shown
 
 
 class FakeCoval(CovalClient):
@@ -453,6 +455,9 @@ elif args[0] == 'api:core:incoming-phone-numbers:update':
             n.setdefault('history', []).append(n['voiceUrl'])
     state.write_text(json.dumps(numbers))
     print('[]')
+elif args[0] == 'api:core:calls:list':
+    calls = json.loads(state.with_name('calls.json').read_text()) if state.with_name('calls.json').exists() else []
+    print(json.dumps([c for c in calls if c['to'] == value('--to') and c['status'] == value('--status')]))
 """
 
 
@@ -470,27 +475,6 @@ def test_phone_line() -> None:
         == 'salon-pipecat-flows'
     )
     with tempfile.TemporaryDirectory() as tmp:
-        binary = Path(tmp) / 'twilio'
-        binary.write_text(FAKE_TWILIO)
-        binary.chmod(0o755)
-        state = binary.with_suffix('.json')
-        other = {
-            'sid': 'PN2',
-            'phoneNumber': '+441111111111',
-            'voiceUrl': 'https://keep.example/x',
-            'voiceMethod': 'POST',
-        }
-        state.write_text(json.dumps([
-            {'sid': 'PN1', 'phoneNumber': '+447427919928', 'voiceUrl': 'https://old.example/voice', 'voiceMethod': 'GET'},
-            other,
-        ]))  # fmt: skip
-        with twilio_voice_url('+447427919928', 'https://bot.example/', binary=str(binary)) as previous:
-            during = json.loads(state.read_text())
-            assert previous == 'https://old.example/voice'
-            assert during[0]['voiceUrl'] == 'https://bot.example/' and during[0]['voiceMethod'] == 'POST'
-        after = json.loads(state.read_text())
-        assert after[0]['voiceUrl'] == 'https://old.example/voice' and after[0]['voiceMethod'] == 'GET', after
-        assert after[1] == other, 'another number was touched'
         log = Path(tmp) / 'bot.log'
         log.write_text(
             'start CA' + 'a' * 32 + ' ok\nagain CA' + 'a' * 32 + '\nnext CA' + 'b' * 32 + '\nCAX\n'
@@ -501,11 +485,141 @@ def test_phone_line() -> None:
             shown('https://x.example/voice?token=secret') == 'https://x.example/voice'
             and shown('') == '(none)'
         )
+
+
+def _fake_twilio(folder: Path) -> tuple[Path, Path]:
+    binary = folder / 'twilio'
+    binary.write_text(FAKE_TWILIO)
+    binary.chmod(0o755)
+    state = binary.with_suffix('.json')
+    state.write_text(json.dumps([
+        {'sid': 'PN1', 'phoneNumber': '+447427919928', 'voiceUrl': 'https://old.example/voice', 'voiceMethod': 'GET'},
+        {'sid': 'PN2', 'phoneNumber': '+441111111111', 'voiceUrl': 'https://keep.example/x', 'voiceMethod': 'POST'},
+    ]))  # fmt: skip
+    return binary, state
+
+
+def test_campaign() -> None:
+    """One campaign owns the number for its life: jobs never touch it, and it is given back once, only when safe."""
+    number = '+447427919928'
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp)
+        binary, state = _fake_twilio(folder)
+        records = folder / 'campaigns'
+        numbers = lambda: {n['sid']: n for n in json.loads(state.read_text())}  # noqa: E731
+        owner = Campaign(
+            number, 'up.trycloudflare.com', 'c-1', records, binary=str(binary), wait_s=0.3, poll_s=0.05
+        )
+        with owner:
+            assert numbers()['PN1']['voiceUrl'] == 'https://up.trycloudflare.com/?campaign=c-1'
+            held = Campaign.owning(number, 'up.trycloudflare.com', records)
+            assert held['label'] == 'c-1' and held['previous'] == 'https://old.example/voice'
+            for host in ('other.trycloudflare.com',):
+                try:
+                    Campaign.owning(number, host, records)
+                except RuntimeError as error:
+                    assert 'another host' in str(error), error
+                else:
+                    raise AssertionError('a job was sent at a host the campaign does not own')
+            try:
+                Campaign(number, 'second.trycloudflare.com', 'c-2', records, binary=str(binary)).__enter__()
+            except RuntimeError as error:
+                assert "owned by campaign 'c-1'" in str(error), error
+            else:
+                raise AssertionError('a second campaign took a number the first still owns')
+            assert len(numbers()['PN1']['history']) == 1, 'jobs on one campaign pointed the number again'
+        assert (
+            numbers()['PN1']['voiceUrl'] == 'https://old.example/voice'
+            and numbers()['PN1']['voiceMethod'] == 'GET'
+        )
+        assert numbers()['PN2']['voiceUrl'] == 'https://keep.example/x', 'another number was touched'
+        assert not (records / 'campaign-447427919928.json').exists()
         try:
-            with twilio_voice_url('+449999999999', 'https://bot.example/', binary=str(binary)):
-                raise AssertionError('a number the account does not hold was pointed')
+            Campaign.owning(number, 'up.trycloudflare.com', records)
         except RuntimeError as error:
-            assert 'not one' in str(error), error
+            assert 'no live campaign' in str(error), error
+        else:
+            raise AssertionError('a job ran on a number no campaign owns')
+
+        state.with_name('calls.json').write_text(
+            json.dumps([{'sid': 'CA1', 'to': number, 'status': 'in-progress'}])
+        )
+        with Campaign(
+            number, 'up.trycloudflare.com', 'c-3', records, binary=str(binary), wait_s=0.3, poll_s=0.05
+        ):
+            pass
+        assert numbers()['PN1']['voiceUrl'].endswith('campaign=c-3'), 'restored while a call was in progress'
+        kept = json.loads((records / 'campaign-447427919928.json').read_text())
+        kept['pid'] = 999_999
+        (records / 'campaign-447427919928.json').write_text(json.dumps(kept))
+        state.with_name('calls.json').write_text('[]')
+        with Campaign(
+            number, 'up.trycloudflare.com', 'c-4', records, binary=str(binary), wait_s=0.3, poll_s=0.05
+        ) as took:
+            assert took.previous == 'https://old.example/voice', 'a takeover lost the URL from before'
+        assert numbers()['PN1']['voiceUrl'] == 'https://old.example/voice', (
+            'a takeover did not give the number back'
+        )
+
+        runner = folder / 'runner.db'
+        db = sqlite3.connect(runner)
+        db.execute('CREATE TABLE calls (call_sid TEXT, state TEXT)')
+        db.execute("INSERT INTO calls VALUES ('CA2', 'active')")
+        db.commit()
+        db.close()
+        with Campaign(
+            number,
+            'up.trycloudflare.com',
+            'c-5',
+            records,
+            runner_db=runner,
+            binary=str(binary),
+            wait_s=0.3,
+            poll_s=0.05,
+        ):
+            pass
+        assert numbers()['PN1']['voiceUrl'].endswith('campaign=c-5'), (
+            'restored while the runner still had a call'
+        )
+        (records / 'campaign-447427919928.json').unlink()
+
+        with Campaign(
+            number, 'up.trycloudflare.com', 'c-6', records, binary=str(binary), wait_s=0.3, poll_s=0.05
+        ):
+            subprocess.run([str(binary), 'api:core:incoming-phone-numbers:update', '--sid', 'PN1', '--voice-url', 'https://someone.else/', '--voice-method', 'POST'], check=True, capture_output=True)  # fmt: skip
+        assert numbers()['PN1']['voiceUrl'] == 'https://someone.else/', (
+            'a later change by somebody else was undone'
+        )
+
+
+def test_correlation() -> None:
+    """A simulation is bound to a call by evidence: Coval's CallSid, or the one call that acted for its caller."""
+    calls = {
+        'CA1': {'+34699000001'},
+        'CA2': {'+34699000002'},
+        'CA3': set(),
+        'CA4': {'+34699000004'},
+        'CA5': {'+34699000004'},
+    }
+    cases = {'K1': '+34699000001', 'K2': '+34699000002', 'K3': '+34699000003', 'K4': '+34699000004'}
+    sims = [
+        {'simulation_id': 'S0', 'test_case_id': 'K9', 'call_sid': 'CA3'},
+        {'simulation_id': 'S1', 'test_case_id': 'K1', 'call_sid': None},
+        {'simulation_id': 'S2', 'test_case_id': 'K2', 'call_sid': None},
+        {'simulation_id': 'S3', 'test_case_id': 'K3', 'call_sid': None},
+        {'simulation_id': 'S4', 'test_case_id': 'K4', 'call_sid': None},
+    ]
+    assert correlate(sims, calls, cases) == {
+        'S0': 'CA3',
+        'S1': 'CA1',
+        'S2': 'CA2',
+        'S3': 'unknown',
+        'S4': 'unknown',
+    }
+    twice = [{'simulation_id': 'A', 'test_case_id': 'K1'}, {'simulation_id': 'B', 'test_case_id': 'K1'}]
+    assert correlate(twice, calls, cases) == {'A': 'unknown', 'B': 'unknown'}, (
+        'one call bound to two simulations'
+    )
 
 
 if __name__ == '__main__':
@@ -521,5 +635,7 @@ if __name__ == '__main__':
     test_named_metrics()
     test_shared_host()
     test_phone_line()
+    test_campaign()
+    test_correlation()
     test_speech_profile()
     print('ok')

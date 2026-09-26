@@ -138,14 +138,15 @@ class ProposalLedger[P: Proposal]:
     def last(self, call: CallContext) -> tuple[P, bool] | None:
         """Last turn's question under the caller's current identity, and whether they heard it in full.
 
-        Heard means its latest copy was delivered (`Spoken.delivered`): the
-        runtime's playback signal or an explicit text acknowledgement says it
-        ran out before the caller cut in. No copy, a copy queued and never
-        played, a copy only estimated to have played, and a copy cut short are
-        all not heard. A read-back the caller talked over and that was then
-        said again, whole, on the same turn, was heard (Coval run 4eDqRVLR,
-        K3: the cut-off first copy left the "yes" to the second with nothing
-        pending).
+        Heard means its latest copy was delivered (`Spoken.delivered`: its own
+        transport mark, or an explicit text acknowledgement) and had played to
+        its end before the caller began this reply (`CallContext.answered_in_time`).
+        No copy, a copy queued and never played, a copy only estimated or
+        signalled to have played, a copy cut short or cleared, and a copy the
+        caller spoke over before its mark came back are all not heard. A
+        read-back the caller talked over and that was then said again, whole,
+        on the same turn, was heard (Coval run 4eDqRVLR, K3: the cut-off first
+        copy left the "yes" to the second with nothing pending).
         """
         question = self.asked
         if question is None or question.turn != call.turn - 1:
@@ -153,7 +154,8 @@ class ProposalLedger[P: Proposal]:
         if question.owner and question.owner != call.identity():
             return None
         copies = self.copies(call)
-        return question, bool(copies) and copies[-1].delivered == 'delivered'
+        heard = bool(copies) and copies[-1].delivered == 'delivered' and call.answered_in_time(copies[-1])
+        return question, heard
 
     def pending(self, call: CallContext) -> P | None:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""

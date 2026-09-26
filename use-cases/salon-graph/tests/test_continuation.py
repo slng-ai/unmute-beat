@@ -16,6 +16,7 @@ Scripted models, no audio, no network. Asserts, no pytest, same as the rest.
 
 import asyncio
 import json
+import time
 from contextlib import ExitStack, contextmanager
 from datetime import datetime
 
@@ -45,7 +46,12 @@ BOOK = FLOW.by_id['booking'].operations[0]
 
 
 class Probe(PydanticAgentProcessor):
-    """The real processor with its frames collected instead of pushed down a pipeline."""
+    """The real processor with its frames collected instead of pushed down a pipeline.
+
+    The caller starting to speak is what the voice detector would report
+    first: a turn (`_turn`) or a barge-in (`interrupt`) notes an onset, as
+    `VADUserStartedSpeakingFrame` does in a pipeline.
+    """
 
     def __init__(self, call):
         super().__init__(call, FLOW.nodes)
@@ -54,20 +60,37 @@ class Probe(PydanticAgentProcessor):
     async def push_frame(self, frame, direction=None):
         self.frames.append(frame)
 
+    async def _turn(self, prompt):
+        self._call.note_onset(time.perf_counter())
+        await super()._turn(prompt)
+
+    def interrupt(self):
+        self._call.note_onset(time.perf_counter())
+        super().interrupt()
+
     def fixed(self) -> list[str]:
         return [f.text for f in self.frames if isinstance(f, TTSSpeakFrame)]
 
 
 def played_out(call) -> None:
-    """The audio ran out after playing in full: the runtime's stop signal, a long while after its start.
+    """The audio ran out after playing in full: every pending mark came back, then the runtime's stop signal.
 
-    A test has no audio, so start and stop arrive in the same instant, which
-    is what audio cut off by the caller looks like (`CallContext._stopped_early`).
-    The start is moved back instead.
+    The marks are what deliver (`Spoken.delivered`); the stop signal decides
+    turn-taking only. A test has no audio, so start and stop arrive in the
+    same instant, which is what audio cut off by the caller looks like
+    (`CallContext._stopped_early`). The start is moved back instead.
     """
+    for name in list(call._pending_marks):
+        call.note_mark_returned(name, time.perf_counter())
     if call._burst != float('inf'):
         call._burst -= 60
     call.note_drained()
+
+
+def said(call, words: str) -> None:
+    """The caller spoke: the voice detector's onset first, as a pipeline reports it, then their words."""
+    call.note_onset(time.perf_counter())
+    call.turn_started(words)
 
 
 def booking_call():
@@ -90,7 +113,7 @@ def offer_friday_at_nine(call) -> None:
 
 async def read_back_a_haircut(call, probe, *, played: bool = True) -> str:
     """Turn one: the booking step reads a Friday haircut back, in the application's words, and its audio plays."""
-    call.turn_started('A haircut on Friday at nine, please.')
+    said(call, 'A haircut on Friday at nine, please.')
     offer_friday_at_nine(call)
     proposal = BOOK.proposal_for(call, _args(BOOK, call))
     question = Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
@@ -180,11 +203,11 @@ async def speech_nobody_heard_is_recorded_as_unheard():
     """A piece's answer that never played is kept for audit but no longer shown to the model as said."""
     call = booking_call()
     await read_back_a_haircut(call, Probe(call))
-    call.turn_started('Yes, please.')
+    said(call, 'Yes, please.')
     await call.speak_now('Let me check that.', origin='entry')
     unheard = call.spoken[-1]
     call.note_barge()
-    call.turn_started('That sounds perfect.')
+    said(call, 'That sounds perfect.')
     assert call.turn == 2 and unheard.text == '' and unheard.generated == 'Let me check that.'
     assert 'Let me check that.' not in str(project(call, call.messages))
 
@@ -193,12 +216,12 @@ async def a_holding_line_heard_in_full_keeps_the_turn_open():
     """A holding line answers nothing: a caller who goes on after hearing all of it is still in the same turn."""
     call = booking_call()
     await read_back_a_haircut(call, Probe(call))
-    call.turn_started('Yes, please.')
+    said(call, 'Yes, please.')
     await call.say('Let me have a look.', origin='tool_filler')
     call.note_reached()
     played_out(call)
     call.note_barge()
-    call.turn_started('That sounds perfect.')
+    said(call, 'That sounds perfect.')
     assert call.turn == 2 and call.heard == 'Yes, please. That sounds perfect.', (call.turn, call.heard)
 
 
@@ -216,7 +239,7 @@ async def one_holding_line_per_caller_turn():
     async def piece(words: str) -> None:
         """What `Turn.events` does before a piece's work: a new gap, the words, then work that waits."""
         call._covered = False
-        call.turn_started(words)
+        said(call, words)
         await Turn(call, FLOW.nodes, TurnBudget())._hold()
 
     def fillers() -> list[str]:
@@ -247,7 +270,7 @@ async def a_holding_line_is_never_sent_to_the_model():
     call = booking_call()
     question = await read_back_a_haircut(call, Probe(call))
     call._covered = False
-    call.turn_started('Yes, please.')
+    said(call, 'Yes, please.')
     await call.say('Let me have a look.', origin='tool_filler')
     sent = str(project(call, call.messages))
     assert 'Let me have a look.' not in sent and question in sent, sent
@@ -257,20 +280,20 @@ async def an_attempted_write_is_never_authorised_twice():
     """If the first piece already acted on the answer, the continuation cannot spend the same answer again."""
     call = booking_call()
     await read_back_a_haircut(call, Probe(call))
-    call.turn_started('Yes, please.')
+    said(call, 'Yes, please.')
     assert call.pending('book_appointment') is not None
     call.answered()
     call.note_business_attempt()
     call.note_barge()
-    call.turn_started('And thanks.')
+    said(call, 'And thanks.')
     assert call.turn == 2 and call.pending('book_appointment') is None, 'a spent answer came back'
 
     call = booking_call()
     await read_back_a_haircut(call, Probe(call))
-    call.turn_started('Yes, please.')
+    said(call, 'Yes, please.')
     call.answered()
     call.note_barge()
-    call.turn_started('That sounds perfect.')
+    said(call, 'That sounds perfect.')
     assert call.pending('book_appointment') is not None, 'a half-sentence consumed the question for good'
 
 
@@ -384,7 +407,7 @@ async def a_yes_with_a_new_request_is_verified_and_the_rest_kept():
     call.commit(agent='verify', pending='booking')
     call_of[0] = call
     probe = Probe(call)
-    call.turn_started('A haircut on Friday.')
+    said(call, 'A haircut on Friday.')
     lookup = FLOW.by_id['verify'].operations[0]
     proposal = lookup.proposal_for(call, _args(lookup, call))
     await call.speak_now(Prompted(proposal.about, proposal.spoken, proposal.value).put(call), origin='ask')
@@ -439,7 +462,7 @@ async def a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends():
         """The call's line to the caller: without one, a covering line is not recorded."""
 
     call._say = line
-    call.turn_started('Two seven three, four five four.')
+    said(call, 'Two seven three, four five four.')
     await call.say('Let me have a look.', origin='tool_filler')
     call.note_reached()
     lookup = FLOW.by_id['verify'].operations[0]
@@ -475,7 +498,7 @@ def a_report_never_unhears_a_line_that_played():
     for missing_signal in (False, True):
         call = booking_call()
         call._playback_known = True
-        call.turn_started('Uh, can we do 10:30?')
+        said(call, 'Uh, can we do 10:30?')
         call.note_said('fixed', question, origin='guidance')
         if missing_signal:
             call.spoken[-1].at -= 60
@@ -484,26 +507,26 @@ def a_report_never_unhears_a_line_that_played():
             played_out(call)
             call.note_heard('', segment_ids=(call.spoken[-1].id,), interrupted=True)
         call.note_barge()
-        call.turn_started('Uh, add another one.')
+        said(call, 'Uh, add another one.')
         assert call.turn == 2, (
             f'a question heard in full was taken as unheard (missing signal: {missing_signal})'
         )
 
     call = booking_call()
     call._playback_known = True
-    call.turn_started('Uh, can we do 10:30?')
+    said(call, 'Uh, can we do 10:30?')
     call.note_said('fixed', question, origin='guidance')
     call.note_barge()
-    call.turn_started('Uh, add another one.')
+    said(call, 'Uh, add another one.')
     assert call.turn == 1, 'a line cut off before it could play still continues the turn'
 
 
 async def a_missing_barge_never_merges_turns():
     """Without the caller cutting in, a silent turn is still over: a missing signal errs towards a new turn."""
     call = booking_call()
-    call.turn_started('One.')
+    said(call, 'One.')
     call.turn_ended(interrupted=False)
-    call.turn_started('Two.')
+    said(call, 'Two.')
     assert call.turn == 2 and call.heard == 'Two.'
 
 
@@ -514,7 +537,7 @@ def a_read_back_said_again_in_full_can_be_answered():
     """
     call = open_call('', diary=books)
     call.commit(agent='verify')
-    call.turn_started("It's plus three four, six seven one, two seven three, four five four.")
+    said(call, "It's plus three four, six seven one, two seven three, four five four.")
     readback = 'Is your number +34 671 27 34 54?'
     Prompted(about='lookup_customer', spoken=readback, value='+34671273454').put(call)
     call.note_said('fixed', readback, origin='ask')
@@ -522,7 +545,7 @@ def a_read_back_said_again_in_full_can_be_answered():
     Prompted(about='lookup_customer', spoken=readback, value='+34671273454').put(call)
     call.note_said('fixed', readback, origin='ask')
     call.acknowledge(call.spoken[-1].id)
-    call.turn_started("Yes. That's right.")
+    said(call, "Yes. That's right.")
     assert call.pending('lookup_customer') is not None, (
         'the read-back heard in full is waiting on this answer'
     )
@@ -541,7 +564,7 @@ async def a_question_cut_off_as_the_audio_stops_is_not_heard():
     for stop_first in (True, False):
         call = booking_call()
         call._say = line
-        call.turn_started('Yes, please.')
+        said(call, 'Yes, please.')
         Prompted(about='closing', spoken="You're all set. Anything else I can help with?").put(call)
         await call.speak_now("You're all set. Anything else I can help with?")
         call.note_reached()
@@ -552,7 +575,7 @@ async def a_question_cut_off_as_the_audio_stops_is_not_heard():
             call.note_barge()
             call.note_drained()
         call.turn_ended(interrupted=True)
-        call.turn_started("That's perfect.")
+        said(call, "That's perfect.")
         assert call.pending_question() is None, (stop_first, 'answered a question the caller never heard')
         assert call.heard == "Yes, please. That's perfect.", (stop_first, call.heard)
 
@@ -560,13 +583,13 @@ async def a_question_cut_off_as_the_audio_stops_is_not_heard():
 def heard_is_matched_by_words():
     """What the runtime says went out is matched word by word, and an interruption always cuts."""
     call = booking_call()
-    call.turn_started('Do you do balayage?')
+    said(call, 'Do you do balayage?')
     call.note_model_text('We do colour work, but balayage is not on our menu. Hair colour is 75 euros.')
     segment = call.spoken[-1]
     assert call.note_heard('we do colour work but', segment_ids=(segment.id,), interrupted=True)
     assert segment.text == 'We do colour work, but' and segment.interrupted, segment.text
 
-    call.turn_started('Next.')
+    said(call, 'Next.')
     call.note_model_text('Hair colour is 75 euros.')
     segment = call.spoken[-1]
     assert not call.note_heard('Hair color is seventy', segment_ids=(segment.id,))
@@ -588,7 +611,7 @@ async def playback_reaches_the_call():
     )
     try:
         await probe.queue_frame(StartFrame())
-        call.turn_started('Hello.')
+        said(call, 'Hello.')
         assert not call._reached
         await probe.queue_frame(BotStartedSpeakingFrame(), FrameDirection.UPSTREAM)
         for _ in range(100):

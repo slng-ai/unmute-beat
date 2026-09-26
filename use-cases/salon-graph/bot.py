@@ -19,6 +19,8 @@ from __future__ import annotations
 # ruff: noqa: E402
 import asyncio
 import os
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 
 from dotenv import load_dotenv
 
@@ -50,7 +52,7 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 
 from core.graph import model_clients
 from core.observability import setup
-from core.processor import PydanticAgentProcessor
+from core.processor import PydanticAgentProcessor, playout, record_ending
 from salon.app import FLOW, GREETING, open_call
 from salon.diary import Diary
 
@@ -104,6 +106,47 @@ transport_params = {
     'twilio': lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
 }
 """`twilio` is the route Coval's simulated calls take (`concierge-tools/coval_sim`); the runner adds the serializer."""
+
+
+class Ceiling:
+    """One call's ceiling (`MAX_CALL_SECONDS`): started when the caller connects, stopped by its owner, always.
+
+    The owner is `run_bot`, which stops it in a `finally` around the
+    pipeline, so a call that ends any way at all (the agent's goodbye, the
+    caller hanging up, a cancellation, an error) takes its timer with it. On a
+    shared bot (`coval_sim serve`) the old timer was cancelled only on a
+    client disconnect: calls the agent ended left theirs running, and every
+    "ceiling reached" line fired together at a deadline long after those calls
+    were over. One call's ceiling knows nothing of any other call.
+
+    `sleep` is injectable so a test can control time.
+    """
+
+    def __init__(
+        self,
+        seconds: float,
+        reached: Callable[[], Awaitable[None]],
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        self.seconds, self._reached, self._sleep = seconds, reached, sleep
+        self._task: asyncio.Task | None = None
+
+    def start(self) -> None:
+        """Start counting, once. A ceiling of 0 never ends a call."""
+        if self.seconds and self._task is None:
+            self._task = asyncio.create_task(self._run())
+
+    async def _run(self) -> None:
+        await self._sleep(self.seconds)
+        await self._reached()
+
+    async def stop(self) -> None:
+        """Cancel the timer if it is still running, and wait for it to be gone. Safe to call more than once."""
+        task, self._task = self._task, None
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
@@ -232,7 +275,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         await node.remind()
 
     pipeline = Pipeline(
-        [transport.input(), stt, user_aggregator, node, tts, transport.output(), assistant_aggregator]
+        [
+            transport.input(),
+            stt,
+            user_aggregator,
+            node,
+            tts,
+            transport.output(),
+            *playout(transport, call),
+            assistant_aggregator,
+        ]
     )
     worker = pipeline_worker(pipeline, session_id)
     playback(node, assistant_aggregator)
@@ -245,37 +297,41 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     async def on_client_ready(rtvi):
         await greet()
 
+    async def hang_up() -> None:
+        """The call ceiling (`MAX_CALL_SECONDS`) was reached: hang up as the caller would."""
+        logger.warning(f'call ceiling of {MAX_CALL_SECONDS:.0f}s reached: hanging up')
+        call.note_ending('ceiling', f'{MAX_CALL_SECONDS:.0f}s call ceiling', observed=False)
+        await node.finish_turn(FINISH_SECONDS)
+        await worker.cancel()
+
+    ceiling = Ceiling(MAX_CALL_SECONDS, hang_up)
+
     @transport.event_handler('on_client_connected')
     async def on_client_connected(transport, client):
         """A phone websocket has no RTVI client to say it is ready, so the greeting goes out here."""
         logger.info('client connected')
-        if MAX_CALL_SECONDS:
-            deadline.append(asyncio.create_task(hang_up_after(MAX_CALL_SECONDS)))
+        ceiling.start()
         if isinstance(runner_args, WebSocketRunnerArguments):
             await greet()
-
-    deadline: list[asyncio.Task] = []
-
-    async def hang_up_after(seconds: float) -> None:
-        """The call ceiling (`MAX_CALL_SECONDS`): hang up as the caller would."""
-        await asyncio.sleep(seconds)
-        logger.warning(f'call ceiling of {seconds:.0f}s reached: hanging up')
-        await node.finish_turn(FINISH_SECONDS)
-        await worker.cancel()
 
     @transport.event_handler('on_client_disconnected')
     async def on_client_disconnected(transport, client):
         """Let a turn already running finish its write, for a few seconds, before the line is torn down."""
         logger.info('client disconnected')
-        for task in deadline:
-            task.cancel()
+        call.note_ending('media_disconnect', 'the media websocket closed', observed=True)
+        await ceiling.stop()
         await node.finish_turn(FINISH_SECONDS)
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
-    async with model_clients(FLOW.nodes, warm=True):
-        await runner.run()
+    try:
+        async with model_clients(FLOW.nodes, warm=True):
+            await runner.run()
+    finally:
+        await ceiling.stop()
+        call.note_ending('pipeline_end', 'the pipeline stopped', observed=True)
+        record_ending(call)
 
 
 async def bot(runner_args: RunnerArguments) -> None:

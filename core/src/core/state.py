@@ -185,23 +185,46 @@ class Spoken:
     it. A segment still `queued` or `playing` when the caller cuts in was not
     heard in full, however the runtime's later text report lines up.
     """
-    heard_by: Literal['', 'signal', 'ack', 'estimate'] = ''
-    """What says it played: the runtime's stop signal, a text consumer's acknowledgement, or only elapsed time."""
+    heard_by: Literal['', 'signal', 'ack', 'estimate', 'mark', 'local'] = ''
+    """What says it played.
+
+    `mark`: the transport returned this segment's own mark after its last
+    audio (Twilio's `mark` event), with no clear sent while it was pending.
+    `local`: a local transport wrote its last audio chunk (development WebRTC).
+    `ack`: a text consumer acknowledged it: simulated delivery, for text runs.
+    `signal` (the runtime's aggregate stop) and `estimate` (elapsed time) only
+    ever decide turn-taking, never delivery (`delivered`).
+    """
     proposal: int = 0
     """The serial of the question this segment carried (`ProposalLedger.bind`), 0 for none."""
+    mark: str = ''
+    """The name of the mark sent after this segment's last audio (`CallContext.mark_for`), '' when none was."""
+    played_at: float | None = None
+    """When its mark came back (or its acknowledgement arrived), on the segments' clock (`time.perf_counter`)."""
+    cleared: bool = False
+    """A clear was sent while its mark was still pending: the audio may have been cut, so it never counts as heard."""
 
     @property
     def delivered(self) -> Literal['delivered', 'interrupted', 'unknown']:
         """Whether the caller got all of it, as far as evidence goes.
 
-        Only a signal or an acknowledgement makes it delivered. Handing text to
-        TTS, a run finishing, or enough time passing proves nothing about what
-        reached the caller, so a segment with no such evidence is unknown, and
-        unknown never authorises anything.
+        Only this segment's own mark, a local transport's write of its last
+        audio, or a text consumer's acknowledgement makes it delivered. Handing
+        text to TTS, a run finishing, the runtime's aggregate stop signal or
+        enough time passing proves nothing about what reached the caller, so a
+        segment with no such evidence is unknown, and unknown never authorises
+        anything. Transport playout is still not comprehension: the caller may
+        not have been listening.
         """
         if self.interrupted:
             return 'interrupted'
-        if self.playback == 'played' and self.heard_by in ('signal', 'ack'):
+        if self.cleared:
+            return 'unknown'
+        if (
+            self.playback == 'played'
+            and self.heard_by in ('mark', 'local', 'ack')
+            and self.played_at is not None
+        ):
             return 'delivered'
         return 'unknown'
 
@@ -564,6 +587,20 @@ class CallContext(BaseModel):
     """Succeeded intents whose local recording (state, speech) failed after the receipt: repaired, never re-sent."""
     _departed: bool = PrivateAttr(default=False)
     """The caller said goodbye: no new consequential intent starts after it. See `note_departure`."""
+    _pending_marks: dict[str, str] = PrivateAttr(default_factory=dict)
+    """Marks sent and not yet returned, by name, with the segment each one follows. See `mark_for`."""
+    _clears: int = PrivateAttr(default=0)
+    """How many clears this call sent: part of every mark's name, so a mark from before one is told apart."""
+    _marks_known: bool = PrivateAttr(default=False)
+    """The transport returns marks (or writes locally): only then can speech be delivered by one."""
+    _onsets: list[float] = PrivateAttr(default_factory=list)
+    """When the caller was heard starting to speak, newest last, bounded (`note_onset`)."""
+    _answer_lead: float = PrivateAttr(default=0.0)
+    """How much earlier than its report caller speech may have begun (the adapter's VAD start window)."""
+    _endings: list[dict[str, Any]] = PrivateAttr(default_factory=list)
+    """How the call ended, as each part of it was observed or intended, in order (`note_ending`)."""
+    _playback_log: list[dict[str, Any]] = PrivateAttr(default_factory=list)
+    """Every mark sent, returned, ignored or cleared, in order, for the write audit (`playback_for`)."""
     _request_kept: bool = PrivateAttr(default=False)
     """Whether a reading of this turn found the detour's request unchanged. See `note_request_kept`."""
     _return_status: str = PrivateAttr(default='')
@@ -747,10 +784,124 @@ class CallContext(BaseModel):
         self._playback_known = True
         if self._open is not None and self._open.id in segment_ids:
             self.close_model_text()
+        now = time.perf_counter()
         for segment in (by_id[i] for i in segment_ids):
             if not segment.interrupted:
-                segment.playback, segment.heard_by = 'played', 'ack'
+                segment.playback, segment.heard_by, segment.played_at = 'played', 'ack', now
         return True
+
+    def mark_for(self, segment_id: str) -> str:
+        """Name the mark to send after this segment's last audio, and wait for it. '' for an unknown segment.
+
+        The name carries the segment's id (call, turn, position) and the
+        number of clears sent so far, so a mark that comes back after a
+        clear, from another call, or twice, is recognised as not this one.
+        """
+        segment = next((s for s in self.all_spoken if s.id == segment_id), None)
+        if segment is None or not segment.text:
+            return ''
+        self._marks_known = True
+        segment.mark = f'{segment_id}~{self._clears}'
+        self._pending_marks[segment.mark] = segment_id
+        return segment.mark
+
+    def note_mark_sent(self, name: str, at: float, *, media: int | None = None) -> None:
+        """The transport sent this mark after the segment's last audio chunk. For the record; it proves nothing yet.
+
+        `media` is how many audio chunks went out since the mark before it,
+        when the transport counts them. None means it does not. Zero means the
+        segment had no audio at all (TTS produced none), so its mark will come
+        back at once and prove nothing: the segment is never delivered.
+        """
+        self._log_playback('sent', name, at)
+        if media == 0 and (segment := self._marked(name)) is not None:
+            segment.cleared = True
+            self._log_playback('silent', name, at, segment.proposal)
+
+    def note_speech_failed(self, at: float) -> None:
+        """Speech synthesis reported an error while marks were pending: those segments may be partial or silent."""
+        for name in list(self._pending_marks):
+            if (segment := self._marked(name)) is not None:
+                segment.cleared = True
+                self._log_playback('failed', name, at, segment.proposal)
+
+    def _marked(self, name: str) -> Spoken | None:
+        segment_id = self._pending_marks.get(name)
+        return next((s for s in self.all_spoken if s.id == segment_id), None) if segment_id else None
+
+    def note_mark_returned(self, name: str, at: float, *, local: bool = False) -> bool:
+        """The transport says the audio up to this mark has played (or, `local`, was written). Returns whether it counted.
+
+        A mark counts once, for the segment it was sent for, if no clear was
+        sent while it was pending: Twilio returns a mark both when its audio
+        has played and when a clear dropped it, and the message does not say
+        which, so every mark pending at a clear was made invalid then.
+        Unrelated, duplicate and stale names change nothing.
+        """
+        segment_id = self._pending_marks.pop(name, None)
+        segment = next((s for s in self.all_spoken if s.id == segment_id), None) if segment_id else None
+        if segment is None or segment.interrupted or segment.cleared:
+            self._log_playback('ignored', name, at)
+            return False
+        segment.playback, segment.heard_by, segment.played_at = 'played', 'local' if local else 'mark', at
+        self._log_playback('played', name, at, segment.proposal)
+        return True
+
+    def note_cleared(self, at: float) -> None:
+        """The transport is about to clear the audio it holds: every mark still pending may now come back for nothing.
+
+        Recorded before the clear goes out, so a mark returned in answer to
+        it can never pass for playback. A segment whose mark already came back
+        keeps it: clearing later audio does not unplay earlier audio.
+        """
+        for name, segment_id in self._pending_marks.items():
+            if (segment := next((s for s in self.all_spoken if s.id == segment_id), None)) is not None:
+                segment.cleared = True
+                self._log_playback('cleared', name, at, segment.proposal)
+        self._pending_marks.clear()
+        self._clears += 1
+
+    def note_onset(self, at: float) -> None:
+        """The caller was heard starting to speak (the adapter's voice detector), on the segments' clock."""
+        self._onsets = [*self._onsets[-31:], at]
+
+    def answered_in_time(self, segment: Spoken) -> bool:
+        """Whether this segment had played to its end before the caller began the reply it is being answered by.
+
+        The reply began at the earliest speech onset after the segment was
+        queued, less the adapter's detection window (`_answer_lead`): both
+        times are this process's `time.perf_counter`, taken where each report
+        arrives, never a provider's clock. With marks and no onset after the
+        segment, nothing says when the reply began, so it did not count. A
+        text run has no onsets; its acknowledgement always comes first.
+        """
+        if segment.played_at is None:
+            return False
+        onsets = [t for t in self._onsets if t >= segment.at]
+        if not onsets:
+            return not self._marks_known or segment.heard_by == 'ack'
+        return segment.played_at <= min(onsets) - self._answer_lead
+
+    def playback_for(self, serial: int) -> dict[str, Any]:
+        """The playback evidence of one question, for the write audit: each mark event and when the answer began."""
+        marks = [dict(event) for event in self._playback_log if event.get('proposal') == serial]
+        copies = [s for s in self.all_spoken if serial and s.proposal == serial]
+        onsets = [t for t in self._onsets if copies and t >= copies[-1].at]
+        acks = [
+            {'proposal': serial, 'segment': s.id, 'kind': 'simulated', 'at': s.played_at}
+            for s in copies
+            if s.heard_by == 'ack' and s.played_at is not None
+        ]
+        return {'marks': marks + acks, 'answered_at': min(onsets) if onsets else None}
+
+    def _log_playback(self, kind: str, name: str, at: float, proposal: int | None = None) -> None:
+        segment = name.split('~', 1)[0]
+        if proposal is None:
+            proposal = next((s.proposal for s in self.all_spoken if s.id == segment), 0)
+        self._playback_log = [
+            *self._playback_log[-255:],
+            {'proposal': proposal, 'segment': segment, 'mark': name, 'kind': kind, 'at': at},
+        ]
 
     def turn_ended(self, *, interrupted: bool) -> None:
         """The run for this piece is over. `interrupted` is whether the caller cut it off by speaking again."""
@@ -1634,6 +1785,30 @@ class CallContext(BaseModel):
         if self._say is not None:
             await self._say(text)
 
+    def note_ending(self, kind: str, reason: str, *, observed: bool, at: float | None = None) -> None:
+        """One piece of how this call ended: what happened, why, and whether it was seen or only intended.
+
+        The pieces are kept apart because they are different facts: the
+        application deciding to close (`observed=False`), the pipeline
+        shutting down, the media stream stopping, and the carrier confirming
+        the call completed. Only the carrier's own report is carrier closure;
+        an `EndFrame` or a failed hang-up request is not. A cause nobody
+        observed stays unknown.
+        """
+        self._endings.append(
+            {
+                'kind': kind,
+                'reason': reason,
+                'observed': observed,
+                'at': time.perf_counter() if at is None else at,
+            }
+        )
+
+    @property
+    def endings(self) -> tuple[dict[str, Any], ...]:
+        """Every piece of ending evidence, in the order it arrived."""
+        return tuple(dict(e) for e in self._endings)
+
     def end_requested(self, why: Literal['caller', 'abandoned', 'transport', 'error']) -> None:
         """Record *why* the call is ending, before anything acts on it.
 
@@ -1642,6 +1817,7 @@ class CallContext(BaseModel):
         on them" scores the second as answered.
         """
         self._ended = why
+        self.note_ending('intent_to_close', why, observed=False)
 
     @property
     def ended(self) -> str:

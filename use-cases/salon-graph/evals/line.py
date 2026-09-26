@@ -10,9 +10,13 @@ no request is a classifier's, and none is counted as one.
 
 `Playout` stands for the transport. When `playback` is `full` it reports the
 audio of each answer as started and run out (`BotStartedSpeakingFrame`,
-`BotStoppedSpeakingFrame`); `none` reports nothing, which is a read-back handed
-to TTS whose audio never played. The harness reads those signals; the native
-build does not.
+`BotStoppedSpeakingFrame`) and, as Twilio does, returns each segment's mark
+once its audio has played (`SegmentMark`, session 4b stage B3); `none` reports
+nothing, which is a read-back handed to TTS whose audio never played. An
+interruption clears the transport, as the Twilio serializer does
+(`CallContext.note_cleared`), and each caller turn begins with the voice
+detector's onset (`CallContext.note_onset`). The harness reads those
+signals; the native build does not.
 
 ponytail: the agents are overridden per line, on the one compiled flow two
 lines share; two lines open at once share whichever override came last. The
@@ -31,6 +35,7 @@ from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     Frame,
+    InterruptionFrame,
     LLMFullResponseEndFrame,
     LLMMessagesAppendFrame,
     LLMTextFrame,
@@ -45,7 +50,7 @@ from pipecat.workers.runner import WorkerRunner
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from core import FlowCall
-from core.processor import PydanticAgentProcessor
+from core.processor import PydanticAgentProcessor, SegmentMark
 from salon.app import FLOW, GREETING, open_call
 from salon.diary import Diary
 
@@ -84,10 +89,13 @@ class Scripted:
 class Playout(FrameProcessor):
     """The transport's place: everything bound for TTS, timed, and, when `playback` says so, played."""
 
-    def __init__(self) -> None:
+    def __init__(self, call: FlowCall) -> None:
         super().__init__()
+        self.call = call
         self.heard: list[tuple[float, str]] = []
         self.ends: list[float] = []
+        self.marks: list[str] = []
+        """Marks sent and not yet played: returned by `Line.played` when playback is full."""
         self.playback: Literal['full', 'none'] = 'full'
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
@@ -95,7 +103,13 @@ class Playout(FrameProcessor):
         await self.push_frame(frame, direction)
         if direction is not FrameDirection.DOWNSTREAM:
             return
-        if isinstance(frame, LLMTextFrame | TTSSpeakFrame):
+        if isinstance(frame, InterruptionFrame):
+            self.call.note_cleared(time.perf_counter())
+            self.marks.clear()
+        elif isinstance(frame, SegmentMark):
+            self.call.note_mark_sent(frame.mark, time.perf_counter())
+            self.marks.append(frame.mark)
+        elif isinstance(frame, LLMTextFrame | TTSSpeakFrame):
             self.heard.append((time.perf_counter(), frame.text))
             if self.playback == 'full':
                 await self.push_frame(BotStartedSpeakingFrame(), FrameDirection.UPSTREAM)
@@ -112,7 +126,7 @@ class Line:
         self.processor = PydanticAgentProcessor(self.call, AGENTS)
         self.context = LLMContext()
         self.pair = LLMContextAggregatorPair(self.context)
-        self.playout = Playout()
+        self.playout = Playout(self.call)
         self.model = Scripted(delay)
         pipeline = Pipeline([self.pair.user(), self.processor, self.playout, self.pair.assistant()])
         self.worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False)
@@ -151,6 +165,9 @@ class Line:
     async def played(self) -> None:
         """The audio of everything said so far ran out, as the transport reports it."""
         if self.playout.playback == 'full':
+            for name in self.playout.marks:
+                self.call.note_mark_returned(name, time.perf_counter())
+            self.playout.marks.clear()
             await self.worker.queue_frame(BotStoppedSpeakingFrame(), FrameDirection.UPSTREAM)
             await self.until(lambda: all(s.playback == 'played' for s in self.call.spoken if s.text))
 
@@ -181,6 +198,7 @@ class Line:
         self.model.replies = list(replies)
         before_heard, before_requests = len(self.playout.heard), len(self.model.requests)
         sent = time.perf_counter()
+        self.call.note_onset(sent)
         await self.worker.queue_frame(
             LLMMessagesAppendFrame([{'role': 'user', 'content': words}], run_llm=True)
         )

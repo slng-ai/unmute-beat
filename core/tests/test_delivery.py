@@ -1,8 +1,10 @@
 """Delivery: only a read-back the caller got in full can be answered, and only its latest copy counts.
 
-`Spoken.delivered` is `delivered` only on evidence: the runtime's playback
-stop, or a text reader's acknowledgement. No record, a queued copy, a copy
-estimated to have played, and a copy cut short are all not heard. Copies
+`Spoken.delivered` is `delivered` only on evidence: the segment's own
+transport mark, or a text reader's acknowledgement (simulated delivery). No
+record, a queued copy, a copy estimated or signalled to have played, a copy
+cut short or cleared, and a copy the caller spoke over before its mark came
+back are all not heard. Copies
 belong to a question by its serial, never by matching words. The first two
 checks were session 1's known defects (`tests.defects`).
 """
@@ -122,17 +124,90 @@ def time_passing_is_not_delivery():
     assert call.spoken[-1].delivered == 'unknown'
 
 
-def a_played_read_back_is_heard():
-    """The positive case, by the runtime's own signals: it started, and it ran out before the caller spoke."""
+def the_stop_signal_alone_is_not_delivery():
+    """Stage B3: the runtime's aggregate start and stop decide turn-taking only; they never authorise."""
     call = Call()
     call.turn_started('I want a haircut')
     asked(call)
     call.note_reached()
     call._burst -= 60
     call.note_drained()
-    assert call.spoken[-1].delivered == 'delivered' and call.spoken[-1].heard_by == 'signal'
+    assert call.spoken[-1].playback == 'played' and call.spoken[-1].delivered == 'unknown'
+    call.turn_started('yes')
+    assert call.pending_question() is None, 'an aggregate stop signal authorised a yes'
+
+
+def marked(call: Call, onset_after: float | None = 0.5) -> str:
+    """A read-back whose mark was sent and came back; the caller then spoke `onset_after` seconds later."""
+    copy = asked(call)
+    name = call.mark_for(copy)
+    call.note_mark_sent(name, 100.0)
+    call.spoken[-1].at = 99.0
+    assert call.note_mark_returned(name, 101.0)
+    if onset_after is not None:
+        call.note_onset(101.0 + onset_after)
+    return name
+
+
+def a_marked_read_back_answered_after_it_is_heard():
+    """The positive case: its own mark came back, and the caller began after it."""
+    call = Call()
+    call.turn_started('I want a haircut')
+    marked(call)
+    assert call.spoken[-1].delivered == 'delivered' and call.spoken[-1].heard_by == 'mark'
     call.turn_started('yes')
     assert call.pending('book', value='slot-1') is not None
+
+
+def an_answer_that_began_before_the_mark_is_not_to_it():
+    """Onset before, at and after the mark, with the adapter's detection lead: only a clear after counts."""
+    for after, lead, heard in ((-0.2, 0.0, False), (0.0, 0.0, True), (0.1, 0.2, False), (0.3, 0.2, True)):
+        call = Call()
+        call._answer_lead = lead
+        call.turn_started('I want a haircut')
+        marked(call, onset_after=after)
+        call.turn_started('yes')
+        assert (call.pending_question() is not None) is heard, (after, lead)
+    call = Call()
+    call.turn_started('I want a haircut')
+    marked(call, onset_after=None)
+    call.turn_started('yes')
+    assert call.pending_question() is None, 'with marks and no onset, when the reply began is unknown'
+
+
+def a_fragmented_reply_is_timed_from_its_first_piece():
+    """The caller began before the mark came back, paused, and went on after it: the reply began too early."""
+    call = Call()
+    call.turn_started('I want a haircut')
+    copy = asked(call)
+    name = call.mark_for(copy)
+    call.spoken[-1].at = 99.0
+    call.note_onset(100.5)
+    assert call.note_mark_returned(name, 101.0)
+    call.note_onset(102.0)
+    call.turn_started('yes')
+    assert call.pending_question() is None, (
+        'the second piece of a reply that began over the read-back approved it'
+    )
+
+
+def marks_that_prove_nothing_change_nothing():
+    """Unrelated, duplicate and previous-generation marks, and a mark returned after a clear, are ignored."""
+    call = Call()
+    call.turn_started('I want a haircut')
+    copy = asked(call)
+    name = call.mark_for(copy)
+    assert not call.note_mark_returned('other-call:1:1~0', 101.0), 'an unrelated mark counted'
+    call.note_cleared(100.5)
+    assert not call.note_mark_returned(name, 101.0), 'a mark pending at a clear counted'
+    assert call.spoken[-1].delivered == 'unknown' and call.spoken[-1].cleared
+    again = asked(call)
+    second = call.mark_for(again)
+    assert second.endswith('~1') and second != name, 'a mark after a clear must carry the new generation'
+    assert call.note_mark_returned(second, 102.0)
+    assert not call.note_mark_returned(second, 102.5), 'a duplicate mark counted twice'
+    call.note_cleared(103.0)
+    assert call.spoken[-1].delivered == 'delivered', 'a clear after a mark came back unplayed it'
 
 
 def main() -> None:
@@ -144,7 +219,11 @@ def main() -> None:
     the_same_words_for_another_question_prove_nothing()
     a_late_stop_cannot_play_a_copy_queued_after_the_cut()
     time_passing_is_not_delivery()
-    a_played_read_back_is_heard()
+    the_stop_signal_alone_is_not_delivery()
+    a_marked_read_back_answered_after_it_is_heard()
+    an_answer_that_began_before_the_mark_is_not_to_it()
+    a_fragmented_reply_is_timed_from_its_first_piece()
+    marks_that_prove_nothing_change_nothing()
     print(
         'delivery ok: no record, queued, unacknowledged, partial, estimated and late copies never authorise'
     )

@@ -44,7 +44,7 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 
 from core.graph import model_clients
 from core.observability import setup
-from core.processor import PydanticAgentProcessor
+from core.processor import PydanticAgentProcessor, playout, record_ending
 from faro import AGENTS, GREETING, STT_LANGUAGE, TTS_LANGUAGE, close_call, open_call
 
 NAME = 'faro call'
@@ -173,7 +173,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     context, node = LLMContext(), PydanticAgentProcessor(call, AGENTS)
     user_aggregator, assistant_aggregator = aggregators(context)
     pipeline = Pipeline(
-        [transport.input(), stt, user_aggregator, node, tts, transport.output(), assistant_aggregator]
+        [
+            transport.input(),
+            stt,
+            user_aggregator,
+            node,
+            tts,
+            transport.output(),
+            *playout(transport, call),
+            assistant_aggregator,
+        ]
     )
     worker = pipeline_worker(pipeline, session_id)
     playback(node, assistant_aggregator)
@@ -197,14 +206,19 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     async def on_client_disconnected(transport, client):
         """Let a turn already running finish its write, then close the session, before the line is torn down."""
         logger.info('client disconnected')
+        call.note_ending('media_disconnect', 'the media websocket closed', observed=True)
         await node.finish_turn(FINISH_SECONDS)
         await close_call(call)
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
-    async with model_clients(AGENTS, warm=True):
-        await runner.run()
+    try:
+        async with model_clients(AGENTS, warm=True):
+            await runner.run()
+    finally:
+        call.note_ending('pipeline_end', 'the pipeline stopped', observed=True)
+        record_ending(call)
 
 
 async def bot(runner_args: RunnerArguments) -> None:

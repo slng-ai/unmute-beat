@@ -25,26 +25,34 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from opentelemetry import trace
 
 try:
     from pipecat.frames.frames import (
+        AudioRawFrame,
         BotStartedSpeakingFrame,
         BotStoppedSpeakingFrame,
         EndWorkerFrame,
+        ErrorFrame,
         Frame,
         InterruptionFrame,
         LLMContextFrame,
         LLMFullResponseEndFrame,
         LLMFullResponseStartFrame,
         LLMTextFrame,
+        OutputTransportMessageFrame,
         TTSSpeakFrame,
+        UserStartedSpeakingFrame,
+        VADUserStartedSpeakingFrame,
     )
     from pipecat.processors.aggregators.llm_context import LLMContext
     from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+    from pipecat.serializers.base_serializer import FrameSerializer
 except ImportError as missing:
     raise ImportError(
         f'core.processor needs the voice extra: install slng-voice-core[voice] ({missing})'
@@ -57,6 +65,140 @@ from core.state import CallContext, Question
 from core.turn import EXHAUSTED, STUMBLE  # noqa: F401  -- re-exported for tests
 
 _tracer = trace.get_tracer('slng-voice-harness')
+
+
+@dataclass(kw_only=True)
+class SegmentMark(OutputTransportMessageFrame):
+    """A marker pushed right after one segment's speech, named for that segment (`CallContext.mark_for`).
+
+    A data frame, so every processor keeps it in order behind the speech
+    before it: Pipecat's TTS emits a frame queued after a `TTSSpeakFrame` only
+    once that utterance's audio has all been pushed (its serialization
+    queue), and the output transport writes it only after the audio chunks
+    ahead of it (its audio queue). An `OutputTransportMessageFrame`, so the
+    output transport hands it to the serializer, which turns it into a
+    Twilio `mark` (`TwilioMarks`). For model speech streamed inside one
+    response, the TTS holds it until the whole response's audio is out:
+    late, never early.
+    """
+
+    mark: str = ''
+    """The mark's name. Not `name`, which every Pipecat frame already has."""
+
+
+class TwilioMarks(FrameSerializer):
+    """Pipecat's Twilio serializer, with a mark after each segment and every returned mark told to the call.
+
+    Wraps the serializer the runner built (so the stream, call and hang-up
+    handling stay Pipecat's), and adds only what Twilio's Media Streams
+    protocol gives for playback: an outbound `mark` after a segment's last
+    media chunk, and the same name coming back once playout reaches it
+    (https://www.twilio.com/docs/voice/media-streams/websocket-messages).
+    Twilio also returns every pending mark when a `clear` empties its
+    buffer, and the returned message does not say which it was, so the call
+    is told of the clear before it goes out (`CallContext.note_cleared`) and
+    those marks count for nothing. `stop` (the stream ended) is recorded as
+    ending evidence of the media, not of the carrier call.
+
+    Times are `time.perf_counter` at the moment each message is handled here:
+    this process's own monotonic clock, the one caller speech onsets use.
+    """
+
+    def __init__(self, inner: FrameSerializer, call: CallContext) -> None:
+        super().__init__()
+        self._inner, self._call = inner, call
+        self._media = 0
+        """Audio chunks serialized since the last mark: none before a mark means its segment had no audio."""
+        self.stopped_at: float | None = None
+        """When Twilio said the media stream stopped, if it did."""
+
+    async def setup(self, setup: Any) -> None:
+        await self._inner.setup(setup)
+
+    async def serialize(self, frame: Frame) -> str | bytes | None:
+        if isinstance(frame, AudioRawFrame):
+            self._media += 1
+        if isinstance(frame, SegmentMark):
+            self._call.note_mark_sent(frame.mark, time.perf_counter(), media=self._media)
+            self._media = 0
+            stream = getattr(self._inner, '_stream_sid', '')
+            return json.dumps({'event': 'mark', 'streamSid': stream, 'mark': {'name': frame.mark}})
+        if isinstance(frame, InterruptionFrame):
+            self._call.note_cleared(time.perf_counter())
+        return await self._inner.serialize(frame)
+
+    async def deserialize(self, data: str | bytes) -> Frame | None:
+        if isinstance(data, str) and '"event"' in data:
+            with contextlib.suppress(ValueError):
+                message = json.loads(data)
+                if message.get('event') == 'mark':
+                    self._call.note_mark_returned(
+                        str(message.get('mark', {}).get('name', '')), time.perf_counter()
+                    )
+                    return None
+                if message.get('event') == 'stop':
+                    self.stopped_at = time.perf_counter()
+                    self._call.note_ending('media_stop', 'twilio stop event', observed=True)
+        return await self._inner.deserialize(data)
+
+
+def record_ending(call: CallContext, *, carrier: str = '') -> None:
+    """One `call.ending` span for the call: every ending fact as it arrived, and what is still unknown.
+
+    `endings` holds the application's intent to close (the goodbye, a
+    ceiling), the pipeline stopping, the media stream stopping or its socket
+    closing, each with whether it was observed. `carrier` is the carrier's
+    own report of the call completing, when the launcher has one (Twilio's
+    status callback); without it, carrier closure is `unknown`, whatever else
+    ended. An `EndFrame` or a failed hang-up request is not a carrier report.
+    """
+    with _tracer.start_as_current_span('call.ending') as span:
+        span.set_attribute('call', call.id)
+        span.set_attribute('ended', call.ended or 'unknown')
+        span.set_attribute('endings', json.dumps(call.endings))
+        span.set_attribute('carrier', carrier or 'unknown')
+
+
+def playout(transport: Any, call: CallContext) -> list[FrameProcessor]:
+    """Wire playback evidence into a transport; returns what to place right after `transport.output()`.
+
+    A Twilio media stream gets its serializer wrapped (`TwilioMarks`), so
+    marks go out and come back on the wire, and nothing is added to the
+    pipeline. Any other transport gets a `LocalPlayout` after its output.
+    Without one or the other, no read-back can ever be delivered, and no
+    consequential write can be approved.
+    """
+    from pipecat.serializers.twilio import TwilioFrameSerializer
+
+    params = getattr(transport, '_params', None)
+    serializer = getattr(params, 'serializer', None)
+    if isinstance(serializer, TwilioFrameSerializer):
+        params.serializer = TwilioMarks(serializer, call)  # ty: ignore[invalid-assignment]
+        return []
+    if isinstance(serializer, TwilioMarks):
+        return []
+    return [LocalPlayout(call)]
+
+
+class LocalPlayout(FrameProcessor):
+    """After a local transport's output: a segment's mark arriving here means its audio was all written.
+
+    For a development transport (WebRTC in a browser) that returns no marks.
+    Written is not played; it is the nearest thing such a transport reports,
+    and it is recorded as `local`, never as a telephone mark. Never place it
+    in a Twilio pipeline: there the same frame passes here when the mark is
+    sent, long before it plays.
+    """
+
+    def __init__(self, call: CallContext, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._call = call
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, SegmentMark):
+            self._call.note_mark_returned(frame.mark, time.perf_counter(), local=True)
+        await self.push_frame(frame, direction)
 
 
 def _last_user_text(context: LLMContext) -> str | None:
@@ -92,6 +234,8 @@ class PydanticAgentProcessor(FrameProcessor):
     ):
         super().__init__(**kwargs)
         self._call = call
+        self._marking = ''
+        """The model segment streaming now, whose mark goes out when it closes."""
         self._agents = agents
         self._budget = budget
         self._usage, self._limits = budget.account()
@@ -160,6 +304,13 @@ class PydanticAgentProcessor(FrameProcessor):
         if segment is not None and self._active_playback is not None:
             self._active_playback.append(segment.id)
         await self.push_frame(frame)
+        if segment is not None:
+            await self._mark(segment.id)
+
+    async def _mark(self, segment_id: str) -> None:
+        """Push the mark that will say this segment has played: right behind its speech, so it follows the last audio."""
+        if name := self._call.mark_for(segment_id):
+            await self.push_frame(SegmentMark(message={}, mark=name))
 
     async def hang_up(self) -> None:
         """Close the line, once whatever is queued ahead of this has been heard.
@@ -199,11 +350,20 @@ class PydanticAgentProcessor(FrameProcessor):
         if isinstance(frame, InterruptionFrame):
             self.interrupt()
             await self.push_frame(frame, direction)
+        elif isinstance(frame, ErrorFrame) and direction == FrameDirection.UPSTREAM:
+            self._call.note_speech_failed(time.perf_counter())
+            await self.push_frame(frame, direction)
         elif isinstance(frame, BotStartedSpeakingFrame):
             self._call.note_reached()
             await self.push_frame(frame, direction)
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self._call.note_drained()
+            await self.push_frame(frame, direction)
+        elif isinstance(frame, VADUserStartedSpeakingFrame):
+            self._call.note_onset(time.perf_counter() - (frame.start_secs or 0.0))
+            await self.push_frame(frame, direction)
+        elif isinstance(frame, UserStartedSpeakingFrame):
+            self._call.note_onset(time.perf_counter())
             await self.push_frame(frame, direction)
         elif isinstance(frame, LLMContextFrame):
             users = [
@@ -345,6 +505,10 @@ class PydanticAgentProcessor(FrameProcessor):
                             frame = LLMTextFrame(text)
                             if self._call.spoken:
                                 segment = self._call.spoken[-1]
+                                if segment.kind == 'model' and segment.id != self._marking:
+                                    if self._marking:
+                                        await self._mark(self._marking)
+                                    self._marking = segment.id
                                 frame.metadata['speech'] = {'segment': segment.id, 'turn': segment.turn}
                                 if (
                                     self._active_playback is not None
@@ -356,6 +520,9 @@ class PydanticAgentProcessor(FrameProcessor):
                             self._active_playback = None
                             open_response = False
                             await self.push_frame(LLMFullResponseEndFrame())
+                            if self._marking:
+                                await self._mark(self._marking)
+                                self._marking = ''
                         case core.FixedSpeech(text=text, reason=reason):
                             if reason == 'error':
                                 await self.push_error(f'agent run failed: {event.text}')
@@ -427,6 +594,7 @@ class PydanticAgentProcessor(FrameProcessor):
                 if prompt and not self._call.input_retained:
                     self._carried = self._call.fresh
                 self._active_playback = None
+                self._marking = ''
                 if open_response:
                     await self.push_frame(LLMFullResponseEndFrame())
 

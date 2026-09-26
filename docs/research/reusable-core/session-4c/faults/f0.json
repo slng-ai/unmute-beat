@@ -1,0 +1,53 @@
+{
+ "F0_kill_before_intent_recorded": {
+  "attempt": 0,
+  "dead_worker": 48768,
+  "victim_closed_by": "bot",
+  "dead_session_closed_s": 4.638805832946673,
+  "replacement_ready_s": 1.8137299590162002,
+  "bystanders_on_other_worker": 1,
+  "bystanders_on_other_worker_booked": 1,
+  "bystanders_on_dead_worker": 2,
+  "victim_bookings_after_ringing_back": 1,
+  "victim_old_intents": [],
+  "ring_back_closed_by": "bot",
+  "idle_after": {
+   "48767": {
+    "tasks": [
+     3,
+     3
+    ],
+    "fds": [
+     20,
+     20
+    ],
+    "ok": true
+   },
+   "48855": {
+    "replacement": true,
+    "tasks": 3,
+    "fds": 20
+   }
+  },
+  "raw_after": {
+   "48767": {
+    "tasks": 3,
+    "fds": 20
+   },
+   "48855": {
+    "tasks": 3,
+    "fds": 20
+   }
+  },
+  "duplicates": 0,
+  "verdict": {
+   "bystander_went_on": true,
+   "dead_session_closed_in_time": true,
+   "replacement_in_time": true,
+   "one_booking_for_the_victim": true,
+   "old_intent_settled": true,
+   "no_duplicates": true,
+   "idle_restored": true
+  }
+ }
+}

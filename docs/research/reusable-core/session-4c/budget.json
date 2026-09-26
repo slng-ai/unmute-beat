@@ -192,9 +192,52 @@
   "stage_c_live_ramp_cap": 8
  },
  "reserved_for_later_stages": {
-  "candidate_final_normal": 20,
-  "candidate_final_interruptive": 20,
+  "candidate_final_normal": 10,
+  "candidate_final_interruptive": 10,
   "native_normal_top_up": 10,
   "native_interruptive_top_up": 12
+ },
+ "stage_c_benchmark": {
+  "note": "The user asked on 2026-09-26 for a 20-call Coval benchmark, 10 normal and 10 interruptive, drawn from the reserved pool. Four batches of five at once, each on a fresh diary.",
+  "calls_allowed": 20,
+  "placed": 20,
+  "batches": [
+   {
+    "batch": "A",
+    "run": "c77fpUwGHjNYHBoFntSpNW",
+    "set": "normal",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_normal",
+    "result": "5 of 5 correct from the diary: one haircut each, on the asked weekday morning; no stray bookings; all ended pipeline_end, 94-106 s. load_report: delivery pass 5 of 5 (marks), no fail; outcome, authorization, completion, operational unknown until reviewed."
+   },
+   {
+    "batch": "B",
+    "run": "C4jjBivqK5PSCLpkVmNzhA",
+    "set": "interruptive",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_interruptive",
+    "result": "5 of 5 correct from the diary: one haircut each on the changed-to day, 09:00; one intent per caller, none for the first-asked day; no stray bookings; all ended pipeline_end, 143-209 s."
+   },
+   {
+    "batch": "C",
+    "run": "8Z7Qce4UCagv3FXEfNRxAz",
+    "set": "normal",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_normal",
+    "result": "5 of 5 correct from the diary: one haircut each on the asked weekday morning; no stray bookings; all ended pipeline_end, 91-113 s."
+   },
+   {
+    "batch": "D",
+    "run": "UMuV6YLmiX4Bx87GACWzCZ",
+    "set": "interruptive",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_interruptive",
+    "result": "5 of 5 correct from the diary: one haircut each on the changed-to day, 09:00; one intent per caller, none for the first-asked day; no stray bookings; all ended pipeline_end, 139-225 s."
+   }
+  ]
  }
 }

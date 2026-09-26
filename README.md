@@ -640,6 +640,7 @@ The whole report is [session-4c.md](docs/research/reusable-core/session-4c.md).
 | The salon's diary is one SQLite file every worker shares: a trigger holds the chair, a move is one `UPDATE`, writes are keyed by intent, a reconciled write with no result is fenced with a void | Each process had its own diary, so no two calls ever contended for a time, and a lost answer did not survive a restart. |
 | `server.py`: uvicorn workers behind one port, at most five calls admitted, a busy refusal past it, each worker's own drain, clients warmed once per worker | `bot.py` ran every call in one process with no bound, and warmed its model clients per call, uncounted. |
 | `coval_sim serve --phone-number --campaign` owns the Twilio number for the whole campaign; jobs never touch it | Each job pointed the number at itself and restored it when it ended, so two jobs undid each other. |
+| A read-back the caller talked over, on a line that has proven delivery, counts against `CUT_READBACKS` (5); only a line that proves nothing keeps `READBACKS` (2). Each further piece of a joined turn adds 2 requests and tool calls, up to twice the turn's own (`TurnBudget.per_piece`) | Live call hzSdfMNn: an interruptive caller cut two copies of the number read-back and heard "please call back" while still trying; joined turns of eight pieces ran out of requests just hearing the number. |
 
 The shared SQLite files use the rollback journal, not WAL: this Python's
 SQLite (3.50.4) predates the fix for the

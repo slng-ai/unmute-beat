@@ -72,7 +72,7 @@ class Locale:
     evaluate.
     """
     gave_up: str = ''
-    """Said instead of a read-back the caller never heard in full twice (`core.steps.READBACKS`): nothing was done."""
+    """Said instead of a read-back the caller never heard in full (`core.steps.READBACKS`, `CUT_READBACKS`): nothing was done."""
     left_undone: str = ''
     """Said in a goodbye when the change last read back was never made, so a caller leaving knows it."""
     still_there: str = ''

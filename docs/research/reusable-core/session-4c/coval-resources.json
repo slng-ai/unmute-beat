@@ -1,0 +1,122 @@
+{
+ "GRdmreeb7SP4G8yegtMntC": {
+  "kind": "test-cases",
+  "update_time": "2026-09-25T11:04:16.768544Z",
+  "create_time": "2026-09-25T11:04:16.768528Z",
+  "sha256_16": "bb15c4a467ad32f2",
+  "content": {
+   "name": "test-cases/GRdmreeb7SP4G8yegtMntC",
+   "id": "GRdmreeb7SP4G8yegtMntC",
+   "test_set_id": "K3Xwqi7g",
+   "input_str": "You want a haircut at Sage and Stone this Friday morning. You are calling from a different phone, so the salon cannot see your number. Your phone number is +34 671 273 454. When the receptionist asks for your phone number, say only \"plus three four, six seven one\" and stop. When they ask for the rest, say \"two seven three, four five four\". Say yes when the full number is read back correctly. Accept the first morning time offered. When the agent reads that booking back and asks you to confirm, do not say yes: say \"Actually, can we make it Saturday morning instead?\". Then accept the first Saturday morning time offered and say yes clearly when that is read back. Then say you need nothing else and goodbye. Do not complain. Do not ask for a manager.",
+   "expected_output_json": {},
+   "description": "reusable-core pause and correction v1: the number in two pieces with a stop between (from QGMVoS7osoWYZdTV4vX3m4), then a day change at the booking read-back (from 6ghEvcChT7kesZPucGJmsu)",
+   "input_type": "SCENARIO",
+   "simulation_metadata_input": {},
+   "metric_input": {},
+   "create_time": "2026-09-25T11:04:16.768528Z",
+   "update_time": "2026-09-25T11:04:16.768544Z",
+   "expected_behaviors": [
+    "After the first piece of the number, the agent asked for the rest of the number rather than reading back an incomplete number.",
+    "The agent read back the full number +34 671 273 454 and the caller said yes before the agent offered any appointment time. The transcript may drop repeated digits in the read-back; judge only that it happened and was agreed.",
+    "The agent did not say a Friday appointment was booked.",
+    "After the caller asked for Saturday morning, the agent offered at least one Saturday morning time.",
+    "Before saying an appointment was booked, the agent had the caller's agreement: the caller picked one of the times the agent had just offered for that service and day, or said a clear yes to a read-back of it.",
+    "By the end of the call the agent had confirmed exactly one appointment, a haircut on Saturday morning."
+   ],
+   "script_turns": null
+  }
+ },
+ "M5Z8LjVyQZPuhSubmt26w7": {
+  "kind": "test-cases",
+  "update_time": "2026-09-25T11:04:10.136124Z",
+  "create_time": "2026-09-25T11:04:10.136107Z",
+  "sha256_16": "f23b4b01c21cc95b",
+  "content": {
+   "name": "test-cases/M5Z8LjVyQZPuhSubmt26w7",
+   "id": "M5Z8LjVyQZPuhSubmt26w7",
+   "test_set_id": "kQ8b6nMZ",
+   "input_str": "You want a haircut at Sage and Stone this Friday morning. Your phone number is +34 671 273 454. Say it as \"plus three four, six seven one, two seven three, four five four\". Give it only when the receptionist asks for it, and say yes when it is read back correctly. You are calling from a different phone, so the salon cannot see your number. Accept the first morning time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+   "expected_output_json": {},
+   "description": "reusable-core normal booking v1: copy of EXbrRnuGX9pXRC8AxdfKk7 (VkpkmRMV 02 Normal booking, then finish)",
+   "input_type": "SCENARIO",
+   "simulation_metadata_input": {},
+   "metric_input": {},
+   "create_time": "2026-09-25T11:04:10.136107Z",
+   "update_time": "2026-09-25T11:04:10.136124Z",
+   "expected_behaviors": [
+    "The agent asked for the caller's phone number once.",
+    "The agent read a phone number back and the caller said yes before it offered or booked any appointment time. The transcript may drop repeated digits in the read-back; judge only that it happened and was agreed.",
+    "The agent offered at least one specific morning time for a haircut.",
+    "Before saying an appointment was booked, the agent had the caller's agreement: the caller picked one of the times the agent had just offered for that service and day, or said a clear yes to a read-back of it.",
+    "The agent told the caller the haircut is booked at the time the caller accepted.",
+    "After the caller said they needed nothing else, the agent did not start a new topic or ask a new question."
+   ],
+   "script_turns": null
+  }
+ },
+ "VSruLZYYyz3w7fkdUaheDR": {
+  "kind": "personas",
+  "update_time": "2026-05-22T18:52:30.840208Z",
+  "create_time": "2026-05-21T00:20:01.315030Z",
+  "sha256_16": "f3f246dfc8b2dd0a",
+  "content": {
+   "resource_name": "personas/VSruLZYYyz3w7fkdUaheDR",
+   "id": "VSruLZYYyz3w7fkdUaheDR",
+   "name": "Interruptive Speaker",
+   "persona_prompt": "You speak over the agent when you think you understand the next step. Interrupt naturally, then continue the conversation when corrected.",
+   "voice_name": "john",
+   "language_code": "en-US",
+   "conversation_initiation": "wait_for_user",
+   "create_time": "2026-05-21T00:20:01.315030Z",
+   "update_time": "2026-05-22T18:52:30.840208Z",
+   "audio_degradation": null,
+   "background_sound_volume": null,
+   "custom_persona_data": null,
+   "custom_voice_id": null,
+   "hold_music_timeout_seconds": null,
+   "initialization_parameters": null,
+   "interruption_rate": "HIGH",
+   "multi_phone_config": null,
+   "silent_mode": null,
+   "situate_speaker": null,
+   "tags": [],
+   "voice": null,
+   "voice_speed": null,
+   "voice_volume": null
+  }
+ },
+ "MUFJdYAHdBHU6UbRRu4ykM": {
+  "kind": "personas",
+  "update_time": "2025-12-17T00:07:31.311440Z",
+  "create_time": "2025-12-17T00:04:47.864534Z",
+  "sha256_16": "e1c9bfbd9fbfcddf",
+  "content": {
+   "resource_name": "personas/MUFJdYAHdBHU6UbRRu4ykM",
+   "id": "MUFJdYAHdBHU6UbRRu4ykM",
+   "name": "Standard Customer",
+   "persona_prompt": "You are a typical customer calling for assistance. You speak clearly at a normal pace and are generally cooperative. You wait for the agent to finish speaking before responding. You ask relevant follow-up questions when needed and provide requested information when asked. You are neither overly patient nor impatient - you expect reasonable service.",
+   "voice_name": "aria",
+   "language_code": "en-US",
+   "background_sound": "off",
+   "wait_seconds": 0.5,
+   "conversation_initiation": "wait_for_user",
+   "create_time": "2025-12-17T00:04:47.864534Z",
+   "update_time": "2025-12-17T00:07:31.311440Z",
+   "audio_degradation": null,
+   "background_sound_volume": null,
+   "custom_persona_data": null,
+   "custom_voice_id": null,
+   "hold_music_timeout_seconds": null,
+   "initialization_parameters": null,
+   "interruption_rate": "NONE",
+   "multi_phone_config": null,
+   "silent_mode": null,
+   "situate_speaker": null,
+   "tags": [],
+   "voice": null,
+   "voice_speed": null,
+   "voice_volume": null
+  }
+ }
+}

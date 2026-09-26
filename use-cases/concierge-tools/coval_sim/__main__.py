@@ -187,7 +187,7 @@ class Job:
             f'agent        {self.agent.id} {self.agent.display_name}',
             'line         '
             + (
-                f'real Twilio: Coval dials {self.agent.phone_number}, pointed at the bot for this job; marks echoed'
+                f'real Twilio: Coval dials {self.agent.phone_number}, owned by one campaign (serve, or this run); marks echoed'
                 if self.agent.phone_line
                 else "Coval's simulated Twilio websocket: no marks returned (TWILIO_MARKS=absent)"
             ),

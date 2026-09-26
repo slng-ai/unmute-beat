@@ -551,7 +551,7 @@ CLASH = 'Somebody has the chair from {at} for a {service}. Read the diary again 
 
 
 SCHEMA = """
-PRAGMA journal_mode=WAL;
+PRAGMA journal_mode=DELETE;
 CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS bookings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -601,6 +601,18 @@ up the old one in one step, or, refused, leaves the booking as it was.
 `operations` is the idempotency table: each write's result under its token
 (the core `Intent` id), in the same transaction as the write. `intents` is
 core's durable record of an intent before dispatch (`note_intent`).
+
+The rollback journal (`journal_mode=DELETE`), not WAL. Every worker process
+writes this file, and SQLite before 3.51.3 can corrupt a WAL database when
+two processes write or checkpoint at the same instant (the WAL-reset bug,
+https://www.sqlite.org/wal.html#walresetbug). This Python ships 3.50.4.
+The rollback journal has no WAL to reset; writers still queue on
+`BEGIN IMMEDIATE`, readers wait out a commit within the busy timeout, and
+`synchronous=FULL` keeps each commit on disk before it returns.
+
+ponytail: rollback journal while the runtime's SQLite is older than 3.51.3
+(or the 3.50.7 backport); switch back to WAL, for readers that never wait,
+once it is not.
 """
 
 BUSY_SECONDS = 2.0
@@ -610,10 +622,10 @@ BUSY_SECONDS = 2.0
 def create_schema(path: str, schema: str, seconds: float = 10.0) -> None:
     """Create the tables if they are missing, retrying while another process holds the file.
 
-    Two workers starting together both run this. Switching a new file to WAL
-    takes the database's exclusive lock and does not wait on the busy
-    timeout, so the second one is told `database is locked` at once. It is
-    retried for a bounded time, never forever.
+    Two workers starting together both run this. Changing a new file's
+    journal mode takes the database's exclusive lock and does not wait on the
+    busy timeout, so the second one is told `database is locked` at once. It
+    is retried for a bounded time, never forever.
     """
     deadline = time_module.monotonic() + seconds
     while True:
@@ -641,8 +653,9 @@ class Diary:
     Everything that lasts is in one SQLite file (`path`), shared by every
     worker process on the host: customers, bookings, complaints, what each
     write token did, and the intents core records before dispatch. Faro's
-    store is the pattern: WAL, `synchronous=FULL`, `BEGIN IMMEDIATE` for
-    every write, a short connection per operation, and a bounded busy wait.
+    store is the pattern: `synchronous=FULL`, `BEGIN IMMEDIATE` for every
+    write, a short connection per operation, and a bounded busy wait; the
+    rollback journal rather than WAL, for the reason given at `SCHEMA`.
     Without a `path` the diary is a private temporary file, one per instance:
     a fixture.
 
@@ -693,7 +706,6 @@ class Diary:
         """One transaction on its own connection: `BEGIN IMMEDIATE` for a write, so writers queue in SQLite."""
         db = sqlite3.connect(self.path, timeout=BUSY_SECONDS, isolation_level=None)
         try:
-            db.execute('PRAGMA journal_mode=WAL')
             db.execute('PRAGMA synchronous=FULL')
             db.execute('BEGIN IMMEDIATE' if write else 'BEGIN')
             yield db
@@ -1206,7 +1218,7 @@ class Diary:
 
 
 def _remove(path: str) -> None:
-    """Delete a fixture diary's file and its WAL companions."""
-    for suffix in ('', '-wal', '-shm'):
+    """Delete a fixture diary's file and any journal beside it."""
+    for suffix in ('', '-journal', '-wal', '-shm'):
         with contextlib.suppress(FileNotFoundError):
             os.remove(path + suffix)

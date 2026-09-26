@@ -99,10 +99,15 @@ REAP_EVERY = 2.0
 
 
 class Admission:
-    """The runner's one record of calls, shared by every worker through one SQLite file."""
+    """The runner's one record of calls, shared by every worker through one SQLite file.
+
+    On the rollback journal, like the diary, for the same reason: every
+    worker writes it, and this SQLite predates the WAL-reset fix
+    (`salon.diary.SCHEMA`).
+    """
 
     SCHEMA = """
-    PRAGMA journal_mode=WAL;
+    PRAGMA journal_mode=DELETE;
     CREATE TABLE IF NOT EXISTS calls (
         call_sid TEXT PRIMARY KEY,
         campaign TEXT, from_number TEXT, to_number TEXT,

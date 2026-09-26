@@ -1,5 +1,8 @@
 """The offline worker-failure checks of Stage C, on the real runner with two workers (`evals.load faults`).
 
+* F0: a worker is killed after the caller's yes, before the booking intent
+  is recorded. Nothing was sent, so the ring-back finds no old intent and
+  books once.
 * F1: a worker is killed after a booking intent is recorded and before it
   is sent. A bystander call on the other worker goes on and books; the dead
   call is closed; a replacement worker comes up; the caller rings back, the
@@ -97,7 +100,7 @@ def idle_ok(before: dict[int, dict[str, Any]], after: dict[int, dict[str, Any]])
 
 
 async def kill_case(folder: Path, fault: str, port: int, attempts: int = 3) -> dict[str, Any]:
-    """F1 (`noted`) and F2 (`committed`): a worker killed inside a write, a bystander on the other worker."""
+    """F0 (`before`), F1 (`noted`) and F2 (`committed`): a worker killed in a write, a bystander on the other worker."""
     report: dict[str, Any] = {}
     for attempt in range(attempts):
         report = await _kill_once(folder, fault, port, attempt)
@@ -107,7 +110,7 @@ async def kill_case(folder: Path, fault: str, port: int, attempts: int = 3) -> d
 
 
 async def _kill_once(folder: Path, fault: str, port: int, attempt: int) -> dict[str, Any]:
-    """One try of F1 or F2. Which worker a call lands on is the kernel's choice, so a try may put no bystander on the other."""
+    """One try of F0, F1 or F2. Which worker a call lands on is the kernel's choice, so a try may put no bystander on the other."""
     out = folder / f'try{attempt}'
     runner = Runner(out, 2, port + attempt)
     runner.start()
@@ -168,14 +171,16 @@ async def _kill_once(folder: Path, fault: str, port: int, attempt: int) -> dict[
         'raw_after': {str(k): {x: v[x] for x in ('tasks', 'fds')} for k, v in after.items()},
         'duplicates': sum(1 for b in state['bookings'] if b[7] == 1 and len(active_for(state, b[1])) > 1),
     }
-    expected_old = 'void' if fault == 'noted' else 'booked'
+    expected_old = {'before': None, 'noted': 'void', 'committed': 'booked'}[fault]
     report['verdict'] = {
         'bystander_went_on': report['bystanders_on_other_worker'] > 0
         and report['bystanders_on_other_worker_booked'] == report['bystanders_on_other_worker'],
         'dead_session_closed_in_time': closed is not None and closed <= DEAD_SESSION_S,
         'replacement_in_time': replaced is not None and replaced <= REPLACEMENT_S,
         'one_booking_for_the_victim': len(mine) == 1,
-        'old_intent_settled': bool(report['victim_old_intents'])
+        'old_intent_settled': not report['victim_old_intents']
+        if expected_old is None
+        else bool(report['victim_old_intents'])
         and all(r is not None and r.get('status') == expected_old for _, r in report['victim_old_intents']),
         'no_duplicates': report['duplicates'] == 0,
         'idle_restored': all(v.get('ok', True) for v in report['idle_after'].values()),
@@ -318,6 +323,7 @@ async def faults(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
     port = args.port
     cases = {
+        'F0_kill_before_intent_recorded': lambda: kill_case(out / 'f0', 'before', port + 20),
         'F1_kill_after_intent_recorded': lambda: kill_case(out / 'f1', 'noted', port),
         'F2_kill_after_commit': lambda: kill_case(out / 'f2', 'committed', port + 5),
         'F3_stale_worker_fenced': lambda: stale_case(out / 'f3', port + 10),

@@ -74,7 +74,7 @@ class Caller:
     lose_tts: str = ''
     """Words of a bot segment whose audio the TTS loses, the first time it is said."""
     fault: str = ''
-    """`noted`, `committed` or `hang`: where a booking write kills (or stalls) its worker."""
+    """`before`, `noted`, `committed` or `hang`: where a booking write kills (or stalls) its worker."""
     leave_after: float | None = None
     """Hang up this many seconds after the last line, without waiting for an answer."""
 
@@ -248,6 +248,8 @@ def _faults(call: core.FlowCall) -> None:
     save = books.save_booking
 
     async def noted(intent: core.Intent) -> None:
+        if caller.fault == 'before' and intent.operation == 'book_appointment':
+            os._exit(9)
         await note(intent)
         if caller.fault == 'noted' and intent.operation == 'book_appointment':
             os._exit(9)

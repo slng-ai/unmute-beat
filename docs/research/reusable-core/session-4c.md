@@ -26,7 +26,7 @@ The runner is qualified on one laptop, for at most five calls at once. That is n
 | Item | Value |
 |---|---|
 | Parent | PR #21, branch `feat/session-4b-runtime`, reviewed head `1bc9fec0d850333e94b1737465e2de373d866a2d` (open; base `feat/session-4b-evaluator`, PR #20, open) |
-| This branch | `feat/session-4c-mac`, created from `1bc9fec` (the name was free locally and on the remote). The PR #21 branch was not renamed |
+| This branch | `feat/session-4c-mac`, [PR #22](https://github.com/slng-ai/slng-voice-harness/pull/22), created from `1bc9fec` (the name was free locally and on the remote). The PR #21 branch was not renamed |
 | Offline evidence SHA | `f823d4e5f218429c444096c2309ddcfefaa3a43f` (ramp, sizing, long run, faults, mutations; no tracked change at the start of the batch) |
 | Text checks SHA | `f823d4e` (text-3 and text-4) |
 | C3 SHA | `6024758` (history copied shallowly; N12 rerun) |

@@ -2,9 +2,14 @@
 
 The protocol is retained for audit. Projection copies it: a reset or playback
 correction must never rewrite another step's source history.
+
+The copy is shallow: every projected message is a new object with a new
+parts list (`dataclasses.replace`), and no part is ever changed in place, so
+the source messages and their parts are never touched. A deep copy of the
+whole history on every model request cost 0.12 s of CPU over ten N12
+booking traces under the profiler, and bought nothing (session 4c).
 """
 
-from copy import deepcopy
 from dataclasses import replace
 
 from pydantic_ai.messages import (
@@ -30,7 +35,7 @@ def paired(messages: list[ModelMessage]) -> list[ModelMessage]:
     }
     complete = calls & results
     projected = []
-    for message in deepcopy(messages):
+    for message in messages:
         parts = [
             p
             for p in message.parts
@@ -76,7 +81,7 @@ def project(
     present = set()
     callers: dict[int, list[str]] = {}
     for source in messages:
-        message = deepcopy(source)
+        message = replace(source, parts=list(source.parts))
         meta = message.metadata or {}
         turn = meta.get('caller_turn')
         if turn is not None and isinstance(message, ModelRequest):

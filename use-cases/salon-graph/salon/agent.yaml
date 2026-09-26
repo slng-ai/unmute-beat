@@ -35,6 +35,7 @@ agents:
 operations:
   lookup_customer:
     function: functions.py:lookup_customer
+    changes: false
     args: {phone: customer_phone}
     readback: functions.py:number_words
     matches: {customer_phone: phone}
@@ -42,6 +43,8 @@ operations:
     say: Thanks, I have you.
   book_appointment:
     function: functions.py:book
+    subject: booking_id
+    idempotent: true
     args: {phone: verified_phone, slot: slot}
     readback: functions.py:booking_words
     reconcile: functions.py:find_booking
@@ -51,6 +54,8 @@ operations:
     say: "You're all set for {spoken}. Anything else I can help with?"
   move_appointment:
     function: functions.py:move
+    subject: booking_id
+    idempotent: true
     args: {phone: verified_phone, slot: slot, booking_id: appointment}
     readback: functions.py:move_words
     reconcile: functions.py:find_move
@@ -60,6 +65,8 @@ operations:
     say: "That's moved to {spoken}. Anything else I can help with?"
   cancel_appointment:
     function: functions.py:cancel
+    subject: booking_id
+    idempotent: true
     args: {phone: verified_phone, booking_id: appointment}
     readback: functions.py:cancel_words
     reconcile: functions.py:find_cancel
@@ -68,6 +75,8 @@ operations:
     say: "That's cancelled for you. Anything else I can help with?"
   record_complaint:
     function: functions.py:record_complaint
+    subject: reference
+    idempotent: true
     args: {phone: verified_phone, summary: complaint, requested_resolution: wanted_outcome}
     readback: functions.py:complaint_words
     reconcile: functions.py:find_complaint

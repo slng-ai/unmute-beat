@@ -264,6 +264,47 @@ class Checkpoint:
     """The caller turn the detour began on. Everything the caller said after it was said to the prerequisite."""
 
 
+type IntentStatus = Literal['prepared', 'dispatched', 'unknown', 'succeeded', 'rejected']
+"""Where one business intent stands.
+
+`prepared`: known not dispatched. `dispatched`: handed to the backend and not
+answered yet. `unknown`: it may or may not have landed (cancelled, timed out,
+lost, or answered in a shape or about a subject that cannot be trusted).
+`succeeded` and `rejected`: a validated receipt, or a validated
+reconciliation, said which. Only those two are terminal.
+"""
+OPEN_INTENT: frozenset[str] = frozenset({'prepared', 'dispatched', 'unknown'})
+
+
+class Intent(BaseModel):
+    """One semantic business action the caller was asked for: this operation, these arguments, this subject.
+
+    Created by core before anything can be dispatched, and kept through
+    retries, reconciliation, a read-back said again and a receipt cut off
+    while it was said: all of those are the same intent. Only a terminal
+    outcome ends it, so a new, separately authorised action with the same
+    arguments gets a new one. The id is opaque (a random UUID), never derived
+    from the arguments, so it is safe to persist and to hand a backend as its
+    idempotency key; a backend that dedups by it may be sent it again.
+
+    Strict and frozen: it crosses into application code and back out of a
+    durable store (`StepFlow.open(intents=...)`), so nothing coerces its
+    fields, and a change is a new, validated copy (`CallContext.set_intent`).
+    """
+
+    model_config = ConfigDict(strict=True, frozen=True, extra='forbid')
+
+    id: str = Field(min_length=1)
+    operation: str = Field(min_length=1)
+    args: str
+    """The validated arguments as canonical JSON: the exact thing this intent is about."""
+    subject: str = ''
+    """Who the call took the caller to be when the intent was made (`CallContext.identity`)."""
+    status: IntentStatus = 'prepared'
+    readbacks: int = Field(0, ge=0)
+    """Read-backs of this intent that did not get an answer that could count. See `CallContext.note_readback`."""
+
+
 @dataclass(frozen=True)
 class Evidence:
     """What a service did, as its validated receipt said, and the answer that authorised it.
@@ -286,6 +327,14 @@ class Evidence:
     """The serial of the question whose answer authorised it, 0 when none was needed."""
     segments: tuple[str, ...] = ()
     """The segments that carried that question to the caller."""
+    intent: str = ''
+    """The `Intent` this receipt answered."""
+    succeeded: bool = True
+    """Whether the receipt said it worked (`succeeds`). A validated refusal is evidence too, of nothing done."""
+    changes: bool = True
+    """Whether the operation changes a business resource. A lookup does not, so it can never back a claim of one."""
+    resource: str = ''
+    """The resource the receipt is about (its declared `subject` field), '' when the operation names none."""
 
 
 @dataclass(frozen=True)
@@ -503,6 +552,18 @@ class CallContext(BaseModel):
     """The identity each turn generation began under, so late work can tell it now speaks for somebody else."""
     _evidence: list[Evidence] = PrivateAttr(default_factory=list)
     """Every validated receipt of the call, oldest first. Append-only. See `note_evidence`."""
+    _intents: dict[str, Intent] = PrivateAttr(default_factory=dict)
+    """Every business intent of the call, by id, oldest first. See `intent_for`."""
+    _unknown: dict[str, tuple[Any, BaseModel]] = PrivateAttr(default_factory=dict)
+    """Intents whose outcome is unknown, by id, with the operation and arguments that reconcile them.
+
+    Settled before anything else: at the start of the next turn, by code
+    (`settlement`), and again before any retry (`Operation._before`).
+    """
+    _unpresented: dict[str, tuple[Any, BaseModel, dict[str, Any]]] = PrivateAttr(default_factory=dict)
+    """Succeeded intents whose local recording (state, speech) failed after the receipt: repaired, never re-sent."""
+    _departed: bool = PrivateAttr(default=False)
+    """The caller said goodbye: no new consequential intent starts after it. See `note_departure`."""
     _request_kept: bool = PrivateAttr(default=False)
     """Whether a reading of this turn found the detour's request unchanged. See `note_request_kept`."""
     _return_status: str = PrivateAttr(default='')
@@ -998,6 +1059,10 @@ class CallContext(BaseModel):
         *,
         proposal: int = 0,
         segments: tuple[str, ...] = (),
+        intent: str = '',
+        succeeded: bool = True,
+        changes: bool = True,
+        resource: str = '',
     ) -> None:
         """File a validated receipt. Called by `Operation.run` before anything can be cancelled."""
         running = turn_generation.get()
@@ -1012,6 +1077,10 @@ class CallContext(BaseModel):
                 generation,
                 proposal,
                 segments,
+                intent,
+                succeeded,
+                changes,
+                resource,
             )
         )
 
@@ -1019,6 +1088,106 @@ class CallContext(BaseModel):
     def evidence(self) -> tuple[Evidence, ...]:
         """Every validated receipt on this call, oldest first, whatever happened since."""
         return tuple(self._evidence)
+
+    def effective(self) -> tuple[Evidence, ...]:
+        """The receipts that still stand: each resource's latest successful change, for the caller now on the line.
+
+        A later successful change to the same resource supersedes an earlier
+        one, whichever operation made it: a move replaces the booking it
+        moved, a cancellation replaces the booking with itself, a reopening
+        replaces the resolution. A receipt about no declared resource stands
+        for its own operation and arguments. A lookup (`changes: false`) and a
+        validated refusal never stand, so neither can back a claim that
+        something changed. Nothing here reads a receipt's meaning: which field
+        names the resource is the application's declaration.
+        """
+        latest: dict[tuple[str, ...], Evidence] = {}
+        for filed in self._evidence:
+            if not (filed.changes and filed.succeeded) or filed.identity != self.identity():
+                continue
+            key = (
+                ('resource', filed.resource) if filed.resource else (filed.operation, json.dumps(filed.args))
+            )
+            latest.pop(key, None)
+            latest[key] = filed
+        return tuple(latest.values())
+
+    def intent_for(self, operation: str, args: str) -> Intent:
+        """The open intent for this operation, these arguments and this caller, or a new one.
+
+        Open means not terminal: a read-back said again, an answer lost to a
+        cancellation and a retry after a timeout all find the same intent, so
+        none of them can manufacture a fresh identity past the retry guard.
+        Once it succeeded or was refused, the same arguments make a new one.
+        """
+        subject = self.identity()
+        for intent in reversed(self._intents.values()):
+            if (
+                intent.operation == operation
+                and intent.args == args
+                and intent.subject == subject
+                and intent.status in OPEN_INTENT
+            ):
+                return intent
+        made = Intent(id=uuid4().hex, operation=operation, args=args, subject=subject)
+        self._intents[made.id] = made
+        return made
+
+    def set_intent(self, intent_id: str, **changes: Any) -> Intent:
+        """Replace one intent with a validated copy carrying these changes. A terminal intent never reopens."""
+        current = self._intents[intent_id]
+        if current.status not in OPEN_INTENT and changes.get('status', current.status) != current.status:
+            raise ValueError(f'intent {intent_id} is {current.status}; it does not change status again')
+        updated = Intent.model_validate(current.model_dump() | changes)
+        self._intents[intent_id] = updated
+        return updated
+
+    @property
+    def intents(self) -> tuple[Intent, ...]:
+        """Every intent of the call, oldest first."""
+        return tuple(self._intents.values())
+
+    def unresolved(self) -> tuple[Intent, ...]:
+        """The intents that may have reached the backend with no answer that settles them: what a fresh process reconciles."""
+        return tuple(i for i in self._intents.values() if i.status in ('dispatched', 'unknown'))
+
+    def restore(self, intents: list[Intent], reconcile_with: dict[str, tuple[Any, type[BaseModel]]]) -> None:
+        """Take back unresolved intents a previous process persisted, so this call reconciles them before any retry.
+
+        Each is revalidated strictly. An id already here with a different
+        operation, arguments or subject is refused: one id names one intent.
+        A dispatched intent comes back unknown, because the process that was
+        waiting for its answer is gone. `reconcile_with` maps an operation
+        name to its operation and argument model.
+        """
+        for given in intents:
+            intent = Intent.model_validate(given.model_dump() if isinstance(given, Intent) else given)
+            held = self._intents.get(intent.id)
+            if held is not None and (held.operation, held.args, held.subject) != (
+                intent.operation,
+                intent.args,
+                intent.subject,
+            ):
+                raise ValueError(f'intent {intent.id} is already held for different arguments')
+            if intent.status not in ('dispatched', 'unknown'):
+                continue
+            if intent.operation not in reconcile_with:
+                raise ValueError(
+                    f'intent {intent.id} names {intent.operation}, which this flow does not declare'
+                )
+            operation, args_type = reconcile_with[intent.operation]
+            args = args_type.model_validate_json(intent.args)
+            self._intents[intent.id] = intent.model_copy(update={'status': 'unknown'})
+            self._unknown[intent.id] = (operation, args)
+
+    @property
+    def departed(self) -> bool:
+        """Whether the caller has said goodbye. After it, no new consequential intent starts."""
+        return self._departed
+
+    def note_departure(self) -> None:
+        """The caller said goodbye. Work already dispatched is still reconciled; nothing new begins."""
+        self._departed = True
 
     def hold(self, kind: str, held: Held) -> None:
         """Keep this, of this kind, until it is released or its `lasts` says no. One of each kind at a time."""

@@ -69,7 +69,7 @@ from core.flow import Flow
 from core.graph import Exit
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
-from core.state import CallContext
+from core.state import CallContext, Intent
 from core.steps import (
     ActionStep,
     AgentStep,
@@ -351,6 +351,27 @@ class _Resolver:
 
         return self._once('function', ref, where, find)
 
+    def domain_function(self, where: str, ref: str) -> Callable[..., Any] | None:
+        """An operation's function or reconciliation: `(services, args)`, or `(services, args, intent: Intent)`.
+
+        The third parameter, when there is one, must be annotated `Intent`:
+        it is the only way core hands application code the identity of the
+        action, and a name alone would let any third argument pass for it.
+        """
+
+        def find() -> Callable[..., Any]:
+            found = self.folder.attr(ref)
+            if not callable(found):
+                raise _ProblemError(f'{ref!r} is not a function')
+            takes = _positional(found)
+            if takes not in (2, 3):
+                raise _ProblemError(f'{ref!r} must take (services, args) or (services, args, intent)')
+            if takes == 3 and not _takes_intent(found):
+                raise _ProblemError(f'{ref!r} must annotate its third parameter with core.Intent')
+            return found
+
+        return self._once('function', ref, where, find)
+
     def folder_callable(self, where: str, ref: str) -> Callable[..., Any] | None:
         """A function from the flow folder whose number of arguments the caller checks itself."""
 
@@ -379,8 +400,11 @@ class _Resolver:
             'say': decl.say,
             'needs_approval': decl.approval == 'readback',
             'matches': dict(decl.matches),
+            'changes': decl.changes,
+            'subject': decl.subject,
+            'idempotent': decl.idempotent,
         }
-        function = self.function(where, decl.function, 2)
+        function = self.domain_function(where, decl.function)
         hints = _hints(function) if function is not None else {}
         params = list(inspect.signature(function).parameters) if function is not None else []
         args_type, receipt_type = (hints.get(params[1]) if params else None), hints.get('return')
@@ -432,8 +456,18 @@ class _Resolver:
             attrs['readback'] = staticmethod(found or (lambda args: ''))
             attrs['readback_uses_services'] = takes == 2
         if decl.reconcile:
-            attrs['reconcile'] = staticmethod(self.function(where, decl.reconcile, 2) or (lambda s, a: None))
+            reconcile = self.domain_function(where, decl.reconcile)
+            attrs['reconcile'] = staticmethod(reconcile or (lambda s, a: None))
+            attrs['reconcile_takes_intent'] = reconcile is not None and _takes_intent(reconcile)
+        if decl.subject and _model(receipt_type) and decl.subject not in receipt_type.model_fields:
+            self.fail(where, f'names subject {decl.subject!r}, which {receipt_type.__name__} does not have')
+        if decl.idempotent and function is not None and not _takes_intent(function):
+            self.fail(
+                where,
+                f'is idempotent, so {decl.function} must take the Intent it dedups by as its third parameter',
+            )
         attrs['function'] = staticmethod(function or (lambda s, a: None))
+        attrs['function_takes_intent'] = function is not None and _takes_intent(function)
         attrs['args_type'] = args_type if _model(args_type) else NoFacts
         attrs['receipt_type'] = receipt_type if _model(receipt_type) else NoFacts
         found = type(f'{name.title().replace("_", "")}Operation', (FunctionOperation,), attrs)
@@ -822,9 +856,15 @@ class OperationSpec(BaseModel):
     readback: str = ''
     """`file.py:words`, taking the arguments, returning the sentence the caller agrees to."""
     reconcile: str = ''
-    """`file.py:find`, `(services, args) -> receipt | None`: what happened to an attempt with an unknown outcome."""
+    """`file.py:find`, `(services, args[, intent]) -> receipt | None`: what happened to an intent whose outcome is unknown."""
     say: str = ''
     """The receipt's speech, formatted from its fields: `Booked, reference {reference}.`"""
+    changes: bool = True
+    """Whether it changes a business resource. `false` for a lookup: its receipt never backs a claim that something changed."""
+    subject: str = ''
+    """The receipt field naming the resource it acts on (`booking_id`): a later change to it supersedes this one."""
+    idempotent: bool = False
+    """The backend dedups by the intent id (the function's `Intent` parameter), so an unknown intent may be sent again."""
 
 
 class PersonaSpec(BaseModel):
@@ -1035,6 +1075,16 @@ def _hints(function: Callable[..., Any]) -> dict[str, Any]:
 
 def _model(kind: Any) -> typing.TypeIs[type[BaseModel]]:
     return isinstance(kind, type) and issubclass(kind, BaseModel)
+
+
+def _takes_intent(function: Callable[..., Any]) -> bool:
+    """Whether a domain function's third positional parameter is annotated `core.Intent`."""
+    params = [
+        p
+        for p in inspect.signature(function).parameters.values()
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    ]
+    return len(params) == 3 and _hints(function).get(params[2].name) is Intent
 
 
 def _bare(kind: Any) -> Any:

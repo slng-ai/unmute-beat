@@ -30,6 +30,7 @@ from core.flowspec import load_file as load
 from core.operations import Operation, OutcomeUnknownError
 from core.policies import TurnBudget
 from core.proposals import BaseProposal
+from core.state import Intent
 from core.steps import ConfirmedOperation, FlowCall, StepFlow
 from core.turn import TextReply, greet, text_turn
 
@@ -39,6 +40,7 @@ __all__ = [
     'FlowCall',
     'FlowSpec',
     'FlowSpecError',
+    'Intent',
     'Operation',
     'OutcomeUnknownError',
     'StepFlow',

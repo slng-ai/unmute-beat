@@ -1,0 +1,34 @@
+agency       salon (use-cases/salon-graph)
+agent        PEivYdEtwEa65QSraG5fMQ voice-harness-salon-pipecat-twilio
+line         real Twilio: Coval dials +447427919928, owned by one campaign (serve, or this run); marks echoed
+test set     DmJJChjD: 5 case(s) CrouaBCnH22Kka5gEitnG9, PxncamaDJP4xxK5NXKSkst, QYL3i8sk8ZiXtZvL5Rf2L5, jHJdQvi5cLatL3s7D4GBoo, UysFwYC6eCZY4XjhWmyqt4
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  5 = 5 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by bot.py (MAX_CALL_SECONDS)
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  5 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        s4c-restate-R
++447427919928 is owned by campaign 's4c-R': left as it is
+launched run gVH4ML72NmkJHjcagxUikH (s4c-restate-R salon DmJJChjD 86153f3d)
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.5 1.3 1.2
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.5 1.3 1.2
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.5 1.3 1.2
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.2 1.3 1.2
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.4 1.3 1.2
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.1 1.3 1.2
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.0 1.2 1.2
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 0.9 1.2 1.1
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 0.9 1.1 1.1
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 0.9 1.1 1.1
+run gVH4ML72NmkJHjcagxUikH IN PROGRESS, load average 1.0 1.1 1.1
+run gVH4ML72NmkJHjcagxUikH COMPLETED, load average 1.0 1.1 1.1
+simulation m5HJ2vFhswLycEQaW78a7S = call CA6c88714109c0d5f907b101d0e92b0f65 (for load_report --call)
+simulation EMXpSVYaeBoEHdBSTNKkgg = call CA666dd414c21c5353c582590cf39e4725 (for load_report --call)
+simulation FjUeifmxSNvJ3pF3bzj9ty = call CAe4704f576ddc6e742e91318708bac7c5 (for load_report --call)
+simulation QPwennqoXTDsyYfM9CUVmU = call CAaced8a8b2f7aaf0684eb4ceee408b455 (for load_report --call)
+simulation DASdb96wbFL6AtsPVtsFNK = call CA6a5374a68eb9559edcbdcfd429708fef (for load_report --call)
+ok    salon  test set DmJJChjD  run gVH4ML72NmkJHjcagxUikH
+exit=0

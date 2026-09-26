@@ -1,0 +1,110 @@
+{
+ "note": "Finding 12 targeted set, version 1: the same number said back after \"no\" is a yes, said aloud (core.graph.Restated), and a real correction is read back again. Copied from the reviewed normal case M5Z8LjVyQZPuhSubmt26w7; each caller has a synthetic number, never dialled. Judged from the batch diary and load_report, not Coval metrics.",
+ "sets": {
+  "restate": {
+   "name": "reusable-core stage C restate v1",
+   "description": "Four callers say their number back after \"no\"; one corrects a misspoken digit.",
+   "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+   "source_case": "M5Z8LjVyQZPuhSubmt26w7",
+   "cases": [
+    {
+     "key": "restate-1",
+     "kind": "restate",
+     "phone": "+34671530301",
+     "want": {
+      "service": "haircut",
+      "day": "Monday",
+      "part": "morning"
+     },
+     "input": "You want a haircut at Sage and Stone on Monday morning. Your phone number is +34 671 530 301. When the receptionist asks for it, say \"plus three four, six seven one, five three zero, three zero one\". When the receptionist reads your number back, do not say yes, even if the number they read is right: say \"No, it's plus three four, six seven one, five three zero, three zero one\". If they read it back again, say yes if it is right. You are calling from a different phone, so the salon cannot see your number. Accept the first morning time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "expected_behaviors": [
+      "The agent read the phone number back, and the caller answered by saying the same number again.",
+      "After the caller said the same number again, the agent said it was the same as it had read back and went on, without asking for the number again.",
+      "The agent offered at least one specific Monday morning time for a haircut.",
+      "Before saying an appointment was booked, the agent had the caller's agreement: a clear yes to a read-back of it.",
+      "The agent told the caller the haircut is booked at the time the caller accepted."
+     ],
+     "coval_test_case": "UysFwYC6eCZY4XjhWmyqt4"
+    },
+    {
+     "key": "restate-2",
+     "kind": "restate",
+     "phone": "+34671530302",
+     "want": {
+      "service": "haircut",
+      "day": "Tuesday",
+      "part": "morning"
+     },
+     "input": "You want a haircut at Sage and Stone on Tuesday morning. Your phone number is +34 671 530 302. When the receptionist asks for it, say \"plus three four, six seven one, five three zero, three zero two\". When the receptionist reads your number back, do not say yes, even if the number they read is right: say \"No, it's plus three four, six seven one, five three zero, three zero two\". If they read it back again, say yes if it is right. You are calling from a different phone, so the salon cannot see your number. Accept the first morning time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "expected_behaviors": [
+      "The agent read the phone number back, and the caller answered by saying the same number again.",
+      "After the caller said the same number again, the agent said it was the same as it had read back and went on, without asking for the number again.",
+      "The agent offered at least one specific Tuesday morning time for a haircut.",
+      "Before saying an appointment was booked, the agent had the caller's agreement: a clear yes to a read-back of it.",
+      "The agent told the caller the haircut is booked at the time the caller accepted."
+     ],
+     "coval_test_case": "jHJdQvi5cLatL3s7D4GBoo"
+    },
+    {
+     "key": "restate-3",
+     "kind": "restate",
+     "phone": "+34671530303",
+     "want": {
+      "service": "haircut",
+      "day": "Wednesday",
+      "part": "morning"
+     },
+     "input": "You want a haircut at Sage and Stone on Wednesday morning. Your phone number is +34 671 530 303. When the receptionist asks for it, say \"plus three four, six seven one, five three zero, three zero three\". When the receptionist reads your number back, do not say yes, even if the number they read is right: say \"No, it's plus three four, six seven one, five three zero, three zero three\". If they read it back again, say yes if it is right. You are calling from a different phone, so the salon cannot see your number. Accept the first morning time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "expected_behaviors": [
+      "The agent read the phone number back, and the caller answered by saying the same number again.",
+      "After the caller said the same number again, the agent said it was the same as it had read back and went on, without asking for the number again.",
+      "The agent offered at least one specific Wednesday morning time for a haircut.",
+      "Before saying an appointment was booked, the agent had the caller's agreement: a clear yes to a read-back of it.",
+      "The agent told the caller the haircut is booked at the time the caller accepted."
+     ],
+     "coval_test_case": "QYL3i8sk8ZiXtZvL5Rf2L5"
+    },
+    {
+     "key": "restate-4",
+     "kind": "restate",
+     "phone": "+34671530304",
+     "want": {
+      "service": "haircut",
+      "day": "Thursday",
+      "part": "morning"
+     },
+     "input": "You want a haircut at Sage and Stone on Thursday morning. Your phone number is +34 671 530 304. When the receptionist asks for it, say \"plus three four, six seven one, five three zero, three zero four\". When the receptionist reads your number back, do not say yes, even if the number they read is right: say \"No, it's plus three four, six seven one, five three zero, three zero four\". If they read it back again, say yes if it is right. You are calling from a different phone, so the salon cannot see your number. Accept the first morning time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "expected_behaviors": [
+      "The agent read the phone number back, and the caller answered by saying the same number again.",
+      "After the caller said the same number again, the agent said it was the same as it had read back and went on, without asking for the number again.",
+      "The agent offered at least one specific Thursday morning time for a haircut.",
+      "Before saying an appointment was booked, the agent had the caller's agreement: a clear yes to a read-back of it.",
+      "The agent told the caller the haircut is booked at the time the caller accepted."
+     ],
+     "coval_test_case": "PxncamaDJP4xxK5NXKSkst"
+    },
+    {
+     "key": "correct-5",
+     "kind": "correction",
+     "phone": "+34671530305",
+     "wrong_phone": "+34671530306",
+     "want": {
+      "service": "haircut",
+      "day": "Friday",
+      "part": "morning"
+     },
+     "input": "You want a haircut at Sage and Stone on Friday morning. Your phone number is +34 671 530 305. When the receptionist asks for it, you misspeak the last digit: say \"plus three four, six seven one, five three zero, three zero six\". When they read that number back, say \"No, sorry, the last digit is five: plus three four, six seven one, five three zero, three zero five\". Say yes when the right number is read back. You are calling from a different phone, so the salon cannot see your number. Accept the first morning time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "expected_behaviors": [
+      "The agent read back the number the caller first said, and the caller corrected its last digit.",
+      "The agent read back the corrected number, ending five, and the caller said yes to it.",
+      "The agent offered at least one specific Friday morning time for a haircut.",
+      "Before saying an appointment was booked, the agent had the caller's agreement: a clear yes to a read-back of it.",
+      "The agent told the caller the haircut is booked at the time the caller accepted."
+     ],
+     "coval_test_case": "CrouaBCnH22Kka5gEitnG9"
+    }
+   ],
+   "coval_test_set": "DmJJChjD"
+  }
+ }
+}

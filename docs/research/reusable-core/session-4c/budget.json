@@ -3,8 +3,8 @@
  "text": {
   "requests_allowed": null,
   "tokens_allowed": 500000,
-  "requests_spent": 122,
-  "tokens_spent": 277238,
+  "requests_spent": 164,
+  "tokens_spent": 374350,
   "runs": [
    {
     "label": "text-1",
@@ -107,6 +107,38 @@
      }
     },
     "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; the Langfuse sessions hold the full record"
+   },
+   {
+    "label": "text-5",
+    "source": "6feb64b, the same-value confirmation and the new verify step 3",
+    "why": "the verify prompt changed (step 3: a number said back is recorded and compared by code), so the four salon cases run again before any voice call",
+    "cases": {
+     "T1.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19627,
+      "session": "text-T1.v1-da80c10a"
+     },
+     "T2.v1": {
+      "result": "passed",
+      "requests": 15,
+      "tokens": 38039,
+      "session": "text-T2.v1-a27a46d1"
+     },
+     "T3.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19793,
+      "session": "text-T3.v2-5ab27d25"
+     },
+     "T4.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19653,
+      "session": "text-T4.v2-702afb80"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; the Langfuse sessions hold the full record"
    }
   ],
   "allowance_changes": [
@@ -123,10 +155,10 @@
  },
  "coval_repair_pool": {
   "calls_allowed": 20,
-  "requested": 4,
-  "placed": 4,
-  "connected": 4,
-  "terminal": 4,
+  "requested": 9,
+  "placed": 9,
+  "connected": 9,
+  "terminal": 9,
   "evidence_complete": 1,
   "runs": [
    {
@@ -187,6 +219,91 @@
     "call_seconds": 180,
     "bound_by": "hand: the only call the runner recorded for the campaign in the run window. Coval gives no CallSid on a phone line, and the call wrote no intent to correlate on, so coval_sim said unknown",
     "result": "failed task, safe: no write, no claim, ended by the 180 s ceiling. The interruptive caller spoke over the phone read-backs. A yes that began before its read-back played out was not counted. Two unheard copies gave the fallback line, twice. Two joined turns ran out of their 8-request budget. Joined pieces also led to wrong numbers being read back. 18 of 19 marks counted; the ignored one was for a cleared segment."
+   },
+   {
+    "label": "s4c-restate-R-1",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "UysFwYC6eCZY4XjhWmyqt4",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12: a number said back after no is confirmed by code and said aloud",
+    "result": "booked correctly (Monday 09:00). Answered the number read-back \"no, it's\" with the same digits; the model called lookup_customer itself with no collect, so the lookup ran silently (the old path), not through Restated.",
+    "simulation": "DASdb96wbFL6AtsPVtsFNK",
+    "call_sid": "CA6a5374a68eb9559edcbdcfd429708fef"
+   },
+   {
+    "label": "s4c-restate-R-2",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "jHJdQvi5cLatL3s7D4GBoo",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12",
+    "result": "booked correctly (Tuesday 09:00). STT added a digit to the restated number; the digits did not fit, the bot asked which part was wrong, read the right number back and got a yes.",
+    "simulation": "m5HJ2vFhswLycEQaW78a7S",
+    "call_sid": "CA6c88714109c0d5f907b101d0e92b0f65"
+   },
+   {
+    "label": "s4c-restate-R-3",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "QYL3i8sk8ZiXtZvL5Rf2L5",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12",
+    "result": "booked correctly (Wednesday 09:00). Restated: \"Yes, that's the same as I read back. Thanks, I have you.\"",
+    "simulation": "QPwennqoXTDsyYfM9CUVmU",
+    "call_sid": "CAaced8a8b2f7aaf0684eb4ceee408b455"
+   },
+   {
+    "label": "s4c-restate-R-4",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "PxncamaDJP4xxK5NXKSkst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12",
+    "result": "booked correctly (Thursday 09:00). Restated: \"Yes, that's the same as I read back. Thanks, I have you.\"",
+    "simulation": "EMXpSVYaeBoEHdBSTNKkgg",
+    "call_sid": "CA666dd414c21c5353c582590cf39e4725"
+   },
+   {
+    "label": "s4c-restate-R-5",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "CrouaBCnH22Kka5gEitnG9",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12: a real correction is still read back again",
+    "result": "booked correctly (Friday 09:00) for the corrected number; the corrected number was read back and got a yes; nothing for the misspoken +34671530306.",
+    "simulation": "FjUeifmxSNvJ3pF3bzj9ty",
+    "call_sid": "CAe4704f576ddc6e742e91318708bac7c5"
    }
   ],
   "stage_c_live_ramp_cap": 8

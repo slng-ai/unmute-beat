@@ -641,6 +641,7 @@ The whole report is [session-4c.md](docs/research/reusable-core/session-4c.md).
 | `server.py`: uvicorn workers behind one port, at most five calls admitted, a busy refusal past it, each worker's own drain, clients warmed once per worker | `bot.py` ran every call in one process with no bound, and warmed its model clients per call, uncounted. |
 | `coval_sim serve --phone-number --campaign` owns the Twilio number for the whole campaign; jobs never touch it | Each job pointed the number at itself and restored it when it ended, so two jobs undid each other. |
 | A read-back the caller talked over, on a line that has proven delivery, counts against `CUT_READBACKS` (5); only a line that proves nothing keeps `READBACKS` (2). Each further piece of a joined turn adds 2 requests and tool calls, up to twice the turn's own (`TurnBudget.per_piece`) | Live call hzSdfMNn: an interruptive caller cut two copies of the number read-back and heard "please call back" while still trying; joined turns of eight pieces ran out of requests just hearing the number. |
+| A reply that records the same value the caller was just read back, and heard in full, is their yes: code says "Yes, that's the same as I read back" and carries it out (`core.graph.Restated`); a refused or changed try that turn makes it a change | Benchmark calls amAP5b4A and Tiv9sDHH: "no, it's" and the same digits in threes; the agent took it as a yes by itself, silently. |
 
 The shared SQLite files use the rollback journal, not WAL: this Python's
 SQLite (3.50.4) predates the fix for the

@@ -1,0 +1,14 @@
+agency       salon (use-cases/salon-graph)
+agent        PEivYdEtwEa65QSraG5fMQ voice-harness-salon-pipecat-twilio
+line         real Twilio: Coval dials +447427919928, owned by one campaign (serve, or this run); marks echoed
+test set     DmJJChjD: 5 case(s) CrouaBCnH22Kka5gEitnG9, PxncamaDJP4xxK5NXKSkst, QYL3i8sk8ZiXtZvL5Rf2L5, jHJdQvi5cLatL3s7D4GBoo, UysFwYC6eCZY4XjhWmyqt4
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  5 = 5 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by bot.py (MAX_CALL_SECONDS)
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  5 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        s4c-restate-R
+exit=0

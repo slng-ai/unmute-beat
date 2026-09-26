@@ -4,7 +4,7 @@ Stage C closes the six guarantee gaps the Stage B review found, gives the salon 
 
 ## Status
 
-The 20-call Coval benchmark booked correctly on every call: 20 of 20, judged from each batch's own diary file. It had 10 normal and 10 interruptive callers, five at a time, on a real Twilio line. Delivery passed on all 20 from Twilio marks. After an independent review of every transcript, **18 of 20 pass authorization and 2 fail**. In both failures the caller answered the phone-number read-back "no, it's …", restating the same digits in groups of three, and the lookup went ahead on that "no" (finding 12). The number and the booking were right in both, and each booking had its own clear yes. The only other open verdict is one completion left unknown: the caller hung up during the closing.
+The 20-call Coval benchmark booked correctly on every call: 20 of 20, judged from each batch's own diary file. It had 10 normal and 10 interruptive callers, five at a time, on a real Twilio line. Delivery passed on all 20 from Twilio marks. An independent review of every transcript, read literally, recorded **18 of 20 authorization passes and 2 fails**. In both "fails" the caller answered the phone-number read-back "no, it's …" and restated the same digits in groups of three, and the lookup went ahead. The user's rule (26 September) is that this is correct: the same number said back is a yes to it. Under that rule all 20 are right. The review files keep the literal reading. Since then code also confirms such a reply itself and says so aloud, and a targeted batch of five showed it live (finding 12). The only other open verdict is one completion left unknown: the caller hung up during the closing.
 
 | Gate | Result |
 |---|---|
@@ -17,7 +17,8 @@ The 20-call Coval benchmark booked correctly on every call: 20 of 20, judged fro
 | C4: worker failure F0-F5 | **Pass.** Dead sessions closed in ≤ 4.6 s, replacements ready in ≤ 1.8 s |
 | C4: real-model text checks | **Pass.** T1-T4 at `f823d4e` |
 | C4: live ramp | Call 1 (interruptive) **failed its task, safely**. It found two accuracy faults, both fixed and regression-tested (B4.4-B4.6). The pair and five-call steps were replaced by the benchmark, on the user's instruction |
-| Benchmark: 20 calls | **20 of 20 correct bookings.** Outcome 20, delivery 20, operational 20 pass; completion 19 pass, 1 unknown; **authorization 18 pass, 2 fail** (a phone read-back accepted on "no, it's <same digits>") |
+| Benchmark: 20 calls | **20 of 20 correct bookings.** Outcome 20, delivery 20, operational 20 pass; completion 19 pass, 1 unknown; authorization 18 pass and 2 "fail" read literally; both are the same number said back after "no", correct under the user's rule |
+| Finding 12 follow-up: 5 targeted calls | **5 of 5 correct bookings.** Same number said back: the lookup went ahead in all 3 cases, 2 with code's "Yes, that's the same as I read back"; a misspoken digit was read back again and fixed |
 
 The runner is qualified on one laptop, for at most five calls at once. That is not a production or server capacity claim.
 
@@ -34,6 +35,7 @@ The runner is qualified on one laptop, for at most five calls at once. That is n
 | Accuracy fixes | `2e5a654` (cut read-backs, joined-turn budget), `0e9414a` (drain lasts the ceiling), `a48b98a` (F0) |
 | Benchmark SHA | `a48b98a` (all 20 calls; no tracked change during the runs) |
 | Final matrix and wheel proof | `a48b98a` |
+| Same number said back (finding 12) | `6feb64b`; text-5 and batch R ran on it |
 
 ## Effective configuration
 
@@ -274,6 +276,40 @@ The one chair fits three haircuts a morning, so no two callers of a batch want t
 
 Evidence: `session-4c/live/{A,B,C,D}/` (the judge from the diary, the runner's stats every 5 s, the `load_report` output, the reviews, the bot log) and `live/perf.json`.
 
+### Finding 12 follow-up: the same number said back
+
+The user's rule: when the caller answers a read-back by saying the same value again, even after "no", the value is confirmed and the operation goes on. `6feb64b` makes that code's decision and says it aloud.
+
+```mermaid
+flowchart LR
+    R[Read-back heard in full] --> A[Caller says a number]
+    A --> C[collect]
+    C -->|same value, every try kept it| S["Yes, that's the same as I read back"]
+    S --> L[Operation runs]
+    C -->|different value| B[Read back again]
+```
+
+1. The read-back played in full: its Twilio mark came back before the caller spoke.
+2. The caller says a number. The `verify` prompt asks the agent to record it with `collect` and call nothing else.
+3. Code compares the recorded value with the read-back. It counts as the same only if every try at the operation's fields this turn kept the value (`_tries`, `_kept`). A refused "half nine" or a change and back is a change.
+4. The same value: code binds the approval to that exact question, says `Locale.restated`, and runs the operation through the same path as the agent's own call (`core.graph.Restated`).
+5. A different value: it is read back again, as before. A read-back nobody heard is never confirmed this way.
+
+Offline: core F5 (four cases) and salon `the_same_number_said_back_is_a_yes`. Turning off the restatement, or the guard, makes F5 fail. The pinned `verify` request was re-blessed, and only step 3 of its prompt changed. The native builds keep copies of the salon prompts; they were not changed, because the native baseline is frozen.
+
+Live text: text-5 at `6feb64b` passed T1-T4 (97,112 tokens).
+
+Live voice: batch R, run `gVH4ML72`, five normal callers at once on a fresh diary, set `DmJJChjD` (`coval-restate.v1.json`), 5 calls from the repair pool.
+
+| Case | What the caller did | What happened |
+|---|---|---|
+| restate-3, restate-4 | "No, it's …" with the same digits | Code: "Yes, that's the same as I read back. Thanks, I have you." |
+| restate-1 | the same | The agent called the lookup itself, with no `collect`. The same number, so correct under the user's rule, but nothing extra was said |
+| restate-2 | the same, but STT added a digit | The digits did not fit; the bot asked which part was wrong, read the right number back, and got a yes |
+| correct-5 | misspoke a digit, then corrected it | The corrected number was read back and got a yes. Nothing for the misspoken number |
+
+All 5 booked correctly from the diary, and delivery passed on all 5. There was no fallback, no exhausted turn and no blocked claim. Evidence: `live/R/`.
+
 ## Findings
 
 1. **Cut read-backs spent the line-fault limit.** Found live, fixed and regression-tested (above).
@@ -287,7 +323,7 @@ Evidence: `session-4c/live/{A,B,C,D}/` (the judge from the diary, the runner's s
 9. **What an earlier call owes is known only once the caller is.** `take_owed` now runs when the identity becomes known, not only at open (O9).
 10. **A call that writes no intent cannot be bound by evidence.** Call 1 wrote none, so `coval_sim` said "unknown" and it was bound by hand from the runner's record. That is the designed answer.
 11. **The goodbye closes 0.4 s after its last audio is sent** (batch C, 20:41:29.646 to 20:41:30.022). Pipecat sends audio at real-time pace, so at most a short tail can be lost. Not checked against a recording; worth one listen in Stage D.
-12. **A phone read-back grouped differently from the caller's words invites a "no", and the model can take "no, it's <same digits>" as a yes.** Seen in 2 of 10 normal benchmark calls. The read-back uses the Spanish grouping (`671 51 01 05`), while callers say the number in threes (`671 510 105`). The caller hears a mismatch and answers "no, it's …" with the same digits. The `verify` prompt says only "a clear yes to those digits" approves, but its model read the matching digits as agreement, and code accepts the model's reading. The effect was correct both times, so no wrong number was used, but a "no" must never approve. Open. Two changes would close it: read the number back in the caller's own grouping, and treat any reply that restates the number as a correction to read back again. The second is a `verify` prompt change and needs live checks.
+12. **A phone read-back grouped differently from the caller's words invites a "no", and the model can take "no, it's <same digits>" as a yes.** Seen in 2 of 10 normal benchmark calls. The read-back uses the Spanish grouping (`671 51 01 05`), while callers say the number in threes (`671 510 105`). The caller hears a mismatch and answers "no, it's …" with the same digits. The `verify` prompt says only "a clear yes to those digits" approves, but its model read the matching digits as agreement, and code accepts the model's reading. The effect was correct both times. **The user's rule:** if the number said back is the same, it is correct, and the lookup starts. Now implemented in `6feb64b` (below): code confirms a same-value reply and says so. Not changed: the read-back grouping.
 
 ## N1-N13 at the final code
 
@@ -303,7 +339,7 @@ Evidence: `session-4c/live/{A,B,C,D}/` (the judge from the diary, the runner's s
 | Worker loss and replacement | yes | F0-F2, F5 | not run live (the five-call kill step was replaced by the benchmark) |
 | One campaign per number, given back | yes | `test_campaign` | 5 campaigns, the number given back each time |
 | Correct bookings for normal callers | yes | T1-T4, ramp | 10 of 10 |
-| A read-back approved only by a yes | yes | B4.1-B4.5, test_nodes | **18 of 20**: 2 phone read-backs approved on "no, it's <same digits>" (finding 12) |
+| A read-back approved only by a yes, or by the same value said back | yes | B4.1-B4.5, F5, the_same_number_said_back_is_a_yes | 20 of 20 under the user's rule (18 of 20 read literally); 5 of 5 in the targeted batch |
 | Correct bookings for interruptive callers | yes | B4.1-B4.6, ramp | 10 of 10 after the fixes (call 1 before them: 0 of 1, safe) |
 | No sustained memory growth | no | failed | not measured long enough live |
 | N12 trace rule | no | failed | |
@@ -314,28 +350,28 @@ Unproven: a worker kill during live calls; memory beyond one batch of live calls
 
 | Pool | Allowed | Used before Stage C | Used in Stage C | Left |
 |---|---|---|---|---|
-| Coval repair (targeted) | 20 | 3 | 1 (call 1) | 16 |
-| Stage C live ramp cap, inside the repair pool | 8 | | 1 | 7 |
+| Coval repair (targeted) | 20 | 3 | 6 (call 1, batch R) | 11 |
+| Stage C live ramp cap, inside the repair pool | 8 | | 6 | 2 |
 | Candidate final normal | 20 | 0 | 10 (benchmark A, C) | 10 |
 | Candidate final interruptive | 20 | 0 | 10 (benchmark B, D) | 10 |
 | Native normal top-up | 10 | 0 | 0 | 10 |
 | Native interruptive top-up | 12 | 0 | 0 | 12 |
-| **All new Coval calls** | **82** | 3 | 21 | **58** |
-| Text tokens | 500,000 (raised from 250,000 by the user) | 186,792 | 90,446 | 222,762 |
-| Text requests | no separate cap | 82 | 40 | |
+| **All new Coval calls** | **82** | 3 | 26 | **53** |
+| Text tokens | 500,000 (raised from 250,000 by the user) | 186,792 | 187,558 | 125,650 |
+| Text requests | no separate cap | 82 | 82 | |
 
 The ledger is `session-4c/budget.json`. No paid rescoring and no extra metric ran: every Coval run used the agent's one metric, Turn Count.
 
 ## Stage D handoff
 
-**Where to start.** Branch `feat/session-4c-mac`, stacked on PR #21 (`feat/session-4b-runtime`). The benchmark ran at `a48b98a`. Read this report, `session-4c/budget.json` and the stability plan.
+**Where to start.** Branch `feat/session-4c-mac`, stacked on PR #21 (`feat/session-4b-runtime`). The benchmark ran at `a48b98a`; the same-value confirmation (`6feb64b`) is the latest runtime change, checked by text-5 and batch R. Read this report, `session-4c/budget.json` and the stability plan.
 
 **Decide first (the user's call):**
 
 1. Whether the 20 benchmark calls count toward Stage D's cohorts. They ran on one revision (`a48b98a`) with a frozen speech profile, and they used 10 of each reserved cohort. If Stage D freezes `a48b98a`, or a later SHA with no runtime change, they can count, and 10 + 10 fresh calls complete the 20 + 20. If Stage D changes the runtime (for example rendered `verify`), only 10 + 10 remain in the reserved pools for a fresh 20 + 20, so the allowance needs a decision.
-2. How to fix finding 12, and whether to fix finding 3 with it. Both touch the `verify` step. They need offline regressions, live text checks, and a targeted batch of normal callers from the repair pool (16 left).
+2. Whether to fix finding 3 (the `verify` step can say a digit read-back in model words). Finding 12 is closed under the user's rule.
 
-**Frozen configuration for the cohort:** the SHA above; `uv.lock` unchanged (pydantic 2.13.5, pydantic-ai-slim and pydantic-graph 2.46.0, pipecat-ai 1.11.0, langfuse 4.15.4); `salon/agent.yaml` and `salon/prompts/` as at that SHA; `session-3/speech-profile.v1.env`; VAD stop 0.3 s, smart-turn v3; two workers, `MAX_CALLS=5`, `MAX_CALL_SECONDS=300`; test sets `2P6J33TP` and `CHPwoXJf`, personas `MUFJdYAH` and `VSruLZYY`; agent `PEivYdEt` dialling +447427919928; batches of five on a fresh diary.
+**Frozen configuration for the cohort:** the latest runtime SHA (`6feb64b` at this handoff; the benchmark ran at `a48b98a`, before the same-value confirmation); `uv.lock` unchanged (pydantic 2.13.5, pydantic-ai-slim and pydantic-graph 2.46.0, pipecat-ai 1.11.0, langfuse 4.15.4); `salon/agent.yaml` and `salon/prompts/` as at that SHA; `session-3/speech-profile.v1.env`; VAD stop 0.3 s, smart-turn v3; two workers, `MAX_CALLS=5`, `MAX_CALL_SECONDS=300`; test sets `2P6J33TP` and `CHPwoXJf`, personas `MUFJdYAH` and `VSruLZYY`; agent `PEivYdEt` dialling +447427919928; batches of five on a fresh diary.
 
 **Resume commands** (from `use-cases/concierge-tools`):
 
@@ -353,6 +389,6 @@ uv run --env-file ../../.env python load_report.py <RUN_ID> --out <dir> --call <
 
 Pass the same `--log` to `serve` and `run`: the campaign record lives beside it, and a `run` that cannot find it refuses to touch the number. Stop `serve` with SIGTERM to the Python process, not its `uv` wrapper. Run Coval CLI help only with `COVAL_API_KEY` unset.
 
-**Open failures:** a phone read-back approved on "no, it's <same digits>" in 2 of 20 benchmark calls (finding 12: fix before the freeze); N12 trace rule; native memory growth; `verify` prose read-back (finding 3); a live worker kill not yet run.
+**Open failures:** N12 trace rule; native memory growth; `verify` prose read-back (finding 3); a live worker kill not yet run.
 
 **Native top-ups:** 10 normal and 12 interruptive remain. Before any, check each of the historical 10 + 8 native calls for eligibility: the exact case and persona content, speech, model, voice and VAD settings, source digest, deadlines, metric definitions and evidence. The historical calls ran on Coval's simulated websocket, not a real Twilio line, so they are not comparable with this benchmark. A fair comparison needs native calls on the same real line. Do not change native to make a row pass.

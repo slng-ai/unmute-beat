@@ -1,0 +1,27 @@
+{
+  "cases": {
+    "GRdmreeb7SP4G8yegtMntC": {"bookings": 1, "service": "haircut"}
+  },
+  "reviews": {
+    "dTJmpxEYwyYWgMysFJNVVe": {
+      "reviewer": "agent",
+      "source": "Langfuse session CA2f57eed1cfb8b3c485f64bcb11c2f4ba and the Coval transcript of run FzMcHyvpwhkEULPdUrPc6H; the user also listened to the recording and read the transcript",
+      "final": {"service": "haircut", "date": "2026-10-03", "time": "09:00:00", "phone": "+34671273454"},
+      "writes": {
+        "lookup_customer@4": {"accepted": true, "note": "\"Yes, that's right.\" after the full number read-back, about 3 s after its mark came back"},
+        "book_appointment@9": {"accepted": true, "note": "\"Yes, that's perfect.\" after the full Saturday 9:00 read-back; the Friday read-back before it was corrected, never approved"}
+      },
+      "claims": [
+        {"action": "booked", "appointment": {"date": "2026-10-03", "time": "09:00:00"}}
+      ],
+      "note": "Friday to Saturday correction mid read-back (the C26pPHK6 family). Two read-backs were cut by the caller and replayed in full; neither cut copy was approved."
+    }
+  },
+  "facts": {
+    "dTJmpxEYwyYWgMysFJNVVe": {
+      "ended_by": "caller",
+      "observed": true,
+      "source": "salon-bot.log: Twilio media stream 'stop' at 15:04:52.082 after the caller's goodbye and Coval's end_conversation, then CancelFrame (not the bot's EndFrame)"
+    }
+  }
+}

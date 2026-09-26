@@ -1073,6 +1073,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument('--saved', type=Path, help='judge this export instead of reading Coval and Langfuse')
     parser.add_argument(
+        '--call',
+        action='append',
+        default=[],
+        metavar='SIMULATION=CALL_SID',
+        help='the call SID of a simulation Coval reports none for (a phone line: coval_sim prints them)',
+    )
+    parser.add_argument(
         '--save', type=Path, help='also write what was read, for --saved later (private: speech)'
     )
     args = parser.parse_args(argv)
@@ -1092,12 +1099,19 @@ def main(argv: list[str] | None = None) -> int:
             for row in json.loads(args.saved.read_text())
         ]
     else:
+        bound = dict(pair.split('=', 1) for pair in args.call if '=' in pair)
+        if len(bound) != len(args.call):
+            parser.error('--call takes SIMULATION=CALL_SID')
         coval = CovalClient(os.environ.get('COVAL_API_KEY', ''))
-        calls = [
-            (run, sim, fetch(sim.call_sid) if sim.call_sid else [])
-            for run in args.runs
-            for sim in coval.simulations(run)
-        ]
+        sims = [(run, sim) for run in args.runs for sim in coval.simulations(run)]
+        for _, sim in sims:
+            if sim.simulation_id in bound:
+                if sim.call_sid and sim.call_sid != bound[sim.simulation_id]:
+                    parser.error(f'--call {sim.simulation_id}: Coval already names call {sim.call_sid}')
+                sim.call_sid = bound.pop(sim.simulation_id)
+        if bound:
+            parser.error(f'--call names no simulation of these runs: {", ".join(bound)}')
+        calls = [(run, sim, fetch(sim.call_sid) if sim.call_sid else []) for run, sim in sims]
     if args.save:
         rows = [
             {'run': run, 'simulation': sim.model_dump(mode='json'), 'observations': [to_json(o) for o in obs]}

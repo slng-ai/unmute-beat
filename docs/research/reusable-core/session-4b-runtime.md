@@ -242,7 +242,44 @@ Open. Final commands and results are filled in at the end.
 
 ## Performance
 
-Open.
+All numbers come from one machine (Apple silicon, macOS), with the same scripted models, cases and warmups.
+
+**N12, the frozen timing gate.** This is `python -m matrix time`: 3 warmups, 20 repetitions, delays 0 and 0.05 s. The candidate and the parent `c07891a` ran back to back with nothing else running (`session-4b-runtime/timing/candidate.json` and `parent-c07891a.json`). The rule is native + max(5 ms, 25%) per turn and for the trace, with a 50 ms ceiling on any harness turn.
+
+| Delay 0 | Turn 1 | Turn 2 | Turn 3 | Turn 4 | Turn 5 | Trace | Largest harness turn |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| native | 7.0 | 8.2 | 30.4 | 6.3 | 6.7 | 58.5 | - |
+| harness, candidate | 11.9 | 17.7 | 46.0 | 17.1 | 16.3 | 107.3 | 48.8 |
+| harness, parent | 12.6 | 17.2 | 45.7 | 16.7 | 15.7 | 107.0 | 47.6 |
+
+All values are milliseconds, the median of the last output.
+
+- The verdict is **failed at both commits**, for the same reason. Turns 2 to 5 and the trace are outside tolerance. The 50 ms ceiling holds.
+- Stage B moved the trace by 0.3 ms. Model requests are identical: 7 agent, 0 classifier.
+- The gap to native, about 10 ms per turn, was profiled with `cProfile` over the same trace. It sits in the event loop's scheduling of the Pipecat pipeline and Pydantic AI's run machinery, not in core's own code. That profile's harness CPU is about 4 to 8 ms per turn.
+- **N12 remains an unresolved gate**, as it was before Stage B. Closing it needs a change in how a turn is scheduled, not a repair in this stage. The thresholds were not changed.
+
+**Core overhead** (`session-4b-runtime/bench.py`, run from each tree's `use-cases/salon-graph`, 20 runs after 3 warmups; `timing/bench-*.json`):
+
+| | Parent `c07891a` | Candidate |
+|---|---:|---:|
+| Cold: interpreter start to compiled salon flow | 0.498 s | 0.499 s |
+| Turn 1 (collect, options): wall / CPU | 10.06 / 7.72 ms | 9.97 / 7.64 ms |
+| Turn 2 (the read-back): wall / CPU | 4.84 / 3.75 ms | 5.23 / 4.02 ms |
+| Turn 3 (the booking): wall / CPU | 5.28 / 4.13 ms | 5.43 / 4.27 ms |
+| Model requests per turn | 3, 1, 1 | 3, 1, 1 |
+| Instructions per request | 6,510 / 6,484 / 6,631 B | same |
+| History on the booking turn | 38,165 B | 38,567 B (+402 B) |
+
+**Zero added model calls.**
+
+- There is no consent classifier, completion judge, retry planner or summarizer.
+- Reconciliation and receipt replay run with no model (`LocalAction`).
+- A goodbye beside a waiting read-back costs one retry, and only in that case.
+- A recap given as its words instead of its reference now costs none (seen once in text-1 T2, repaired).
+- A plain domain function now runs in a worker thread, which keeps a database or HTTP call off the audio loop. That costs a thread hop per write, under 0.4 ms here.
+
+**Not measured in Stage B.** These need a live voice run or Stage C: endpointing, STT, TTS, playback acknowledgement latency on a real network, time to useful speech, and interruption stop latency. The targeted Coval call reports what it can below. A narrow cohort cannot establish the 2.7 s p90 target.
 
 ## Live checks
 

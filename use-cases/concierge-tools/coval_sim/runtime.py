@@ -215,3 +215,25 @@ def twilio_voice_url(number: str, url: str, binary: str = 'twilio') -> Iterator[
             '--voice-method',
             method,
         )
+        now = cli('api:core:incoming-phone-numbers:list', '--phone-number', number)[0].get('voiceUrl') or ''
+        if now != previous:
+            print(f'warning: {number} voice URL is {shown(now)}, not {shown(previous)} as before', flush=True)
+
+
+def shown(url: str) -> str:
+    """A webhook URL without its query, which can hold a token: fit for a log."""
+    return url.split('?', 1)[0] or '(none)'
+
+
+CALL_SID = re.compile(r'\bCA[0-9a-f]{32}\b')
+
+
+def call_sids(log: Path) -> list[str]:
+    """The Twilio calls a bot log saw, in order.
+
+    On a phone line Coval reports no call SID of its own (session 4b run
+    FzMcHyvp), so the bot's log is the only link from a simulation to its
+    Langfuse session, which the bot keys by this SID.
+    """
+    text = log.read_text(errors='replace') if log.exists() else ''
+    return list(dict.fromkeys(CALL_SID.findall(text)))

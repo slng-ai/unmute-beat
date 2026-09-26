@@ -39,7 +39,7 @@ from coval_sim.models import (
     RunResults,
     Simulation,
 )
-from coval_sim.runtime import CONNECTED, Process, ceiling, twilio_voice_url
+from coval_sim.runtime import CONNECTED, Process, call_sids, ceiling, shown, twilio_voice_url
 
 
 class FakeCoval(CovalClient):
@@ -491,6 +491,16 @@ def test_phone_line() -> None:
         after = json.loads(state.read_text())
         assert after[0]['voiceUrl'] == 'https://old.example/voice' and after[0]['voiceMethod'] == 'GET', after
         assert after[1] == other, 'another number was touched'
+        log = Path(tmp) / 'bot.log'
+        log.write_text(
+            'start CA' + 'a' * 32 + ' ok\nagain CA' + 'a' * 32 + '\nnext CA' + 'b' * 32 + '\nCAX\n'
+        )
+        assert call_sids(log) == ['CA' + 'a' * 32, 'CA' + 'b' * 32]
+        assert call_sids(Path(tmp) / 'none.log') == []
+        assert (
+            shown('https://x.example/voice?token=secret') == 'https://x.example/voice'
+            and shown('') == '(none)'
+        )
         try:
             with twilio_voice_url('+449999999999', 'https://bot.example/', binary=str(binary)):
                 raise AssertionError('a number the account does not hold was pointed')

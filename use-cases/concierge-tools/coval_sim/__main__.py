@@ -44,7 +44,16 @@ from dotenv import dotenv_values
 
 from coval_sim.coval import CovalClient, CovalError
 from coval_sim.models import FOLDERS, Agent, Persona, SpeechProfile
-from coval_sim.runtime import NotReadyError, Process, Tunnel, answers_http, ceiling, twilio_voice_url
+from coval_sim.runtime import (
+    NotReadyError,
+    Process,
+    Tunnel,
+    answers_http,
+    call_sids,
+    ceiling,
+    shown,
+    twilio_voice_url,
+)
 
 PORT = 7860
 RUN_TIMEOUT_S = 45 * 60
@@ -493,7 +502,10 @@ class ReleaseCheck:
                     )
                     host = tunnel.host
                 if job.agent.phone_line:
-                    stack.enter_context(twilio_voice_url(job.agent.phone_number, f'https://{host}/'))
+                    previous = stack.enter_context(
+                        twilio_voice_url(job.agent.phone_number, f'https://{host}/')
+                    )
+                    print(f'{job.agent.phone_number} voice URL was {shown(previous)}; put back after the job')
                 else:
                     self.coval.update_connection(job.agent, connection(host))
                 self.runs.write(job.key, name=name, status='intent')
@@ -542,7 +554,10 @@ class ReleaseCheck:
                 log,
                 still_running=True,
             )
-        self.runs.write(job.key, name=name, status='finished', run_id=run_id, remote=run.status)
+        calls = call_sids(log) if job.agent.phone_line else []
+        self.runs.write(job.key, name=name, status='finished', run_id=run_id, remote=run.status, calls=calls)
+        if calls:
+            print(f'bot calls {" ".join(calls)} (for load_report --call SIMULATION=CALL_SID)', flush=True)
         problems = run.problems(
             self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
         )

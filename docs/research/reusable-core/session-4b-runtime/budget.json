@@ -41,11 +41,11 @@
   },
   "coval_repair_pool": {
     "calls_allowed": 20,
-    "requested": 2,
-    "placed": 2,
-    "connected": 2,
-    "terminal": 2,
-    "evidence_complete": 0,
+    "requested": 3,
+    "placed": 3,
+    "connected": 3,
+    "terminal": 3,
+    "evidence_complete": 1,
     "runs": [
       {
         "label": "s4b-B-stress-1",
@@ -74,6 +74,20 @@
           "7VHk6dTjvBcuV6XYPmaeGq"
         ],
         "result": "diagnostic, failed task, safe: Coval's simulator returned no marks (confirmed by logging); TWILIO_MARKS=absent settled every segment at real time; the simulated caller stayed silent about 20 s after each fully played read-back and answered only after the reminder, over its repeat, so the fallback fired. Test-side fault: the simulated carrier."
+      },
+      {
+        "label": "s4b-B-twilio-stress-1",
+        "run": "FzMcHyvpwhkEULPdUrPc6H",
+        "simulation": "dTJmpxEYwyYWgMysFJNVVe",
+        "call_sid": "CA2f57eed1cfb8b3c485f64bcb11c2f4ba",
+        "langfuse_session": "CA2f57eed1cfb8b3c485f64bcb11c2f4ba",
+        "source": "a72d33d",
+        "case": "GRdmreeb7SP4G8yegtMntC",
+        "persona": "VSruLZYYyz3w7fkdUaheDR",
+        "metrics": [
+          "7VHk6dTjvBcuV6XYPmaeGq"
+        ],
+        "result": "passed, all five dimensions (three rest on an agent review, coval-twilio-1-evidence.json): real Twilio line, 15 of 15 marks returned, Friday to Saturday correction mid read-back, two cut read-backs replayed in full, one booking BK0001 Saturday 2026-10-03 09:00, goodbye recap from the receipt, caller hung up (Twilio stop). Caller answered 3-4 s after each read-back. Coval reports no call SID on a phone line; bound by hand from the bot log. Agent PEivYdEtwEa65QSraG5fMQ."
       }
     ]
   },

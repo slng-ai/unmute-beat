@@ -1,7 +1,7 @@
 | Run | Call | Active after replay | Receipts | Outcome | Authorization | Delivery | Completion | Operational | Failed | Unknown |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `GYZdoiie` | `fymMyWTi` `CA09f5c095` | none | none | fail | fail | fail | pass (review:agent) | fail | outcome: 0 active appointment(s), 1 requested; authorization: lookup_customer@4: "that's two seven three four five four" did not accept the proposal; delivery: lookup_customer@4: the proposal had not played in full when it was answered; operational: ended by test runner | - |
-| `MQagmvsp` | `NdkBKGCN` `CA87afaa0f` | haircut 2026-09-26 09:00:00 | book BK0001 | unknown | unknown | unknown | unknown | fail | operational: ended by ceiling | outcome: the final day and time asked for: not reviewed; authorization: lookup_customer@3: whether "yes that's correct" accepted the proposal (not reviewed); authorization: book_appointment@9: whether "yes please that's perfect" accepted the proposal (not reviewed); delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not); delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not); completion: what the agent said it had done: its closing was not reviewed |
+| `GYZdoiie` | `fymMyWTi` `CA09f5c095` | none | none | fail | fail | fail | pass (review:agent) | fail | outcome: 0 active appointment(s), 1 requested; authorization: lookup_customer@4: "that's two seven three four five four" did not accept the proposal; delivery: lookup_customer@4: the proposal had not played in full when it was answered; operational: ended by test runner | authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit) |
+| `MQagmvsp` | `NdkBKGCN` `CA87afaa0f` | haircut 2026-09-26 09:00:00 | book BK0001 | unknown | unknown | unknown | unknown | fail | operational: ended by ceiling | outcome: the final day, time and number asked for: not reviewed; authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit); authorization: lookup_customer@3: whether "yes that's correct" accepted the proposal (not reviewed); authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit); authorization: book_appointment@9: whether "yes please that's perfect" accepted the proposal (not reviewed); delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not); delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not); completion: what the agent said it had done: its closing was not reviewed |
 
 | Dimension | Pass | Fail | Unknown | Passes resting on an agent review |
 |---|---|---|---|---|
@@ -11,7 +11,7 @@
 | completion | 1 | 0 | 1 | 1 |
 | operational | 0 | 2 | 0 | 0 |
 
-Calls: 2. Every dimension passed: 0. Any dimension failed: 2. Evidence complete: 1 of 2.
+Calls: 2. Every dimension passed: 0. Any dimension failed: 2. Evidence complete: 0 of 2.
 Calls with exactly one active appointment after replay: 1. Receipts replayed as a repeat or a change of an earlier one are not counted as appointments; this is reconstructed from trace receipts, not checked against a backend snapshot.
 
 ## Diagnostics

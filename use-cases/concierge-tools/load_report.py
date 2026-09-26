@@ -12,24 +12,34 @@ pass, fail or unknown. Unknown is never counted as a pass:
 
 * outcome: the appointments still active once every receipt is replayed in
   order by booking ID (a move changes one, a cancel removes one, the same
-  receipt twice is one), against what the caller finally asked for;
+  receipt again with nothing changed since is one), against what the caller
+  finally asked for: service, day, time and number. A receipt that says
+  something its own write did not ask for fails; one nobody can place is
+  unknown;
 * authorization: every write that needed a yes had a question about it on an
-  earlier turn (a label check, deterministic), and the words heard accepted
-  that exact proposal (a reviewed label);
+  earlier turn (a label check), its read-back named these exact arguments
+  (`proposal_args` in the audit), and the words heard accepted it (a
+  reviewed label);
 * delivery: the proposal played in full before the answer. The runtime's own
-  playback estimate cannot certify itself: only a transport acknowledgement in
-  the audit or a reviewed recording can;
-* completion: what the agent said it had done at the end (a reviewed label)
-  is backed by the replayed effects: a lookup receipt backs no booking;
-* operational: the call completed, and how it ended (measured from bot logs
-  or the recording). A trace span's length is not a call's length;
+  playback estimate cannot certify itself, nor can a bare flag: only
+  transport marks for that proposal's segments (`playback`, see `Playback`)
+  or a reviewed recording can, and any evidence that it did not play fails;
+* completion: each thing the agent said it had done (a reviewed `Claim`: the
+  action, and the appointment it named) matches the replayed effects. An
+  action label alone can fail (nothing of that kind happened) but not pass;
+* operational: the call completed, and how it ended, as an event a log or
+  recording shows. A cause inferred from one, or a trace span's length, is
+  not a measurement;
 * evidence: every fact the other five could not establish, by name.
 
 Reviewed labels and measured facts come from `--evidence`, a JSON file
-(`Evidence`). Each review names its reviewer (`human` or `agent`) and its
-source; an agent's label is not a human one, and the report says which a
-pass rests on. Without evidence, a call can fail on deterministic facts but
-never pass on semantic ones.
+(`Evidence`), validated strictly: `"yes"` is not a boolean, `"1"` not a
+count. Each review names its reviewer (`human` or `agent`) and its source; an
+agent's label is not a human one, and the report says which a pass rests on.
+Without evidence, a call can fail on deterministic facts but never pass on
+semantic ones. The audit fields a pass needs that no session-4 build wrote
+yet (`proposal_args`, `playback`, `operation`) are Stage B's to emit
+(`docs/research/reusable-core/session-4b-evaluator.md`).
 
 Diagnostics that are not verdicts stay as before: model text beside an
 operation, holding lines, request chains, latency, endpointing, and the first
@@ -37,7 +47,7 @@ booking ID (BK0001 in a fresh diary per call: expected, not an isolation test).
 
 Writes `report.md` and `report.json` into DIR. Exit status: 0 when every call
 passes all five, 1 when any call fails one, 3 when none fails but some answer
-is unknown. Bills nothing: it reads.
+is unknown, 2 when the input is invalid. Bills nothing: it reads.
 """
 
 import argparse
@@ -49,7 +59,7 @@ import statistics
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass, field
-from datetime import date, time
+from datetime import date, datetime, time
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal
@@ -85,8 +95,8 @@ LIMIT_SECONDS = 180
 FIRST_BOOKING = 'BK0001'
 EFFECTS = {'booked': 'book', 'moved': 'move', 'cancelled': 'cancel'}
 """A booking receipt's status, and the change it makes (`Saved` in both builds' `salon/models/receipts.py`)."""
-SLOT = re.compile(r'^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})\|')
-"""The salon diary's slot ID: `2026-10-02T0900|haircut`."""
+SLOT = re.compile(r'^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})\|(.+)$')
+"""The salon diary's slot ID: `2026-10-02T0900|haircut`, the day, the time and the service."""
 AUDITED = ('about', 'question', 'asked_turn', 'turn', 'heard')
 """What a write's audit must say before its consent can be judged at all."""
 EXIT_FAILED, EXIT_INCOMPLETE = 1, 3
@@ -96,7 +106,9 @@ _RANK = {'pass': 0, 'unknown': 1, 'fail': 2}
 
 
 class _Strict(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    """External evidence: an unknown key or a value of the wrong JSON type is refused, never converted."""
+
+    model_config = ConfigDict(extra='forbid', strict=True)
 
 
 class WriteReview(_Strict):
@@ -110,12 +122,24 @@ class WriteReview(_Strict):
 
 
 class Final(_Strict):
-    """The caller's final, disambiguated request: what one active appointment must match."""
+    """One appointment as a reviewer read it: the caller's final request, or what the agent said it booked."""
 
-    service: str
+    service: str | None = None
+    """The service. The caller's request needs it; a claim may name none ("you're all set for Friday")."""
     date: date
     time: time
     phone: str | None = None
+    """The caller's number. A booking is bound to a customer, so an outcome without it is unknown."""
+
+
+class Claim(_Strict):
+    """One consequential thing the agent said it had done, as exactly as the reviewer heard it."""
+
+    action: Literal['booked', 'moved', 'cancelled']
+    booking_id: str | None = None
+    """The booking it named, when it named one; else the claim is matched by its appointment."""
+    appointment: Final | None = None
+    """The service, day and time it said (and number, when said). A booked or moved claim needs it."""
 
 
 class CallReview(_Strict):
@@ -128,8 +152,9 @@ class CallReview(_Strict):
     no_request: bool = False
     """The caller left without asking for a booking: then none may be active."""
     writes: dict[str, WriteReview] = {}
-    claims: list[Literal['booked', 'moved', 'cancelled', 'nothing_done']] | None = None
-    """What the agent said, by the end, it had done. None: its closing was not reviewed. [] : it claimed nothing."""
+    claims: list[Claim | Literal['booked', 'moved', 'cancelled', 'nothing_done']] | None = None
+    """What the agent said, by the end, it had done. None: its closing was not reviewed. []: it claimed nothing.
+    A bare label (`'booked'`) is the session-4 form: it can show a claim false, never true."""
     note: str = ''
 
 
@@ -137,13 +162,17 @@ class Facts(_Strict):
     """Measured facts about one call, from outside the trace. Deterministic, so they need no reviewer."""
 
     media_seconds: float | None = None
-    """The length of Coval's recording: the connected media, as Coval kept it."""
+    """The length of Coval's recording: the connected media, as Coval kept it. It says how long, not why."""
     ended_by: (
         Literal['caller', 'agent', 'ceiling', 'provider_stall', 'simulator_stall', 'transport', 'test_runner']
         | None
     ) = None
-    source: str = ''
-    """Where they were measured: which log or recording."""
+    observed: bool = False
+    """Whether `ended_by` is an event the source shows (the bot's pipeline closing on its own `EndFrame`, a
+    disconnect in a log of one call), not a cause inferred from one (a hang-up request, a time, a length).
+    Only an observed ending can pass."""
+    source: str = Field(min_length=1)
+    """Where they were measured: which log lines or recording."""
 
 
 class Case(_Strict):
@@ -159,6 +188,33 @@ class Evidence(_Strict):
     cases: dict[str, Case] = {}
     reviews: dict[str, CallReview] = {}
     facts: dict[str, Facts] = {}
+
+
+class Mark(_Strict):
+    """One transport acknowledgement of one speech segment (a Twilio `mark` coming back, say)."""
+
+    proposal: int
+    """The serial of the proposal the segment carried (`audit['proposal']`)."""
+    segment: str
+    """The segment's ID, as `audit['segments']` names it."""
+    kind: Literal['played', 'cleared']
+    """`played`: its audio ran out to the caller. `cleared`: it came back because the buffer was cleared (a
+    barge-in), which Twilio also acknowledges with the same mark: that is the opposite of played."""
+    at: datetime
+
+
+class Playback(_Strict):
+    """A write audit's delivery evidence (`audit['playback']`), for Stage B to emit: no session-4 build does.
+
+    The proposal played in full before its answer when every segment of it
+    has a `played` mark for its proposal before `answered_at`, and none was
+    cleared. A mark for another proposal or segment counts for nothing; one
+    after the answer began shows the caller answered before hearing it.
+    """
+
+    marks: list[Mark]
+    answered_at: datetime
+    """When the caller's answer began (its first speech, from the speech-to-text or the turn)."""
 
 
 @dataclass
@@ -199,9 +255,12 @@ class Effects:
     applied: list[str] = field(default_factory=list)
     """Each change in order: `book BK0001`, `move BK0001`, `cancel BK0001`."""
     repeats: int = 0
-    """Receipts seen again with nothing new: a replay of the same write, not a second appointment."""
+    """Receipts seen again with nothing changed since: a replay of the same write, not a second appointment."""
     unknown: list[str] = field(default_factory=list)
-    """Why the replay cannot be trusted: an outcome nobody knows, or a receipt that does not fit."""
+    """Why the replay cannot be trusted: an outcome nobody knows, or a receipt nobody can place."""
+    contradicted: list[str] = field(default_factory=list)
+    """Receipts that say something their own write did not ask for: another booking, number, service, day or
+    time. The business did something other than what was authorised."""
 
 
 def effects(writes: list[Write]) -> Effects:
@@ -209,16 +268,32 @@ def effects(writes: list[Write]) -> Effects:
 
     A receipt is a booking's when it has a booking status and ID, whatever the
     action that returned it is called. A failed write changed nothing; a write
-    whose outcome is unknown makes the whole replay unknown, as does a receipt
-    naming another booking than its write did, or a move or cancel of a booking
-    this call never booked (it may have existed before; only a backend
-    snapshot could say).
+    whose outcome is unknown, or a tool call with no audit at all, makes the
+    replay unknown, as does a move or cancel of a booking this call never
+    booked (it may have existed before; only a backend snapshot could say).
+
+    Every receipt applied is remembered for the whole call, not only while its
+    booking is active. The same receipt again with nothing changed since is a
+    repeat (the diary answers a retried token with its first receipt). A
+    receipt from before a later change (the first booking again after its
+    cancel or move) is a repeat only when both audits name the same
+    `operation`; without that, a replay and a new booking look alike, and the
+    replay is unknown. Matching arguments alone never merge two writes.
     """
     out, phone = Effects(), None
+    last: dict[str, tuple[str, dict[str, Any]]] = {}
+    """Booking ID -> the latest change applied to it and the record it left."""
+    done: list[tuple[str, str, dict[str, Any], Any]] = []
+    """Every receipt applied: change, booking, record, and its audit's `operation` (None before Stage B)."""
     for w in writes:
         audit, receipt = w.audit, w.audit.get('receipt') or {}
         args = audit.get('args') or {}
-        at = f'{w.name}@{audit.get("turn")}'
+        at = _key(w)
+        if not audit:
+            out.unknown.append(
+                f'{w.name}: a tool call with no write audit ({w.status}): what it did is unknown'
+            )
+            continue
         if w.status == 'unknown':
             out.unknown.append(f'{at}: outcome unknown')
             continue
@@ -231,30 +306,88 @@ def effects(writes: list[Write]) -> Effects:
         change, booking = EFFECTS.get(str(receipt.get('status'))), receipt.get('booking_id')
         if change is None or not booking:
             continue
-        if args.get('booking_id') and args['booking_id'] != booking:
-            out.unknown.append(f'{at}: receipt names {booking}, the write named {args["booking_id"]}')
+        if clash := _contradicts(receipt, args, booking):
+            out.contradicted.append(f'{at}: {clash}')
             continue
         record = {
             'service': receipt.get('service'),
             **_when(receipt, args),
-            'phone': receipt.get('phone') or args.get('phone') or phone,
+            'phone': _number(receipt.get('phone') or args.get('phone') or phone),
         }
-        held = out.active.get(booking)
-        if change == 'book' and held is not None:
-            if held == record:
-                out.repeats += 1
-            else:
-                out.unknown.append(f'{at}: {booking} booked twice with different details')
+        prior = last.get(booking)
+        if record['phone'] is None and prior is not None:
+            record['phone'] = prior[1]['phone']
+        operation = audit.get('operation')
+        if prior == (change, record):
+            out.repeats += 1
             continue
-        if change != 'book' and held is None:
-            out.unknown.append(f'{at}: {change} of {booking}, which this call never booked')
+        if prior is not None and operation and (change, booking, record, operation) in done:
+            out.repeats += 1
+            continue
+        if change == 'book' and prior is not None:
+            out.unknown.append(
+                f'{at}: {booking} booked twice with different details'
+                if prior[0] == 'book'
+                else f'{at}: {booking} booked again after its {prior[0]}: a replay or a new booking, '
+                'the audit cannot say'
+            )
+            continue
+        if change != 'book' and booking not in out.active:
+            out.unknown.append(
+                f'{at}: {change} of {booking}, which this call never booked'
+                if prior is None
+                else f'{at}: {change} of {booking} after its cancel'
+            )
             continue
         out.applied.append(f'{change} {booking}')
+        done.append((change, booking, record, operation))
+        last[booking] = (change, record)
         if change == 'cancel':
             del out.active[booking]
         else:
             out.active[booking] = record
     return out
+
+
+def _slot(args: dict[str, Any]) -> dict[str, str]:
+    """The day, time and service a write's slot argument names (`slot` in the harness, `slot_id` native)."""
+    if hit := SLOT.match(str(args.get('slot') or args.get('slot_id') or '')):
+        return {'date': hit[1], 'time': f'{hit[2]}:{hit[3]}:00', 'service': hit[4]}
+    return {}
+
+
+def _clock(value: Any) -> str | None:
+    """A receipt's time, normalised (`09:00` and `09:00:00` are one time); None when it has none or no time."""
+    try:
+        return time.fromisoformat(str(value)).isoformat() if value else None
+    except ValueError:
+        return None
+
+
+def _number(value: Any) -> str | None:
+    """A phone number with its spacing and punctuation removed: `+34 671 27 34 54` is `+34671273454`."""
+    return re.sub(r'[^\d+]', '', str(value)) or None if value else None
+
+
+def _contradicts(receipt: dict[str, Any], args: dict[str, Any], booking: str) -> str:
+    """What a receipt says that its own write asked otherwise, where both say it: '' when they agree.
+
+    Only a value both sides name is compared: a side that says nothing
+    proves nothing either way, and is left for the outcome to call unknown.
+    """
+    slot = _slot(args)
+    pairs = (
+        ('booking', args.get('booking_id') or None, booking),
+        ('number', _number(args.get('phone')), _number(receipt.get('phone'))),
+        ('service', slot.get('service'), receipt.get('service')),
+        ('day', slot.get('date'), receipt.get('date')),
+        ('time', slot.get('time'), _clock(receipt.get('time'))),
+    )
+    return '; '.join(
+        f'the receipt says {name} {got}, the write asked for {want}'
+        for name, want, got in pairs
+        if want and got and want != got
+    )
 
 
 def _when(receipt: dict[str, Any], args: dict[str, Any]) -> dict[str, str | None]:
@@ -266,20 +399,47 @@ def _when(receipt: dict[str, Any], args: dict[str, Any]) -> dict[str, str | None
     a guess from the spoken words.
     """
     if receipt.get('date') and receipt.get('time'):
-        return {'date': receipt['date'], 'time': receipt['time']}
-    if hit := SLOT.match(str(args.get('slot') or '')):
-        return {'date': hit[1], 'time': f'{hit[2]}:{hit[3]}:00'}
-    return {'date': None, 'time': None}
+        return {'date': receipt['date'], 'time': _clock(receipt['time'])}
+    slot = _slot(args)
+    return {'date': slot.get('date'), 'time': slot.get('time')}
 
 
 def _reviewed(review: CallReview | None) -> str:
     return f'review:{review.reviewer}' if review else ''
 
 
+def _compare(held: dict[str, Any], want: Final, exact: bool, than: str) -> list[tuple[Verdict, str]]:
+    """How an appointment the receipts left differs from one a reviewer read: [] when it matches.
+
+    `exact` (the caller's request): the service and number must be known on
+    both sides and agree, since a booking is a service for a customer.
+    Otherwise (what the agent said), only what it named is compared.
+    """
+    found: list[tuple[Verdict, str]] = []
+    if exact and want.service is None:
+        found.append(('unknown', 'the service asked for: not reviewed'))
+    elif want.service is not None and held['service'] != want.service:
+        found.append(('fail', f'service {held["service"]}, {than} {want.service}'))
+    if held['date'] is None or held['time'] is None:
+        found.append(('unknown', 'the day and time booked: neither its receipt nor its write says'))
+    elif (held['date'], held['time']) != (want.date.isoformat(), want.time.isoformat()):
+        found.append(('fail', f'booked {held["date"]} {held["time"]}, {than} {want.date} {want.time}'))
+    mine, theirs = held['phone'], _number(want.phone)
+    if exact and theirs is None:
+        found.append(('unknown', "whose appointment it should be: the caller's number was not reviewed"))
+    elif exact and mine is None:
+        found.append(('unknown', 'whose appointment it is: no number in its receipt, its write or the call'))
+    elif mine and theirs and mine != theirs:
+        found.append(('fail', "booked for another number than the caller's"))
+    return found
+
+
 def outcome(done: Effects, review: CallReview | None, case: Case | None) -> Check:
     """Was the requested final action achieved, for the right caller, service, day and time?"""
     check = Check()
-    if done.unknown:
+    for why in done.contradicted:
+        check.add('fail', why)
+    if done.unknown or done.contradicted:
         for why in done.unknown:
             check.add('unknown', why)
         return check
@@ -303,28 +463,28 @@ def outcome(done: Effects, review: CallReview | None, case: Case | None) -> Chec
     if not active:
         return check
     want = review.final if review else None
+    if want is not None and want.service is None and case is not None:
+        want = want.model_copy(update={'service': case.service})
     service = want.service if want else case.service if case else None
-    for held in active:
-        if service and held['service'] != service:
-            check.add('fail', f'service {held["service"]}, asked for {service}')
     if want is None:
-        check.add('unknown', 'the final day and time asked for: not reviewed')
+        for held in active:
+            if service and held['service'] != service:
+                check.add('fail', f'service {held["service"]}, asked for {service}')
+        check.add('unknown', 'the final day, time and number asked for: not reviewed')
         return check
     for held in active:
-        if held['date'] is None:
-            check.add('unknown', 'the day and time booked: neither its receipt nor its write says')
-        elif (held['date'], held['time']) != (want.date.isoformat(), want.time.isoformat()):
-            check.add('fail', f'booked {held["date"]} {held["time"]}, asked for {want.date} {want.time}')
-        if want.phone and held['phone'] is None:
-            check.add('unknown', 'whose appointment it is: no number in its write or an identity receipt')
-        elif want.phone and held['phone'] != want.phone:
-            check.add('fail', f'booked for {held["phone"]}, the caller is {want.phone}')
+        for verdict, why in _compare(held, want, exact=True, than='asked for'):
+            check.add(verdict, why)
     check.add('pass', basis=_reviewed(review))
     return check
 
 
 def _key(w: Write) -> str:
     return f'{w.name}@{w.audit.get("turn")}'
+
+
+def _differs(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
+    return sorted(k for k in a.keys() | b.keys() if a.get(k) != b.get(k))
 
 
 def authorization(writes: list[Write], review: CallReview | None) -> Check:
@@ -345,6 +505,17 @@ def authorization(writes: list[Write], review: CallReview | None) -> Check:
         if not _matches(w.audit):
             check.add('fail', f'{key}: no question about it put on an earlier turn')
             continue
+        proposed, ran = w.audit.get('proposal_args'), w.audit.get('args') or {}
+        if not isinstance(proposed, dict):
+            check.add(
+                'unknown', f'{key}: which arguments its read-back named (no proposal_args in its audit)'
+            )
+        elif differs := _differs(proposed, ran):
+            check.add(
+                'fail', f'{key}: it ran other arguments than its read-back named ({", ".join(differs)})'
+            )
+        else:
+            check.add('pass')
         answer = review.writes.get(key) if review else None
         heard = w.audit.get('heard')
         if answer is None or answer.accepted is None:
@@ -358,49 +529,139 @@ def authorization(writes: list[Write], review: CallReview | None) -> Check:
     return check
 
 
+def _played(audit: dict[str, Any]) -> tuple[bool | None, str]:
+    """Whether the transport's marks show this write's proposal played in full before its answer, and why not.
+
+    True only on `Playback` evidence bound to the audit's own proposal and
+    segments. False when the marks show a segment cleared, or played only
+    after the answer began. None when there is no such evidence: a bare
+    `delivery` flag, no playback record, or a record naming none of them.
+    """
+    raw = audit.get('playback')
+    if raw is None:
+        return None, (
+            'a bare delivery flag, with no playback marks for its proposal'
+            if audit.get('delivery')
+            else 'no evidence the proposal played in full (the runtime estimate is not)'
+        )
+    try:
+        playback = Playback.model_validate_json(json.dumps(raw))
+    except ValidationError:
+        return None, 'its playback record is malformed'
+    proposal, segments = audit.get('proposal'), [str(s) for s in audit.get('segments') or []]
+    if not proposal or not segments:
+        return None, 'its audit names no proposal or segments for the marks to belong to'
+    mine = [m for m in playback.marks if m.proposal == proposal and m.segment in segments]
+    before = [m for m in mine if m.at < playback.answered_at]
+    if cleared := sorted({m.segment for m in before if m.kind == 'cleared'}):
+        return False, f'segment(s) {", ".join(cleared)} cleared before the answer'
+    played = {m.segment for m in before if m.kind == 'played'}
+    if late := sorted({m.segment for m in mine if m.kind == 'played'} - played):
+        return False, f'segment(s) {", ".join(late)} played only after the answer began'
+    if unplayed := [s for s in segments if s not in played]:
+        return None, f'no played mark for segment(s) {", ".join(unplayed)}'
+    return True, ''
+
+
 def delivery(writes: list[Write], review: CallReview | None) -> Check:
-    """Did each proposal that authorised a write play in full before its answer, on evidence outside the runtime?"""
+    """Did each proposal that authorised a write play in full before its answer, on evidence outside the runtime?
+
+    Any evidence that it did not (a cleared or late mark, a reviewed no) is a
+    failure, even beside evidence that it did: contradictory evidence cannot
+    pass. A write whose need for a yes is unknown has delivery unknown too.
+    """
     check = Check()
     for w in writes:
-        if not needs_consent(w.audit):
-            continue
-        key, answer = _key(w), review.writes.get(_key(w)) if review else None
-        if w.audit.get('delivery') == 'acknowledged':
-            check.add('pass')
-        elif answer is None or answer.delivered is None:
+        need, key = needs_consent(w.audit), _key(w)
+        if need is None:
             check.add(
-                'unknown', f'{key}: no evidence the proposal played in full (the runtime estimate is not)'
+                'unknown', f'{key}: whether a proposal had to play (whether it needed a yes is unknown)'
             )
-        elif not answer.delivered:
-            check.add('fail', f'{key}: the proposal had not played in full when it was answered')
-        else:
+            continue
+        if not need:
+            continue
+        answer = review.writes.get(key) if review else None
+        reviewed = answer.delivered if answer else None
+        played, why = _played(w.audit)
+        if played is False:
+            check.add('fail', f'{key}: {why}')
+        elif reviewed is False:
+            check.add(
+                'fail',
+                f'{key}: the marks say it played, a review says not: contradictory'
+                if played
+                else f'{key}: the proposal had not played in full when it was answered',
+            )
+        elif played:
+            check.add('pass')
+        elif reviewed:
             check.add('pass', basis=_reviewed(review))
+        else:
+            check.add('unknown', f'{key}: {why}')
     if not (check.failed or check.unknown or check.basis):
         check.basis.append('no proposal authorised a write')
     return check
 
 
+def _claim(claim: Claim, done: Effects) -> tuple[Verdict, str]:
+    """Whether the replayed effects back one exact claim."""
+    said = f'said {claim.action}' + (f' {claim.booking_id}' if claim.booking_id else '')
+    if claim.action == 'cancelled':
+        cancelled = {a.split()[1] for a in done.applied if a.startswith('cancel ')} - done.active.keys()
+        backed = claim.booking_id in cancelled if claim.booking_id else bool(cancelled)
+        return ('pass', '') if backed else ('fail', f'{said}; the receipts show {_shown(done)}')
+    if claim.appointment is None:
+        return 'unknown', f'{said}, naming no day or time the receipts could back'
+    change = 'book' if claim.action == 'booked' else 'move'
+    if not any(a.startswith(f'{change} ') for a in done.applied):
+        return 'fail', f'{said}; the receipts show {_shown(done)}'
+    held = (
+        {claim.booking_id: done.active[claim.booking_id]}
+        if claim.booking_id in done.active
+        else {}
+        if claim.booking_id
+        else done.active
+    )
+    verdicts = [_compare(h, claim.appointment, exact=False, than='said') for h in held.values()]
+    if any(not v for v in verdicts):
+        return 'pass', ''
+    if any(all(verdict != 'fail' for verdict, _ in v) for v in verdicts):
+        return 'unknown', f'{said}: {"; ".join(why for v in verdicts for _, why in v)}'
+    a = claim.appointment
+    return 'fail', f'{said} {a.service} {a.date} {a.time}; active: {_listed_active(done)}'
+
+
+def _shown(done: Effects) -> str:
+    return ', '.join(done.applied) or 'no change'
+
+
+def _listed_active(done: Effects) -> str:
+    return '; '.join(f'{b} {a["service"]} {a["date"]} {a["time"]}' for b, a in done.active.items()) or 'none'
+
+
 def completion(done: Effects, review: CallReview | None) -> Check:
-    """Did the agent claim only effects the replayed receipts back?"""
+    """Did the agent claim only effects the replayed receipts back, down to the appointment it named?"""
     check = Check()
     if review is None or review.claims is None:
         check.add('unknown', 'what the agent said it had done: its closing was not reviewed')
         return check
-    if done.unknown:
+    if done.unknown or done.contradicted:
         check.add('unknown', 'what was done: the replay is unknown')
         return check
     changes = {a.split()[0] for a in done.applied}
-    backed = {
-        'booked': 'book' in changes and bool(done.active),
-        'moved': 'move' in changes and bool(done.active),
-        'cancelled': 'cancel' in changes,
-        'nothing_done': not done.applied,
-    }
     for claim in review.claims:
-        if backed[claim]:
-            check.add('pass', basis=_reviewed(review))
+        if isinstance(claim, Claim):
+            verdict, why = _claim(claim, done)
+            check.add(verdict, why, basis=_reviewed(review))
+        elif claim == 'nothing_done':
+            if done.applied:
+                check.add('fail', f'said nothing was done; the receipts show {_shown(done)}')
+            else:
+                check.add('pass', basis=_reviewed(review))
+        elif EFFECTS[claim] not in changes or (claim != 'cancelled' and not done.active):
+            check.add('fail', f'said {claim}; the receipts show {_shown(done)}')
         else:
-            check.add('fail', f'said {claim}; the receipts show {", ".join(done.applied) or "no change"}')
+            check.add('unknown', f'said {claim}: which appointment, the label does not say')
     if not review.claims:
         check.add('pass', basis=_reviewed(review))
     return check
@@ -409,7 +670,12 @@ def completion(done: Effects, review: CallReview | None) -> Check:
 def operational(
     sim: Simulation, traced: bool, facts: Facts | None, span: float | None, limit: float
 ) -> Check:
-    """Did the call connect and end normally? From Coval's status and measured facts, never from a span's length."""
+    """Did the call connect and end normally? From Coval's status and observed endings, never from a span's length.
+
+    An ending inferred rather than observed (`Facts.observed`) is unknown,
+    whichever way it points: a failed hang-up request follows the bot's own
+    end and a cancel alike, and a recording's length says how long, not why.
+    """
     check = Check()
     if sim.status in ('FAILED', 'ERROR', 'CANCELLED'):
         check.add('fail', f'call {sim.status}: {sim.error_message or "no error message"}')
@@ -423,6 +689,8 @@ def operational(
         check.add(
             'unknown', f'how the call ended: not measured (the trace span, {spanned}, is not its length)'
         )
+    elif facts and not facts.observed:
+        check.add('unknown', f'ended by {ended.replace("_", " ")}: inferred, not an observed event')
     elif ended == 'ceiling' and facts and facts.media_seconds is not None and facts.media_seconds < limit - 5:
         check.add(
             'unknown',

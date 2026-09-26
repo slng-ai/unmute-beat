@@ -319,6 +319,14 @@ def read_call(ref: str, observations: list[Obs]) -> Call:
         for turn, estimate in zip([t for t in call.turns if t.latency is None], estimates, strict=False):
             turn.latency, turn.estimated = estimate, True
 
+    audited = {o.id for o in obs if o.name == 'write' and 'write.audit' in o.attrs}
+    covered = set()
+    for o in obs:
+        if o.id in audited:
+            at = by_id.get(o.parent or '')
+            while at is not None:
+                covered.add(at.id)
+                at = by_id.get(at.parent or '')
     said, heard = '', ''
     for o in obs:
         if o.name == 'tts' and o.input:
@@ -332,12 +340,36 @@ def read_call(ref: str, observations: list[Obs]) -> Call:
             audit = json.loads(audit) if isinstance(audit, str) else dict(audit)
             call.writes.append(Write(audit['action'], audit['status'], said, heard, audit))
         elif o.type == 'TOOL' and o.name in TASKS:
+            if audited and (o.id in covered or _proposes(o)):
+                continue
             out = _text(o.output).lower()
             status = 'unknown' if o.output is None else 'failed' if any(w in out for w in FAILED) else 'ok'
             call.writes.append(Write(o.name, status, said, heard))
-    if any(w.audit for w in call.writes):
-        call.writes = [w for w in call.writes if w.audit]
     return call
+
+
+def _proposes(o: Obs) -> bool:
+    """Whether a tool call only read its operation back: its output is its own proposal, not a receipt.
+
+    In a build that audits its writes (`core/operations.py`), every attempt
+    leaves a `write` span below its tool call, and a read-back or a refusal
+    leaves none. So a tool call with its own `write` below it is that write,
+    and one whose output is a proposal about itself (`{"about": name,
+    "spoken": ...}`) wrote nothing. Any other tool call that could write is
+    kept, with no audit: its outcome and consent are unknown, never dropped.
+    """
+    output = o.output
+    if isinstance(output, str):
+        try:
+            output = json.loads(output)
+        except ValueError:
+            return False
+    return (
+        isinstance(output, dict)
+        and output.get('about') == o.name
+        and bool(output.get('spoken'))
+        and not ({'status', 'receipt', 'booking_id'} & output.keys())
+    )
 
 
 def summary(label: str, calls: list[Call]) -> list[str]:

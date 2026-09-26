@@ -10,6 +10,8 @@
 > - **A native call "ran to the 300 s limit":** `iPFgi5qq`'s recording is 49.7 s. Its 1,105 s trace span came from a model request that never returned.
 > - **"No call saw another call's booking":** every call had its own fresh diary, so BK0001 first is expected. It is not an isolation test.
 > - **N1-N13:** native N9 fails, native N13 is not exercised, and the N12 timing command reports `passed: false`.
+> - **"Safe? Yes" and "fixed with regression tests":** each safety patch was tested for its own case only. It is not a general guarantee. The review reproduced three core defects that are still open.
+> - **How calls ended** (added after the [review of stage A](session-4b-evaluator-review.md)): a "Failed to terminate Twilio call" line proves a hang-up attempt, not who ended the call. The rechecked endings (observed: 115 agent, 6 caller, 1 ceiling, 1 provider stall, 1 test runner; 14 inferred or not attributable) are in the [stage A report](session-4b-evaluator.md#ending-provenance-118-agent-labels-rechecked).
 > - **Safe? "Yes, with one caveat":** not established. Delivery was never checked independently of the runtime. The audit passed four writes a review has since failed: call 1's harness lookup, the two early native Friday bookings, and `kwUbc4PR`'s native identity write.
 >
 > No corrected success rate is published yet: most calls still lack a reviewed final request and any recording review.

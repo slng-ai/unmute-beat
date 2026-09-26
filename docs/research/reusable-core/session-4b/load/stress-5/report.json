@@ -66,7 +66,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -76,7 +76,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
     "lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
     "book_appointment@9: whether \"yes please that's perfect\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -107,8 +109,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: book_appointment@9: whether \"yes please that's perfect\" accepted the proposal (not reviewed)",
    "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)",
@@ -287,7 +291,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -297,7 +301,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
     "lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
     "book_appointment@9: whether 'yes please' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -328,8 +334,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: book_appointment@9: whether 'yes please' accepted the proposal (not reviewed)",
    "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)",
@@ -504,7 +512,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -514,7 +522,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
     "lookup_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
     "book_appointment@8: whether 'yes please book me in for nine am on saturday the third' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -545,8 +555,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: lookup_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: book_appointment@8: whether 'yes please book me in for nine am on saturday the third' accepted the proposal (not reviewed)",
    "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)",
@@ -709,7 +721,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -719,7 +731,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
     "lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "book_appointment@10: which arguments its read-back named (no proposal_args in its audit)",
     "book_appointment@10: whether \"yes that's perfect saturday the third at nine am\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -750,8 +764,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@10: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: book_appointment@10: whether \"yes that's perfect saturday the third at nine am\" accepted the proposal (not reviewed)",
    "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: book_appointment@10: no evidence the proposal played in full (the runtime estimate is not)",
@@ -931,7 +947,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -941,7 +957,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
     "lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
     "book_appointment@9: whether \"yes please that's perfect\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -972,8 +990,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: lookup_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: book_appointment@9: whether \"yes please that's perfect\" accepted the proposal (not reviewed)",
    "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)",

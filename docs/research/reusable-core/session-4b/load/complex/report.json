@@ -42,7 +42,9 @@
    "failed": [
     "lookup_customer@4: \"that's two seven three four five four\" did not accept the proposal"
    ],
-   "unknown": [],
+   "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)"
+   ],
    "basis": []
   },
   "delivery": {
@@ -69,7 +71,9 @@
    "unknown": [],
    "basis": []
   },
-  "missing": [],
+  "missing": [
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)"
+  ],
   "caller_turns": 6,
   "completed": 13,
   "cancelled": 2,
@@ -195,7 +199,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -205,7 +209,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
     "lookup_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
     "book_appointment@9: whether \"yes please that's perfect\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -236,8 +242,10 @@
    "basis": []
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: lookup_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: book_appointment@9: whether \"yes please that's perfect\" accepted the proposal (not reviewed)",
    "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)",

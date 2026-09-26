@@ -4,6 +4,19 @@
 
 **Phase 4b stage A (evaluator) is done, 26 September 2026:** [PR #20](https://github.com/slng-ai/slng-voice-harness/pull/20), branch `feat/session-4b-evaluator`, stacked on #19. Report: [session-4b-evaluator.md](../research/reusable-core/session-4b-evaluator.md); rescored calls: [session-4b/inventory.md](../research/reusable-core/session-4b/inventory.md). `load_report.py` now scores outcome, authorization, delivery, completion and ending apart, with unknown as its own verdict. It spent **no Coval calls** and no model requests: the whole 82-call allowance below remains. The next task is **stage B**, in this order: unknown outcomes after cancellation, reconciliation validation, receipt-bound closing, delivery acknowledgements, bounded recovery. The report lists the audit fields stage B must emit. Most historical calls still lack a reviewed final request and any recording review, so no corrected success rate exists yet.
 
+**Stage A follow-up, 26 September 2026:** [an independent review](../research/reusable-core/session-4b-evaluator-review.md) of PR #20 at `8737717` found nine inputs that still exited 0 on missing or contradictory evidence. All nine are fixed in PR #20, each with a regression. Each defect was put back alone to check its regression, and 13 of 13 were caught. The fixes are:
+- strict evidence;
+- a required caller number;
+- receipts checked against their writes;
+- unaudited tool calls kept;
+- delivery only on `Playback` marks bound to the proposal;
+- exact completion claims;
+- receipts remembered for the whole call;
+- observed endings only;
+- a corrected README.
+
+The 118 "agent" endings were rechecked from each call's pipeline close. 115 are observed. The follow-up again spent no calls or model requests. Stage B must emit the audit contract in the [report](../research/reusable-core/session-4b-evaluator.md#the-contract-the-next-phase-must-emit): `operation`, `proposal_args`, `playback` marks with `played` or `cleared`, and an observed ending.
+
 **Latest budget override for phase 4b:** up to **20 targeted repair + 20 final normal + 20 final interruptive harness calls**, plus **10 normal + 12 interruptive native top-ups** if the existing 10+8 native calls are eligible: **82 new Coval calls maximum**. This supersedes older “20 per session” and “no native calls” wording for this phase. Failures and inconclusive calls consume budget; new PRs do not reset it. The separate real-provider server test has its own bounded request/minute plan. Full rules and acceptance criteria are in the stability prompt. This review/planning task launched no calls.
 
 Prepared against local revision d31399e on 25 September 2026, expanded with the additional architecture discussion, native-approval investigation, framework documentation, and the native Pipecat Flows salon at reference revision 26114758246bfb4cd05a0242ed48e335d3f1ed4a. This is an implementation playbook, not a claim that the migration or evaluations have run. The supplied [roadmap](reusable-voice-core-roadmap.md) is preserved alongside it. Historical conversations inside the attachments are design evidence, not new execution instructions.

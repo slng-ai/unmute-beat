@@ -649,10 +649,12 @@ offline, each arm in its own environment (`uv run python -m matrix run`).
 `use-cases/concierge-tools/load_report.py` reads a batch of Coval calls'
 Langfuse traces and write records — no Coval judge — and gives each call
 five separate answers, each pass, fail or unknown: outcome (the appointments
-left after replaying every receipt by booking ID), authorization, delivery,
-completion and how the call ended. Reviewed labels and measured facts come
-from an `--evidence` file; missing evidence is unknown, never a pass. It also
-reports speech (repeated lines), request chains and latency per call.
+left after replaying every receipt by booking ID, each checked against its
+own write), authorization, delivery, completion and how the call ended.
+Reviewed labels and observed facts come from an `--evidence` file, validated
+strictly. Missing evidence is unknown, never a pass, and contradictory
+evidence fails. It also reports speech (repeated lines), request chains and
+latency per call.
 
 We used **Coval and Langfuse to evaluate the feasibility of the package**:
 simulated phone calls scored by Coval, and the traces of the same calls read
@@ -871,9 +873,11 @@ marked above.
 
 # Evidence
 
-Session 4 tested this design with 140 Coval phone calls, on two booking cases: a normal caller and an interruptive one. The full report is [docs/research/reusable-core/session-4.md](docs/research/reusable-core/session-4.md). Every call, with its Coval recording and its Langfuse trace, is listed in [docs/research/reusable-core/session-4/coval-evals.md](docs/research/reusable-core/session-4/coval-evals.md).
+Session 4 tested this design with Coval phone calls, on two booking cases: a normal caller and an interruptive one. 140 calls were authorised and **138 placed**: 120 harness (69 normal, 51 interruptive) and 18 native (10 normal, 8 interruptive). The full report is [docs/research/reusable-core/session-4.md](docs/research/reusable-core/session-4.md). Every call, with its Coval recording and its Langfuse trace, is listed in [docs/research/reusable-core/session-4/coval-evals.md](docs/research/reusable-core/session-4/coval-evals.md).
 
-How a call is judged: Coval places and records it and scores nothing but a turn count. `use-cases/concierge-tools/load_report.py` reads the call's Langfuse session and write records, replays the receipts by booking ID, and scores outcome, authorization, delivery, completion and ending apart; what the trace cannot show is unknown until a reviewed label or measured fact supplies it ([session 4b, stage A](docs/research/reusable-core/session-4b-evaluator.md)).
+How a call is judged: Coval places and records it and scores nothing but a turn count. `use-cases/concierge-tools/load_report.py` reads the call's Langfuse session and write records. It replays the receipts by booking ID, checks each receipt against its own write, and scores outcome, authorization, delivery, completion and ending apart. What the trace cannot show stays unknown until a reviewed label or an observed fact supplies it. The corrected scores are in [session 4b](docs/research/reusable-core/session-4b-evaluator.md) ([inventory](docs/research/reusable-core/session-4b/inventory.md)).
+
+> **Superseded, kept for the record.** The table below is session 4's own summary, before the evaluator was repaired. Its "wrong bookings" and native "1 of 8" are wrong. The two native "wrong bookings" were each a booking and then a move of the same BK0001, so each call left one appointment on the day the caller chose. Their early authorizations are real faults: the Friday booking was written on a time pick and on simulator noise. Its booking counts rest on receipts and a label check, not on reviewed consent or delivery. **No corrected success rate is published.** Most calls have no reviewed final request, and no recording was listened to, so no call has verified delivery.
 
 | | Harness, normal | Native Pipecat, normal | Harness, interruptive | Native Pipecat, interruptive |
 |---|---|---|---|---|
@@ -884,7 +888,11 @@ How a call is judged: Coval places and records it and scores nothing but a turn 
 
 The harness ran ten calls at once and native one at a time. The builds also differ in model and voice detector settings, so the latency gap is the product as configured, not the architecture alone.
 
-Across all 120 harness calls, 227 writes each answered a matching question put on an earlier turn. Live testing found two safety faults, both fixed with a regression test: a read-back counted as heard while it was still queued (call 1), and a goodbye that said "your haircut is booked" when nothing was (gate 1).
+After the rescore, 123 of the 138 calls end with exactly one active appointment and none with two. That is a receipt count, not a success rate. The 227 harness writes "each answered a matching question put on an earlier turn": that is a label check, and it also passed call 1's consent fault. Live testing found two safety faults, and each was patched with a regression test for that case:
+- a read-back counted as heard while it was still queued (call 1, patched in `52eb245`);
+- a goodbye that said "your haircut is booked" when nothing was (gate 1, patched in `11dd3eb`).
+
+Each patch was tested for its own case only. It is not a general guarantee. The review of session 4 reproduced three core defects that remain open for the runtime repair stage.
 
 What is not proven yet: a clean normal-caller gate on the final build; moves, cancellations and complaints in Coval; a second production use case on this path (Faro, session 5); load beyond 20 calls at once.
 

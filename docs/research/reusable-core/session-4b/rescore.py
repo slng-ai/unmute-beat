@@ -5,8 +5,9 @@
 
 EXPORT.json is `load_report.py --save` over the 31 session-4 runs: every
 observation of every call, speech included, so it stays private and is not
-committed. `evidence.json` beside this file is committed: the measured facts
-(recording length, how each call ended) and the reviewed labels. This writes
+committed. `evidence.json` beside this file is committed: the facts (recording
+length; how each call ended, observed or inferred, with its log lines) and the
+reviewed labels. This writes
 `load/<group>/report.{md,json}` and `inventory.md` beside it, and reads the
 session-4 reports only to take each run's group. It launches nothing.
 """
@@ -57,13 +58,17 @@ def main(export: Path) -> None:
         out.mkdir(parents=True, exist_ok=True)
         (out / 'report.md').write_text(render(reports) + '\n')
         (out / 'report.json').write_text(json.dumps([as_json(r) for r in reports], indent=1) + '\n')
-    ends = {sim: facts.ended_by for sim, facts in evidence.facts.items()}
+    ends = {
+        sim: f'{facts.ended_by}{"" if facts.observed else " (inferred)"}'
+        for sim, facts in evidence.facts.items()
+        if facts.ended_by
+    }
     (HERE / 'inventory.md').write_text('\n'.join(inventory(everything, rows, ends)) + '\n')
     print(f'rescored {len(everything)} calls')
 
 
 def inventory(
-    calls: list[tuple[str, str, CallReport]], rows: dict[str, dict], ends: dict[str, str | None]
+    calls: list[tuple[str, str, CallReport]], rows: dict[str, dict], ends: dict[str, str]
 ) -> list[str]:
     """The counts: placed, connected, terminal, evidence-complete, and each dimension, by build and scenario."""
     lines = [
@@ -72,7 +77,7 @@ def inventory(
         'Built by `rescore.py` from the private export and `evidence.json`. Every placed call is counted once, in',
         'its build and scenario; failures and unknowns stay in every denominator.',
         '',
-        '| Build | Scenario | Placed | Coval completed | Conversation span | Recording measured | Ending measured '
+        '| Build | Scenario | Placed | Coval completed | Conversation span | Recording measured | Ending observed '
         '| Active after replay: 0 / 1 / 2+ | Ended by | Evidence complete | '
         + ' | '.join(f'{d}: pass / fail / unknown' for d in DIMENSIONS)
         + ' |',
@@ -94,7 +99,7 @@ def inventory(
         lines.append(
             f'| {build} | {scenario} | {len(reports)} | {sum(r.status == "COMPLETED" for r in reports)} '
             f'| {sum(r.span_seconds is not None for r in reports)} | {sum(r.media_seconds is not None for r in reports)} '
-            f'| {sum(not any("how the call ended" in m for m in r.missing) for r in reports)} '
+            f'| {sum(not any("how the call ended" in m or "inferred" in m for m in r.missing) for r in reports)} '
             f'| {active[0]} / {active[1]} / {active[2]} | {ended} '
             f'| {sum(not r.missing for r in reports)} | ' + ' | '.join(cells) + ' |'
         )

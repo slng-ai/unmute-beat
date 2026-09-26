@@ -69,7 +69,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -79,7 +79,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@9: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@9: whether \"that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@11: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@11: whether 'yes please' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -110,8 +112,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@9: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@9: whether \"that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@11: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@11: whether 'yes please' accepted the proposal (not reviewed)",
    "delivery: confirm_customer@9: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@11: no evidence the proposal played in full (the runtime estimate is not)",
@@ -213,7 +217,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -223,7 +227,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@3: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@5: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@5: whether \"yes that's perfect\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -254,8 +260,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@3: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@5: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@5: whether \"yes that's perfect\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@5: no evidence the proposal played in full (the runtime estimate is not)",
@@ -356,7 +364,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -366,7 +374,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@6: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@6: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@9: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@9: whether \"that's perfect\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -397,8 +407,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@6: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@6: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@9: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@9: whether \"that's perfect\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@6: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@9: no evidence the proposal played in full (the runtime estimate is not)",
@@ -503,7 +515,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -513,7 +525,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@4: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@7: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@7: whether 'please' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -544,8 +558,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@4: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@4: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@7: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@7: whether 'please' accepted the proposal (not reviewed)",
    "delivery: confirm_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@7: no evidence the proposal played in full (the runtime estimate is not)",
@@ -647,7 +663,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -657,7 +673,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@8: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@8: whether \"that's perfect\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -688,8 +706,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@8: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@8: whether \"that's perfect\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@8: no evidence the proposal played in full (the runtime estimate is not)",
@@ -794,7 +814,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -804,7 +824,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@8: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@8: whether 'please' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -835,8 +857,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@8: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@8: whether 'please' accepted the proposal (not reviewed)",
    "delivery: confirm_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@8: no evidence the proposal played in full (the runtime estimate is not)",
@@ -940,7 +964,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -950,7 +974,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@7: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@7: whether 'yes please' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -981,8 +1007,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@7: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@7: whether 'yes please' accepted the proposal (not reviewed)",
    "delivery: confirm_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@7: no evidence the proposal played in full (the runtime estimate is not)",
@@ -1085,7 +1113,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -1095,7 +1123,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@10: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@10: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@13: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@13: whether 'please' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -1126,8 +1156,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@10: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@10: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@13: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@13: whether 'please' accepted the proposal (not reviewed)",
    "delivery: confirm_customer@10: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@13: no evidence the proposal played in full (the runtime estimate is not)",
@@ -1230,7 +1262,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -1240,7 +1272,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@3: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@6: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@6: whether \"that's perfect\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -1271,8 +1305,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@3: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@3: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@6: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@6: whether \"that's perfect\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@6: no evidence the proposal played in full (the runtime estimate is not)",
@@ -1377,7 +1413,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
-    "the final day and time asked for: not reviewed"
+    "the final day, time and number asked for: not reviewed"
    ],
    "basis": [
     "deterministic"
@@ -1387,7 +1423,9 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+    "save_booking@8: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@8: whether 'yes please' accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -1418,8 +1456,10 @@
    ]
   },
   "missing": [
-   "outcome: the final day and time asked for: not reviewed",
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: confirm_customer@5: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@5: whether \"yes that's correct\" accepted the proposal (not reviewed)",
+   "authorization: save_booking@8: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@8: whether 'yes please' accepted the proposal (not reviewed)",
    "delivery: confirm_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@8: no evidence the proposal played in full (the runtime estimate is not)",
@@ -1559,6 +1599,9 @@
     "save_booking@14: 'nine works for me thanks' did not accept the proposal"
    ],
    "unknown": [
+    "confirm_customer@11: which arguments its read-back named (no proposal_args in its audit)",
+    "save_booking@14: which arguments its read-back named (no proposal_args in its audit)",
+    "save_booking@20: which arguments its read-back named (no proposal_args in its audit)",
     "save_booking@20: whether \"that's great\" accepted the proposal (not reviewed)"
    ],
    "basis": [
@@ -1593,6 +1636,9 @@
    ]
   },
   "missing": [
+   "authorization: confirm_customer@11: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: save_booking@14: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: save_booking@20: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: save_booking@20: whether \"that's great\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@11: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@20: no evidence the proposal played in full (the runtime estimate is not)"
@@ -1673,6 +1719,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@7: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@7: whether \"yes that's correct\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -1702,6 +1749,7 @@
    ]
   },
   "missing": [
+   "authorization: confirm_customer@7: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@7: whether \"yes that's correct\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@7: no evidence the proposal played in full (the runtime estimate is not)",
    "completion: what the agent said it had done: its closing was not reviewed"
@@ -1857,7 +1905,10 @@
     "save_booking@15: 'silence underscore tool' did not accept the proposal"
    ],
    "unknown": [
-    "confirm_customer@9: whether 'go ahead' accepted the proposal (not reviewed)"
+    "confirm_customer@9: which arguments its read-back named (no proposal_args in its audit)",
+    "confirm_customer@9: whether 'go ahead' accepted the proposal (not reviewed)",
+    "save_booking@15: which arguments its read-back named (no proposal_args in its audit)",
+    "save_booking@20: which arguments its read-back named (no proposal_args in its audit)"
    ],
    "basis": [
     "review:agent"
@@ -1890,7 +1941,10 @@
    ]
   },
   "missing": [
+   "authorization: confirm_customer@9: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@9: whether 'go ahead' accepted the proposal (not reviewed)",
+   "authorization: save_booking@15: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: save_booking@20: which arguments its read-back named (no proposal_args in its audit)",
    "delivery: confirm_customer@9: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@15: no evidence the proposal played in full (the runtime estimate is not)",
    "delivery: save_booking@20: no evidence the proposal played in full (the runtime estimate is not)"
@@ -1977,6 +2031,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@17: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@17: whether \"yes that's correct\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -2006,6 +2061,7 @@
    ]
   },
   "missing": [
+   "authorization: confirm_customer@17: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@17: whether \"yes that's correct\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@17: no evidence the proposal played in full (the runtime estimate is not)",
    "completion: what the agent said it had done: its closing was not reviewed"
@@ -2091,6 +2147,7 @@
    "verdict": "unknown",
    "failed": [],
    "unknown": [
+    "confirm_customer@4: which arguments its read-back named (no proposal_args in its audit)",
     "confirm_customer@4: whether \"right so it's plus three four six seven one two seven three four five four is that correct\" accepted the proposal (not reviewed)"
    ],
    "basis": []
@@ -2120,6 +2177,7 @@
    ]
   },
   "missing": [
+   "authorization: confirm_customer@4: which arguments its read-back named (no proposal_args in its audit)",
    "authorization: confirm_customer@4: whether \"right so it's plus three four six seven one two seven three four five four is that correct\" accepted the proposal (not reviewed)",
    "delivery: confirm_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
    "completion: what the agent said it had done: its closing was not reviewed"
@@ -2240,7 +2298,10 @@
    "failed": [
     "confirm_customer@6: \"that's\" did not accept the proposal"
    ],
-   "unknown": [],
+   "unknown": [
+    "confirm_customer@6: which arguments its read-back named (no proposal_args in its audit)",
+    "save_booking@12: which arguments its read-back named (no proposal_args in its audit)"
+   ],
    "basis": [
     "review:agent"
    ]
@@ -2272,6 +2333,8 @@
    ]
   },
   "missing": [
+   "authorization: confirm_customer@6: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: save_booking@12: which arguments its read-back named (no proposal_args in its audit)",
    "delivery: save_booking@12: no evidence the proposal played in full (the runtime estimate is not)"
   ],
   "caller_turns": 12,

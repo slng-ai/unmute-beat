@@ -273,9 +273,47 @@ def reports_what_it_cannot_measure():
         raise AssertionError(f'{bad} was accepted')
 
 
+def a_tool_call_is_dropped_only_for_its_own_audit():
+    """Once any write was audited, every unaudited tool call was dropped: a separate cancel vanished too."""
+
+    def tool(id_: str, name: str, output, start: float = 20) -> Obs:
+        return Obs(id_, 't3', 'TOOL', name, at(start), at(start + 0.3), output=output)
+
+    audit = {'action': 'book_appointment', 'about': 'book_appointment', 'question': 'Shall I book it?',
+             'asked_turn': 2, 'turn': 3, 'heard': 'Yes.', 'status': 'ok'}  # fmt: skip
+    own = Obs('w9', 'tb', 'SPAN', 'write', at(20.1), at(20.2), attrs={'write.audit': json.dumps(audit)})
+    readback = json.dumps({'about': 'book_appointment', 'spoken': 'Shall I book a haircut, Friday at 9?'})
+    base = [o for o in harness_call() if o.id != 'w1']
+    pair = read_call('x', [*base, tool('tb', 'book_appointment', 'booked'), own])
+    assert [(w.name, bool(w.audit)) for w in pair.writes] == [('book_appointment', True)], (
+        'a tool call and the write below it are one write'
+    )
+    asked = read_call(
+        'x', [*base, tool('ta', 'book_appointment', readback), tool('tb', 'book_appointment', 'ok'), own]
+    )
+    assert len(asked.writes) == 1, 'a tool call that only read its operation back wrote nothing'
+    hidden = read_call(
+        'x',
+        [
+            *base,
+            tool('tb', 'book_appointment', 'ok'),
+            own,
+            tool('tc', 'cancel_appointment', 'cancelled BK0001', 25),
+        ],
+    )
+    assert [(w.name, w.status, w.audit) for w in hidden.writes] == [
+        ('book_appointment', 'ok', audit), ('cancel_appointment', 'ok', {})
+    ], 'a separate unaudited cancel is kept, with no audit'  # fmt: skip
+    legacy = read_call('x', [*base[:-1], tool('tb', 'save_booking', 'saved')])
+    assert [(w.name, w.audit) for w in legacy.writes] == [('save_booking', {})], (
+        'a build with no audits: as before'
+    )
+
+
 def main():
     counts_every_request_once()
     reads_the_audit_of_a_write()
+    a_tool_call_is_dropped_only_for_its_own_audit()
     an_unmapped_write_is_consent_unknown_not_consent_free()
     pages_every_trace_of_a_session()
     a_saved_observation_reads_back_the_same()

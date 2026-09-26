@@ -3,8 +3,8 @@
   "text": {
     "requests_allowed": 100,
     "tokens_allowed": 250000,
-    "requests_spent": 41,
-    "tokens_spent": 93159,
+    "requests_spent": 82,
+    "tokens_spent": 186792,
     "runs": [
       {
         "label": "text-1",
@@ -33,6 +33,37 @@
             "requests": 9,
             "tokens": 19430,
             "session": "text-T4.v2-165a9569"
+          }
+        },
+        "cancelled_requests": "not counted by the checkpoint (a request whose span never ended); Langfuse sessions hold the full record"
+      },
+      {
+        "label": "text-2",
+        "source": "1d5c43a (the final runtime; the goodbye tool description changed after text-1)",
+        "cases": {
+          "T1.v1": {
+            "result": "passed",
+            "requests": 9,
+            "tokens": 19487,
+            "session": "text-T1.v1-985111b6"
+          },
+          "T2.v1": {
+            "result": "passed",
+            "requests": 14,
+            "tokens": 34894,
+            "session": "text-T2.v1-3f3fc504"
+          },
+          "T3.v2": {
+            "result": "passed",
+            "requests": 9,
+            "tokens": 19703,
+            "session": "text-T3.v2-2631f19e"
+          },
+          "T4.v2": {
+            "result": "passed",
+            "requests": 9,
+            "tokens": 19549,
+            "session": "text-T4.v2-d2a271c7"
           }
         },
         "cancelled_requests": "not counted by the checkpoint (a request whose span never ended); Langfuse sessions hold the full record"

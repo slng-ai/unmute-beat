@@ -85,6 +85,14 @@ class Locale:
     """Said before the line is closed, once reminders went unanswered."""
     pardon: str = ''
     """Said on a rendered step (`speech: rendered`) when its agent chose to wait and nothing is missing to ask for."""
+    restated: str = ''
+    """Said before a read-back is carried out because the caller answered it by saying the same value again.
+
+    The caller heard "Is your number +34 671 51 01 05?" and said "No, it's
+    six seven one, five one zero, one zero five": the same digits, grouped
+    their own way. Code found the value unchanged (`core.steps.Restated`), so
+    that reply is a yes, and this line tells them why the call goes on.
+    """
 
 
 ENGLISH = Locale(
@@ -101,6 +109,7 @@ ENGLISH = Locale(
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
     pardon='Sorry, could you say that again?',
+    restated="Yes, that's the same as I read back.",
 )
 
 SPANISH = Locale(
@@ -117,4 +126,5 @@ SPANISH = Locale(
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
     pardon='Perdona, ¿me lo repites?',
+    restated='Sí, es lo mismo que te he leído.',
 )

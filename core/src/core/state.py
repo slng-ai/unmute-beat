@@ -12,6 +12,7 @@ import contextvars
 import json
 import re
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -531,6 +532,18 @@ class CallContext(BaseModel):
     """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
     _unapplied: set[str] = PrivateAttr(default_factory=set)
     """Fields the current model response changes after its action: not yet run when the action does."""
+    _tries: Counter[str] = PrivateAttr(default_factory=Counter)
+    """How many times a model response in this caller turn tried to record each field (`one_action_per_reply`)."""
+    _kept: Counter[str] = PrivateAttr(default_factory=Counter)
+    """How many of those tries recorded the field with the value it already had (`collect`).
+
+    `_changing` also holds a field recorded again unchanged: the caller saying
+    the read-back's value back. A read-back is confirmed by that
+    (`core.graph.Restated`) only while every try at its fields kept the value.
+    A try the tool's schema refused never reaches `collect`, so it counts as
+    a try and not as kept: "half nine, well, ten then" is a change, and
+    "ten, no, nine, no, ten" too, never a yes to ten.
+    """
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
     """The one question this call is waiting on an answer to. See `core.proposals`."""
     _told: tuple[int, str, str] = PrivateAttr(default=(0, '', ''))
@@ -1936,6 +1949,8 @@ class CallContext(BaseModel):
         self._reached = False
         self._leaving = False
         self._changing = set()
+        self._tries = Counter()
+        self._kept = Counter()
         self._request_kept = False
         self._response = ''
         self._entered = ''

@@ -201,6 +201,7 @@ def one_action_per_reply(actions: frozenset[str], updates: frozenset[str] = froz
                     values = {}
                 fields = set(values) if isinstance(values, dict) else set()
                 ctx.deps._changing |= fields
+                ctx.deps._tries.update(fields)
                 if claimed:
                     ctx.deps._unapplied |= fields
         return response

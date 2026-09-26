@@ -57,6 +57,29 @@ class LocalAction:
 
 
 @dataclass(frozen=True)
+class Restated:
+    """The caller answered a read-back by saying its value again, unchanged: code carries the operation out.
+
+    "Is your number +34 671 51 01 05?" answered "No, it's six seven one,
+    five one zero, one zero five" is the same number, grouped the caller's
+    own way. The step's agent only records what it heard (`collect`); code
+    finds the recorded value equal to the read-back the caller heard in full
+    before they began (`CallContext.pending`), and that is the yes
+    (`core.steps.ConversationStep._reads_back`). `run` binds the approval to
+    that exact question, says `Locale.restated` and carries it out, as the
+    agent's own call would have; it returns None if nothing is pending.
+    A different value is a change, read back again as before.
+
+    Benchmark calls amAP5b4A and Tiv9sDHH (session 4c): the agent had read
+    such a reply as a yes by itself, silently; the user asked for it to be
+    code's decision and said aloud.
+    """
+
+    about: str
+    run: Callable[[RunUsage | None, UsageLimits | None], Awaitable[Any]]
+
+
+@dataclass(frozen=True)
 class Opening[C: CallContext]:
     """What a step does first on arrival when the application already knows it.
 

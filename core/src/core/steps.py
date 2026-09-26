@@ -50,7 +50,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.completion import FieldsPresent, ReceiptMatched
-from core.graph import Exit, LocalAction, Node, Opening, holds
+from core.graph import Exit, LocalAction, Node, Opening, Restated, holds
 from core.locale import Locale
 from core.operations import Operation, OutcomeUnknownError, _tracer
 from core.policies import claim_or_refuse, one_action_per_reply, request_clock, speak_by
@@ -1213,6 +1213,11 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     return result
 
 
+def _resting_on(operation: Operation) -> set[str]:
+    """The state fields an operation's arguments are built from: a change to one of them makes its read-back stale."""
+    return set(getattr(operation, 'binds', {}).values()) or set(operation.args_type.model_fields)
+
+
 async def _carry_out(
     call: FlowCall[Any],
     operation: Operation,
@@ -1353,14 +1358,16 @@ class ConversationStep(Step):
 
         return (Opening(operation.name, 'handoff', ready, read_back),)
 
-    def _reads_back(self) -> Callable[[FlowCall[Any]], Prompted | None] | None:
+    def _reads_back(self, flow: StepFlow) -> Callable[[FlowCall[Any]], Prompted | Restated | None] | None:
         """The `reads_back` rule: the operation whose field was just recorded, when it is the only one that could run.
 
         An operation could run when its arguments are complete, or when the
         ones missing are choices on offer (a held booking the caller could
         name). So where a new booking and a move of a held one are both
         possible, which one the caller means is the model's to read, as
-        before. None as well when that exact question is already waiting.
+        before. When that exact question is already waiting, heard in full,
+        the caller has said its value again: `Restated`, carried out by code.
+        None when something it rests on is still changing.
         """
         if not self.reads_back:
             return None
@@ -1374,7 +1381,7 @@ class ConversationStep(Step):
                 return all(call._offered.get(name) for name in missing)
             return True
 
-        def read(call: FlowCall[Any]) -> Prompted | None:
+        def read(call: FlowCall[Any]) -> Prompted | Restated | None:
             if [op for op in self.operations if possible(call, op)] != [
                 op for op in self.operations if op.name in self.reads_back and possible(call, op)
             ]:
@@ -1387,11 +1394,50 @@ class ConversationStep(Step):
                 except ValidationError:
                     return None
                 if call.pending(operation.name, value=proposal.value) is not None:
-                    return None
+                    if not operation.needs_approval or any(
+                        call._tries[name] != call._kept[name]
+                        for name in call._changing & _resting_on(operation)
+                    ):
+                        return None
+                    return Restated(
+                        about=proposal.about,
+                        run=lambda usage, limits, operation=operation: self._confirmed(
+                            flow, operation, call, usage, limits
+                        ),
+                    )
                 return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
             return None
 
         return read
+
+    async def _confirmed(
+        self,
+        flow: StepFlow,
+        operation: Operation,
+        call: FlowCall[Any],
+        usage: RunUsage | None,
+        limits: UsageLimits | None,
+    ) -> Any:
+        """Carry out a read-back the caller confirmed by saying its value again (`Restated`). None if nothing is pending."""
+        proposal = operation.proposal_for(call, _args(operation, call))
+        if not call.approve(proposal.about, value=proposal.value):
+            return None
+        await call.speak_now(call.locale.restated, origin='confirmation')
+        return await self._approved(flow, operation, call, usage, limits)
+
+    async def _approved(
+        self,
+        flow: StepFlow,
+        operation: Operation,
+        call: FlowCall[Any],
+        usage: RunUsage | None,
+        limits: UsageLimits | None,
+    ) -> Prompted | Handoff | str | None:
+        """Run an operation whose approval is bound, then hand back to a waiting step, if this was its prerequisite."""
+        said = await _carry_out(call, operation, usage, limits, rendered=self.rendered)
+        if (back := flow.return_after(self, call)) is not None:
+            return back
+        return said
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def goodbye(ctx: RunContext[FlowCall[Any]], recap: list[str] | None = None) -> str:
@@ -1437,19 +1483,24 @@ class ConversationStep(Step):
             async def collect(ctx: RunContext[FlowCall[Any]], values: BaseModel) -> str:
                 """Record exactly what the caller has just said for any of these fields. Never guess a value."""
                 proposed = values.model_dump(exclude_none=True)
-                _refuse_unoffered(ctx.deps, self.choices, proposed)
+                call = ctx.deps
+                before = {name: getattr(call.state.facts, name, None) for name in proposed}
+                _refuse_unoffered(call, self.choices, proposed)
                 for name in self.quoted:
-                    if proposed.get(name) and not said_by_caller(ctx.deps, str(proposed[name])):
+                    if proposed.get(name) and not said_by_caller(call, str(proposed[name])):
                         raise ModelRetry(
                             f"Nothing was recorded: {name} must be the caller's own words, copied from what "
                             'they said. Punctuation and case may differ; nothing else may.'
                         )
                 try:
-                    flow.record(ctx.deps, proposed)
+                    flow.record(call, proposed)
                 except ValidationError as error:
                     problems = '; '.join(e['msg'] for e in error.errors())
                     raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
-                ctx.deps._recorded = frozenset(proposed)
+                call._kept.update(
+                    name for name in proposed if getattr(call.state.facts, name, None) == before[name]
+                )
+                call._recorded = frozenset(proposed)
                 return f'Recorded: {", ".join(sorted(proposed)) or "nothing"}.'
 
             collect.__annotations__ = {'ctx': RunContext[FlowCall], 'values': values_type, 'return': str}
@@ -1513,7 +1564,7 @@ class ConversationStep(Step):
             guarded=self.guarded,
             openings=self.opening(),
             speaks_for=frozenset(op.name for op in self.operations),
-            reads_back=self._reads_back(),
+            reads_back=self._reads_back(flow),
             model_speech=not self.rendered,
         )
 
@@ -1529,9 +1580,7 @@ class ConversationStep(Step):
             if operation.needs_approval:
                 proposal = operation.proposal_for(call, args)
                 read_back = Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
-                resting_on = set(getattr(operation, 'binds', {}).values()) or set(
-                    operation.args_type.model_fields
-                )
+                resting_on = _resting_on(operation)
                 if call._unapplied & resting_on:
                     raise ModelRetry(
                         f'Nothing was done: this reply also changes {", ".join(sorted(call._unapplied & resting_on))}. '
@@ -1539,10 +1588,7 @@ class ConversationStep(Step):
                     )
                 if call._changing & resting_on or not call.approve(proposal.about, value=proposal.value):
                     return read_back
-            said = await _carry_out(call, operation, ctx.usage, ctx.usage_limits, rendered=self.rendered)
-            if (back := flow.return_after(self, call)) is not None:
-                return back
-            return said
+            return await self._approved(flow, operation, call, ctx.usage, ctx.usage_limits)
 
         return operate
 

@@ -7,7 +7,7 @@ Prepared 26 September 2026 from [the independent session-4 review](../research/r
 | Stage | Smallest useful deliverable | Verification before proceeding |
 |---|---|---|
 | A. Establish truthful evidence | Correct outcome reconstruction, consent coverage and release exit status; reconcile existing reports | Known false passes fail; book → move leaves one effective booking; missing evidence is incomplete; old results rescored without new calls |
-| B. Repair execution and conversation recovery | Delivery acknowledgements, unknown-operation handling, receipt-bound closing and bounded clarification | Deterministic timing/fault tests and clinic reuse; targeted voice checks only for the affected behavior |
+| B. Repair execution and conversation recovery | Delivery acknowledgements, unknown-operation handling, receipt-bound closing and bounded clarification | Deterministic timing/fault tests and clinic reuse; targeted voice checks only for the affected behavior. **Done 26 September 2026, PR PRNUM** ([report](../research/reusable-core/session-4b-runtime.md)): offline-proven on the clinic, the salon and a support desk; 3 of 20 repair calls, the last on a real Twilio line, passed |
 | C. Prove one-server operation | Bounded production host, durable application effects, isolated session state | 50 simultaneous media sessions, real-provider qualification, contention and worker kill; no hidden process-local diary assumption |
 | D. Freeze and evaluate | One candidate revision/configuration; 20 normal + 20 interruptive calls; eligible native top-ups | Independent effect/consent/audio review; all failures retained; compare by condition, revision and source cohort |
 

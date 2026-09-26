@@ -2,8 +2,6 @@
 
 Stage B repairs the runtime so that the evidence Stage A's evaluator needs now exists, and the guarantees behind it hold. Every business action is now an `Intent` that survives cancellation, a lost answer and a fresh process. A goodbye can recap only a receipt that still stands. A read-back counts as heard only when its own Twilio mark comes back before the caller starts to answer. Recovery is bounded. And the real `load_report` command passes on the runtime's own spans.
 
-This report is kept up to date as the stage goes. The sections marked "open" are not finished.
-
 ## Checkpoint
 
 | Item | Value |
@@ -11,8 +9,8 @@ This report is kept up to date as the stage goes. The sections marked "open" are
 | Parent | PR #20, branch `feat/session-4b-evaluator`, handoff `c07891afdaa4987d4d3cc91e1f054fc02fb805ea` |
 | This branch | `feat/session-4b-runtime` (renamed from `worktree-session-4b-runtime`, which Claude Code created; the name was unused locally and on the remote) |
 | PR #20 at start | open, head `c07891a`, base `feat/session-4-node-agents-cc` (checked 26 September 2026) |
-| Tested source SHA | open |
-| Stage | B1 to B5 implemented and offline-proven; text checkpoint and targeted Coval open |
+| Tested source SHA | `b2b1de09fd53631af1db16f40e735d765306b9f3` (every offline gate, text-2 ran on its runtime `1d5c43a`, Coval call 3 on `a72d33d`: later commits touched only tooling and docs) |
+| Stage | B1 to B5 implemented and offline-proven; text checkpoint passed; one targeted Coval call passed on a real Twilio line. Stage B ends here: no Stage C, Stage D or Faro |
 
 ## Effective configuration
 
@@ -238,7 +236,23 @@ Faults found on the way, each repaired with a regression:
 
 ## Verification
 
-Open. Final commands and results are filled in at the end.
+All at `b2b1de0`. The full log is `session-4b-runtime/verification.txt`.
+
+| Gate | Where | Result |
+|---|---|---|
+| `ruff format --check .`, `ruff check .` | the root, every member | clean (233 files) |
+| `git diff --check c07891a` | the whole stage | clean |
+| `ty check .` | core, salon-graph, concierge-tools, faro-language-learning, salon-pipecat-flows, salon-prompt, faro-tools | all clean |
+| `python -m tests` | core, salon-graph, concierge-tools, faro-language-learning, salon-pipecat-flows, salon-prompt | all exit 0 |
+| `python -m tests.defects` | core | 3 of 3 fixed. All 3 failed at the parent (`defects-before.txt`) |
+| Each repair turned off in a scratch copy | 14 repairs | each regression fails without its repair (`mutations.md`) |
+| `python -m matrix run` | concierge-tools | harness passes N1 to N11 and N13. Native N9 fails and native N13 is not exercised, both as before (`matrix/matrix.md`) |
+| `python -m matrix time` (N12) | concierge-tools | failed, as at the parent (see Performance) |
+| Package proof | `session-4b-runtime/package-proof.sh` | the wheel is installed with `env -i` outside the checkout. The clinic books once. The desk reconciles a lost answer by its intent. A fresh session reconciles a persisted intent and sends nothing again (`package-proof.log`) |
+
+faro-tools has no `tests` folder.
+
+`uv.lock` is unchanged from the parent. No dependency was added.
 
 ## Performance
 
@@ -255,6 +269,7 @@ All numbers come from one machine (Apple silicon, macOS), with the same scripted
 All values are milliseconds, the median of the last output.
 
 - The verdict is **failed at both commits**, for the same reason. Turns 2 to 5 and the trace are outside tolerance. The 50 ms ceiling holds.
+- **Again at the final HEAD `b2b1de0`**, twice, with the same result. The first run came right after the functional matrix (`matrix/timing.json`). It had one turn-3 sample of 55.0 ms, over the 50 ms ceiling. The next slowest of its 20 samples was 48.0 ms. The rerun with nothing else running (`timing/head-b2b1de0-rerun.json`) had a trace of 108.4 ms and a largest turn of 49.1 ms, inside the ceiling. The ceiling is the slowest single sample, so one scheduling hiccup can break it. Both runs are kept, and the rule was not changed.
 - Stage B moved the trace by 0.3 ms. Model requests are identical: 7 agent, 0 classifier.
 - The gap to native, about 10 ms per turn, was profiled with `cProfile` over the same trace. It sits in the event loop's scheduling of the Pipecat pipeline and Pydantic AI's run machinery, not in core's own code. That profile's harness CPU is about 4 to 8 ms per turn.
 - **N12 remains an unresolved gate**, as it was before Stage B. Closing it needs a change in how a turn is scheduled, not a repair in this stage. The thresholds were not changed.
@@ -283,17 +298,107 @@ All values are milliseconds, the median of the last output.
 
 ## Live checks
 
-Open.
+### Text checkpoint (`evals.calls`, real model, simulated delivery)
+
+Each turn's request limit is `min(8, requests left)`, set before the turn is sent, so a turn cannot go past the allowance.
+
+| Run | Source | T1.v1 | T2.v1 | T3.v2 | T4.v2 | Requests | Tokens |
+|---|---|---|---|---|---|---:|---:|
+| text-1 | `35d6f9d` working tree | passed | passed | passed | passed | 41 | 93,159 |
+| text-2 | `1d5c43a`, the final runtime | passed | passed | passed | passed | 41 | 93,633 |
+
+- text-1 found one fault. In T2 the model gave a recap as its words, not its reference. That cost a retry. The fix (`da8120a`) accepts a standing recap's exact words.
+- text-2 was needed because the goodbye tool's description changed. The records are in `session-4b-runtime/text/` and `text-2/`. The Langfuse sessions are named in `budget.json`.
+
+### Coval: the targeted repair pool
+
+All three calls used the stress case `GRdmreeb7SP4G8yegtMntC` with persona `VSruLZYYyz3w7fkdUaheDR` (Interruptive Speaker). Each ran with `--max-simulations 1` and metric `7VHk6dTjvBcuV6XYPmaeGq` only, which is the one the agent already had, so no new paid metric. `plan` ran before each `run`.
+
+| Call | Run | Route | Source | Result |
+|---|---|---|---|---|
+| 1 `s4b-B-stress-1` | `SdkVkoJjcCk56p2rWNK9ns` | Coval's simulated Twilio websocket, agent `JxGgSPA55DcFcDcvbKAUQM` | `da8120a` | Failed the task, safely. No mark came back, so no read-back could count as heard. The number read-back hit the two-copy fallback. Nothing was written. |
+| 2 `s4b-B-stress-2` | `9mM4QPgeDVf9se9AWqU29g` | the same, with mark logging and `TWILIO_MARKS=absent` | `dce11cb` | A diagnostic call. It confirmed the simulator returns no marks and ignores non-audio messages. Each segment was settled from real time as `local`. The caller then stayed silent about 20 s after every fully played read-back. It answered only after the reminder, over the repeat, so the fallback fired. Failed the task, safely. |
+| 3 `s4b-B-twilio-stress-1` | `FzMcHyvpwhkEULPdUrPc6H` | a real Twilio number, +447427919928, through Coval voice agent `PEivYdEtwEa65QSraG5fMQ` | `a72d33d` | **Passed all five dimensions** (`coval-twilio-1-report.md`) |
+
+**Why the route changed.** Calls 1 and 2 showed two faults on the test side, in Coval's simulated carrier. It returns no Twilio marks. Its caller also waits about 20 s after a read-back that played in full. A real phone line fixes both. Twilio carries the call, returns marks, answers a clear and paces audio as production does. The user approved this route and the number.
+
+- `coval_sim` points the number's voice webhook at the job's tunnel through the Twilio command line. It puts the old URL back afterwards (`twilio_voice_url`).
+- A Coval agent named `...-pipecat-twilio` with a phone number is a phone line (`Agent.phone_line`).
+
+**Call 3 in detail** (simulation `dTJmpxEYwyYWgMysFJNVVe`, bot call `CA2f57eed1cfb8b3c485f64bcb11c2f4ba`):
+
+- **Marks.** 15 sent, 15 returned. The mark names carry 15 clears. Every cut segment was cleared before its mark went out, so it never counted as heard.
+- **Stress triggers seen:**
+  - the number given in two pieces;
+  - four turns joined over pieces;
+  - the number read-back cut and replayed in full;
+  - Friday changed to Saturday while the Friday read-back played;
+  - the Saturday read-back cut and replayed;
+  - TTS contexts abandoned mid-utterance, twice, not fatal;
+  - the caller's goodbye.
+- **Outcome.** One booking, `BK0001`, a haircut on Saturday 3 October at 9:00. Both yeses came 3 to 4 s after their read-back's mark.
+- **Speech.** The goodbye recap came from the receipt. The caller hung up while it played. Twilio's `stop` was observed, followed by a `CancelFrame`.
+- **Evaluator.** `load_report` exits 0, and evidence is complete for 1 of 1 calls. Delivery and operational pass on deterministic evidence. Outcome, authorization and completion rest on an agent review (`coval-twilio-1-evidence.json`). The user also listened to the recording and read the transcript.
+- **Latency.** Turn latency is p50 2.36 s and p90 3.54 s over 11 turns. That is one call through a tunnel and a phone line, not a cohort, so it says nothing about the 2.7 s p90 target.
+- **Coval's own transcript** drops and repeats words, for example "Friday the at 9AM" and a caller line listed twice. The bot's TTS text is correct in the bot log.
+
+**Test-side repairs made on the way:**
+- `TWILIO_MARKS=absent` for the simulator route. It settles from real time as `local` and is never written as transport playback.
+- Mark logging in `TwilioMarks`.
+- The phone line itself.
+- Coval reports no call SID for a phone line. `coval_sim` now logs the bot's call SIDs, and `load_report --call SIMULATION=CALL_SID` binds them.
+- The voice-URL restore now prints the URL it replaced, with no query, and warns if the number reads back different.
+
+**One loose end.** The number's voice URL read back empty after call 3. Before the job it pointed at a dead tunnel. No manual change was made in between. The job did not yet log what it replaced, so it is unknown whether the URL was cleared before the job or the restore failed. The restore now logs and checks itself.
+
+**Stopped after 3 of 20 calls.** Call 3 exercised every repair it targeted. A repeat would not test anything new.
 
 ## Budgets
 
 These live in `session-4b-runtime/budget.json`. Every billable action updates that file.
 
-| Pool | Allowed | Spent |
-|---|---:|---:|
-| Text model requests | 100 | 0 |
-| Text tokens | 250,000 | 0 |
-| Coval repair calls | 20 | 0 |
+| Pool | Allowed | Spent | Left |
+|---|---:|---:|---:|
+| Text model requests | 100 | 82 | 18 |
+| Text tokens | 250,000 | 186,792 | 63,208 |
+| Coval repair calls | 20 | 3 (3 connected, 3 terminal, 1 evidence-complete) | 17 |
+
+No native calls, paid rescoring or new paid metrics were used.
+
+## What is proven, and how
+
+**Implemented.** Everything in B1 to B5 above. Also:
+- the support desk fixture;
+- the no-marks mode for Coval's simulator;
+- the phone-line route in `coval_sim`;
+- `load_report --call`.
+
+**Offline-proven** (the scripted model, the real engine, the real Pipecat transport and serializer over a fake phone):
+- An intent through cancellation after dispatch, a lost answer, a malformed answer, a `matches` mismatch, a thread that commits late, idempotent resend and restore in a fresh process (I1 to I10, R1 to R10).
+- Effective receipts and recap refusal on the clinic, the salon and the desk. The desk also passes with every name changed and core untouched.
+- Marks in order after the last media chunk. Lost, late, duplicate, stale and unrelated marks. A clear before its echo. Caller onset before and after the mark (M1 to M7, `test_delivery`).
+- The `C26pPHK6` family. The two-copy fallback. One budget per joined turn. The ceiling on every exit path. Ending facts.
+- The real `load_report` on the runtime's own spans, exits 0, 1 and 3.
+- Zero added model calls.
+
+**Live-proven:**
+- T1 to T4 on the real model, text only, with simulated delivery (text-2).
+- One call on a real Twilio line (Coval call 3):
+  - real marks returned and bound to the read-backs;
+  - cut read-backs replayed in full and never approved;
+  - a correction in the middle of a read-back;
+  - one booking;
+  - a goodbye recap from the receipt;
+  - an observed ending;
+  - the evaluator passing on the runtime's live spans.
+
+**Still unproven live:**
+- An unknown intent after a real cancellation or lost backend answer, and its reconciliation. The salon's diary is in memory and never loses an answer.
+- The two-copy fallback with real marks. It fired live only on the simulator, which returns no marks.
+- The ceiling on a live call. Restore in a fresh process on a live call. Idempotent resend.
+- The support desk and the clinic by voice. They were never meant to run live in Stage B.
+- Any rate or latency claim. One call is not a cohort. The 2.7 s p90 target needs Stage D's cohorts.
+- N12 remains failed, as at the parent.
 
 Reserved for later stages, untouched: 20 final normal, 20 final interruptive, 10 native normal and 12 native interruptive calls.
 

@@ -647,9 +647,12 @@ for d in core use-cases/*/; do [ -d $d/tests ] && uv run --directory $d python -
 both this harness and the native Pipecat-flows build (`use-cases/salon-pipecat-flows`),
 offline, each arm in its own environment (`uv run python -m matrix run`).
 `use-cases/concierge-tools/load_report.py` reads a batch of Coval calls'
-Langfuse traces and write records — no Coval judge — and reports consent
-(writes with no matching question), speech (repeated lines), request chains
-and latency per call.
+Langfuse traces and write records — no Coval judge — and gives each call
+five separate answers, each pass, fail or unknown: outcome (the appointments
+left after replaying every receipt by booking ID), authorization, delivery,
+completion and how the call ended. Reviewed labels and measured facts come
+from an `--evidence` file; missing evidence is unknown, never a pass. It also
+reports speech (repeated lines), request chains and latency per call.
 
 We used **Coval and Langfuse to evaluate the feasibility of the package**:
 simulated phone calls scored by Coval, and the traces of the same calls read
@@ -870,7 +873,7 @@ marked above.
 
 Session 4 tested this design with 140 Coval phone calls, on two booking cases: a normal caller and an interruptive one. The full report is [docs/research/reusable-core/session-4.md](docs/research/reusable-core/session-4.md). Every call, with its Coval recording and its Langfuse trace, is listed in [docs/research/reusable-core/session-4/coval-evals.md](docs/research/reusable-core/session-4/coval-evals.md).
 
-How a call is judged: Coval places and records it and scores nothing but a turn count. `use-cases/concierge-tools/load_report.py` reads the call's Langfuse session and write records, and says whether it booked once, on the day asked, and whether each write answered a question the caller heard.
+How a call is judged: Coval places and records it and scores nothing but a turn count. `use-cases/concierge-tools/load_report.py` reads the call's Langfuse session and write records, replays the receipts by booking ID, and scores outcome, authorization, delivery, completion and ending apart; what the trace cannot show is unknown until a reviewed label or measured fact supplies it ([session 4b, stage A](docs/research/reusable-core/session-4b-evaluator.md)).
 
 | | Harness, normal | Native Pipecat, normal | Harness, interruptive | Native Pipecat, interruptive |
 |---|---|---|---|---|

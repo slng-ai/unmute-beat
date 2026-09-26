@@ -15,7 +15,7 @@ import time
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
@@ -603,6 +603,11 @@ class CallContext(BaseModel):
     """When the caller was heard starting to speak, newest last, bounded (`note_onset`)."""
     _answer_lead: float = PrivateAttr(default=0.0)
     """How much earlier than its report caller speech may have begun (the adapter's VAD start window)."""
+    _origin: tuple[float, datetime] = PrivateAttr(
+        default_factory=lambda: (time.perf_counter(), datetime.now(UTC))
+    )
+    """The segments' clock and UTC wall time at one instant: how a monotonic time is written for a report (`wall`)."""
+    _audits: int = PrivateAttr(default=0)
     _endings: list[dict[str, Any]] = PrivateAttr(default_factory=list)
     """How the call ended, as each part of it was observed or intended, in order (`note_ending`)."""
     _playback_log: list[dict[str, Any]] = PrivateAttr(default_factory=list)
@@ -888,17 +893,49 @@ class CallContext(BaseModel):
             return not self._marks_known or segment.heard_by == 'ack'
         return segment.played_at <= min(onsets) - self._answer_lead
 
-    def playback_for(self, serial: int) -> dict[str, Any]:
-        """The playback evidence of one question, for the write audit: each mark event and when the answer began."""
-        marks = [dict(event) for event in self._playback_log if event.get('proposal') == serial]
+    def wall(self, at: float) -> str:
+        """A time on the segments' clock (`time.perf_counter`) as UTC wall time, for a record read elsewhere.
+
+        One origin per call, taken when the call was made, so the order of
+        events is the monotonic clock's and never a wall clock's jump.
+        """
+        perf, wall = self._origin
+        return (wall + timedelta(seconds=at - perf)).isoformat()
+
+    def playback_for(self, serial: int) -> dict[str, Any] | None:
+        """A question's transport playback evidence, in the shape `load_report.Playback` reads, or None.
+
+        Each of its marks that came back (`played`), and each that proves it
+        did not play (`cleared`: voided by a clear, no media before it, or
+        synthesis failed), with when the caller's reply began. None when the
+        reply's start is unknown (no onset after the copy) or nothing was
+        marked: that is no evidence, not a pass. A text acknowledgement is
+        simulated delivery and is never written here (`simulated_for`).
+        """
         copies = [s for s in self.all_spoken if serial and s.proposal == serial]
-        onsets = [t for t in self._onsets if copies and t >= copies[-1].at]
-        acks = [
-            {'proposal': serial, 'segment': s.id, 'kind': 'simulated', 'at': s.played_at}
-            for s in copies
-            if s.heard_by == 'ack' and s.played_at is not None
+        kinds = {'played': 'played', 'cleared': 'cleared', 'silent': 'cleared', 'failed': 'cleared'}
+        marks = [
+            {'proposal': serial, 'segment': e['segment'], 'kind': kinds[e['kind']], 'at': self.wall(e['at'])}
+            for e in self._playback_log
+            if e.get('proposal') == serial and e['kind'] in kinds
         ]
-        return {'marks': marks + acks, 'answered_at': min(onsets) if onsets else None}
+        onsets = [t for t in self._onsets if copies and t >= copies[-1].at]
+        if not marks or not onsets:
+            return None
+        return {'marks': marks, 'answered_at': self.wall(min(onsets) - self._answer_lead)}
+
+    def simulated_for(self, serial: int) -> list[dict[str, Any]]:
+        """A question's text acknowledgements: simulated delivery, labelled as such, never transport playout."""
+        return [
+            {'segment': s.id, 'at': self.wall(s.played_at)}
+            for s in self.all_spoken
+            if serial and s.proposal == serial and s.heard_by == 'ack' and s.played_at is not None
+        ]
+
+    def next_audit(self) -> int:
+        """The next number in this call's sequence of audited events, so a reader can order them without clocks."""
+        self._audits += 1
+        return self._audits
 
     def _log_playback(self, kind: str, name: str, at: float, proposal: int | None = None) -> None:
         segment = name.split('~', 1)[0]

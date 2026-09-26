@@ -152,7 +152,10 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 'call': call.id,
                 'turn': call.turn,
                 'generation': call._generation,
+                'sequence': call.next_audit(),
                 'heard': heard,
+                'playback': call.playback_for(answering[0]) if asked is not None else None,
+                'simulated_delivery': call.simulated_for(answering[0]) if asked is not None else [],
                 'status': 'unknown',
             }
             try:

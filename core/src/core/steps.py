@@ -435,14 +435,19 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             raise OutcomeUnknownError(
                 f'{self.name}: an earlier attempt may have landed, so it is not retried'
             )
-        with _tracer.start_as_current_span('reconcile') as span:
+        with _tracer.start_as_current_span('write') as span:
             audit: dict[str, Any] = {
                 'action': self.name,
                 'intent': intent.id,
                 'operation': intent.id,
+                'reconciled': True,
                 'args': args.model_dump(mode='json'),
+                'needs_approval': self.needs_approval,
+                'changes': self.changes,
                 'call': call.id,
                 'turn': call.turn,
+                'generation': call._generation,
+                'sequence': call.next_audit(),
                 'status': 'unknown',
             }
             try:

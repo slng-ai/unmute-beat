@@ -263,6 +263,37 @@ class Effects:
     time. The business did something other than what was authorised."""
 
 
+def reconciliations(writes: list[Write]) -> tuple[set[int], set[int]]:
+    """Which unknown writes a later reconciliation settled, and which audits are those reconciliations, by index.
+
+    Stage B's runtime asks the backend what an unknown intent did and files
+    the answer as a write audit marked `reconciled`, under the same intent
+    (`operation`). It settles only an earlier write audit of the same action
+    for that same intent id, and only with a validated answer (`ok` or
+    `failed`). One with no such earlier write is an ordinary write, judged
+    like any other: a `reconciled` flag alone excuses nothing.
+    """
+    settled: set[int] = set()
+    found: set[int] = set()
+    for i, w in enumerate(writes):
+        operation = w.audit.get('operation')
+        if w.audit.get('reconciled') is not True or not operation:
+            continue
+        earlier = [
+            j
+            for j in range(i)
+            if writes[j].name == w.name
+            and writes[j].audit.get('operation') == operation
+            and writes[j].audit.get('reconciled') is not True
+        ]
+        if not earlier:
+            continue
+        found.add(i)
+        if w.status in ('ok', 'failed'):
+            settled.update(j for j in earlier if writes[j].status == 'unknown')
+    return settled, found
+
+
 def effects(writes: list[Write]) -> Effects:
     """Replay the booking receipts of one call, in order, by booking ID.
 
@@ -285,10 +316,13 @@ def effects(writes: list[Write]) -> Effects:
     """Booking ID -> the latest change applied to it and the record it left."""
     done: list[tuple[str, str, dict[str, Any], Any]] = []
     """Every receipt applied: change, booking, record, and its audit's `operation` (None before Stage B)."""
-    for w in writes:
+    settled, _ = reconciliations(writes)
+    for i, w in enumerate(writes):
         audit, receipt = w.audit, w.audit.get('receipt') or {}
         args = audit.get('args') or {}
         at = _key(w)
+        if i in settled:
+            continue
         if not audit:
             out.unknown.append(
                 f'{w.name}: a tool call with no write audit ({w.status}): what it did is unknown'
@@ -490,7 +524,10 @@ def _differs(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
 def authorization(writes: list[Write], review: CallReview | None) -> Check:
     """Did the caller authorise each write that needed it: this exact proposal, not a pick, digits or noise?"""
     check = Check()
-    for w in writes:
+    _, reconciled = reconciliations(writes)
+    for i, w in enumerate(writes):
+        if i in reconciled:
+            continue
         need, key = needs_consent(w.audit), _key(w)
         if need is None:
             check.add(
@@ -571,7 +608,10 @@ def delivery(writes: list[Write], review: CallReview | None) -> Check:
     pass. A write whose need for a yes is unknown has delivery unknown too.
     """
     check = Check()
-    for w in writes:
+    _, reconciled = reconciliations(writes)
+    for i, w in enumerate(writes):
+        if i in reconciled:
+            continue
         need, key = needs_consent(w.audit), _key(w)
         if need is None:
             check.add(

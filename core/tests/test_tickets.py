@@ -17,7 +17,8 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R7: a fresh process reconciles what a killed one did: after its commit,
   found and not sent again; before it, sent again as the same intent, once;
 * R8: every field and operation renamed, and nothing in core changed;
-* R9: a receipt cut off is said again only while it stands, and never re-sent.
+* R9: a receipt cut off is said again only while it stands, and never re-sent;
+* R10: its write audit is the salon's envelope, and names the desk's own effect.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -30,6 +31,11 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import core
 from tests.test_nodes import Script
@@ -228,6 +234,39 @@ async def a_cut_receipt_is_said_again_only_while_it_stands(folder: Path):
         assert said == expected, (superseded, said)
 
 
+async def the_audit_names_the_backend_effect(folder: Path):
+    """R10: the write audit the desk's resolve leaves is the same envelope the salon's is, and names the effect.
+
+    Its intent is the key the desk filed the effect under; the arguments its
+    read-back named were captured when it was asked; a text run's delivery is
+    simulated, so it is labelled so and never written as transport playback.
+    """
+    exporter = InMemorySpanExporter()
+    provider = trace.get_tracer_provider()
+    if not isinstance(provider, TracerProvider):
+        provider = TracerProvider()
+        trace.set_tracer_provider(provider)
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    audits = [
+        json.loads(str(s.attributes['write.audit']))
+        for s in exporter.get_finished_spans()
+        if s.name == 'write' and s.attributes and 'write.audit' in s.attributes
+    ]
+    [audit] = [a for a in audits if a['action'] == 'resolve_ticket']
+    assert desk.effect(audit['intent']) == audit['receipt'], ('the audit names another effect', audit)
+    assert audit['operation'] == audit['intent'] and audit['proposal_args'] == audit['args'], audit
+    assert audit['needs_approval'] is True and audit['changes'] is True and audit['status'] == 'ok', audit
+    assert audit['playback'] is None and audit['simulated_delivery'], (
+        'text delivery is not transport playback',
+        audit,
+    )
+    assert not any(k in json.dumps(audit) for k in ('phone', 'slot', 'appointment', 'booking')), audit
+
+
 RENAMES = {
     'account_id': 'customer_ref',
     'ticket_id': 'case_ref',
@@ -284,13 +323,14 @@ async def main() -> None:
                 a_fresh_process_reconciles,
                 renamed_it_still_holds,
                 a_cut_receipt_is_said_again_only_while_it_stands,
+                the_audit_names_the_backend_effect,
             )
         ):
             folder = Path(tmp) / str(index)
             for sub in ('', 'wrong_ticket', 'lose_answer', 'invented', 'standing', 'superseded'):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R9, no phone, date, appointment or slot')
+    print('tickets ok: R1-R10, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

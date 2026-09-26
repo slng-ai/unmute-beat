@@ -418,6 +418,7 @@ class Runner:
         self.env = {
             **os.environ,
             'VOICE_DOUBLES': '1',
+            'CARRIER_NUMBER': '1',
             'GOOGLE_API_KEY': 'offline',
             'SLNG_API_KEY': 'offline',
             'DIARY_PATH': str(out / 'diary.db'),

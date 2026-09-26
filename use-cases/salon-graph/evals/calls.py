@@ -195,7 +195,14 @@ def watch(diary: Diary, record: Record, start: float) -> None:
     does: the first live run of this checkpoint read a key the answer did not
     have, and the evaluator broke the diary it was meant to watch.
     """
-    for name in ('find_slots', 'save_booking', 'outcome_of', 'bookings_for', 'save_complaint'):
+    for name in (
+        'find_slots',
+        'save_booking',
+        'outcome_of',
+        'outcome_or_void',
+        'bookings_for',
+        'save_complaint',
+    ):
         real = getattr(diary, name, None)
         if real is None:
             continue
@@ -210,7 +217,9 @@ def watch(diary: Diary, record: Record, start: float) -> None:
                 raise
             finally:
                 entry['end'] = time.time() - start
-            entry['returned'] = result is not None
+            entry['returned'] = result is not None and not (
+                isinstance(result, dict) and result.get('status') == 'void'
+            )
             if isinstance(result, dict) and isinstance(result.get('slots'), list):
                 entry['offered'] = [
                     (result.get('date'), s.get('time')) for s in result['slots'] if isinstance(s, dict)
@@ -472,12 +481,23 @@ def check_t4(record: Record) -> list[str]:
 
     v2 of the case adds the caller's reply to the agent saying the save went
     wrong: v1 had none, and its one live run stopped there, off-script.
+
+    Since Stage C a reconciliation asks `outcome_or_void`, which fences a
+    write it cannot find; a void answer is asking, and is not recovering.
     """
     problems = one_booking(record, 'haircut', '2026-10-02')
     saves = record.calls_to('save_booking')
     if not saves or 'error' not in saves[0]:
         return [*problems, 'the injected lost answer never happened: nothing was tested']
-    asked = [c for c in record.calls_to('outcome_of') if c['start'] >= saves[0]['end']]
+    asked = sorted(
+        (
+            c
+            for name in ('outcome_of', 'outcome_or_void')
+            for c in record.calls_to(name)
+            if c['start'] >= saves[0]['end']
+        ),
+        key=lambda c: c['start'],
+    )
     if len(saves) > 1 and not any(c['end'] <= saves[1]['start'] for c in asked):
         problems.append('a second write went out before the outcome of the first was asked for')
     if not any(c.get('returned') for c in asked):

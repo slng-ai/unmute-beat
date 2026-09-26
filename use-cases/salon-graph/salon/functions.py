@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
@@ -45,9 +46,32 @@ class Salon:
 
     diary: Diary
     call: str
+    settle: Callable[[str], bool] | None = None
+    """Which earlier calls are over, by call key: only their intents are owed to a new call (`owed`)."""
 
     def now(self) -> datetime:
         return self.diary.now()
+
+    def owed(self, identity: str) -> list[Intent]:
+        """This caller's intents that calls now over left with no answer: core settles them before anything new.
+
+        Settled by the diary: found, they are said as done; not found, they
+        are voided, so a worker still holding one can never land it. An
+        intent of a call still running anywhere is left alone.
+        """
+        if self.settle is None:
+            return []
+        return [
+            Intent(
+                id=i['id'],
+                operation=i['operation'],
+                args=i['args'],
+                subject=i['subject'],
+                status='dispatched',
+            )
+            for i in self.diary.unresolved(identity)
+            if i['session'] != self.call and self.settle(i['session'])
+        ]
 
     async def note_intent(self, intent: Intent) -> None:
         """Core's durable record of an intent, before it is dispatched: what a new call settles if this one dies."""

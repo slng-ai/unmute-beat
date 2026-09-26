@@ -14,7 +14,8 @@
   finished intent is never reopened by a restore;
 * O7: ticket 1 and address 1 are two resources; resolve and reopen of one
   ticket still supersede each other;
-* O8: the loader checks `rejects`, `version` and `resource`.
+* O8: the loader checks `rejects`, `version` and `resource`;
+* O9: once a caller is known mid-call, what calls now over owe them is settled first (`take_owed`).
 
 Every check drives `Operation.run` or a compiled manifest through `text_turn`.
 """
@@ -311,7 +312,54 @@ def the_loader_checks_it(folder: Path):
         raise AssertionError(f'the loader took a manifest with {name}')
 
 
+async def owed_once_known(folder: Path):
+    """O9: a caller known only mid-call is owed what a dead worker left: settled first, never sent again.
+
+    A worker commits a resolve and is killed before it answers (the R7
+    worker). A new call opens knowing nobody. Once the caller's account is
+    recorded, the desk's services say what is owed to it (`owed`), and the
+    next turn reconciles it, by its intent, before any model: the caller hears
+    the receipt, and the desk is not sent it again.
+    """
+    import subprocess
+    import sys
+
+    desk = desk_in(folder)
+    died = subprocess.run(
+        [sys.executable, '-m', 'tests.ticket_flow.worker', str(folder / 'desk.db'), 'after'],
+        cwd=Path(__file__).parent.parent,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert died.returncode == 3, died.stderr[-2000:]
+    asked: list[str] = []
+
+    def owed(identity: str) -> list[Intent]:
+        asked.append(identity)
+        return [i for i in desk.unresolved() if i.subject == identity]
+
+    desk.owed = owed
+    script, flow, call = opened(desk)
+    assert not call.intents and asked == [], 'owed was asked with nobody known'
+    await turn(
+        flow,
+        call,
+        script,
+        'Hola, cuenta ACC-1234, el ticket T-101.',
+        ('call', 'hand_over', {'to': 'desk', 'because': 'un ticket'}),
+        ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'ticket_id': 'T-101'}}),
+        ('call', 'wait', {}),
+    )
+    assert asked == ['ACC-1234'] and [i.status for i in call.intents] == ['unknown'], (asked, call.intents)
+    said = await turn(flow, call, script, '¿Se resolvió?', ('call', 'wait', {}))
+    assert said[0] == 'Ticket T-101 resuelto. ¿Algo más?', said
+    assert desk.sent() == 1 and [i.status for i in call.intents] == ['succeeded'], 'owed was sent again'
+
+
 async def main() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        await owed_once_known(Path(tmp))
     await a_pending_answer_settles_nothing()
     await a_declared_no_is_final()
     await a_retry_signal_after_dispatch_is_unknown()
@@ -324,7 +372,7 @@ async def main() -> None:
     await kinds_keep_ids_apart()
     with tempfile.TemporaryDirectory() as tmp:
         the_loader_checks_it(Path(tmp))
-    print('outcomes ok: O1-O8')
+    print('outcomes ok: O1-O9')
 
 
 if __name__ == '__main__':

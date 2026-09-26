@@ -102,6 +102,10 @@ class FlowCall[S: BaseModel](CallContext):
     """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
     _goodbye_checked: int = PrivateAttr(default=0)
     """The turn on which a goodbye beside a waiting read-back was sent back once, to carry out a yes first."""
+    _reconcile_with: dict[str, tuple[Any, type[BaseModel]]] = PrivateAttr(default_factory=dict)
+    """Each declared operation and its argument model, by name: what a restored intent is reconciled with."""
+    _asked_owed: set[str] = PrivateAttr(default_factory=set)
+    """The identities whose owed intents the services were already asked for (`take_owed`)."""
 
     @property
     def locale(self) -> Locale:
@@ -135,6 +139,29 @@ class FlowCall[S: BaseModel](CallContext):
         self.commit(facts=candidate)
         if self.state.facts is not facts:
             self._version += 1
+            self.take_owed()
+
+    def take_owed(self) -> None:
+        """Once the caller is known, take back what earlier calls still owe them, to settle before anything new.
+
+        The services may say (`owed(identity) -> intents`): intents of calls
+        that are over, made for this caller, with no answer that settles
+        them. Restored here, they are unknown on this call, so the next
+        turn reconciles them by their own operation before any model runs,
+        and nothing of the same operation for this caller is sent until then
+        (`Operation._may_dispatch`). Asked once per identity. A caller known
+        at open is asked at open; one who says who they are later is asked
+        then, which on a phone line is the usual case.
+        """
+        identity = self.identity()
+        owed = getattr(self._services, 'owed', None)
+        if not identity or identity in self._asked_owed or owed is None:
+            return
+        self._asked_owed.add(identity)
+        intents = [i for i in owed(identity) if i.id not in self._intents]
+        if intents:
+            logger.info('{} intent(s) owed to this caller by earlier calls: settled first', len(intents))
+            self.restore(intents, self._reconcile_with)
 
     def wrote_this_turn(self) -> bool:
         """Whether a business action filed a validated receipt in this caller turn. Evidence, never a flag."""
@@ -1699,8 +1726,10 @@ class StepFlow:
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale
+        call._reconcile_with = {op.name: (op, op.args_type) for op in self.operations()}
         if intents:
-            call.restore(list(intents), {op.name: (op, op.args_type) for op in self.operations()})
+            call.restore(list(intents), call._reconcile_with)
+        call.take_owed()
         return call
 
     def operations(self) -> list[Operation]:

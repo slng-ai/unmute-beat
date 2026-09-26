@@ -83,6 +83,13 @@ RUNNER_DB = os.getenv('RUNNER_DB') or 'runner.db'
 PUBLIC_HOST = os.getenv('PUBLIC_HOST', '')
 """The host Twilio reaches the stream on (a tunnel's). Empty: the host the webhook came to."""
 DOUBLES = bool(os.getenv('VOICE_DOUBLES'))
+CARRIER_NUMBER = bool(os.getenv('CARRIER_NUMBER'))
+"""Offer the webhook's `From` number to the caller as theirs. Off: the salon asks, as `bot.py` does on Coval.
+
+Coval dials from its own number, so on that line the carrier's number is
+never the caller's. The offline load test turns it on: its fake phones
+send each caller's own number.
+"""
 LAG_EVERY = 0.05
 """How often the loop-lag sampler wakes: its lag is how late each wake-up was."""
 DRAIN_SECONDS = float(os.getenv('DRAIN_SECONDS') or 200)
@@ -356,7 +363,7 @@ async def media(websocket: WebSocket) -> None:
             speech=SPEECH,
             warm=False,
             trace=not DOUBLES,
-            from_number=row['from_number'],
+            from_number=row['from_number'] if CARRIER_NUMBER else os.getenv('CALLER_ID', ''),
             settle=over.__contains__,
         )
     except Exception as error:

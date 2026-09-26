@@ -47,26 +47,29 @@ class Locale:
     """
     unsettled: str
     """Said when a business action's outcome is unknown: nothing is claimed, and nothing is tried again until it is settled."""
-    claims: tuple[str, ...] = ()
-    """Patterns for a model telling the caller a business action is done: "I've booked", "your complaint is recorded".
+    goodbye: str = ''
+    """The last line of a call the caller ended. Core says it; a model never words a goodbye.
 
-    On a step that can write, a clause matching one is never said: the only
-    words that report a completed action are its receipt's, said by code from
-    the validated result (`say:` in the manifest), so they cannot be about a
-    different action, different arguments or somebody else. "Nothing was
-    saved" and "you're booked for Friday" (recounting what the caller holds)
-    do not match. Case-insensitive.
-
-    ponytail: a pattern list per language, the one place a word list still
-    guards speech. It fails towards silence (the withheld line), never towards
-    a false claim; widen it when a live call shows a phrasing it misses.
+    Before it, core says the recap the model pointed at, rendered by the
+    application from a receipt that still stands (`recap:` in the manifest),
+    and the `unsettled` line when an intent's outcome is still unknown. So a
+    goodbye can claim nothing the business did not do. See
+    `core.steps.ConversationStep`.
     """
-    recounts: tuple[str, ...] = ()
-    """Patterns for telling the caller they hold something: "you're booked", "you're all set".
+    claims: tuple[str, ...] = ()
+    """Patterns for a model telling the caller the business changed something. Empty here: an application's to give.
 
-    True after a write on the call, so never withheld in speech; a goodbye
-    saying it with no such write on the call is refused (Coval gate 1,
-    cYMMixAc: "your haircut is booked" and nothing was).
+    On a step that can write (`guarded`), a clause matching one is never
+    said: what was done is said by the receipt, in words code rendered from
+    the validated result (`say:`), so it cannot be about a different action,
+    different arguments or somebody else. Which verbs claim a change is the
+    application's domain ("booked", "resolved"), so core ships none; a
+    manifest names its own (`locale: {base: english, claims: [...]}`).
+
+    ponytail: a best-effort guard on model prose, not a guarantee. The
+    guarantee is structural: receipt speech, fixed lines and goodbye recaps
+    are rendered by code. Ordinary model speech stays a semantic behaviour to
+    evaluate.
     """
     still_there: str = ''
     """Said when the caller has been silent a while after the last answer played (`core.turn.remind`).
@@ -78,20 +81,6 @@ class Locale:
     """Said before the line is closed, once reminders went unanswered."""
 
 
-_CLAIMS_EN = (
-    r"\b(?:i|we)(?:'ve| have|'ll have| had)?\s+(?:just\s+)?(?:gone\s+ahead\s+and\s+)?"
-    r'(?:cancelled|canceled|booked|moved|rebooked|recorded|logged|filed|saved|noted|written down|registered)\b',
-    r"\bi(?:'ve| have)\s+(?:got\s+)?you\s+(?:down|booked|in)\b",
-    r"\byour\s+\w+(?:\s+\w+)?(?:'s| is| has been| was)\s+(?:now\s+|all\s+)?(?:booked|cancelled|canceled|moved|rebooked)\b",
-    r"\b(?:that|it|this|your (?:complaint|booking|appointment|request))(?:'s| is| has been| was)\s+(?:now\s+)?"
-    r'(?:on record|recorded|logged|filed|saved|booked|cancelled|canceled|moved|confirmed|registered)\b',
-)
-_CLAIMS_ES = (
-    r'\b(?:te\s+|le\s+)?(?:he|hemos)\s+(?:ya\s+)?(?:reservado|cancelado|movido|cambiado|registrado|anotado|guardado|apuntado)\b',
-    r'\b(?:ya\s+)?(?:est[aá]|queda|ha quedado)\s+(?:ya\s+)?(?:reservad[oa]|cancelad[oa]|registrad[oa]|anotad[oa]|guardad[oa]|apuntad[oa]|confirmad[oa])\b',
-)
-
-
 ENGLISH = Locale(
     stumble='Sorry, I had a problem there. Could you say that again?',
     exhausted="Sorry, I'm going round in circles there. Could you say that again?",
@@ -99,8 +88,7 @@ ENGLISH = Locale(
     withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
     holding=('Let me have a look.', 'One moment.'),
     unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
-    claims=_CLAIMS_EN,
-    recounts=(r"\byou(?:'re| are)\s+(?:all\s+set|booked|confirmed)\b",),
+    goodbye='Thanks for calling. Goodbye.',
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
 )
@@ -112,8 +100,7 @@ SPANISH = Locale(
     withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
     holding=('Déjame mirar.', 'Un momento.'),
     unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
-    claims=_CLAIMS_ES,
-    recounts=(r'\bya\s+tienes\s+(?:tu\s+|la\s+)?cita\b',),
+    goodbye='Gracias por llamar. Adiós.',
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
 )

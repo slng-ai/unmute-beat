@@ -91,6 +91,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     """The backend dedups by the intent id, so an intent whose outcome is unknown may be sent again, as itself."""
     subject: ClassVar[str] = ''
     """The receipt field naming the resource it acts on (a booking id, a ticket id). See `CallContext.effective`."""
+    recap: ClassVar[str] = ''
+    """What a goodbye may say about a receipt of it that still stands, formatted from the receipt. Empty: nothing."""
     proposal_about: ClassVar[str] = ''
     """Which kind of question authorises this, for the default `_authorise`. Defaults to `name`."""
 
@@ -213,12 +215,17 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
             succeeded=succeeded,
             changes=self.changes,
             resource=str(data.get(self.subject, '')) if self.subject else '',
+            identity=intent.subject,
         )
         audit.update(
             status='ok' if succeeded else 'failed',
             outcome='succeeded' if succeeded else 'rejected',
             receipt=data,
         )
+        if intent.subject and call.identity() and intent.subject != call.identity():
+            audit['presented'] = False
+            logger.info('{} settled for another caller than the one on the line: filed, not said', self.name)
+            return None  # ty: ignore[invalid-return-type]
         if succeeded:
             call._unpresented[intent.id] = (self, args, receipt.model_dump())
         try:
@@ -290,8 +297,11 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
 
         Optional: a service without it keeps intents only as long as this
         process does. Bounded, so a slow store cannot hold the turn; a failure
-        means the intent was never dispatched.
+        means the intent was never dispatched. A read (`changes: false`) has
+        no effect to reconcile, so it is not recorded.
         """
+        if not self.changes:
+            return
         services = getattr(call, 'services', None)
         note = getattr(services, 'note_intent', None)
         if note is None:

@@ -232,7 +232,7 @@ async def holding_covers_work_not_thinking():
 
     for slow, moves, expected in (
         ('tool', (('call', 'options', {}), ('say', 'I have Tuesday at nine.')), 1),
-        ('model', (('call', 'goodbye', {'words': 'Goodbye.'}),), 0),
+        ('model', (('call', 'goodbye', {}),), 0),
     ):
         script = Script()
         step = ConversationStep(

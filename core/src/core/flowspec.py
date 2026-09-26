@@ -48,12 +48,13 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import re
 import sys
 import typing
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Literal, TypeAliasType, get_args, get_origin, get_type_hints
@@ -401,6 +402,7 @@ class _Resolver:
             'needs_approval': decl.approval == 'readback',
             'matches': dict(decl.matches),
             'changes': decl.changes,
+            'recap': decl.recap,
             'subject': decl.subject,
             'idempotent': decl.idempotent,
         }
@@ -459,6 +461,8 @@ class _Resolver:
             reconcile = self.domain_function(where, decl.reconcile)
             attrs['reconcile'] = staticmethod(reconcile or (lambda s, a: None))
             attrs['reconcile_takes_intent'] = reconcile is not None and _takes_intent(reconcile)
+        if decl.recap and not decl.changes:
+            self.fail(where, 'changes nothing, so a goodbye has nothing of it to recap (recap:)')
         if decl.subject and _model(receipt_type) and decl.subject not in receipt_type.model_fields:
             self.fail(where, f'names subject {decl.subject!r}, which {receipt_type.__name__} does not have')
         if decl.idempotent and function is not None and not _takes_intent(function):
@@ -859,6 +863,12 @@ class OperationSpec(BaseModel):
     """`file.py:find`, `(services, args[, intent]) -> receipt | None`: what happened to an intent whose outcome is unknown."""
     say: str = ''
     """The receipt's speech, formatted from its fields: `Booked, reference {reference}.`"""
+    recap: str = ''
+    """What a goodbye may say about it later, formatted from the receipt: `You're booked for {spoken}.`
+
+    Said only when the model points the goodbye at this receipt and the
+    receipt still stands. Empty: a goodbye cannot recap it.
+    """
     changes: bool = True
     """Whether it changes a business resource. `false` for a lookup: its receipt never backs a claim that something changed."""
     subject: str = ''
@@ -879,6 +889,35 @@ class PersonaSpec(BaseModel):
 LOCALES: dict[str, Locale] = {'english': ENGLISH, 'spanish': SPANISH}
 
 
+class LocaleSpec(BaseModel):
+    """A language for the engine's fixed lines, with the application's own words where its domain decides them.
+
+    `claims` are the verbs that claim a change in this application ("booked",
+    "resolved"): patterns for the clause check on a `guarded` step. `goodbye`
+    replaces the language's closing line. Each pattern is compiled here, so a
+    broken one fails at load, never on a call.
+    """
+
+    model_config = SPEC
+    base: Literal['english', 'spanish']
+    claims: list[str] = []
+    goodbye: str = ''
+
+    @field_validator('claims')
+    @classmethod
+    def _compiles(cls, claims: list[str]) -> list[str]:
+        for pattern in claims:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise ValueError(f'claim pattern {pattern!r} does not compile: {error}') from None
+        return claims
+
+    def build(self) -> Locale:
+        base = LOCALES[self.base]
+        return replace(base, claims=tuple(self.claims), goodbye=self.goodbye or base.goodbye)
+
+
 class FlowSpec(BaseModel):
     """A whole flow file: the application's manifest, `agent.yaml`."""
 
@@ -894,8 +933,11 @@ class FlowSpec(BaseModel):
     """`file.py:factory`, making one call's services when `open` is given none."""
     model: str = ''
     """The default model, like `google-gla:gemini-3.5-flash-lite`. A persona's own model wins; `compile(model=...)` wins over both."""
-    locale: Literal['', 'english', 'spanish'] = ''
-    """The engine's own fixed lines, in this language. Speech settings belong to the voice adapter."""
+    locale: Literal['', 'english', 'spanish'] | LocaleSpec = ''
+    """The engine's own fixed lines, in this language, or a language and the application's own words for it.
+
+    Speech settings belong to the voice adapter.
+    """
     agents: dict[str, PersonaSpec] = {}
     operations: dict[str, OperationSpec] = {}
     greeting: str = ''
@@ -1051,7 +1093,7 @@ class FlowSpec(BaseModel):
             call_type=resolve.call_type() if self.call else None,
             entry=self.entry,
             services=resolve.function('services', self.services, 0) if self.services else None,
-            locale=LOCALES.get(self.locale),
+            locale=self.locale.build() if isinstance(self.locale, LocaleSpec) else LOCALES.get(self.locale),
             version=self.app_version,
         )
         Flow.of(flow.nodes)

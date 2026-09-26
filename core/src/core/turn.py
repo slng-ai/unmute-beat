@@ -394,8 +394,9 @@ class Turn:
 
         if not barge.hit and (claim := call.unbacked_claim()):
             logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
-            call.note_said('fixed', call.locale.unbacked, origin='error')
-            yield FixedSpeech(call.locale.unbacked, reason='unbacked')
+            line = call.correction(call.locale.unbacked)
+            call.note_said('fixed', line, origin='error')
+            yield FixedSpeech(line, reason='unbacked')
 
         call.turn_ended(interrupted=barge.hit)
         status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
@@ -1009,9 +1010,11 @@ class Turn:
             call.close_model_text()
 
         if gate == 'blocked':
-            note_spoken(call, _delivered(call), interrupted=True)
-            call.note_said('fixed', call.locale.withheld, origin='error')
-            yield FixedSpeech(call.locale.withheld, reason='withheld')
+            if model := [s for s in call.spoken if s.kind == 'model']:
+                note_spoken(call, model[-1].text, interrupted=True, segment_ids=(model[-1].id,))
+            line = call.correction(call.locale.withheld)
+            call.note_said('fixed', line, origin='error')
+            yield FixedSpeech(line, reason='withheld')
         yield RunEnded(step)
         yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
 

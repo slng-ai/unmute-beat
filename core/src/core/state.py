@@ -500,8 +500,8 @@ class CallContext(BaseModel):
     """Fields the current model response changes after its action: not yet run when the action does."""
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
     """The one question this call is waiting on an answer to. See `core.proposals`."""
-    _told: tuple[int, str] = PrivateAttr(default=(0, ''))
-    """The turn and words of the latest receipt speech (`note_receipt`)."""
+    _told: tuple[int, str, str] = PrivateAttr(default=(0, '', ''))
+    """The turn, words and intent of the latest receipt speech (`note_receipt`)."""
     _approved: tuple[int, int] = PrivateAttr(default=(0, -1))
     """The question serial the active step's agent approved, and the turn generation that did. See `approve`."""
     _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
@@ -1004,9 +1004,9 @@ class CallContext(BaseModel):
         self._approved = (self._proposals.serial, generation)
         return True
 
-    def note_receipt(self, words: str) -> None:
+    def note_receipt(self, words: str, intent: str = '') -> None:
         """These words just told the caller what the business did. Kept so they can be said again if unheard."""
-        self._told = (self.turn, words)
+        self._told = (self.turn, words, intent)
 
     def unheard_receipt(self) -> str:
         """The latest receipt speech, if it is known not to have reached the caller: cut, or never started.
@@ -1019,8 +1019,11 @@ class CallContext(BaseModel):
         cut in on, or one whose audio never started on a runtime that reports
         playback. No record of the words is not evidence, and gives ''.
         """
-        turn, words = self._told
+        turn, words, intent = self._told
         if not words or turn not in (self.turn - 1, self.turn) or (turn == self.turn and not self.continuing):
+            return ''
+        filed = next((e for e in self._evidence if e.intent and e.intent == intent), None)
+        if filed is not None and filed.changes and filed not in self.effective():
             return ''
         copies = [s for s in self.all_spoken if s.turn == turn and s.generated == words]
         if not copies:
@@ -1063,8 +1066,14 @@ class CallContext(BaseModel):
         succeeded: bool = True,
         changes: bool = True,
         resource: str = '',
+        identity: str | None = None,
     ) -> None:
-        """File a validated receipt. Called by `Operation.run` before anything can be cancelled."""
+        """File a validated receipt. Called by `Operation.run` before anything can be cancelled.
+
+        `identity` is whom it was done for, when that is not who is on the
+        line now: an intent reconciled in a fresh process, before the caller
+        is known again, was still done for the caller it was made for.
+        """
         running = turn_generation.get()
         generation = running[1] if running is not None and running[0] == self._id else self._generation
         self._evidence.append(
@@ -1072,7 +1081,7 @@ class CallContext(BaseModel):
                 operation,
                 deepcopy(args),
                 deepcopy(receipt),
-                self.identity(),
+                self.identity() if identity is None else identity,
                 self.turn,
                 generation,
                 proposal,
@@ -1179,6 +1188,14 @@ class CallContext(BaseModel):
             args = args_type.model_validate_json(intent.args)
             self._intents[intent.id] = intent.model_copy(update={'status': 'unknown'})
             self._unknown[intent.id] = (operation, args)
+
+    def correction(self, line: str) -> str:
+        """A fixed line that says nothing changed, unless an intent's outcome is unknown: then the unsettled line.
+
+        "Nothing has been changed" is a claim too, and a false one while a
+        write may have landed.
+        """
+        return self.locale.unsettled if self.unresolved() else line
 
     @property
     def departed(self) -> bool:

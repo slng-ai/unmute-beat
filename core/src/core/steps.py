@@ -100,6 +100,8 @@ class FlowCall[S: BaseModel](CallContext):
     """State fields picked from offered ids (`choices`): valid only while the request they were offered for stands."""
     _recorded: frozenset[str] = PrivateAttr(default=frozenset())
     """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
+    _goodbye_checked: int = PrivateAttr(default=0)
+    """The turn on which a goodbye beside a waiting read-back was sent back once, to carry out a yes first."""
 
     @property
     def locale(self) -> Locale:
@@ -174,16 +176,20 @@ class FlowCall[S: BaseModel](CallContext):
         turn, for the rest of the call. A backoff belongs here if a backend
         ever minds.
         """
-        pending = [(operation, args) for operation, args in self._unknown.values() if operation.reconcile]
+        pending = [
+            (operation, args, self._intents[intent_id])
+            for intent_id, (operation, args) in self._unknown.items()
+            if operation.reconcile
+        ]
         repairs = list(self._unpresented.values())
         if not pending and not repairs:
             return None
 
         async def settle() -> object:
             found = None
-            for operation, args in pending:
+            for operation, args, intent in pending:
                 try:
-                    found = await operation._before(self, args) or found
+                    found = await operation.reconcile_intent(self, args, intent) or found
                 except OutcomeUnknownError as error:
                     logger.info('still unknown after reconciliation: {}', error)
             for operation, args, receipt in repairs:
@@ -388,6 +394,15 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         )
         if intent is None:
             return None
+        return await self.reconcile_intent(call, args, intent)
+
+    async def reconcile_intent(self, call: FlowCall[Any], args: BaseModel, intent: Intent) -> Any:
+        """Ask the backend what this intent did, and settle it only on an answer that proves it. See `_before`.
+
+        By intent, not by who is on the line: settlement at the start of a
+        turn, or in a fresh process before the caller is known again, asks
+        about the intent the arguments were recorded for.
+        """
         if self.reconcile is None:
             if self.resendable:
                 return None
@@ -458,7 +473,11 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             call._offered.pop(source, None)
         if self.say:
             words = self.say.format_map(_Facts(data))
-            call.note_receipt(words)
+            given = args.model_dump(mode='json')
+            filed = next(
+                (e for e in reversed(call.evidence) if e.operation == self.name and e.args == given), None
+            )
+            call.note_receipt(words, filed.intent if filed is not None else '')
             await call.speak_now(words, origin='confirmation')
         return receipt
 
@@ -572,6 +591,17 @@ def context(flow: StepFlow, step: Step, call: FlowCall[Any]) -> str:
         lines.append(
             f'Done on this call: {filed.operation} {json.dumps(filed.args)} -> {json.dumps(filed.receipt)}'
         )
+    for intent in call.unresolved():
+        lines.append(
+            f'Outcome unknown: {intent.operation} {intent.args}. Do not say it was done, or that it was not: '
+            'the application is checking, and will not send it again until it knows.'
+        )
+    if standing := recaps(flow, call):
+        lines.append(
+            'Can recap on goodbye, by reference: '
+            + '; '.join(f'{ref}: "{words}"' for ref, words in standing.items())
+            + '.'
+        )
     if call.spoken_over:
         lines.append(call.spoken_over)
     exits = list(step.exits) if isinstance(step, ConversationStep) else []
@@ -599,24 +629,44 @@ def _optional(info: FieldInfo) -> Any:
     return kind | None  # ty: ignore[unsupported-operator]
 
 
-def _unbacked_goodbye(call: FlowCall[Any], words: str, operations: frozenset[str]) -> bool:
-    """Whether a goodbye claims a change, or a booking held, when this step's operations made none on the call.
+RECAP_REF = 8
+"""How many characters of an intent id a recap reference is: unique within a call, short enough to copy."""
 
-    A goodbye's words are spoken as they are, with no clause check, so this
-    is their only one. A recap after a real write ("you're booked for
-    Friday") is true and goes out.
 
-    ponytail: "made on the call" is any receipt from one of this step's
-    operations; a step whose only operation is a lookup could still recap a
-    booking it never made. Key it on the operations that change the business
-    if a use case ever needs that.
+def recaps(flow: StepFlow, call: FlowCall[Any]) -> dict[str, str]:
+    """What a goodbye may recap, by reference: each receipt that still stands, in its operation's `recap` words.
+
+    Only `CallContext.effective` receipts: a lookup, a refusal, a booking
+    since moved or cancelled, and anything done for another caller are not
+    here, so no reference to them exists for a model to give.
     """
-    if any(e.operation in operations for e in call.evidence):
-        return False
-    text = ' '.join(words.split())
-    return call.claims_completion(text) or any(
-        re.search(pattern, text, re.IGNORECASE) for pattern in call.locale.recounts
-    )
+    known = {op.name: op for op in flow.operations()}
+    found = {}
+    for filed in call.effective():
+        template = getattr(known.get(filed.operation), 'recap', '')
+        if filed.intent and template:
+            found[filed.intent[:RECAP_REF]] = template.format_map(_Facts(filed.receipt))
+    return found
+
+
+def goodbye_words(flow: StepFlow, call: FlowCall[Any], recap: Sequence[str]) -> str:
+    """The goodbye core says: the recaps pointed at, then `unsettled` if anything is still unknown, then the line.
+
+    A reference that is not a standing receipt of this call is refused back
+    to the model; it cannot name one into existence, and it writes none of
+    the words.
+    """
+    standing = recaps(flow, call)
+    if wrong := [ref for ref in recap if ref not in standing]:
+        raise ModelRetry(
+            f'Nothing was said: {", ".join(map(repr, wrong))} is not something done on this call that still '
+            'stands. Recap only references listed under "Can recap", or none.'
+        )
+    words = [standing[ref] for ref in dict.fromkeys(recap)]
+    if call.unresolved():
+        words.append(call.locale.unsettled)
+    words.append(call.locale.goodbye)
+    return ' '.join(w for w in words if w)
 
 
 def _args(operation: Operation, call: FlowCall[Any]) -> BaseModel:
@@ -1205,24 +1255,26 @@ class ConversationStep(Step):
         return read
 
     def node(self, flow: StepFlow) -> Node[Any]:
-        async def goodbye(ctx: RunContext[FlowCall[Any]], words: str) -> str:
-            """End the call, only once the caller's own words say they are finished. Say one short goodbye.
+        async def goodbye(ctx: RunContext[FlowCall[Any]], recap: list[str] | None = None) -> str:
+            """End the call, only once the caller's own words say they are finished. The application says the goodbye.
 
             Args:
-                words: The goodbye. It is the last thing they hear.
+                recap: References from "Can recap" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none.
             """
             call = ctx.deps
-            if _unbacked_goodbye(call, words, ours):
+            if call.pending_question() is not None and call._goodbye_checked != call.turn:
+                call._goodbye_checked = call.turn
                 raise ModelRetry(
-                    'Nothing was said: no booking, change or record was made on this call, so the goodbye '
-                    'cannot say one was. If the caller just said yes to a read-back, carry that action out now.'
+                    "Nothing was said: a read-back is waiting for the caller's answer. If their words agree to "
+                    'it, carry it out now. If they are leaving, call goodbye again.'
                 )
+            words = goodbye_words(flow, call, recap or [])
+            call.note_departure()
             call.end_requested('caller')
             await call.speak_now(words, origin='goodbye')
             await call.end_call()
             return words
 
-        ours = frozenset(op.name for op in self.operations)
         actions = frozenset(op.name for op in self.operations) | (
             {'hand_over'} if self.exits else frozenset()
         )

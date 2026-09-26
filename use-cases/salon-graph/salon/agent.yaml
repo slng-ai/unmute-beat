@@ -15,7 +15,16 @@ greeting: "Hi, you've reached Sage and Stone. Robin speaking, what can I do for 
 state: models/state.py:SalonState
 identity: customer_phone
 entry: concierge
-locale: english
+locale:
+  base: english
+  goodbye: Thanks for calling Sage and Stone. Have a lovely day!
+  # The salon's verbs for a claimed change, checked clause by clause on a guarded step.
+  # Moved here unchanged from core's English locale in session 4b stage B.
+  claims:
+    - "\\b(?:i|we)(?:'ve| have|'ll have| had)?\\s+(?:just\\s+)?(?:gone\\s+ahead\\s+and\\s+)?(?:cancelled|canceled|booked|moved|rebooked|recorded|logged|filed|saved|noted|written down|registered)\\b"
+    - "\\bi(?:'ve| have)\\s+(?:got\\s+)?you\\s+(?:down|booked|in)\\b"
+    - "\\byour\\s+\\w+(?:\\s+\\w+)?(?:'s| is| has been| was)\\s+(?:now\\s+|all\\s+)?(?:booked|cancelled|canceled|moved|rebooked)\\b"
+    - "\\b(?:that|it|this|your (?:complaint|booking|appointment|request))(?:'s| is| has been| was)\\s+(?:now\\s+)?(?:on record|recorded|logged|filed|saved|booked|cancelled|canceled|moved|confirmed|registered)\\b"
 model: google-cloud:gemini-3.5-flash-lite
 quote_caller: true
 includes:
@@ -42,6 +51,7 @@ operations:
     assign: {verified_phone: customer_phone, customer_status: customer_status}
     say: Thanks, I have you.
   book_appointment:
+    recap: You're booked for {spoken}.
     function: functions.py:book
     subject: booking_id
     idempotent: true
@@ -53,6 +63,7 @@ operations:
     assign: {booked: booking_id, booked_spoken: spoken}
     say: "You're all set for {spoken}. Anything else I can help with?"
   move_appointment:
+    recap: Your appointment is now {spoken}.
     function: functions.py:move
     subject: booking_id
     idempotent: true
@@ -64,6 +75,7 @@ operations:
     assign: {booked: booking_id, booked_spoken: spoken}
     say: "That's moved to {spoken}. Anything else I can help with?"
   cancel_appointment:
+    recap: Your appointment is cancelled.
     function: functions.py:cancel
     subject: booking_id
     idempotent: true
@@ -74,6 +86,7 @@ operations:
     succeeds: {status: cancelled}
     say: "That's cancelled for you. Anything else I can help with?"
   record_complaint:
+    recap: Your complaint is on record, reference {reference}.
     function: functions.py:record_complaint
     subject: reference
     idempotent: true

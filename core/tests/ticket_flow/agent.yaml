@@ -1,0 +1,70 @@
+# A support desk on core's public contract: resolve or reopen a ticket, and answer general questions.
+# No phone, no date, no booking. The same loader, operation boundary and turn engine as the clinic and the salon.
+# The desk speaks Spanish: the fixed lines, the claim words, the receipts and the recaps are all its own.
+version: 1
+id: support-desk
+state: tickets.py:DeskState
+identity: account_id
+entry: faq
+locale:
+  base: spanish
+  goodbye: Gracias por llamar al soporte. Hasta pronto.
+  claims:
+    - '\b(?:he|hemos)\s+(?:ya\s+)?(?:resuelto|cerrado|reabierto)\b'
+    - '\b(?:est[aá]|queda)\s+(?:ya\s+)?(?:resuelto|cerrado|reabierto)\b'
+agents:
+  agent:
+    prompt: prompts/agent.md
+operations:
+  look_up_ticket:
+    function: tickets.py:look_up
+    args: {account_id: account_id, ticket_id: ticket_id}
+    approval: none
+    changes: false
+    matches: {account_id: account_id, ticket_id: ticket_id}
+    succeeds: {found: true}
+    assign: {revision: revision, ticket_status: status}
+    say: 'Tengo el ticket {ticket_id}.'
+  resolve_ticket:
+    function: tickets.py:resolve
+    args: {account_id: account_id, ticket_id: ticket_id, revision: revision, resolution: resolution}
+    readback: tickets.py:resolve_words
+    reconcile: tickets.py:find_effect
+    subject: ticket_id
+    idempotent: true
+    matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    succeeds: {status: resolved}
+    assign: {revision: now_revision, ticket_status: status}
+    say: 'Ticket {ticket_id} resuelto. ¿Algo más?'
+    recap: 'El ticket {ticket_id} queda resuelto.'
+  reopen_ticket:
+    function: tickets.py:reopen
+    args: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    readback: tickets.py:reopen_words
+    reconcile: tickets.py:find_effect
+    subject: ticket_id
+    idempotent: true
+    matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    succeeds: {status: open}
+    assign: {revision: now_revision, ticket_status: status}
+    say: 'Ticket {ticket_id} reabierto. ¿Algo más?'
+    recap: 'El ticket {ticket_id} vuelve a estar abierto.'
+steps:
+  - id: faq
+    kind: conversation
+    agent: agent
+    prompt: prompts/faq.md
+    exits:
+      - {to: desk, purpose: resolving or reopening one of the caller's tickets}
+  - id: desk
+    kind: conversation
+    agent: agent
+    prompt: prompts/desk.md
+    fields: [account_id, ticket_id, resolution]
+    operations: [resolve_ticket, reopen_ticket]
+    guarded: true
+    exits:
+      - {to: look_up, purpose: find the ticket's current revision once the account and ticket are recorded}
+      - {to: faq, purpose: a general question}
+  - {id: look_up, kind: action, operation: look_up_ticket, returns: true, on_error: desk, on_unknown: desk}
+  - {id: done, kind: end, outcome: completed, say: Hasta pronto.}

@@ -289,6 +289,7 @@ async def reply_heard(late: bool) -> bool:
         if late:
             wire.phone.hold.clear()
             await wire.until(lambda: wire.marked(readback))
+            await asyncio.sleep(0.3)
             await wire.node.queue_frame(VADUserStartedSpeakingFrame(start_secs=0.2))
             await asyncio.sleep(0.05)
             wire.phone.hold.set()

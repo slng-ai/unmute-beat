@@ -175,6 +175,20 @@ def an_answer_that_began_before_the_mark_is_not_to_it():
     assert call.pending_question() is None, 'with marks and no onset, when the reply began is unknown'
 
 
+def a_mark_with_no_audio_before_it_proves_nothing():
+    """A TTS that produced no audio, and said nothing about it: its mark returns at once, and delivers nothing."""
+    call = Call()
+    call.turn_started('I want a haircut')
+    copy = asked(call)
+    name = call.mark_for(copy)
+    call.spoken[-1].at = 99.0
+    call.note_mark_sent(name, 100.0, media=0)
+    assert not call.note_mark_returned(name, 100.01), 'a mark with no media before it delivered its segment'
+    call.note_onset(101.0)
+    call.turn_started('yes')
+    assert call.pending_question() is None
+
+
 def a_fragmented_reply_is_timed_from_its_first_piece():
     """The caller began before the mark came back, paused, and went on after it: the reply began too early."""
     call = Call()
@@ -222,6 +236,7 @@ def main() -> None:
     the_stop_signal_alone_is_not_delivery()
     a_marked_read_back_answered_after_it_is_heard()
     an_answer_that_began_before_the_mark_is_not_to_it()
+    a_mark_with_no_audio_before_it_proves_nothing()
     a_fragmented_reply_is_timed_from_its_first_piece()
     marks_that_prove_nothing_change_nothing()
     print(

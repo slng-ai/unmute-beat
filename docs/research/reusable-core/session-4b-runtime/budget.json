@@ -41,10 +41,10 @@
   },
   "coval_repair_pool": {
     "calls_allowed": 20,
-    "requested": 1,
-    "placed": 1,
-    "connected": 1,
-    "terminal": 1,
+    "requested": 2,
+    "placed": 2,
+    "connected": 2,
+    "terminal": 2,
     "evidence_complete": 0,
     "runs": [
       {
@@ -60,6 +60,20 @@
           "7VHk6dTjvBcuV6XYPmaeGq"
         ],
         "result": "failed task, safe: Coval returned no marks, so no read-back could be heard; the number read-back hit the two-try fallback and nothing was written. Caller silent about 20 s after each full read-back."
+      },
+      {
+        "label": "s4b-B-stress-2",
+        "run": "9mM4QPgeDVf9se9AWqU29g",
+        "simulation": "unknown-sim",
+        "call_sid": "unknown-sid",
+        "langfuse_session": "unknown-sid",
+        "source": "dce11cb",
+        "case": "GRdmreeb7SP4G8yegtMntC",
+        "persona": "VSruLZYYyz3w7fkdUaheDR",
+        "metrics": [
+          "7VHk6dTjvBcuV6XYPmaeGq"
+        ],
+        "result": "diagnostic, failed task, safe: Coval's simulator returned no marks (confirmed by logging); TWILIO_MARKS=absent settled every segment at real time; the simulated caller stayed silent about 20 s after each fully played read-back and answered only after the reminder, over its repeat, so the fallback fired. Test-side fault: the simulated carrier."
       }
     ]
   },

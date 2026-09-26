@@ -9,7 +9,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Self
@@ -172,3 +173,45 @@ class Tunnel(Process):
             raise NotReadyError(f'{self.name} printed no host; see {self.log}')
         self.host = found.group(1)
         self.wait_until(lambda: resolves_publicly(self.host), 120)
+
+
+@contextmanager
+def twilio_voice_url(number: str, url: str, binary: str = 'twilio') -> Iterator[str]:
+    """Point one Twilio number's voice webhook at `url` for a job, and put the one it had back afterwards.
+
+    Through the Twilio CLI's active profile, so no Twilio credential passes
+    through this tool. Only this number is read or written, and only its
+    voice URL and method: never a listing of every number, whose webhook URLs
+    can hold other services' tokens. Yields the voice URL it replaced.
+
+    ponytail: one job per number at a time. Two jobs sharing a number would
+    restore each other's URL; give each its own number, or share one `serve`.
+    """
+
+    def cli(*args: str) -> list[dict]:
+        done = subprocess.run([binary, *args, '-o', 'json'], capture_output=True, text=True, check=False)
+        if done.returncode != 0:
+            raise RuntimeError(f'twilio {args[0]}: {done.stderr.strip()[:300]}')
+        return json.loads(done.stdout or '[]')
+
+    found = cli('api:core:incoming-phone-numbers:list', '--phone-number', number)
+    if len(found) != 1:
+        raise RuntimeError(f'the Twilio account holds {len(found)} numbers matching {number}, not one')
+    sid, previous, method = (
+        found[0]['sid'],
+        found[0].get('voiceUrl') or '',
+        found[0].get('voiceMethod') or 'POST',
+    )
+    cli('api:core:incoming-phone-numbers:update', '--sid', sid, '--voice-url', url, '--voice-method', 'POST')
+    try:
+        yield previous
+    finally:
+        cli(
+            'api:core:incoming-phone-numbers:update',
+            '--sid',
+            sid,
+            '--voice-url',
+            previous,
+            '--voice-method',
+            method,
+        )

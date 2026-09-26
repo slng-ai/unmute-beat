@@ -10,10 +10,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-AGENT_NAME = re.compile(r'^voice-harness-(?P<agency>[a-z][a-z-]*)-pipecat$')
+AGENT_NAME = re.compile(r'^voice-harness-(?P<agency>[a-z][a-z-]*?)-pipecat(?P<line>-twilio)?$')
 """A Coval agent this tool drives is named after the flow it calls: voice-harness-salon-pipecat.
 The name is the whole link between the repository and Coval, so nothing here holds a Coval ID.
-The agency names the folder under `use-cases/` whose `bot.py` answers (`FOLDERS`)."""
+The agency names the folder under `use-cases/` whose `bot.py` answers (`FOLDERS`). A `-twilio`
+suffix names a Coval voice agent that dials a real Twilio number (`Agent.phone_line`)."""
 FOLDERS = {'salon': 'salon-graph'}
 """An agency whose folder has another name. `salon` is the Coval agent that existed before the
 split, and it has always called the graph build. Any other agency is its own folder's name."""
@@ -36,6 +37,19 @@ class Agent(BaseModel):
     test_set_ids: list[str] = []
     metric_ids: list[str] = []
     metadata: dict[str, Any] = {}
+    phone_number: str = ''
+    """The number a Coval voice agent dials. Empty for a websocket agent."""
+
+    @property
+    def phone_line(self) -> bool:
+        """Whether Coval reaches the bot by dialling a real Twilio number, rather than playing Twilio itself.
+
+        Then Twilio carries the call: its media stream returns marks, answers a
+        clear and paces audio as production does. Coval's own websocket
+        simulator does none of those (session 4b, calls SdkVkoJj and 9mM4QPge).
+        """
+        match = AGENT_NAME.match(self.display_name)
+        return bool(match and match['line']) and self.phone_number.startswith('+')
 
     @property
     def agency(self) -> str | None:

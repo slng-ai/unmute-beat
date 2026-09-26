@@ -12,8 +12,9 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
   nothing sent again;
 * R5: resolve then reopen: a goodbye can recap only what still stands, in
   the desk's words; a reference nobody issued is refused;
-* R6: after a lookup alone, a claimed resolution is withheld by the desk's
-  own claim words, and a goodbye has nothing to recap;
+* R6: the desk step is rendered: after a lookup alone, a claimed
+  resolution is never said, whatever its words, and a goodbye has nothing
+  to recap;
 * R7: a fresh process reconciles what a killed one did: after its commit,
   found and not sent again; before it, sent again as the same intent, once;
 * R8: every field and operation renamed, and nothing in core changed;
@@ -195,9 +196,9 @@ async def a_lookup_backs_no_claim(folder: Path):
     """R6."""
     desk = desk_in(folder)
     script, flow, call = opened(desk)
-    moves = [*TO_READ_BACK[:3], ('say', 'He resuelto el ticket T-101.')]
+    moves = [*TO_READ_BACK[:3], ('say', 'He resuelto el ticket T-101.'), ('call', 'wait', {})]
     said = await turn(flow, call, script, 'Ticket T-101, cuenta ACC-1234.', *moves)
-    assert 'He resuelto' not in ' '.join(said) and said[-1] == call.locale.withheld, said
+    assert said == ['Tengo el ticket T-101.', call.locale.pardon], ('a rendered step said model words', said)
     assert [e.operation for e in call.evidence] == ['look_up_ticket'] and not call.effective()
     said = await turn(flow, call, script, 'Vale, adiós.', ('call', 'goodbye', {}))
     assert said == [SPANISH_GOODBYE], said
@@ -257,9 +258,9 @@ async def a_cut_receipt_is_said_again_only_while_it_stands(folder: Path):
                 kind=standing.kind,
                 version=(standing.version or 0) + 1,
             )
-        said = await turn(flow, call, script, '¿Perdona?', ('say', 'Dime.'))
+        said = await turn(flow, call, script, '¿Perdona?', ('call', 'wait', {}))
         assert desk.sent() == 1, 'saying a receipt again sent the write again'
-        expected = ['Dime.'] if superseded else ['Ticket T-101 resuelto. ¿Algo más?']
+        expected = [call.locale.pardon] if superseded else ['Ticket T-101 resuelto. ¿Algo más?']
         assert said == expected, (superseded, said)
 
 

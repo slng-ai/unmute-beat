@@ -199,6 +199,7 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 'heard': heard,
                 'playback': call.playback_for(answering[0]) if asked is not None else None,
                 'simulated_delivery': call.simulated_for(answering[0]) if asked is not None else [],
+                'simulated_playout': call.simulated_playout,
                 'status': 'unknown',
             }
             try:

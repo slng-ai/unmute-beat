@@ -68,7 +68,7 @@ steps:
     prompt: prompts/desk.md
     fields: [account_id, ticket_id, resolution]
     operations: [resolve_ticket, reopen_ticket]
-    guarded: true
+    speech: rendered
     exits:
       - {to: look_up, purpose: find the ticket's current revision once the account and ticket are recorded}
       - {to: faq, purpose: a general question}

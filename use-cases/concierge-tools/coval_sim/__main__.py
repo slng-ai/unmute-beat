@@ -82,7 +82,8 @@ serializer refuses to start without them; its hang-up request then fails with
 a logged 401, which is harmless. No Twilio marks come back from Coval's
 simulated caller (session 4b call SdkVkoJj), so on that route the bot is
 told so (`TWILIO_MARKS=absent`, `Repository.bot`) and settles a read-back
-from the audio it sent. On a phone line (`Agent.phone_line`) real Twilio
+from the audio it sent; that estimate approves a yes only because the same
+job also says `DELIVERY=simulated`, a test route chosen by name. On a phone line (`Agent.phone_line`) real Twilio
 carries the call and returns marks (`echoed`).
 
 `bot.py` loads `.env` with `override=True`, so do not put any of these names in `.env`.
@@ -320,6 +321,7 @@ class Repository:
                 **env,
                 **BOT_ENV,
                 'TWILIO_MARKS': marks,
+                'DELIVERY': 'simulated' if marks == 'absent' else 'marks',
                 'MAX_CALL_SECONDS': str(call_seconds),
                 **(profile.model_dump() if profile else {}),
                 **(GRAPH_ENV if agency == GRAPH else {}),

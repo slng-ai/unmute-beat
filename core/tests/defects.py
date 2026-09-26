@@ -333,7 +333,36 @@ def a_paraphrased_claim_after_a_lookup_is_said() -> bool:
         return asyncio.run(check(Path(tmp)))
 
 
+def a_prose_step_can_still_claim() -> bool:
+    """A known limit, kept visible: a `prose` step speaks the model's own words, and a paraphrase can claim anything.
+
+    Stage C closes the route on `rendered` steps and on every code route. The
+    desk's informational `faq` step stays prose, so its model can still say
+    the ticket is solved when nothing was done. Truthful completion is not
+    claimed for prose steps; the salon's booking step is one. Whether the
+    salon's write steps become rendered is a Stage D decision, because it
+    changes their prompts and needs live checks.
+    """
+    import tempfile
+
+    from tests.test_tickets import turn
+
+    claim = 'El ticket T-101 ha quedado solucionado definitivamente.'
+
+    async def check(folder: Path) -> bool:
+        desk, script, flow, call = _desk(folder)
+        said = await turn(flow, call, script, '¿Cómo va el T-101?', ('say', claim))
+        return claim in ' '.join(said) and desk.ticket('T-101') == (1, 'open')
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return asyncio.run(check(Path(tmp)))
+
+
 DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
+    'a prose step can still say an unbacked claim (known limit)': (
+        a_prose_step_can_still_claim,
+        'Stage D decision',
+    ),
     'a pending receipt becomes an authoritative refusal': (pending_receipt_becomes_a_refusal, '4c C0.1'),
     'two concurrent runs of one intent both dispatch': (concurrent_runs_dispatch_twice, '4c C0.2'),
     'a restored intent resurrects a superseded effect': (restore_resurrects_a_superseded_effect, '4c C0.3'),

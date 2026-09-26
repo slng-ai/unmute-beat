@@ -1160,14 +1160,32 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
 
 
 async def _carry_out(
-    call: FlowCall[Any], operation: Operation, usage: RunUsage | None, limits: UsageLimits | None
+    call: FlowCall[Any],
+    operation: Operation,
+    usage: RunUsage | None,
+    limits: UsageLimits | None,
+    *,
+    rendered: bool = False,
 ) -> str | None:
-    """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown."""
+    """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown.
+
+    On a rendered step an authoritative no is said by code too
+    (`Locale.withheld`, or `unsettled` while anything is unknown), instead
+    of being handed back to a model to put in its own words.
+    """
+    before = {i.id for i in call.intents if i.status == 'rejected'}
     try:
         receipt = await operation.run(call, _args(operation, call), usage=usage, usage_limits=limits)
     except OutcomeUnknownError:
         await call.speak_now(call.locale.unsettled, origin='confirmation')
         return call.locale.unsettled
+    except ModelRetry:
+        refused = {i.id for i in call.intents if i.status == 'rejected' and i.operation == operation.name}
+        if not rendered or not refused - before:
+            raise
+        words = call.correction(call.locale.withheld)
+        await call.speak_now(words, origin='error')
+        return words
     say = getattr(operation, 'say', '')
     return say.format_map(_Facts(receipt.model_dump())) if say and isinstance(receipt, BaseModel) else None
 
@@ -1210,6 +1228,14 @@ class ConversationStep(Step):
     requires: tuple[str, ...] = ()
     satisfied_by: str = ''
     guarded: bool = False
+    rendered: bool = False
+    """`speech: rendered`: the agent chooses and code words everything. No text output, so no model prose to TTS.
+
+    Its outputs are the step's operations (read back, then carried out),
+    `hand_over`, `goodbye`, and `wait`, after which code asks for the first
+    missing `asks:` field, or says `Locale.pardon`. An authoritative no is
+    said in core's fixed words (`_carry_out`).
+    """
     quoted: tuple[str, ...] = ()
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
     opens_with: Operation | None = None
@@ -1334,10 +1360,22 @@ class ConversationStep(Step):
             await call.end_call()
             return words
 
+        async def wait(ctx: RunContext[FlowCall[Any]]) -> str:
+            """Nothing to read back, carry out or hand over yet. The application asks the caller for what it still needs."""
+            call = ctx.deps
+            missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
+            words = self.asks[missing] if missing else call.locale.pardon
+            await call.speak_now(words, origin='ask')
+            return words
+
         actions = frozenset(op.name for op in self.operations) | (
             {'hand_over'} if self.exits else frozenset()
         )
-        outputs: list[Any] = [str, ToolOutput(goodbye, name='goodbye')]
+        outputs: list[Any] = [
+            *([] if self.rendered else [str]),
+            ToolOutput(goodbye, name='goodbye'),
+            *([ToolOutput(wait, name='wait')] if self.rendered else []),
+        ]
         tools: list[Any] = []
         if self.fields:
             values_type = _values(flow, f'{self.id.title()}Values', self.fields)
@@ -1422,6 +1460,7 @@ class ConversationStep(Step):
             openings=self.opening(),
             speaks_for=frozenset(op.name for op in self.operations),
             reads_back=self._reads_back(),
+            model_speech=not self.rendered,
         )
 
     def _operate(self, flow: StepFlow, operation: Operation, actions: frozenset[str]):
@@ -1446,7 +1485,7 @@ class ConversationStep(Step):
                     )
                 if call._changing & resting_on or not call.approve(proposal.about, value=proposal.value):
                     return read_back
-            said = await _carry_out(call, operation, ctx.usage, ctx.usage_limits)
+            said = await _carry_out(call, operation, ctx.usage, ctx.usage_limits, rendered=self.rendered)
             if (back := flow.return_after(self, call)) is not None:
                 return back
             return said

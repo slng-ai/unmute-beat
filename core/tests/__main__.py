@@ -42,6 +42,7 @@ MODULES = (
     'tests.test_intents',
     'tests.test_tickets',
     'tests.test_outcomes',
+    'tests.test_speech',
 )
 
 

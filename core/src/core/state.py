@@ -190,11 +190,16 @@ class Spoken:
 
     `mark`: the transport returned this segment's own mark after its last
     audio (Twilio's `mark` event), with no clear sent while it was pending.
-    `local`: a local transport wrote its last audio chunk (development WebRTC).
+    `local`: its last audio was written out, or had time to play, with no
+    mark from the far end (a development transport, a carrier that returns
+    none). It is an estimate: it delivers only in a call the launcher
+    explicitly opened for simulated playout (`simulated`).
     `ack`: a text consumer acknowledged it: simulated delivery, for text runs.
     `signal` (the runtime's aggregate stop) and `estimate` (elapsed time) only
     ever decide turn-taking, never delivery (`delivered`).
     """
+    simulated: bool = False
+    """Its `local` record came in a call opened for simulated playout (`CallContext.simulate_playout`)."""
     proposal: int = 0
     """The serial of the question this segment carried (`ProposalLedger.bind`), 0 for none."""
     mark: str = ''
@@ -208,23 +213,22 @@ class Spoken:
     def delivered(self) -> Literal['delivered', 'interrupted', 'unknown']:
         """Whether the caller got all of it, as far as evidence goes.
 
-        Only this segment's own mark, a local transport's write of its last
-        audio, or a text consumer's acknowledgement makes it delivered. Handing
-        text to TTS, a run finishing, the runtime's aggregate stop signal or
-        enough time passing proves nothing about what reached the caller, so a
-        segment with no such evidence is unknown, and unknown never authorises
-        anything. Transport playout is still not comprehension: the caller may
-        not have been listening.
+        Only this segment's own mark, or a text consumer's acknowledgement,
+        makes it delivered. Handing text to TTS, a run finishing, the
+        runtime's aggregate stop signal, bytes written to a socket or enough
+        time passing prove nothing about what reached the caller, so a segment
+        with no such evidence is unknown, and unknown never authorises
+        anything. The one exception is chosen, never defaulted: in a call the
+        launcher opened for simulated playout, a `local` write counts too.
+        Transport playout is still not comprehension: the caller may not have
+        been listening.
         """
         if self.interrupted:
             return 'interrupted'
         if self.cleared:
             return 'unknown'
-        if (
-            self.playback == 'played'
-            and self.heard_by in ('mark', 'local', 'ack')
-            and self.played_at is not None
-        ):
+        evidence = self.heard_by in ('mark', 'ack') or (self.heard_by == 'local' and self.simulated)
+        if self.playback == 'played' and evidence and self.played_at is not None:
             return 'delivered'
         return 'unknown'
 
@@ -589,6 +593,8 @@ class CallContext(BaseModel):
     """
     _unpresented: dict[str, tuple[Any, BaseModel, dict[str, Any]]] = PrivateAttr(default_factory=dict)
     """Succeeded intents whose local recording (state, speech) failed after the receipt: repaired, never re-sent."""
+    _simulated_playout: bool = PrivateAttr(default=False)
+    """Whether an estimated playback may count as heard. Off unless a launcher chose it (`simulate_playout`)."""
     _claimed: set[str] = PrivateAttr(default_factory=set)
     """Intents a run of `Operation.run` is sending right now. A second run of one of them is refused."""
     _versions: dict[tuple[str, str], int] = PrivateAttr(default_factory=dict)
@@ -863,8 +869,23 @@ class CallContext(BaseModel):
             self._log_playback('ignored', name, at)
             return False
         segment.playback, segment.heard_by, segment.played_at = 'played', 'local' if local else 'mark', at
+        segment.simulated = local and self._simulated_playout
         self._log_playback('written' if local else 'played', name, at, segment.proposal)
         return True
+
+    def simulate_playout(self) -> None:
+        """Let an estimated playback (`local`) count as heard on this call. For a test or development launcher only.
+
+        Only `core.processor.playout(..., simulate=True)` calls it, and only a
+        launcher that names the mode passes that: no transport turns it on by
+        itself. Every `write` audit says whether it was on.
+        """
+        self._simulated_playout = True
+
+    @property
+    def simulated_playout(self) -> bool:
+        """Whether estimated playback counts as heard on this call (`simulate_playout`)."""
+        return self._simulated_playout
 
     def note_cleared(self, at: float) -> None:
         """The transport is about to clear the audio it holds: every mark still pending may now come back for nothing.
@@ -1360,9 +1381,13 @@ class CallContext(BaseModel):
                 else (filed.operation, json.dumps(filed.args))
             )
             held = latest.get(key)
-            if held is not None and held.version is not None and filed.version is not None:
-                if filed.version < held.version:
-                    continue
+            if (
+                held is not None
+                and held.version is not None
+                and filed.version is not None
+                and filed.version < held.version
+            ):
+                continue
             latest.pop(key, None)
             latest[key] = filed
         return tuple(f for f in latest.values() if self.is_latest(f.kind, f.resource, f.version))

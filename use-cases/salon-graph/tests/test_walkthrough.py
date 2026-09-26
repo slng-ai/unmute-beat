@@ -29,12 +29,7 @@ from tests.script import CLOCK, PHONE, Script, opened, slot, text_of, turn
 TODAY = CLOCK.date()
 FRIDAY = '2026-10-02'
 SNAPSHOTS = (
-    Path(__file__).parents[3]
-    / 'docs'
-    / 'research'
-    / 'reusable-core'
-    / 'session-4c'
-    / 'booking-context.md'
+    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4c' / 'booking-context.md'
 )
 REF = re.compile(r'\b[0-9a-f]{8}(?=: ")')
 """A recap reference in the rendered context: an intent id's first characters, different every run."""

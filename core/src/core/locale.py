@@ -83,6 +83,8 @@ class Locale:
     """
     idle_goodbye: str = ''
     """Said before the line is closed, once reminders went unanswered."""
+    pardon: str = ''
+    """Said on a rendered step (`speech: rendered`) when its agent chose to wait and nothing is missing to ask for."""
 
 
 ENGLISH = Locale(
@@ -98,6 +100,7 @@ ENGLISH = Locale(
     left_undone="I haven't made that last change.",
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
+    pardon='Sorry, could you say that again?',
 )
 
 SPANISH = Locale(
@@ -113,4 +116,5 @@ SPANISH = Locale(
     left_undone='No he hecho ese último cambio.',
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
+    pardon='Perdona, ¿me lo repites?',
 )

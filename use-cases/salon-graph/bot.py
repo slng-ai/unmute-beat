@@ -98,6 +98,15 @@ Then a read-back is settled from the audio actually sent, at real time, and
 recorded as `local` rather than a mark (`core.processor.TwilioMarks`). A real
 Twilio call returns marks: leave it `echoed`. `coval_sim` sets `absent`.
 """
+DELIVERY = os.getenv('DELIVERY', 'marks')
+"""`simulated` lets estimated playback count as heard (`core.processor.playout(simulate=True)`).
+
+Only for a far end that returns no marks and is a test or a developer: the
+local browser transport, or Coval's simulated carrier (`coval_sim` sets it
+with `TWILIO_MARKS=absent`). Anything else (`marks`) approves a read-back
+only on its own returned Twilio mark, so a real voice line with no marks
+can carry out nothing that needs a yes.
+"""
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
 """One language per call for each speech service."""
@@ -243,7 +252,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             node,
             tts,
             transport.output(),
-            *playout(transport, call, echoes_marks=TWILIO_MARKS != 'absent'),
+            *playout(
+                transport, call, echoes_marks=TWILIO_MARKS != 'absent', simulate=DELIVERY == 'simulated'
+            ),
             assistant_aggregator,
         ]
     )

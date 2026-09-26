@@ -244,18 +244,29 @@ def record_ending(call: CallContext, *, carrier: str = '') -> None:
         span.set_attribute('carrier', carrier or 'unknown')
 
 
-def playout(transport: Any, call: CallContext, *, echoes_marks: bool = True) -> list[FrameProcessor]:
+def playout(
+    transport: Any, call: CallContext, *, echoes_marks: bool = True, simulate: bool = False
+) -> list[FrameProcessor]:
     """Wire playback evidence into a transport; returns what to place right after `transport.output()`.
 
     A Twilio media stream gets its serializer wrapped (`TwilioMarks`), so
     marks go out and come back on the wire, and nothing is added to the
     pipeline. `echoes_marks=False` is for a far end known to return none
     (see `TwilioMarks`). Any other transport gets a `LocalPlayout` after its output.
-    Without one or the other, no read-back can ever be delivered, and no
-    consequential write can be approved.
+
+    Only a returned mark is heard. What a transport with no marks reports
+    (audio written, or time for it to play) is an estimate: it drives
+    turn-taking, and approves nothing, so on such a transport no read-back is
+    ever heard and no consequential write can run. `simulate=True` makes the
+    estimate count, for a test or development launcher that names the mode
+    itself (salon-graph's `DELIVERY=simulated`); the call records it
+    (`CallContext.simulated_playout`), and so does every write audit.
     """
     from pipecat.serializers.twilio import TwilioFrameSerializer
 
+    if simulate:
+        call.simulate_playout()
+        logger.warning('simulated playout: estimated playback counts as heard on this call')
     params = getattr(transport, '_params', None)
     serializer = getattr(params, 'serializer', None)
     if isinstance(serializer, TwilioFrameSerializer):

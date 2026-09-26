@@ -9,6 +9,8 @@ belong to a question by its serial, never by matching words. The first two
 checks were session 1's known defects (`tests.defects`).
 """
 
+import time
+
 from core.proposals import BaseProposal
 from core.state import CallContext, VoiceState
 
@@ -224,7 +226,53 @@ def marks_that_prove_nothing_change_nothing():
     assert call.spoken[-1].delivered == 'delivered', 'a clear after a mark came back unplayed it'
 
 
+def an_estimate_is_heard_only_in_a_simulation():
+    """Stage C0.5: audio written out, or time for it to play, approves nothing unless the launcher chose simulation.
+
+    The same `local` record, before and after `simulate_playout`, with the
+    caller answering after it. A mark from the far end needs no simulation.
+    """
+    for simulated in (False, True):
+        call = Call()
+        if simulated:
+            call.simulate_playout()
+        call.turn_started('I want a haircut')
+        copy = asked(call)
+        name = call.mark_for(copy)
+        call.note_mark_sent(name, 100.0)
+        call.spoken[-1].at = 99.0
+        assert call.note_mark_returned(name, 101.0, local=True)
+        call.note_onset(101.5)
+        call.turn_started('yes')
+        heard = call.pending('book', value='slot-1') is not None
+        assert heard is simulated, ('estimated playback', simulated, call.spoken[-1])
+        assert call.simulated_playout is simulated
+    call = Call()
+    call.turn_started('I want a haircut')
+    marked(call)
+    call.turn_started('yes')
+    assert call.pending('book', value='slot-1') is not None, 'a real mark needed a simulation'
+
+
+def a_text_acknowledgement_counts_only_before_the_reply():
+    """An acknowledgement that arrives after the caller began to answer does not make that answer one to it."""
+    for heard in (True, False):
+        call = Call()
+        call.turn_started('I want a haircut')
+        copy = asked(call)
+        call.spoken[-1].at = time.perf_counter() - 2.0
+        if not heard:
+            call.note_onset(time.perf_counter() - 1.0)
+        call.acknowledge(copy)
+        if heard:
+            call.note_onset(time.perf_counter() + 0.5)
+        call.turn_started('yes')
+        assert (call.pending('book', value='slot-1') is not None) is heard, heard
+
+
 def main() -> None:
+    an_estimate_is_heard_only_in_a_simulation()
+    a_text_acknowledgement_counts_only_before_the_reply()
     a_read_back_never_recorded_is_not_heard()
     a_read_back_queued_and_never_played_is_not_heard()
     text_with_no_acknowledgement_is_unknown()

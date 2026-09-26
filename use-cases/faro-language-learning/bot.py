@@ -180,7 +180,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             node,
             tts,
             transport.output(),
-            *playout(transport, call),
+            *playout(transport, call, simulate=os.getenv('DELIVERY') == 'simulated'),
             assistant_aggregator,
         ]
     )

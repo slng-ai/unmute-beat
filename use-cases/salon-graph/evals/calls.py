@@ -24,8 +24,15 @@ as heard.
 Limits, from the Verification contract (`docs/plans/reusable-voice-core-sessions.md`):
 12 caller turns per case, 100 target model requests and 250,000 tokens across
 the four, one attempt each, no retries. A limit hit stops the case as
-`exhausted`, which is not a pass. The limits are checked between turns, so one
-turn can overshoot by at most its own `TurnBudget` (8 requests).
+`exhausted`, which is not a pass. Requests are bounded before dispatch: each
+turn's `TurnBudget.model_requests` is what is left of the allowance (at most
+its usual 8), and the SDK's `UsageLimits` refuses a request past it before it
+is sent. Tokens are known only once a response returns, so they are checked
+between turns: one turn can overshoot the token allowance by its own usage.
+
+Delivery acknowledged here is simulated delivery (a text reader got the
+segment), never transport playback: the write audits record it apart
+(`simulated_delivery`), and a text run certifies nothing acoustic.
 
 ponytail: requests and tokens are counted from the model spans Pydantic AI
 already emits, collected in memory. A request whose span never ended, such as
@@ -275,9 +282,15 @@ async def run_case(
     record.turns.append({'turn': 0, 'caller': '', 'said': last, 'delivered': acknowledge(call)})
     words, closing, used = case.opening, False, {}
     for number in range(1, max_turns + 1):
+        left = requests_left - record.requests
+        if left <= 0:
+            record.result = 'exhausted'
+            record.problems.append(f'allowance reached before turn {number}: {record.requests} requests')
+            break
         turn_start = time.time() - start
         before, parts, done = len(heard), [], None
-        async for event in run_turn(call, agents, words, TurnBudget()):
+        budget = TurnBudget(model_requests=min(TurnBudget().model_requests, left))
+        async for event in run_turn(call, agents, words, budget):
             if isinstance(event, TextDelta | FixedSpeech):
                 parts.append(event.text)
             elif isinstance(event, TurnFinished):

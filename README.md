@@ -586,12 +586,28 @@ with a regression check:
 | `Node.speaks_for`: model text in the same reply as an operation call is dropped | The model wrote the read-back or the receipt itself, right beside calling the operation that then said the same words again: 19 times in 10 of 20 calls before the fix. |
 | `reads_back:` | A reply that only records one of an operation's fields gets that operation read back by code, with no second request only to ask for it. |
 | `asks:` on arrival | With no caller ID, verify's model opened the detour with "I'll connect you with someone" and the caller hung up unbooked (gate 1 rerun). Code now asks for the missing field in fixed words, with no model request. |
-| A goodbye cannot claim a write nothing made (`steps._unbacked_goodbye`) | The model said "your haircut is booked" in a goodbye after a yes it never carried out; the caller hung up believing it (gate 1). Such a goodbye is refused back to the model, which then carries the action out. |
+| A goodbye cannot claim a write nothing made (session 4's `steps._unbacked_goodbye`, replaced in stage B by goodbyes with no model words) | The model said "your haircut is booked" in a goodbye after a yes it never carried out; the caller hung up believing it (gate 1). |
 | Silence reminder (`core.turn.remind`, 20 s) | Two calls sat silent until the call limit, each side waiting on the other. After 20 s of silence the caller hears "Are you still there?" and the open question again; a goodbye after two. At 8 s it talked over slow callers and looped. |
 | A number with a digit too many says what was heard | "Say the whole number again" restarted the number in pieces and cost 85 s in one call. The model now reads back the digits heard and asks which part is wrong. |
 
 Implementation: [core/processor.py](core/src/core/processor.py),
 [core/history.py](core/src/core/history.py) and [core/turn.py](core/src/core/turn.py).
+
+### Session 4b stage B: what a write, a goodbye and "heard" now mean
+
+The whole report, with the evidence for each line, is
+[session-4b-runtime.md](docs/research/reusable-core/session-4b-runtime.md).
+
+| Change | What it stops |
+|---|---|
+| Every business action is an `Intent` core issues before dispatch (`core.state.Intent`). It is marked dispatched before the await. After it, only a validated receipt or reconciliation settles it | A backend that committed and then lost its answer to a cancellation left no record, and the retry committed again. A reconciliation that answered in the wrong shape cleared the guard. The retry rule is AWS's: [making retries safe](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/). |
+| A function may take the `Intent` as its third parameter. `idempotent: true` lets an unknown intent be sent again, as itself. `changes: false` marks a read. `subject:` names the resource a receipt is about | The salon's diary token held a per-call counter, which a fresh process could not rebuild. |
+| A goodbye has no model words. Core says the recap the model points at (only a receipt that still stands, in the operation's `recap:` words), then the locale's goodbye | A lookup receipt allowed "your haircut is booked" in a goodbye. The claim-word list was core's and the salon's verbs; it is now the application's (`locale: {base, claims, goodbye}`). |
+| A read-back is delivered only by its own Twilio `mark` (`core.processor.TwilioMarks`), with no clear sent while it was pending, and answered only by speech that began after it | Delivery rested on the aggregate stop signal and a text-length estimate. Twilio also returns a mark for cleared audio ([media streams](https://www.twilio.com/docs/voice/media-streams/websocket-messages)), so every mark pending at a clear counts for nothing. |
+| A read-back unheard twice gives way to a truthful line, and a joined turn spends one request tally | Coval call C26pPHK6: yes over every read-back, for 12 s, then goodbye with nothing booked. |
+| The call ceiling is stopped by its owner in a `finally` (`core.processor.Ceiling`) | On a shared bot, a call the agent ended left its timer running. |
+| The write audit names its intent, the arguments its read-back named when it was asked, and the proposal's marks. `tests.test_audit_export` runs the real `load_report` on the runtime's own spans | The evaluator's authorization and delivery checks had nothing to read. |
+
 
 ## 9. Where reuse comes from
 
@@ -803,15 +819,18 @@ the same turn engine, budget and barge-in handling.
 
 - Recovering a write whose outcome is unknown is declared per operation
   (`reconcile:` in `agent.yaml`, a typed function such as
-  `functions.py:find_booking`). Without one, an attempt with an unknown
-  outcome is never retried in that call.
+  `functions.py:find_booking`, looked up by the intent). Without one, and
+  without `idempotent: true`, an intent with an unknown outcome is never sent
+  again in that call. Exactly-once holds only against a backend that dedups
+  by the intent id; the salon's diary does, in memory, for one process.
 - The complaint-request word list (`_ASKING_TO_COMPLAIN` in
   `salon/models/state.py`) is the salon's, and English: it only says a
   sentence is nothing but "I'd like to complain," never what went wrong.
-- `Locale.claims` (`core/src/core/locale.py`) is the one place a word list
-  still guards speech: one pattern list per language, checked against model
-  text on a `guarded` step before it is said. English and Spanish exist
-  today; a new language needs its own list.
+- `Locale.claims` is the one place a word list still guards speech, and it
+  is the application's (the salon's English verbs, the support desk's
+  Spanish ones): checked against model text on a `guarded` step before it is
+  said. It is a best-effort guard; model prose remains a behaviour to
+  evaluate. Receipts, recaps, goodbyes and fixed lines are rendered by code.
 - Structured output validates shape, not semantic accuracy: a valid class or
   a valid tool call can still misread the caller. Run a live evaluation
   before making an accuracy or latency claim (see "How this design is
@@ -833,7 +852,7 @@ core/                     the harness, a package: slng-voice-core
     state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
     graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
     flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
-    locale.py             Locale: the lines the turn engine says itself, claims patterns included; ENGLISH and SPANISH
+    locale.py             Locale: the lines the turn engine says itself (claim words are the application's); ENGLISH and SPANISH
     proposals.py          the one question a call waits on, and when it can be answered
     completion.py         when a step is done: evidence in the facts, never a flag
     steps.py              CollectStep, ConfirmStep, ActionStep, ConversationStep (one agent per node), End,

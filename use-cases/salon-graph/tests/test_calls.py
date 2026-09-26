@@ -92,8 +92,16 @@ async def limits_stop_the_case():
     assert any(p.startswith('(check, not decisive)') for p in record.problems), record.problems
 
     spent = await one(endless, requests_left=0)
-    assert spent.result == 'exhausted' and 'allowance reached after turn 1' in spent.problems[0], (
+    assert spent.result == 'exhausted' and 'allowance reached before turn 1' in spent.problems[0], (
         spent.problems
+    )
+    assert spent.requests == 0, 'a request went out with no allowance left'
+
+    one_left = await one(endless, requests_left=1)
+    assert one_left.result == 'exhausted' and one_left.requests <= 1, (
+        'a turn sent more requests than the allowance had left',
+        one_left.requests,
+        one_left.problems,
     )
 
 

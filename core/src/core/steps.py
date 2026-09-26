@@ -919,6 +919,11 @@ class ConfirmStep(Step):
             Args:
                 words: One short sentence to the caller. Never say the request is done.
             """
+            if ctx.deps.claims_completion(' '.join(words.split())):
+                raise ModelRetry(
+                    'Nothing was said: those words claim the request is done, and nothing was done yet. '
+                    'Answer without saying it was done; the read-back is asked again after.'
+                )
             await ctx.deps.speak_now(words, origin='model')
             return self.readback(ctx.deps)
 

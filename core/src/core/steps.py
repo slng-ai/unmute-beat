@@ -1130,7 +1130,9 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     """Ask each choice function for this caller's options, and record them as offered, unless the call moved on.
 
     A choice function may be sync or async, and may take long: the caller can
-    change what they asked for, or be handed elsewhere, before it answers. An
+    change what they asked for, or be handed elsewhere, before it answers. A
+    plain one runs in a worker thread, like a domain function (`_call`), so a
+    database or HTTP read never holds the event loop that carries audio. An
     answer computed for a state that is no longer the call's, or in a turn the
     caller has left, is returned as stale and offers nothing, so it can never
     replace the current offer or make an old slot pickable.
@@ -1139,7 +1141,10 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     found: dict[str, Options] = {}
     for name, choose in choices.items():
         try:
-            answer = await _result(choose(call.services, call.state.facts))
+            if inspect.iscoroutinefunction(choose):
+                answer = await choose(call.services, call.state.facts)
+            else:
+                answer = await _result(await asyncio.to_thread(choose, call.services, call.state.facts))
         except Exception as error:
             logger.exception('choice function for {} failed', name)
             return {

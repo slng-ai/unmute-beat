@@ -33,6 +33,7 @@ Turn latency: p50 1.57 s, p90 2.85 s, n=121.
 Model request time: p50 0.83 s, p90 1.02 s.
 First token to end of a reply that spoke: p50 0.17 s, p90 0.25 s, n=55.
 Input tokens per call: 22941.
+Time to booking: p50 74.97 s, p90 122.98 s.
 
 Most common request chains per hop:
 - 32 x `collect`

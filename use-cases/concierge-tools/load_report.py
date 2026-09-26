@@ -113,10 +113,12 @@ class CallReport:
     """Runs that answered a second or later piece of one caller turn (`turn_pieces` over 1)."""
     interrupted: int = 0
     """Runtime turns the caller cut into (`turn.was_interrupted`)."""
+    booked_after: float | None = None
+    """Seconds from the call's start to its first booking write: how long the task took."""
     problems: list[str] = field(default_factory=list)
 
 
-def judge(run: str, sim: Simulation, obs: list[Obs]) -> CallReport:
+def judge(run: str, sim: Simulation, obs: list[Obs], limit: float = LIMIT_SECONDS) -> CallReport:
     """One call's report, from its Langfuse observations."""
     report = CallReport(run, sim.simulation_id, sim.call_sid, sim.status)
     if sim.status != 'COMPLETED':
@@ -189,6 +191,17 @@ def judge(run: str, sim: Simulation, obs: list[Obs]) -> CallReport:
     )
     conversation = next((o for o in obs if o.name == 'conversation'), None)
     report.seconds = _seconds(conversation) if conversation else None
+    booking_writes = sorted(
+        (
+            o
+            for o in obs
+            if o.name == 'write'
+            and any(f'"{name}"' in str(o.attrs.get('write.audit', '')) for name in BOOKINGS)
+        ),
+        key=lambda o: o.start,
+    )
+    if conversation is not None and booking_writes:
+        report.booked_after = (booking_writes[0].start - conversation.start).total_seconds()
 
     if report.unmatched:
         report.problems.append(f'{len(report.unmatched)} write(s) with no matching question: consent')
@@ -198,8 +211,8 @@ def judge(run: str, sim: Simulation, obs: list[Obs]) -> CallReport:
         report.problems.append(
             f'first booking {report.first_booking}, not {FIRST_BOOKING}: calls share a diary'
         )
-    if report.seconds is not None and report.seconds >= LIMIT_SECONDS - 1:
-        report.problems.append(f'ended by the {LIMIT_SECONDS} s limit')
+    if report.seconds is not None and report.seconds >= limit - 1:
+        report.problems.append(f'ended by the {limit:.0f} s limit')
     if report.echo:
         report.problems.append(f'{len(report.echo)} reply(s) spoke beside an operation')
     if any(n > 1 for n in holding.values()):
@@ -259,6 +272,8 @@ def render(reports: list[CallReport]) -> str:
         f'First token to end of a reply that spoke: p50 {_p(every("tails"), 0.5)} s, '
         f'p90 {_p(every("tails"), 0.9)} s, n={len(every("tails"))}.',
         f'Input tokens per call: {statistics.mean(r.input_tokens for r in reports) if reports else 0:.0f}.',
+        f'Time to booking: p50 {_p([r.booked_after for r in reports if r.booked_after is not None], 0.5)} s, '
+        f'p90 {_p([r.booked_after for r in reports if r.booked_after is not None], 0.9)} s.',
         '',
         'Most common request chains per hop:',
         *[f'- {n} x `{p}`' for p, n in patterns.most_common(12)],
@@ -275,10 +290,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument('runs', nargs='+', help='Coval run IDs')
     parser.add_argument('--out', type=Path, required=True, help='where report.md and report.json go')
+    parser.add_argument(
+        '--call-seconds', type=float, default=LIMIT_SECONDS, help='the call limit the runs had'
+    )
     args = parser.parse_args(argv)
     coval = CovalClient(os.environ.get('COVAL_API_KEY', ''))
     reports = [
-        judge(run, sim, fetch(sim.call_sid) if sim.call_sid else [])
+        judge(run, sim, fetch(sim.call_sid) if sim.call_sid else [], args.call_seconds)
         for run in args.runs
         for sim in coval.simulations(run)
     ]

@@ -74,6 +74,7 @@ def a_clean_call_has_no_problem() -> None:
         and report.interrupted == 1
     )
     assert [round(t, 2) for t in report.tails] == [0.4], 'the second reply spoke: 0.9 s, first token at 0.5 s'
+    assert report.booked_after == 9.0, report.booked_after
     assert 'with no problem: 1' in render([report])
 
 

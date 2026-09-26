@@ -264,3 +264,18 @@ Offline: ruff and ty clean; core 11/11, salon-graph 11/11, concierge-tools 5/5, 
 ### Gate 2, logged before launch
 
 Your choice: gate 2 on the fixed build without a third gate 1 run. Revision `83d4be8`, label `session-4-gate2`, interruptive x20, concurrency 10, profile, 300 s. Target as logged: at least 18 of 20 with exactly one booking on the day the caller finally chose; 0 writes without a matching question. It also checks the `asks:` opening live, since no Coval call has a caller ID.
+
+### Gate 2 result: passed (run `B6c7CSHw32Lt6PqxRR9yCZ`, 20 interruptive calls, revision 83d4be8)
+
+19 of 20 booked Saturday the 3rd, the day each caller chose (target at least 18). 39 writes, 0 without a matching question. Turn latency p50 1.69 s, p90 2.95 s. Time to booking p50 137 s; 8 of the 19 successful calls took longer than 180 s. The `asks:` opening ran in every call (no caller ID), with no verify misstep. The one failure, `C26pPHK6`: the caller said yes 0.3 s into the Saturday read-back (not heard, not counted), said yes again in pieces for 12 s while each piece restarted the turn, then said goodbye before the repeated read-back was answered. No wrong write. Report: [`load/gate2/report.md`](load/gate2/report.md).
+
+### Native result (salon-pipecat-flows, 18 calls placed)
+
+Runs listed in `coval-runs.jsonl` under `session-4-native-*`; report [`load/native/report.md`](load/native/report.md). s09 and s10 were never placed: `cloudflared` could not get a quick tunnel (`api.trycloudflare.com` timed out), so the job failed before launch. Not retried.
+
+- Normal: 10 of 10 booked Friday. Turn latency p50 2.20 s, p90 3.86 s.
+- Interruptive: 1 of 8 correct. Two wrong double bookings: `3CyVWZmp` booked Friday on "silence underscore tool" (Coval tool noise), `YzkhPWRp` on a time pick, and each then booked Saturday as a second appointment. Three stopped after the number was confirmed, two never confirmed a number. Turn latency p50 2.39 s, p90 4.00 s.
+
+Used: **138** of 140 (2 native calls not placed).
+
+Final documents: [`../session-4.md`](../session-4.md) (report and verdicts), [`coval-evals.md`](coval-evals.md) (every call, built by `coval_evals.py`), README `# Evidence`.

@@ -101,6 +101,7 @@
   },
   "pieces": 4,
   "interrupted": 2,
+  "booked_after": 124.795,
   "problems": []
  },
  {
@@ -197,6 +198,7 @@
   },
   "pieces": 1,
   "interrupted": 2,
+  "booked_after": 105.553,
   "problems": []
  },
  {
@@ -296,6 +298,7 @@
   },
   "pieces": 4,
   "interrupted": 4,
+  "booked_after": 90.317,
   "problems": []
  },
  {
@@ -392,6 +395,7 @@
   },
   "pieces": 3,
   "interrupted": 1,
+  "booked_after": 118.452,
   "problems": []
  },
  {
@@ -493,6 +497,7 @@
   },
   "pieces": 2,
   "interrupted": 3,
+  "booked_after": 97.552,
   "problems": []
  },
  {
@@ -589,6 +594,7 @@
   },
   "pieces": 3,
   "interrupted": 3,
+  "booked_after": 80.407,
   "problems": []
  },
  {
@@ -704,8 +710,8 @@
   },
   "pieces": 5,
   "interrupted": 2,
+  "booked_after": 191.531,
   "problems": [
-   "ended by the 180 s limit",
    "1 reply(s) spoke beside an operation"
   ]
  },
@@ -796,6 +802,7 @@
   },
   "pieces": 2,
   "interrupted": 2,
+  "booked_after": 69.435,
   "problems": []
  },
  {
@@ -892,6 +899,7 @@
   },
   "pieces": 2,
   "interrupted": 3,
+  "booked_after": 88.225,
   "problems": []
  },
  {
@@ -992,6 +1000,7 @@
   },
   "pieces": 2,
   "interrupted": 1,
+  "booked_after": 131.872,
   "problems": []
  },
  {
@@ -1086,6 +1095,7 @@
   },
   "pieces": 3,
   "interrupted": 1,
+  "booked_after": 113.794,
   "problems": []
  },
  {
@@ -1149,13 +1159,13 @@
    "goodbye"
   ],
   "latency": [
+   2.799453020095825,
    1.8927650451660156,
    1.6415657997131348,
    1.2296559810638428,
    1.2840259075164795,
    1.1066620349884033,
-   0.5156219005584717,
-   2.799453020095825
+   0.5156219005584717
   ],
   "requests": [
    0.74,
@@ -1178,6 +1188,7 @@
   },
   "pieces": 4,
   "interrupted": 1,
+  "booked_after": 91.024,
   "problems": []
  },
  {
@@ -1254,6 +1265,7 @@
   },
   "pieces": 2,
   "interrupted": 1,
+  "booked_after": null,
   "problems": [
    "0 booking writes, expected 1"
   ]
@@ -1344,6 +1356,7 @@
   },
   "pieces": 1,
   "interrupted": 2,
+  "booked_after": 75.628,
   "problems": []
  },
  {
@@ -1438,6 +1451,7 @@
   },
   "pieces": 2,
   "interrupted": 2,
+  "booked_after": 82.181,
   "problems": []
  },
  {
@@ -1548,6 +1562,7 @@
   },
   "pieces": 4,
   "interrupted": 6,
+  "booked_after": 89.077,
   "problems": []
  },
  {
@@ -1644,6 +1659,7 @@
   },
   "pieces": 2,
   "interrupted": 1,
+  "booked_after": 96.33,
   "problems": []
  },
  {
@@ -1734,6 +1750,7 @@
   },
   "pieces": 3,
   "interrupted": 1,
+  "booked_after": 72.604,
   "problems": []
  },
  {
@@ -1823,6 +1840,7 @@
   },
   "pieces": 1,
   "interrupted": 1,
+  "booked_after": 76.337,
   "problems": []
  },
  {
@@ -1918,6 +1936,7 @@
   },
   "pieces": 3,
   "interrupted": 1,
+  "booked_after": 84.404,
   "problems": []
  }
 ]

@@ -868,7 +868,22 @@ marked above.
 
 # Evidence
 
-<!-- EVIDENCE: filled in from docs/research/reusable-core/session-4.md after the stress test -->
+Session 4 tested this design with 140 Coval phone calls, on two booking cases: a normal caller and an interruptive one. The full report is [docs/research/reusable-core/session-4.md](docs/research/reusable-core/session-4.md). Every call, with its Coval recording and its Langfuse trace, is listed in [docs/research/reusable-core/session-4/coval-evals.md](docs/research/reusable-core/session-4/coval-evals.md).
+
+How a call is judged: Coval places and records it and scores nothing but a turn count. `use-cases/concierge-tools/load_report.py` reads the call's Langfuse session and write records, and says whether it booked once, on the day asked, and whether each write answered a question the caller heard.
+
+| | Harness, normal | Native Pipecat, normal | Harness, interruptive | Native Pipecat, interruptive |
+|---|---|---|---|---|
+| Calls | 40 (gate 1 and its rerun) | 10 | 20 (gate 2) | 8 |
+| Exactly one booking, on the day chosen | 38 | 10 | 19 | 1 |
+| Wrong bookings | 0 | 0 | 0 | 2 |
+| Turn latency p50 / p90 | 1.48-1.57 / 2.72-2.85 s | 2.20 / 3.86 s | 1.69 / 2.95 s | 2.39 / 4.00 s |
+
+The harness ran ten calls at once and native one at a time. The builds also differ in model and voice detector settings, so the latency gap is the product as configured, not the architecture alone.
+
+Across all 120 harness calls, 227 writes each answered a matching question put on an earlier turn. Live testing found two safety faults, both fixed with a regression test: a read-back counted as heard while it was still queued (call 1), and a goodbye that said "your haircut is booked" when nothing was (gate 1).
+
+What is not proven yet: a clean normal-caller gate on the final build; moves, cancellations and complaints in Coval; a second production use case on this path (Faro, session 5); load beyond 20 calls at once.
 
 ---
 

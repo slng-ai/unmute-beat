@@ -6,7 +6,7 @@
 | `57wWUrMH` | `c4wZXXVr` `CA4b8deb2b` | Friday the 2nd at 9:00 AM | 2 (0) | 0 | 0 | 1 | 0 | 1.30 | 3 | 1.87 / 2.86 | none |
 | `57wWUrMH` | `J8a4nUeY` `CA6354269d` | Friday the 2nd at 9:00 AM | 2 (0) | 0 | 0 | 1 | 1 | 1.50 | 3 | 1.36 / 2.63 | none |
 | `57wWUrMH` | `LDCFnwtx` `CAbff5b263` | Friday the 2nd at 9:00 AM | 2 (0) | 0 | 0 | 1 | 0 | 1.44 | 2 | 1.23 / 2.17 | none |
-| `57wWUrMH` | `BWqBhyLj` `CA912badf9` | Friday the 2nd at 9:00 AM | 2 (0) | 1 | 0 | 1 | 0 | 1.27 | 6 | 1.68 / 2.64 | ended by the 180 s limit; 1 reply(s) spoke beside an operation |
+| `57wWUrMH` | `BWqBhyLj` `CA912badf9` | Friday the 2nd at 9:00 AM | 2 (0) | 1 | 0 | 1 | 0 | 1.27 | 6 | 1.68 / 2.64 | 1 reply(s) spoke beside an operation |
 | `57wWUrMH` | `CWdNQatU` `CA65faacf1` | Friday the 2nd at 9:00 AM | 2 (0) | 0 | 0 | 1 | 0 | 1.12 | 1 | 1.30 / 2.82 | none |
 | `57wWUrMH` | `iSJyaJs8` `CAd9ea88ef` | Friday the 2nd at 9:00 AM | 2 (0) | 0 | 0 | 1 | 0 | 1.30 | 2 | 1.60 / 2.67 | none |
 | `57wWUrMH` | `DRoSn8Hq` `CAa96da03c` | Friday the 2nd at 9:00 AM | 2 (0) | 0 | 0 | 1 | 0 | 1.40 | 2 | 1.81 / 2.73 | none |
@@ -33,6 +33,7 @@ Turn latency: p50 1.48 s, p90 2.72 s, n=141.
 Model request time: p50 0.76 s, p90 0.96 s.
 First token to end of a reply that spoke: p50 0.17 s, p90 0.24 s, n=58.
 Input tokens per call: 27390.
+Time to booking: p50 90.32 s, p90 131.87 s.
 
 Most common request chains per hop:
 - 43 x `collect`

@@ -43,6 +43,7 @@
   },
   "pieces": 0,
   "interrupted": 1,
+  "booked_after": null,
   "problems": [
    "0 booking writes, expected 1"
   ]
@@ -137,6 +138,7 @@
   },
   "pieces": 2,
   "interrupted": 2,
+  "booked_after": 86.331,
   "problems": []
  },
  {
@@ -227,6 +229,7 @@
   },
   "pieces": 2,
   "interrupted": 1,
+  "booked_after": 73.303,
   "problems": []
  },
  {
@@ -319,6 +322,7 @@
   },
   "pieces": 3,
   "interrupted": 2,
+  "booked_after": 73.829,
   "problems": []
  },
  {
@@ -410,6 +414,7 @@
   },
   "pieces": 4,
   "interrupted": 2,
+  "booked_after": 81.953,
   "problems": []
  },
  {
@@ -503,6 +508,7 @@
   },
   "pieces": 1,
   "interrupted": 1,
+  "booked_after": 74.625,
   "problems": []
  },
  {
@@ -595,6 +601,7 @@
   },
   "pieces": 2,
   "interrupted": 2,
+  "booked_after": 76.284,
   "problems": []
  },
  {
@@ -659,13 +666,13 @@
    "goodbye"
   ],
   "latency": [
-   1.637789011001587,
-   1.3459978103637695,
-   1.3514790534973145,
    1.6787259578704834,
    3.4113237857818604,
    2.151505947113037,
-   1.1357109546661377
+   1.637789011001587,
+   1.1357109546661377,
+   1.3459978103637695,
+   1.3514790534973145
   ],
   "requests": [
    0.865,
@@ -694,6 +701,7 @@
   },
   "pieces": 3,
   "interrupted": 1,
+  "booked_after": 135.88,
   "problems": []
  },
  {
@@ -792,6 +800,7 @@
   },
   "pieces": 4,
   "interrupted": 3,
+  "booked_after": 71.43,
   "problems": []
  },
  {
@@ -860,14 +869,14 @@
    "goodbye"
   ],
   "latency": [
-   2.6336348056793213,
-   1.5130019187927246,
-   1.4898500442504883,
-   2.1186208724975586,
    2.5866148471832275,
    1.259099006652832,
+   2.6336348056793213,
    1.6912920475006104,
-   2.214106798171997
+   2.214106798171997,
+   1.5130019187927246,
+   1.4898500442504883,
+   2.1186208724975586
   ],
   "requests": [
    0.971,
@@ -898,6 +907,7 @@
   },
   "pieces": 4,
   "interrupted": 2,
+  "booked_after": 122.984,
   "problems": []
  },
  {
@@ -963,12 +973,12 @@
   ],
   "latency": [
    1.5275228023529053,
+   2.123955011367798,
    1.243901014328003,
    1.0856008529663086,
+   2.0141727924346924,
    2.7441229820251465,
    1.57017183303833,
-   2.123955011367798,
-   2.0141727924346924,
    2.931033134460449
   ],
   "requests": [
@@ -999,6 +1009,7 @@
   },
   "pieces": 3,
   "interrupted": 3,
+  "booked_after": 84.598,
   "problems": []
  },
  {
@@ -1087,6 +1098,7 @@
   },
   "pieces": 3,
   "interrupted": 1,
+  "booked_after": 69.991,
   "problems": []
  },
  {
@@ -1182,6 +1194,7 @@
   },
   "pieces": 2,
   "interrupted": 2,
+  "booked_after": 74.968,
   "problems": []
  },
  {
@@ -1272,6 +1285,7 @@
   },
   "pieces": 3,
   "interrupted": 1,
+  "booked_after": 79.958,
   "problems": []
  },
  {
@@ -1363,6 +1377,7 @@
   },
   "pieces": 3,
   "interrupted": 2,
+  "booked_after": 72.606,
   "problems": []
  },
  {
@@ -1459,6 +1474,7 @@
   },
   "pieces": 1,
   "interrupted": 2,
+  "booked_after": 77.281,
   "problems": []
  },
  {
@@ -1558,6 +1574,7 @@
   },
   "pieces": 3,
   "interrupted": 2,
+  "booked_after": 83.476,
   "problems": []
  },
  {
@@ -1647,6 +1664,7 @@
   },
   "pieces": 2,
   "interrupted": 1,
+  "booked_after": 73.088,
   "problems": []
  },
  {
@@ -1736,6 +1754,7 @@
   },
   "pieces": 2,
   "interrupted": 1,
+  "booked_after": 74.193,
   "problems": []
  },
  {
@@ -1829,6 +1848,7 @@
   },
   "pieces": 2,
   "interrupted": 1,
+  "booked_after": 74.218,
   "problems": []
  }
 ]

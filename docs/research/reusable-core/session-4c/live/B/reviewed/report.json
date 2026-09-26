@@ -1,0 +1,1007 @@
+[
+ {
+  "run": "C4jjBivqK5PSCLpkVmNzhA",
+  "simulation": "8ggjwDXYYjMAuSQu7My532",
+  "call": "CA637b7620b77012708f80a0e2eed8f1bc",
+  "status": "COMPLETED",
+  "span_seconds": 177.661,
+  "media_seconds": null,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Is your number +34 671 52 02 05?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes that's right",
+    "args": {
+     "phone": "+34671520205"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671520205"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book a haircut, Saturday the 3rd at 9:00 AM?",
+    "asked_turn": 10,
+    "turn": 11,
+    "heard": "yes please saturday the third at nine am that's great yes please nine am on saturday the third",
+    "args": {
+     "phone": "+34671520205",
+     "slot": "2026-10-03T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671520205",
+     "booking_id": "BK0004",
+     "revision": 1,
+     "service": "haircut",
+     "spoken": "Saturday the 3rd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-03",
+    "time": "09:00:00",
+    "phone": "+34671520205"
+   }
+  ],
+  "applied": [
+   "book BK0004"
+  ],
+  "first_booking": "BK0004",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "authorization": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "delivery": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "completion": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "review:agent"
+   ]
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [],
+  "caller_turns": 14,
+  "completed": 24,
+  "cancelled": 10,
+  "input_tokens": 63504,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "8": 1
+  },
+  "chains": {},
+  "patterns": [
+   "collect > hand_over",
+   "collect > text",
+   "collect > text",
+   "collect",
+   "lookup_customer",
+   "lookup_customer > options > text",
+   "text",
+   "text",
+   "collect",
+   "collect > options > text",
+   "text",
+   "collect > text",
+   "book_appointment",
+   "book_appointment",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   2.618762969970703,
+   2.8022539615631104,
+   1.4008140563964844,
+   3.325223922729492,
+   4.289422988891602,
+   2.3215417861938477,
+   3.083630084991455,
+   2.100925922393799,
+   2.3209779262542725,
+   1.243452787399292,
+   1.192948818206787,
+   1.2449889183044434,
+   1.930365800857544
+  ],
+  "requests": [
+   0.76,
+   0.883,
+   0.919,
+   0.677,
+   0.756,
+   0.803,
+   0.938,
+   0.72,
+   0.67,
+   0.879,
+   0.809,
+   0.889,
+   0.897,
+   0.888,
+   0.775,
+   0.699,
+   0.754,
+   0.621,
+   0.855,
+   0.728,
+   0.6,
+   0.593,
+   0.593
+  ],
+  "tails": [
+   0.11699999999999999,
+   0.16300000000000003,
+   0.15000000000000002,
+   0.22099999999999997,
+   0.27,
+   0.18700000000000006,
+   0.139,
+   0.16500000000000004,
+   0.0
+  ],
+  "statuses": {
+   "answered": 16
+  },
+  "pieces": 9,
+  "interrupted": 3,
+  "booked_after": 156.762,
+  "problems": [
+   "first booking BK0004, not BK0001: calls share a diary"
+  ],
+  "verdict": "pass"
+ },
+ {
+  "run": "C4jjBivqK5PSCLpkVmNzhA",
+  "simulation": "J9bFqmkhgJRN972JNfgB9x",
+  "call": "CAe67c8fccda71c4225e52321469b4cbbd",
+  "status": "COMPLETED",
+  "span_seconds": 174.329,
+  "media_seconds": null,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Is your number +34 671 52 02 04?",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "yes that's right",
+    "args": {
+     "phone": "+34671520204"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671520204"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 8,
+    "turn": 9,
+    "heard": "yes please that's exactly what i want thank you",
+    "args": {
+     "phone": "+34671520204",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671520204",
+     "booking_id": "BK0003",
+     "revision": 1,
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671520204"
+   }
+  ],
+  "applied": [
+   "book BK0003"
+  ],
+  "first_booking": "BK0003",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "authorization": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "delivery": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "completion": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "review:agent"
+   ]
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [],
+  "caller_turns": 15,
+  "completed": 22,
+  "cancelled": 7,
+  "input_tokens": 59929,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "7": 1
+  },
+  "chains": {},
+  "patterns": [
+   "collect > hand_over",
+   "collect > text",
+   "collect",
+   "collect",
+   "lookup_customer > options > text",
+   "text",
+   "collect",
+   "collect > options > text",
+   "text",
+   "text",
+   "collect > text",
+   "book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.5161798000335693,
+   2.8936071395874023,
+   2.8866002559661865,
+   1.7265598773956299,
+   3.102524757385254,
+   2.7806029319763184,
+   2.1173958778381348,
+   2.8473410606384277,
+   3.180363893508911,
+   1.1978986263275146,
+   1.197615623474121,
+   2.1888608932495117,
+   3.378887176513672,
+   1.4855811595916748
+  ],
+  "requests": [
+   0.96,
+   0.713,
+   0.758,
+   0.573,
+   0.602,
+   0.715,
+   0.63,
+   0.855,
+   0.846,
+   0.749,
+   0.786,
+   0.755,
+   0.557,
+   0.648,
+   0.87,
+   0.698,
+   0.844,
+   0.606,
+   0.738,
+   0.867,
+   0.888
+  ],
+  "tails": [
+   0.09999999999999998,
+   0.258,
+   0.16900000000000004,
+   0.16700000000000004,
+   0.17300000000000004,
+   0.19199999999999995,
+   0.262,
+   0.08999999999999997,
+   0.11699999999999999
+  ],
+  "statuses": {
+   "answered": 14
+  },
+  "pieces": 8,
+  "interrupted": 6,
+  "booked_after": 155.267,
+  "problems": [
+   "first booking BK0003, not BK0001: calls share a diary"
+  ],
+  "verdict": "pass"
+ },
+ {
+  "run": "C4jjBivqK5PSCLpkVmNzhA",
+  "simulation": "n4pRSiBp4DFuKNhgBuc8Nd",
+  "call": "CA82dcb4d34751580ff9d5ea112828150a",
+  "status": "COMPLETED",
+  "span_seconds": 168.455,
+  "media_seconds": null,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Is your number +34 671 52 02 03?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes that's correct",
+    "args": {
+     "phone": "+34671520203"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671520203"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book a haircut, Thursday the 1st at 9:00 AM?",
+    "asked_turn": 9,
+    "turn": 10,
+    "heard": "yes please that's perfect",
+    "args": {
+     "phone": "+34671520203",
+     "slot": "2026-10-01T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671520203",
+     "booking_id": "BK0002",
+     "revision": 1,
+     "service": "haircut",
+     "spoken": "Thursday the 1st at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Thursday the 1st at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-01",
+    "time": "09:00:00",
+    "phone": "+34671520203"
+   }
+  ],
+  "applied": [
+   "book BK0002"
+  ],
+  "first_booking": "BK0002",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "authorization": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "delivery": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "completion": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "review:agent"
+   ]
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [],
+  "caller_turns": 16,
+  "completed": 20,
+  "cancelled": 4,
+  "input_tokens": 50162,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "8": 1
+  },
+  "chains": {
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over",
+   "collect > text",
+   "collect",
+   "collect > text",
+   "collect",
+   "lookup_customer > options > text",
+   "text",
+   "collect",
+   "collect > options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "",
+   "",
+   ""
+  ],
+  "latency": [
+   2.0499589443206787,
+   1.2668447494506836,
+   1.4104318618774414,
+   2.348111867904663,
+   1.1748697757720947,
+   2.9130589962005615,
+   3.6198458671569824,
+   2.639131784439087,
+   2.051196813583374,
+   1.2309789657592773,
+   2.8166909217834473,
+   1.794802188873291,
+   2.4401488304138184,
+   3.2372679710388184
+  ],
+  "requests": [
+   0.857,
+   0.787,
+   0.799,
+   0.498,
+   0.697,
+   0.805,
+   0.775,
+   0.663,
+   0.667,
+   0.786,
+   0.838,
+   0.63,
+   0.803,
+   0.66,
+   0.59,
+   0.731,
+   0.769,
+   0.978,
+   0.794,
+   0.824
+  ],
+  "tails": [
+   0.07900000000000001,
+   0.15100000000000002,
+   0.251,
+   0.137,
+   0.15400000000000003,
+   0.19800000000000006,
+   0.20499999999999996
+  ],
+  "statuses": {
+   "answered": 16
+  },
+  "pieces": 9,
+  "interrupted": 7,
+  "booked_after": 151.504,
+  "problems": [
+   "first booking BK0002, not BK0001: calls share a diary"
+  ],
+  "verdict": "pass"
+ },
+ {
+  "run": "C4jjBivqK5PSCLpkVmNzhA",
+  "simulation": "SqB3qpaHswFgUKr8jTwUJ4",
+  "call": "CA2d066cee0dcabf9215f93486b60c1adc",
+  "status": "COMPLETED",
+  "span_seconds": 141.987,
+  "media_seconds": null,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Is your number +34 671 52 02 02?",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "yes that's right",
+    "args": {
+     "phone": "+34671520202"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671520202"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book a haircut, Wednesday the 30th at 9:00 AM?",
+    "asked_turn": 8,
+    "turn": 9,
+    "heard": "yes please book it for wednesday the thirtieth at nine am",
+    "args": {
+     "phone": "+34671520202",
+     "slot": "2026-09-30T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671520202",
+     "booking_id": "BK0001",
+     "revision": 1,
+     "service": "haircut",
+     "spoken": "Wednesday the 30th at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Wednesday the 30th at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-09-30",
+    "time": "09:00:00",
+    "phone": "+34671520202"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "authorization": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "delivery": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "completion": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "review:agent"
+   ]
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [],
+  "caller_turns": 15,
+  "completed": 22,
+  "cancelled": 2,
+  "input_tokens": 58797,
+  "echo": [
+   "book_appointment: Shall I book a haircut, Wednesday the 30th at 9:00 AM?",
+   "book_appointment: Shall I book a haircut, Wednesday the 30th at 9:00 AM?"
+  ],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "7": 1
+  },
+  "chains": {},
+  "patterns": [
+   "collect > hand_over",
+   "collect > text",
+   "collect",
+   "lookup_customer",
+   "lookup_customer > options > text",
+   "text",
+   "collect",
+   "book_appointment",
+   "collect > options > text",
+   "collect > text",
+   "book_appointment",
+   "book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   1.483320713043213,
+   1.363340139389038,
+   1.9633588790893555,
+   2.434725284576416,
+   1.325218915939331,
+   2.0183746814727783,
+   2.342911958694458,
+   2.240097761154175,
+   3.2583160400390625,
+   2.1600587368011475,
+   2.7077128887176514
+  ],
+  "requests": [
+   0.948,
+   0.943,
+   0.862,
+   0.557,
+   0.829,
+   0.846,
+   0.753,
+   0.767,
+   0.947,
+   0.662,
+   1.068,
+   0.881,
+   0.845,
+   0.709,
+   0.727,
+   0.69,
+   0.86,
+   0.829,
+   0.66,
+   0.909,
+   0.933
+  ],
+  "tails": [
+   0.09300000000000003,
+   0.21899999999999997,
+   0.15400000000000003,
+   0.14300000000000002,
+   0.18199999999999994,
+   0.03700000000000003,
+   0.132,
+   0.17100000000000004
+  ],
+  "statuses": {
+   "answered": 14
+  },
+  "pieces": 5,
+  "interrupted": 6,
+  "booked_after": 128.605,
+  "problems": [
+   "2 reply(s) spoke beside an operation"
+  ],
+  "verdict": "pass"
+ },
+ {
+  "run": "C4jjBivqK5PSCLpkVmNzhA",
+  "simulation": "9ut6yboSHC3JGoVmRFy2MC",
+  "call": "CA8b041777edb318a8fe60a7f22d1040a2",
+  "status": "COMPLETED",
+  "span_seconds": 208.853,
+  "media_seconds": null,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Is your number +34 671 52 02 01?",
+    "asked_turn": 5,
+    "turn": 6,
+    "heard": "yes that's correct",
+    "args": {
+     "phone": "+34671520201"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671520201"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book a haircut, Tuesday the 29th at 9:00 AM?",
+    "asked_turn": 10,
+    "turn": 11,
+    "heard": "yes please that's perfect",
+    "args": {
+     "phone": "+34671520201",
+     "slot": "2026-09-29T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671520201",
+     "booking_id": "BK0005",
+     "revision": 1,
+     "service": "haircut",
+     "spoken": "Tuesday the 29th at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Tuesday the 29th at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-09-29",
+    "time": "09:00:00",
+    "phone": "+34671520201"
+   }
+  ],
+  "applied": [
+   "book BK0005"
+  ],
+  "first_booking": "BK0005",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "authorization": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic",
+    "review:agent"
+   ]
+  },
+  "delivery": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "completion": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "review:agent"
+   ]
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [],
+  "caller_turns": 20,
+  "completed": 28,
+  "cancelled": 7,
+  "input_tokens": 76758,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "9": 1
+  },
+  "chains": {
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over",
+   "collect > text",
+   "collect > text",
+   "collect > text",
+   "collect",
+   "collect > text",
+   "collect",
+   "lookup_customer",
+   "collect",
+   "lookup_customer > options > text",
+   "text",
+   "collect",
+   "collect > options > text",
+   "text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   3.1320650577545166,
+   3.1068551540374756,
+   1.1110849380493164,
+   1.8774747848510742,
+   2.8877696990966797,
+   2.174668073654175,
+   3.424083948135376,
+   6.779687166213989,
+   2.930723190307617,
+   1.4479906558990479,
+   4.655868291854858,
+   2.6692140102386475,
+   2.821633815765381,
+   3.1078310012817383,
+   2.234133243560791,
+   3.006018877029419,
+   1.808406114578247
+  ],
+  "requests": [
+   1.137,
+   0.659,
+   1.019,
+   0.487,
+   0.691,
+   0.778,
+   0.814,
+   0.743,
+   0.793,
+   0.684,
+   0.707,
+   0.638,
+   0.736,
+   0.775,
+   0.607,
+   0.606,
+   0.906,
+   0.686,
+   0.72,
+   0.694,
+   0.762,
+   0.909,
+   0.809,
+   0.777,
+   1.014,
+   0.916,
+   0.844,
+   0.904
+  ],
+  "tails": [
+   0.069,
+   0.16100000000000003,
+   0.18999999999999995,
+   0.10899999999999999,
+   0.27,
+   0.16600000000000004,
+   0.20000000000000007,
+   0.17400000000000004,
+   0.17200000000000004,
+   0.275
+  ],
+  "statuses": {
+   "answered": 20
+  },
+  "pieces": 12,
+  "interrupted": 9,
+  "booked_after": 182.274,
+  "problems": [
+   "first booking BK0005, not BK0001: calls share a diary"
+  ],
+  "verdict": "pass"
+ }
+]

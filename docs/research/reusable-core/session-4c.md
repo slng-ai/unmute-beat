@@ -4,7 +4,7 @@ Stage C closes the six guarantee gaps the Stage B review found, gives the salon 
 
 ## Status
 
-The 20-call Coval benchmark booked correctly on every call: 20 of 20, judged from each batch's own diary file. It had 10 normal and 10 interruptive callers, five at a time, on a real Twilio line. Delivery passed on all 20 from Twilio marks. No call failed any of the five dimensions. <!-- REVIEW -->
+The 20-call Coval benchmark booked correctly on every call: 20 of 20, judged from each batch's own diary file. It had 10 normal and 10 interruptive callers, five at a time, on a real Twilio line. Delivery passed on all 20 from Twilio marks. After an independent review of every transcript, **18 of 20 pass authorization and 2 fail**. In both failures the caller answered the phone-number read-back "no, it's …", restating the same digits in groups of three, and the lookup went ahead on that "no" (finding 12). The number and the booking were right in both, and each booking had its own clear yes. The only other open verdict is one completion left unknown: the caller hung up during the closing.
 
 | Gate | Result |
 |---|---|
@@ -17,7 +17,7 @@ The 20-call Coval benchmark booked correctly on every call: 20 of 20, judged fro
 | C4: worker failure F0-F5 | **Pass.** Dead sessions closed in ≤ 4.6 s, replacements ready in ≤ 1.8 s |
 | C4: real-model text checks | **Pass.** T1-T4 at `f823d4e` |
 | C4: live ramp | Call 1 (interruptive) **failed its task, safely**. It found two accuracy faults, both fixed and regression-tested (B4.4-B4.6). The pair and five-call steps were replaced by the benchmark, on the user's instruction |
-| Benchmark: 20 calls | **20 of 20 correct bookings.** Delivery 20 of 20 pass. No fail in any dimension |
+| Benchmark: 20 calls | **20 of 20 correct bookings.** Outcome 20, delivery 20, operational 20 pass; completion 19 pass, 1 unknown; **authorization 18 pass, 2 fail** (a phone read-back accepted on "no, it's <same digits>") |
 
 The runner is qualified on one laptop, for at most five calls at once. That is not a production or server capacity claim.
 
@@ -256,7 +256,21 @@ The one chair fits three haircuts a morning, so no two callers of a batch want t
 - The only ERROR lines are expected: 35 TTS contexts stopped by a barge-in, 16 of Pipecat's usual hang-up lines, and one websocket close that raced the caller's goodbye.
 - Two interruptive calls took longer than 180 s (209 s and 225 s). The old ceiling would have cut them.
 
-<!-- REVIEWED -->
+**The review.** A separate reviewer agent read every call from local files only (the Langfuse export, the bot log and the diary judge) and wrote one review file per batch (`live/*/evidence.json`). The real `load_report` then judged each batch offline with it (`live/*/reviewed/`).
+
+| Dimension | Pass | Fail | Unknown |
+|---|---|---|---|
+| outcome | 20 | 0 | 0 |
+| authorization | 18 | **2** | 0 |
+| delivery | 20 | 0 | 0 |
+| completion | 19 | 0 | 1 |
+| operational | 20 | 0 | 0 |
+
+- **The two authorization failures** are `amAP5b4A` (batch A) and `Tiv9sDHH` (batch C), both normal callers. The code read back the right number, "Is your number +34 671 51 01 05?". The caller answered "no, it's plus three four six seven one five one zero one zero five": the same digits, in threes. The `verify` step's model then called `lookup_customer` with no new `collect`, so the lookup ran on a reply that began with "no". Finding 12 has the cause.
+- **Three other calls** heard a wrong or garbled number read back (`9ut6yboS`, `SqB3qpaH` in B, `8EiDGNHq` in D). Each time the caller said no, and a fresh read-back and a yes came before the lookup. That is the designed path.
+- **The completion left unknown** is `oJFVME6p` (batch D). The caller hung up while the closing was playing, so no whole claim sentence exists to judge. Its booking is correct in the diary.
+- **Endings.** Batches A and C ended on the agent's goodbye. In batch B, three callers hung up just after the full closing. In batch D, one did so during the closing.
+- **Cosmetic.** One stutter after a barge-in ("for a haircut haircut"), one "Your booked" in a closing, and one call with no recap after the caller's goodbye (`HTt7eSPj`). None changed a receipt.
 
 Evidence: `session-4c/live/{A,B,C,D}/` (the judge from the diary, the runner's stats every 5 s, the `load_report` output, the reviews, the bot log) and `live/perf.json`.
 
@@ -273,6 +287,7 @@ Evidence: `session-4c/live/{A,B,C,D}/` (the judge from the diary, the runner's s
 9. **What an earlier call owes is known only once the caller is.** `take_owed` now runs when the identity becomes known, not only at open (O9).
 10. **A call that writes no intent cannot be bound by evidence.** Call 1 wrote none, so `coval_sim` said "unknown" and it was bound by hand from the runner's record. That is the designed answer.
 11. **The goodbye closes 0.4 s after its last audio is sent** (batch C, 20:41:29.646 to 20:41:30.022). Pipecat sends audio at real-time pace, so at most a short tail can be lost. Not checked against a recording; worth one listen in Stage D.
+12. **A phone read-back grouped differently from the caller's words invites a "no", and the model can take "no, it's <same digits>" as a yes.** Seen in 2 of 10 normal benchmark calls. The read-back uses the Spanish grouping (`671 51 01 05`), while callers say the number in threes (`671 510 105`). The caller hears a mismatch and answers "no, it's …" with the same digits. The `verify` prompt says only "a clear yes to those digits" approves, but its model read the matching digits as agreement, and code accepts the model's reading. The effect was correct both times, so no wrong number was used, but a "no" must never approve. Open. Two changes would close it: read the number back in the caller's own grouping, and treat any reply that restates the number as a correction to read back again. The second is a `verify` prompt change and needs live checks.
 
 ## N1-N13 at the final code
 
@@ -288,6 +303,7 @@ Evidence: `session-4c/live/{A,B,C,D}/` (the judge from the diary, the runner's s
 | Worker loss and replacement | yes | F0-F2, F5 | not run live (the five-call kill step was replaced by the benchmark) |
 | One campaign per number, given back | yes | `test_campaign` | 5 campaigns, the number given back each time |
 | Correct bookings for normal callers | yes | T1-T4, ramp | 10 of 10 |
+| A read-back approved only by a yes | yes | B4.1-B4.5, test_nodes | **18 of 20**: 2 phone read-backs approved on "no, it's <same digits>" (finding 12) |
 | Correct bookings for interruptive callers | yes | B4.1-B4.6, ramp | 10 of 10 after the fixes (call 1 before them: 0 of 1, safe) |
 | No sustained memory growth | no | failed | not measured long enough live |
 | N12 trace rule | no | failed | |
@@ -317,7 +333,7 @@ The ledger is `session-4c/budget.json`. No paid rescoring and no extra metric ra
 **Decide first (the user's call):**
 
 1. Whether the 20 benchmark calls count toward Stage D's cohorts. They ran on one revision (`a48b98a`) with a frozen speech profile, and they used 10 of each reserved cohort. If Stage D freezes `a48b98a`, or a later SHA with no runtime change, they can count, and 10 + 10 fresh calls complete the 20 + 20. If Stage D changes the runtime (for example rendered `verify`), only 10 + 10 remain in the reserved pools for a fresh 20 + 20, so the allowance needs a decision.
-2. Whether to fix finding 3 (rendered `verify`) before the freeze. It needs live text checks and a targeted call.
+2. How to fix finding 12, and whether to fix finding 3 with it. Both touch the `verify` step. They need offline regressions, live text checks, and a targeted batch of normal callers from the repair pool (16 left).
 
 **Frozen configuration for the cohort:** the SHA above; `uv.lock` unchanged (pydantic 2.13.5, pydantic-ai-slim and pydantic-graph 2.46.0, pipecat-ai 1.11.0, langfuse 4.15.4); `salon/agent.yaml` and `salon/prompts/` as at that SHA; `session-3/speech-profile.v1.env`; VAD stop 0.3 s, smart-turn v3; two workers, `MAX_CALLS=5`, `MAX_CALL_SECONDS=300`; test sets `2P6J33TP` and `CHPwoXJf`, personas `MUFJdYAH` and `VSruLZYY`; agent `PEivYdEt` dialling +447427919928; batches of five on a fresh diary.
 
@@ -337,6 +353,6 @@ uv run --env-file ../../.env python load_report.py <RUN_ID> --out <dir> --call <
 
 Pass the same `--log` to `serve` and `run`: the campaign record lives beside it, and a `run` that cannot find it refuses to touch the number. Stop `serve` with SIGTERM to the Python process, not its `uv` wrapper. Run Coval CLI help only with `COVAL_API_KEY` unset.
 
-**Open failures:** N12 trace rule; native memory growth; `verify` prose read-back (finding 3); a live worker kill not yet run.
+**Open failures:** a phone read-back approved on "no, it's <same digits>" in 2 of 20 benchmark calls (finding 12: fix before the freeze); N12 trace rule; native memory growth; `verify` prose read-back (finding 3); a live worker kill not yet run.
 
 **Native top-ups:** 10 normal and 12 interruptive remain. Before any, check each of the historical 10 + 8 native calls for eligibility: the exact case and persona content, speech, model, voice and VAD settings, source digest, deadlines, metric definitions and evidence. The historical calls ran on Coval's simulated websocket, not a real Twilio line, so they are not comparable with this benchmark. A fair comparison needs native calls on the same real line. Do not change native to make a row pass.

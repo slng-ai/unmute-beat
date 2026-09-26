@@ -27,7 +27,7 @@ imports stay until their migration sessions (4, 5 and 6).
 
 from core.flowspec import FlowSpec, FlowSpecError
 from core.flowspec import load_file as load
-from core.operations import Operation, OutcomeUnknownError
+from core.operations import Operation, OutcomeUnknownError, Refused
 from core.policies import TurnBudget
 from core.proposals import BaseProposal
 from core.state import Intent
@@ -43,6 +43,7 @@ __all__ = [
     'Intent',
     'Operation',
     'OutcomeUnknownError',
+    'Refused',
     'StepFlow',
     'TextReply',
     'TurnBudget',

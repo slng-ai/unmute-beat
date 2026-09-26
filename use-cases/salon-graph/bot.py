@@ -55,11 +55,9 @@ from salon.diary import Diary
 
 NAME = 'salon call'
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
-DIARY = Diary()
-"""One salon per process: a booking made on one call is there when the next one rings."""
-DIARY_PER_CALL = bool(os.getenv('DIARY_PER_CALL'))
-"""Give every call a fresh diary instead. Coval's simulated calls run side by side with one
-phone number, so a shared diary lets one test case's booking change the next case's path."""
+DIARY = Diary(path=os.getenv('DIARY_PATH') or None)
+"""The salon: one SQLite file (`DIARY_PATH`) every worker process shares, so calls on two workers
+contend for one chair. Unset: a private file for this process only, for development."""
 FINISH_SECONDS = 8.0
 """How long a turn already running may go on after the caller hangs up: a reading and a write fit in it.
 
@@ -229,7 +227,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''
     setup(session=session_id, trace_name=NAME)
     stt, tts = speech_services()
-    call = open_call(FLOW, os.getenv('CALLER_ID', ''), diary=Diary() if DIARY_PER_CALL else DIARY)
+    call = open_call(FLOW, os.getenv('CALLER_ID', ''), diary=DIARY)
     context, node = LLMContext(), PydanticAgentProcessor(call, FLOW.nodes)
     user_aggregator, assistant_aggregator = aggregators(context)
 

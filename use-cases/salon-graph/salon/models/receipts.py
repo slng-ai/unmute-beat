@@ -63,6 +63,8 @@ class Saved(BaseModel):
     date: Date
     time: Time
     spoken: str
+    revision: int
+    """The booking's revision after this write: 1 when booked, one more for each move or cancel."""
 
 
 class BookingCommand(BaseModel):

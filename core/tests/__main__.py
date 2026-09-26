@@ -41,6 +41,7 @@ MODULES = (
     'tests.test_nodes',
     'tests.test_intents',
     'tests.test_tickets',
+    'tests.test_outcomes',
 )
 
 

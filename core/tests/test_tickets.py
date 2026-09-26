@@ -254,6 +254,8 @@ async def a_cut_receipt_is_said_again_only_while_it_stands(folder: Path):
                 {**standing.receipt, 'status': 'open'},
                 intent='e' * 32,
                 resource='T-101',
+                kind=standing.kind,
+                version=(standing.version or 0) + 1,
             )
         said = await turn(flow, call, script, '¿Perdona?', ('say', 'Dime.'))
         assert desk.sent() == 1, 'saying a receipt again sent the write again'

@@ -274,6 +274,7 @@ def resources_of_two_kinds_collide() -> bool:
             needs_approval = False
 
         Change.name, Change.subject = name, 'id'
+        Change.resource = name.removeprefix('update_')
         Change.function = staticmethod(change)
         return Change()
 

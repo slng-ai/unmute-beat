@@ -26,22 +26,30 @@ different for the next attempt (the retry rule of
 https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/):
 
 * a validated receipt that says it worked: `succeeded`;
-* a validated receipt that says it did not, or the operation's own
-  `ModelRetry`: `rejected`, an authoritative no;
+* a validated receipt the application declares a terminal no (`rejects`),
+  or its own `Refused`: `rejected`, an authoritative no;
 * anything else once dispatched (a cancellation, a timeout, a lost
-  connection, an answer that does not validate): `unknown`. The same intent
-  is never sent again until it is reconciled, unless the backend has declared
-  it dedups by the intent id (`idempotent`).
+  connection, an answer that does not validate, a plain `ModelRetry`, a
+  receipt that says `pending` or anything the application did not declare
+  terminal): `unknown`. An exception alone never says the backend did
+  nothing. The same intent is never sent again until it is reconciled,
+  unless the backend has declared it dedups by the intent id (`idempotent`).
+
+Two runs of one intent on one call cannot both reach the backend: the first
+claims it (`CallContext._claimed`) in the same synchronous stretch as the
+eligibility check, before anything is awaited. Across processes the backend
+arbitrates, by the intent id it is handed.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Any, ClassVar, final
+from typing import Any, ClassVar, Literal, final
 
 from loguru import logger
 from opentelemetry import trace
@@ -72,6 +80,20 @@ class OutcomeUnknownError(Exception):
     """The service may or may not have done it. Never reported as success or as failure; reconcile first."""
 
 
+class Refused(ModelRetry):
+    """The application's authoritative no from inside `_execute`: nothing was done, and nothing will be.
+
+    Raise it only where the application knows no effect happened, such as a
+    check made before its backend is called. The model reads the reason, as
+    with any `ModelRetry`. A plain `ModelRetry` after dispatch is not this: it
+    leaves the intent unknown.
+    """
+
+
+type Outcome = Literal['succeeded', 'rejected', 'unknown']
+"""What a validated receipt that is about these arguments says happened."""
+
+
 class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](ABC):
     """A business action: authorised by the caller's answer, executed once, answered with a validated receipt.
 
@@ -91,6 +113,10 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     """The backend dedups by the intent id, so an intent whose outcome is unknown may be sent again, as itself."""
     subject: ClassVar[str] = ''
     """The receipt field naming the resource it acts on (a booking id, a ticket id). See `CallContext.effective`."""
+    resource: ClassVar[str] = ''
+    """The kind of resource `subject` names (`ticket`, `address`): ids are unique only within it. Defaults to `subject`."""
+    version: ClassVar[str] = ''
+    """The receipt field holding the resource's version after this change: what orders two changes of one resource."""
     recap: ClassVar[str] = ''
     """What a goodbye may say about a receipt of it that still stands, formatted from the receipt. Empty: nothing."""
     proposal_about: ClassVar[str] = ''
@@ -135,6 +161,23 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         grant = await self._authorise(call, checked, usage=usage, usage_limits=usage_limits)
         intent = call.intent_for(self.name, checked.model_dump_json())
         self._may_dispatch(call, intent)
+        call._claimed.add(intent.id)
+        try:
+            return await self._dispatch(call, checked, intent, asked, answering, heard, grant)
+        finally:
+            call._claimed.discard(intent.id)
+
+    async def _dispatch(
+        self,
+        call: C,
+        checked: ArgsT,
+        intent: Intent,
+        asked: Proposal | None,
+        answering: tuple[int, tuple[str, ...]],
+        heard: str,
+        grant: Any,
+    ) -> OutputT:
+        """Record the intent, send it once, and settle what came back. Runs only while this run holds the claim."""
         with _tracer.start_as_current_span('write') as span:
             audit: dict[str, Any] = {
                 'action': self.name,
@@ -161,6 +204,9 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
             try:
                 try:
                     await self._note_intent(call, intent)
+                except asyncio.CancelledError:
+                    audit.update(status='failed', outcome='prepared', error='cancelled before dispatch')
+                    raise
                 except Exception as error:
                     audit.update(
                         status='failed', outcome='prepared', error=f'{type(error).__name__}: {error}'
@@ -174,10 +220,13 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 try:
                     raw = await self._execute(call, checked, grant)
                     receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
-                except ModelRetry:
+                except Refused:
                     call.set_intent(intent.id, status='rejected')
                     audit.update(status='failed', outcome='rejected')
                     raise
+                except ModelRetry as error:
+                    self._lost(call, intent, checked, audit, f'ModelRetry after dispatch: {error}')
+                    raise OutcomeUnknownError(f'{self.name}: a retry signal after dispatch') from error
                 except asyncio.CancelledError:
                     self._lost(call, intent, checked, audit, 'cancelled after dispatch')
                     raise
@@ -203,11 +252,27 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         cancelled: a success whose speech or state projection then fails is
         still a success, kept for repair (`CallContext._unpresented`) and
         never sent again.
+
+        A receipt that is neither a success nor a declared refusal (a
+        `pending`, a status nobody declared) settles nothing: the intent stays
+        unknown and nothing is filed. A reconciled success whose resource has
+        moved on since (`version` below the application's current one) is
+        history: filed and audited, never said, assigned or recapped.
         """
         data = receipt.model_dump(mode='json')
-        succeeded = self.succeeded(receipt.model_dump())
-        call.set_intent(intent.id, status='succeeded' if succeeded else 'rejected')
+        outcome = self.outcome(receipt.model_dump())
+        if outcome == 'unknown':
+            self._lost(call, intent, args, audit, 'the answer is neither a success nor a declared refusal')
+            audit['receipt'] = data
+            raise OutcomeUnknownError(f'{self.name}: the answer settles nothing yet ({data})')
+        succeeded = outcome == 'succeeded'
+        call.set_intent(intent.id, status=outcome)
         call._unknown.pop(intent.id, None)
+        resource = str(data.get(self.subject, '')) if self.subject else ''
+        version = data.get(self.version) if self.version else None
+        kind = self.resource or self.subject
+        if succeeded and resource and audit.get('reconciled') and isinstance(version, int):
+            call.note_version(kind, resource, await self._current_version(call, kind, resource, version))
         call.note_evidence(
             self.name,
             args.model_dump(mode='json'),
@@ -217,17 +282,19 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
             intent=intent.id,
             succeeded=succeeded,
             changes=self.changes,
-            resource=str(data.get(self.subject, '')) if self.subject else '',
+            resource=resource,
             identity=intent.subject,
+            kind=kind,
+            version=version if isinstance(version, int) else None,
         )
-        audit.update(
-            status='ok' if succeeded else 'failed',
-            outcome='succeeded' if succeeded else 'rejected',
-            receipt=data,
-        )
+        audit.update(status='ok' if succeeded else 'failed', outcome=outcome, receipt=data)
         if intent.subject and call.identity() and intent.subject != call.identity():
             audit['presented'] = False
             logger.info('{} settled for another caller than the one on the line: filed, not said', self.name)
+            return None  # ty: ignore[invalid-return-type]
+        if succeeded and resource and not call.is_latest(kind, resource, version):
+            audit.update(presented=False, historical=True)
+            logger.info('{} for {} {} is history: a later change stands', self.name, kind, resource)
             return None  # ty: ignore[invalid-return-type]
         if succeeded:
             call._unpresented[intent.id] = (self, args, receipt.model_dump())
@@ -269,7 +336,7 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         two bookings in flight for one caller is the duplicate this exists to
         prevent, and which of them landed is for reconciliation to say.
         """
-        if intent.status == 'dispatched':
+        if intent.status == 'dispatched' or intent.id in call._claimed:
             raise OutcomeUnknownError(f'{self.name}: this request is still waiting for an answer')
         if intent.status == 'unknown' and not self.resendable:
             raise OutcomeUnknownError(
@@ -317,6 +384,35 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     def succeeded(self, receipt: Mapping[str, Any]) -> bool:
         """Whether a validated receipt says the action worked. Base: any validated receipt."""
         return True
+
+    def outcome(self, receipt: Mapping[str, Any]) -> Outcome:
+        """What a validated receipt about these arguments says. Base: a success, or else an authoritative no."""
+        return 'succeeded' if self.succeeded(receipt) else 'rejected'
+
+    async def _current_version(self, call: C, kind: str, resource: str, version: int) -> int:
+        """The resource's version now, as the service says (`current_version`), for a success learnt by reconciliation.
+
+        A receipt found by reconciliation says what the intent did then, not
+        what stands now: the ticket may have been reopened since. Optional
+        on the service, like `note_intent`, and bounded. Without it, or when
+        it fails, the receipt's own version is taken as current only if
+        nothing in this call knows better; a failure counts as "something may
+        be newer", so the old receipt is not said.
+        """
+        services = getattr(call, 'services', None)
+        ask = getattr(services, 'current_version', None)
+        if ask is None:
+            return version
+        try:
+            async with asyncio.timeout(NOTE_INTENT_SECONDS):
+                if inspect.iscoroutinefunction(ask):
+                    found = await ask(kind, resource)
+                else:
+                    found = await asyncio.to_thread(ask, kind, resource)
+        except Exception as error:
+            logger.warning('current_version failed ({}): {} taken as history', type(error).__name__, resource)
+            return version + 1
+        return found if isinstance(found, int) and not isinstance(found, bool) else version + 1
 
     async def _before(self, call: C, args: ArgsT) -> OutputT | None:
         """Settle anything that must be resolved before a new action. Return an output to stop here."""

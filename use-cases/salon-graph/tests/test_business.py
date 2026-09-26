@@ -557,9 +557,11 @@ async def a_goodbye_never_claims_a_booking_nothing_made():
     call.note_evidence(
         'cancel_appointment',
         {'phone': call.state.facts.verified_phone, 'booking_id': standing.resource},
-        {'status': 'cancelled', 'booking_id': standing.resource},
+        {'status': 'cancelled', 'booking_id': standing.resource, 'revision': (standing.version or 0) + 1},
         intent='c' * 32,
         resource=standing.resource,
+        kind=standing.kind,
+        version=(standing.version or 0) + 1,
     )
     said = await turn(
         flow, call, script, 'Bye.', ('call', 'goodbye', {'recap': [standing.intent[:8]]}), ('call', 'goodbye')

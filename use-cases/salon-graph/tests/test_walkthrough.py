@@ -10,7 +10,7 @@ Each step asserts which node is active, what each provider request was sent
 (the requested time, the offer, the pending read-back, the receipt), and
 what the diary holds. It also writes the booking node's rendered context at
 the offer, the pending read-back and after the receipt to
-`docs/research/reusable-core/session-4b-runtime/booking-context.md`, so the
+`docs/research/reusable-core/session-4c/booking-context.md`, so the
 design can be reviewed from what the agent actually sees. Session 4's copy
 stays as it was measured. A recap reference is an intent id, random per run,
 so the snapshot writes it as `<ref>`.
@@ -33,7 +33,7 @@ SNAPSHOTS = (
     / 'docs'
     / 'research'
     / 'reusable-core'
-    / 'session-4b-runtime'
+    / 'session-4c'
     / 'booking-context.md'
 )
 REF = re.compile(r'\b[0-9a-f]{8}(?=: ")')

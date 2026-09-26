@@ -361,6 +361,22 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
     def succeeded(self, receipt: Mapping[str, Any]) -> bool:
         return all(receipt.get(name) == value for name, value in self.succeeds.items())
 
+    rejects: ClassVar[Mapping[str, Any]] = {}
+    """Receipt fields and the values that mean a terminal no, like `{status: [full, stale]}` (a list: any of them)."""
+
+    def outcome(self, receipt: Mapping[str, Any]) -> Literal['succeeded', 'rejected', 'unknown']:
+        """`succeeds` is a success; a declared `rejects` is an authoritative no; any other answer to a change settles nothing.
+
+        A read changes nothing, so any validated answer to it is final.
+        """
+        if self.succeeded(receipt):
+            return 'succeeded'
+        refused = self.rejects and all(
+            receipt.get(name) in (value if isinstance(value, list) else [value])
+            for name, value in self.rejects.items()
+        )
+        return 'rejected' if refused or not self.changes else 'unknown'
+
     function_takes_intent: ClassVar[bool] = False
     """The function declares a third parameter, the `Intent`: its idempotency key for the backend."""
     reconcile_takes_intent: ClassVar[bool] = False

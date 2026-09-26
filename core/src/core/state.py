@@ -358,6 +358,10 @@ class Evidence:
     """Whether the operation changes a business resource. A lookup does not, so it can never back a claim of one."""
     resource: str = ''
     """The resource the receipt is about (its declared `subject` field), '' when the operation names none."""
+    kind: str = ''
+    """The kind of that resource (the operation's `resource`, else its `subject` field): ids are unique within it."""
+    version: int | None = None
+    """The resource's version after this change (the operation's `version` field), None when it declares none."""
 
 
 @dataclass(frozen=True)
@@ -585,6 +589,10 @@ class CallContext(BaseModel):
     """
     _unpresented: dict[str, tuple[Any, BaseModel, dict[str, Any]]] = PrivateAttr(default_factory=dict)
     """Succeeded intents whose local recording (state, speech) failed after the receipt: repaired, never re-sent."""
+    _claimed: set[str] = PrivateAttr(default_factory=set)
+    """Intents a run of `Operation.run` is sending right now. A second run of one of them is refused."""
+    _versions: dict[tuple[str, str], int] = PrivateAttr(default_factory=dict)
+    """The newest version known for each resource (kind, id): a receipt below it is history. See `is_latest`."""
     _last_asked_intent: str = PrivateAttr(default='')
     """The intent of the last read-back put to the caller, whatever happened to the question since."""
     _judged: set[str] = PrivateAttr(default_factory=set)
@@ -1277,6 +1285,8 @@ class CallContext(BaseModel):
         changes: bool = True,
         resource: str = '',
         identity: str | None = None,
+        kind: str = '',
+        version: int | None = None,
     ) -> None:
         """File a validated receipt. Called by `Operation.run` before anything can be cancelled.
 
@@ -1286,6 +1296,8 @@ class CallContext(BaseModel):
         """
         running = turn_generation.get()
         generation = running[1] if running is not None and running[0] == self._id else self._generation
+        if succeeded and changes and resource and version is not None:
+            self.note_version(kind, resource, version)
         self._evidence.append(
             Evidence(
                 operation,
@@ -1300,8 +1312,19 @@ class CallContext(BaseModel):
                 succeeded,
                 changes,
                 resource,
+                kind,
+                version,
             )
         )
+
+    def note_version(self, kind: str, resource: str, version: int) -> None:
+        """The application says this resource is at `version` (or later): anything filed below it is history."""
+        key = (kind, resource)
+        self._versions[key] = max(version, self._versions.get(key, version))
+
+    def is_latest(self, kind: str, resource: str, version: int | None) -> bool:
+        """Whether a change at `version` is the newest this call knows of for the resource. Unversioned: yes."""
+        return version is None or version >= self._versions.get((kind, resource), version)
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:
@@ -1319,17 +1342,30 @@ class CallContext(BaseModel):
         validated refusal never stand, so neither can back a claim that
         something changed. Nothing here reads a receipt's meaning: which field
         names the resource is the application's declaration.
+
+        A resource is its kind and its id: ticket 1 and address 1 are two.
+        "Latest" is the application's version when the operation declares one,
+        never the order receipts reached this call, so an old receipt found
+        late by reconciliation cannot stand over a newer change. A resource
+        the application says has moved past every receipt here has none
+        standing: its current state is not one this call can recap.
         """
         latest: dict[tuple[str, ...], Evidence] = {}
         for filed in self._evidence:
             if not (filed.changes and filed.succeeded) or filed.identity != self.identity():
                 continue
             key = (
-                ('resource', filed.resource) if filed.resource else (filed.operation, json.dumps(filed.args))
+                ('resource', filed.kind, filed.resource)
+                if filed.resource
+                else (filed.operation, json.dumps(filed.args))
             )
+            held = latest.get(key)
+            if held is not None and held.version is not None and filed.version is not None:
+                if filed.version < held.version:
+                    continue
             latest.pop(key, None)
             latest[key] = filed
-        return tuple(latest.values())
+        return tuple(f for f in latest.values() if self.is_latest(f.kind, f.resource, f.version))
 
     def open_intent(self, operation: str, args: str) -> Intent | None:
         """The open intent for this operation and these arguments under the caller now on the line, if there is one."""
@@ -1424,7 +1460,9 @@ class CallContext(BaseModel):
                 intent.subject,
             ):
                 raise ValueError(f'intent {intent.id} is already held for different arguments')
-            if intent.status not in ('dispatched', 'unknown'):
+            if intent.status not in ('dispatched', 'unknown') or (
+                held is not None and held.status not in OPEN_INTENT
+            ):
                 continue
             if intent.operation not in reconcile_with:
                 raise ValueError(

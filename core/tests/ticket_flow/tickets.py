@@ -187,6 +187,11 @@ class Desk:
             for i, op, args, subject in rows
         ]
 
+    def current_version(self, kind: str, resource: str) -> int | None:
+        """The ticket's revision now: core asks it before saying a receipt it learnt by reconciliation."""
+        found = self.ticket(resource) if kind == 'ticket' else None
+        return found[0] if found else None
+
     def effect(self, intent: str) -> dict | None:
         with self._tx() as db:
             row = db.execute('SELECT result FROM effects WHERE intent = ?', (intent,)).fetchone()

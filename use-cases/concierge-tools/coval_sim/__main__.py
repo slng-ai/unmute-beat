@@ -363,7 +363,8 @@ class Repository:
         Its diary and call record are files in `state`, kept after the run: the
         diary's bookings and intents and the runner's calls are the evidence a
         campaign's calls are judged and correlated on. Real Twilio returns
-        marks, so delivery is `marks`, never simulated.
+        marks, so delivery is `marks`, never simulated. A worker's drain lasts
+        the call ceiling and a little more, so a drain never cuts a call short.
         """
         state.mkdir(parents=True, exist_ok=True)
         runner = Process(
@@ -389,6 +390,7 @@ class Repository:
                 'TWILIO_MARKS': 'echoed',
                 'DELIVERY': 'marks',
                 'MAX_CALL_SECONDS': str(call_seconds),
+                'DRAIN_SECONDS': str(call_seconds + 20),
                 'PUBLIC_HOST': host,
                 'DIARY_PATH': str(state / 'diary.db'),
                 'RUNNER_DB': str(state / 'runner.db'),

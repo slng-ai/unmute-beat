@@ -855,7 +855,7 @@ class CallContext(BaseModel):
             self._log_playback('ignored', name, at)
             return False
         segment.playback, segment.heard_by, segment.played_at = 'played', 'local' if local else 'mark', at
-        self._log_playback('played', name, at, segment.proposal)
+        self._log_playback('written' if local else 'played', name, at, segment.proposal)
         return True
 
     def note_cleared(self, at: float) -> None:
@@ -925,11 +925,20 @@ class CallContext(BaseModel):
         return {'marks': marks, 'answered_at': self.wall(min(onsets) - self._answer_lead)}
 
     def simulated_for(self, serial: int) -> list[dict[str, Any]]:
-        """A question's text acknowledgements: simulated delivery, labelled as such, never transport playout."""
+        """A question's delivery that is not a transport mark: a text acknowledgement, or audio written at real time.
+
+        `kind` says which (`text`, or `written`: a transport that returns no
+        marks, settled from the media sent, see `core.processor.TwilioMarks`).
+        Never written as `playback`, so an evaluator does not read it as one.
+        """
         return [
-            {'segment': s.id, 'at': self.wall(s.played_at)}
+            {
+                'segment': s.id,
+                'kind': 'text' if s.heard_by == 'ack' else 'written',
+                'at': self.wall(s.played_at),
+            }
             for s in self.all_spoken
-            if serial and s.proposal == serial and s.heard_by == 'ack' and s.played_at is not None
+            if serial and s.proposal == serial and s.heard_by in ('ack', 'local') and s.played_at is not None
         ]
 
     def next_audit(self) -> int:

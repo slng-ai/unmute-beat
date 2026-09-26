@@ -10,10 +10,30 @@
         "label": "text-1",
         "source": "2dda8bd..35d6f9d working tree at 35d6f9d",
         "cases": {
-          "T1.v1": {"result": "passed", "requests": 9, "tokens": 19393, "session": "text-T1.v1-a7a00fb6"},
-          "T2.v1": {"result": "passed", "requests": 14, "tokens": 34770, "session": "text-T2.v1-dcb8574d"},
-          "T3.v2": {"result": "passed", "requests": 9, "tokens": 19566, "session": "text-T3.v2-20fb7475"},
-          "T4.v2": {"result": "passed", "requests": 9, "tokens": 19430, "session": "text-T4.v2-165a9569"}
+          "T1.v1": {
+            "result": "passed",
+            "requests": 9,
+            "tokens": 19393,
+            "session": "text-T1.v1-a7a00fb6"
+          },
+          "T2.v1": {
+            "result": "passed",
+            "requests": 14,
+            "tokens": 34770,
+            "session": "text-T2.v1-dcb8574d"
+          },
+          "T3.v2": {
+            "result": "passed",
+            "requests": 9,
+            "tokens": 19566,
+            "session": "text-T3.v2-20fb7475"
+          },
+          "T4.v2": {
+            "result": "passed",
+            "requests": 9,
+            "tokens": 19430,
+            "session": "text-T4.v2-165a9569"
+          }
         },
         "cancelled_requests": "not counted by the checkpoint (a request whose span never ended); Langfuse sessions hold the full record"
       }
@@ -21,12 +41,27 @@
   },
   "coval_repair_pool": {
     "calls_allowed": 20,
-    "requested": 0,
-    "placed": 0,
-    "connected": 0,
-    "terminal": 0,
+    "requested": 1,
+    "placed": 1,
+    "connected": 1,
+    "terminal": 1,
     "evidence_complete": 0,
-    "runs": []
+    "runs": [
+      {
+        "label": "s4b-B-stress-1",
+        "run": "SdkVkoJjcCk56p2rWNK9ns",
+        "simulation": "S3DKpHVpf2iioCdujDrpeP",
+        "call_sid": "CA48477ad8cbee47a7af96f8254d7800f3",
+        "langfuse_session": "CA48477ad8cbee47a7af96f8254d7800f3",
+        "source": "da8120a",
+        "case": "GRdmreeb7SP4G8yegtMntC",
+        "persona": "VSruLZYYyz3w7fkdUaheDR",
+        "metrics": [
+          "7VHk6dTjvBcuV6XYPmaeGq"
+        ],
+        "result": "failed task, safe: Coval returned no marks, so no read-back could be heard; the number read-back hit the two-try fallback and nothing was written. Caller silent about 20 s after each full read-back."
+      }
+    ]
   },
   "reserved_for_later_stages": {
     "candidate_final_normal": 20,

@@ -63,6 +63,7 @@ BOT_ENV = {
     'MAX_CALL_SECONDS': str(MAX_CALL_SECONDS),
     'TWILIO_ACCOUNT_SID': 'AC' + '0' * 32,
     'TWILIO_AUTH_TOKEN': 'coval-sim',
+    'TWILIO_MARKS': 'absent',
 }
 """What the bot gets on top of `.env` for a simulated call.
 
@@ -70,7 +71,9 @@ No caller ID, so the agent has to ask for the number. A fresh diary per call,
 so calls running side by side cannot see each other's bookings. A ceiling on
 the call's length. Placeholder Twilio credentials, because Pipecat's Twilio
 serializer refuses to start without them; its hang-up request then fails with
-a logged 401, which is harmless.
+a logged 401, which is harmless. No Twilio marks come back from Coval's
+simulated caller (session 4b call SdkVkoJj), so the bot is told so
+(`TWILIO_MARKS=absent`) and settles a read-back from the audio it sent.
 
 `bot.py` loads `.env` with `override=True`, so do not put any of these names in `.env`.
 """

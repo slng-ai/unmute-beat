@@ -17,6 +17,8 @@ sends every pending mark back at once. Checked:
 * M5: a clear sent while a mark is pending makes the mark that comes back
   for it count for nothing, and a mark from before the clear is stale; audio
   proven played before the clear stays played;
+* M7: a far end that returns no marks (Coval's simulator) settles a read-back
+  from its audio at real time, as `local`, never as transport playback;
 * M6: the caller's voice detector onset (less its own window) decides
   whether the reply began after the read-back played: before it, no answer.
 
@@ -50,7 +52,7 @@ READBACK = 'Shall I book a haircut, Friday at two?'
 class Voice(TTSService):
     """A TTS service on Pipecat's own base: real contexts and ordering, made-up audio.
 
-    Text starting `[silent]` makes no audio; `[fail]` makes one chunk, then an error.
+    Text starting `[silent]` makes no audio; `[fail]` makes one chunk, then an error; `[long]` makes 4 s of audio.
     """
 
     def __init__(self) -> None:
@@ -61,6 +63,12 @@ class Voice(TTSService):
 
     async def run_tts(self, text: str, context_id: str):
         if text.startswith('[silent]'):
+            return
+        if text.startswith('[long]'):
+            for _ in range(20):
+                yield TTSAudioRawFrame(
+                    audio=bytes([7]) * 3200, sample_rate=8000, num_channels=1, context_id=context_id
+                )
             return
         for index in range(3 if not text.startswith('[fail]') else 1):
             await asyncio.sleep(0.005)
@@ -95,7 +103,7 @@ class Phone:
         message = json.loads(data)
         self.wire.append(message)
         if message['event'] == 'clear':
-            for pending in [m for m in self.buffer if m['event'] == 'mark']:
+            for pending in [m for m in self.buffer if m['event'] == 'mark' and '*' not in self.lose]:
                 self.echo(pending['mark']['name'])
             self.buffer.clear()
         else:
@@ -119,7 +127,11 @@ class Phone:
             await self.hold.wait()
             if self.buffer:
                 message = self.buffer.pop(0)
-                if message['event'] == 'mark' and message['mark']['name'] not in self.lose:
+                if (
+                    message['event'] == 'mark'
+                    and message['mark']['name'] not in self.lose
+                    and '*' not in self.lose
+                ):
                     self.echo(message['mark']['name'])
             await asyncio.sleep(0.001)
 
@@ -127,7 +139,7 @@ class Phone:
 class Wire:
     """One call on the real adapter, transport and serializer. Use as `async with Wire() as wire:`."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, echoes_marks: bool = True) -> None:
         self.call = open_call(FLOW, '', Diary())
         self.call.turn_started('I want a haircut on Friday at two')
         self.node = PydanticAgentProcessor(self.call, FLOW.nodes)
@@ -135,7 +147,7 @@ class Wire:
         twilio = TwilioFrameSerializer(
             stream_sid='MZ1', params=TwilioFrameSerializer.InputParams(auto_hang_up=False)
         )
-        self.serializer = TwilioMarks(twilio, self.call)
+        self.serializer = TwilioMarks(twilio, self.call, echoes_marks=echoes_marks)
         transport = FastAPIWebsocketTransport(
             websocket=self.phone,  # ty: ignore[invalid-argument-type]
             params=FastAPIWebsocketParams(
@@ -211,16 +223,12 @@ async def a_holding_line_does_not_deliver_the_read_back():
     """M2."""
     async with Wire() as wire:
         holding = await wire.say('One moment.')
-        await wire.until(lambda: wire.marked(holding))
-        wire.phone.hold.clear()
         readback = await wire.say(READBACK, question=True)
-        await wire.until(lambda: wire.marked(readback))
-        wire.phone.hold.set()
-        await wire.until(lambda: holding.delivered == 'delivered')
-        wire.phone.hold.clear()
+        wire.phone.lose.add(readback.mark)
+        await wire.until(lambda: holding.delivered == 'delivered' and wire.marked(readback))
         await asyncio.sleep(0.05)
         assert readback.delivered == 'unknown', "the holding line's mark delivered the read-back behind it"
-        wire.phone.hold.set()
+        wire.phone.echo(readback.mark)
         await wire.until(lambda: readback.delivered == 'delivered')
 
 
@@ -308,6 +316,33 @@ async def the_reply_must_begin_after_the_mark():
     assert not await reply_heard(late=True), 'a reply that began before the mark answered the read-back'
 
 
+async def a_far_end_with_no_marks_is_settled_from_its_audio():
+    """M7: `echoes_marks=False` (Coval's simulator): settled at the audio's real-time end, as `local`, never as a mark."""
+    async with Wire(echoes_marks=False) as wire:
+        wire.phone.lose.add('*')
+        readback = await wire.say(READBACK, question=True)
+        await wire.until(lambda: wire.marked(readback))
+        sent_at = time.perf_counter()
+        await wire.until(lambda: readback.delivered == 'delivered')
+        audio = 3 * 320 / 8000 / 2
+        assert readback.heard_by == 'local' and not wire.phone.returned, (
+            readback.heard_by,
+            wire.phone.returned,
+        )
+        assert readback.played_at is not None and readback.played_at >= sent_at - audio, readback.played_at
+        assert wire.call.playback_for(readback.proposal) is None, (
+            'a settled estimate was written as transport playback'
+        )
+        assert [d['kind'] for d in wire.call.simulated_for(readback.proposal)] == ['written']
+    async with Wire(echoes_marks=False) as wire:
+        wire.phone.lose.add('*')
+        readback = await wire.say('[long] ' + READBACK, question=True)
+        await wire.until(lambda: wire.marked(readback))
+        await wire.worker.queue_frame(InterruptionFrame(), FrameDirection.DOWNSTREAM)
+        await asyncio.sleep(0.2)
+        assert readback.delivered != 'delivered', 'a clear before the audio ended was settled as heard'
+
+
 async def main() -> None:
     await final_media_then_mark()
     await a_holding_line_does_not_deliver_the_read_back()
@@ -315,7 +350,8 @@ async def main() -> None:
     await lost_duplicate_and_unrelated_marks()
     await a_clear_voids_pending_marks_only()
     await the_reply_must_begin_after_the_mark()
-    print('marks ok: M1-M6 on the real adapter, transport and Twilio serializer')
+    await a_far_end_with_no_marks_is_settled_from_its_audio()
+    print('marks ok: M1-M7 on the real adapter, transport and Twilio serializer')
 
 
 if __name__ == '__main__':

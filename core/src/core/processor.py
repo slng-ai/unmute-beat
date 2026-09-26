@@ -32,6 +32,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
+from loguru import logger
 from opentelemetry import trace
 
 try:
@@ -104,13 +105,30 @@ class TwilioMarks(FrameSerializer):
 
     Times are `time.perf_counter` at the moment each message is handled here:
     this process's own monotonic clock, the one caller speech onsets use.
+
+    `echoes_marks=False` is for a far end that speaks the Media Streams
+    protocol but never returns marks (Coval's simulated caller: session 4b
+    call SdkVkoJj sent none back, so no read-back could ever be heard). The
+    marks still go out. Each segment is then settled at the moment its audio
+    has played out at real-time speed, from the media actually sent: its first
+    chunk's send time plus the audio's own length, and never before its last
+    chunk was written (the websocket output writes at twice real time). That
+    is recorded as `local`, never as a telephone mark, so an evaluator does
+    not count it as transport playback. A clear before that moment still
+    voids it. Only a launcher that knows its far end sets this; nothing
+    chooses it automatically.
     """
 
-    def __init__(self, inner: FrameSerializer, call: CallContext) -> None:
+    def __init__(self, inner: FrameSerializer, call: CallContext, *, echoes_marks: bool = True) -> None:
         super().__init__()
-        self._inner, self._call = inner, call
+        self._inner, self._call, self._echoes = inner, call, echoes_marks
         self._media = 0
         """Audio chunks serialized since the last mark: none before a mark means its segment had no audio."""
+        self._first_media: float | None = None
+        self._audio_seconds = 0.0
+        """When this segment's first chunk went out, and how long its audio lasts at real time."""
+        self._seen: set[str] = set()
+        self._counts = {'sent': 0, 'returned': 0, 'settled': 0}
         self.stopped_at: float | None = None
         """When Twilio said the media stream stopped, if it did."""
 
@@ -118,29 +136,53 @@ class TwilioMarks(FrameSerializer):
         await self._inner.setup(setup)
 
     async def serialize(self, frame: Frame) -> str | bytes | None:
+        now = time.perf_counter()
         if isinstance(frame, AudioRawFrame):
             self._media += 1
+            self._first_media = self._first_media if self._first_media is not None else now
+            width = max(1, frame.sample_rate) * max(1, frame.num_channels) * 2
+            self._audio_seconds += len(frame.audio) / width
         if isinstance(frame, SegmentMark):
-            self._call.note_mark_sent(frame.mark, time.perf_counter(), media=self._media)
-            self._media = 0
+            self._call.note_mark_sent(frame.mark, now, media=self._media)
+            self._counts['sent'] += 1
+            logger.info(
+                'mark {} sent after {} chunks, {:.2f}s of audio', frame.mark, self._media, self._audio_seconds
+            )
+            if not self._echoes and self._media:
+                ends = max(now, (self._first_media or now) + self._audio_seconds)
+                asyncio.get_running_loop().call_later(ends - now, self._settle, frame.mark, ends)
+            self._media, self._first_media, self._audio_seconds = 0, None, 0.0
             stream = getattr(self._inner, '_stream_sid', '')
             return json.dumps({'event': 'mark', 'streamSid': stream, 'mark': {'name': frame.mark}})
         if isinstance(frame, InterruptionFrame):
-            self._call.note_cleared(time.perf_counter())
+            self._call.note_cleared(now)
+            self._media, self._first_media, self._audio_seconds = 0, None, 0.0
         return await self._inner.serialize(frame)
+
+    def _settle(self, name: str, at: float) -> None:
+        """The segment's audio has played out at real time: settle its mark, unless a clear came first."""
+        if self._call.note_mark_returned(name, at, local=True):
+            self._counts['settled'] += 1
+            logger.info('mark {} settled at real time (no marks from this far end)', name)
 
     async def deserialize(self, data: str | bytes) -> Frame | None:
         if isinstance(data, str) and '"event"' in data:
             with contextlib.suppress(ValueError):
                 message = json.loads(data)
-                if message.get('event') == 'mark':
-                    self._call.note_mark_returned(
-                        str(message.get('mark', {}).get('name', '')), time.perf_counter()
-                    )
+                event = str(message.get('event'))
+                if event not in self._seen and event != 'media':
+                    self._seen.add(event)
+                    logger.info('media stream: first {!r} event from the far end', event)
+                if event == 'mark':
+                    self._counts['returned'] += 1
+                    name = str(message.get('mark', {}).get('name', ''))
+                    counted = self._call.note_mark_returned(name, time.perf_counter())
+                    logger.info('mark {} returned ({})', name, 'counted' if counted else 'ignored')
                     return None
-                if message.get('event') == 'stop':
+                if event == 'stop':
                     self.stopped_at = time.perf_counter()
                     self._call.note_ending('media_stop', 'twilio stop event', observed=True)
+                    logger.info('media stream stopped: marks {}', self._counts)
         return await self._inner.deserialize(data)
 
 
@@ -202,12 +244,13 @@ def record_ending(call: CallContext, *, carrier: str = '') -> None:
         span.set_attribute('carrier', carrier or 'unknown')
 
 
-def playout(transport: Any, call: CallContext) -> list[FrameProcessor]:
+def playout(transport: Any, call: CallContext, *, echoes_marks: bool = True) -> list[FrameProcessor]:
     """Wire playback evidence into a transport; returns what to place right after `transport.output()`.
 
     A Twilio media stream gets its serializer wrapped (`TwilioMarks`), so
     marks go out and come back on the wire, and nothing is added to the
-    pipeline. Any other transport gets a `LocalPlayout` after its output.
+    pipeline. `echoes_marks=False` is for a far end known to return none
+    (see `TwilioMarks`). Any other transport gets a `LocalPlayout` after its output.
     Without one or the other, no read-back can ever be delivered, and no
     consequential write can be approved.
     """
@@ -216,7 +259,7 @@ def playout(transport: Any, call: CallContext) -> list[FrameProcessor]:
     params = getattr(transport, '_params', None)
     serializer = getattr(params, 'serializer', None)
     if isinstance(serializer, TwilioFrameSerializer):
-        params.serializer = TwilioMarks(serializer, call)  # ty: ignore[invalid-assignment]
+        params.serializer = TwilioMarks(serializer, call, echoes_marks=echoes_marks)  # ty: ignore[invalid-assignment]
         return []
     if isinstance(serializer, TwilioMarks):
         return []

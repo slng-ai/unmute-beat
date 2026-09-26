@@ -93,6 +93,13 @@ after a read-back: the reminder said the read-back again, their yes cut into
 that copy, so it was asked again, up to five times (gate 1, BWqBhyLj). The
 calls that really stalled were silent for 70 to 150 s.
 """
+TWILIO_MARKS = os.getenv('TWILIO_MARKS', 'echoed')
+"""`absent` for a far end that speaks Twilio Media Streams but returns no marks (Coval's simulator).
+
+Then a read-back is settled from the audio actually sent, at real time, and
+recorded as `local` rather than a mark (`core.processor.TwilioMarks`). A real
+Twilio call returns marks: leave it `echoed`. `coval_sim` sets `absent`.
+"""
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
 """One language per call for each speech service."""
@@ -238,7 +245,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             node,
             tts,
             transport.output(),
-            *playout(transport, call),
+            *playout(transport, call, echoes_marks=TWILIO_MARKS != 'absent'),
             assistant_aggregator,
         ]
     )

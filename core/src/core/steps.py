@@ -168,7 +168,9 @@ class FlowCall[S: BaseModel](CallContext):
         caller. Found and valid: the receipt is filed and said, exactly as if
         the first answer had arrived. Not found, or an answer that does not
         validate or is about something else: it stays unknown, and nothing is
-        sent again (`Operation._may_dispatch`). A success whose recording
+        sent again (`Operation._may_dispatch`). An authoritative no (a
+        backend that fenced the intent as void) settles it, silently: nothing
+        was done, and no model is waiting to be told. A success whose recording
         failed is recorded again from its receipt, with nothing sent. No
         model is asked what happened.
 
@@ -192,6 +194,8 @@ class FlowCall[S: BaseModel](CallContext):
                     found = await operation.reconcile_intent(self, args, intent) or found
                 except OutcomeUnknownError as error:
                     logger.info('still unknown after reconciliation: {}', error)
+                except ModelRetry:
+                    logger.info('settled by reconciliation as not done: {}', intent.id)
             for operation, args, receipt in repairs:
                 found = await operation.present_again(self, args, receipt) or found
             return found

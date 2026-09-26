@@ -74,7 +74,7 @@ def _race(path: str, jobs: list[tuple]) -> list[dict]:
     with context.Manager() as manager:
         start = manager.Barrier(len(jobs))
         with context.Pool(len(jobs)) as pool:
-            return pool.starmap(_book, [(path, *job[:2], start, *job[2:]) for job in jobs])
+            return pool.starmap(_workers()._book, [(path, *job[:2], start, *job[2:]) for job in jobs])
 
 
 def _die_after_commit(path: str, phone: str, at: str, token: str) -> None:
@@ -84,6 +84,13 @@ def _die_after_commit(path: str, phone: str, at: str, token: str) -> None:
     slot = _slot(books, phone, at)
     books.save_booking(phone, 'book', slot, '', False, AT, operation_token=token)
     os._exit(3)
+
+
+def _workers():
+    """This module under its import name: `python -m tests` runs it as `__main__`, which a spawned worker cannot import."""
+    import tests.test_store
+
+    return tests.test_store
 
 
 def fresh(folder: Path, name: str) -> str:
@@ -123,12 +130,10 @@ def overlaps_share_no_chair(folder: Path):
     assert len(snapshot(path)) == 1
     db = sqlite3.connect(path)
     try:
-        start, end = diary._minutes(
-            AT.date().replace(day=22), datetime.strptime('09:30', '%H:%M').time(), 'blowout'
-        )
+        (won,) = db.execute('SELECT starts FROM bookings WHERE active = 1').fetchone()
         db.execute(
             'INSERT INTO bookings (phone, service, day, at, starts, ends) VALUES (?, ?, ?, ?, ?, ?)',
-            (CALLERS[2], 'blowout', '2026-09-22', '09:30', start, end),
+            (CALLERS[2], 'blowout', '2026-09-22', 'any', won + 15, won + 45),
         )
     except sqlite3.IntegrityError as error:
         assert 'clash' in str(error), error
@@ -200,7 +205,9 @@ def a_lost_answer_survives_a_restart(folder: Path):
     """B7."""
     path = fresh(folder, 'lost')
     context = multiprocessing.get_context('spawn')
-    worker = context.Process(target=_die_after_commit, args=(path, CALLERS[0], '09:00', 'intent-L'))
+    worker = context.Process(
+        target=_workers()._die_after_commit, args=(path, CALLERS[0], '09:00', 'intent-L')
+    )
     worker.start()
     worker.join(60)
     assert worker.exitcode == 3, worker.exitcode

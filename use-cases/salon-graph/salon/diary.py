@@ -29,6 +29,7 @@ import re
 import sqlite3
 import tempfile
 import threading
+import time as time_module
 import weakref
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -606,6 +607,28 @@ BUSY_SECONDS = 2.0
 """How long a write waits for another worker's transaction before it gives up: a bounded wait, never a queue."""
 
 
+def create_schema(path: str, schema: str, seconds: float = 10.0) -> None:
+    """Create the tables if they are missing, retrying while another process holds the file.
+
+    Two workers starting together both run this. Switching a new file to WAL
+    takes the database's exclusive lock and does not wait on the busy
+    timeout, so the second one is told `database is locked` at once. It is
+    retried for a bounded time, never forever.
+    """
+    deadline = time_module.monotonic() + seconds
+    while True:
+        db = sqlite3.connect(path, timeout=BUSY_SECONDS)
+        try:
+            db.executescript(schema)
+            return
+        except sqlite3.OperationalError as error:
+            if 'locked' not in str(error) or time_module.monotonic() > deadline:
+                raise
+        finally:
+            db.close()
+        time_module.sleep(0.05)
+
+
 def _minutes(day: Date, at: time, service: str) -> tuple[int, int]:
     """An appointment's start and end, in minutes since the epoch on the salon's own clock."""
     start, end = _interval(day, at, service)
@@ -661,11 +684,7 @@ class Diary:
         self._lock = threading.Lock()
         """Offers are read and written from the worker threads domain functions run in."""
         self._clock = clock
-        db = sqlite3.connect(self.path, timeout=BUSY_SECONDS)
-        try:
-            db.executescript(SCHEMA)
-        finally:
-            db.close()
+        create_schema(self.path, SCHEMA)
         with self._tx() as db:
             db.executemany('INSERT OR IGNORE INTO customers VALUES (?)', [(p,) for p in self._seed])
 
@@ -1012,11 +1031,11 @@ class Diary:
         """Every intent recorded for this caller with no result filed under its token: what a new call settles first."""
         with self._tx(write=False) as db:
             rows = db.execute(
-                'SELECT id, operation, args, subject FROM intents '
+                'SELECT id, session, operation, args, subject FROM intents '
                 'WHERE subject = ? AND id NOT IN (SELECT token FROM operations)',
                 (subject,),
             ).fetchall()
-        return [{'id': i, 'operation': op, 'args': args, 'subject': s} for i, op, args, s in rows]
+        return [{'id': i, 'session': c, 'operation': op, 'args': a, 'subject': s} for i, c, op, a, s in rows]
 
     def current_revision(self, booking_id: str) -> int | None:
         """A booking's revision now, active or cancelled; None for a booking this diary never made."""

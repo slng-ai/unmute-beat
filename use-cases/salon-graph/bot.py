@@ -18,6 +18,8 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import os
+from collections.abc import Callable
+from datetime import datetime
 
 from dotenv import load_dotenv
 
@@ -36,6 +38,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.runner.types import RunnerArguments, WebSocketRunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.tts_service import TextAggregationMode
@@ -47,6 +50,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
+from core import StepFlow
 from core.graph import model_clients
 from core.observability import setup
 from core.processor import Ceiling, PydanticAgentProcessor, playout, record_ending
@@ -55,9 +59,13 @@ from salon.diary import Diary
 
 NAME = 'salon call'
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
-DIARY = Diary(path=os.getenv('DIARY_PATH') or None)
+DIARY = Diary(
+    path=os.getenv('DIARY_PATH') or None,
+    clock=datetime.fromisoformat(os.environ['DIARY_CLOCK']) if os.getenv('DIARY_CLOCK') else None,
+)
 """The salon: one SQLite file (`DIARY_PATH`) every worker process shares, so calls on two workers
-contend for one chair. Unset: a private file for this process only, for development."""
+contend for one chair. Unset: a private file for this process only, for development. `DIARY_CLOCK`
+pins the salon's clock, for a load run whose days must not move."""
 FINISH_SECONDS = 8.0
 """How long a turn already running may go on after the caller hangs up: a reading and a write fit in it.
 
@@ -220,8 +228,23 @@ def playback(agents: PydanticAgentProcessor, assistant_aggregator) -> None:
         agents.note_spoken(message.content, message.interrupted, timestamp=message.timestamp)
 
 
-async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
+async def run_bot(
+    transport: BaseTransport,
+    runner_args: RunnerArguments,
+    *,
+    flow: StepFlow | None = None,
+    speech: Callable[[], tuple[FrameProcessor, FrameProcessor]] | None = None,
+    warm: bool = True,
+    trace: bool = True,
+    from_number: str | None = None,
+    settle: Callable[[str], bool] | None = None,
+) -> None:
     """One call: build the pipeline around the agency and run it until the line drops.
+
+    `bot.py` runs it once per call and warms the model clients for that call.
+    A runner that owns them for a worker's life (`server.py`) passes
+    `warm=False`, its own `flow` and `speech` (the offline doubles), and the
+    caller's number from the carrier's webhook.
 
     Pipecat's `LLMContext` is kept even though no model reads it: the
     aggregators use it to work out the caller's turn and, on a barge-in, what
@@ -234,10 +257,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     """
     call_data = getattr(runner_args, 'call_data', None)
     session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''
-    setup(session=session_id, trace_name=NAME)
-    stt, tts = speech_services()
-    call = open_call(FLOW, os.getenv('CALLER_ID', ''), diary=DIARY)
-    context, node = LLMContext(), PydanticAgentProcessor(call, FLOW.nodes)
+    flow = flow or FLOW
+    if trace:
+        setup(session=session_id, trace_name=NAME)
+    stt, tts = (speech or speech_services)()
+    caller = os.getenv('CALLER_ID', '') if from_number is None else from_number
+    call = open_call(flow, caller, diary=DIARY, key=session_id, settle=settle)
+    context, node = LLMContext(), PydanticAgentProcessor(call, flow.nodes)
     user_aggregator, assistant_aggregator = aggregators(context)
 
     @user_aggregator.event_handler('on_user_turn_idle')
@@ -298,7 +324,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
     try:
-        async with model_clients(FLOW.nodes, warm=True):
+        async with model_clients(flow.nodes, warm=warm):
             await runner.run()
     finally:
         await ceiling.stop()

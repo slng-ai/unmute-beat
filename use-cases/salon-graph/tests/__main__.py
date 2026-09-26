@@ -44,6 +44,7 @@ MODULES = (
     'tests.test_ceiling',
     'tests.test_audit_export',
     'tests.test_store',
+    'tests.test_runner',
 )
 """In the order they are quickest to fail: the graph and the state first, the engine and the adapter last."""
 

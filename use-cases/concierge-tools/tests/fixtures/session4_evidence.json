@@ -1,0 +1,83 @@
+{
+ "cases": {
+  "M5Z8LjVyQZPuhSubmt26w7": {"bookings": 1, "service": "haircut"},
+  "GRdmreeb7SP4G8yegtMntC": {"bookings": 1, "service": "haircut"}
+ },
+ "reviews": {
+  "fymMyWTiyz6eqfK3RwRTRX": {
+   "reviewer": "agent", "source": "langfuse trace CA09f5c0: tts, stt and write spans; recording not listened to",
+   "writes": {"lookup_customer@4": {"accepted": false, "delivered": false,
+     "note": "read-back started 39.1 s; caller spoke 40.9 s repeating digits: not a yes, and 1.8 s cannot play the read-back"}},
+   "claims": [], "note": "the runner took the bot down at 68 s; no day or time was chosen"
+  },
+  "cYMMixAchYqsXAAFpLUccQ": {
+   "reviewer": "agent", "source": "langfuse trace CAc55c90: tts, stt and write spans",
+   "final": {"service": "haircut", "date": "2026-10-02", "time": "09:00:00", "phone": "+34671273454"},
+   "writes": {"lookup_customer@4": {"accepted": true}},
+   "claims": ["booked"], "note": "goodbye said 'your haircut is booked for Friday the 2nd'; only a lookup was written"
+  },
+  "C26pPHK6Fkjz57N9bmZupD": {
+   "reviewer": "agent", "source": "langfuse trace CA313860: tts, stt and write spans",
+   "final": {"service": "haircut", "date": "2026-10-03", "time": "09:00:00", "phone": "+34671273454"},
+   "writes": {"lookup_customer@4": {"accepted": true}},
+   "claims": [], "note": "yes 0.3 s into the Saturday read-back, then goodbye; the agent said only 'Goodbye!'"
+  },
+  "YzkhPWRpDFUKuEmBWNmfrA": {
+   "reviewer": "agent", "source": "langfuse trace CAa24472: tts, stt and write spans",
+   "final": {"service": "haircut", "date": "2026-10-03", "time": "09:00:00", "phone": "+34671273454"},
+   "writes": {
+    "confirm_customer@11": {"accepted": true},
+    "save_booking@14": {"accepted": false, "delivered": false,
+      "note": "'nine works for me thanks' 1.7 s into the read-back: a time pick, not a yes"},
+    "save_booking@20": {"note": "ambiguous: the caller repeated the pick, then 'that's great'"}
+   },
+   "claims": ["booked", "moved"], "note": "book then move of the same BK0001: one appointment, not two"
+  },
+  "3CyVWZmpnotfM4nfdru2e2": {
+   "reviewer": "agent", "source": "langfuse trace CA4fb153: tts, stt and write spans",
+   "final": {"service": "haircut", "date": "2026-10-03", "time": "09:00:00", "phone": "+34671273454"},
+   "writes": {
+    "confirm_customer@9": {"note": "ambiguous: 'go ahead' to 'Have I got that right?'"},
+    "save_booking@15": {"accepted": false, "note": "'silence underscore tool' is simulator tool noise, not a yes"},
+    "save_booking@20": {"accepted": true}
+   },
+   "claims": ["booked", "moved"], "note": "book then move of the same BK0001: one appointment, not two"
+  },
+  "kwUbc4PRZhe4Absq4yxScy": {
+   "reviewer": "agent", "source": "langfuse trace CA3bf045: tts, stt and write spans",
+   "final": {"service": "haircut", "date": "2026-10-03", "time": "09:00:00", "phone": "+34671273454"},
+   "writes": {
+    "confirm_customer@6": {"accepted": false, "delivered": false, "note": "'that's' 0.7 s into the number read-back"},
+    "save_booking@12": {"accepted": true}
+   },
+   "claims": ["booked"]
+  },
+  "iPFgi5qqowDhHxEE66H85W": {
+   "reviewer": "agent", "source": "langfuse trace CAecf626 and the bot log",
+   "claims": [], "note": "no write; the model request at 43 s never returned"
+  },
+  "SB4GGMzURZEKaYgDf2RkdU": {
+   "reviewer": "agent", "source": "langfuse trace CA41a566: tts, stt and write spans",
+   "final": {"service": "haircut", "date": "2026-10-02", "time": "09:00:00", "phone": "+34671273454"},
+   "writes": {"lookup_customer@4": {"accepted": true}, "book_appointment@7": {"accepted": true}},
+   "claims": ["booked"]
+  },
+  "VuhAwZ3etdM8ERrZWMndxh": {
+   "reviewer": "agent", "source": "langfuse trace CA941c5b: tts, stt and write spans",
+   "final": {"service": "haircut", "date": "2026-10-03", "time": "09:00:00", "phone": "+34671273454"},
+   "writes": {"lookup_customer@5": {"accepted": true}, "book_appointment@10": {"accepted": true}},
+   "claims": ["booked"]
+  }
+ },
+ "facts": {
+  "fymMyWTiyz6eqfK3RwRTRX": {"media_seconds": 68.035, "ended_by": "test_runner", "source": "session-4 ledger: the runner exited on a Coval 429 and took the bot down"},
+  "iPFgi5qqowDhHxEE66H85W": {"media_seconds": 49.742, "ended_by": "provider_stall", "source": "bot log: LLM completion timeout after 17.7 min, then idle timeout"},
+  "kwUbc4PRZhe4Absq4yxScy": {"media_seconds": 132.235, "ended_by": "agent", "source": "bot log: the bot hung up"},
+  "3CyVWZmpnotfM4nfdru2e2": {"media_seconds": 169.712, "ended_by": "agent", "source": "bot log: the bot hung up"},
+  "YzkhPWRpDFUKuEmBWNmfrA": {"media_seconds": 204.506, "ended_by": "caller", "source": "bot log: client disconnected"},
+  "C26pPHK6Fkjz57N9bmZupD": {"media_seconds": 117.917},
+  "cYMMixAchYqsXAAFpLUccQ": {"media_seconds": 108.761},
+  "SB4GGMzURZEKaYgDf2RkdU": {"media_seconds": 135.829},
+  "VuhAwZ3etdM8ERrZWMndxh": {"media_seconds": 201.533}
+ }
+}

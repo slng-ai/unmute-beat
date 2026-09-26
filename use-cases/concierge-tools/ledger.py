@@ -49,7 +49,7 @@ import math
 import statistics
 import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import cache
 from typing import Any
@@ -179,12 +179,24 @@ class Call:
         return sum(1 for w in self.writes if w.status != 'failed' and w.name in TASKS)
 
     def unmatched(self) -> list[Write]:
-        """Audited writes with no question behind them, or a question about another action: none should exist."""
-        return [w for w in self.writes if 'about' in w.audit and w.name in ANSWERS and not _matches(w.audit)]
+        """Audited writes that needed a yes and had no matching question behind it: none should exist.
+
+        A match is a label check, not consent: it says a question about this
+        action was put on an earlier turn, not that the caller heard it or
+        that their words meant yes (`load_report` keeps those apart).
+        """
+        return [
+            w for w in self.writes if 'about' in w.audit and needs_consent(w.audit) and not _matches(w.audit)
+        ]
+
+    def unmapped(self) -> list[Write]:
+        """Audited writes whose need for a yes is unknown: their action is in no mapping and says nothing itself."""
+        return [w for w in self.writes if 'about' in w.audit and needs_consent(w.audit) is None]
 
 
 ANSWERS = {
     'save_booking': ('booking', 'move_or_add'),
+    'confirm_customer': ('phone',),
     'record_complaint': ('complaint', 'record_complaint'),
     'book_appointment': ('book_appointment',),
     'move_appointment': ('move_appointment',),
@@ -193,10 +205,21 @@ ANSWERS = {
     'confirm_phone': ('phone',),
     'activate_plan': ('plan',),
 }
-"""The questions whose yes can authorise each write. A write not named here needs no yes: it is audited, not matched.
+"""Compatibility mapping for audits that do not say whether they needed a yes: the questions whose yes can
+authorise each write. Every write named here needed one.
 
-Session 4's operations are asked about under their own name (`about` is the action).
+A write named nowhere is not "needs no yes": its consent is unknown (`needs_consent` is None) until its
+audit carries `needs_approval` itself, as an audit written from the operation's own declaration will.
+Session 4's operations are asked about under their own name (`about` is the action); the native build's
+`confirm_customer` and `save_booking` about `phone` and `booking` (`salon-pipecat-flows/graph_salon/writes.py`).
 """
+
+
+def needs_consent(audit: dict[str, Any]) -> bool | None:
+    """Whether this write needed the caller's yes: from the audit's own `needs_approval`, else the mapping, else None."""
+    if isinstance(audit.get('needs_approval'), bool):
+        return audit['needs_approval']
+    return True if audit.get('action') in ANSWERS else None
 
 
 def _matches(audit: dict[str, Any]) -> bool:
@@ -207,8 +230,9 @@ def _matches(audit: dict[str, Any]) -> bool:
     Word it in code (as the read-backs are) to close that.
     """
     asked = audit.get('asked_turn')
+    allowed = ANSWERS.get(audit.get('action', ''), (audit.get('action'),))
     return (
-        audit.get('about') in ANSWERS.get(audit.get('action', ''), ())
+        audit.get('about') in allowed
         and (bool(audit.get('question')) or audit.get('about') == 'move_or_add')
         and asked is not None
         and asked < audit.get('turn', 0)
@@ -351,15 +375,18 @@ def summary(label: str, calls: list[Call]) -> list[str]:
         if tasks
         else '   tokens per completed task: undefined, no task completed'
     )
-    audited = [w for c in calls for w in c.writes if 'about' in w.audit and w.name in ANSWERS]
-    if audited:
+    audited = [w for c in calls for w in c.writes if 'about' in w.audit and needs_consent(w.audit)]
+    unmapped = [w for c in calls for w in c.unmapped()]
+    if audited or unmapped:
         bad = [w for c in calls for w in c.unmatched()]
         lines.append(
-            f'   write audit: {len(audited) - len(bad)} of {len(audited)} writes answered a matching '
-            'question put on an earlier turn'
+            f'   write audit: {len(audited) - len(bad)} of {len(audited)} writes that needed a yes answered a '
+            'question about them put on an earlier turn (a label check: not proof it was heard or meant yes)'
         )
         for w in bad:
             lines.append(f'      NO MATCH {w.name}: {w.audit}')
+        for w in unmapped:
+            lines.append(f'      CONSENT UNKNOWN {w.name}: no mapping and no needs_approval in its audit')
     elif any(c.writes for c in calls):
         lines.append('   write audit: no application question in these traces; the writes above need reading')
     rows = [t for c in calls for t in c.turns]
@@ -438,8 +465,42 @@ def _langfuse() -> Any:
 def fetch(ref: str) -> list[Obs]:
     lf = _langfuse()
     kind_, _, ident = ref.partition(':') if ':' in ref else ('session', '', ref)
-    ids = [ident] if kind_ == 'trace' else [t.id for t in lf.api.trace.list(session_id=ident, limit=100).data]
+    ids = [ident] if kind_ == 'trace' else _session_traces(lf, ident)
     return [Obs.of(o) for tid in ids for o in lf.api.trace.get(tid).observations]
+
+
+def _session_traces(lf: Any, session: str) -> list[str]:
+    """Every trace id of a session, page by page: one page of 100 used to be taken as all of them."""
+    ids, page = [], 1
+    while True:
+        listed = lf.api.trace.list(session_id=session, limit=100, page=page)
+        ids += [t.id for t in listed.data]
+        if page >= listed.meta.total_pages:
+            return ids
+        page += 1
+
+
+def to_json(o: Obs) -> dict[str, Any]:
+    """One observation as JSON, for a saved export (`load_report --save`)."""
+    return {**asdict(o), 'start': o.start.isoformat(), 'end': o.end.isoformat() if o.end else None}
+
+
+def from_json(row: dict[str, Any]) -> Obs:
+    """An observation back from a saved export. Missing optional fields take their defaults."""
+    end = row.get('end')
+    return Obs(
+        id=row['id'],
+        parent=row.get('parent'),
+        type=row['type'],
+        name=row['name'],
+        start=datetime.fromisoformat(row['start']),
+        end=datetime.fromisoformat(end) if end else None,
+        model=row.get('model', ''),
+        input=row.get('input'),
+        output=row.get('output'),
+        usage=row.get('usage') or {},
+        attrs=row.get('attrs') or {},
+    )
 
 
 if __name__ == '__main__':

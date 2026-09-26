@@ -382,6 +382,13 @@ sequenceDiagram
 5. A reply that also changes the request (calls `collect` beside the
    operation) gets a fresh read-back instead: the old proposal no longer
    matches what is now being asked.
+6. A reply that only says the same value back ("Is your number +34 671 51 01
+   05?" answered "No, it's six seven one, five one zero, one zero five") is a
+   yes to it. The agent only records what it heard; code finds the value
+   unchanged from the read-back the caller heard in full, says "Yes, that's
+   the same as I read back", and carries it out (`core.graph.Restated`). A
+   try that turn which was refused, or changed the value and back, is a
+   change and is read back again.
 
 This is why "yes" needs no separate reading: what makes a yes an
 authorisation is never the word itself, it is code matching an exact,
@@ -397,7 +404,9 @@ code-chosen alike (`one_action_per_reply`, `claim_or_refuse`).
   (a caller naming a time, nothing else) gets that operation read back by
   code, with no second request for it — the same read-back the agent would
   otherwise have had to ask for a request later
-  (`ConversationStep.reads_back`, `Node.reads_back`).
+  (`ConversationStep.reads_back`, `Node.reads_back`). When the value it
+  records is the one just read back, the reply is the caller's yes, and code
+  carries the operation out instead (step 6 above).
 - **`opens_with`.** A step entered by a hand-over can read back an operation
   on arrival, by code, when the state already gives its arguments (a carrier's
   own number) — no model request just to notice the read-back is due
@@ -648,6 +657,28 @@ SQLite (3.50.4) predates the fix for the
 [WAL-reset bug](https://www.sqlite.org/wal.html#walresetbug), which can
 corrupt a WAL database two processes write at the same instant.
 
+How one host runs several calls:
+
+```mermaid
+flowchart LR
+    T[Twilio] -->|webhook| W[Any worker]
+    W -->|admit, at most 5| R[(runner.db)]
+    T -->|media stream| K[Worker that claims the call]
+    K --> C[Call: own state, history, approvals]
+    C -->|reads and writes by intent| D[(diary.db, shared)]
+    K -->|release, however it ends| R
+```
+
+1. uvicorn runs `server.py` in two worker processes behind one port.
+2. Twilio's webhook reaches any worker. It admits the call in `runner.db` while
+   fewer than five are admitted or active, and answers busy otherwise.
+3. The media stream may reach the other worker. Only the one that claims the
+   admitted call runs it, once.
+4. Each call keeps its own state, history, approvals and speech ledger. Only
+   the diary file is shared, and it holds capacity, idempotency and fences.
+5. The call's place is released however it ends. A reaper frees the places
+   of a worker that died, and uvicorn starts a replacement.
+
 
 ## 9. Where reuse comes from
 
@@ -685,8 +716,8 @@ raises on its first failure:
 
 | Member | Some of what its suite covers |
 |---|---|
-| `core` (`core/tests`) | `test_authoring` (the manifest contract on all three clinic patterns), `test_session` (atomic state, owned fields, isolation, stale work, evidence), `test_nodes` (P1-P18: no reader runs on the public path, hostile calls are refused, `reads_back`, the silence reminder), `test_delivery`, `test_sdk`, `test_public`, `test_package`, `test_history`, `test_clock`. `defects.py` runs separately: known defects that fail on purpose, one per open repair. |
-| `use-cases/salon-graph` (`tests`) | `test_graph` (legal moves, prerequisite interposition, pinned first requests in `tests/golden/agents.json`), `test_business` (the acceptance matrix, A-L), `test_walkthrough` (one booking call through every boundary), `test_continuation`, `test_overlap` (timed barge-in and delivery replay), `test_state`, `test_diary`, `test_budget`, `test_traces`, `test_core` (direct engine and Pipecat adapter agree), `test_calls` (the live text checkpoint's own machinery, scripted). |
+| `core` (`core/tests`) | `test_authoring` (the manifest contract on all three clinic patterns), `test_session` (atomic state, owned fields, isolation, stale work, evidence), `test_nodes` (P1-P18 and F3-F5: no reader runs on the public path, hostile calls are refused, `reads_back`, the same value said back, the silence reminder), `test_outcomes` (O1-O9: pending is unknown, one sender per intent, versions, resource kinds, owed intents), `test_speech` (a rendered step says no model words), `test_intents`, `test_delivery`, `test_tickets` (a Spanish support desk on SQLite), `test_sdk`, `test_public`, `test_package`, `test_history`, `test_clock`. `defects.py` runs separately: known defects that fail on purpose, one per open repair. |
+| `use-cases/salon-graph` (`tests`) | `test_graph` (legal moves, prerequisite interposition, pinned first requests in `tests/golden/agents.json`), `test_business` (the acceptance matrix, A-L), `test_walkthrough` (one booking call through every boundary), `test_continuation`, `test_overlap` (timed barge-in and delivery replay), `test_recovery` (B4.1-B4.6: bounded read-backs, cut copies, joined-turn budget), `test_store` (B1-B9: worker processes on one diary file), `test_runner` (A1-A5: admission), `test_marks`, `test_state`, `test_diary`, `test_budget`, `test_traces`, `test_core` (direct engine and Pipecat adapter agree), `test_calls` (the live text checkpoint's own machinery, scripted). `evals/load` and `evals/faults` drive the real runner offline: the 1-2-5 ramp, worker kills, a stale worker, overload, drain. |
 
 Tests pin every request the harness sends
 (`use-cases/salon-graph/tests/golden/agents.json`), so a code change that
@@ -718,9 +749,7 @@ by `use-cases/concierge-tools/ledger.py` for tokens, latency and every write.
 [docs/research/poc-evidence-2026-09-24.md](docs/research/poc-evidence-2026-09-24.md)
 holds that evidence, from the classifier-based design session 4 replaced; it
 is history, not a claim about the current node-agent design. The current
-design's own runs are logged as they happen in
-[docs/research/reusable-core/session-4/ledger.md](docs/research/reusable-core/session-4/ledger.md);
-the "Evidence" section below will summarise them once the stress test is done.
+design's results are in the "Evidence" section below.
 
 The offline tests check whether the machinery follows its rules. Voice
 evaluations check how the model and audio path behave in the tested
@@ -871,6 +900,16 @@ the same turn engine, budget and barge-in handling.
 
 ### Known limits
 
+- The runner is qualified on one MacBook, for five calls at once. More calls,
+  a server host, and a worker killed during live calls are untested.
+- Worker memory grows under steady load (800 to 1,870 MB over 180 s of five
+  calls offline), in native code, not Python objects. It stays below 80 % of
+  RAM, but a long unattended run needs workers recycled after some calls.
+- The harness adds at most 50 ms per turn, but a full scripted trace is
+  about twice native Pipecat's (N12, 109 ms against 57 ms).
+- On the `verify` step the model can still say a digit read-back in its own
+  words. A yes to it approves nothing, because only code-worded read-backs
+  are questions, but it can confuse the caller.
 - Recovering a write whose outcome is unknown is declared per operation
   (`reconcile:` in `agent.yaml`, a typed function such as
   `functions.py:find_booking`, looked up by the intent). Without one, and
@@ -908,7 +947,7 @@ pyproject.toml            the uv workspace: core and every folder in use-cases/,
 core/                     the harness, a package: slng-voice-core
   src/core/
     state.py              VoiceState, CallContext and its speech ledger, Handoff, Question
-    graph.py              Node, Exit, LocalAction, Opening, route, moved_by, model_clients
+    graph.py              Node, Exit, LocalAction, Restated, Opening, route, moved_by, model_clients
     flow.py               the steps as a Pydantic graph: walks every turn, refuses undeclared moves, draws itself
     locale.py             Locale: the lines the turn engine says itself (claim words are the application's); ENGLISH and SPANISH
     proposals.py          the one question a call waits on, and when it can be answered
@@ -932,7 +971,9 @@ core/                     the harness, a package: slng-voice-core
                           the node-agent contract (test_nodes.py: no reader on the public path), clinic.py
                           (the legacy classes, for Faro-style use cases)
 use-cases/
-  salon-graph/            the salon on core: bot.py, salon/agent.yaml, salon/functions.py, salon/app.py, evals/, tests/
+  salon-graph/            the salon on core: bot.py (one call), server.py (the runner: many calls, one host),
+                          salon/agent.yaml, salon/functions.py, salon/app.py, salon/diary.py (one shared SQLite file),
+                          evals/ (live text checks, offline load and fault drivers), tests/
   salon-prompt/           the same salon as one prompt on Pipecat's Gemini service, no core
   salon-pipecat-flows/    the same salon on declarative Pipecat flows, the guarantees as app code, no core
   faro-language-learning/ Faro: a bilingual learning companion on core's legacy path, with a SQLite store
@@ -949,6 +990,52 @@ marked above.
 ---
 
 # Evidence
+
+## Current results (Stage C, 26 September 2026)
+
+**Every live call after the Stage C fixes booked correctly: 25 of 25**, on a
+real Twilio line, five calls at a time, judged from each batch's own diary
+file. The report is
+[session-4c.md](docs/research/reusable-core/session-4c.md), and every call's
+evidence is in `docs/research/reusable-core/session-4c/live/`.
+
+| Run | Calls | Callers | Correct bookings | Delivery (read-back heard before the yes) |
+|---|---|---|---|---|
+| Benchmark A, C | 10 | normal: a haircut on a weekday morning | 10 of 10 | 10 of 10 |
+| Benchmark B, D | 10 | interruptive: the number in two pieces, then a change of day at the read-back | 10 of 10 | 10 of 10 |
+| Batch R | 5 | normal: the same number said back after "no", and one real correction | 5 of 5 | 5 of 5 |
+| Call 1, before the fixes | 1 | interruptive | 0 of 1, safe: nothing booked, nothing false said | pass |
+
+- **Nothing unsafe happened.** No booking went to a wrong number, day or
+  time. No booking was duplicated, and the chair was never double-booked. No
+  bot line claimed a change nothing made.
+- **The review.** A separate reviewer read all 20 benchmark calls. Outcome,
+  delivery and ending passed on 20 of 20, and completion on 19 of 20 (1
+  unknown: the caller hung up during the closing). Authorization passed on 18
+  of 20 read literally. The other 2 are the same number said back after
+  "no", which is correct under the rule in section 6.
+- **Latency, five calls at once.** Turn p50 2.1-2.5 s, p90 3.3-4.2 s. The
+  model request is p50 0.8 s; the rest is speech recognition, endpointing and
+  TTS. The harness itself adds at most 48 ms a turn. Event-loop lag p99 stayed
+  under 3 ms.
+- **What call 1 found, now fixed.** A caller who talks over a read-back hears
+  it again, instead of "please call back" after two tries. A turn split into
+  many pieces gets more model requests. The same number said back is
+  confirmed aloud.
+- **Offline, on the real runner.** The 1 → 2 → 5 ramp, with 62 s at five
+  calls, and worker kills before the write, after the write and after the
+  commit, a stale worker, overload and drain all pass. Dead calls closed in
+  at most 4.6 s, and a replacement worker was ready in at most 1.8 s.
+
+How a call is judged: Coval places and records it and scores only a turn
+count. `load_report.py` judges it from its Langfuse trace and write records.
+Each batch's diary file is the ground truth for what was booked.
+
+Not proven yet: moves, cancellations and complaints on live calls (they are
+covered offline and in text); a live worker kill; more than five calls; a
+server host; a matched native comparison on the real line.
+
+## Session 4 (history)
 
 Session 4 tested this design with Coval phone calls, on two booking cases: a normal caller and an interruptive one. 140 calls were authorised and **138 placed**: 120 harness (69 normal, 51 interruptive) and 18 native (10 normal, 8 interruptive). The full report is [docs/research/reusable-core/session-4.md](docs/research/reusable-core/session-4.md). Every call, with its Coval recording and its Langfuse trace, is listed in [docs/research/reusable-core/session-4/coval-evals.md](docs/research/reusable-core/session-4/coval-evals.md).
 

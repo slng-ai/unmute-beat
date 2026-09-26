@@ -585,6 +585,12 @@ class CallContext(BaseModel):
     """
     _unpresented: dict[str, tuple[Any, BaseModel, dict[str, Any]]] = PrivateAttr(default_factory=dict)
     """Succeeded intents whose local recording (state, speech) failed after the receipt: repaired, never re-sent."""
+    _last_asked_intent: str = PrivateAttr(default='')
+    """The intent of the last read-back put to the caller, whatever happened to the question since."""
+    _judged: set[str] = PrivateAttr(default_factory=set)
+    """Question copies already counted as heard or not (`note_unheard_readbacks`)."""
+    _turn_usage: tuple[int, Any] | None = PrivateAttr(default=None)
+    """The caller turn and the usage tally its pieces share, so a joined turn spends one budget (`core.turn.Turn`)."""
     _departed: bool = PrivateAttr(default=False)
     """The caller said goodbye: no new consequential intent starts after it. See `note_departure`."""
     _pending_marks: dict[str, str] = PrivateAttr(default_factory=dict)
@@ -1113,6 +1119,13 @@ class CallContext(BaseModel):
     def ask(self, proposal: Proposal) -> None:
         """Record that this question has gone out to the caller, on this turn."""
         self._proposals.ask(self, proposal)
+        if intent := getattr(proposal, 'intent', ''):
+            self._last_asked_intent = intent
+
+    def last_asked_left_undone(self) -> bool:
+        """Whether the change last read back to the caller was never made: its intent was never dispatched."""
+        intent = self._intents.get(self._last_asked_intent)
+        return intent is not None and intent.status == 'prepared'
 
     def pending_question(self) -> Any:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
@@ -1271,6 +1284,42 @@ class CallContext(BaseModel):
             latest.pop(key, None)
             latest[key] = filed
         return tuple(latest.values())
+
+    def open_intent(self, operation: str, args: str) -> Intent | None:
+        """The open intent for this operation and these arguments under the caller now on the line, if there is one."""
+        subject = self.identity()
+        return next(
+            (
+                i
+                for i in reversed(self._intents.values())
+                if i.operation == operation
+                and i.args == args
+                and i.subject == subject
+                and i.status in OPEN_INTENT
+            ),
+            None,
+        )
+
+    def note_unheard_readbacks(self) -> None:
+        """The caller spoke: every copy of the question they are answering that they did not hear in full counts once.
+
+        Counted against the question's intent (`Intent.readbacks`), each copy
+        once, so a caller who goes on in pieces over one read-back spends one,
+        and a question asked again gets no fresh allowance.
+        """
+        asked = self._proposals.asked
+        intent = self._intents.get(getattr(asked, 'intent', '')) if asked is not None else None
+        if intent is None or intent.status != 'prepared':
+            return
+        unheard = 0
+        for copy in self._proposals.copies(self):
+            if copy.id in self._judged:
+                continue
+            self._judged.add(copy.id)
+            if not (copy.delivered == 'delivered' and self.answered_in_time(copy)):
+                unheard += 1
+        if unheard:
+            self.set_intent(intent.id, readbacks=intent.readbacks + unheard)
 
     def intent_for(self, operation: str, args: str) -> Intent:
         """The open intent for this operation, these arguments and this caller, or a new one.
@@ -1719,6 +1768,7 @@ class CallContext(BaseModel):
         is what the model has not been sent yet. Either way, what the caller
         missed of the last speech is said to this piece's runs (`spoken_over`).
         """
+        self.note_unheard_readbacks()
         continuing = self.continues_turn()
         self.close_model_text()
         missed = _missed(self._spoken, self._playback_known)

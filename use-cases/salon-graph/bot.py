@@ -17,10 +17,7 @@ Then open http://localhost:7860 and talk.
 from __future__ import annotations
 
 # ruff: noqa: E402
-import asyncio
 import os
-from collections.abc import Awaitable, Callable
-from contextlib import suppress
 
 from dotenv import load_dotenv
 
@@ -52,7 +49,7 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 
 from core.graph import model_clients
 from core.observability import setup
-from core.processor import PydanticAgentProcessor, playout, record_ending
+from core.processor import Ceiling, PydanticAgentProcessor, playout, record_ending
 from salon.app import FLOW, GREETING, open_call
 from salon.diary import Diary
 
@@ -106,47 +103,6 @@ transport_params = {
     'twilio': lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
 }
 """`twilio` is the route Coval's simulated calls take (`concierge-tools/coval_sim`); the runner adds the serializer."""
-
-
-class Ceiling:
-    """One call's ceiling (`MAX_CALL_SECONDS`): started when the caller connects, stopped by its owner, always.
-
-    The owner is `run_bot`, which stops it in a `finally` around the
-    pipeline, so a call that ends any way at all (the agent's goodbye, the
-    caller hanging up, a cancellation, an error) takes its timer with it. On a
-    shared bot (`coval_sim serve`) the old timer was cancelled only on a
-    client disconnect: calls the agent ended left theirs running, and every
-    "ceiling reached" line fired together at a deadline long after those calls
-    were over. One call's ceiling knows nothing of any other call.
-
-    `sleep` is injectable so a test can control time.
-    """
-
-    def __init__(
-        self,
-        seconds: float,
-        reached: Callable[[], Awaitable[None]],
-        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-    ) -> None:
-        self.seconds, self._reached, self._sleep = seconds, reached, sleep
-        self._task: asyncio.Task | None = None
-
-    def start(self) -> None:
-        """Start counting, once. A ceiling of 0 never ends a call."""
-        if self.seconds and self._task is None:
-            self._task = asyncio.create_task(self._run())
-
-    async def _run(self) -> None:
-        await self._sleep(self.seconds)
-        await self._reached()
-
-    async def stop(self) -> None:
-        """Cancel the timer if it is still running, and wait for it to be gone. Safe to call more than once."""
-        task, self._task = self._task, None
-        if task is not None and task is not asyncio.current_task() and not task.done():
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
 
 def speech_services() -> tuple[SlngSTTService, SlngTTSService]:

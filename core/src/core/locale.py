@@ -71,6 +71,10 @@ class Locale:
     are rendered by code. Ordinary model speech stays a semantic behaviour to
     evaluate.
     """
+    gave_up: str = ''
+    """Said instead of a read-back the caller never heard in full twice (`core.steps.READBACKS`): nothing was done."""
+    left_undone: str = ''
+    """Said in a goodbye when the change last read back was never made, so a caller leaving knows it."""
     still_there: str = ''
     """Said when the caller has been silent a while after the last answer played (`core.turn.remind`).
 
@@ -89,6 +93,9 @@ ENGLISH = Locale(
     holding=('Let me have a look.', 'One moment.'),
     unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
     goodbye='Thanks for calling. Goodbye.',
+    gave_up="I'm sorry, I couldn't get that confirmed on this line, so I haven't made that change. "
+    'Please call back and we can do it then.',
+    left_undone="I haven't made that last change.",
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
 )
@@ -101,6 +108,9 @@ SPANISH = Locale(
     holding=('Déjame mirar.', 'Un momento.'),
     unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
     goodbye='Gracias por llamar. Adiós.',
+    gave_up='Lo siento, no he podido confirmarlo por esta línea, así que no he hecho ese cambio. '
+    'Llámanos otra vez y lo hacemos entonces.',
+    left_undone='No he hecho ese último cambio.',
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
 )

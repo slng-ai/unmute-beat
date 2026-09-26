@@ -10,8 +10,10 @@ Each step asserts which node is active, what each provider request was sent
 (the requested time, the offer, the pending read-back, the receipt), and
 what the diary holds. It also writes the booking node's rendered context at
 the offer, the pending read-back and after the receipt to
-`docs/research/reusable-core/session-4/booking-context.md`, so the design can
-be reviewed from what the agent actually sees.
+`docs/research/reusable-core/session-4b-runtime/booking-context.md`, so the
+design can be reviewed from what the agent actually sees. Session 4's copy
+stays as it was measured. A recap reference is an intent id, random per run,
+so the snapshot writes it as `<ref>`.
 
 Covers D1-D6, P4, P13, P14, P15 and P17 (scripted). Scripted models prove the
 runtime's handling; whether a real model reads "the later one" right is the
@@ -19,6 +21,7 @@ live paired check's business.
 """
 
 import asyncio
+import re
 from pathlib import Path
 
 from tests.script import CLOCK, PHONE, Script, opened, slot, text_of, turn
@@ -26,16 +29,24 @@ from tests.script import CLOCK, PHONE, Script, opened, slot, text_of, turn
 TODAY = CLOCK.date()
 FRIDAY = '2026-10-02'
 SNAPSHOTS = (
-    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4' / 'booking-context.md'
+    Path(__file__).parents[3]
+    / 'docs'
+    / 'research'
+    / 'reusable-core'
+    / 'session-4b-runtime'
+    / 'booking-context.md'
 )
+REF = re.compile(r'\b[0-9a-f]{8}(?=: ")')
+"""A recap reference in the rendered context: an intent id's first characters, different every run."""
 
 
 def snapshot(script: Script, moment: str) -> str:
     """The latest booking request's instructions and tools, as a section of the snapshot file."""
     request = next(r for r in reversed(script.requests) if r.step == 'booking')
+    instructions = REF.sub('<ref>', request.instructions)
     return (
         f'## {moment}\n\nActive node: `{request.step}`. Tools and outputs offered: '
-        f'{", ".join(f"`{t}`" for t in request.tools)}.\n\n```text\n{request.instructions}\n```\n'
+        f'{", ".join(f"`{t}`" for t in request.tools)}.\n\n```text\n{instructions}\n```\n'
     )
 
 

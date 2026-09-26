@@ -29,6 +29,7 @@ Scripted models prove runtime properties, not language understanding.
 """
 
 import asyncio
+import contextlib
 import json
 import subprocess
 import sys
@@ -252,6 +253,36 @@ async def holding_covers_work_not_thinking():
         assert len(fillers) == expected, (slow, [(s.origin, s.text) for s in call.spoken])
         if expected:
             assert call.spoken[0] is fillers[0], 'the holding line comes before the answer'
+
+
+async def a_cut_off_tool_leaves_no_timer():
+    """B4: a caller who cuts in while a slow tool runs ends the turn, and its holding-line timer with it, awaited."""
+    started = asyncio.Event()
+
+    async def hanging_times(clinic: Any, state: Any) -> dict[str, str]:
+        started.set()
+        await asyncio.Event().wait()
+        return {}
+
+    script = Script()
+    step = ConversationStep(
+        id='desk', instructions='Help.', fields=('patient', 'slot'), choices={'slot': hanging_times}
+    )
+    flow = StepFlow([step], model=script.model, state_type=ClinicState)
+    call = flow.open(ClinicState(), services=Backend())
+    script.call, script.moves = call, [('call', 'options', {})]
+    barge = core.turn.Barge()
+    running = asyncio.create_task(
+        take_turn(call, flow.nodes, 'Which times?', TurnBudget(hold_after=5.0), barge)
+    )
+    await asyncio.wait_for(started.wait(), 3)
+    barge.fire()
+    running.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await asyncio.wait_for(running, 3)
+    await asyncio.sleep(0)
+    left = [t for t in asyncio.all_tasks() if '_hold_after' in repr(t.get_coro())]
+    assert not left, ('a holding-line timer outlived the turn that armed it', left)
 
 
 async def a_code_node_returns_with_no_model():
@@ -497,6 +528,7 @@ async def main() -> None:
     await hostile_calls_are_refused()
     await a_change_in_the_same_reply_spends_no_yes()
     await holding_covers_work_not_thinking()
+    await a_cut_off_tool_leaves_no_timer()
     await a_code_node_returns_with_no_model()
     await late_options_offer_nothing()
     await an_unheard_receipt_is_said_again()

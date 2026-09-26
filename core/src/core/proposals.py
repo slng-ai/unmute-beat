@@ -67,6 +67,8 @@ class BaseProposal(BaseModel):
     value: str = ''
     owner: str = ''
     turn: int = 0
+    intent: str = ''
+    """The `Intent` this question asks the caller to agree to, when it is an operation's read-back."""
 
 
 class ProposalLedger[P: Proposal]:

@@ -244,8 +244,32 @@ class Prompted:
     value: str = ''
 
     def put(self, call: CallContext) -> str:
-        call.ask(BaseProposal(about=self.about, spoken=self.spoken, value=self.value, owner=call.identity()))
+        """Record the question and return its words; or, for an intent read back `READBACKS` times unheard, the fallback.
+
+        An operation's read-back names its intent, so every copy of it counts
+        against that intent (`CallContext.note_unheard_readbacks`), across the
+        caller's joined pieces and reissued questions alike. Past the limit it
+        is not asked again on this call: the caller hears `Locale.gave_up`,
+        which is true, because nothing was dispatched.
+        """
+        intent = call.open_intent(self.about, self.value)
+        if intent is not None and intent.status == 'prepared' and intent.readbacks >= READBACKS:
+            logger.info('{} read back {} times unheard: fallback', self.about, intent.readbacks)
+            return call.locale.gave_up
+        call.ask(
+            BaseProposal(
+                about=self.about,
+                spoken=self.spoken,
+                value=self.value,
+                owner=call.identity(),
+                intent=intent.id if intent is not None else '',
+            )
+        )
         return self.spoken
+
+
+READBACKS = 2
+"""Read-backs of one intent the caller never heard in full before answering, after which it is not asked again."""
 
 
 class ConfirmedOperation[ArgsT: BaseModel, ReceiptT: BaseModel](
@@ -325,6 +349,8 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         return BaseProposal(about=self.name, spoken=spoken, value=args.model_dump_json())
 
     def proposal_for(self, call: FlowCall[Any], args: BaseModel) -> Proposal:
+        """The read-back as it is asked: its intent is made now, before anything could be dispatched."""
+        call.intent_for(self.name, args.model_dump_json())
         if self.readback is None or not self.readback_uses_services:
             return self.proposal(args)
         readback: Callable[[Any, Any], str] = self.readback  # ty: ignore[invalid-assignment]
@@ -665,6 +691,8 @@ def goodbye_words(flow: StepFlow, call: FlowCall[Any], recap: Sequence[str]) -> 
     words = [standing[ref] for ref in dict.fromkeys(recap)]
     if call.unresolved():
         words.append(call.locale.unsettled)
+    elif call.last_asked_left_undone():
+        words.append(call.locale.left_undone)
     words.append(call.locale.goodbye)
     return ' '.join(w for w in words if w)
 

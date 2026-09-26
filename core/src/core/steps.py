@@ -685,9 +685,14 @@ def goodbye_words(flow: StepFlow, call: FlowCall[Any], recap: Sequence[str]) -> 
 
     A reference that is not a standing receipt of this call is refused back
     to the model; it cannot name one into existence, and it writes none of
-    the words.
+    the words. An entry that is exactly a standing recap's words (the live
+    text checkpoint's model sent those instead of the reference) counts as
+    that reference: the words were rendered by the application from the
+    receipt, so matching them names nothing new, and saves a retry.
     """
     standing = recaps(flow, call)
+    by_words = {' '.join(words.split()): ref for ref, words in standing.items()}
+    recap = [ref if ref in standing else by_words.get(' '.join(ref.split()), ref) for ref in recap]
     if wrong := [ref for ref in recap if ref not in standing]:
         raise ModelRetry(
             f'Nothing was said: {", ".join(map(repr, wrong))} is not something done on this call that still '
@@ -1297,7 +1302,7 @@ class ConversationStep(Step):
             """End the call, only once the caller's own words say they are finished. The application says the goodbye.
 
             Args:
-                recap: References from "Can recap" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none.
+                recap: The short references (like 3fa85f64) listed under "Can recap" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none.
             """
             call = ctx.deps
             if call.pending_question() is not None and call._goodbye_checked != call.turn:

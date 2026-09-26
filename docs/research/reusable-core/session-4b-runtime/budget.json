@@ -3,9 +3,21 @@
   "text": {
     "requests_allowed": 100,
     "tokens_allowed": 250000,
-    "requests_spent": 0,
-    "tokens_spent": 0,
-    "runs": []
+    "requests_spent": 41,
+    "tokens_spent": 93159,
+    "runs": [
+      {
+        "label": "text-1",
+        "source": "2dda8bd..35d6f9d working tree at 35d6f9d",
+        "cases": {
+          "T1.v1": {"result": "passed", "requests": 9, "tokens": 19393, "session": "text-T1.v1-a7a00fb6"},
+          "T2.v1": {"result": "passed", "requests": 14, "tokens": 34770, "session": "text-T2.v1-dcb8574d"},
+          "T3.v2": {"result": "passed", "requests": 9, "tokens": 19566, "session": "text-T3.v2-20fb7475"},
+          "T4.v2": {"result": "passed", "requests": 9, "tokens": 19430, "session": "text-T4.v2-165a9569"}
+        },
+        "cancelled_requests": "not counted by the checkpoint (a request whose span never ended); Langfuse sessions hold the full record"
+      }
+    ]
   },
   "coval_repair_pool": {
     "calls_allowed": 20,

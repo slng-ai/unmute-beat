@@ -1,0 +1,752 @@
+{
+  "case": "T2.v1",
+  "session": "text-T2.v1-dcb8574d",
+  "turns": [
+    {
+      "turn": 0,
+      "caller": "",
+      "said": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:0:1",
+          "origin": "entry",
+          "text": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "started": 0.003,
+      "caller": "Hi, I'd like a haircut on Tuesday.",
+      "said": "One moment. Which phone number should I use? Please say it with the country code.",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:1:2",
+          "origin": "tool_filler",
+          "text": "One moment.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        },
+        {
+          "id": "5173c0410a6a:1:3",
+          "origin": "ask",
+          "text": "Which phone number should I use? Please say it with the country code.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 2,
+      "tokens": {
+        "input": 2893,
+        "output": 60
+      },
+      "seconds": {
+        "wall": 1.552,
+        "model": 1.533,
+        "backend": 0.0,
+        "core": 0.019
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 2,
+      "started": 1.555,
+      "caller": "My number is plus three four, six zero zero, one one one, two two two.",
+      "said": "Is your number +34 600 11 12 22?",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:2:4",
+          "origin": "ask",
+          "text": "Is your number +34 600 11 12 22?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 1218,
+        "output": 27
+      },
+      "seconds": {
+        "wall": 0.966,
+        "model": 0.951,
+        "backend": 0.0,
+        "core": 0.015
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 3,
+      "started": 2.521,
+      "caller": "Yes, that's my number.",
+      "said": "Thanks, I have you. For a haircut tomorrow, I have 9:00 AM, 9:30 AM, and 10:00 AM available. Which time works for you?",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:3:5",
+          "origin": "confirmation",
+          "text": "Thanks, I have you.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        },
+        {
+          "id": "5173c0410a6a:3:6",
+          "origin": "model",
+          "text": "For a haircut tomorrow, I have 9:00 AM, 9:30 AM, and 10:00 AM available. Which time works for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "text",
+          "seconds": null
+        }
+      ],
+      "requests": 3,
+      "tokens": {
+        "input": 6359,
+        "output": 55
+      },
+      "seconds": {
+        "wall": 1.841,
+        "model": 1.808,
+        "backend": 0.0,
+        "core": 0.032
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 4,
+      "started": 4.362,
+      "caller": "The first one, please.",
+      "said": "Shall I book a haircut, tomorrow at 9:00 AM?",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:4:7",
+          "origin": "ask",
+          "text": "Shall I book a haircut, tomorrow at 9:00 AM?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 2741,
+        "output": 31
+      },
+      "seconds": {
+        "wall": 0.807,
+        "model": 0.79,
+        "backend": 0.0,
+        "core": 0.017
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 5,
+      "started": 5.169,
+      "caller": "Yes, but make it Wednesday.",
+      "said": "Let me have a look. For a haircut on Wednesday the 30th, I have 9:00 AM, 9:30 AM, and 10:00 AM. Which time works for you?",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:5:8",
+          "origin": "tool_filler",
+          "text": "Let me have a look.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        },
+        {
+          "id": "5173c0410a6a:5:9",
+          "origin": "model",
+          "text": "For a haircut on Wednesday the 30th, I have 9:00 AM, 9:30 AM, and 10:00 AM. Which time works for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "text",
+          "seconds": null
+        }
+      ],
+      "requests": 3,
+      "tokens": {
+        "input": 8355,
+        "output": 70
+      },
+      "seconds": {
+        "wall": 1.84,
+        "model": 1.81,
+        "backend": 0.0,
+        "core": 0.03
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 6,
+      "started": 7.009,
+      "caller": "The first one, please.",
+      "said": "Shall I book a haircut, Wednesday the 30th at 9:00 AM?",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:6:10",
+          "origin": "ask",
+          "text": "Shall I book a haircut, Wednesday the 30th at 9:00 AM?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 3127,
+        "output": 31
+      },
+      "seconds": {
+        "wall": 0.839,
+        "model": 0.822,
+        "backend": 0.0,
+        "core": 0.018
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 7,
+      "started": 7.848,
+      "caller": "Yes, please.",
+      "said": "You're all set for Wednesday the 30th at 9:00 AM. Anything else I can help with?",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:7:11",
+          "origin": "confirmation",
+          "text": "You're all set for Wednesday the 30th at 9:00 AM. Anything else I can help with?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 3242,
+        "output": 10
+      },
+      "seconds": {
+        "wall": 0.736,
+        "model": 0.72,
+        "backend": 0.0,
+        "core": 0.016
+      },
+      "bookings_after": 1,
+      "appointment_known": true,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 8,
+      "started": 8.584,
+      "caller": "No, that's everything. Goodbye.",
+      "said": "One moment. Thanks for calling Sage and Stone. Have a lovely day!",
+      "delivered": [
+        {
+          "id": "5173c0410a6a:8:12",
+          "origin": "tool_filler",
+          "text": "One moment.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        },
+        {
+          "id": "5173c0410a6a:8:13",
+          "origin": "goodbye",
+          "text": "Thanks for calling Sage and Stone. Have a lovely day!",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 2,
+      "tokens": {
+        "input": 6503,
+        "output": 48
+      },
+      "seconds": {
+        "wall": 1.316,
+        "model": 1.29,
+        "backend": 0.0,
+        "core": 0.026
+      },
+      "bookings_after": 1,
+      "appointment_known": true,
+      "agent_after": "booking"
+    }
+  ],
+  "diary_calls": [
+    {
+      "name": "bookings_for",
+      "start": 1.5551130771636963,
+      "end": 1.555116891860962,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 2.5209920406341553,
+      "end": 2.5209968090057373,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.559627056121826,
+      "end": 3.5596330165863037,
+      "returned": true
+    },
+    {
+      "name": "find_slots",
+      "start": 3.559666872024536,
+      "end": 3.559946060180664,
+      "returned": true,
+      "offered": [
+        [
+          "2026-09-29",
+          "09:00"
+        ],
+        [
+          "2026-09-29",
+          "09:30"
+        ],
+        [
+          "2026-09-29",
+          "10:00"
+        ],
+        [
+          "2026-09-29",
+          "10:30"
+        ],
+        [
+          "2026-09-29",
+          "11:00"
+        ],
+        [
+          "2026-09-29",
+          "11:30"
+        ],
+        [
+          "2026-09-29",
+          "12:00"
+        ],
+        [
+          "2026-09-29",
+          "12:30"
+        ],
+        [
+          "2026-09-29",
+          "13:00"
+        ],
+        [
+          "2026-09-29",
+          "13:30"
+        ],
+        [
+          "2026-09-29",
+          "14:00"
+        ],
+        [
+          "2026-09-29",
+          "14:30"
+        ]
+      ]
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5596699714660645,
+      "end": 3.5596718788146973,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.5600779056549072,
+      "end": 3.5600810050964355,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 4.3618879318237305,
+      "end": 4.361894845962524,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.166360855102539,
+      "end": 5.166368007659912,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.169047832489014,
+      "end": 5.169052839279175,
+      "returned": true
+    },
+    {
+      "name": "find_slots",
+      "start": 6.374796152114868,
+      "end": 6.37519907951355,
+      "returned": true,
+      "offered": [
+        [
+          "2026-09-30",
+          "09:00"
+        ],
+        [
+          "2026-09-30",
+          "09:30"
+        ],
+        [
+          "2026-09-30",
+          "10:00"
+        ],
+        [
+          "2026-09-30",
+          "10:30"
+        ],
+        [
+          "2026-09-30",
+          "11:00"
+        ],
+        [
+          "2026-09-30",
+          "11:30"
+        ],
+        [
+          "2026-09-30",
+          "12:00"
+        ],
+        [
+          "2026-09-30",
+          "12:30"
+        ],
+        [
+          "2026-09-30",
+          "13:00"
+        ],
+        [
+          "2026-09-30",
+          "13:30"
+        ],
+        [
+          "2026-09-30",
+          "14:00"
+        ],
+        [
+          "2026-09-30",
+          "14:30"
+        ]
+      ]
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.374805927276611,
+      "end": 6.3748109340667725,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.375370025634766,
+      "end": 6.375374794006348,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 7.008940696716309,
+      "end": 7.008945941925049,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 7.84545111656189,
+      "end": 7.845456838607788,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 7.848272800445557,
+      "end": 7.8482770919799805,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 8.580079793930054,
+      "end": 8.58008599281311,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 8.580572843551636,
+      "end": 8.58057713508606,
+      "returned": true
+    },
+    {
+      "name": "save_booking",
+      "start": 8.580605030059814,
+      "end": 8.580650091171265,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 8.58060908317566,
+      "end": 8.580610752105713,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 8.584422826766968,
+      "end": 8.584452867507935,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 9.900491952896118,
+      "end": 9.900524854660034,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 9.900528907775879,
+      "end": 9.900535821914673,
+      "returned": true
+    }
+  ],
+  "writes": [
+    {
+      "action": "lookup_customer",
+      "intent": "f770ac0b8f564807978a3af494855248",
+      "operation": "f770ac0b8f564807978a3af494855248",
+      "args": {
+        "phone": "+34600111222"
+      },
+      "proposal_args": {
+        "phone": "+34600111222"
+      },
+      "needs_approval": true,
+      "changes": false,
+      "question": "Is your number +34 600 11 12 22?",
+      "about": "lookup_customer",
+      "asked_turn": 2,
+      "proposal": 1,
+      "segments": [
+        "5173c0410a6a:2:4"
+      ],
+      "call": "5173c0410a6a",
+      "turn": 3,
+      "generation": 3,
+      "sequence": 1,
+      "heard": "Yes, that's my number.",
+      "playback": null,
+      "simulated_delivery": [
+        {
+          "segment": "5173c0410a6a:2:4",
+          "at": "2026-09-26T12:33:37.628500+00:00"
+        }
+      ],
+      "status": "ok",
+      "outcome": "succeeded",
+      "receipt": {
+        "customer_status": "existing",
+        "customer_phone": "+34600111222"
+      },
+      "presented": true
+    },
+    {
+      "action": "book_appointment",
+      "intent": "468f6ec54e484e13af91000db78d1206",
+      "operation": "468f6ec54e484e13af91000db78d1206",
+      "args": {
+        "phone": "+34600111222",
+        "slot": "2026-09-30T0900|haircut"
+      },
+      "proposal_args": {
+        "phone": "+34600111222",
+        "slot": "2026-09-30T0900|haircut"
+      },
+      "needs_approval": true,
+      "changes": true,
+      "question": "Shall I book a haircut, Wednesday the 30th at 9:00 AM?",
+      "about": "book_appointment",
+      "asked_turn": 6,
+      "proposal": 3,
+      "segments": [
+        "5173c0410a6a:6:10"
+      ],
+      "call": "5173c0410a6a",
+      "turn": 7,
+      "generation": 7,
+      "sequence": 2,
+      "heard": "Yes, please.",
+      "playback": null,
+      "simulated_delivery": [
+        {
+          "segment": "5173c0410a6a:6:10",
+          "at": "2026-09-26T12:33:42.955772+00:00"
+        }
+      ],
+      "status": "ok",
+      "outcome": "succeeded",
+      "receipt": {
+        "status": "booked",
+        "phone": "+34600111222",
+        "booking_id": "BK0001",
+        "service": "haircut",
+        "spoken": "Wednesday the 30th at 9:00 AM",
+        "service_spoken": "haircut",
+        "reason": ""
+      },
+      "presented": true
+    }
+  ],
+  "final": {
+    "bookings": [
+      {
+        "booking_id": "BK0001",
+        "service": "haircut",
+        "date": "2026-09-30",
+        "time": "09:00",
+        "spoken": "Wednesday the 30th at 9:00 AM"
+      }
+    ],
+    "state": {
+      "customer_phone": "+34600111222",
+      "verified_phone": "+34600111222",
+      "customer_status": "existing",
+      "service": "haircut",
+      "booking_day": "Wednesday",
+      "booking_time": "",
+      "slot": "2026-09-30T0900|haircut",
+      "appointment": "",
+      "booked": "BK0001",
+      "booked_spoken": "Wednesday the 30th at 9:00 AM",
+      "complaint": "",
+      "wanted_outcome": "",
+      "complaint_reference": "",
+      "agent": "booking"
+    }
+  },
+  "requests": 14,
+  "tokens": {
+    "input": 34438,
+    "output": 332
+  },
+  "trace_ids": [
+    "c38de53d212fbf639093e65bf9cebf04",
+    "fa4724171751c6d593052aa942a47bc2",
+    "c2082961f7918c67e73dd410ab2484ea",
+    "efa55b3af62c72a7b07c41e5cd76bf24",
+    "9e9e590e51b78e67efdbea1f16401c92",
+    "1b5f587b2eb3bfe5bc7c743c2d0d34e1",
+    "baca823b6d6a20e65d3e0fcc8660d89d",
+    "37054c279bdf7a7070fb07d5e3670a5e",
+    "0136dc93b8ca5f5a3e7f29b389837dcc"
+  ],
+  "result": "passed",
+  "problems": []
+}

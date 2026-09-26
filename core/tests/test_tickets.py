@@ -156,6 +156,33 @@ async def only_what_stands_is_recapped(folder: Path):
     assert said == [f'El ticket T-101 vuelve a estar abierto. {SPANISH_GOODBYE}'], said
     assert call.ended and call.departed
 
+    desk = desk_in(folder / 'by_words')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    requests = len(script.steps)
+    said = await turn(
+        flow, call, script, 'Adiós.', ('call', 'goodbye', {'recap': ['El ticket T-101 queda resuelto.']})
+    )
+    assert said == [f'El ticket T-101 queda resuelto. {SPANISH_GOODBYE}'], (
+        'a standing recap by its words',
+        said,
+    )
+    assert len(script.steps) == requests + 1, 'the recap by its own words cost a retry'
+    desk = desk_in(folder / 'paraphrase')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Adiós.',
+        ('call', 'goodbye', {'recap': ['Todo arreglado y cerrado para siempre.']}),
+        ('call', 'goodbye', {}),
+    )
+    assert said == [SPANISH_GOODBYE], ('a recap in words nobody rendered was said', said)
+
     desk = desk_in(folder / 'invented')
     script, flow, call = opened(desk)
     said = await turn(
@@ -327,7 +354,16 @@ async def main() -> None:
             )
         ):
             folder = Path(tmp) / str(index)
-            for sub in ('', 'wrong_ticket', 'lose_answer', 'invented', 'standing', 'superseded'):
+            for sub in (
+                '',
+                'wrong_ticket',
+                'lose_answer',
+                'invented',
+                'standing',
+                'superseded',
+                'by_words',
+                'paraphrase',
+            ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
     print('tickets ok: R1-R10, no phone, date, appointment or slot')

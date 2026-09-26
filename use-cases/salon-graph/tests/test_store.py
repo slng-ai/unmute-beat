@@ -269,6 +269,14 @@ def ids_are_unique_and_owned(folder: Path):
     assert [r[4] for r in rows].count('15:00') == 1, rows
 
 
+def shared_capacity() -> None:
+    """B1 to B3 on their own: what the N11 row of the native comparison runs (`concierge-tools/matrix`)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        five_distinct_callers(Path(tmp))
+        five_callers_one_time(Path(tmp))
+        overlaps_share_no_chair(Path(tmp))
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)

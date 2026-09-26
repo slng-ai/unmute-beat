@@ -157,6 +157,17 @@ def no_rendered_choices(folder: Path):
     raise AssertionError('a rendered step was allowed to offer choices')
 
 
+async def rendered_claims() -> None:
+    """S1 and S6 on their own: what the N6 row of the native comparison runs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp)
+        for index in range(len(CLAIMS)):
+            (folder / f'lookup{index}').mkdir()
+        (folder / 'stale').mkdir()
+        await after_a_lookup(folder)
+        await a_refusal_in_core_words(folder)
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)

@@ -303,11 +303,16 @@ core builds the whole node from this declaration.
 operations:
   book_appointment:
     function: functions.py:book
+    subject: booking_id
+    resource: booking
+    version: revision
+    idempotent: true
     args: {phone: verified_phone, slot: slot}
     readback: functions.py:booking_words
     reconcile: functions.py:find_booking
     matches: {phone: phone}
     succeeds: {status: booked}
+    rejects: {status: [refused, void]}
     assign: {booked: booking_id, booked_spoken: spoken}
     say: "You're all set for {spoken}. Anything else I can help with?"
 ```
@@ -326,7 +331,10 @@ Its own signature is the schema: the second parameter's type (`Booking`) is
 what core validates the arguments into, and the return type (`Written`) is
 what it validates the receipt into. Nothing types this twice in the YAML.
 `readback` renders the sentence the caller is asked to agree to; `succeeds`
-says which receipt values mean it worked; `matches` refuses a receipt that
+says which receipt values mean it worked, and `rejects` which mean a final
+no (any other answer, such as `pending`, settles nothing and the write stays
+unknown); `subject`, `resource` and `version` name what the write changed
+(booking `BK0001`) and in which order two changes of it happened; `matches` refuses a receipt that
 answers about someone else's phone number; `assign` copies receipt fields
 into state once it succeeds; `say` is the fixed line the receipt itself
 speaks, with no model asked to restate it; `reconcile` looks up what an
@@ -558,6 +566,16 @@ made is replaced before it is spoken (`Locale.claims`, a pattern list per
 language — see "Known limits"). Partial tool arguments are never treated as
 completed actions.
 
+A step declares who words what the caller hears (`speech:`). `prose`, the
+default, lets its agent speak in its own words; the claim patterns above are
+then a best-effort guard, and a paraphrase in any language can still claim a
+change nothing made. `rendered` removes the agent's text output: it still
+reads the caller and chooses what to record, read back, carry out or hand
+over, or to `wait`, but every word is the application's or core's
+(`asks:` lines, read-backs, receipts, recaps, fixed lines). Only there, and on
+the code routes, is truthful completion structural. The support desk's write
+step is rendered; the salon's steps are still prose.
+
 Interruptions need more than stopping audio. The engine keeps accepted input
 and completed tool results, and uses playback feedback to track what speech
 was delivered. A question the caller talked over is not counted as heard, so
@@ -607,6 +625,26 @@ The whole report, with the evidence for each line, is
 | A read-back unheard twice gives way to a truthful line, and a joined turn spends one request tally | Coval call C26pPHK6: yes over every read-back, for 12 s, then goodbye with nothing booked. |
 | The call ceiling is stopped by its owner in a `finally` (`core.processor.Ceiling`) | On a shared bot, a call the agent ended left its timer running. |
 | The write audit names its intent, the arguments its read-back named when it was asked, and the proposal's marks. `tests.test_audit_export` runs the real `load_report` on the runtime's own spans | The evaluator's authorization and delivery checks had nothing to read. |
+
+### Session 4c stage C: shared state, one host, five calls
+
+The whole report is [session-4c.md](docs/research/reusable-core/session-4c.md).
+
+| Change | What it stops |
+|---|---|
+| A receipt settles a change only when it matches `succeeds` or the application's `rejects`. After dispatch every exception, a plain `ModelRetry` included, leaves the intent unknown; `core.Refused` is the application's explicit no | A `pending` answer ended the intent as refused, so a second intent could be sent while the first might still land. |
+| `Operation.run` claims the intent before its first await | Two runs of one intent on one call both reached the backend. |
+| `resource:` and `version:` key and order what stands; a reconciled success below the service's `current_version` is history, never said | A restored old "resolved" stood over a newer reopen and was said to the caller. Ticket 1 and address 1 were one resource. |
+| Estimated playback (`local`) approves nothing unless a launcher names the simulation (`playout(simulate=True)`, `DELIVERY=simulated`) | Audio written to a socket, or time passing, counted as a heard read-back on a voice line with no marks. |
+| `speech: rendered` steps have no model text | After a lookup alone the desk said "El ticket T-101 ha quedado solucionado definitivamente", past its claim words. |
+| The salon's diary is one SQLite file every worker shares: a trigger holds the chair, a move is one `UPDATE`, writes are keyed by intent, a reconciled write with no result is fenced with a void | Each process had its own diary, so no two calls ever contended for a time, and a lost answer did not survive a restart. |
+| `server.py`: uvicorn workers behind one port, at most five calls admitted, a busy refusal past it, each worker's own drain, clients warmed once per worker | `bot.py` ran every call in one process with no bound, and warmed its model clients per call, uncounted. |
+| `coval_sim serve --phone-number --campaign` owns the Twilio number for the whole campaign; jobs never touch it | Each job pointed the number at itself and restored it when it ended, so two jobs undid each other. |
+
+The shared SQLite files use the rollback journal, not WAL: this Python's
+SQLite (3.50.4) predates the fix for the
+[WAL-reset bug](https://www.sqlite.org/wal.html#walresetbug), which can
+corrupt a WAL database two processes write at the same instant.
 
 
 ## 9. Where reuse comes from
@@ -706,11 +744,25 @@ Run one from its folder:
 
 ```bash
 uv sync --all-packages                 # once, from the repository root
-cd use-cases/salon-graph && uv run bot.py
+cd use-cases/salon-graph && DELIVERY=simulated uv run bot.py
 ```
 
 Then open **http://localhost:7860** and click connect. Each `bot.py` finds the
-root `.env` by walking up from its folder.
+root `.env` by walking up from its folder. The browser transport returns no
+playback marks, so without `DELIVERY=simulated` nothing that needs a heard
+read-back can be carried out; the name says what it is.
+
+Several phone calls at once, on one host, run the salon behind its runner:
+
+```bash
+cd use-cases/salon-graph
+DIARY_PATH=salon.db RUNNER_DB=runner.db uv run uvicorn server:app --workers 2 --port 7860
+uv run python -m evals.load ramp --calls 1,2,5 --seconds 60 --workers 2 --out /tmp/load   # offline, no provider
+```
+
+It is qualified on one MacBook, for five calls at once
+([session-4c.md](docs/research/reusable-core/session-4c.md)); that is not a
+production capacity claim.
 
 | Folder | What answers | README |
 |---|---|---|
@@ -822,7 +874,8 @@ the same turn engine, budget and barge-in handling.
   `functions.py:find_booking`, looked up by the intent). Without one, and
   without `idempotent: true`, an intent with an unknown outcome is never sent
   again in that call. Exactly-once holds only against a backend that dedups
-  by the intent id; the salon's diary does, in memory, for one process.
+  by the intent id; the salon's diary does, in one SQLite file shared by
+  every worker on the host, and survives a restart. Not across hosts.
 - The complaint-request word list (`_ASKING_TO_COMPLAIN` in
   `salon/models/state.py`) is the salon's, and English: it only says a
   sentence is nothing but "I'd like to complain," never what went wrong.
@@ -830,7 +883,10 @@ the same turn engine, budget and barge-in handling.
   is the application's (the salon's English verbs, the support desk's
   Spanish ones): checked against model text on a `guarded` step before it is
   said. It is a best-effort guard; model prose remains a behaviour to
-  evaluate. Receipts, recaps, goodbyes and fixed lines are rendered by code.
+  evaluate. Receipts, recaps, goodbyes and fixed lines are rendered by code,
+  and so is everything a `speech: rendered` step says. The salon's steps are
+  prose, so the salon's completion speech is guaranteed only on those code
+  routes.
 - Structured output validates shape, not semantic accuracy: a valid class or
   a valid tool call can still misread the caller. Run a live evaluation
   before making an accuracy or latency claim (see "How this design is

@@ -72,6 +72,11 @@ def nothing_is_held_forever(path: str):
     assert 'CA-live' not in runner.over(), 'a live call was offered for settling'
 
 
+def admission() -> None:
+    """A1 to A5: what the N11 row of the native comparison runs."""
+    main()
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate((ceiling_and_release, one_call_one_place, nothing_is_held_forever)):

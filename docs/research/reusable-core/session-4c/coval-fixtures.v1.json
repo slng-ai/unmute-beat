@@ -11,15 +11,25 @@
           "key": "pair-1",
           "phone": "+34671400101",
           "spoken": "plus three four, six seven one, four zero zero, one zero one",
-          "want": {"service": "haircut", "day": "Wednesday", "time": "10:00"},
-          "input": "You want a haircut at Sage and Stone on Wednesday at 10 in the morning. Your phone number is +34 671 400 101. Say it as \"plus three four, six seven one, four zero zero, one zero one\"."
+          "want": {
+            "service": "haircut",
+            "day": "Wednesday",
+            "time": "10:00"
+          },
+          "input": "You want a haircut at Sage and Stone on Wednesday at 10 in the morning. Your phone number is +34 671 400 101. Say it as \"plus three four, six seven one, four zero zero, one zero one\".",
+          "coval_test_case": "f6uPHaT5vDjHekS6tGuZuR"
         },
         {
           "key": "pair-2",
           "phone": "+34671400102",
           "spoken": "plus three four, six seven one, four zero zero, one zero two",
-          "want": {"service": "haircut", "day": "Wednesday", "time": "10:00"},
-          "input": "You want a haircut at Sage and Stone on Wednesday at 10 in the morning. Your phone number is +34 671 400 102. Say it as \"plus three four, six seven one, four zero zero, one zero two\"."
+          "want": {
+            "service": "haircut",
+            "day": "Wednesday",
+            "time": "10:00"
+          },
+          "input": "You want a haircut at Sage and Stone on Wednesday at 10 in the morning. Your phone number is +34 671 400 102. Say it as \"plus three four, six seven one, four zero zero, one zero two\".",
+          "coval_test_case": "BsP7jpKHAGmrogh7YaU2KX"
         }
       ],
       "expected": [
@@ -28,7 +38,8 @@
         "No two active bookings overlap on the chair.",
         "Every booking was read back in full (its own Twilio mark returned) before the caller's yes began.",
         "No booking for any phone the two callers did not give."
-      ]
+      ],
+      "coval_test_set": "LkKsLfaY"
     },
     "five": {
       "name": "reusable-core stage C five v1",
@@ -39,36 +50,61 @@
           "key": "five-1",
           "phone": "+34671400201",
           "spoken": "plus three four, six seven one, four zero zero, two zero one",
-          "want": {"service": "haircut", "day": "Tuesday", "time": "11:00"},
-          "input": "You want a haircut at Sage and Stone on Tuesday at 11 in the morning. Your phone number is +34 671 400 201. Say it as \"plus three four, six seven one, four zero zero, two zero one\"."
+          "want": {
+            "service": "haircut",
+            "day": "Tuesday",
+            "time": "11:00"
+          },
+          "input": "You want a haircut at Sage and Stone on Tuesday at 11 in the morning. Your phone number is +34 671 400 201. Say it as \"plus three four, six seven one, four zero zero, two zero one\".",
+          "coval_test_case": "X59pFajNPbVydu6TZroskV"
         },
         {
           "key": "five-2",
           "phone": "+34671400202",
           "spoken": "plus three four, six seven one, four zero zero, two zero two",
-          "want": {"service": "blowout", "day": "Thursday", "time": "15:00"},
-          "input": "You want a blowout at Sage and Stone on Thursday at 3 in the afternoon. Your phone number is +34 671 400 202. Say it as \"plus three four, six seven one, four zero zero, two zero two\"."
+          "want": {
+            "service": "blowout",
+            "day": "Thursday",
+            "time": "15:00"
+          },
+          "input": "You want a blowout at Sage and Stone on Thursday at 3 in the afternoon. Your phone number is +34 671 400 202. Say it as \"plus three four, six seven one, four zero zero, two zero two\".",
+          "coval_test_case": "cVWYcqjrPq9HWjjpLDTYB4"
         },
         {
           "key": "five-3",
           "phone": "+34671400203",
           "spoken": "plus three four, six seven one, four zero zero, two zero three",
-          "want": {"service": "haircut", "day": "Friday", "time": "12:00"},
-          "input": "You want a haircut at Sage and Stone on Friday at 12 noon. Your phone number is +34 671 400 203. Say it as \"plus three four, six seven one, four zero zero, two zero three\"."
+          "want": {
+            "service": "haircut",
+            "day": "Friday",
+            "time": "12:00"
+          },
+          "input": "You want a haircut at Sage and Stone on Friday at 12 noon. Your phone number is +34 671 400 203. Say it as \"plus three four, six seven one, four zero zero, two zero three\".",
+          "coval_test_case": "hp6xNsXFjuwXKdwXKn3rXq"
         },
         {
           "key": "five-4",
           "phone": "+34671400204",
           "spoken": "plus three four, six seven one, four zero zero, two zero four",
-          "want": {"service": "haircut", "day": "Wednesday", "time": "16:00"},
-          "input": "You want a haircut at Sage and Stone on Wednesday at 4 in the afternoon. Your phone number is +34 671 400 204. Say it as \"plus three four, six seven one, four zero zero, two zero four\"."
+          "want": {
+            "service": "haircut",
+            "day": "Wednesday",
+            "time": "16:00"
+          },
+          "input": "You want a haircut at Sage and Stone on Wednesday at 4 in the afternoon. Your phone number is +34 671 400 204. Say it as \"plus three four, six seven one, four zero zero, two zero four\".",
+          "coval_test_case": "iXcfJk2YqaGcb8VRRxXE9F"
         },
         {
           "key": "five-5",
           "phone": "+34671400205",
           "spoken": "plus three four, six seven one, four zero zero, two zero five",
-          "want": {"service": "haircut", "day": "Wednesday", "time": "16:00"},
-          "input": "You want a haircut at Sage and Stone on Wednesday at 4 in the afternoon. Your phone number is +34 671 400 205. Say it as \"plus three four, six seven one, four zero zero, two zero five\"."
+          "want": {
+            "service": "haircut",
+            "day": "Wednesday",
+            "time": "16:00"
+          },
+          "input": "You want a haircut at Sage and Stone on Wednesday at 4 in the afternoon. Your phone number is +34 671 400 205. Say it as \"plus three four, six seven one, four zero zero, two zero five\".",
+          "coval_test_case": "JNyXW43cUZA43TyLgjCkzR"
         }
       ],
       "expected": [
@@ -78,7 +114,8 @@
         "No two active bookings overlap on the chair.",
         "Every booking was read back in full (its own Twilio mark returned) before the caller's yes began.",
         "No booking for any phone the five callers did not give, and none resurrected or duplicated after the worker was killed."
-      ]
+      ],
+      "coval_test_set": "K3bTFtSw"
     }
   }
 }

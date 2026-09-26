@@ -224,6 +224,11 @@ WARMED: list[dict[str, Any]] = []
 if DOUBLES:
     import pydantic_ai.models
 
+    if os.getenv('TRACEMALLOC'):
+        import tracemalloc
+
+        tracemalloc.start(1)
+
     from evals import doubles
 
     pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
@@ -434,6 +439,73 @@ def _stats() -> dict[str, Any]:
         'lag': lag,
         'warmed': WARMED,
     }
+
+
+LIVE_TYPES = (
+    'FlowCall',
+    'PipelineWorker',
+    'Pipeline',
+    'PydanticAgentProcessor',
+    'FastAPIWebsocketTransport',
+    'SileroVADAnalyzer',
+    'LocalSmartTurnAnalyzerV3',
+    'LLMContext',
+)
+"""The per-call objects `/debug/live` counts: after a call ends, each should be gone."""
+
+
+@app.get('/debug/live')
+async def live(request: Request, chain: str = '') -> JSONResponse:
+    """With the doubles only: how many of each per-call object are alive, and what holds one of `chain`.
+
+    For finding what keeps a finished call in memory. A full scan of the
+    heap, so never on a production worker.
+    """
+    if not (DOUBLES and _local(request)):
+        return JSONResponse({}, status_code=404)
+    import gc
+
+    gc.collect()
+    objects = gc.get_objects()
+    counts = {name: sum(1 for o in objects if type(o).__name__ == name) for name in LIVE_TYPES}
+    held: list[list[str]] = []
+    if chain:
+        found = next((o for o in objects if type(o).__name__ == chain), None)
+        frontier = [found] if found is not None else []
+        for _ in range(5):
+            step = [
+                r
+                for o in frontier
+                for r in gc.get_referrers(o)
+                if r is not objects and not isinstance(r, type(frontier))
+            ]
+            held.append(sorted({f'{type(r).__module__}.{type(r).__name__}' for r in step})[:25])
+            frontier = step[:8]
+    return JSONResponse({'counts': counts, 'held_by': held})
+
+
+_HEAP: list[Any] = []
+"""The last tracemalloc snapshot `/debug/heap` compared with, when `TRACEMALLOC` is set."""
+
+
+@app.get('/debug/heap')
+async def heap(request: Request) -> JSONResponse:
+    """With the doubles and `TRACEMALLOC=1` only: Python's allocations that grew since the last call, by line."""
+    import tracemalloc
+
+    if not (DOUBLES and _local(request) and tracemalloc.is_tracing()):
+        return JSONResponse({}, status_code=404)
+    import gc
+
+    gc.collect()
+    now = tracemalloc.take_snapshot()
+    grew = []
+    if _HEAP:
+        for stat in now.compare_to(_HEAP[0], 'lineno')[:15]:
+            grew.append(f'{stat.size_diff / 1024:+.0f} KiB {stat.count_diff:+d} {stat.traceback}')
+    _HEAP[:] = [now]
+    current, peak = tracemalloc.get_traced_memory()
+    return JSONResponse({'traced_mb': current / 2**20, 'peak_mb': peak / 2**20, 'grew': grew})
 
 
 @app.get('/calls')

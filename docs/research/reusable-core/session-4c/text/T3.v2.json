@@ -1,0 +1,564 @@
+{
+  "case": "T3.v2",
+  "session": "text-T3.v2-06b13d56",
+  "turns": [
+    {
+      "turn": 0,
+      "caller": "",
+      "said": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+      "delivered": [
+        {
+          "id": "3076b25b626c:0:1",
+          "origin": "entry",
+          "text": "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "started": 0.009,
+      "caller": "Hi, can I book a colour on Thursday at two in the afternoon?",
+      "said": "One moment. Which phone number should I use? Please say it with the country code.",
+      "delivered": [
+        {
+          "id": "3076b25b626c:1:2",
+          "origin": "tool_filler",
+          "text": "One moment.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        },
+        {
+          "id": "3076b25b626c:1:3",
+          "origin": "ask",
+          "text": "Which phone number should I use? Please say it with the country code.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 2,
+      "tokens": {
+        "input": 2953,
+        "output": 67
+      },
+      "seconds": {
+        "wall": 1.628,
+        "model": 1.611,
+        "backend": 0.0,
+        "core": 0.017
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 2,
+      "started": 1.638,
+      "caller": "My number is plus three four, six zero zero, one one one, two two two.",
+      "said": "Is your number +34 600 11 12 22?",
+      "delivered": [
+        {
+          "id": "3076b25b626c:2:4",
+          "origin": "ask",
+          "text": "Is your number +34 600 11 12 22?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 1252,
+        "output": 27
+      },
+      "seconds": {
+        "wall": 0.879,
+        "model": 0.867,
+        "backend": 0.0,
+        "core": 0.013
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "verify"
+    },
+    {
+      "turn": 3,
+      "started": 2.517,
+      "caller": "Yes, that's my number.",
+      "said": "Thanks, I have you. For hair colour on Thursday the first, I have 2:00 PM, 1:30 PM, and 2:30 PM. Which time works for you?",
+      "delivered": [
+        {
+          "id": "3076b25b626c:3:5",
+          "origin": "confirmation",
+          "text": "Thanks, I have you.",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        },
+        {
+          "id": "3076b25b626c:3:6",
+          "origin": "model",
+          "text": "For hair colour on Thursday the first, I have 2:00 PM, 1:30 PM, and 2:30 PM. Which time works for you?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "tool",
+          "seconds": null
+        },
+        {
+          "kind": "text",
+          "seconds": null
+        }
+      ],
+      "requests": 3,
+      "tokens": {
+        "input": 6537,
+        "output": 56
+      },
+      "seconds": {
+        "wall": 2.171,
+        "model": 2.135,
+        "backend": 0.002,
+        "core": 0.035
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 4,
+      "started": 4.689,
+      "caller": "Two o'clock, please.",
+      "said": "Shall I book a hair colour, Thursday the 1st at 2:00 PM?",
+      "delivered": [
+        {
+          "id": "3076b25b626c:4:7",
+          "origin": "ask",
+          "text": "Shall I book a hair colour, Thursday the 1st at 2:00 PM?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 2846,
+        "output": 32
+      },
+      "seconds": {
+        "wall": 0.845,
+        "model": 0.832,
+        "backend": 0.001,
+        "core": 0.013
+      },
+      "bookings_after": 0,
+      "appointment_known": false,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 5,
+      "started": 5.535,
+      "caller": "Yes, please.",
+      "said": "You're all set for Thursday the 1st at 2:00 PM. Anything else I can help with?",
+      "delivered": [
+        {
+          "id": "3076b25b626c:5:8",
+          "origin": "confirmation",
+          "text": "You're all set for Thursday the 1st at 2:00 PM. Anything else I can help with?",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 2962,
+        "output": 10
+      },
+      "seconds": {
+        "wall": 0.713,
+        "model": 0.693,
+        "backend": 0.002,
+        "core": 0.018
+      },
+      "bookings_after": 1,
+      "appointment_known": true,
+      "agent_after": "booking"
+    },
+    {
+      "turn": 6,
+      "started": 6.248,
+      "caller": "No, that's everything. Goodbye.",
+      "said": "You're booked for Thursday the 1st at 2:00 PM. Thanks for calling Sage and Stone. Have a lovely day!",
+      "delivered": [
+        {
+          "id": "3076b25b626c:6:9",
+          "origin": "goodbye",
+          "text": "You're booked for Thursday the 1st at 2:00 PM. Thanks for calling Sage and Stone. Have a lovely day!",
+          "before": "queued",
+          "after": "played",
+          "interrupted": false,
+          "delivered": "delivered"
+        }
+      ],
+      "status": "answered",
+      "readings": [
+        {
+          "kind": "tool",
+          "seconds": null
+        }
+      ],
+      "requests": 1,
+      "tokens": {
+        "input": 2934,
+        "output": 22
+      },
+      "seconds": {
+        "wall": 0.725,
+        "model": 0.712,
+        "backend": 0.0,
+        "core": 0.013
+      },
+      "bookings_after": 1,
+      "appointment_known": true,
+      "agent_after": "booking"
+    }
+  ],
+  "diary_calls": [
+    {
+      "name": "bookings_for",
+      "start": 1.6371920108795166,
+      "end": 1.6374900341033936,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 2.5168089866638184,
+      "end": 2.5174779891967773,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.9518001079559326,
+      "end": 3.952422857284546,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.9524290561676025,
+      "end": 3.95263409614563,
+      "returned": true
+    },
+    {
+      "name": "find_slots",
+      "start": 3.952660083770752,
+      "end": 3.9532461166381836,
+      "returned": true,
+      "offered": [
+        [
+          "2026-10-01",
+          "10:30"
+        ],
+        [
+          "2026-10-01",
+          "11:00"
+        ],
+        [
+          "2026-10-01",
+          "11:30"
+        ],
+        [
+          "2026-10-01",
+          "12:00"
+        ],
+        [
+          "2026-10-01",
+          "12:30"
+        ],
+        [
+          "2026-10-01",
+          "13:00"
+        ],
+        [
+          "2026-10-01",
+          "13:30"
+        ],
+        [
+          "2026-10-01",
+          "14:00"
+        ],
+        [
+          "2026-10-01",
+          "14:30"
+        ],
+        [
+          "2026-10-01",
+          "15:00"
+        ],
+        [
+          "2026-10-01",
+          "15:30"
+        ],
+        [
+          "2026-10-01",
+          "16:00"
+        ]
+      ]
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.9526631832122803,
+      "end": 3.9528419971466064,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 3.9535250663757324,
+      "end": 3.9537160396575928,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 4.688244104385376,
+      "end": 4.688565015792847,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.530874252319336,
+      "end": 5.5314061641693115,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 5.5339720249176025,
+      "end": 5.534605026245117,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.239315032958984,
+      "end": 6.239995002746582,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.242510080337524,
+      "end": 6.242762088775635,
+      "returned": true
+    },
+    {
+      "name": "save_booking",
+      "start": 6.242797136306763,
+      "end": 6.243849039077759,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.247640132904053,
+      "end": 6.248304843902588,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.973254919052124,
+      "end": 6.973893165588379,
+      "returned": true
+    },
+    {
+      "name": "bookings_for",
+      "start": 6.973897933959961,
+      "end": 6.974129915237427,
+      "returned": true
+    }
+  ],
+  "writes": [
+    {
+      "action": "lookup_customer",
+      "intent": "caa76cf66a4341579e53409d85aab8d8",
+      "operation": "caa76cf66a4341579e53409d85aab8d8",
+      "args": {
+        "phone": "+34600111222"
+      },
+      "proposal_args": {
+        "phone": "+34600111222"
+      },
+      "needs_approval": true,
+      "changes": false,
+      "question": "Is your number +34 600 11 12 22?",
+      "about": "lookup_customer",
+      "asked_turn": 2,
+      "proposal": 1,
+      "segments": [
+        "3076b25b626c:2:4"
+      ],
+      "call": "3076b25b626c",
+      "turn": 3,
+      "generation": 3,
+      "sequence": 1,
+      "heard": "Yes, that's my number.",
+      "playback": null,
+      "simulated_delivery": [
+        {
+          "segment": "3076b25b626c:2:4",
+          "kind": "text",
+          "at": "2026-09-26T16:05:26.195178+00:00"
+        }
+      ],
+      "simulated_playout": false,
+      "status": "ok",
+      "outcome": "succeeded",
+      "receipt": {
+        "customer_status": "existing",
+        "customer_phone": "+34600111222"
+      },
+      "presented": true
+    },
+    {
+      "action": "book_appointment",
+      "intent": "7f5ac50e808f4bf5b11b299e4d232018",
+      "operation": "7f5ac50e808f4bf5b11b299e4d232018",
+      "args": {
+        "phone": "+34600111222",
+        "slot": "2026-10-01T1400|hair-color"
+      },
+      "proposal_args": {
+        "phone": "+34600111222",
+        "slot": "2026-10-01T1400|hair-color"
+      },
+      "needs_approval": true,
+      "changes": true,
+      "question": "Shall I book a hair colour, Thursday the 1st at 2:00 PM?",
+      "about": "book_appointment",
+      "asked_turn": 4,
+      "proposal": 2,
+      "segments": [
+        "3076b25b626c:4:7"
+      ],
+      "call": "3076b25b626c",
+      "turn": 5,
+      "generation": 5,
+      "sequence": 2,
+      "heard": "Yes, please.",
+      "playback": null,
+      "simulated_delivery": [
+        {
+          "segment": "3076b25b626c:4:7",
+          "kind": "text",
+          "at": "2026-09-26T16:05:29.212320+00:00"
+        }
+      ],
+      "simulated_playout": false,
+      "status": "ok",
+      "outcome": "succeeded",
+      "receipt": {
+        "status": "booked",
+        "phone": "+34600111222",
+        "booking_id": "BK0001",
+        "revision": 1,
+        "service": "hair-color",
+        "spoken": "Thursday the 1st at 2:00 PM",
+        "service_spoken": "hair colour",
+        "reason": ""
+      },
+      "presented": true
+    }
+  ],
+  "final": {
+    "bookings": [
+      {
+        "booking_id": "BK0001",
+        "service": "hair-color",
+        "date": "2026-10-01",
+        "time": "14:00",
+        "spoken": "Thursday the 1st at 2:00 PM",
+        "revision": 1
+      }
+    ],
+    "state": {
+      "customer_phone": "+34600111222",
+      "verified_phone": "+34600111222",
+      "customer_status": "existing",
+      "service": "hair-color",
+      "booking_day": "Thursday",
+      "booking_time": "14:00",
+      "slot": "2026-10-01T1400|hair-color",
+      "appointment": "",
+      "booked": "BK0001",
+      "booked_spoken": "Thursday the 1st at 2:00 PM",
+      "complaint": "",
+      "wanted_outcome": "",
+      "complaint_reference": "",
+      "agent": "booking"
+    }
+  },
+  "requests": 9,
+  "tokens": {
+    "input": 19484,
+    "output": 214
+  },
+  "trace_ids": [
+    "68bc515aa75f2de917b4c4fd23f58aa6",
+    "3e274426726d4e12d8fbac092ec04da5",
+    "0289dae660cefa54888611fd420a8009",
+    "cda9934fde1197028ef8da0271409efa",
+    "94105dc276dc8d8603f7a835b71577d9",
+    "82944f1d62e5cb8f35ee46841f9b5498",
+    "fe4f97b0602bdcbbb73abeed206a0f17"
+  ],
+  "result": "passed",
+  "problems": []
+}

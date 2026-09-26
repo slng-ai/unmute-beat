@@ -281,11 +281,22 @@ class Prompted:
         against that intent (`CallContext.note_unheard_readbacks`), across the
         caller's joined pieces and reissued questions alike. Past the limit it
         is not asked again on this call: the caller hears `Locale.gave_up`,
-        which is true, because nothing was dispatched.
+        which is true, because nothing was dispatched. Copies lost on a line
+        that proves nothing count against `READBACKS`; copies the caller
+        talked over on a line that works count against `CUT_READBACKS`.
         """
         intent = call.open_intent(self.about, self.value)
-        if intent is not None and intent.status == 'prepared' and intent.readbacks >= READBACKS:
-            logger.info('{} read back {} times unheard: fallback', self.about, intent.readbacks)
+        if (
+            intent is not None
+            and intent.status == 'prepared'
+            and (intent.readbacks >= READBACKS or intent.cut_readbacks >= CUT_READBACKS)
+        ):
+            logger.info(
+                '{} read back unheard {} times, cut {} times: fallback',
+                self.about,
+                intent.readbacks,
+                intent.cut_readbacks,
+            )
             return call.locale.gave_up
         call.ask(
             BaseProposal(
@@ -300,7 +311,14 @@ class Prompted:
 
 
 READBACKS = 2
-"""Read-backs of one intent the caller never heard in full before answering, after which it is not asked again."""
+"""Read-backs of one intent lost on a line that has proven no delivery, after which it is not asked again."""
+CUT_READBACKS = 5
+"""Read-backs of one intent the caller talked over on a line that works, after which it is not asked again.
+
+ponytail: a fixed count, picked so an interruptive caller gets several
+tries while a caller who never lets it finish still ends; per-step limits
+if one application needs another number.
+"""
 
 
 class ConfirmedOperation[ArgsT: BaseModel, ReceiptT: BaseModel](

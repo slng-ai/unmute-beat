@@ -329,7 +329,9 @@ class Intent(BaseModel):
     """Who the call took the caller to be when the intent was made (`CallContext.identity`)."""
     status: IntentStatus = 'prepared'
     readbacks: int = Field(0, ge=0)
-    """Read-backs of this intent that did not get an answer that could count. See `CallContext.note_readback`."""
+    """Read-backs of this intent not heard in full on a line that had proven no delivery yet (`note_unheard_readbacks`)."""
+    cut_readbacks: int = Field(0, ge=0)
+    """Read-backs of this intent the caller did not hear in full on a line that had proven delivery: they talked over them."""
 
 
 @dataclass(frozen=True)
@@ -1410,9 +1412,20 @@ class CallContext(BaseModel):
     def note_unheard_readbacks(self) -> None:
         """The caller spoke: every copy of the question they are answering that they did not hear in full counts once.
 
-        Counted against the question's intent (`Intent.readbacks`), each copy
-        once, so a caller who goes on in pieces over one read-back spends one,
-        and a question asked again gets no fresh allowance.
+        Counted against the question's intent, each copy once, so a caller who
+        goes on in pieces over one read-back spends one, and a question asked
+        again gets no fresh allowance.
+
+        Two counts, because two different things lose a copy. On a line that
+        has never proven one segment heard (a carrier or simulator that
+        returns no marks), no copy can ever be heard, so asking again only
+        loops: `Intent.readbacks`, bounded by `core.steps.READBACKS`. On a line
+        that has proven delivery, an unheard copy is one the caller talked
+        over, and saying it again is how they get to hear it:
+        `Intent.cut_readbacks`, bounded by the larger `CUT_READBACKS`. Live
+        call hzSdfMNn (session 4c) spent the first limit on two copies an
+        interruptive caller cut, while every other mark came back, and gave
+        up on a caller who was still trying.
         """
         asked = self._proposals.asked
         intent = self._intents.get(getattr(asked, 'intent', '')) if asked is not None else None
@@ -1425,7 +1438,11 @@ class CallContext(BaseModel):
             self._judged.add(copy.id)
             if not (copy.delivered == 'delivered' and self.answered_in_time(copy)):
                 unheard += 1
-        if unheard:
+        if not unheard:
+            return
+        if any(s.delivered == 'delivered' for s in self.all_spoken):
+            self.set_intent(intent.id, cut_readbacks=intent.cut_readbacks + unheard)
+        else:
             self.set_intent(intent.id, readbacks=intent.readbacks + unheard)
 
     def intent_for(self, operation: str, args: str) -> Intent:

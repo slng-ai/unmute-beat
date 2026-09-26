@@ -376,6 +376,7 @@ class Turn:
         call.turn_started(prompt or '')
         if call.continuing and call._turn_usage is not None and call._turn_usage[0] == call.turn:
             self.usage = call._turn_usage[1]
+            _, self.limits = self.budget.account(len(call._pieces))
         call._turn_usage = (call.turn, self.usage)
         if prompt is not None:
             prompt = call.fresh or None
@@ -592,8 +593,11 @@ class Turn:
         if action is not None:
             if self._stale():
                 return
-            if self.usage.tool_calls >= self.budget.tool_calls:
-                yield _Exhausted(f'the {self.budget.tool_calls}-tool budget')
+            if (
+                self.limits.tool_calls_limit is not None
+                and self.usage.tool_calls >= self.limits.tool_calls_limit
+            ):
+                yield _Exhausted(f'the {self.limits.tool_calls_limit}-tool budget')
                 return
             call.retain_input()
             prompt = None

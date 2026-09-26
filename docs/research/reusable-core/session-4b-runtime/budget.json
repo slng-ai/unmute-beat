@@ -1,0 +1,25 @@
+{
+  "note": "Stage B allowances. Survive sessions, worktrees and PRs. Update after every billable action; never reset.",
+  "text": {
+    "requests_allowed": 100,
+    "tokens_allowed": 250000,
+    "requests_spent": 0,
+    "tokens_spent": 0,
+    "runs": []
+  },
+  "coval_repair_pool": {
+    "calls_allowed": 20,
+    "requested": 0,
+    "placed": 0,
+    "connected": 0,
+    "terminal": 0,
+    "evidence_complete": 0,
+    "runs": []
+  },
+  "reserved_for_later_stages": {
+    "candidate_final_normal": 20,
+    "candidate_final_interruptive": 20,
+    "native_normal_top_up": 10,
+    "native_interruptive_top_up": 12
+  }
+}

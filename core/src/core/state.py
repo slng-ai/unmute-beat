@@ -618,6 +618,10 @@ class CallContext(BaseModel):
     """The newest version known for each resource (kind, id): a receipt below it is history. See `is_latest`."""
     _last_asked_intent: str = PrivateAttr(default='')
     """The intent of the last read-back put to the caller, whatever happened to the question since."""
+    _last_asked_serial: int = PrivateAttr(default=0)
+    """The serial of that read-back (`ProposalLedger.serial`)."""
+    _replied_to: set[int] = PrivateAttr(default_factory=set)
+    """Questions the caller heard in full and then answered: a reply began after the latest copy played."""
     _judged: set[str] = PrivateAttr(default_factory=set)
     """Question copies already counted as heard or not (`note_unheard_readbacks`)."""
     _turn_usage: tuple[int, Any] | None = PrivateAttr(default=None)
@@ -1212,12 +1216,26 @@ class CallContext(BaseModel):
         """Record that this question has gone out to the caller, on this turn."""
         self._proposals.ask(self, proposal)
         if intent := getattr(proposal, 'intent', ''):
-            self._last_asked_intent = intent
+            self._last_asked_intent, self._last_asked_serial = intent, self._proposals.serial
 
     def last_asked_left_undone(self) -> bool:
-        """Whether the change last read back to the caller was never made: its intent was never dispatched."""
+        """Whether the change last read back to the caller was left waiting: never made, and never answered.
+
+        Never made: its intent was never dispatched. Never answered: no reply
+        began after it played in full (`_replied_to`). A read-back the caller
+        heard and answered, whose step's agent then did not carry it out, was
+        turned down or changed ("No, don't book Friday at two"), not left
+        waiting: telling them "I haven't made that last change" as they leave
+        says what they just asked for as if it were a failure (session 4d,
+        live call 7). The agent's choice is the typed decision; no word of the
+        reply is read here.
+        """
         intent = self._intents.get(self._last_asked_intent)
-        return intent is not None and intent.status == 'prepared'
+        return (
+            intent is not None
+            and intent.status == 'prepared'
+            and self._last_asked_serial not in self._replied_to
+        )
 
     def pending_question(self) -> Any:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
@@ -1969,6 +1987,8 @@ class CallContext(BaseModel):
             self._acted = False
             self._proposals.age(self)
             self._proposals.open_turn()
+            if self._proposals.pending(self) is not None:
+                self._replied_to.add(self._proposals.serial)
         self._spoken_over = missed
         self.heard = ' '.join(p for p in self._pieces if p)
         self._inputs[self._turn] = self.heard

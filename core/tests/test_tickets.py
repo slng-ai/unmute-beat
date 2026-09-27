@@ -628,6 +628,32 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
         broken.unlink()
 
 
+async def a_no_is_not_left_undone(folder: Path):
+    """R14 (session 4e, live call 7): a goodbye after a read-back the caller heard and turned down.
+
+    The agent did not carry it out: that was the caller's no, not a change
+    left waiting, so the goodbye does not say `left_undone`. A read-back the
+    caller never heard in full still gets it as they leave. Neither reads a
+    word of the reply: what counts is whether a reply began after the
+    read-back played, and what the agent chose.
+    """
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    said = await turn(
+        flow, call, script, 'No, déjalo así. Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {})
+    )
+    assert call.locale.left_undone not in ' '.join(said), ('a no was told it was left undone', said)
+    assert said[-1].endswith(SPANISH_GOODBYE) and desk.sent() == 0, said
+
+    desk = desk_in(folder / 'standing')
+    script, flow, call = opened(desk)
+    script.moves = list(TO_READ_BACK)
+    await core.text_turn(flow, call, 'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.')
+    said = await turn(flow, call, script, 'Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {}))
+    assert call.locale.left_undone in ' '.join(said), ('an unheard read-back left undone was not said', said)
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -645,6 +671,7 @@ async def main() -> None:
                 picks_rest_only_on_what_their_offer_read,
                 picks_follow_the_state_they_end_in,
                 a_rendered_step_offers_in_the_desks_words,
+                a_no_is_not_left_undone,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -660,7 +687,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R13, no phone, date, appointment or slot')
+    print('tickets ok: R1-R14, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

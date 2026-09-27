@@ -12,3 +12,4 @@ was then restored with `git checkout` and the suite passed again.
 | Core change by meaning | `steps.py` `collect`: `changed` compared to the raw input again | salon V10 | "the same day said again took the times away" ("Thursday" beside a stored 2026-10-01) |
 | Rendered choices speak the application's offer | `steps.py` `wait`: the offer words left out | core R13 | "Perdona, ¿me lo repites?" instead of the desk's offer |
 | Salon booking rendered | `salon/agent.yaml`: booking back to `guarded` prose (refusals dropped) | salon `model_speech_never_claims_a_completed_action` | the model's own copy of a move read-back was said, as in live call 6 |
+| Receipt said again once | `state.py` `unheard_receipt`: the repeat count ignored | salon `an_unheard_receipt_is_said_again_once_then_the_caller_is_heard` | "the caller was not heard": the receipt was replayed again, and the correction never reached the agent |

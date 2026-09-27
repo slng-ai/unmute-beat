@@ -30,7 +30,7 @@ from pydantic import BaseModel, StringConstraints, ValidationError
 from core import Intent, OutcomeUnknownError
 from salon.diary import WEEKDAYS, AlreadyHoldsError, Diary, RefusedError, day_phrases, resolve_day, spoken_day
 from salon.models.receipts import CustomerLookup, Held, Saved, Slots
-from salon.models.shapes import Spoken, SubmittedPhone
+from salon.models.shapes import Spoken, SubmittedPhone, grouped, phone_length
 from salon.models.state import SalonState
 
 
@@ -161,6 +161,26 @@ def lookup_customer(salon: Salon, args: PhoneArgs) -> CustomerLookup:
 
 def number_words(args: PhoneArgs) -> str:
     return f'Is your number {Spoken.validate_python(args.phone)}?'
+
+
+def phone_refusal(raw: str) -> str:
+    """What the caller hears when the number recorded cannot be looked up: verify's `refusals:`, said by code.
+
+    The same four questions the verify prompt used to give the model to say,
+    now said by code, with a too-long number's digits grouped the way the
+    read-back groups them. '' for a number with nothing wrong in its length:
+    core then asks with the step's `asks:` line.
+    """
+    if not raw.startswith('+'):
+        return 'Which country is that phone number from?'
+    match phone_length(raw):
+        case 'too long':
+            return f'I have {grouped(raw)}. Which part is wrong?'
+        case 'too short':
+            return 'Please give me the rest of the digits.'
+        case 'unknown country code':
+            return 'Which phone number should I use? Please say it with the country code.'
+    return ''
 
 
 OFFER_AT_MOST = 6

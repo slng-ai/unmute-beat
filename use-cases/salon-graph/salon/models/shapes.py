@@ -100,6 +100,32 @@ def heard(value: str) -> str:
     return '+' + ' '.join(filter(None, [code, *(rest[i : i + 3] for i in range(0, len(rest), 3))]))
 
 
+def grouped(value: str) -> str:
+    """A number too long for its country, grouped the way its read-back is: "+34 680 84 06 46 4".
+
+    The longest start of it that is a real number is grouped by
+    libphonenumber, like `Spoken`, and the digits left over follow. So what
+    the caller hears about a wrong number and the read-back of a right one
+    group the same digits the same way (session 4d, defect 6: "I have +34 680
+    840 646 4" beside "Is your number +34 680 84 04 64?"). Falls back to
+    `heard` when no start of it is a real number.
+    """
+    try:
+        number = phonenumbers.parse(value, None)
+    except phonenumbers.NumberParseException:
+        return heard(value)
+    national = phonenumbers.national_significant_number(number)
+    for cut in range(len(national) - 1, 0, -1):
+        try:
+            start = phonenumbers.parse(f'+{number.country_code}{national[:cut]}', None)
+        except phonenumbers.NumberParseException:
+            break
+        if phonenumbers.is_valid_number(start):
+            said = phonenumbers.format_number(start, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+            return f'{said} {national[cut:]}'
+    return heard(value)
+
+
 def _real_or_absent(value: str) -> str:
     """A real number from any country, or '' for no number yet, which is the field's only absence.
 
@@ -132,7 +158,7 @@ def _real_and_present(value: str) -> str:
     match phone_length(value):
         case 'too long':
             raise ValueError(
-                f'I heard {heard(value)}: that is {digits_after_code(value)}, too many for its country, so a '
+                f'I heard {grouped(value)}: that is {digits_after_code(value)}, too many for its country, so a '
                 'digit was misheard or repeated. Say those digits back to the caller and ask which part is '
                 'wrong. Nothing is missing, so do not ask for the rest.'
             )

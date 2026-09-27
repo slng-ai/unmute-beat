@@ -157,7 +157,7 @@ def a_wrong_number_says_what_to_ask():
     for bad, says in (
         ('600111222', 'Ask which country'),
         ('+3467127345', 'Ask for the rest of the digits'),
-        ('+346712734544', 'I heard +34 671 273 454 4'),
+        ('+346712734544', 'I heard +34 671 27 34 54 4'),
         ('+346712734544', 'ask which part is wrong'),
         ('+999123456789', 'Ask for the whole number again'),
     ):

@@ -12,7 +12,12 @@ false:
 * S4: after the ticket was resolved and then reopened;
 * S5: in a fresh process that restores the old resolve after the reopen;
 * S6: an authoritative no (a stale revision) is said in core's words;
-* S7: the loader refuses a rendered step that offers choices.
+* S7: the loader refuses a rendered step that offers choices;
+* S8: on a prose step that is not guarded, a claim after a lookup alone, or
+  after a refused change, is corrected out loud: neither stands, so neither
+  backs it (session 4d, defect 6). A claim beside a change that does stand
+  is not caught by this check: which change it names is prose, the limit
+  `tests.defects` keeps.
 
 "No model words" is checked on the call's own record: no segment the caller
 was sent is of kind `model`. What a prose step may still say is a separate,
@@ -168,6 +173,51 @@ async def rendered_claims() -> None:
         await a_refusal_in_core_words(folder)
 
 
+async def a_prose_claim_is_corrected_unless_a_change_stands() -> None:
+    """S8, on the clinic: its front desk (a lookup) and its one-agent desk (a booking the diary refuses)."""
+    from tests.clinic_flow.clinic import Backend, ClinicState
+    from tests.test_nodes import FILL, Script
+    from tests.test_nodes import turn as clinic_turn
+
+    clinic = Path(__file__).parent / 'clinic_flow'
+    claim = 'Your appointment is booked for Tuesday at ten.'
+    for name, moves in (
+        (
+            'code_node.yaml',
+            (
+                ('call', 'collect', {'values': {'patient': 'P-1234'}}),
+                ('call', 'hand_over', {'to': 'look_up', 'because': 'find their booking'}),
+                ('say', claim),
+            ),
+        ),
+        ('one_agent.yaml', (('call', 'book', {}), ('say', claim))),
+    ):
+        manifest = clinic / f'_claims_{name}'
+        manifest.write_text(
+            (clinic / name)
+            .read_text()
+            .replace('agents:\n', "locale:\n  base: english\n  claims: ['\\bis booked\\b']\nagents:\n", 1)
+        )
+        try:
+            script = Script()
+            flow = core.load(manifest).compile(model=script.model)
+            backend = Backend()
+            call = flow.open(ClinicState(), services=backend)
+            script.call = call
+            if name == 'one_agent.yaml':
+                await clinic_turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}))
+                backend.full = True
+            said = await clinic_turn(flow, call, script, 'P-1234, am I booked?', *moves)
+            assert not call.effective() and not backend.bookings, (name, call.evidence)
+            assert claim in said and said[-1] == call.locale.unbacked, (
+                name,
+                'an unbacked claim went uncorrected',
+                said,
+            )
+        finally:
+            manifest.unlink()
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
@@ -184,7 +234,8 @@ async def main() -> None:
         await after_a_reopen(folder)
         await a_refusal_in_core_words(folder)
         no_rendered_choices(folder)
-    print('speech ok: S1-S7, a rendered step says no model words')
+    await a_prose_claim_is_corrected_unless_a_change_stands()
+    print('speech ok: S1-S8, a rendered step says no model words; a prose claim nothing backs is corrected')
 
 
 if __name__ == '__main__':

@@ -635,6 +635,39 @@ async def one_action_per_reply_and_one_budget_per_turn():
     assert booked(diary) == []
 
 
+async def verify_says_every_word_in_code():
+    """Trace 5edecd4c and Stage C finding 3 (session 4d, defect 6): verify's number questions are code's.
+
+    The agent records what it heard and calls `wait`; the salon says what to
+    ask, and a too-long number is said back grouped as the read-back groups
+    it. Model words on verify are never said, whatever digits they carry.
+    """
+    for heard, recorded, line in (
+        ('Plus 34 680 840.', '+34680840', 'Please give me the rest of the digits.'),
+        ('Plus 34 680 840 646 4.', '+346808406464', 'I have +34 680 84 06 46 4. Which part is wrong?'),
+        ('680 840 464.', '680840464', 'Which country is that phone number from?'),
+    ):
+        script, flow, call, _ = opened(phone='')
+        call.commit(agent='verify')
+        said = await turn(
+            flow,
+            call,
+            script,
+            heard,
+            ('collect', {'customer_phone': recorded}),
+            ('say', 'I have +34 680 840 646 4, which part is wrong?'),
+            ('call', 'wait'),
+        )
+        assert said == [line], (heard, said)
+        assert not [s for s in call.spoken if s.kind == 'model'], call.spoken
+    script, flow, call, _ = opened(phone='')
+    call.commit(agent='verify')
+    said = await turn(
+        flow, call, script, 'Plus 34 680 84 04 64.', ('collect', {'customer_phone': '+34680840464'})
+    )
+    assert said == ['Is your number +34 680 84 04 64?'], said
+
+
 async def main() -> None:
     await a_booking_before_identity_verifies_first()
     await a_missing_number_is_asked_for_by_code()
@@ -649,6 +682,7 @@ async def main() -> None:
     await a_receipt_cut_before_it_played_is_said_again_not_moved()
     await an_identity_is_the_lookup_of_the_number_agreed_to()
     await the_same_number_said_back_is_a_yes()
+    await verify_says_every_word_in_code()
     await a_bare_weekday_beside_another_week_is_asked_about()
     await model_speech_never_claims_a_completed_action()
     await a_goodbye_never_claims_a_booking_nothing_made()

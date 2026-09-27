@@ -128,11 +128,14 @@ steps:
     kind: conversation
     agent: robin
     prompt: prompts/verify.md
+    # Every word here is code's: the read-back, the lookup's receipt, and what to ask (session 4d, defect 6).
+    speech: rendered
     fields: [customer_phone, service, booking_day, booking_time]
     operations: [lookup_customer]
     opens_with: lookup_customer
     reads_back: {lookup_customer: [customer_phone]}
     asks: {customer_phone: "Which phone number should I use? Please say it with the country code."}
+    refusals: {customer_phone: functions.py:phone_refusal}
     exits:
       - {to: concierge, purpose: 'the caller will not confirm a number, or asks about something else entirely'}
 

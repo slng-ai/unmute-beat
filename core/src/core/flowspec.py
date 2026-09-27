@@ -753,6 +753,13 @@ class ConversationSpec(StepSpec):
     """One of `operations`, read back by code on arrival when the state already gives its arguments."""
     asks: dict[str, str] = {}
     """Field -> words: on arrival by a hand-over, code asks for the first of these fields still empty, no model."""
+    refusals: dict[str, str] = {}
+    """Field -> `file.py:words`, `(value) -> str`: on a rendered step, what the caller hears when `collect` refused that value.
+
+    A validator's reason is written for the model; with no model words on a
+    rendered step, the application says what to ask instead ("Please give me
+    the rest of the digits."), in its own words. '' falls back to `asks:`.
+    """
     reads_back: dict[str, list[str]] = {}
     """Operation -> fields: a reply that only records one of them gets the operation read back by code, no request.
 
@@ -786,6 +793,14 @@ class ConversationSpec(StepSpec):
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         for name in sorted(set(self.asks) - set(self.fields)):
             resolve.fail(self.id, f'asks for {name!r}, which is not one of its fields')
+        for name, ref in self.refusals.items():
+            if name not in self.fields:
+                resolve.fail(self.id, f'words a refusal of {name!r}, which is not one of its fields')
+            resolve.function(self.id, ref, 1)
+        if self.refusals and self.speech != 'rendered':
+            resolve.fail(
+                self.id, 'words refusals, which only a rendered step says: on a prose step the model does'
+            )
         for name, fields in self.reads_back.items():
             if name not in self.operations:
                 resolve.fail(self.id, f'reads back {name!r}, which is not one of its operations')
@@ -827,6 +842,11 @@ class ConversationSpec(StepSpec):
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             asks=dict(self.asks),
+            refusals={
+                name: found
+                for name, ref in self.refusals.items()
+                if (found := resolve.function(self.id, ref, 1)) is not None
+            },
             reads_back={name: tuple(fields) for name, fields in self.reads_back.items()},
             spec=resolve.persona(self.id, self.agent),
         )

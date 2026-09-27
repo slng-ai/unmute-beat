@@ -43,7 +43,7 @@ from pydantic.fields import FieldInfo
 from pydantic_ai import Agent, ModelRetry, RunContext, Tool, ToolOutput
 from pydantic_ai.agent.spec import AgentSpec
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.messages import UserPromptPart
+from pydantic_ai.messages import ModelMessage, RetryPromptPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
@@ -166,8 +166,13 @@ class FlowCall[S: BaseModel](CallContext):
             self.restore(intents, self._reconcile_with)
 
     def wrote_this_turn(self) -> bool:
-        """Whether a business action filed a validated receipt in this caller turn. Evidence, never a flag."""
-        return any(filed.turn == self.turn for filed in self.evidence)
+        """Whether a change this caller turn made still stands (`effective`). Evidence, never a flag.
+
+        A lookup changed nothing, a refusal did nothing, and a change undone
+        since stands no more: none of them backs a claim that something was
+        done (session 4d, defect 6; before, any receipt this turn did).
+        """
+        return any(filed.turn == self.turn for filed in self.effective())
 
     def claims_completion(self, clause: str) -> bool:
         """Whether this clause tells the caller a business action is done (`Locale.claims`).
@@ -1185,6 +1190,35 @@ def said_by_caller(call: CallContext, excerpt: str) -> bool:
     return bool(wanted) and any(f' {wanted} ' in f' {words(source)} ' for source in sources)
 
 
+def _refused(messages: list[ModelMessage], fields: Mapping[str, Any]) -> tuple[str, str] | None:
+    """The field and value of this caller turn's latest `collect`, if it was refused, among `fields`.
+
+    Read from the run's own messages: the retry the SDK sent back for that
+    call, and the call's arguments. A later `collect` that was recorded
+    supersedes it, and the caller's words mark where this turn began.
+    """
+    if not fields:
+        return None
+    asked = {
+        part.tool_call_id: part.args_as_dict()
+        for message in messages
+        for part in message.parts
+        if isinstance(part, ToolCallPart) and part.tool_name == 'collect'
+    }
+    for message in reversed(messages):
+        for part in reversed(message.parts):
+            if isinstance(part, UserPromptPart) or (
+                isinstance(part, ToolReturnPart) and part.tool_name == 'collect'
+            ):
+                return None
+            if isinstance(part, RetryPromptPart) and part.tool_name == 'collect':
+                values = asked.get(part.tool_call_id, {}).get('values') or {}
+                for name in fields:
+                    if isinstance(values, dict) and values.get(name):
+                        return name, str(values[name])
+    return None
+
+
 def _not_ready(operation: Operation, call: FlowCall[Any], error: ValidationError) -> str:
     """What an operation still lacks, told as what to do next: a pick comes from `options`, anything else from the caller.
 
@@ -1377,6 +1411,8 @@ class ConversationStep(Step):
     open with it said "I'll connect you with someone" instead (Coval gate 1
     rerun, cBrx4NhR). Tried after `opens_with`.
     """
+    refusals: Mapping[str, Callable[[str], str]] = field(default_factory=dict)
+    """Field -> the application's words for a value `collect` refused, said by `wait` on a rendered step."""
     reads_back: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     """Operation -> fields: a reply that only records one of these fields gets that operation read back by code.
 
@@ -1538,7 +1574,12 @@ class ConversationStep(Step):
             """Nothing to read back, carry out or hand over yet. The application asks the caller for what it still needs."""
             call = ctx.deps
             missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
-            words = self.asks[missing] if missing else call.locale.pardon
+            refused = _refused(ctx.messages, self.refusals)
+            words = (
+                (self.refusals[refused[0]](refused[1]) if refused else '')
+                or (self.asks[missing] if missing else '')
+                or call.locale.pardon
+            )
             await call.speak_now(words, origin='ask')
             return words
 

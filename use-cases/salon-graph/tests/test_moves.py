@@ -21,11 +21,14 @@ second, independent caller writes to the same SQLite file through its own
 * V6: a value said again (a no, a question, a condition, a quotation; heard,
   unheard or stale) approves no booking, move, cancel or complaint;
 * V7: a missing pick, and a day the diary cannot place, each say their own
-  next step, never "ask the caller" or "nothing is free".
+  next step, never "ask the caller" or "nothing is free";
+* V8: the live check's contender (`evals.contend`) takes the time when the
+  move's read-back reaches the log, and the move is refused.
 """
 
 import asyncio
 import sqlite3
+import time
 
 from salon.diary import Diary
 from salon.functions import Cancel, Move, Salon, cancel, find_move, move
@@ -453,6 +456,44 @@ async def each_problem_says_its_own_next_step():
     assert 'Nothing is free' not in note, note
 
 
+async def a_contender_takes_the_time_the_bot_reads_back():
+    """V8: the live check's second caller (`evals.contend`), offline: it waits for the move's read-back in the log.
+
+    The bot's log is stood in for by a file the test writes the TTS line to,
+    as Pipecat's TTS logs it; the booking goes through `Diary` on the same
+    SQLite file, and the move then gets the diary's refusal.
+    """
+    import tempfile
+    import threading
+    from pathlib import Path
+
+    from evals.contend import take, watch
+
+    script, flow, call, diary = await at_booking()
+    held = seed(diary)
+    said = await ask_to_move(flow, call, script, held, '14:00')
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / 'salon-bot.log'
+        log.write_text('')
+        found: list[str] = []
+        waiting = threading.Thread(
+            target=lambda: found.append(watch(log, ['Shall I move your haircut', '2:00 PM'], timeout=5))
+        )
+        waiting.start()
+        time.sleep(0.2)
+        with log.open('a') as handle:
+            handle.write(f'2026-09-28 08:30:00.000 | DEBUG | tts - Generating TTS [{said[-1]}]\n')
+        waiting.join()
+    assert found and found[0], 'the read-back line was not seen'
+    taken = take(diary.path, OTHER, FRIDAY, '14:00', now=CLOCK)
+    assert taken['status'] == 'booked', taken
+    await turn(
+        flow, call, script, 'Yes.', ('call', 'move_appointment'), ('say', 'Sorry, that time just went.')
+    )
+    assert the_move_intent(call) == 'rejected', call.intents
+    assert snapshot(diary.path)[0][:4] == (held, PHONE, FRIDAY, '09:00'), snapshot(diary.path)
+
+
 async def main() -> None:
     await a_taken_destination_is_refused_and_another_time_moves()
     await a_booking_changed_elsewhere_is_refused_then_offered_fresh()
@@ -462,8 +503,9 @@ async def main() -> None:
     await two_holdings_and_a_reference_not_on_offer()
     await a_value_said_again_is_not_a_yes()
     await each_problem_says_its_own_next_step()
+    await a_contender_takes_the_time_the_bot_reads_back()
     print(
-        'moves ok: V1-V7, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V8, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

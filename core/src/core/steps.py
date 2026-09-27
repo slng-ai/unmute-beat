@@ -172,17 +172,27 @@ class FlowCall[S: BaseModel](CallContext):
     _choices: frozenset[str] = PrivateAttr(default=frozenset())
     """State fields picked from offered ids (`choices`): valid only while the request they were offered for stands."""
     _choice_after: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
+    """The fields a choice's offer rests on, when its manifest says (`after:`); the others rest on every field."""
     _resource_choices: dict[str, dict[str, Callable[[Any, Any], Any]]] = PrivateAttr(default_factory=dict)
     """Choice fields that name a resource, by its kind, with the choice function that offers them (`StepFlow`)."""
-    """The fields a choice's offer rests on, when its manifest says (`after:`); the others rest on every field."""
     _recorded: frozenset[str] = PrivateAttr(default=frozenset())
-    """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
+    """The fields this caller turn's latest `collect` recorded: what a step's `reads_back` rule is keyed on.
+
+    Cleared when each piece of a caller turn starts (`turn_started`): a slot
+    recorded last turn is not this reply's, so after a no it does not read
+    the same booking back again (session 4f, scripted case K7).
+    """
     _goodbye_checked: int = PrivateAttr(default=0)
     """The turn on which a goodbye beside a waiting read-back was sent back once, to carry out a yes first."""
     _reconcile_with: dict[str, tuple[Any, type[BaseModel]]] = PrivateAttr(default_factory=dict)
     """Each declared operation and its argument model, by name: what a restored intent is reconciled with."""
     _asked_owed: set[str] = PrivateAttr(default_factory=set)
     """The identities whose owed intents the services were already asked for (`take_owed`)."""
+
+    def turn_started(self, heard: str = '') -> None:
+        """A piece of a caller turn starts: nothing is recorded by this reply yet."""
+        super().turn_started(heard)
+        self._recorded = frozenset()
 
     @property
     def locale(self) -> Locale:
@@ -1805,7 +1815,7 @@ class ConversationStep(Step):
                 return await _offer(ctx.deps, self.choices)
 
             async def offer(ctx: RunContext[FlowCall[Any]]) -> dict[str, Any]:
-                """The options on offer to the caller now, by id, for what they asked. Only an offered id can be recorded. Then call wait: the application tells the caller what is on offer."""
+                """The options on offer now, by id, for what they asked. Only an offered id can be recorded. Call it only when you need an id to record what the caller named; to tell the caller what is on offer, call wait: the application looks it up and says it."""
                 return await _offer(ctx.deps, self.choices, rendered=True)
 
             tools.append(Tool(offer, name='options') if self.rendered else Tool(options))

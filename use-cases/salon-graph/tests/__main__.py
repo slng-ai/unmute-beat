@@ -34,6 +34,7 @@ MODULES = (
     'tests.test_walkthrough',
     'tests.test_business',
     'tests.test_moves',
+    'tests.test_requests',
     'tests.test_budget',
     'tests.test_continuation',
     'tests.test_overlap',

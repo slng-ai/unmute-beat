@@ -286,6 +286,38 @@ def resolutions(desk: Desk, state: DeskState) -> dict[str, str]:
     return RESOLUTIONS.get(state.category, {})
 
 
+class Offer(BaseModel):
+    """A choice's options and the desk's own words for them, for a rendered step (`rendered_choices.yaml`)."""
+
+    options: dict[str, str]
+    say: str
+
+
+def ticket_offer(desk: Desk, state: DeskState) -> Offer:
+    """The caller's tickets, and how the desk offers them."""
+    tickets = open_tickets(desk, state)
+    return Offer(
+        options=tickets,
+        say=f'Veo {" y ".join(tickets.values())}. ¿Cuál es?' if tickets else 'No veo tickets en esa cuenta.',
+    )
+
+
+def resolution_offer(desk: Desk, state: DeskState) -> Offer:
+    """The resolutions for the category recorded, and how the desk offers them; with no category, it asks for one."""
+    found = resolutions(desk, state)
+    return Offer(
+        options=found,
+        say=f'Puedo dejarlo como {" o ".join(found.values())}. ¿Qué prefiere?'
+        if found
+        else '¿El problema es de facturación o de acceso?',
+    )
+
+
+def not_offered(value: str) -> str:
+    """What the desk says when the caller picks something it did not offer."""
+    return f'{value} no es una de las opciones que tengo.'
+
+
 def look_up(desk: Desk, ref: TicketRef) -> Found:
     """The ticket's current revision and status, for this account. A read: no read-back, nothing changes."""
     with desk._tx() as db:

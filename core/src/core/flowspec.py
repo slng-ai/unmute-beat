@@ -744,8 +744,9 @@ class ConversationSpec(StepSpec):
     chooses: record, read back, carry out, hand over, say goodbye, or wait.
     Every word is the application's or core's: `asks:` lines, read-backs,
     receipts (`say:`), recaps and fixed lines. So nothing here can claim a
-    change no valid receipt made. It cannot offer `choices`, which a model
-    would word.
+    change no valid receipt made. Its `choices` functions word their own
+    offers (`say` beside `options`), and none is `guarded`: there is no
+    model prose to check.
     """
     quoted: list[str] = []
     """Fields among `fields` that must be the caller's own words, found in what they said (a complaint)."""
@@ -787,8 +788,8 @@ class ConversationSpec(StepSpec):
             )
         for name in sorted(set(self.quoted) - set(self.fields)):
             resolve.fail(self.id, f'quotes {name!r}, which is not one of its fields')
-        if self.speech == 'rendered' and self.choices:
-            resolve.fail(self.id, "is rendered, so it cannot offer choices: their words would be the model's")
+        if self.speech == 'rendered' and self.guarded:
+            resolve.fail(self.id, 'is rendered and guarded: a rendered step has no model prose to guard')
         if self.opens_with and self.opens_with not in self.operations:
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         for name in sorted(set(self.asks) - set(self.fields)):

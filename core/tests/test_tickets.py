@@ -533,6 +533,101 @@ async def picks_follow_the_state_they_end_in(folder: Path):
     assert call.state.facts.follow_up == '2026-09-30', ('a commit read the date again', call.state.facts)
 
 
+async def a_rendered_step_offers_in_the_desks_words(folder: Path):
+    """R13 (session 4e): choices on a rendered step. The agent reads and chooses; the desk says every word.
+
+    The offers are the choice functions' own words (`say`), in the order the
+    step lists them. A model that writes text, a claim or a copy of the
+    options it was shown, says nothing. A pick nobody offered gets the
+    desk's refusal, then the fresh offer. A pick on offer is read back and
+    carried out on a heard yes, as on any step.
+    """
+    desk = desk_in(folder)
+    desk.seed('ACC-1234', 'T-102')
+    script, flow, call = opened(desk, HERE / 'rendered_choices.yaml')
+    offered = (
+        'Veo el ticket T-101, open y el ticket T-102, open. ¿Cuál es? '
+        'Puedo dejarlo como un reembolso o un abono en la cuenta. ¿Qué prefiere?'
+    )
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Cuenta ACC-1234, es de facturación.',
+        ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
+        ('call', 'options', {}),
+        ('call', 'wait', {}),
+    )
+    assert said == [offered], said
+
+    said = await turn(
+        flow,
+        call,
+        script,
+        'El T-101.',
+        ('say', 'Listo, ya está resuelto.'),
+        ('say', '{"resolution": {"options": {"refund": "un reembolso"}}}'),
+    )
+    assert not [s for s in said if 'resuelto' in s or '{' in s], ('model text reached the caller', said)
+    assert desk.sent() == 0
+
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Con un cambio de contraseña.',
+        ('call', 'collect', {'values': {'resolution': 'reset'}}),
+        ('call', 'options', {}),
+        ('call', 'wait', {}),
+    )
+    assert said == [f'reset no es una de las opciones que tengo. {offered}'], said
+
+    said = await turn(
+        flow,
+        call,
+        script,
+        'El T-101, con un reembolso.',
+        ('call', 'collect', {'values': {'ticket_id': 'T-101', 'resolution': 'refund'}}),
+        ('call', 'hand_over', {'to': 'look_up', 'because': 'find its revision'}),
+        ('call', 'resolve_ticket', {}),
+    )
+    assert said[-2:] == ['Tengo el ticket T-101.', '¿Marco el ticket T-101 como resuelto: refund?'], said
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    assert said == ['Ticket T-101 resuelto. ¿Algo más?'] and desk.ticket('T-101') == (2, 'resolved'), said
+
+    wordless = HERE / '_rendered_wordless.yaml'
+    wordless.write_text((HERE / 'rendered_choices.yaml').read_text().replace('ticket_offer', 'open_tickets'))
+    try:
+        script, flow, call = opened(desk_in(folder / 'by_words'), wordless)
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234.',
+            ('call', 'collect', {'values': {'account_id': 'ACC-1234'}}),
+            ('call', 'options', {}),
+            ('call', 'wait', {}),
+        )
+        assert 'ticket_id' not in call._offered, 'a rendered step offered choices it had no words for'
+    finally:
+        wordless.unlink()
+
+    broken = HERE / '_rendered_broken.yaml'
+    broken.write_text(
+        (HERE / 'rendered_choices.yaml')
+        .read_text()
+        .replace('speech: rendered', 'speech: rendered\n    guarded: true')
+    )
+    try:
+        core.load(broken).compile(model='test')
+    except core.FlowSpecError as error:
+        assert 'rendered and guarded' in str(error), str(error)
+    else:
+        raise AssertionError('a rendered step was allowed to be guarded')
+    finally:
+        broken.unlink()
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -549,6 +644,7 @@ async def main() -> None:
                 the_audit_names_the_backend_effect,
                 picks_rest_only_on_what_their_offer_read,
                 picks_follow_the_state_they_end_in,
+                a_rendered_step_offers_in_the_desks_words,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -564,7 +660,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R12, no phone, date, appointment or slot')
+    print('tickets ok: R1-R13, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

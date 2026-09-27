@@ -91,6 +91,8 @@ class FlowCall[S: BaseModel](CallContext):
     _services: Any = PrivateAttr(default=None)
     _offered: dict[str, dict[str, str]] = PrivateAttr(default_factory=dict)
     """For each choice field, the ids offered to this caller and how each was said. Only these can be picked."""
+    _offer_words: tuple[int, str] = PrivateAttr(default=(0, ''))
+    """On a rendered step, the application's words for the offer made on this turn, until `wait` says them."""
     _locale: Locale | None = PrivateAttr(default=None)
     _version: int = PrivateAttr(default=0)
     """Bumped by every accepted change to the application state: work begun on an older version is stale."""
@@ -1319,14 +1321,22 @@ class Options(BaseModel):
     this). The note is how the domain says something the ids cannot, such as
     a day that could mean two dates: the agent reads it and asks the caller,
     and only the ids are ever offered.
+
+    On a rendered step the object also carries `say`: what the caller hears
+    about this offer, in the application's words, including when nothing is
+    free or the day could mean two dates. Core never words an offer. ''
+    says nothing for this choice.
     """
 
     model_config = ConfigDict(extra='forbid')
     options: dict[str, str] = {}
     note: str = ''
+    say: str = ''
 
 
-async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any], Any]]) -> dict[str, Any]:
+async def _offer(
+    call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any], Any]], rendered: bool = False
+) -> dict[str, Any]:
     """Ask each choice function for this caller's options, and record them as offered, unless the call moved on.
 
     A choice function may be sync or async, and may take long: the caller can
@@ -1336,6 +1346,12 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     answer computed for a state that is no longer the call's, or in a turn the
     caller has left, is returned as stale and offers nothing, so it can never
     replace the current offer or make an old slot pickable.
+
+    On a `rendered` step every answer must carry `say`, the application's
+    words for it: one without is a fault in the application, and offers
+    nothing. The words are kept for `wait` to say, in the order the step
+    lists its choices. The agent is still shown the ids and notes, to read
+    the caller's pick.
     """
     version, generation, agent = call._version, call._generation, call.state.agent
     found: dict[str, Options] = {}
@@ -1345,6 +1361,10 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
                 answer = await choose(call.services, call.state.facts)
             else:
                 answer = await _result(await asyncio.to_thread(choose, call.services, call.state.facts))
+            if rendered and not hasattr(answer, 'say'):
+                raise TypeError(
+                    f'the choice function for {name} returned no words to say, on a rendered step'
+                )
         except Exception as error:
             logger.exception('choice function for {} failed', name)
             return {
@@ -1353,7 +1373,9 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
         found[name] = (
             Options(options=dict(answer))
             if isinstance(answer, Mapping)
-            else Options(options=dict(answer.options), note=getattr(answer, 'note', ''))
+            else Options(
+                options=dict(answer.options), note=getattr(answer, 'note', ''), say=getattr(answer, 'say', '')
+            )
         )
     if call._version != version or call._generation != generation or call.state.agent != agent:
         return {'stale': 'The request changed while these were looked up. Nothing is offered; look again.'}
@@ -1361,6 +1383,8 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     for name, options in found.items():
         call._offered[name] = dict(options.options)
         result[name] = {'options': options.options, **({'note': options.note} if options.note else {})}
+    if rendered:
+        call._offer_words = (call.turn, ' '.join(o.say for o in found.values() if o.say))
     return result
 
 
@@ -1444,9 +1468,11 @@ class ConversationStep(Step):
     """`speech: rendered`: the agent chooses and code words everything. No text output, so no model prose to TTS.
 
     Its outputs are the step's operations (read back, then carried out),
-    `hand_over`, `goodbye`, and `wait`, after which code asks for the first
-    missing `asks:` field, or says `Locale.pardon`. An authoritative no is
-    said in core's fixed words (`_carry_out`).
+    `hand_over`, `goodbye`, and `wait`, after which code says, in this
+    order: a read-back the reply calls for; the application's words for a
+    refused value, then for the offer made this turn (a choice function's
+    `say`); the first missing `asks:` field; or `Locale.pardon`. An
+    authoritative no is said in core's fixed words (`_carry_out`).
     """
     quoted: tuple[str, ...] = ()
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
@@ -1619,14 +1645,24 @@ class ConversationStep(Step):
             return words
 
         async def wait(ctx: RunContext[FlowCall[Any]]) -> str | Prompted:
-            """Nothing to read back, carry out or hand over yet. The application asks the caller for what it still needs."""
+            """Nothing to read back, carry out or hand over yet. The application tells the caller what is on offer, or asks for what it still needs."""
             call = ctx.deps
             if read_back is not None and isinstance(asked := read_back(call), Prompted):
                 return asked
             missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
             refused = _refused(ctx.messages, self.refusals)
+            turn, offer = call._offer_words
+            call._offer_words = (0, '')
             words = (
-                (self.refusals[refused[0]](refused[1]) if refused else '')
+                ' '.join(
+                    filter(
+                        None,
+                        [
+                            self.refusals[refused[0]](refused[1]) if refused else '',
+                            offer if turn == call.turn else '',
+                        ],
+                    )
+                )
                 or (self.asks[missing] if missing else '')
                 or call.locale.pardon
             )
@@ -1684,7 +1720,11 @@ class ConversationStep(Step):
                 """The options you may offer the caller now, by id, for what they asked. Only an offered id can be recorded. Say them in your own words."""
                 return await _offer(ctx.deps, self.choices)
 
-            tools.append(Tool(options))
+            async def offer(ctx: RunContext[FlowCall[Any]]) -> dict[str, Any]:
+                """The options on offer to the caller now, by id, for what they asked. Only an offered id can be recorded. Then call wait: the application tells the caller what is on offer."""
+                return await _offer(ctx.deps, self.choices, rendered=True)
+
+            tools.append(Tool(offer, name='options') if self.rendered else Tool(options))
         for operation in self.operations:
             outputs.append(
                 ToolOutput(

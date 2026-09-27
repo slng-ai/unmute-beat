@@ -853,7 +853,7 @@ def context(flow: StepFlow, step: Step, call: FlowCall[Any]) -> str:
             f'Outcome unknown: {intent.operation} {intent.args}. Do not say it was done, or that it was not: '
             'the application is checking, and will not send it again until it knows.'
         )
-    if standing := recaps(flow, call):
+    if standing := flow.recaps(call):
         lines.append(
             'Can recap on goodbye, by reference: '
             + '; '.join(f'{ref}: "{words}"' for ref, words in standing.items())
@@ -888,49 +888,6 @@ def _optional(info: FieldInfo) -> Any:
 
 RECAP_REF = 8
 """How many characters of an intent id a recap reference is: unique within a call, short enough to copy."""
-
-
-def recaps(flow: StepFlow, call: FlowCall[Any]) -> dict[str, str]:
-    """What a goodbye may recap, by reference: each receipt that still stands, in its operation's `recap` words.
-
-    Only `CallContext.effective` receipts: a lookup, a refusal, a booking
-    since moved or cancelled, and anything done for another caller are not
-    here, so no reference to them exists for a model to give.
-    """
-    known = {op.name: op for op in flow.operations()}
-    found = {}
-    for filed in call.effective():
-        template = getattr(known.get(filed.operation), 'recap', '')
-        if filed.intent and template:
-            found[filed.intent[:RECAP_REF]] = template.format_map(_Facts(filed.receipt))
-    return found
-
-
-def goodbye_words(flow: StepFlow, call: FlowCall[Any], recap: Sequence[str]) -> str:
-    """The goodbye core says: the recaps pointed at, then `unsettled` if anything is still unknown, then the line.
-
-    A reference that is not a standing receipt of this call is refused back
-    to the model; it cannot name one into existence, and it writes none of
-    the words. An entry that is exactly a standing recap's words (the live
-    text checkpoint's model sent those instead of the reference) counts as
-    that reference: the words were rendered by the application from the
-    receipt, so matching them names nothing new, and saves a retry.
-    """
-    standing = recaps(flow, call)
-    by_words = {' '.join(words.split()): ref for ref, words in standing.items()}
-    recap = [ref if ref in standing else by_words.get(' '.join(ref.split()), ref) for ref in recap]
-    if wrong := [ref for ref in recap if ref not in standing]:
-        raise ModelRetry(
-            f'Nothing was said: {", ".join(map(repr, wrong))} is not something done on this call that still '
-            'stands. Recap only references listed under "Can recap", or none.'
-        )
-    words = [standing[ref] for ref in dict.fromkeys(recap)]
-    if call.unresolved():
-        words.append(call.locale.unsettled)
-    elif call.last_asked_left_undone():
-        words.append(call.locale.left_undone)
-    words.append(call.locale.goodbye)
-    return ' '.join(w for w in words if w)
 
 
 def _args(operation: Operation, call: FlowCall[Any]) -> BaseModel:
@@ -1517,6 +1474,14 @@ class ConversationStep(Step):
     (session 4f). `decline` is a function tool, so under Pydantic AI's
     `graceful` end strategy it runs beside `wait` or `goodbye` in one response.
 
+    A step whose operations say their receipts also has `say_again`: when the
+    caller asks to hear what was done, code says the newest receipt that
+    still stands, in the application's words (`StepFlow.receipt_words`). It
+    only speaks: nothing is sent, no intent is made, no delivery is assumed,
+    and the automatic repeat of an unheard receipt keeps its own limit
+    (`RECEIPT_REPEATS`). Session 4e found a rendered step answering "say that
+    again?" with `pardon`.
+
     `requires` names state facts this step needs before it runs, and
     `satisfied_by` the step that establishes them; the graph interposes it
     and comes back (`core.graph.route`). A step that satisfies another returns
@@ -1718,7 +1683,7 @@ class ConversationStep(Step):
                     + ('If their words turned it down, call decline as well. ' if confirms else '')
                     + 'If they are leaving, call goodbye again.'
                 )
-            words = goodbye_words(flow, call, recap or [])
+            words = flow.goodbye_words(call, recap or [])
             call.note_departure()
             call.end_requested('caller')
             await call.speak_now(words, origin='goodbye')
@@ -1755,6 +1720,19 @@ class ConversationStep(Step):
             await call.speak_now(words, origin='ask')
             return words
 
+        async def say_again(ctx: RunContext[FlowCall[Any]]) -> str | Prompted:
+            """The caller asked to hear again what was done for them. The application says it again."""
+            call = ctx.deps
+            words = flow.receipt_words(call)
+            if not words:
+                if self.rendered:
+                    return await wait(ctx)
+                raise ModelRetry(
+                    'Nothing was said: nothing done on this call still stands. Answer the caller.'
+                )
+            await call.speak_now(words, origin='confirmation')
+            return words
+
         read_back = self._reads_back(flow)
         confirms = any(op.needs_approval for op in self.operations)
         actions = frozenset(op.name for op in self.operations) | (
@@ -1764,6 +1742,11 @@ class ConversationStep(Step):
             *([] if self.rendered else [str]),
             ToolOutput(goodbye, name='goodbye'),
             *([ToolOutput(wait, name='wait')] if self.rendered else []),
+            *(
+                [ToolOutput(say_again, name='say_again')]
+                if any(op.changes and getattr(op, 'say', '') for op in self.operations)
+                else []
+            ),
         ]
         tools: list[Any] = []
         if self.fields:
@@ -2121,6 +2104,63 @@ class StepFlow:
                 if operation is not None:
                     found.setdefault(operation.name, operation)
         return list(found.values())
+
+    def recaps(self, call: FlowCall[Any]) -> dict[str, str]:
+        """What a goodbye may recap, by reference: each receipt that still stands, in its operation's `recap` words.
+
+        Only `CallContext.effective` receipts: a lookup, a refusal, a booking
+        since moved or cancelled, and anything done for another caller are not
+        here, so no reference to them exists for a model to give.
+        """
+        known = {op.name: op for op in self.operations()}
+        found = {}
+        for filed in call.effective():
+            template = getattr(known.get(filed.operation), 'recap', '')
+            if filed.intent and template:
+                found[filed.intent[:RECAP_REF]] = template.format_map(_Facts(filed.receipt))
+        return found
+
+    def receipt_words(self, call: FlowCall[Any]) -> str:
+        """The newest receipt that still stands for the caller on the line, in its operation's own `say` words.
+
+        What `say_again` says when the caller asks to hear what was done.
+        Read from `CallContext.effective`, so a change since superseded, a
+        refusal, a lookup and anything done for someone else are never said
+        as the current outcome. '' when nothing stands.
+        """
+        known = {op.name: op for op in self.operations()}
+        standing = call.effective()
+        for filed in reversed(call.evidence):
+            template = getattr(known.get(filed.operation), 'say', '')
+            if template and any(filed is s for s in standing):
+                return template.format_map(_Facts(filed.receipt))
+        return ''
+
+    def goodbye_words(self, call: FlowCall[Any], recap: Sequence[str]) -> str:
+        """The goodbye core says: the recaps pointed at, then `unsettled` if anything is still unknown, then the line.
+
+        A reference that is not a standing receipt of this call is refused back
+        to the model; it cannot name one into existence, and it writes none of
+        the words. An entry that is exactly a standing recap's words (the live
+        text checkpoint's model sent those instead of the reference) counts as
+        that reference: the words were rendered by the application from the
+        receipt, so matching them names nothing new, and saves a retry.
+        """
+        standing = self.recaps(call)
+        by_words = {' '.join(words.split()): ref for ref, words in standing.items()}
+        recap = [ref if ref in standing else by_words.get(' '.join(ref.split()), ref) for ref in recap]
+        if wrong := [ref for ref in recap if ref not in standing]:
+            raise ModelRetry(
+                f'Nothing was said: {", ".join(map(repr, wrong))} is not something done on this call that still '
+                'stands. Recap only references listed under "Can recap", or none.'
+            )
+        words = [standing[ref] for ref in dict.fromkeys(recap)]
+        if call.unresolved():
+            words.append(call.locale.unsettled)
+        elif call.last_asked_left_undone():
+            words.append(call.locale.left_undone)
+        words.append(call.locale.goodbye)
+        return ' '.join(w for w in words if w)
 
     def sequence(self) -> list[Step]:
         """The steps walked in order, without the endings and without hand-built steps, which move by their exits."""

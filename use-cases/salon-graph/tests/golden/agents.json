@@ -10,6 +10,7 @@
       "hand_over",
       "move_appointment",
       "options",
+      "say_again",
       "wait"
     ]
   },
@@ -20,7 +21,8 @@
       "decline",
       "goodbye",
       "hand_over",
-      "record_complaint"
+      "record_complaint",
+      "say_again"
     ]
   },
   "concierge, nobody identified": {

@@ -24,6 +24,7 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
   and the desk's validators read the call's clock from core's validation context.
 * R15: what a rendered step says about an offer is exactly what can still be picked from it.
 * R16: only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
+* R17: a receipt said again on request, past the automatic limit, only while it stands, with nothing sent.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -658,6 +659,71 @@ async def a_no_is_not_left_undone(folder: Path):
     assert call.locale.left_undone in ' '.join(said), ('an unheard read-back left undone was not said', said)
 
 
+async def a_receipt_is_said_again_when_asked(folder: Path):
+    """R17 (session 4f): the caller asks to hear what was done, and code says it again: no write, no new intent.
+
+    The automatic repeat of a receipt the caller cut off stays at one
+    (`RECEIPT_REPEATS`). Past it, an explicit request still gets the receipt
+    (`say_again`), in the desk's words, from the receipt that still stands:
+    after a reopen superseded the resolve, the reopen is what is said. A
+    requested copy the caller cuts off is not marked heard and brings no
+    automatic repeat. Nothing is ever sent again.
+    """
+    receipt = 'Ticket T-101 resuelto. ¿Algo más?'
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    script.moves = [('call', 'resolve_ticket', {})]
+    reply = await core.text_turn(flow, call, 'Sí.')
+    call.acknowledge(reply.segments[-1].id, heard='')
+    script.moves = [('call', 'wait', {})]
+    reply = await core.text_turn(flow, call, '¿Perdona?')
+    assert [s.text for s in reply.segments] == [receipt], reply.segments
+    call.acknowledge(reply.segments[-1].id, heard='')
+    said = await turn(flow, call, script, '¿Qué?', ('call', 'wait', {}))
+    assert receipt not in said, ('the automatic repeat went past its limit', said)
+    intents = len(call.intents)
+
+    script.moves = [('call', 'say_again', {})]
+    reply = await core.text_turn(flow, call, '¿Me lo repites, por favor?')
+    assert [s.text for s in reply.segments] == [receipt], ('a requested repeat was not said', reply.segments)
+    call.acknowledge(reply.segments[-1].id, heard='')
+    assert reply.segments[-1].delivered != 'delivered', 'a requested copy the caller cut off counted as heard'
+    said = await turn(flow, call, script, 'Vale.', ('call', 'wait', {}))
+    assert receipt not in said, ('a cut requested copy brought an automatic repeat', said)
+    assert desk.sent() == 1 and len(call.intents) == intents, (
+        'saying a receipt again sent something',
+        desk.sent(),
+    )
+
+    [standing] = call.effective()
+    call.note_evidence(
+        'reopen_ticket',
+        standing.args,
+        {**standing.receipt, 'status': 'open'},
+        intent='e' * 32,
+        resource='T-101',
+        kind=standing.kind,
+        version=(standing.version or 0) + 1,
+    )
+    said = await turn(flow, call, script, '¿Cómo quedó?', ('call', 'say_again', {}))
+    assert said == ['Ticket T-101 reabierto. ¿Algo más?'], (
+        'a superseded receipt was said as the outcome',
+        said,
+    )
+
+    script, flow, call = opened(desk_in(folder / 'standing'), HERE / 'rendered_choices.yaml')
+    said = await turn(flow, call, script, '¿Me lo repites?', ('call', 'say_again', {}))
+    assert said and not any('resuelto' in s for s in said), (
+        'nothing stands, and something was said as done',
+        said,
+    )
+    assert said == ['No veo tickets en esa cuenta. ¿El problema es de facturación o de acceso?'], (
+        'with nothing standing, a rendered step says what wait would',
+        said,
+    )
+
+
 async def a_question_is_not_a_no(folder: Path):
     """R16 (session 4f): only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
 
@@ -891,6 +957,7 @@ async def main() -> None:
                 a_no_is_not_left_undone,
                 spoken_offers_go_with_their_options,
                 a_question_is_not_a_no,
+                a_receipt_is_said_again_when_asked,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -906,7 +973,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R16, no phone, date, appointment or slot')
+    print('tickets ok: R1-R17, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

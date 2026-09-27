@@ -1,6 +1,7 @@
 # Session 4d: correctness repairs after Stage C
 
-Branch `feat/session-4d-correctness`, stacked on PR #22 (`feat/session-4c-mac`, base `8b127b2`).
+[PR #25](https://github.com/slng-ai/slng-voice-harness/pull/25), branch `feat/session-4d-correctness`, stacked on
+PR #22 (`feat/session-4c-mac`, base `8b127b2`).
 Tested commit: `cd3a95f` (every gate below). The report commit on top of it changes no code. Live calls 4-7 ran
 on `3a4c3e4`, whose runtime `cd3a95f` keeps (only a dead function and a test file changed since). Calls 1-3 ran
 on older commits.
@@ -186,8 +187,7 @@ Start from the tested commit, in a new worktree:
 git worktree add ../slng_voice_harness-session-4e -b feat/session-4e-latency cd3a95f
 ```
 
-Stack its PR on `feat/session-4d-correctness` while this PR is open. PRs #21, #22 and this one are open and
-unmerged. Check `HEAD..main` first: other sessions commit to main.
+Stack its PR on `feat/session-4d-correctness` while #25 is open. PRs #21, #22 and #25 are open and unmerged. Check `HEAD..main` first: other sessions commit to main.
 
 ### Budget left
 

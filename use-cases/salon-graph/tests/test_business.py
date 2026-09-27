@@ -130,7 +130,7 @@ async def no_a_condition_or_a_change_writes_nothing():
     said = await turn(
         flow, call, script, 'Yes, if it is under 30 euros?', ('say', 'It is 28 euros. Shall I go ahead?')
     )
-    assert booked(diary) == [] and said == [call.locale.pardon], said
+    assert booked(diary) == [] and said[-1].startswith('2:00 PM on Friday the 2nd is free.'), said
     said = await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
     assert booked(diary) == [] and said[-1].startswith('Shall I book'), 'the price answer was not a read-back'
 
@@ -509,6 +509,21 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
     assert all('2026-10-10' in s for s in call._offered['slot']), call._offered
 
 
+async def a_wait_with_nothing_to_say_offers_what_there_is():
+    """Session 4e, live call s4e-latency-1: back from verify, booking's agent waited without looking at the times.
+
+    The caller heard "Sorry, could you say that again?" right after "Thanks,
+    I have you." A rendered step with choices and nothing else to say looks
+    its offer up by code and says the salon's words; no model is asked.
+    """
+    script, flow, call, diary = await at_booking(
+        service='haircut', booking_day='Friday', booking_time='14:00'
+    )
+    said = await turn(flow, call, script, "Yes, that's my number.", ('call', 'wait'))
+    assert said == ['2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'], said
+    assert slot(FRIDAY, '14:00') in call._offered['slot'] and len(script.requests) == 1, script.requests
+
+
 async def model_speech_never_claims_a_completed_action():
     """Claims: on a writing step, only a receipt says something is done, in any supported language.
 
@@ -713,6 +728,7 @@ async def main() -> None:
     await the_same_number_said_back_is_a_yes()
     await verify_says_every_word_in_code()
     await a_bare_weekday_beside_another_week_is_asked_about()
+    await a_wait_with_nothing_to_say_offers_what_there_is()
     await model_speech_never_claims_a_completed_action()
     await a_goodbye_never_claims_a_booking_nothing_made()
     await one_action_per_reply_and_one_budget_per_turn()

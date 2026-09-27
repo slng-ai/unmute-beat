@@ -1473,7 +1473,12 @@ class ConversationStep(Step):
     order: a read-back the reply calls for; the application's words for a
     refused value, then for the offer made this turn (a choice function's
     `say`); `Locale.withheld` after an authoritative no this turn
-    (`_carry_out`); the first missing `asks:` field; or `Locale.pardon`.
+    (`_carry_out`); the first missing `asks:` field; with none of these and
+    choices on the step, the offer as it stands, looked up by code; or
+    `Locale.pardon`. Session 4e, live call s4e-latency-1: booking's agent
+    waited on arrival from verify without looking at the times, and the
+    caller heard "Sorry, could you say that again?" after "Thanks, I have
+    you." What there is to offer is code's to look up; no model is asked.
     """
     quoted: tuple[str, ...] = ()
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
@@ -1666,8 +1671,13 @@ class ConversationStep(Step):
                 )
                 or (call.correction(call.locale.withheld) if call._refused_on == call.turn else '')
                 or (self.asks[missing] if missing else '')
-                or call.locale.pardon
             )
+            if not words and self.choices:
+                await _offer(call, self.choices, rendered=True)
+                turn, offer = call._offer_words
+                call._offer_words = (0, '')
+                words = offer if turn == call.turn else ''
+            words = words or call.locale.pardon
             await call.speak_now(words, origin='ask')
             return words
 

@@ -603,7 +603,9 @@ async def a_day_said_two_ways_is_one_day():
     )
     facts = call.state.facts
     assert (facts.booking_day, facts.slot, facts.appointment) == ('2026-10-02', '', held), facts
-    assert 'slot' not in call._offered, 'a real change of day kept the Thursday times'
+    assert not [s for s in call._offered.get('slot', {}) if s.startswith('2026-10-01')], (
+        'a real change of day kept the Thursday times'
+    )
 
 
 async def main() -> None:

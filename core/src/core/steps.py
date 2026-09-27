@@ -452,7 +452,7 @@ class Prompted:
             and (intent.readbacks >= READBACKS or intent.cut_readbacks >= CUT_READBACKS)
         ):
             logger.info(
-                '{} read back unconfirmed {} times, cut {} times: withdrawn',
+                '{} read back unheard {} times before any delivery was proven, {} times after: withdrawn',
                 self.about,
                 intent.readbacks,
                 intent.cut_readbacks,

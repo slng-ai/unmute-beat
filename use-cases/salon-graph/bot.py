@@ -118,10 +118,11 @@ DELIVERY = os.getenv('DELIVERY', 'marks')
 """`marks` (the default): a read-back is heard only on the transport's own playback report for it.
 
 On a phone line that is its returned Twilio mark. In the browser it is the
-client page's playout report (`core.processor.WebRTCPlayout`): open
-http://localhost:7860, which serves core's client (`serve_client`); the
-runner's prebuilt client at /client reports no playback, and a call from it
-is refused before the greeting (`reports_playback`). `simulated` lets
+page's playout report (`core.processor.WebRTCPlayout`): open
+http://localhost:7860, which sends you to core's page at /voice/ (Pipecat's
+own web client with core's playback reports, `serve_client`); the runner's
+prebuilt client at /client reports no playback, and a call from it is
+refused before the greeting (`reports_playback`). `simulated` lets
 estimated playback count as heard instead (`core.processor.playout(simulate=True)`):
 only for Coval's simulated carrier, which returns no marks (`coval_sim` sets
 it with `TWILIO_MARKS=absent`), or a developer who asks for it.
@@ -317,20 +318,27 @@ async def run_bot(
     playback(node, assistant_aggregator)
 
     async def greet() -> None:
-        """The fixed opening line: the harness records it as said, Pipecat adds it to the context."""
+        """The fixed opening line, or, on a line that can never confirm anything, the refusal and the end of the call.
+
+        The harness records the line as said, Pipecat adds it to the context.
+        A line with no playback evidence (a browser client that reports none,
+        a Twilio far end that returns no marks, outside simulation) could
+        never confirm a read-back: saying so first means nobody gives details
+        that could never be confirmed.
+        """
+        if flow.confirms and not await reports_playback(wiring, call):
+            logger.error(
+                f'this {call.transport} line reports no playback: open http://localhost:7860 in a browser'
+            )
+            call.note_ending('unconfirmable', 'the line reports no playback', observed=True)
+            await node.greet(call.locale.unconfirmable)
+            await node.hang_up()
+            return
         await node.greet(GREETING)
 
     @worker.rtvi.event_handler('on_client_ready')
     async def on_client_ready(rtvi):
-        """A browser client is ready. One that reports no playback could never confirm anything: say so and end."""
-        if flow.confirms and not await reports_playback(wiring):
-            logger.error(
-                'this browser client reports no playback: open http://localhost:7860 for one that does'
-            )
-            call.note_ending('unconfirmable', 'the client reports no playback', observed=True)
-            await node.greet(call.locale.unconfirmable)
-            await node.hang_up()
-            return
+        """A browser client is ready: it said, in its `client-ready`, whether it reports playback."""
         await greet()
 
     async def hang_up() -> None:

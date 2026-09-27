@@ -290,19 +290,23 @@ def playout(
     return [LocalPlayout(call)]
 
 
-async def reports_playback(wiring: list[FrameProcessor]) -> bool:
-    """Whether the far end reports playback: False only for a browser client that said, on joining, that it will not.
+async def reports_playback(wiring: list[FrameProcessor], call: CallContext) -> bool:
+    """Whether a read-back can ever be heard on this call: what a launcher asks before its greeting.
 
-    A launcher asks this when the client is ready, before its greeting: a
-    flow that needs confirmations (`StepFlow.confirms`) on a line that can
+    A flow that needs confirmations (`StepFlow.confirms`) on a line that can
     never deliver one would otherwise collect the caller's details and then
-    fail to confirm anything. Twilio and a local transport answer True here:
-    their evidence is judged segment by segment.
+    fail to confirm anything. True on a Twilio stream that returns marks
+    (its evidence is judged segment by segment), on a browser client that
+    said on joining that it reports playback (`WebRTCPlayout.capability`),
+    and on a call a launcher opened for simulated playout. False on every
+    other line: estimates approve nothing there.
     """
+    if call.simulated_playout:
+        return True
     for processor in wiring:
         if isinstance(processor, WebRTCPlayout):
             return await processor.capability()
-    return True
+    return call.transport == 'twilio'
 
 
 class LocalPlayout(FrameProcessor):
@@ -327,15 +331,22 @@ class LocalPlayout(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
-PLAYOUT = 'rtp-timestamp/1'
-"""What a browser client names in its RTVI `client-ready` (`about.platform_details.playout`) to say it reports playback."""
+PLAYOUT = 'rtp-timestamp/2'
+"""What a browser client names in its RTVI `client-ready` (`about.platform_details.playout`) to say it reports playback.
+
+Version 2: a report also means the page's audio output played the stream
+with no break from before the segment's `start` (`core/client/playout.js`).
+A version 1 client (a receiver position alone) is not accepted.
+"""
 PLAYOUT_MARGIN = 3840
-"""RTP ticks (48 kHz, so 80 ms, four Opus packets) past the last packet sent when a segment's mark passes the output.
+"""RTP ticks (48 kHz, so 80 ms, four Opus packets) between a segment's audio and the timestamps that bound it.
 
 When the mark passes, the packet holding the segment's last sample may still
 be two packets behind the last one sent; the browser's `rtpTimestamp` names
 the start of a packet, so a strictly later one is needed; and one more covers
-the Opus encoder's lookahead. Late, never early.
+the Opus encoder's lookahead. Late, never early. The segment's `start` is
+the same margin the other way: when its first 40 ms frame passes the output,
+some of it may already be sent. Early, never late.
 """
 CAPABILITY_SECONDS = 5.0
 """How long `WebRTCPlayout.capability` waits for the client's `client-ready`, which normally comes with it."""
@@ -351,8 +362,21 @@ class _Envelope(BaseModel):
     data: dict[str, Any] = {}
 
 
+def _at_or_after(a: int, b: int) -> bool:
+    """RTP timestamp `a` is at or after `b`: they wrap at 2**32, so the comparison is serial (RFC 1982)."""
+    return (a - b) % 2**32 < 2**31
+
+
+class _About(BaseModel):
+    """What a browser client says about itself in its `client-ready`, as far as `WebRTCPlayout` reads it."""
+
+    model_config = ConfigDict(extra='ignore')
+
+    platform_details: dict[str, Any] = {}
+
+
 class PlayoutReport(BaseModel):
-    """A browser client's report that its playout passed a mark's bound (`client.html`): validated where it arrives."""
+    """A browser client's report that it played a segment whole (`core/client/playout.js`): validated where it arrives."""
 
     model_config = ConfigDict(strict=True, frozen=True)
 
@@ -361,6 +385,8 @@ class PlayoutReport(BaseModel):
     """The RTP stream's SSRC the client played, as `getSynchronizationSources()` names it."""
     rtp: int = Field(ge=0, lt=2**32)
     """The RTP timestamp of the media it last delivered for playout."""
+    since: int = Field(ge=0, lt=2**32)
+    """The playout position when its audio output last started playing without a break: at or before `start`."""
 
 
 class WebRTCPlayout(FrameProcessor):
@@ -375,25 +401,40 @@ class WebRTCPlayout(FrameProcessor):
     RTP timestamp of the media last delivered for playout
     (https://w3c.github.io/webrtc-pc/#dom-rtcrtpcontributingsource-rtptimestamp).
 
-    When a segment's `SegmentMark` passes here (its audio all sent), this
-    reads the audio sender's last RTP timestamp and adds `PLAYOUT_MARGIN`:
-    the bound. It tells the client the bound in an RTVI `server-message`
-    (`t: playout-mark`). The client (`core/client.html`) reports back, in an
-    RTVI `client-message` (`t: playout`), once its played RTP timestamp for
-    that same source (SSRC) passes the bound. Only then does the mark count
+    When a segment's first audio frame passes here, this reads the audio
+    sender's last RTP timestamp, less `PLAYOUT_MARGIN`: the segment's
+    `start`. When its `SegmentMark` passes (its audio all sent), it reads it
+    again and adds `PLAYOUT_MARGIN`: the bound. It tells the client both in
+    an RTVI `server-message` (`t: playout-mark`). The client
+    (`core/client/playout.js`, on Pipecat's own PipecatClient) reports back,
+    in an RTVI `client-message` (`t: playout`), once its audio element has
+    played the stream with no break from before `start` and its played RTP
+    timestamp for that same source (SSRC) passed the bound. A receiver
+    position alone proves nothing: it may advance with no output attached.
+    The report says where that unbroken run began (`since`), and the server
+    checks it too. Only then does the mark count
     (`CallContext.note_mark_returned`), timed at the report's arrival: late,
-    never early. A report for another source, short of its bound, for a mark
-    this adapter never bounded, or for one a clear voided counts for nothing,
-    and so does a duplicate. A segment with no audio before its mark is never
-    bounded (`note_mark_sent(media=0)`). An interruption voids every pending mark
-    (`CallContext.note_cleared`): the audio queued behind it was dropped, and
-    a browser has no clear to confirm what it still played.
+    never early. A report for another source, short of its bound, from an
+    output that started after the segment began, or for a mark this adapter
+    never bounded counts for nothing, and so does a duplicate. A segment with
+    no audio before its mark is never bounded (`note_mark_sent(media=0)`).
 
-    What it proves: that segment's audio, on this call's stream, was decoded
-    and taken from the jitter buffer for playout. Not that a speaker played
-    it or that anyone listened: a muted tab still reports. A client that does
-    not say it reports (`PLAYOUT` in its `client-ready`) is known at once
-    (`capability`), so a launcher can say so before the caller gives anything.
+    An interruption drops only audio not yet sent: the segment it cuts never
+    gets its mark here, so it is never bounded, and its pending mark is voided
+    as cleared (`note_cleared(sent=False)`): it reads `cut`. A mark already
+    here is a segment whose audio was all sent, and a browser has no clear: it
+    plays what it holds. So that mark stays pending (unlike Twilio's, whose
+    clear empties what the carrier still holds, `TwilioMarks`). A report that
+    arrives after the caller began to speak is `early`, never an answer
+    (`answered_in_time`); one that never arrives is `unconfirmed`, never `cut`.
+
+    What it proves: the page's audio element was attached, playing, unmuted
+    and holding this call's stream from before the segment began until the
+    browser's playout passed its end. Not that a speaker played it or that
+    anyone listened: system volume and the output device are beyond the page.
+    A client that does not say it reports (`PLAYOUT` in its `client-ready`) is
+    known at once (`capability`), so a launcher can say so before the caller
+    gives anything.
 
     ponytail: the last RTP timestamp sent is read from aiortc's sender
     (`_RTCRtpSender__rtp_timestamp`, a private field of the pinned 1.15.0;
@@ -407,12 +448,14 @@ class WebRTCPlayout(FrameProcessor):
         super().__init__(**kwargs)
         self._call = call
         self._connection: Any = None
-        self._bounds: dict[str, tuple[int, int]] = {}
-        """Each mark sent to the client: its source (SSRC) and the RTP timestamp its playout must pass."""
+        self._bounds: dict[str, tuple[int, int, int]] = {}
+        """Each mark sent to the client: its source (SSRC), its `start`, and the RTP timestamp its playout must pass."""
         self._capable: bool | None = None
         self._decided = asyncio.Event()
         self._media = 0
         """Audio frames the output wrote since the last mark: none means that segment had no audio at all."""
+        self._start: int | None = None
+        """The segment's `start`, read when its first audio frame passed; None when there was no sender then."""
         transport.add_event_handler('on_client_connected', self._on_connected)
         transport.add_event_handler('on_app_message', self._on_app_message)
 
@@ -431,27 +474,32 @@ class WebRTCPlayout(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, OutputAudioRawFrame):
+            if not self._media:
+                sender = self._sender()
+                self._start = (sender[1] - PLAYOUT_MARGIN) % 2**32 if sender is not None else None
             self._media += 1
         elif isinstance(frame, InterruptionFrame):
-            self._call.note_cleared(time.perf_counter())
-            self._bounds.clear()
-            self._media = 0
+            self._call.note_cleared(time.perf_counter(), sent=False)
+            self._media, self._start = 0, None
         elif isinstance(frame, SegmentMark):
             media, self._media = self._media, 0
             self._call.note_mark_sent(frame.mark, time.perf_counter(), media=media)
-            if media and (sender := self._sender()) is not None:
-                self._bound(frame.mark, *sender)
+            if media and self._start is not None and (sender := self._sender()) is not None:
+                self._bound(frame.mark, *sender, self._start)
         await self.push_frame(frame, direction)
 
-    def _bound(self, mark: str, ssrc: int, sent: int) -> None:
-        """Keep this mark's bound and tell the client: it reports once its playout passes it."""
+    def _bound(self, mark: str, ssrc: int, sent: int, start: int) -> None:
+        """Keep this mark's bound and tell the client: it reports once it has played from `start` past the bound."""
         bound = (sent + PLAYOUT_MARGIN) % 2**32
-        self._bounds[mark] = (ssrc, bound)
+        self._bounds[mark] = (ssrc, start, bound)
         self._connection.send_app_message(
             {
                 'label': 'rtvi-ai',
                 'type': 'server-message',
-                'data': {'t': 'playout-mark', 'd': {'mark': mark, 'source': ssrc, 'rtp': bound}},
+                'data': {
+                    't': 'playout-mark',
+                    'd': {'mark': mark, 'source': ssrc, 'start': start, 'rtp': bound},
+                },
             }
         )
 
@@ -461,8 +509,11 @@ class WebRTCPlayout(FrameProcessor):
         except ValidationError:
             return
         if envelope.type == 'client-ready':
-            details = envelope.data.get('about', {}).get('platform_details') or {}
-            self._capable = isinstance(details, dict) and details.get('playout') == PLAYOUT
+            try:
+                about = _About.model_validate(envelope.data.get('about'))
+            except ValidationError:
+                about = _About()
+            self._capable = about.platform_details.get('playout') == PLAYOUT
             self._decided.set()
             logger.info('browser client {} playback reports', 'sends' if self._capable else 'sends no')
         elif envelope.type == 'client-message' and envelope.data.get('t') == 'playout':
@@ -476,7 +527,12 @@ class WebRTCPlayout(FrameProcessor):
             logger.info('playout report ignored, not a report: {}', report)
             return False
         bound = self._bounds.get(checked.mark)
-        if bound is None or checked.source != bound[0] or (checked.rtp - bound[1]) % 2**32 >= 2**31:
+        if (
+            bound is None
+            or checked.source != bound[0]
+            or not _at_or_after(bound[1], checked.since)
+            or not _at_or_after(checked.rtp, bound[2])
+        ):
             logger.info('playout report ignored: {}', report)
             return False
         del self._bounds[checked.mark]
@@ -495,22 +551,26 @@ class WebRTCPlayout(FrameProcessor):
 
 
 def serve_client(app: Any) -> None:
-    """Serve core's browser client (`client.html`, which reports playback) at `/` on the Pipecat runner's app.
+    """Serve core's browser page at `/voice/` on the Pipecat runner's app, and send `/` there.
 
-    Call it before the runner's `main()`: the runner's own `/` only redirects
-    to its prebuilt client, which reports no playback, and the first route
-    registered answers. The prebuilt client stays at `/client/`.
+    The page is Pipecat's own web client (`PipecatClient`, `SmallWebRTCTransport`,
+    built unmodified into `client/sdk.js` by `core/client`) with core's
+    playback reports added (`client/playout.js`). Call it before the runner's
+    `main()`: the runner's own `/` redirects to its prebuilt client, which
+    reports no playback, and the first route registered answers. The
+    prebuilt client stays at `/client/`. A launcher that never confirms
+    anything, or brings its own client, need not call it.
     """
     from importlib.resources import files
 
-    from starlette.responses import HTMLResponse
+    from starlette.responses import RedirectResponse
+    from starlette.staticfiles import StaticFiles
 
-    page = files('core').joinpath('client.html').read_text()
+    async def home() -> RedirectResponse:
+        return RedirectResponse('/voice/')
 
-    async def client() -> HTMLResponse:
-        return HTMLResponse(page)
-
-    app.get('/', include_in_schema=False)(client)
+    app.mount('/voice', StaticFiles(directory=str(files('core').joinpath('client')), html=True), name='voice')
+    app.get('/', include_in_schema=False)(home)
 
 
 def _last_user_text(context: LLMContext) -> str | None:

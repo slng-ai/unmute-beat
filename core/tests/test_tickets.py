@@ -27,6 +27,8 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R17: a receipt said again on request, past the automatic limit, only while it stands, with nothing sent.
 * R18: after a change, the resources it named are offered again by the desk's own function.
 * R19: a read-back with no playback evidence is withdrawn once, and stays withdrawn; the caller can go on.
+* R20: on a line that proved delivery, read-backs whose marks never came back are withdrawn as unconfirmed,
+  never recorded as cut.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -1114,6 +1116,56 @@ async def an_unconfirmed_read_back_is_withdrawn_once(folder: Path):
     assert desk.sent() == 1 and said == ['Ticket T-101 resuelto. ¿Algo más?'], (desk.sent(), said)
 
 
+def unacknowledged(call, reply, heard: int = 0) -> None:
+    """Every segment's mark sent after its audio; only the first `heard` came back, as the far end's own marks."""
+    now = time.perf_counter()
+    for index, sent in enumerate(reply.segments):
+        segment = next(s for s in call.all_spoken if s.id == sent.id)
+        segment.at = now - 2
+        name = call.mark_for(sent.id)
+        call.note_mark_sent(name, now - 1, media=320)
+        if index < heard:
+            call.note_mark_returned(name, now - 0.5)
+    call.note_onset(now)
+
+
+async def a_missing_acknowledgement_is_not_a_cut(folder: Path):
+    """R20: a line that proved one segment heard, then returned no mark for any read-back copy.
+
+    Nobody cut in. The copies count against the larger `CUT_READBACKS`
+    allowance, because the line has proven delivery, but the withdrawal's
+    audit says what the evidence says: `unconfirmed`, not talked over.
+    """
+    exporter = spans(InMemorySpanExporter())
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    call.note_transport('webrtc')
+    script.moves = list(TO_READ_BACK)
+    reply = await core.text_turn(flow, call, 'Resuelve el ticket T-101, cuenta ACC-1234.')
+    unacknowledged(call, reply, heard=len(reply.segments) - 1)
+    said: list[str] = []
+    for _ in range(8):
+        script.moves = [('call', 'resolve_ticket', {})]
+        reply = await core.text_turn(flow, call, 'Sí.')
+        unacknowledged(call, reply)
+        said = [s.text for s in reply.segments]
+        if said == [call.locale.gave_up]:
+            break
+    assert said == [call.locale.gave_up] and desk.sent() == 0, said
+    [intent] = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert intent.status == 'withdrawn' and intent.readbacks == 0 and intent.cut_readbacks, intent
+    [withdrawn] = [
+        json.loads(str(s.attributes['confirmation.audit']))
+        for s in exporter.get_finished_spans()
+        if s.name == 'confirmation'
+        and s.attributes
+        and '"withdrawn"' in str(s.attributes['confirmation.audit'])
+    ]
+    assert withdrawn['reason'] == 'unconfirmed' and withdrawn['transport'] == 'webrtc', withdrawn
+    assert {c['hearing'] for c in withdrawn['copies']} == {'unconfirmed'}, withdrawn
+    assert {c['heard_by'] for c in withdrawn['copies']} == {'none'}, withdrawn
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -1137,6 +1189,7 @@ async def main() -> None:
                 a_receipt_is_said_again_when_asked,
                 a_changed_resource_stays_on_offer,
                 an_unconfirmed_read_back_is_withdrawn_once,
+                a_missing_acknowledgement_is_not_a_cut,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -1152,7 +1205,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R19, no phone, date, appointment or slot')
+    print('tickets ok: R1-R20, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

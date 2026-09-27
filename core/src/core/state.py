@@ -651,6 +651,8 @@ class CallContext(BaseModel):
     _departed: bool = PrivateAttr(default=False)
     """The caller said goodbye: no new consequential intent starts after it. See `note_departure`."""
     _pending_marks: dict[str, str] = PrivateAttr(default_factory=dict)
+    _sent_marks: set[str] = PrivateAttr(default_factory=set)
+    """Pending marks the transport has sent: all their segment's audio went out before them."""
     """Marks sent and not yet returned, by name, with the segment each one follows. See `mark_for`."""
     _clears: int = PrivateAttr(default=0)
     """How many clears this call sent: part of every mark's name, so a mark from before one is told apart."""
@@ -882,6 +884,8 @@ class CallContext(BaseModel):
         back at once and prove nothing: the segment is never delivered.
         """
         self._log_playback('sent', name, at)
+        if name in self._pending_marks:
+            self._sent_marks.add(name)
         if media == 0 and (segment := self._marked(name)) is not None:
             segment.cleared, segment.lost = True, 'silent'
             self._log_playback('silent', name, at, segment.proposal)
@@ -907,6 +911,7 @@ class CallContext(BaseModel):
         Unrelated, duplicate and stale names change nothing.
         """
         segment_id = self._pending_marks.pop(name, None)
+        self._sent_marks.discard(name)
         segment = next((s for s in self.all_spoken if s.id == segment_id), None) if segment_id else None
         if segment is None or segment.interrupted or segment.cleared:
             self._log_playback('ignored', name, at)
@@ -939,18 +944,26 @@ class CallContext(BaseModel):
         """Whether estimated playback counts as heard on this call (`simulate_playout`)."""
         return self._simulated_playout
 
-    def note_cleared(self, at: float) -> None:
+    def note_cleared(self, at: float, *, sent: bool = True) -> None:
         """The transport is about to clear the audio it holds: every mark still pending may now come back for nothing.
 
         Recorded before the clear goes out, so a mark returned in answer to
         it can never pass for playback. A segment whose mark already came back
         keeps it: clearing later audio does not unplay earlier audio.
+
+        `sent=False` is for a far end that keeps all it was sent (a browser has
+        no clear): only the marks still queued behind the dropped audio are
+        voided. A segment whose mark was already sent had all its audio sent,
+        and stays pending for the far end's own report.
         """
-        for name, segment_id in self._pending_marks.items():
+        for name, segment_id in list(self._pending_marks.items()):
+            if not sent and name in self._sent_marks:
+                continue
             if (segment := next((s for s in self.all_spoken if s.id == segment_id), None)) is not None:
                 segment.cleared, segment.lost = True, 'cleared'
                 self._log_playback('cleared', name, at, segment.proposal)
-        self._pending_marks.clear()
+            del self._pending_marks[name]
+            self._sent_marks.discard(name)
         self._clears += 1
 
     def note_onset(self, at: float) -> None:
@@ -1349,14 +1362,17 @@ class CallContext(BaseModel):
         of the ones that never got that far, and why: the hearing of its last
         copy (`hearing`), or what else stood in the way.
         """
-        serial = self._proposals.serial if self._proposals.asked is not None else self._last_asked_serial
         record = {'event': event, 'about': about, 'reason': reason, 'call': self._id, 'turn': self._turn}
-        record |= self.delivery_record(serial)
+        record |= self.delivery_record(self._confirmation_serial())
         with _tracer.start_as_current_span('confirmation') as span:
             span.set_attribute('confirmation.audit', json.dumps(record, default=str))
         logger.info(
             'confirmation {} for {}: {} on {}', event, about, reason, self.transport or 'no transport'
         )
+
+    def _confirmation_serial(self) -> int:
+        """The serial of the read-back a confirmation record is about: the one asked, else the last one asked."""
+        return self._proposals.serial if self._proposals.asked is not None else self._last_asked_serial
 
     def withdraw(self, intent_id: str) -> None:
         """Take back a prepared intent whose read-back could not be confirmed: terminal, never dispatched, nothing pending.
@@ -1366,11 +1382,19 @@ class CallContext(BaseModel):
         find it again (`intent_for`) and never get a fresh read-back
         allowance. Nothing is owed: it never reached a service. A goodbye
         still says `left_undone` for it (`last_asked_left_undone`).
+
+        The audit's reason is the hearing of the read-back's last copy
+        (`hearing`): `unconfirmed` when evidence is missing, `cut` only when
+        the caller did cut in. Which retry count ran out says neither: a line
+        that proved one segment heard counts every later unacknowledged copy
+        as talked over.
         """
         intent = self._intents.get(intent_id)
         if intent is None or intent.status != 'prepared':
             return
-        reason = 'unconfirmed' if intent.readbacks else 'talked_over'
+        serial = self._confirmation_serial()
+        copies = [s for s in self.all_spoken if serial and s.proposal == serial]
+        reason = self.hearing(copies[-1] if copies else None)
         self.note_confirmation('withdrawn', intent.operation, reason)
         self.set_intent(intent_id, status='withdrawn')
         if getattr(self._proposals.asked, 'intent', '') == intent_id:

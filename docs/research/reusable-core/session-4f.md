@@ -1,6 +1,6 @@
 # Session 4f: readiness gaps closed before Faro
 
-Branch `feat/session-4f-readiness`, stacked on PR #26 (`feat/session-4e-lifecycle`, head `420de86`, still open),
+[PR #27](https://github.com/slng-ai/slng-voice-harness/pull/27), branch `feat/session-4f-readiness`, stacked on PR #26 (`feat/session-4e-lifecycle`, head `420de86`, still open),
 which is stacked on PR #25. Tested runtime: `b36ab10`.
 
 ## Result

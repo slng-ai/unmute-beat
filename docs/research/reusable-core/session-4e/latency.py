@@ -27,13 +27,14 @@ breakdown:` lines), not here.
 import json
 import sys
 from datetime import datetime
+from pathlib import Path
 
 
 def when(value: str | None) -> float | None:
     return datetime.fromisoformat(value).timestamp() if value else None
 
 
-rows = json.load(open(sys.argv[1]))
+rows = json.loads(Path(sys.argv[1]).read_text())
 for o in rows:
     o['t0'], o['t1'] = when(o['start']), when(o['end'])
 turns = sorted((o for o in rows if 'model_requests' in o['attrs']), key=lambda o: o['t0'])

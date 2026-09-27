@@ -1574,13 +1574,6 @@ class ConversationStep(Step):
                     "Nothing was said: a read-back is waiting for the caller's answer. If their words agree to "
                     'it, carry it out now. If they are leaving, call goodbye again.'
                 )
-            asked_for = sorted(call._changing & set(self.fields))
-            if asked_for and call._goodbye_checked != call.turn:
-                call._goodbye_checked = call.turn
-                raise ModelRetry(
-                    f'Nothing was said: this turn the caller asked for something ({", ".join(asked_for)} '
-                    'recorded). Answer that. If their words say they are leaving, call goodbye again.'
-                )
             words = goodbye_words(flow, call, recap or [])
             call.note_departure()
             call.end_requested('caller')

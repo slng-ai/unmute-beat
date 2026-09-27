@@ -17,6 +17,7 @@ and on the repair: the before-and-after evidence of session 4b stage B.
 """
 
 import asyncio
+import contextlib
 import os
 import time
 from collections.abc import Callable
@@ -358,7 +359,135 @@ def a_prose_step_can_still_claim() -> bool:
         return asyncio.run(check(Path(tmp)))
 
 
+def a_restated_value_books() -> bool:
+    """Session 4d, defect 1: the caller refuses a heard booking read-back, and the model records the slot again.
+
+    Recording a value is not agreeing to a write. The parent compared the
+    recorded slot with the pending read-back, called the equal value a yes,
+    and booked, saying "Yes, that's the same as I read back."
+    """
+    from tests.test_nodes import FILL, Script, opened, turn
+
+    async def check() -> bool:
+        script = Script()
+        flow, call = opened('reads_back.yaml', script)
+        await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+        said = await turn(
+            flow,
+            call,
+            script,
+            'No, do not book ten. I am only checking if it is free.',
+            ('call', 'collect', {'values': {'slot': '1000'}}),
+            ('say', 'Ten is free. Nothing is booked.'),
+        )
+        return bool(call.services.bookings) or call.locale.restated in said
+
+    return asyncio.run(check())
+
+
+class _Versioned(BaseModel):
+    value: str
+    status: str
+    rev: int = 0
+
+
+def a_cancel_during_the_version_check_sends_again() -> bool:
+    """Session 4d, defect 2: a lost answer is reconciled as a success; the current-version check is cancelled.
+
+    The parent settled the intent as succeeded and forgot it was unknown
+    before awaiting `current_version`, so a cancellation there left no
+    evidence, no unknown record and no repair: the next run sent a new write.
+    """
+    from core import OutcomeUnknownError
+    from core.steps import FlowCall, FlowState, FunctionOperation
+
+    sent: list[str] = []
+
+    def lost(services, args):
+        sent.append(args.value)
+        raise OutcomeUnknownError('the answer was lost after the commit')
+
+    class Services:
+        async def current_version(self, kind, resource):
+            await asyncio.Event().wait()
+
+    class Probe(FunctionOperation):
+        name = 'probe'
+        args_type = _Args
+        receipt_type = _Versioned
+        needs_approval = False
+        subject, resource, version = 'value', 'thing', 'rev'
+
+    Probe.succeeds = {'status': 'done'}
+
+    Probe.function = staticmethod(lost)
+    Probe.reconcile = staticmethod(lambda services, args: {'value': args.value, 'status': 'done', 'rev': 1})
+
+    async def check() -> bool:
+        operation = Probe()
+        call = FlowCall(state=FlowState(agent='desk', facts=_Args()))
+        call._services = Services()
+        await _runs(operation, call)
+        settle = call.settlement()
+        assert settle is not None
+        task = asyncio.create_task(settle())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        await _runs(operation, call)
+        return len(sent) > 1
+
+    return asyncio.run(check())
+
+
+def a_lookup_backs_a_prose_claim() -> bool:
+    """Session 4d, defect 6: a lookup's receipt counted as "wrote this turn", so a prose claim went uncorrected.
+
+    The clinic's front desk looks the patient up (a read), comes back, and its
+    model says a booking was made. Nothing was booked, so the caller must
+    hear the correction after it.
+    """
+    import core
+    from tests.clinic_flow.clinic import Backend, ClinicState
+    from tests.test_nodes import Script
+
+    claim = 'Your appointment is booked for Tuesday at ten.'
+    manifest = HERE / '_defect_lookup_claim.yaml'
+    manifest.write_text(
+        (HERE / 'code_node.yaml')
+        .read_text()
+        .replace('agents:\n', "locale:\n  base: english\n  claims: ['\\bis booked\\b']\nagents:\n")
+    )
+
+    async def check() -> bool:
+        script = Script()
+        flow = core.load(manifest).compile(model=script.model)
+        call = flow.open(ClinicState(), services=Backend())
+        script.call = call
+        script.moves = [
+            ('call', 'collect', {'values': {'patient': 'P-1234'}}),
+            ('call', 'hand_over', {'to': 'look_up', 'because': 'find their booking'}),
+            ('say', claim),
+        ]
+        reply = await core.text_turn(flow, call, 'P-1234, have I got a booking?')
+        said = [s.text for s in reply.segments]
+        assert [e.operation for e in call.evidence] == ['look_up'], (call.evidence, said)
+        return claim in said and call.locale.unbacked not in said
+
+    try:
+        return asyncio.run(check())
+    finally:
+        manifest.unlink()
+
+
 DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
+    'a restated value books without a yes': (a_restated_value_books, '4d defect 1'),
+    'a cancel during the version check sends the write again': (
+        a_cancel_during_the_version_check_sends_again,
+        '4d defect 2',
+    ),
+    'a lookup receipt lets a prose claim through uncorrected': (a_lookup_backs_a_prose_claim, '4d defect 6'),
     'a prose step can still say an unbacked claim (known limit)': (
         a_prose_step_can_still_claim,
         'Stage D decision',

@@ -1855,7 +1855,19 @@ class CallContext(BaseModel):
             if not updates:
                 return
         candidate = self.state.model_dump() | deepcopy(updates)
-        self.state = type(self.state).model_validate(candidate, extra='forbid')
+        self.state = type(self.state).model_validate(
+            candidate, extra='forbid', context=self.validation_context()
+        )
+
+    def validation_context(self) -> dict[str, Any]:
+        """What an application's validators may read (`ValidationInfo.context`) whenever core validates its state.
+
+        The call's own clock, read once per call (`today`), so a validator can
+        turn "Thursday" into one date, the same date all call long. Plain
+        values, no services and nothing that changes under a validator: a
+        validator does no I/O and needs no core import to read it.
+        """
+        return {'today': self.today.date, 'now': self.today.at}
 
     async def say(self, text: str, origin: str = 'entry', tool_call_id: str = '') -> None:
         """Speak one fixed line now, without waiting for the model.

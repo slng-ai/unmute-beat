@@ -31,7 +31,7 @@ import inspect
 import json
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -137,11 +137,25 @@ class FlowCall[S: BaseModel](CallContext):
         facts = self.state.facts
         if unknown := set(fields) - set(type(facts).model_fields):
             raise ValueError(f'no such field on {type(facts).__name__}: {", ".join(sorted(unknown))}')
-        candidate = type(facts).model_validate(facts.model_dump() | deepcopy(fields), extra='forbid')
-        self.commit(facts=candidate)
+        self.commit(facts=self.validated(facts.model_dump() | deepcopy(fields)))
         if self.state.facts is not facts:
             self._version += 1
             self.take_owed()
+
+    def validation_context(self) -> dict[str, Any]:
+        """The call's clock, and the application state as it stands before this change (`before`).
+
+        `before` is the committed state, which is replaced whole and never
+        changed in place: a validator can read what the caller was talking
+        about (a day under discussion) without any service.
+        """
+        return super().validation_context() | {'before': self.state.facts}
+
+    def validated(self, values: Mapping[str, Any]) -> Any:
+        """The application's model built from these values, validated with this call's context, or `ValidationError`."""
+        return type(self.state.facts).model_validate(
+            values, extra='forbid', context=self.validation_context()
+        )
 
     def take_owed(self) -> None:
         """Once the caller is known, take back what earlier calls still owe them, to settle before anything new.
@@ -244,7 +258,7 @@ class FlowCall[S: BaseModel](CallContext):
 
         return settle
 
-    def collect(self, **fields: Any) -> None:
+    def collect(self, offered: Collection[str] = (), /, **fields: Any) -> list[str]:
         """What the caller said, as a model heard it: only fields a collect step asks for.
 
         Anything else (verification, approval, a receipt) is refused before it
@@ -257,34 +271,66 @@ class FlowCall[S: BaseModel](CallContext):
         changed field, with the pick made from it. "Actually, make it
         Saturday" leaves no Friday slot behind for an old yes to book.
 
-        What an offer rests on is its manifest's `after:` list; without one,
-        every field but the choices and the identity. So a new day takes the
+        A change is a change of meaning: the values are validated first, with
+        the call's context, and compared as the application's model holds
+        them. "Thursday" recorded again as the date it already stands for is
+        no change, and takes nothing away (session 4d, live call 5).
+
+        What an offer rests on is its manifest's `after:` list, which may name
+        another choice; without one, every field but the choices and the
+        identity. An offer taken away counts as a change, so what rested on
+        it goes too: a new ticket takes the category offered for it, and that
+        takes the resolution offered for the category. A new day takes the
         times away and keeps the appointment being moved, which rests on no
-        field (session 4d, defect 4: the day change cleared the appointment,
-        trace ce40c124). A known identity changed to another takes every
-        offer and pick away: they were made to someone else. Naming the
-        caller for the first time is not a change of caller.
+        field (session 4d, defect 4). A known identity changed to another
+        takes every offer and pick away: they were made to someone else.
+        Naming the caller for the first time is not a change of caller.
+
+        A pick counts only against an offer made for the state this update
+        ends in. For the choice fields named in `offered`, a new pick must be
+        on offer now, and a pick whose offer this same update takes away came
+        from an offer that no longer stands (session 4e: "access, with a
+        refund", said about the billing resolutions). A value the state
+        already holds is not a new pick. Refused picks are left out and their
+        names returned; the rest is recorded. Nothing changes when the
+        candidate is not a valid state (`ValidationError`).
         """
         if refused := set(fields) - self._collectible:
             raise ValueError(f'not collected from the caller: {", ".join(sorted(refused))}')
         facts = self.state.facts
         default = lambda name: type(facts).model_fields[name].get_default(call_default_factory=True)  # noqa: E731
-        changed = {name for name, value in fields.items() if getattr(facts, name) != value}
-        request = changed - self._choices - {self._identity_field}
+        unoffered = _not_on_offer(self, offered, fields)
+        kept = {name: value for name, value in fields.items() if name not in unoffered}
+        candidate = self.validated(facts.model_dump() | deepcopy(kept))
+        changed = {name for name in kept if getattr(facts, name) != getattr(candidate, name)}
         someone_else = bool(self.identity()) and self._identity_field in changed
-        stale = {
-            name for name in self._choices if someone_else or request & self._choice_after.get(name, request)
-        }
-        picks = {name: default(name) for name in stale - set(fields)}
+        plain = changed - self._choices - {self._identity_field}
+        stale: set[str] = set()
+        while True:
+            moved = changed | stale
+            found = {
+                name
+                for name in self._choices
+                if someone_else
+                or ((moved - {name}) & self._choice_after[name] if name in self._choice_after else plain)
+            }
+            if found <= stale:
+                break
+            stale |= found
+        late = [name for name in offered if name in stale and kept.get(name, default(name)) != default(name)]
+        unoffered += late
+        kept = {name: value for name, value in kept.items() if name not in late}
+        picks = {name: default(name) for name in stale if name not in kept}
         changed |= {name for name, value in picks.items() if getattr(facts, name) != value}
         resets = {
             name: default(name)
             for name, sources in self._derived.items()
-            if sources & changed and name not in fields
+            if sources & changed and name not in kept
         }
-        self.update(**fields, **picks, **resets)
+        self.update(**kept, **picks, **resets)
         for name in stale:
             self._offered.pop(name, None)
+        return unoffered
 
 
 @dataclass(frozen=True)
@@ -1240,19 +1286,22 @@ def _not_ready(operation: Operation, call: FlowCall[Any], error: ValidationError
     return f'Not yet: {"; ".join(said)}.'
 
 
-def _not_on_offer(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> list[str]:
+def _not_on_offer(call: FlowCall[Any], choices: Collection[str], values: Mapping[str, Any]) -> list[str]:
     """The choice fields among `values` whose value is not on offer to this caller now.
 
     A value the state already holds is not a new pick: it was recorded from an
     offer, and still stands, so recording it again changes nothing (a move
     spends the offer of the booking it moved, and the cancel that follows
     names the same booking). The service checks ownership and revision when
-    it acts on it, whatever was offered (session 4d, trace ce40c124).
+    it acts on it, whatever was offered (session 4d, trace ce40c124). A
+    field's default is no pick either: it takes a pick back.
     """
+    fields = type(call.state.facts).model_fields
     return [
         name
         for name, value in values.items()
         if name in choices
+        and value != fields[name].get_default(call_default_factory=True)
         and getattr(call.state.facts, name, None) != value
         and str(value) not in call._offered.get(name, {})
     ]
@@ -1601,20 +1650,19 @@ class ConversationStep(Step):
                 """Record exactly what the caller has just said for any of these fields. Never guess a value."""
                 asked = values.model_dump(exclude_none=True)
                 call = ctx.deps
-                unoffered = _not_on_offer(call, self.choices, asked)
-                proposed = {name: value for name, value in asked.items() if name not in unoffered}
-                before = {name: getattr(call.state.facts, name, None) for name in proposed}
+                before = {name: getattr(call.state.facts, name, None) for name in asked}
                 for name in self.quoted:
-                    if proposed.get(name) and not said_by_caller(call, str(proposed[name])):
+                    if asked.get(name) and not said_by_caller(call, str(asked[name])):
                         raise ModelRetry(
                             f"Nothing was recorded: {name} must be the caller's own words, copied from what "
                             'they said. Punctuation and case may differ; nothing else may.'
                         )
                 try:
-                    flow.record(call, proposed)
+                    unoffered = flow.record(call, asked, self.choices)
                 except ValidationError as error:
                     problems = '; '.join(e['msg'] for e in error.errors())
                     raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
+                proposed = {name: value for name, value in asked.items() if name not in unoffered}
                 call._kept.update(
                     name for name in proposed if getattr(call.state.facts, name, None) == before[name]
                 )
@@ -1897,7 +1945,8 @@ class StepFlow:
 
         The state is copied in and validated as the flow's model, so the
         object the caller passed can change afterwards without reaching the
-        call. Services are kept as given: whether a client is shared between
+        call; once the call has its clock, it is validated again with the
+        call's context (`validation_context`). Services are kept as given: whether a client is shared between
         calls or made per call is the application's decision.
 
         `intents` are unresolved intents an earlier process persisted (through
@@ -1917,6 +1966,7 @@ class StepFlow:
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale
+        call.state = call.state.model_copy(update={'facts': call.validated(facts.model_dump())})
         call._reconcile_with = {op.name: (op, op.args_type) for op in self.operations()}
         if intents:
             call.restore(list(intents), call._reconcile_with)
@@ -2002,17 +2052,23 @@ class StepFlow:
         resets |= self._resting_on(list(names), set(names))
         call.collect(**resets)
 
-    def record(self, call: FlowCall[Any], updates: Mapping[str, Any]) -> None:
+    def record(
+        self, call: FlowCall[Any], updates: Mapping[str, Any], offered: Collection[str] = ()
+    ) -> list[str]:
         """Commit the caller's values as one state candidate, resetting whatever rested on a value that changed.
 
-        Raises `ValidationError` and changes nothing when the candidate is not
-        a valid state.
+        Returns the picks among `offered` that were not on offer for the state
+        this update ends in, left out (`FlowCall.collect`). Raises
+        `ValidationError` and changes nothing when the candidate is not a
+        valid state.
         """
         facts = call.state.facts
-        candidate = type(facts).model_validate(facts.model_dump() | deepcopy(dict(updates)), extra='forbid')
+        unoffered = _not_on_offer(call, offered, updates)
+        updates = {name: value for name, value in updates.items() if name not in unoffered}
+        candidate = call.validated(facts.model_dump() | deepcopy(updates))
         changed = [
             name
             for name in updates
             if present(getattr(facts, name)) and getattr(facts, name) != getattr(candidate, name)
         ]
-        call.collect(**dict(updates), **self._resting_on(changed, set(updates)))
+        return unoffered + call.collect(offered, **updates, **self._resting_on(changed, set(updates)))

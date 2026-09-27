@@ -28,15 +28,24 @@ import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, ValidationInfo
 
 from core import Intent
 
 type AccountId = Annotated[str, StringConstraints(pattern=r'^ACC-\d{4}$')]
 type TicketId = Annotated[str, StringConstraints(pattern=r'^T-\d{3}$')]
+
+
+def _on_the_calls_clock(value: str, info: ValidationInfo) -> str:
+    """A relative day as the date it means today, from the call's validation context; a date is kept as it is."""
+    days = {'hoy': 0, 'mañana': 1}.get(value.strip().lower())
+    if days is None or not info.context or 'today' not in info.context:
+        return value
+    return (info.context['today'] + timedelta(days=days)).isoformat()
 
 
 class DeskState(BaseModel):
@@ -52,6 +61,8 @@ class DeskState(BaseModel):
     revision: int = 0
     """The ticket's revision as the backend last said it. Only a receipt sets it."""
     ticket_status: str = ''
+    follow_up: Annotated[str, AfterValidator(_on_the_calls_clock)] = ''
+    """When to call the customer back: "hoy" or "mañana" is kept as the date it means on the call's clock."""
 
 
 class TicketRef(BaseModel):
@@ -263,6 +274,11 @@ RESOLUTIONS = {
     'access': {'reset': 'un cambio de contraseña', 'unlock': 'la cuenta desbloqueada'},
 }
 """How a problem of each category can be closed: what `choices.yaml` offers, by the category the caller gave."""
+
+
+def categories(desk: Desk, state: DeskState) -> dict[str, str]:
+    """What the picked ticket's problem can be about (`chained.yaml`): offered only once a ticket is picked."""
+    return {'billing': 'facturación', 'access': 'acceso'} if state.ticket_id else {}
 
 
 def resolutions(desk: Desk, state: DeskState) -> dict[str, str]:

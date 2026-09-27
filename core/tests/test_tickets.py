@@ -20,6 +20,8 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R8: every field and operation renamed, and nothing in core changed;
 * R9: a receipt cut off is said again only while it stands, and never re-sent;
 * R10: its write audit is the salon's envelope, and names the desk's own effect.
+* R12: a pick counts only against an offer made for the state an update ends in,
+  and the desk's validators read the call's clock from core's validation context.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -31,12 +33,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from pydantic import ValidationError
 
 import core
 from tests.test_nodes import Script
@@ -421,6 +425,114 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
             broken.unlink()
 
 
+async def picks_follow_the_state_they_end_in(folder: Path):
+    """R12 (session 4e): a pick counts only against an offer made for the state the update ends in.
+
+    The ticket, the category offered for it and the resolution offered for
+    that category are all choices (`chained.yaml`). A: a new category takes
+    the old resolution and its offer. B: a new category and a resolution in
+    the same update: the resolution was offered for the old category, so it
+    is refused, whatever else changes with it, and with a plain category
+    (`choices.yaml`) too. A new ticket takes the category, and with it the
+    resolution. A field nothing rests on keeps every pick, and an update
+    that fails validation changes nothing.
+    """
+    desk = desk_in(folder)
+    desk.seed('ACC-1234', 'T-102')
+    script, flow, call = opened(desk, HERE / 'chained.yaml')
+
+    async def pick(words: str, values: dict, *more) -> list[str]:
+        return await turn(flow, call, script, words, ('call', 'collect', {'values': values}), *more)
+
+    await pick(
+        'Cuenta ACC-1234.', {'account_id': 'ACC-1234'}, ('call', 'options', {}), ('say', '¿Qué ticket?')
+    )
+    await pick(
+        'El T-101.', {'ticket_id': 'T-101'}, ('call', 'options', {}), ('say', '¿Facturación o acceso?')
+    )
+    await pick('Facturación.', {'category': 'billing'}, ('call', 'options', {}), ('say', '¿Qué solución?'))
+    await pick('Un reembolso.', {'resolution': 'refund'}, ('say', 'Vale.'))
+    facts = call.state.facts
+    assert (facts.category, facts.resolution) == ('billing', 'refund'), facts
+
+    await pick('No, es de acceso.', {'category': 'access'}, ('say', 'Entendido.'))
+    facts = call.state.facts
+    assert facts.category == 'access', facts
+    assert facts.resolution == '' and 'resolution' not in call._offered, (
+        'A: a resolution offered for billing outlived its category, itself a choice',
+        facts,
+        call._offered,
+    )
+
+    await pick('Facturación otra vez.', {'category': 'billing'}, ('call', 'options', {}), ('say', '¿Cuál?'))
+    assert 'refund' in call._offered['resolution'], call._offered
+    await pick(
+        'Acceso, con un reembolso.',
+        {'category': 'access', 'resolution': 'refund'},
+        ('say', 'Vale.'),
+    )
+    facts = call.state.facts
+    assert facts.category == 'access', ('the category was lost beside a refused resolution', facts)
+    assert facts.resolution == '', ('B: a resolution offered for billing came in with access', facts)
+
+    await pick('Facturación.', {'category': 'billing'}, ('call', 'options', {}), ('say', '¿Cuál?'))
+    await pick('Un abono.', {'resolution': 'credit'}, ('say', 'Vale.'))
+    await pick('Es sobre la impresora.', {'account_id': 'ACC-1234'}, ('say', 'Vale.'))
+    facts = call.state.facts
+    assert (facts.ticket_id, facts.category, facts.resolution) == ('T-101', 'billing', 'credit'), (
+        'a value that did not change took picks away',
+        facts,
+    )
+    offered = {name: dict(options) for name, options in call._offered.items()}
+    try:
+        call.collect(('category', 'resolution'), ticket_id='T-1', category='access')
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError('an invalid candidate was accepted')
+    assert call.state.facts == facts and call._offered == offered, (
+        'an update that failed validation changed something',
+        call.state.facts,
+        call._offered,
+    )
+
+    await pick('Perdona, es el T-102.', {'ticket_id': 'T-102'}, ('say', 'Vale.'))
+    facts = call.state.facts
+    assert (facts.ticket_id, facts.category, facts.resolution) == ('T-102', '', ''), (
+        'a pick resting on a pick that went outlived it',
+        facts,
+    )
+    assert set(call._offered) == {'ticket_id'}, call._offered
+
+    desk = desk_in(folder / 'standing')
+    script, flow, call = opened(desk, HERE / 'choices.yaml')
+    await pick(
+        'Cuenta ACC-1234, facturación.',
+        {'account_id': 'ACC-1234', 'category': 'billing'},
+        ('call', 'options', {}),
+        ('say', '¿Qué solución?'),
+    )
+    await pick(
+        'Acceso, con un reembolso.',
+        {'category': 'access', 'resolution': 'refund'},
+        ('say', 'Vale.'),
+    )
+    facts = call.state.facts
+    assert (facts.category, facts.resolution) == ('access', ''), (
+        'B, plain category: a resolution offered for billing came in with access',
+        facts,
+    )
+
+    clock = lambda: datetime(2026, 9, 30, 23, 50)  # noqa: E731
+    flow = core.load(HERE / 'agent.yaml').compile(model=Script().model)
+    call = flow.open(DeskState(follow_up='mañana'), services=desk, clock=clock)
+    assert call.state.facts.follow_up == '2026-10-01', ('open validated without the call clock', call.state)
+    call.update(follow_up='hoy')
+    assert call.state.facts.follow_up == '2026-09-30', call.state.facts
+    call.commit(agent=call.state.agent)
+    assert call.state.facts.follow_up == '2026-09-30', ('a commit read the date again', call.state.facts)
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -436,6 +548,7 @@ async def main() -> None:
                 a_cut_receipt_is_said_again_only_while_it_stands,
                 the_audit_names_the_backend_effect,
                 picks_rest_only_on_what_their_offer_read,
+                picks_follow_the_state_they_end_in,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -451,7 +564,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R11, no phone, date, appointment or slot')
+    print('tickets ok: R1-R12, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

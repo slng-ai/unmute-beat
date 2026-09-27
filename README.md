@@ -654,6 +654,8 @@ The whole report is [session-4c.md](docs/research/reusable-core/session-4c.md).
 | `Operation.run` claims the intent before its first await | Two runs of one intent on one call both reached the backend. |
 | `resource:` and `version:` key and order what stands; a reconciled success below the service's `current_version` is history, never said | A restored old "resolved" stood over a newer reopen and was said to the caller. Ticket 1 and address 1 were one resource. |
 | Estimated playback (`local`) approves nothing unless a launcher names the simulation (`playout(simulate=True)`, `DELIVERY=simulated`) | Audio written to a socket, or time passing, counted as a heard read-back on a voice line with no marks. |
+| In the browser, a read-back is heard only on the page's playout report: its played RTP timestamp passed the bound the server read when the segment's last audio left (`WebRTCPlayout`, `core/client.html`) | The browser returned no marks, so a real yes could never be heard: the caller said "That sounds right" three times and heard the fallback line three times (session 4f follow-up). |
+| A read-back past its limit is withdrawn: its intent terminal, nothing left pending, the fallback said once; asked again, a short line and no read-back | The same fallback line on every yes, with the read-back still actionable. |
 | `speech: rendered` steps have no model text | After a lookup alone the desk said "El ticket T-101 ha quedado solucionado definitivamente", past its claim words. |
 | The salon's diary is one SQLite file every worker shares: a trigger holds the chair, a move is one `UPDATE`, writes are keyed by intent, a reconciled write with no result is fenced with a void | Each process had its own diary, so no two calls ever contended for a time, and a lost answer did not survive a restart. |
 | `server.py`: uvicorn workers behind one port, at most five calls admitted, a busy refusal past it, each worker's own drain, clients warmed once per worker | `bot.py` ran every call in one process with no bound, and warmed its model clients per call, uncounted. |
@@ -786,13 +788,21 @@ Run one from its folder:
 
 ```bash
 uv sync --all-packages                 # once, from the repository root
-cd use-cases/salon-graph && DELIVERY=simulated uv run bot.py
+cd use-cases/salon-graph && uv run bot.py
 ```
 
-Then open **http://localhost:7860** and click connect. Each `bot.py` finds the
-root `.env` by walking up from its folder. The browser transport returns no
-playback marks, so without `DELIVERY=simulated` nothing that needs a heard
-read-back can be carried out; the name says what it is.
+Then open **http://localhost:7860** in Chrome, Firefox or Safari and click
+**Start call**. Each `bot.py` finds the root `.env` by walking up from its
+folder.
+
+That page is core's own client (`core/src/core/client.html`), served at `/`.
+It plays the agent and reports how far each reply has played, so a read-back
+counts as heard only once the browser has actually played it
+(`core.processor.WebRTCPlayout`). The runner's prebuilt client at
+`/client/` sends no such report: a call from it hears that this connection
+can make no changes, and ends before anyone is asked for details.
+`DELIVERY=simulated` is not needed for the browser; it is only for Coval's
+simulated carrier, which returns no marks.
 
 Several phone calls at once, on one host, run the salon behind its runner:
 

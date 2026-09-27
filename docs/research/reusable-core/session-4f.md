@@ -3,6 +3,229 @@
 [PR #27](https://github.com/slng-ai/slng-voice-harness/pull/27), branch `feat/session-4f-readiness`, stacked on PR #26 (`feat/session-4e-lifecycle`, head `420de86`, still open),
 which is stacked on PR #25. Tested runtime: `b36ab10`.
 
+## Follow-up: browser calls and bounded recovery
+
+The documented browser entry point (`cd use-cases/salon-graph && uv run bot.py`) could never confirm a read-back,
+and a read-back that could not be confirmed looped. Both are repaired in core, for every use case, with no
+salon code in the fix. Twilio evaluations were never evidence for this path, and none is used as evidence here.
+
+Live validation in a real browser is **pending**: the manual checkpoint is at the end of this section.
+
+### The incident
+
+Langfuse trace `369560b8ed25d40a0266fe1a602d0c91` (session `f4927fb0…`), a browser call on this branch with the
+default `DELIVERY=marks`. Read-only review, every turn:
+
+| Turn | Caller | Model chose | Delivery evidence | Authorization | Backend ran | Said by code |
+|---|---|---|---|---|---|---|
+| 4 | their number, in two fragments (one joined turn) | `collect(customer_phone)` | the read-back was sent; no report of it playing | nothing pending yet | no | "Is your number +34 …?" (the number assembled correctly) |
+| 5 | "That sounds about right." | `lookup_customer` | none | refused: the question was not heard in full | no | the same read-back again |
+| 6 | "That sounds right." | `lookup_customer` | none | refused: second unconfirmed copy, `READBACKS` reached | no | `Locale.gave_up` |
+| 7 | "What do you mean that you couldn't confirm? I am confirming it now." | `lookup_customer` | none | refused: nothing pending | no | `Locale.gave_up` again |
+
+The model was told, on turns 5 and 6: *"They did not hear all of it, so their reply cannot agree to it: put it to
+them again."* The evidence showed only that playback was never confirmed, not that the caller missed it. The
+trace held no delivery, authorization or transport record at all: the ledger lived only in process.
+
+### Root cause
+
+1. **No playback evidence on the browser transport.** `core.processor.playout` gave every non-Twilio transport
+   `LocalPlayout`, which records a segment as `local` when its audio is written. That is an estimate, and by
+   design an estimate approves nothing unless a launcher names the simulation. So on the default browser path no
+   read-back could ever be heard. Pipecat 1.11 has no browser playback signal to use instead: `bot-stopped-speaking`
+   is a server event, the prebuilt client sends only pings, and RTVI has no playback acknowledgement.
+2. **Recovery was a string, not a state.** `Prompted.put` returned `Locale.gave_up` past the limit but left the
+   intent `prepared`. Every later yes reached the same branch and said the same line.
+3. **Missing evidence was worded as a fact about the caller.** The model's context said "they did not hear".
+
+The support-desk flow reproduces all three through `core.load` and `core.text_turn` with no salon import
+(core R19). The same scripted operation dispatches exactly once when playback is acknowledged.
+
+### What each signal proves
+
+| Signal | Where it comes from | What it proves | Can it approve? |
+|---|---|---|---|
+| `BotStoppedSpeakingFrame`, RTVI `bot-stopped-speaking` | the server's output transport | the server stopped sending audio | no: turn-taking only |
+| Audio written to the WebRTC track (`LocalPlayout`) | the server | the audio left the server's queue | no: an estimate, unless simulation is named |
+| The mark message arriving in the browser | the data channel | nothing about audio: the channel is not ordered with the RTP stream, and the message leaves before the packet is encoded | no |
+| Twilio `mark` returned, no `clear` pending | Twilio's Media Streams | Twilio's playout reached that point | yes |
+| Browser playout report past the segment's bound | `getSynchronizationSources().rtpTimestamp` in the page | the segment's audio, on this call's stream, was taken from the jitter buffer for playout | yes |
+| Text `acknowledge` | a text runner | simulated delivery | yes, recorded as simulated |
+
+### How the browser repair works
+
+```mermaid
+sequenceDiagram
+    participant Agent as Core processor
+    participant Out as WebRTC output
+    participant Adapter as WebRTCPlayout
+    participant Page as client.html
+    Agent->>Out: segment audio, then its mark
+    Out->>Adapter: mark passes after its last audio chunk
+    Adapter->>Adapter: bound = last RTP timestamp sent + 80 ms
+    Adapter->>Page: playout-mark (mark, source, bound)
+    Page->>Page: poll getSynchronizationSources every 20 ms
+    Page->>Adapter: playout (mark, source, rtp) once rtp passes bound
+    Adapter->>Agent: note_mark_returned: the segment is heard
+```
+
+1. The processor pushes a `SegmentMark` behind each segment's speech, as for Twilio.
+2. The output transport passes the mark on only after the segment's last 10 ms chunk has left the audio track.
+   `WebRTCPlayout` counts the audio frames before it: a mark with no audio before it is never bounded.
+3. It reads the audio sender's last RTP timestamp and adds `PLAYOUT_MARGIN` (3840 ticks, 80 ms: two packets the
+   final sample may still be behind, one more because the browser names a packet by its start, one for the
+   Opus lookahead). Late, never early.
+4. It sends the page the mark, the stream's SSRC and the bound, in an RTVI `server-message`.
+5. The page reads its receiver's `getSynchronizationSources()`. The W3C spec defines `rtpTimestamp` as the RTP
+   timestamp of the media played out at `timestamp`. When it passes the bound (a serial comparison, since RTP
+   timestamps wrap at 2³²), the page reports once.
+6. The adapter validates the report (`PlayoutReport`, strict) and checks the source and the bound. Only then does
+   the core ledger count the mark, timed at the report's arrival. A report for another stream, short of its
+   bound, for a mark never bounded, from another call, for a mark voided by an interruption, or sent twice counts
+   for nothing: the ledger's existing rules do most of this already.
+7. An `InterruptionFrame` voids every mark still pending (`CallContext.note_cleared`), exactly as a Twilio clear
+   does. The browser has no clear to confirm what it still played, so pending audio is never counted.
+8. The page names the capability in its `client-ready` (`about.platform_details.playout = 'rtp-timestamp/1'`).
+   `bot.py` asks `reports_playback` before its greeting. A page that does not report (Pipecat's prebuilt
+   `/client/`) hears `Locale.unconfirmable` and the call ends, before anyone gives details.
+9. `serve_client` puts the page at `/` on the runner's app before `main()` runs, so `http://localhost:7860` opens
+   it. The prebuilt client stays at `/client/`.
+
+No model request and no sleep were added to delivery handling. The one wait is `capability`, which waits for the
+page's `client-ready` event itself (bounded at 5 s).
+
+### Recovery as a state transition
+
+A read-back past its limit (`READBACKS`, 2 unconfirmed copies on a line that has proven nothing, or
+`CUT_READBACKS`, 5 talked-over copies) is now **withdrawn** (`CallContext.withdraw`). The intent becomes
+`withdrawn`: terminal, never dispatched, owed to nobody. The pending question is spent. The caller hears
+`Locale.gave_up` once, and a `confirmation` span records the transport, each copy's evidence and the reason.
+
+| The caller then | What happens | Checked by |
+|---|---|---|
+| confirms again | the same arguments find the same withdrawn intent: no read-back, no new intent, no allowance reset, no dispatch; they hear `Locale.withdrawn` ("I still can't confirm that on this line, so it stays as it was.") | R19, twice |
+| corrects the value | different arguments are a new intent with its own allowance, read back; once heard, a yes carries it out once | R19 |
+| asks something else | answered normally; nothing is pending | R19 (FAQ hand-over) |
+| asks to stop | the goodbye, with `left_undone` (they may have talked over the fallback too) | R19, salon B4.1 |
+
+An operation that was already dispatched is untouched: only a `prepared` intent can be withdrawn, and unknown
+outcomes still reconcile by intent.
+
+The model is now told what the evidence says, not a guess about the caller (`CallContext.hearing`):
+
+| Hearing | Told to the model |
+|---|---|
+| `heard` | They heard it in full. |
+| `early` | They began answering before it finished playing … |
+| `cut` | It was cut off before they heard all of it … |
+| `failed` | Its audio failed to play … |
+| `unconfirmed` | This line has not confirmed that it finished playing. That is missing evidence, not a sign they missed it … |
+
+Every blocked or withdrawn confirmation leaves a `confirmation` span (`confirmation.audit`: event, operation,
+reason, transport, whether estimates count, and per copy `heard_by`, `lost` and `hearing`). Every write audit
+now names its `transport`.
+
+### Evidence each transport supplies
+
+| Transport | Evidence of playback | Where | Approves |
+|---|---|---|---|
+| Twilio Media Streams | returned `mark`, voided by any pending `clear` | `TwilioMarks` | yes |
+| Twilio-shaped simulator with no marks (Coval) | audio settled at real time, `local` | `TwilioMarks(echoes_marks=False)` | only with `DELIVERY=simulated` |
+| Browser, core's `client.html` | playout report past the segment's RTP bound | `WebRTCPlayout` | yes |
+| Browser, Pipecat's prebuilt client | none | refused on `client-ready` | no: the call ends before the greeting |
+| Browser with `DELIVERY=simulated` | audio written, `local` | `LocalPlayout` | yes, recorded as simulated |
+| Text runner | `acknowledge` | `CallContext.acknowledge` | yes, recorded as simulated |
+
+### Offline results
+
+Provider requests were disabled for every check (`ALLOW_MODEL_REQUESTS` off, scripted models, speech doubles).
+No Coval call, rescoring or live model run was made.
+
+| Check asked for | Where | Result |
+|---|---|---|
+| A. The original failure, reproduced through public entry points on a non-salon flow, failing without the repair | core R19 (the support desk, `core.load` and `core.text_turn`) | passes; fails with the old `Prompted.put` (revert F1) |
+| B. A heard read-back and a yes dispatch once, on WebRTC evidence | core W6 (desk, real SmallWebRTC transport, aiortc peer), C3 (the same in headless Chrome) | passes: `desk.sent() == 1`, a second yes sends nothing |
+| B. The same on Twilio evidence | salon E1 (`test_audit_export`: real processor, `TwilioMarks`, fake Twilio phone) | passes: exactly one booking, audit `transport: twilio`, not simulated |
+| C. Missing, duplicate, stale, wrong-call, cleared reports, and an answer begun before playback, do not authorise | core W2, W3, W4, W5, W8; salon M4, M5, M6 unchanged | pass |
+| D. An interrupted read-back keeps the authorization rules; a repeated receipt repeats nothing | core W4; salon B4.1-B4.6, M5; core R9, R17 | pass |
+| E. Exhausted recovery does not loop, dispatch or make a fresh authorization; correct, ask, stop follow their transitions | core R19; salon B4.1, B4.5 (now `withdrawn`) | pass |
+| F. The WebRTC wiring itself, not a manually marked segment | core W1-W8 (real transport, real peer, real data channel), `tests.client_check` C1-C3 (`client.html` in Chrome), salon BR1-BR3 (`bot.py` as a script, `run_bot` over SmallWebRTC) | pass |
+| G. Existing Twilio, consent, cancellation, recovery and cross-use-case regressions | every suite below | pass |
+
+Suites on the final code (`uv run python -m tests` in each member):
+
+- core: all 16 modules ok (R1-R19, W1-W8 new).
+- salon-graph: all 20 modules ok (BR1-BR3 new; B4.1 and B4.5 now expect `withdrawn`; E1 now counts one booking).
+- faro-language-learning, concierge-tools (5 modules), salon-pipecat-flows: all ok.
+- `tests.defects`: core exits 1, its one known limit (a prose step can still say an unbacked claim), as before;
+  salon exits 0.
+- `tests.client_check` (headless Chrome, fake microphone): C1-C3 ok.
+- `ruff format`, `ruff check`, and `ty check` in core, salon-graph, faro, concierge-tools and salon-pipecat-flows:
+  clean.
+- Package proof (`session-4d-correctness/package-proof.sh`): ok; the wheel carries `core/client.html`
+  ([browser/package-proof.log](session-4f/browser/package-proof.log)).
+- N1-N13 matrix: every row identical to the 4f record.
+- Revert checks: seven, all caught ([revert-checks.md](session-4f/revert-checks.md),
+  [browser/reverts.txt](session-4f/browser/reverts.txt)).
+
+**Latency.** No model request and no sleep were added to delivery. The page's playout report reached the server
+79 to 88 ms after the read-back's last audio left it, in headless Chrome over loopback: the 80 ms margin and the
+browser's jitter buffer. That delay sits between the end of the read-back and the earliest moment a reply to it
+can count; a caller's reply normally starts later than that, and is timed from its own voice onset. The adapter's
+work per frame is a type check and a counter; per segment, one dictionary entry and one data-channel message.
+
+**N12, run 5**, on this code, with the frozen protocol and tolerances: the verdict is unchanged. The relative
+rule still fails on turns 2, 4 and 5 and on the trace; the 50 ms ceiling passes. Both arms ran slower than in
+run 4, the native reference too (its turn 3 38.8 ms against 30.8), because the machine was busier (the run came
+straight after the suites and the Chrome check; no load average was captured this time). Raw samples:
+[matrix/n12-runs/run5](session-4f/matrix/n12-runs/run5/timing.json). N12 is not relabelled, and no latency parity
+is claimed. The N12 path has no browser transport; what this change adds there is the hearing lookup in each
+request's context and an audit on a blocked confirmation.
+
+### What is not supported, and what the evidence does not prove
+
+- The page's report proves the audio was decoded and taken from the jitter buffer for playout on this call's
+  stream. It does not prove a speaker played it, or that anyone listened: a muted tab still reports. Twilio's
+  marks have the same limit.
+- Headless Chrome may update the playout position on receipt when there is no audio device. The Chrome check
+  proves the page's protocol and the RTP correlation, not speaker playout.
+- `WebRTCPlayout` reads the last RTP timestamp sent from aiortc's sender, a private field of the pinned 1.15.0.
+  aiortc's random RTP origin is not readable any other way. If the field disappears, nothing is ever heard,
+  and `test_webrtc` fails at once. The upgrade path is an encoded-transform timestamp on the page, or aiortc
+  exposing the sent timestamp. `uv.lock` is unchanged.
+- Only core's page reports playback. Pipecat's prebuilt client, the Daily transport and any other client are
+  refused before the greeting when the flow needs confirmations (Daily was not checked).
+- Faro's `bot.py` serves the page too, but has no early refusal yet: that is session 5's.
+
+### Manual browser checkpoint (pending)
+
+Start it exactly as documented, with no simulation flag:
+
+```bash
+cd /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4f-readiness/use-cases/salon-graph
+uv run bot.py
+```
+
+Open **http://localhost:7860** in Chrome (Firefox and Safari also expose `rtpTimestamp`) and click
+**Start call**. The page needs the microphone and must stay open and audible. Under the buttons it counts
+"Playback reported for N replies": that number going up is the evidence arriving.
+
+1. Ask to book a haircut. When asked for a number, give it in fragments: the country code and the first
+   digits, a pause, then the rest.
+2. The salon reads it back. Wait for it to finish, then say **"That sounds about right."** Expected: the call
+   goes on to the booking. You do not hear "I couldn't get that confirmed".
+3. Ask for a time, and let the salon read the booking back. **Interrupt it** halfway. Expected: it is read back
+   again in full. Let it finish, then say "Yes." Expected: one booking, and its confirmation.
+4. Ask to move it, and when it is read back, **correct a value**: "No, make it three o'clock." Expected: a new
+   read-back with the corrected time, and nothing moved until you say yes to that one.
+5. Say **"That's all, goodbye."** Expected: the goodbye, and the call ends.
+6. Optional, the refusal: open **http://localhost:7860/client/** (Pipecat's own page) and connect. Expected:
+   "Sorry, this connection can't confirm that you've heard me…", and the call ends.
+
+Afterwards, the call's Langfuse trace shows a `confirmation` span for any blocked read-back and a `transport:
+webrtc` field in each write audit. The bot log shows `browser client sends playback reports`, then one
+`playout report for … counted` line per heard segment.
+
 ## Result
 
 Seven repairs, each with a public-path regression and a revert check that fails without it
@@ -261,6 +484,7 @@ Files: [load/faults.json](session-4f/load/faults.json), [load/faults.log](sessio
 |---|---|---|---|---|---|---|---|
 | 4e run 3 | 4e | 1.65 / 1.21 | 11.7 (7.0), 17.9 (8.0), 30.1 (30.6), 17.4 (6.4), 18.5 (6.8) | 32.0 | 7 / 7 | fails turns 2, 4, 5 and trace | passes |
 | 4f run 4 | offer turn is `wait` alone | 1.57 / 1.14 | 11.7 (7.1), 18.4 (8.2), 26.3 (30.8), 17.7 (6.5), 18.9 (6.6) | 27.3 | 6 / 7 | fails turns 2, 4, 5 and trace (91.9 vs 58.9) | passes |
+| 4f run 5 (browser follow-up) | as run 4 | not captured (busier: after the suites) | 11.7 (7.0), 23.5 (10.5), 19.1 (38.8), 22.2 (8.9), 23.3 (9.0) | 35.4 | 6 / 7 | fails turns 2, 4, 5 and trace (114.2 vs 73.3) | passes |
 
 The protocol, tolerances and native reference are unchanged. Every raw sample is in
 [matrix/n12-runs/run4](session-4f/matrix/n12-runs/run4/timing.json); runs 1-3 stay in the 4e folder. **N12 is

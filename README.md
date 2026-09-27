@@ -1014,9 +1014,11 @@ evidence is in `docs/research/reusable-core/session-4c/live/`.
   unknown: the caller hung up during the closing). Authorization passed on 18
   of 20 read literally. The other 2 are the same number said back after
   "no", which is correct under the rule in section 6.
-- **Latency, five calls at once.** Turn p50 2.1-2.5 s, p90 3.3-4.2 s. The
-  model request is p50 0.8 s; the rest is speech recognition, endpointing and
-  TTS. The harness itself adds at most 48 ms a turn. Event-loop lag p99 stayed
+- **Latency, five calls at once, as the caller hears it** (caller goes quiet
+  → bot's first audio, on the call recordings): normal callers p50 2.72 s,
+  p90 4.38 s; interruptive callers p50 2.58 s, p90 3.64 s. The model request
+  is p50 0.8 s; the rest is endpointing, speech recognition, TTS and the
+  phone network. The first audio can be a holding line ("One moment."). The harness itself adds at most 48 ms a turn. Event-loop lag p99 stayed
   under 3 ms.
 - **What call 1 found, now fixed.** A caller who talks over a read-back hears
   it again, instead of "please call back" after two tries. A turn split into

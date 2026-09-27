@@ -245,7 +245,9 @@ On the user's instruction, the pair and five-call steps of the live ramp were re
 
 The one chair fits three haircuts a morning, so no two callers of a batch want the same morning. Four batches of five ran at once, each with its own campaign and a fresh diary, at `a48b98a`, with `MAX_CALL_SECONDS=300`. Each simulation was bound to its CallSid by evidence: the intents its call wrote for its caller's number.
 
-| Batch | Callers | Run | Correct (diary) | Delivery | Call length | Turn latency p50 / p90 | Model request p50 / p90 | Loop lag p99 | Worker memory |
+Response latency, measured on each call's two-channel recording from the caller going quiet to the bot's first audio (`live/heard-latency.json`, `audio_timing.py`): normal callers p50 2.72 s, p90 4.38 s (108 replies); interruptive callers p50 2.58 s, p90 3.64 s (133 replies). 23 more replies began while the caller was still talking, mostly over a barge-in, and are counted apart. The bot's first audio may be a holding line ("One moment."). The turn latency in the table below is Pipecat's server-side figure: it starts at the voice detector's stop and ends when audio leaves the server, so it misses the network legs and reads 0.2-0.5 s lower.
+
+| Batch | Callers | Run | Correct (diary) | Delivery | Call length | Turn latency p50 / p90 (server side) | Model request p50 / p90 | Loop lag p99 | Worker memory |
 |---|---|---|---|---|---|---|---|---|---|
 | A | normal | `c77fpUwG` | 5/5 | 5/5 pass | 94-106 s | 2.46 / 4.15 s | 0.82 / 1.01 s | 2.8 ms | 704-859 MB |
 | B | interruptive | `C4jjBivq` | 5/5 | 5/5 pass | 143-209 s | 2.34 / 3.33 s | 0.78 / 0.92 s | 2.9 ms | 383-848 MB |

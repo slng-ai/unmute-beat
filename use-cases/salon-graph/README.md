@@ -81,7 +81,8 @@ smart-turn v3 with a 1.6 s ceiling on a turn it thinks is not finished.
 On a real Twilio line, five calls at a time, every call after the Stage C
 fixes booked correctly: 25 of 25. They were 10 normal callers, 10
 interruptive callers, and 5 who said their number back after "no". Delivery
-passed on all 25. Turn latency was p50 2.1-2.5 s. The full numbers are in the
+passed on all 25. From the caller going quiet to the bot's first audio, on
+the call recordings, p50 was 2.6-2.7 s and p90 3.6-4.4 s. The full numbers are in the
 root README's Evidence section.
 
 ## How to check it

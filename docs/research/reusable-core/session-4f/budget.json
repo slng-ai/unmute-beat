@@ -636,6 +636,120 @@
      "output_tokens": 823
     },
     "result": "no fault injected. Outcome fail against the case: BK0001 +34671540102 booked Monday 09:00, moved to Tuesday 09:00 (correct), then moved again to Tuesday 10:00 (revision 3). After the move receipt (said again once) the simulated caller repeated its request; the agent looked the times up and the salon said \"9:00 AM is taken\" about the caller's own booking; the caller accepted 10:00, heard the read-back and said yes (authorization holds). Fixed offline in 985522f (V11: \"You already have ...\"). Not re-run live: no calls left."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "b36ab10",
+    "label": "s4f-1-v11",
+    "run": "ACdLZnmTw45tmr7J6qLghi",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "campaign": "s4f-1-v11",
+    "why": "the previously failing complex case first: V11 (own slot), interruptive receipts",
+    "result": "pass from the diary: BK0001 +34671540102 booked Monday 28th 09:00, moved to Tuesday 29th 09:00 (revision 2); no second move. V11 trigger reached live: after the move receipt the caller repeated its request and the salon said \"You already have a haircut Tuesday the 29th at 9:00 AM. Would you like a different time?\"; nothing else was written. Authorization: each write followed its read-back and a yes (agent trace review). Ended pipeline_end after a goodbye recap. options called 3 times, twice followed only by wait (prompt change partly followed).",
+    "simulation": "iQBErmK4H4b2NJoPKLoJnX",
+    "call_sid": "CAfb240f6fd29325c77c5ae6338a7d5ecf",
+    "langfuse_session": "CAfb240f6fd29325c77c5ae6338a7d5ecf",
+    "bound_by": "coval_sim correlate",
+    "model_usage": {
+     "requests_completed": 22,
+     "requests_started": 38,
+     "input_tokens": 72097,
+     "output_tokens": 384
+    }
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "b36ab10",
+    "label": "s4f-2-behavior",
+    "run": "DFUKKk8CESFxEsfH6BE777",
+    "set": "358XiSye",
+    "case": "JKNSZVVGDEDG4xXgfCdeof",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "campaign": "s4f-2-behavior",
+    "why": "question during a read-back, an explicit no, a requested receipt repeat, a move of the booking just made, fewer booking requests",
+    "result": "pass from the diary: BK0001 +34671540105 booked Tuesday 29th 14:00, moved to Wednesday 30th 14:00 (revision 2), nothing at Tuesday 11:00. Triggers reached: a question during the read-back (booking handed to concierge, which answered Saturday nine to four, matching knowledge/services.md; nothing written); say_again live (the booking receipt said again on request, in code words); the move of the booking just made as collect > move_appointment, with no options and no not-on-offer retry; no options request anywhere in the call. Missed: decline. The caller said \"No, don't book that one\" while on concierge, which has no operations and so no decline tool; concierge answered in prose. The next read-back replaced the question, so no left_undone case arose. Ended pipeline_end after a goodbye recap.",
+    "simulation": "DE4RbL4JFfLifUtrxhsHCR",
+    "call_sid": "CA46c31c4c6b3c3dc05709294876ac9e08",
+    "langfuse_session": "CA46c31c4c6b3c3dc05709294876ac9e08",
+    "bound_by": "coval_sim correlate",
+    "model_usage": {
+     "requests_completed": 22,
+     "requests_started": 25,
+     "input_tokens": 61435
+    }
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "b36ab10",
+    "campaign": "s4f-worker",
+    "fault": "LIVE_FAULT=committed:+34671540101, LIVE_FAULT_ARM=<state-pair>/armed, armed by evals.placement",
+    "arrangement": "coval_sim serve --processes 2 --workers 2: runners on 7870 and 7871, two tunnels, one diary and runner file",
+    "warm_up_requests": 16,
+    "result": "fault injected live: the booking BK0001 +34671540101 (Monday 28th 10:00) committed once, its result filed with it, then worker 71031 died (LIVE_FAULT line 20:40:44.152). The runner closed the call as lost; the arm file was gone (fired once); runner A replaced the worker (pid 71452 answered /stats). The caller heard nothing after the read-back yes; the call did not continue and no reconnection was attempted. Offline, on a copy of the diary (live/ringback_offline.out): nothing unresolved, nothing sent again, the booking held for a new session. The verify step read the number back and took the same digits said again as a yes (restated: confirms), as designed.",
+    "label": "s4f-3-victim",
+    "run": "o5T5ygcVBzwL9u787wM43X",
+    "set": "JCZGihHR",
+    "case": "9GH9opPTqPbRJFT2pNnJst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "simulation": "MkDCXouUmJPEax76qdjV6B",
+    "call_sid": "CA8f4db79bae32675be27029b013121d1a",
+    "langfuse_session": "CA8f4db79bae32675be27029b013121d1a",
+    "bound_by": "coval_sim correlate",
+    "placement": "both calls placed by process: CA8f4db7 claimed by pid 71031 on port 7870, CA5c2494 by pid 71037 on port 7871 (runner record and s4f-pair.placement.json); evals.placement armed the fault after both were active",
+    "model_usage": {
+     "requests_completed": 6,
+     "input_tokens": 11474,
+     "note": "partial: the last spans died with the worker"
+    }
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "b36ab10",
+    "campaign": "s4f-worker",
+    "fault": "LIVE_FAULT=committed:+34671540101, LIVE_FAULT_ARM=<state-pair>/armed, armed by evals.placement",
+    "arrangement": "coval_sim serve --processes 2 --workers 2: runners on 7870 and 7871, two tunnels, one diary and runner file",
+    "warm_up_requests": 16,
+    "result": "crash isolation pass: on the other process, the call went on after the kill and booked BK0002 Monday 28th 09:00 at 20:41:06, 22 s after worker 71031 died. Outcome fail against the case: after the receipt the caller said \"Yes, that's perfect.\" and began \"Can you\", and booking's agent chose goodbye; the caller's move request came after the line closed (a model reading, not the fault). say_again was called when the caller asked to repeat a cut-off offer; with nothing standing it said the offer again, as designed. Ended by the bot (EndFrame); the failed Twilio hang-up is the known placeholder-account 401.",
+    "label": "s4f-4-bystander",
+    "run": "dqpPTERWfRzPNrdQfAeCqH",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "simulation": "2LLPcZXbnAKvuu7JPh9MDa",
+    "call_sid": "CA5c24944dc5c7e075b93c5820b778babe",
+    "langfuse_session": "CA5c24944dc5c7e075b93c5820b778babe",
+    "bound_by": "coval_sim correlate",
+    "placement": "both calls placed by process: CA8f4db7 claimed by pid 71031 on port 7870, CA5c2494 by pid 71037 on port 7871 (runner record and s4f-pair.placement.json); evals.placement armed the fault after both were active",
+    "model_usage": {
+     "requests_completed": 12,
+     "input_tokens": 29809
+    }
    }
   ],
   "stage_c_live_ramp_cap": 8,
@@ -653,8 +767,12 @@
   "session_4f": {
    "plan": "user-authorized in session 4f (27 September 2026): at most 4 targeted calls, only after offline gates and offline placement pass. 1: the failing 4e bystander case (V11). 2: one behavior call (decline vs question, say_again, known-resource move). 3+4: one worker-failure pair on two runner processes.",
    "allowed": 4,
-   "placed": 0,
-   "left": 4
+   "placed": 4,
+   "left": 0,
+   "warm_up_requests": {
+    "calls 1 and 2 (one runner, 2 workers each)": "not recorded per call in the run log; 4 per worker by the pair runners",
+    "pair (2 runners x 2 workers)": 16
+   }
   }
  },
  "reserved_for_later_stages": {

@@ -276,6 +276,11 @@ complaint-request word list in `salon/models/state.py`
 not semantic accuracy; run the explicit live evaluation before making
 accuracy or latency claims.
 
+Session 4f's live calls left two behavior limits (`docs/research/reusable-core/session-4f.md`): `decline`
+lives on the step that owns the operation, so a no said after a hand-over records nothing (a goodbye then
+says the change was left undone, which is true); and a goodbye is the model's reading, so "Yes, that's
+perfect. Can you..." was once taken as leaving. N12's relative rule still fails; its 50 ms ceiling passes.
+
 In one of two live text runs of the session-4 wording, the `verify` step's
 first request answered "I'm sorry, I cannot do that right now" to an
 ordinary request, with nothing unusual about it; the second run of the same

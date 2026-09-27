@@ -1,0 +1,18 @@
+turn  agent     status       req  useful  model(n)     tools   core   tts_ttfb  user_bot
+   1  verify    answered       4   1.545   1.52(2)    0.00   0.02      0.17  2.107322931289673
+   2  verify    answered       1   1.011   0.99(1)    0.00   0.02      1.44  3.4575679302215576
+   3  booking   answered       2   0.944   0.93(1)    0.00   0.01      0.09  2.0421319007873535
+   4  booking   answered       1   0.897   0.88(1)    0.00   0.02      1.00  -
+   5  booking   answered       1   0.989   0.98(1)    0.00   0.01      0.08  2.9800240993499756
+   6  concierge  answered       3   1.697   0.83(1)    0.00   0.86      0.88  2.9800240993499756
+   7  concierge  answered       1   0.722   0.00(0)    0.00   0.72      1.05  2.13358211517334
+   8  booking   answered       3   2.438   2.40(3)    0.00   0.04      1.40  4.851628065109253
+   9  booking   answered       1   1.153   1.13(1)    0.00   0.02      0.85  3.0086679458618164
+  10  booking   answered       1   1.013   1.00(1)    0.00   0.01      1.11  2.5137789249420166
+  11  booking   answered       1   0.898   0.89(1)    0.00   0.01      1.32  2.641925811767578
+  12  booking   answered       2   1.849   1.83(2)    0.00   0.02      1.61  3.81745982170105
+  13  booking   answered       2   1.878   1.85(2)    0.00   0.02      1.35  3.628122091293335
+  14  booking   answered       2   1.068   1.05(1)    0.00   0.02      1.14  3.2199947834014893
+  15  booking   answered       1   0.897   0.88(1)    0.00   0.02      1.67  4.492851257324219
+median  useful 1.01  model 0.99  tools 0.00  core 0.02  tts_ttfb 1.11
+model requests 25; input tokens 61435, cached 0, output 450

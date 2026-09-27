@@ -1,0 +1,380 @@
+INFO:     Uvicorn running on http://127.0.0.1:7870 (Press CTRL+C to quit)
+INFO:     Started parent process [71029]
+2026-09-27 20:38:07.103 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-27 20:38:07.103 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+INFO:     Started server process [71032]
+INFO:     Waiting for application startup.
+INFO:     Started server process [71031]
+INFO:     Waiting for application startup.
+Direct use of automatic function calling (AFC) in AsyncModels.generate_content is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message. Similarly, direct use of AFC in AsyncModels.generate_content_stream is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message_stream.
+Direct use of automatic function calling (AFC) in AsyncModels.generate_content is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message. Similarly, direct use of AFC in AsyncModels.generate_content_stream is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message_stream.
+2026-09-27 20:38:07.846 | INFO     | server:lifespan:400 - worker 71032 ready, warming its model clients once
+INFO:     Application startup complete.
+2026-09-27 20:38:07.847 | INFO     | server:lifespan:400 - worker 71031 ready, warming its model clients once
+INFO:     Application startup complete.
+INFO:     127.0.0.1:56175 - "GET /ready HTTP/1.1" 200 OK
+2026-09-27 20:38:08.262 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:38:08.327 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:38:08.374 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:38:08.376 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:38:08.400 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:38:08.486 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:38:08.488 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:38:08.533 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+INFO:     127.0.0.1:56201 - "GET /ready HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56203 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56204 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56205 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56206 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56207 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56208 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56209 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56210 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56211 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56212 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56213 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56214 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56217 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56219 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56220 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56221 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56222 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56223 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56224 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56225 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56226 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56227 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56228 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56229 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56230 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56231 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56232 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56233 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56234 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56235 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56236 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56237 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56238 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56239 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56241 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56244 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56246 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56249 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56250 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56251 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56252 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56253 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56254 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56255 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56257 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56259 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56260 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56262 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56264 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56266 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56267 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56269 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56270 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56271 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56272 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56273 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56274 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56275 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56276 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56277 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56278 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56279 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56280 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56281 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56283 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56286 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56288 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56290 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56292 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56293 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56294 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56295 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56296 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56297 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56298 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56299 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56300 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56301 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56302 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56304 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56305 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56306 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56307 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56308 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56309 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56310 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56311 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56312 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56313 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56316 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56317 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56320 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56323 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56326 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56329 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56330 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56331 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56332 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56333 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56334 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56335 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56337 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56338 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56339 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56342 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56343 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56344 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56345 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56346 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56347 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56348 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56349 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56350 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56351 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56352 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56355 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56356 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56357 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56358 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56359 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56360 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56361 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56362 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56363 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56364 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56365 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56368 - "GET /calls HTTP/1.1" 200 OK
+INFO:     3.92.1.42:0 - "POST /?campaign=s4f-worker HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56370 - "GET /calls HTTP/1.1" 200 OK
+INFO:     54.157.215.46:0 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-27 20:39:33.426 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:223 - Detected transport: twilio (from second message)
+2026-09-27 20:39:33.426 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:278 - Parsed - Type: twilio, Data: {'stream_id': 'MZcc0dbfc45c22d8c1ece1c6fc59077054', 'call_id': 'CA8f4db79bae32675be27029b013121d1a', 'body': {'campaign': 's4f-worker'}, 'from': None, 'to': None}
+2026-09-27 20:39:33.426 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for twilio
+2026-09-27 20:39:33.427 | INFO     | pipecat.runner.utils:_create_telephony_transport:508 - Using pre-detected telephony provider: twilio
+INFO:     127.0.0.1:56372 - "GET /calls HTTP/1.1" 200 OK
+2026-09-27 20:39:33.448 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-27 20:39:33.479 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-27 20:39:33.480 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4f-readiness/.venv/lib/python3.14/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-27 20:39:33.501 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0::Source -> FastAPIWebsocketInputTransport#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#0 -> SlngSTTService#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngSTTService#0 -> LLMUserAggregator#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#0 -> PydanticAgentProcessor#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PydanticAgentProcessor#0 -> SlngTTSService#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngTTSService#0 -> FastAPIWebsocketOutputTransport#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#0 -> LLMAssistantAggregator#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#0 -> Pipeline#0::Sink
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#0 -> Pipeline#0
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0 -> PipelineWorker#0::Sink
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-b0ae910f': added worker 'PipelineWorker#0'
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-b0ae910f': started running
+2026-09-27 20:39:33.502 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-b0ae910f': starting worker 'PipelineWorker#0'
+2026-09-27 20:39:33.503 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.3 min_volume=0.6
+2026-09-27 20:39:33.573 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-09-27 20:39:33.573 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:start_conversation_tracing:151 - Started tracing for Conversation CA8f4db79bae32675be27029b013121d1a
+2026-09-27 20:39:33.573 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 1
+2026-09-27 20:39:33.573 | DEBUG    | pipecat_slng.stt:_connect_websocket:306 - Connecting to SLNG STT (deepgram/nova:3)
+2026-09-27 20:39:33.576 | INFO     | bot:on_client_connected:330 - client connected
+2026-09-27 20:39:33.908 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - SlngSTTService#0: ttfs_p99_latency not set, using default 1.0s
+INFO:     127.0.0.1:56376 - "GET /calls HTTP/1.1" 200 OK
+INFO:     13.222.168.41:0 - "POST /?campaign=s4f-worker HTTP/1.1" 200 OK
+2026-09-27 20:39:34.087 | DEBUG    | pipecat_slng.stt:_process_message:395 - SlngSTTService#0: SLNG STT session ready (id=5a1f1458-77bd-491b-856b-0bc31c1473b2)
+2026-09-27 20:39:34.151 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?]
+2026-09-27 20:39:34.151 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-27 20:39:34.152 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-09-27 20:39:34.152 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-b0ae910f': broadcasting registry: ['PipelineWorker#0']
+2026-09-27 20:39:34.152 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#0': activated
+2026-09-27 20:39:34.152 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-09-27 20:39:34.305 | DEBUG    | pipecat_slng.tts:_process_message:1140 - SlngTTSService#0: SLNG TTS session ready (id=91bf2c77-f2d4-45ae-ba4a-5174ada7b812)
+2026-09-27 20:39:34.426 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 0.300s
+2026-09-27 20:39:34.431 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 0.312s (0.012s leading silence)
+2026-09-27 20:39:34.431 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context 42b00049-cbbb-45ee-887f-b66ccf643647
+2026-09-27 20:39:34.434 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 20:39:34.436 | INFO     | bot:breakdown:222 - latency breakdown:  0.283s  pipeline             [pipecat]
+2026-09-27 20:39:34.436 | INFO     | bot:breakdown:222 - latency breakdown:  0.283s  TOTAL (from client connected)
+INFO:     127.0.0.1:56378 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56380 - "GET /calls HTTP/1.1" 200 OK
+2026-09-27 20:39:38.877 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 20:39:38.877 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 20:39:38.877 | INFO     | core.processor:serialize:149 - mark ad821162653c:0:1~0 sent after 112 chunks, 4.48s of audio
+2026-09-27 20:39:39.094 | INFO     | core.processor:deserialize:176 - media stream: first 'mark' event from the far end
+2026-09-27 20:39:39.094 | INFO     | core.processor:deserialize:181 - mark ad821162653c:0:1~0 returned (counted)
+2026-09-27 20:39:41.378 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 1
+2026-09-27 20:39:42.333 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 20:39:42.334 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 2
+2026-09-27 20:39:42.334 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 20:39:42.335 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.002s
+2026-09-27 20:39:46.550 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 20:39:46.550 | WARNING  | pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy:_handle_vad_user_stopped_speaking:250 - TurnAnalyzerUserTurnStopStrategy#0: VAD stop_secs (0.3s) differs from the recommended default (0.2s). Built-in p99 latency values assume stop_secs=0.2. Re-run https://github.com/pipecat-ai/stt-benchmark with your settings and pass the TTFS P99 latency result as ttfs_p99_latency to your STT service.
+2026-09-27 20:39:46.587 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.394s
+2026-09-27 20:39:46.588 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:39:46.588 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:39:48.332 | INFO     | core.turn:_hop:718 - handoff concierge -> verify (The caller wants to book a haircut.)
+2026-09-27 20:39:48.334 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-27 20:39:48.336 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-27 20:39:48.336 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#0: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-27 20:39:48.336 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#0 usage characters: 69
+2026-09-27 20:39:48.481 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 0.147s
+2026-09-27 20:39:48.484 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 0.150s (0.003s leading silence)
+2026-09-27 20:39:48.484 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context 7912df31-7653-4297-9af5-57eaf5f6ba1c
+2026-09-27 20:39:48.486 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 20:39:48.487 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 20:39:48.487 | INFO     | bot:breakdown:222 - latency breakdown:  0.095s  transcription        [SlngSTTService#0]
+2026-09-27 20:39:48.487 | INFO     | bot:breakdown:222 - latency breakdown:  0.002s  turn detection       [config: user turn strategies]
+2026-09-27 20:39:48.487 | INFO     | bot:breakdown:222 - latency breakdown:  1.896s  pipeline             [pipecat]
+2026-09-27 20:39:48.487 | INFO     | bot:breakdown:222 - latency breakdown:  2.293s  TOTAL
+2026-09-27 20:39:48.487 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 2 user-bot latency: 2.294s
+2026-09-27 20:39:51.729 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 20:39:51.729 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 20:39:51.729 | INFO     | core.processor:serialize:149 - mark ad821162653c:1:2~1 sent after 82 chunks, 3.28s of audio
+2026-09-27 20:39:51.913 | INFO     | core.processor:deserialize:181 - mark ad821162653c:1:2~1 returned (counted)
+2026-09-27 20:39:54.229 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 2
+2026-09-27 20:39:55.412 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 20:39:55.413 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 3
+2026-09-27 20:39:55.413 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 20:39:55.414 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.002s
+2026-09-27 20:39:55.844 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 20:39:55.868 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.375s
+2026-09-27 20:39:55.869 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:39:55.869 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:39:56.072 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 20:39:56.072 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 20:39:56.074 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.002s
+2026-09-27 20:39:57.741 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 20:39:58.392 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:39:58.392 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:39:58.393 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.182s
+2026-09-27 20:39:58.394 | INFO     | core.state:turn_started:2000 - turn 2 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-27 20:39:58.533 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 20:39:58.534 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 20:39:58.536 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.001s
+2026-09-27 20:39:59.476 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.305s
+2026-09-27 20:39:59.523 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+INFO:     127.0.0.1:56404 - "GET /calls HTTP/1.1" 200 OK
+2026-09-27 20:40:01.483 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 1.430s
+2026-09-27 20:40:01.623 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 20:40:03.634 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 1.782s
+2026-09-27 20:40:03.703 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 20:40:04.355 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:04.355 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:04.355 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.282s
+2026-09-27 20:40:04.355 | INFO     | core.state:turn_started:2000 - turn 2 continues with piece 3: the caller went on before any answer played out (nothing said)
+2026-09-27 20:40:05.357 | INFO     | core.turn:_speak:1001 - read back lookup_customer by code after collect
+2026-09-27 20:40:05.360 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Is your number +34 671 54 01 01?]
+2026-09-27 20:40:05.362 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-27 20:40:06.757 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 1.397s
+2026-09-27 20:40:06.761 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 1.398s (0.001s leading silence)
+2026-09-27 20:40:06.762 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context a926f680-93c5-442b-ab0e-28fc736a3f94
+2026-09-27 20:40:06.764 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 20:40:06.765 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 20:40:06.765 | INFO     | bot:breakdown:222 - latency breakdown:  3.112s  pipeline             [pipecat]
+2026-09-27 20:40:06.765 | INFO     | bot:breakdown:222 - latency breakdown:  3.412s  TOTAL
+2026-09-27 20:40:06.765 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 3 user-bot latency: 3.412s
+2026-09-27 20:40:11.927 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 20:40:11.927 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 20:40:11.927 | INFO     | core.processor:serialize:149 - mark ad821162653c:2:3~4 sent after 130 chunks, 5.20s of audio
+2026-09-27 20:40:12.117 | INFO     | core.processor:deserialize:181 - mark ad821162653c:2:3~4 returned (counted)
+2026-09-27 20:40:14.428 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 3
+2026-09-27 20:40:15.670 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-27 20:40:15.670 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 4
+2026-09-27 20:40:15.670 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 20:40:16.482 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 20:40:16.512 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.380s
+2026-09-27 20:40:16.512 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.460s
+2026-09-27 20:40:18.038 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.467s
+2026-09-27 20:40:18.101 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 20:40:19.754 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.301s
+2026-09-27 20:40:19.755 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.843s
+2026-09-27 20:40:19.804 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 20:40:20.662 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 20:40:20.702 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.389s
+2026-09-27 20:40:20.702 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.571s
+2026-09-27 20:40:21.555 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.463s
+2026-09-27 20:40:22.460 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 20:40:24.247 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 1.354s
+2026-09-27 20:40:24.365 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 20:40:25.017 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:25.017 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:25.017 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.232s
+2026-09-27 20:40:25.894 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Thanks, I have you.]
+2026-09-27 20:40:25.896 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-27 20:40:25.897 | INFO     | core.turn:_hop:718 - handoff verify -> booking (-)
+2026-09-27 20:40:25.898 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#0: Generating TTS [Thanks, I have you.]
+2026-09-27 20:40:25.898 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#0 usage characters: 19
+2026-09-27 20:40:25.980 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 0.086s
+2026-09-27 20:40:25.981 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 0.091s (0.005s leading silence)
+2026-09-27 20:40:25.981 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context b7275a46-a264-4204-8e46-9656d81d6fc0
+2026-09-27 20:40:25.982 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 20:40:25.983 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 20:40:25.983 | INFO     | bot:breakdown:222 - latency breakdown:  1.668s  pipeline             [pipecat]
+2026-09-27 20:40:25.983 | INFO     | bot:breakdown:222 - latency breakdown:  1.968s  TOTAL
+2026-09-27 20:40:25.983 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 4 user-bot latency: 1.968s
+2026-09-27 20:40:26.754 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [10:00 AM tomorrow is free. I also have 9:30 AM or 10:30 AM.]
+2026-09-27 20:40:26.756 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-27 20:40:26.757 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#0: Generating TTS [10:00 AM tomorrow is free. I also have 9:30 AM or 10:30 AM.]
+2026-09-27 20:40:26.757 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#0 usage characters: 59
+2026-09-27 20:40:27.184 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 20:40:27.185 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 20:40:27.185 | INFO     | core.processor:serialize:149 - mark ad821162653c:3:4~5 sent after 31 chunks, 1.24s of audio
+2026-09-27 20:40:27.333 | INFO     | core.processor:deserialize:181 - mark ad821162653c:3:4~5 returned (counted)
+2026-09-27 20:40:28.616 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 1.862s
+2026-09-27 20:40:28.620 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 1.862s (0.000s leading silence)
+2026-09-27 20:40:28.620 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context 03d652a6-1d00-4e4f-8596-dcb2d78f8243
+2026-09-27 20:40:28.624 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 20:40:30.449 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-27 20:40:30.449 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 20:40:30.451 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 4
+2026-09-27 20:40:30.451 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 5
+2026-09-27 20:40:30.453 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 20:40:30.731 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.259s
+2026-09-27 20:40:30.801 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 20:40:31.450 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:31.450 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:31.451 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.280s
+2026-09-27 20:40:32.176 | INFO     | core.turn:_speak:1001 - read back book_appointment by code after collect
+2026-09-27 20:40:32.179 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Shall I book a haircut, tomorrow at 10:00 AM?]
+2026-09-27 20:40:32.180 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-27 20:40:32.333 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 0.154s
+2026-09-27 20:40:32.335 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 0.164s (0.010s leading silence)
+2026-09-27 20:40:32.336 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context b2c68620-bae4-4e46-b80e-b9dfc1ab695b
+2026-09-27 20:40:32.337 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 20:40:32.338 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 20:40:32.338 | INFO     | bot:breakdown:222 - latency breakdown:  1.587s  pipeline             [pipecat]
+2026-09-27 20:40:32.338 | INFO     | bot:breakdown:222 - latency breakdown:  1.887s  TOTAL
+2026-09-27 20:40:32.338 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 5 user-bot latency: 1.887s
+2026-09-27 20:40:34.980 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 20:40:34.980 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 20:40:34.980 | INFO     | core.processor:serialize:149 - mark ad821162653c:4:6~6 sent after 67 chunks, 2.68s of audio
+2026-09-27 20:40:35.213 | INFO     | core.processor:deserialize:181 - mark ad821162653c:4:6~6 returned (counted)
+2026-09-27 20:40:37.482 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 5
+2026-09-27 20:40:38.967 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-27 20:40:38.968 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 6
+2026-09-27 20:40:38.969 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 20:40:42.487 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 2.733s
+2026-09-27 20:40:42.532 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 20:40:43.191 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:43.191 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 20:40:43.192 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.297s
+2026-09-27 20:40:44.152 | WARNING  | server:saving:307 - LIVE_FAULT: worker 71031 dies after committing a booking for +34671540101
+INFO:     Waiting for child process [71031]
+INFO:     Child process [71031] died
+2026-09-27 20:40:44.591 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+INFO:     Started server process [71452]
+INFO:     Waiting for application startup.
+Direct use of automatic function calling (AFC) in AsyncModels.generate_content is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message. Similarly, direct use of AFC in AsyncModels.generate_content_stream is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message_stream.
+2026-09-27 20:40:45.315 | INFO     | server:lifespan:400 - worker 71452 ready, warming its model clients once
+INFO:     Application startup complete.
+2026-09-27 20:40:45.843 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:40:45.924 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:40:45.940 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+2026-09-27 20:40:46.078 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'gemini-3.5-flash-lite', 'answered': True, 'input_tokens': 1, 'output_tokens': 0}
+INFO:     127.0.0.1:56575 - "GET /calls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56576 - "GET /stats HTTP/1.1" 200 OK

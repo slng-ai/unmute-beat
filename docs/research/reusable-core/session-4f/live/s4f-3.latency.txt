@@ -1,0 +1,7 @@
+turn  agent     status       req  useful  model(n)     tools   core   tts_ttfb  user_bot
+   1  verify    answered       2   1.745   1.72(2)    0.00   0.03      0.15  2.2935118675231934
+   2  verify    answered       3   1.004   0.99(1)    0.00   0.02      1.40  3.412109851837158
+   3  booking   answered       2   0.875   0.86(1)    0.00   0.01      0.09  1.9678239822387695
+   4  booking   answered       1   0.726   0.70(1)    0.00   0.02      0.15  1.887096881866455
+median  useful 1.00  model 0.99  tools 0.00  core 0.02  tts_ttfb 0.15
+model requests 8; input tokens 11474, cached 0, output 140

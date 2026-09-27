@@ -1,0 +1,38 @@
+{
+ "at": 1790534374.945782,
+ "verdict": "armed",
+ "active": [
+  {
+   "call_sid": "CA8f4db79bae32675be27029b013121d1a",
+   "campaign": "s4f-worker",
+   "from_number": "+14092355419",
+   "to_number": "+447427919928",
+   "state": "active",
+   "admitted_by": 71031,
+   "worker": 71031,
+   "stream_sid": "MZcc0dbfc45c22d8c1ece1c6fc59077054",
+   "admitted_at": 1790534372.812086,
+   "started_at": 1790534373.430739,
+   "ended_at": null,
+   "ended": null,
+   "media_host": "wss://providence-airfare-entertaining-ultram.trycloudflare.com/ws",
+   "served_port": 7870
+  },
+  {
+   "call_sid": "CA5c24944dc5c7e075b93c5820b778babe",
+   "campaign": "s4f-worker",
+   "from_number": "+19803906363",
+   "to_number": "+447427919928",
+   "state": "active",
+   "admitted_by": 71031,
+   "worker": 71037,
+   "stream_sid": "MZ2997b09ebec1ef93351934361325520e",
+   "admitted_at": 1790534374.048696,
+   "started_at": 1790534374.906653,
+   "ended_at": null,
+   "ended": null,
+   "media_host": "wss://toddler-third-demonstrated-homeland.trycloudflare.com/ws",
+   "served_port": 7871
+  }
+ ]
+}

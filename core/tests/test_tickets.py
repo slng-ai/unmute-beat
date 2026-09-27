@@ -26,6 +26,7 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R16: only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
 * R17: a receipt said again on request, past the automatic limit, only while it stands, with nothing sent.
 * R18: after a change, the resources it named are offered again by the desk's own function.
+* R19: a read-back with no playback evidence is withdrawn once, and stays withdrawn; the caller can go on.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -37,6 +38,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -993,6 +995,125 @@ async def spoken_offers_go_with_their_options(folder: Path):
         aside.unlink()
 
 
+def spans(exporter: InMemorySpanExporter) -> InMemorySpanExporter:
+    """Collect this process's finished spans in `exporter`, on the one global provider."""
+    provider = trace.get_tracer_provider()
+    if not isinstance(provider, TracerProvider):
+        provider = TracerProvider()
+        trace.set_tracer_provider(provider)
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    return exporter
+
+
+def estimated(call, reply) -> None:
+    """Play a reply on a transport that only estimates playback: every mark settled `local`, as `LocalPlayout` did.
+
+    The browser path before session 4f's repair: audio written, or time for
+    it to play, and nothing from the far end. The caller's reply begins after.
+    """
+    now = time.perf_counter()
+    for sent in reply.segments:
+        segment = next(s for s in call.all_spoken if s.id == sent.id)
+        segment.at = now - 2
+        name = call.mark_for(sent.id)
+        call.note_mark_sent(name, now - 1, media=320)
+        call.note_mark_returned(name, now - 0.5, local=True)
+    call.note_onset(now)
+
+
+async def estimated_turn(flow, call, script: Script, words: str, *moves) -> list[str]:
+    script.moves = list(moves)
+    reply = await core.text_turn(flow, call, words)
+    estimated(call, reply)
+    return [s.text for s in reply.segments]
+
+
+async def an_unconfirmed_read_back_is_withdrawn_once(folder: Path):
+    """R19 (session 4f follow-up, Langfuse trace 369560b8): a read-back with no playback evidence ends, once.
+
+    The browser incident on the desk: every segment only estimated as played,
+    no simulation. The caller says yes three times; the agent calls the
+    resolve each time. Before the repair the intent stayed prepared, and the
+    caller heard `gave_up` again on every yes. Now the second unconfirmed
+    copy withdraws it (`CallContext.withdraw`): `gave_up` once, nothing
+    pending, the intent terminal, and a `confirmation` span naming the
+    transport and why. Then, specified: confirming again hears `withdrawn`
+    with no read-back, no new intent and no dispatch; a different question is
+    answered; stopping says the goodbye, with `left_undone` (the caller may
+    have talked over `gave_up` too); a corrected value is a new question, read back with its own
+    allowance, and here acknowledged, so a yes to it resolves once. The
+    model is told the evidence is missing, never that the caller did not hear.
+    """
+    exporter = spans(InMemorySpanExporter())
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    call.note_transport('estimated')
+    script.moves = list(TO_READ_BACK)
+    estimated(call, await core.text_turn(flow, call, 'Resuelve el ticket T-101, cuenta ACC-1234.'))
+    readback = '¿Marco el ticket T-101 como resuelto: la impresora ya imprime?'
+
+    said = await estimated_turn(flow, call, script, 'Me parece bien.', ('call', 'resolve_ticket', {}))
+    assert said == [readback], said
+    told = script.told[-1]
+    assert 'missing evidence, not a sign they missed it' in told and 'did not hear' not in told, told
+    said = await estimated_turn(flow, call, script, 'Sí, correcto.', ('call', 'resolve_ticket', {}))
+    assert said == [call.locale.gave_up], said
+    [intent] = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert intent.status == 'withdrawn' and call.pending_question() is None and desk.sent() == 0, intent
+    [withdrawn] = [
+        json.loads(str(s.attributes['confirmation.audit']))
+        for s in exporter.get_finished_spans()
+        if s.name == 'confirmation'
+        and s.attributes
+        and 'withdrawn' in str(s.attributes['confirmation.audit'])
+    ]
+    assert withdrawn['reason'] == 'unconfirmed' and withdrawn['transport'] == 'estimated', withdrawn
+    assert {c['heard_by'] for c in withdrawn['copies']} == {'local'} and not withdrawn['simulated_playout']
+    assert {c['hearing'] for c in withdrawn['copies']} == {'unconfirmed'}, withdrawn
+
+    for words in ('¡Pero si te lo estoy confirmando!', 'Que sí, hazlo.'):
+        said = await estimated_turn(flow, call, script, words, ('call', 'resolve_ticket', {}))
+        assert said == [call.locale.withdrawn], ('confirming again read it back or looped the fallback', said)
+    assert [i.id for i in call.intents if i.operation == 'resolve_ticket'] == [intent.id], call.intents
+    assert call.intents[-1].readbacks == intent.readbacks and desk.sent() == 0, call.intents
+    assert 'Withdrawn: resolve_ticket' in script.told[-1], 'the model was not told it was withdrawn'
+
+    said = await estimated_turn(
+        flow,
+        call,
+        script,
+        '¿Cuál es vuestro horario?',
+        ('call', 'hand_over', {'to': 'faq', 'because': 'a general question'}),
+        ('say', 'De nueve a cinco.'),
+    )
+    assert said == ['De nueve a cinco.'] and call.pending_question() is None, said
+    said = await estimated_turn(flow, call, script, 'Adiós.', ('call', 'goodbye', {}))
+    assert said[-1].endswith(SPANISH_GOODBYE) and call.locale.left_undone in ' '.join(said), said
+    assert desk.sent() == 0
+
+    desk = desk_in(folder / 'standing')
+    script, flow, call = opened(desk)
+    call.note_transport('estimated')
+    script.moves = list(TO_READ_BACK)
+    estimated(call, await core.text_turn(flow, call, 'Resuelve el ticket T-101, cuenta ACC-1234.'))
+    for words in ('Sí.', 'Sí.'):
+        said = await estimated_turn(flow, call, script, words, ('call', 'resolve_ticket', {}))
+    assert said == [call.locale.gave_up], said
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Pon mejor que la arregló el técnico.',
+        ('call', 'collect', {'values': {'resolution': 'la arregló el técnico'}}),
+        ('call', 'resolve_ticket', {}),
+    )
+    assert said == ['¿Marco el ticket T-101 como resuelto: la arregló el técnico?'], said
+    first, second = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert (first.status, second.status, second.readbacks) == ('withdrawn', 'prepared', 0), call.intents
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    assert desk.sent() == 1 and said == ['Ticket T-101 resuelto. ¿Algo más?'], (desk.sent(), said)
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -1015,6 +1136,7 @@ async def main() -> None:
                 a_question_is_not_a_no,
                 a_receipt_is_said_again_when_asked,
                 a_changed_resource_stays_on_offer,
+                an_unconfirmed_read_back_is_withdrawn_once,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -1030,7 +1152,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R18, no phone, date, appointment or slot')
+    print('tickets ok: R1-R19, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

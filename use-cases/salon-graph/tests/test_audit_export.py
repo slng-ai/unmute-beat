@@ -247,7 +247,9 @@ async def a_booking_on_the_wire() -> list[dict[str, Any]]:
         )
         await line.turn('That one.', ('collect', {'slot': friday}), ('call', 'book_appointment'))
         await line.turn('Yes, please.', ('call', 'book_appointment'))
-        assert line.diary.bookings_for(PHONE, line.diary.now().date()), 'the heard yes did not book'
+        assert len(line.diary.bookings_for(PHONE, line.diary.now().date())) == 1, (
+            'the heard yes did not book once'
+        )
         [standing] = line.call.effective()
         await line.turn("That's all, thanks.", ('call', 'goodbye', {'recap': [standing.intent[:8]]}))
     return rows(list(exported.get_finished_spans()))
@@ -258,6 +260,7 @@ def main() -> None:
     audit = json.loads(write_audit(export)['attrs']['write.audit'])
     assert audit['intent'] and audit['operation'] == audit['intent'] and audit['sequence'] >= 1, audit
     assert audit['proposal_args'] == audit['args'] and audit['needs_approval'] is True, audit
+    assert audit['transport'] == 'twilio' and audit['simulated_playout'] is False, audit
     assert audit['playback'] and audit['playback']['marks'], audit
     assert all(m['proposal'] == audit['proposal'] for m in audit['playback']['marks']), audit
     key = f'book_appointment@{audit["turn"]}'

@@ -426,28 +426,38 @@ class Prompted:
     value: str = ''
 
     def put(self, call: CallContext) -> str:
-        """Record the question and return its words; or, for an intent read back `READBACKS` times unheard, the fallback.
+        """Record the question and return its words; or, for an intent past its read-back limit, take it back.
 
         An operation's read-back names its intent, so every copy of it counts
         against that intent (`CallContext.note_unheard_readbacks`), across the
-        caller's joined pieces and reissued questions alike. Past the limit it
-        is not asked again on this call: the caller hears `Locale.gave_up`,
-        which is true, because nothing was dispatched. Copies lost on a line
-        that proves nothing count against `READBACKS`; copies the caller
-        talked over on a line that works count against `CUT_READBACKS`.
+        caller's joined pieces and reissued questions alike. Copies with no
+        evidence on a line that proves nothing count against `READBACKS`;
+        copies the caller talked over on a line that works count against
+        `CUT_READBACKS`. Past the limit the intent is withdrawn
+        (`CallContext.withdraw`): terminal, never dispatched, nothing left
+        pending, so the caller hears `Locale.gave_up` once, which is true.
+        Asked for again (the caller confirms again, an arrival reads it back),
+        the same arguments find the same withdrawn intent, and the caller
+        hears `Locale.withdrawn`: no fresh read-back, no fresh allowance, no
+        dispatch. A corrected value is different arguments: a new intent, read
+        back with its own allowance.
         """
         intent = call.open_intent(self.about, self.value)
+        if intent is not None and intent.status == 'withdrawn':
+            call.note_confirmation('blocked', self.about, 'withdrawn')
+            return call.locale.withdrawn
         if (
             intent is not None
             and intent.status == 'prepared'
             and (intent.readbacks >= READBACKS or intent.cut_readbacks >= CUT_READBACKS)
         ):
             logger.info(
-                '{} read back unheard {} times, cut {} times: fallback',
+                '{} read back unconfirmed {} times, cut {} times: withdrawn',
                 self.about,
                 intent.readbacks,
                 intent.cut_readbacks,
             )
+            call.withdraw(intent.id)
             return call.locale.gave_up
         call.ask(
             BaseProposal(
@@ -460,6 +470,31 @@ class Prompted:
         )
         return self.spoken
 
+
+def _blocked(call: CallContext, proposal: Proposal, reason: str) -> None:
+    """Audit a reply that tried to agree to this read-back and could not (`CallContext.note_confirmation`).
+
+    Only when the caller was answering this same question: the first
+    read-back of a value is not a blocked confirmation. `reason` defaults to
+    the hearing of its last copy.
+    """
+    last = call.last_proposal()
+    if last is None or last[0].about != proposal.about or last[0].value != proposal.value:
+        return
+    call.note_confirmation('blocked', proposal.about, reason or call.last_hearing() or 'unconfirmed')
+
+
+_HEARING: dict[str, str] = {
+    'heard': 'They heard it in full.',
+    'early': 'They began answering before it finished playing, so their reply cannot agree to it: put it to them again.',
+    'cut': 'It was cut off before they heard all of it, so their reply cannot agree to it: put it to them again.',
+    'failed': 'Its audio failed to play, so their reply cannot agree to it: put it to them again.',
+    'unconfirmed': (
+        'This line has not confirmed that it finished playing. That is missing evidence, not a sign they '
+        'missed it, but their reply cannot agree to it yet: put it to them again.'
+    ),
+}
+"""What the model is told about the question the caller is answering, by `CallContext.hearing`. Prompt text."""
 
 READBACKS = 2
 """Read-backs of one intent lost on a line that has proven no delivery, after which it is not asked again."""
@@ -858,15 +893,17 @@ def context(flow: StepFlow, step: Step, call: FlowCall[Any]) -> str:
     )
     last = call.last_proposal()
     if last is not None:
-        question, heard = last
+        question, _ = last
         lines.append(
             f'The caller is answering: "{question.spoken}" ({question.about}). '
-            + (
-                'They heard it in full.'
-                if heard
-                else 'They did not hear all of it, so their reply cannot agree to it: put it to them again.'
-            )
+            + _HEARING[call.last_hearing() or 'unconfirmed']
         )
+    for intent in call.intents:
+        if intent.status == 'withdrawn' and intent.subject == call.identity():
+            lines.append(
+                f'Withdrawn: {intent.operation} {intent.args}. Its read-back could not be confirmed on this line, '
+                'and the caller was told. It is not read back or carried out again on this call: do not offer it.'
+            )
     done = [e for e in call.evidence if e.identity == call.identity()]
     for filed in done[-3:]:
         lines.append(
@@ -1902,6 +1939,7 @@ class ConversationStep(Step):
                         f'Record the change first, then call {operation.name} again to read it back.'
                     )
                 if call._changing & resting_on or not call.approve(proposal.about, value=proposal.value):
+                    _blocked(call, proposal, 'changing' if call._changing & resting_on else '')
                     return read_back
             return await self._approved(flow, operation, call, ctx.usage, ctx.usage_limits)
 
@@ -2089,6 +2127,11 @@ class StepFlow:
     @property
     def start(self) -> str:
         return self.entry
+
+    @property
+    def confirms(self) -> bool:
+        """Whether any operation waits for a heard read-back and a yes: the flow needs playback evidence to act."""
+        return any(operation.needs_approval for operation in self.operations())
 
     def open(
         self,

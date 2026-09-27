@@ -42,6 +42,7 @@ MODULES = (
     'tests.test_calls',
     'tests.test_core',
     'tests.test_marks',
+    'tests.test_browser',
     'tests.test_recovery',
     'tests.test_ceiling',
     'tests.test_audit_export',

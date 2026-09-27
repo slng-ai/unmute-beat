@@ -64,7 +64,7 @@ async def yes_over_every_read_back_is_bounded():
         probe.interrupt()
         await probe._turn('Yes.')
     intent = next(i for i in call.intents if i.operation == 'book_appointment')
-    assert intent.readbacks == READBACKS and intent.status == 'prepared', intent
+    assert intent.readbacks == READBACKS and intent.status == 'withdrawn', intent
     assert books.bookings_for(PHONE, CLOCK.date()) == [], (
         'a yes nobody could have given to the read-back booked'
     )
@@ -145,7 +145,7 @@ async def talking_over_every_copy_is_bounded():
             probe.interrupt()
             await probe._turn('Yes.')
     intent = next(i for i in call.intents if i.operation == 'book_appointment')
-    assert (intent.readbacks, intent.cut_readbacks, intent.status) == (0, CUT_READBACKS, 'prepared'), intent
+    assert (intent.readbacks, intent.cut_readbacks, intent.status) == (0, CUT_READBACKS, 'withdrawn'), intent
     assert books.bookings_for(PHONE, CLOCK.date()) == [], 'a yes over an unheard read-back booked'
     assert probe.fixed()[-1] == call.locale.gave_up, probe.fixed()
     assert probe.fixed().count(readback) == CUT_READBACKS, 'a read-back went out past the limit'

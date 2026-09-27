@@ -54,7 +54,14 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 from core import StepFlow
 from core.graph import model_clients
 from core.observability import setup
-from core.processor import Ceiling, PydanticAgentProcessor, playout, record_ending
+from core.processor import (
+    Ceiling,
+    PydanticAgentProcessor,
+    playout,
+    record_ending,
+    reports_playback,
+    serve_client,
+)
 from salon.app import FLOW, GREETING, open_call
 from salon.diary import Diary
 
@@ -108,13 +115,16 @@ recorded as `local` rather than a mark (`core.processor.TwilioMarks`). A real
 Twilio call returns marks: leave it `echoed`. `coval_sim` sets `absent`.
 """
 DELIVERY = os.getenv('DELIVERY', 'marks')
-"""`simulated` lets estimated playback count as heard (`core.processor.playout(simulate=True)`).
+"""`marks` (the default): a read-back is heard only on the transport's own playback report for it.
 
-Only for a far end that returns no marks and is a test or a developer: the
-local browser transport, or Coval's simulated carrier (`coval_sim` sets it
-with `TWILIO_MARKS=absent`). Anything else (`marks`) approves a read-back
-only on its own returned Twilio mark, so a real voice line with no marks
-can carry out nothing that needs a yes.
+On a phone line that is its returned Twilio mark. In the browser it is the
+client page's playout report (`core.processor.WebRTCPlayout`): open
+http://localhost:7860, which serves core's client (`serve_client`); the
+runner's prebuilt client at /client reports no playback, and a call from it
+is refused before the greeting (`reports_playback`). `simulated` lets
+estimated playback count as heard instead (`core.processor.playout(simulate=True)`):
+only for Coval's simulated carrier, which returns no marks (`coval_sim` sets
+it with `TWILIO_MARKS=absent`), or a developer who asks for it.
 """
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
@@ -290,6 +300,7 @@ async def run_bot(
     async def on_user_turn_idle(aggregator):
         await node.remind()
 
+    wiring = playout(transport, call, echoes_marks=TWILIO_MARKS != 'absent', simulate=DELIVERY == 'simulated')
     pipeline = Pipeline(
         [
             transport.input(),
@@ -298,9 +309,7 @@ async def run_bot(
             node,
             tts,
             transport.output(),
-            *playout(
-                transport, call, echoes_marks=TWILIO_MARKS != 'absent', simulate=DELIVERY == 'simulated'
-            ),
+            *wiring,
             assistant_aggregator,
         ]
     )
@@ -313,6 +322,15 @@ async def run_bot(
 
     @worker.rtvi.event_handler('on_client_ready')
     async def on_client_ready(rtvi):
+        """A browser client is ready. One that reports no playback could never confirm anything: say so and end."""
+        if flow.confirms and not await reports_playback(wiring):
+            logger.error(
+                'this browser client reports no playback: open http://localhost:7860 for one that does'
+            )
+            call.note_ending('unconfirmable', 'the client reports no playback', observed=True)
+            await node.greet(call.locale.unconfirmable)
+            await node.hang_up()
+            return
         await greet()
 
     async def hang_up() -> None:
@@ -358,6 +376,7 @@ async def bot(runner_args: RunnerArguments) -> None:
 
 
 if __name__ == '__main__':
-    from pipecat.runner.run import main
+    from pipecat.runner.run import app, main
 
+    serve_client(app)
     main()

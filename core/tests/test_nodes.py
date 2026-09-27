@@ -69,6 +69,8 @@ class Script:
     def __init__(self) -> None:
         self.moves: list[tuple[Any, ...]] = []
         self.steps: list[str] = []
+        self.told: list[str] = []
+        """Everything each request was sent (instructions and messages), as text, for checks on what a step was told."""
         self.call: core.FlowCall | None = None
         self.delay = 0.0
         self.model = FunctionModel(self.reading, stream_function=self.agent)
@@ -78,6 +80,7 @@ class Script:
 
     async def agent(self, messages: Any, info: AgentInfo):
         self.steps.append(self.call.state.agent if self.call is not None else '?')
+        self.told.append(f'{getattr(info, "instructions", "") or ""}\n{messages!r}')
         if self.delay:
             await asyncio.sleep(self.delay)
         if not self.moves:

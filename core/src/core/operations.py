@@ -202,6 +202,7 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 'playback': call.playback_for(answering[0]) if asked is not None else None,
                 'simulated_delivery': call.simulated_for(answering[0]) if asked is not None else [],
                 'simulated_playout': call.simulated_playout,
+                'transport': call.transport,
                 'status': 'unknown',
             }
             try:
@@ -355,6 +356,11 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         two bookings in flight for one caller is the duplicate this exists to
         prevent, and which of them landed is for reconciliation to say.
         """
+        if intent.status == 'withdrawn':
+            raise ModelRetry(
+                f'Nothing was done: this {self.name} could not be confirmed on this line and was withdrawn. '
+                'It is not carried out on this call.'
+            )
         if intent.status == 'dispatched' or intent.id in call._claimed:
             raise OutcomeUnknownError(f'{self.name}: this request is still waiting for an answer')
         if intent.status == 'unknown' and not self.resendable:

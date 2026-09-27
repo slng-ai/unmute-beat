@@ -411,6 +411,34 @@ def an_exact_date_decides_and_a_day_after_counts_from_its_day():
     assert diary.anchored('friday', on_the_table) == 'friday'
 
 
+def day_after_tomorrow_needs_no_article():
+    """Trace 5edecd4c (session 4d, defect 5): "day after tomorrow" was refused; "the day after tomorrow" was not.
+
+    Both are the same unambiguous day, from the call's own clock. A bare "day
+    after" still names no day by itself, and a month end is crossed by date.
+    """
+    friday, month_end = date(2026, 9, 25), date(2026, 9, 29)
+    for words in (
+        'day after tomorrow',
+        'the day after tomorrow',
+        'Day after tomorrow, please',
+        'the day after tomorrow in the afternoon',
+        'day after tomorrow afternoon',
+    ):
+        assert diary.resolve_day(words, friday) == date(2026, 9, 27), (
+            words,
+            diary.resolve_day(words, friday),
+        )
+    assert diary.resolve_day('day after tomorrow', month_end) == date(2026, 10, 1)
+    assert diary.resolve_day('day before Saturday the 3rd', friday) == date(2026, 10, 2)
+    for alone in ('day after', 'the day after', 'day after next'):
+        assert diary.resolve_day(alone, friday) is None, alone
+    assert diary.day_phrases('Can we do day after tomorrow at two?') == ['day after tomorrow']
+    assert diary.anchored('day after', date(2026, 10, 2)) == '2026-10-03'
+    assert diary.names_a_day('day after tomorrow')
+    assert books.find_slots(ALICE, 'day after tomorrow', 'haircut', AT)['status'] != 'need_day'
+
+
 def anything_outside_the_policy_is_asked_about():
     """Not guessed. The agent gets `need_day` and asks which day."""
     for outside in ('whenever suits', 'in a fortnight', ''):
@@ -696,6 +724,7 @@ async def main():
     the_supported_phrases_resolve()
     the_phrases_of_trace_bbe42ad4_resolve()
     an_exact_date_decides_and_a_day_after_counts_from_its_day()
+    day_after_tomorrow_needs_no_article()
     anything_outside_the_policy_is_asked_about()
     a_modifier_the_policy_cannot_do_is_asked_about()
     a_weekday_must_be_a_whole_word()

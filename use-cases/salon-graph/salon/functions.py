@@ -250,7 +250,8 @@ def find_times(salon: Salon, state: SalonState) -> Times:
     if found.status != 'ok':
         notes.append(
             {
-                'need_day': f'The diary cannot place "{state.booking_day}" as a day. Ask for a weekday or a date.',
+                'need_day': f'Nothing was looked up: "{state.booking_day}" is not a day the diary can place, so '
+                'this says nothing about what is free. Ask which day they mean: a weekday or a date.',
                 'past': f'{found.day} has already gone past. Ask for a day that has not.',
                 'closed': f'The salon is closed on {found.day}. Ask for another day.',
             }.get(found.status, f'Nothing is free on {found.day}. Ask about another day.')

@@ -19,7 +19,9 @@ second, independent caller writes to the same SQLite file through its own
 * V5: two appointments held, the one picked survives a day change; an id
   nobody offered is refused, with a refusal that says what to do;
 * V6: a value said again (a no, a question, a condition, a quotation; heard,
-  unheard or stale) approves no booking, move, cancel or complaint.
+  unheard or stale) approves no booking, move, cancel or complaint;
+* V7: a missing pick, and a day the diary cannot place, each say their own
+  next step, never "ask the caller" or "nothing is free".
 """
 
 import asyncio
@@ -413,6 +415,44 @@ async def a_value_said_again_is_not_a_yes():
     nothing_went_out(call, diary, said, [])
 
 
+async def each_problem_says_its_own_next_step():
+    """V7 (session 4d, defect 5, trace 5edecd4c): a missing pick, a day the diary cannot place, a time not free.
+
+    Each tells the agent a different next step. A missing pick is not
+    something to ask the caller for again; a day that cannot be placed is not
+    a full day.
+    """
+    script, flow, call, diary = await at_booking()
+    held = seed(diary)
+    await turn(
+        flow,
+        call,
+        script,
+        'Move my Friday haircut to Tuesday.',
+        ('call', 'options'),
+        ('collect', {'appointment': held, 'service': 'haircut', 'booking_day': 'Tuesday'}),
+        ('call', 'move_appointment'),
+    )
+    missing = refusals_in(script)[-1]
+    assert missing.startswith('Not yet: no slot picked yet: call options'), missing
+    assert 'ask the caller' not in missing, missing
+    await turn(
+        flow,
+        call,
+        script,
+        'Whenever suits.',
+        ('collect', {'booking_day': 'whenever suits'}),
+        ('call', 'options'),
+        ('say', 'Which day would you like?'),
+    )
+    [options] = [
+        r for r in script.requests[-1].messages[-1].parts if getattr(r, 'tool_name', '') == 'options'
+    ]
+    note = str(options.content)
+    assert 'Nothing was looked up' in note and 'says nothing about what is free' in note, note
+    assert 'Nothing is free' not in note, note
+
+
 async def main() -> None:
     await a_taken_destination_is_refused_and_another_time_moves()
     await a_booking_changed_elsewhere_is_refused_then_offered_fresh()
@@ -421,8 +461,9 @@ async def main() -> None:
     await book_move_and_cancel(via_concierge=True)
     await two_holdings_and_a_reference_not_on_offer()
     await a_value_said_again_is_not_a_yes()
+    await each_problem_says_its_own_next_step()
     print(
-        'moves ok: V1-V6, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V7, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

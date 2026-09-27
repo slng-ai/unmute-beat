@@ -199,8 +199,13 @@ _WEEK_ON = re.compile(rf'\ba\s+week\s+(?:on|from)\s+({_DAYNAMES})\b', re.IGNOREC
 """A week on Saturday: seven days after the coming Saturday."""
 _THE_NTH = re.compile(r'\bthe\s+(\d{1,2})(?:st|nd|rd|th)\b', re.IGNORECASE)
 """The 3rd, with no month: the next 3rd from today. It needs "the" and the suffix, so "at 3" is never a day."""
-_BESIDE = re.compile(r'\bthe\s+day\s+(after|before)\b(.*)$', re.IGNORECASE)
-"""The day after (or before) another day: that day, plus or minus one. With no day after it, it names none."""
+_BESIDE = re.compile(r'\b(?:the\s+)?day\s+(after|before)\b(.*)$', re.IGNORECASE)
+"""The day after (or before) another day: that day, plus or minus one. With no day after it, it names none.
+
+"The" is optional: "day after tomorrow" is how people say it (trace
+5edecd4c, where it was refused, and the refusal was then said to the caller
+as a full day).
+"""
 _UNHANDLED = re.compile(
     r'\b(week on|weeks?|fortnight|after next|the one after|following|in \d|in (two|three|four))\b'
 )
@@ -230,7 +235,7 @@ _ANCHOR = (
     r'|\b\d{4}-\d{2}-\d{2}\b'
 )
 _PHRASE = re.compile(
-    rf'\bthe\s+day\s+(?:after|before)(?:\s+(?:{_ANCHOR}))?'
+    rf'\b(?:the\s+)?day\s+(?:after|before)(?:\s+(?:{_ANCHOR}))?'
     r'|\bthe\s+(?:next|following)\s+day\b' + f'|{_REFUSED.pattern}|{_ANCHOR}',
     re.IGNORECASE,
 )
@@ -276,9 +281,9 @@ def anchored(words: str, on: Date | None) -> str:
     text = ' '.join(words.casefold().split())
     if on is None:
         return words
-    if text in ('the day after', 'the next day', 'the following day'):
+    if text in ('the day after', 'day after', 'the next day', 'the following day'):
         return (on + timedelta(days=1)).isoformat()
-    if text == 'the day before':
+    if text in ('the day before', 'day before'):
         return (on - timedelta(days=1)).isoformat()
     return words
 

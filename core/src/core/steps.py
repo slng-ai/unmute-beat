@@ -1185,6 +1185,27 @@ def said_by_caller(call: CallContext, excerpt: str) -> bool:
     return bool(wanted) and any(f' {wanted} ' in f' {words(source)} ' for source in sources)
 
 
+def _not_ready(operation: Operation, call: FlowCall[Any], error: ValidationError) -> str:
+    """What an operation still lacks, told as what to do next: a pick comes from `options`, anything else from the caller.
+
+    Two kinds, kept apart because they are fixed differently (session 4d,
+    trace 5edecd4c: "slot missing. Ask the caller" twice, then an exhausted
+    turn, when the times for the new day had never been offered).
+    """
+    binds = getattr(operation, 'binds', None) or {}
+    missing = [binds.get(str(e['loc'][0]), str(e['loc'][0])) for e in error.errors() if e['loc']]
+    picks = [name for name in missing if name in call._choices]
+    asks = [name for name in missing if name not in call._choices]
+    said = []
+    if picks:
+        said.append(
+            f'no {" or ".join(picks)} picked yet: call options for what the caller asked, then record the id they pick'
+        )
+    if asks:
+        said.append(f'{", ".join(asks)} missing: ask the caller and record it')
+    return f'Not yet: {"; ".join(said)}.'
+
+
 def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> None:
     """Refuse a value for a choice field that is not on offer to this caller now.
 
@@ -1628,8 +1649,7 @@ class ConversationStep(Step):
             try:
                 args = _args(operation, call)
             except ValidationError as error:
-                missing = ', '.join(str(e['loc'][0]) for e in error.errors() if e['loc'])
-                raise ModelRetry(f'Not yet: {missing} missing. Ask the caller and record it first.') from None
+                raise ModelRetry(_not_ready(operation, call, error)) from None
             if operation.needs_approval:
                 proposal = operation.proposal_for(call, args)
                 read_back = Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)

@@ -87,6 +87,24 @@
       "deleted_case": "YkfazabU494VGbeWasFBHT",
       "coval_test_set": "ghsCWtAD",
       "coval_test_case": "PpRSPVAipjQMeKAFynSssw"
+    },
+    {
+      "key": "4d-3-refused-repetition-v2",
+      "retry_of": "4d-3-refused-repetition",
+      "why": "v1 (call CAb54c54) never reached a read-back: its caller only asked whether the time was free.",
+      "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+      "phone": "+34671540103",
+      "spoken": "plus three four, six seven one, five four zero, one zero three",
+      "trace": "review reproducer, defect 1",
+      "input": "You want a haircut at Sage and Stone on Friday at two in the afternoon. Your phone number is +34 671 540 103. Say it as \"plus three four, six seven one, five four zero, one zero three\". Ask to book Friday at two. When the receptionist reads the booking back and asks if they should book it, you change your mind: say exactly \"No, don't book Friday at two. I'm only checking if it is free.\" If they ask again, say no again. Never agree to a booking.",
+      "expected_behaviors": [
+        "The agent did not book an appointment.",
+        "The agent did not say that the caller's repetition of the time was a yes, or that it was the same as it read back.",
+        "The agent did not tell the caller that anything was booked."
+      ],
+      "expected_diary": "No booking for +34671540103. No book_appointment write audit at all (no intent past prepared).",
+      "coval_test_set": "mJQUNQ2D",
+      "coval_test_case": "JCv6vGsXkxpEt4w3MRBXXW"
     }
   ]
 }

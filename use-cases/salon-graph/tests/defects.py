@@ -194,31 +194,6 @@ def a_refused_pick_loses_the_new_day() -> bool:
     return asyncio.run(check())
 
 
-def goodbye_answers_a_request_with_a_hang_up() -> bool:
-    """Live call CAc82c12: the caller asked to move; the booking agent called `goodbye` in the same turn.
-
-    Nothing in the caller's words was a goodbye: they had just asked for a
-    change, which was recorded. The call ended with the request unanswered.
-    """
-    from tests.script import turn
-    from tests.test_business import at_booking
-
-    async def check() -> bool:
-        script, flow, call, _ = await at_booking()
-        await turn(
-            flow,
-            call,
-            script,
-            'Can you do Wednesday instead?',
-            ('collect', {'service': 'haircut', 'booking_day': 'Wednesday'}),
-            ('call', 'goodbye'),
-            ('say', 'Let me look at Wednesday.'),
-        )
-        return call.ended
-
-    return asyncio.run(check())
-
-
 def verify_waits_with_a_number_to_read_back() -> bool:
     """Live call CAc82c12: the whole number recorded and `wait` in one reply: "Sorry, could you say that again?"
 
@@ -247,10 +222,6 @@ DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
         a_refused_pick_loses_the_new_day,
         '4d live call 1',
     ),
-    'goodbye hangs up on a turn that asked for a change': (
-        goodbye_answers_a_request_with_a_hang_up,
-        '4d live call 1',
-    ),
     'verify waits with a whole number to read back': (
         verify_waits_with_a_number_to_read_back,
         '4d live call 1',
@@ -261,7 +232,12 @@ DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
     '"day after tomorrow" names no day': (day_after_tomorrow_names_no_day, '4d defect 5'),
     'verify says a digit read-back in model words': (verify_says_model_digits, '4d defect 6'),
 }
-"""Each defect, its check (True while the defect is present) and the session that owns the repair."""
+"""Each defect, its check (True while the defect is present) and the session that owns the repair.
+
+Live call 1's hang-up had a reproducer here that scripted the `goodbye` call
+itself, so it measured a guard, not the cause. The cause was the history
+drift of live call 3: core `tests.defects` "old speech is sent as the
+agent's last words", and its regression in core `tests.test_history`."""
 
 
 def main() -> int:

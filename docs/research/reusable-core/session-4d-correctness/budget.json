@@ -231,10 +231,10 @@
  },
  "coval_repair_pool": {
   "calls_allowed": 20,
-  "requested": 12,
-  "placed": 12,
-  "connected": 12,
-  "terminal": 12,
+  "requested": 16,
+  "placed": 16,
+  "connected": 16,
+  "terminal": 16,
   "evidence_complete": 1,
   "runs": [
    {
@@ -435,6 +435,89 @@
     "call_seconds": 300,
     "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
     "result": "failed task, safe: booked BK0002 Monday 09:00 for +34671540102 on a heard yes; verify read the number back from wait (the call 1 fix held live). The caller cut in over the Wednesday offer with \"sorry no\"; endpointing closed that as a new turn, the rest of the sentence never joined it, the agent called goodbye and the call ended. No move, no cancel, no unknown intent, nothing false said. Turn-taking finding, handed to the lifecycle session."
+   },
+   {
+    "label": "s4d-3-refused-repetition",
+    "run": "Pb7rhkkNWfxVHX9HC9itZX",
+    "simulation": "iz3DeeJnDVXBQbQQ2CfLWj",
+    "call_sid": "CAb54c544267bf70f88873f6e0928a6637",
+    "langfuse_session": "CAb54c544267bf70f88873f6e0928a6637",
+    "bound_by": "hand: the only call on serve s4d-correctness-3 at the time",
+    "source": "3a4c3e4",
+    "set": "MmqxRgZW",
+    "case": "XGAeqKFdquEjwVha8pUDBF",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "result": "safe, target not reached: the simulated caller only asked whether Friday at two was free, so no booking was read back and the refused repetition never happened. Diary: no booking, no intent. The agent said nothing was booked. New finding: the booking model wrote a copy of the options tool result as text (\"data/options: {...}\", its own order, not the real one) and it was spoken: a model output fault on a prose step. The history sent to the model was in order (the drift fix held). Ended by the caller (CancelFrame after the goodbye)."
+   },
+   {
+    "label": "s4d-4-taken-then-alternative",
+    "run": "8g6fMVkEpwb5RrJvyCwL5D",
+    "simulation": "irE4H3ZnV7qXxLxBukeeiA",
+    "call_sid": "CA4e59647f812c4073f27ea57d75b5797f",
+    "langfuse_session": "CA4e59647f812c4073f27ea57d75b5797f",
+    "bound_by": "coval_sim correlate",
+    "source": "3a4c3e4",
+    "set": "ghsCWtAD",
+    "case": "PpRSPVAipjQMeKAFynSssw",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "contender": {
+     "took_at": "2026-09-27T14:40:00.059+02:00",
+     "booking": "BK0002 +34671540199 2026-10-01 15:00 revision 1",
+     "matched": "Shall I move your haircut from Tuesday the 29th at 11:00 AM to Thursday the 1st at 3:00 PM?"
+    },
+    "result": "task done, one fault. Diary exactly as expected: BK0001 +34671540104 booked Tuesday 11:00 on a heard yes, moved to Thursday 16:00 (revision 2) on a heard yes after the move to 15:00 was refused by the diary (the contender held it; intent rejected with its booking id, the fix for defect 3 live); the agent said the time was taken and offered 2 PM or 4 PM; goodbye recap from the standing receipt. Intents: book, move 15:00 (rejected), move 16:00. No unknown. Fault: the first move turn ran out of requests (\"Sorry, I am going round in circles there\"): the booking model handed over to concierge for no reason after options, concierge recorded booking_day again as 2026-10-01 instead of thursday, a spelling change that core counted as a change, so the slot offer was cleared and the slot refused. State finding for the next session: values by meaning, not spelling."
+   },
+   {
+    "label": "s4d-2r-interruptive-move",
+    "run": "gAGgJysB7bsUTYNq82RhHS",
+    "simulation": "VpoAHxREEnLRKPU7zYmp2h",
+    "call_sid": "CA51ab472f9f7b58cd0d27c2353de6c04a",
+    "langfuse_session": "CA51ab472f9f7b58cd0d27c2353de6c04a",
+    "bound_by": "coval_sim correlate",
+    "source": "3a4c3e4",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "retry_of": "s4d-2-interruptive-move",
+    "result": "task done, one false phrase partly spoken. Diary exactly as expected: BK0003 +34671540102 booked Monday 09:00 on a heard yes, moved to Tuesday the 29th 09:00 (\"day after tomorrow\", revision 2) on a heard yes; no write for Wednesday. Authorization by code: the move question \"from tomorrow at 9:00 AM to Tuesday the 29th at 9:00 AM?\" played in full (Twilio mark 12:48:31.8Z), yes answered at 12:48:35.1Z. Just before it, the booking model spoke its own copy of the read-back with a wrong source day (\"from Wednesday the 30th\", origin model), cut while playing: the prose-step limit, seen live (text T5 saw it twice). The caller talked over the move receipt five times and it was said again each time (naturalness, lifecycle). Ended by the caller (CancelFrame)."
+   },
+   {
+    "label": "s4d-3r-refused-repetition-v2",
+    "run": "E87gmpv7aBSz6qYQ5Yu3YW",
+    "simulation": "8ZDGSVUcgUMF6HCX8KuSkW",
+    "call_sid": "CAe1250a6d4169cdaf80417ca998971daf",
+    "langfuse_session": "CAe1250a6d4169cdaf80417ca998971daf",
+    "bound_by": "hand: the only call on serve s4d-correctness-3 at the time (coval_sim printed call unknown)",
+    "source": "3a4c3e4",
+    "set": "mJQUNQ2D",
+    "case": "JCv6vGsXkxpEt4w3MRBXXW",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "retry_of": "s4d-3-refused-repetition",
+    "result": "target reached, passed from the diary: code read back \"Shall I book a haircut, Friday the 2nd at 2:00 PM?\"; the caller answered \"no don't book friday at two i'm only checking if it is free\"; no Restated line, no write, no intent; the agent said nothing was booked. Diary: no booking, no intent for +34671540103. Naturalness: the goodbye added the left_undone line (\"I haven't made that last change\") after an explicit no. Ended by the bot (EndFrame after goodbye)."
    }
   ],
   "stage_c_live_ramp_cap": 8,
@@ -442,7 +525,7 @@
    "plan": "4 initial targeted calls, at most 3 narrow retries; 2 latency and 2 worker-failure calls stay reserved",
    "cap_this_session": 7,
    "test_sets": "coval-fixtures.v1.json: one single-case set per call",
-   "placed": 3
+   "placed": 7
   }
  },
  "reserved_for_later_stages": {

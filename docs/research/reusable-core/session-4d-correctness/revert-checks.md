@@ -17,6 +17,9 @@ was then restored from the saved diff and the suite passed again.
 | 5 | `steps.py`, `salon/functions.py` (texts) | salon V7 | "Not yet: slot missing. Ask the caller and record it first." |
 | 6 | `wrote_this_turn` (one line) | core S8 | a claim after a lookup went uncorrected |
 | 6 | `salon/agent.yaml` (verify rendered) | salon `verify_says_every_word_in_code` | the model's own digits were said |
+| call 1 | `core/src/core/steps.py` (`collect` keeps fields on offer) | salon V9 | the day was lost beside a refused id |
+| call 1 | `core/src/core/steps.py` (`wait` reads back) | salon `verify_says_every_word_in_code` | the pardon line beside a whole number |
+| call 3 | `core/src/core/history.py` | core `old_speech_stays_where_it_was_said` | a turn-1 line was sent as the agent's last words |
 
 The script: save `git diff -- <files>`, `git checkout -- <files>`, run the
 module with `GOOGLE_API_KEY=x`, then `git apply` the saved diff.

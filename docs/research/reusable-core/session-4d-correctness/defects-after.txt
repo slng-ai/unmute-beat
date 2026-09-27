@@ -1,5 +1,6 @@
-# e48eb33 1 changed paths; all six fixes
+# 96ddb1f 13 changed paths; after the live-call fixes
 ## core/tests/defects.py
+fixed: old speech is sent as the agent's last words
 fixed: a restated value books without a yes
 fixed: a cancel during the version check sends the write again
 fixed: a lookup receipt lets a prose claim through uncorrected
@@ -15,6 +16,8 @@ fixed: an invalid reconciliation answer clears the retry guard
 fixed: a lookup receipt backs a goodbye that claims a booking
 exit=1
 ## use-cases/salon-graph/tests/defects.py
+fixed: a refused pick loses the new day recorded beside it
+fixed: verify waits with a whole number to read back
 fixed: a restated booking value books without a yes
 fixed: a move refused by the diary is left unknown
 fixed: a day change forgets the appointment being moved

@@ -10,9 +10,9 @@ Each step asserts which node is active, what each provider request was sent
 (the requested time, the offer, the pending read-back, the receipt), and
 what the diary holds. It also writes the booking node's rendered context at
 the offer, the pending read-back and after the receipt to
-`docs/research/reusable-core/session-4c/booking-context.md`, so the
-design can be reviewed from what the agent actually sees. Session 4's copy
-stays as it was measured. A recap reference is an intent id, random per run,
+`docs/research/reusable-core/session-4e/booking-context.md`, so the
+design can be reviewed from what the agent actually sees. Session 4's and 4c's copies
+stay as they were measured. A recap reference is an intent id, random per run,
 so the snapshot writes it as `<ref>`.
 
 Covers D1-D6, P4, P13, P14, P15 and P17 (scripted). Scripted models prove the
@@ -29,7 +29,7 @@ from tests.script import CLOCK, PHONE, Script, opened, slot, text_of, turn
 TODAY = CLOCK.date()
 FRIDAY = '2026-10-02'
 SNAPSHOTS = (
-    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4c' / 'booking-context.md'
+    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4e' / 'booking-context.md'
 )
 REF = re.compile(r'\b[0-9a-f]{8}(?=: ")')
 """A recap reference in the rendered context: an intent id's first characters, different every run."""
@@ -61,7 +61,7 @@ async def the_booking_walkthrough():
     assert call.state.agent == 'verify' and call.state.pending == 'booking', call.state
     assert said == ['Is your number +34 600 11 12 22?'], said
     facts = call.state.facts
-    assert (facts.service, facts.booking_day, facts.booking_time) == ('haircut', 'Friday', '14:00')
+    assert (facts.service, facts.booking_day, facts.booking_time) == ('haircut', '2026-10-02', '14:00')
     assert not facts.verified_phone, 'a number from the carrier is not an identity'
 
     said = await turn(
@@ -188,7 +188,7 @@ async def a_changed_day_offers_again_and_books_nothing_old():
         ('say', 'On Saturday I have 2:00 PM. Does that work?'),
     )
     assert diary.bookings_for(PHONE, TODAY) == [], 'nothing was written under the Friday approval'
-    assert call.state.facts.booking_day == 'Saturday' and slot(FRIDAY, '14:00') not in call._offered.get(
+    assert call.state.facts.booking_day == '2026-10-03' and slot(FRIDAY, '14:00') not in call._offered.get(
         'slot', {}
     )
     assert any('2026-10-03' in s for s in call._offered.get('slot', {})), call._offered

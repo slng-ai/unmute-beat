@@ -35,7 +35,7 @@ import time
 from salon.diary import Diary
 from salon.functions import Cancel, Move, Salon, cancel, find_move, move
 from tests.script import CLOCK, PHONE, slot, turn
-from tests.test_business import FRIDAY, TUE, at_booking, seed
+from tests.test_business import FRIDAY, TUE, at_booking, read_back, seed
 
 OTHER = '+447700900123'
 """A second, synthetic caller (Ofcom's drama range)."""
@@ -514,7 +514,7 @@ async def a_move_request_keeps_its_day():
         ('say', 'Wednesday at nine is free. Shall I move it?'),
     )
     facts = call.state.facts
-    assert (facts.booking_day, facts.booking_time, facts.appointment) == ('Wednesday', '09:00', ''), facts
+    assert (facts.booking_day, facts.booking_time, facts.appointment) == ('2026-09-30', '09:00', ''), facts
     refusal = next(r for r in refusals_in(script) if 'on offer' in r)
     assert refusal.startswith('Recorded: booking_day, booking_time. Not recorded:'), refusal
     times = next(
@@ -524,6 +524,80 @@ async def a_move_request_keeps_its_day():
         if getattr(part, 'tool_name', '') == 'options'
     )
     assert '2026-09-30T0900|haircut' in times, "the times offered were not the new day's"
+
+
+async def a_day_said_two_ways_is_one_day():
+    """V10 (live call CA4e5964, session 4d call 5): "thursday", then "2026-10-01" from concierge, is one request.
+
+    Booked Tuesday, asked to move to Thursday, the times shown; booking then
+    handed over to concierge, which recorded the day again as a date. The
+    state holds the day as the date it means, so nothing changed: the time
+    on offer stays pickable and the move is read back. A real change of day
+    still takes the times away.
+    """
+    script, flow, call, diary = await at_booking()
+    await read_back(flow, call, script, day='Tuesday', at='11:00', words='Tuesday at eleven.')
+    await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    [held] = [b['booking_id'] for b in diary.bookings_for(PHONE, CLOCK.date())]
+    await turn(
+        flow,
+        call,
+        script,
+        'Can you move it?',
+        ('call', 'options'),
+        ('collect', {'appointment': held}),
+        ('say', 'Which day?'),
+    )
+    await turn(
+        flow,
+        call,
+        script,
+        'Thursday at three.',
+        ('collect', {'booking_day': 'thursday', 'booking_time': '15:00'}),
+        ('call', 'options'),
+        ('say', 'Thursday at three is free.'),
+    )
+    thursday = slot('2026-10-01', '15:00')
+    assert call.state.facts.booking_day == '2026-10-01' and thursday in call._offered['slot'], (
+        call.state.facts,
+        call._offered,
+    )
+    await turn(
+        flow,
+        call,
+        script,
+        'Thursday, yes.',
+        ('collect', {'booking_day': 'Thursday'}),
+        ('say', 'At three?'),
+    )
+    assert thursday in call._offered.get('slot', {}), 'the same day said again took the times away'
+    await turn(
+        flow,
+        call,
+        script,
+        'Yes, Thursday the first.',
+        ('call', 'hand_over', {'to': 'concierge', 'because': 'confirm the day'}),
+        ('collect', {'booking_day': '2026-10-01'}),
+        ('call', 'hand_over', {'to': 'booking', 'because': 'move to Thursday at three'}),
+        ('collect', {'slot': thursday}),
+        ('call', 'move_appointment'),
+    )
+    assert not [r for r in refusals_in(script) if 'on offer' in r], (
+        'a day spelled again took the time on offer away',
+        refusals_in(script),
+    )
+    assert call.state.facts.slot == thursday, call.state.facts
+    await turn(
+        flow,
+        call,
+        script,
+        'Actually, Friday.',
+        ('collect', {'booking_day': 'friday'}),
+        ('say', 'Let me look at Friday.'),
+    )
+    facts = call.state.facts
+    assert (facts.booking_day, facts.slot, facts.appointment) == ('2026-10-02', '', held), facts
+    assert 'slot' not in call._offered, 'a real change of day kept the Thursday times'
 
 
 async def main() -> None:
@@ -537,8 +611,9 @@ async def main() -> None:
     await each_problem_says_its_own_next_step()
     await a_contender_takes_the_time_the_bot_reads_back()
     await a_move_request_keeps_its_day()
+    await a_day_said_two_ways_is_one_day()
     print(
-        'moves ok: V1-V9, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V10, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

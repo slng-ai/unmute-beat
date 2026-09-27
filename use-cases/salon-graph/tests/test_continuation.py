@@ -437,7 +437,7 @@ async def a_yes_with_a_new_request_is_verified_and_the_rest_kept():
     assert facts.verified_phone == PHONE and facts.customer_phone == PHONE, (
         'the yes did not verify the unchanged number'
     )
-    assert facts.booking_day == 'Saturday', 'the new day was lost'
+    assert facts.booking_day == '2026-09-26', ('the new day was lost', facts)
     assert call.state.agent == 'booking', call.state.agent
 
 

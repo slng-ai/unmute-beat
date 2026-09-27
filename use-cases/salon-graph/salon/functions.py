@@ -22,16 +22,16 @@ import asyncio
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints, ValidationError
 
 from core import Intent, OutcomeUnknownError
-from salon.diary import WEEKDAYS, AlreadyHoldsError, Diary, RefusedError, day_phrases, resolve_day, spoken_day
+from salon.diary import AlreadyHoldsError, Diary, RefusedError, spoken_day
 from salon.models.receipts import CustomerLookup, Held, Saved, Slots
 from salon.models.shapes import Spoken, SubmittedPhone, grouped, phone_length
-from salon.models.state import SalonState
+from salon.models.state import SalonState, ambiguous_day
 
 
 @dataclass
@@ -187,13 +187,6 @@ OFFER_AT_MOST = 6
 """How many times the agent is shown, nearest the caller's time first. It offers up to three of them."""
 
 
-def _bare_weekday(words: str) -> int | None:
-    """The weekday these words name on their own ("Saturday", "on Saturday instead"), or None."""
-    phrases = day_phrases(words)
-    index = {name.casefold(): number for number, name in enumerate(WEEKDAYS)}
-    return index.get(phrases[0]) if len(phrases) == 1 else None
-
-
 def _discussed(salon: Salon, phone: str, state: SalonState, today: date) -> date | None:
     """The day already on the table: the times last offered to this call, else the booking being moved."""
     offered = salon.diary.offered_to(salon.call, phone)
@@ -203,25 +196,6 @@ def _discussed(salon: Salon, phone: str, state: SalonState, today: date) -> date
         if held['booking_id'] == state.appointment:
             return date.fromisoformat(held['date'])
     return None
-
-
-def _ambiguous(words: str, today: date, discussed: date | None) -> tuple[date, date] | None:
-    """Two dates a bare weekday could mean beside the date under discussion, or None when it means one.
-
-    "Saturday instead", said about "Friday next week", is the Saturday after
-    that Friday to one caller and the coming Saturday to another (session 3:
-    three live calls, two different dates). Read from today it is the coming
-    one; read beside the date under discussion it is the one in that week.
-    When those differ, neither is chosen: the caller is asked, with both dates.
-    """
-    weekday = _bare_weekday(words)
-    if weekday is None or discussed is None:
-        return None
-    coming = resolve_day(words, today)
-    beside = discussed - timedelta(days=discussed.weekday()) + timedelta(days=weekday)
-    if coming is None or beside < today or beside == coming:
-        return None
-    return coming, beside
 
 
 def _nearest(slots: list[dict], wanted: str) -> list[dict]:
@@ -249,7 +223,7 @@ def find_times(salon: Salon, state: SalonState) -> Times:
     today = now.date()
     if not state.booking_day:
         return Times(note='No day yet: ask which day they would like.')
-    if (two := _ambiguous(state.booking_day, today, _discussed(salon, phone, state, today))) is not None:
+    if (two := ambiguous_day(state.booking_day, today, _discussed(salon, phone, state, today))) is not None:
         first, second = (spoken_day(day, today) for day in two)
         return Times(
             note=f'"{state.booking_day}" could be {first} or {second}. Nothing is offered: ask which one, '

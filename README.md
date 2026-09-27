@@ -172,42 +172,6 @@ same runtime without phone numbers, appointments or salon imports. The
 show controlled flow, one conversational agent, handoff and code-node patterns
 using the same domain functions.
 
-### Try the public API without a model request
-
-**Migration branch only.** Run from the repository root after `uv sync --all-packages`.
-This scripted model asks a question; it makes no provider request or backend write.
-
-```bash
-uv run --directory core python - <<'PY'
-import asyncio
-
-from pydantic_ai import models
-from pydantic_ai.models.function import FunctionModel
-
-import core
-
-models.ALLOW_MODEL_REQUESTS = False
-
-async def answer(messages, info):
-    yield 'What is your patient number?'
-
-async def main():
-    spec = core.load('tests/clinic_flow/code_node.yaml')
-    flow = spec.compile(model=FunctionModel(stream_function=answer))
-    call = flow.open(flow.state_type())
-    reply = await core.text_turn(flow, call, 'Can you look up my appointment?')
-    for segment in reply.segments:
-        print(segment.text)
-        call.acknowledge(segment.id)
-
-asyncio.run(main())
-PY
-```
-
-Here the text driver explicitly treats printed segments as delivered. A voice
-adapter must use actual playback evidence; successful text generation is not
-evidence that a caller heard the words.
-
 ## Approval, effects and speech
 
 The intended operation boundary separates four facts: what the caller requested,

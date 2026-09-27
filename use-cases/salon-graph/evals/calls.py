@@ -519,9 +519,9 @@ def check_t5(record: Record) -> list[str]:
     moved = next(
         (w for w in record.writes if w.get('action') == 'move_appointment' and w.get('status') == 'ok'), None
     )
-    if moved is not None and moved['receipt'].get('date') != '2026-09-30':
+    if moved is not None and not str(moved['args'].get('slot', '')).startswith('2026-09-30'):
         problems.append(
-            f'"the day after tomorrow" is Wednesday the 30th; moved to {moved["receipt"].get("date")}'
+            f'"the day after tomorrow" is Wednesday the 30th; moved to {moved["args"].get("slot")}'
         )
     for write in (w for w in record.writes if w.get('changes') and w.get('status') == 'ok'):
         if not played(record, write['question']):

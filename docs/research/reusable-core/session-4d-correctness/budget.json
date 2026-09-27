@@ -3,8 +3,8 @@
  "text": {
   "requests_allowed": null,
   "tokens_allowed": 515000,
-  "requests_spent": 164,
-  "tokens_spent": 374350,
+  "requests_spent": 198,
+  "tokens_spent": 470853,
   "runs": [
    {
     "label": "text-1",
@@ -139,6 +139,27 @@
      }
     },
     "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; the Langfuse sessions hold the full record"
+   },
+   {
+    "label": "text-6",
+    "source": "e9d086e (all six fixes; clean tree)",
+    "why": "session 4d: the two new focused cases first, T5 (move with a relative day, cancel) and T6 (refused read-back repeating its time)",
+    "cases": {
+     "T5.v1": {
+      "result": "off-script",
+      "requests": 25,
+      "tokens": 76693,
+      "session": "text-T5.v1-61c6706d",
+      "note": "off-script at turn 12 of 12: booked Tuesday 10:00, moved to \"day after tomorrow\" = Wednesday 30th 10:00 (correct); the cancel read-back got a yes and the model answered in text, withheld as a claim; nothing cancelled, nothing false said. The booking model twice spoke its own read-back as prose (turns 7, 10)."
+     },
+     "T6.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19810,
+      "session": "text-T6.v1-f88b35ec"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; T5 turn 12 had one"
    }
   ],
   "allowance_changes": [

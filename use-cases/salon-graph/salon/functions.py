@@ -22,13 +22,13 @@ import asyncio
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints, ValidationError
 
 from core import Intent, OutcomeUnknownError
-from salon.diary import AlreadyHoldsError, Diary, RefusedError, spoken_day
+from salon.diary import AlreadyHoldsError, Diary, RefusedError, spoken_day, spoken_time
 from salon.models.receipts import CustomerLookup, Held, Saved, Slots
 from salon.models.shapes import Spoken, SubmittedPhone, grouped, phone_length
 from salon.models.state import SalonState, ambiguous_day
@@ -143,10 +143,16 @@ class Noted(BaseModel):
 
 
 class Times(BaseModel):
-    """The times on offer by slot id, and what the agent should know that an id cannot say."""
+    """The times on offer by slot id, what the agent should know that an id cannot say, and what the caller hears.
+
+    `say` is the salon's own words for this offer: the booking step is
+    rendered, so the model reads the caller and chooses, and never words an
+    offer (session 4d: it spoke a copy of the options as JSON, call 4).
+    """
 
     options: dict[str, str] = {}
     note: str = ''
+    say: str = ''
 
 
 def spoken_service(service: str) -> str:
@@ -161,6 +167,26 @@ def lookup_customer(salon: Salon, args: PhoneArgs) -> CustomerLookup:
 
 def number_words(args: PhoneArgs) -> str:
     return f'Is your number {Spoken.validate_python(args.phone)}?'
+
+
+def slot_refusal(raw: str) -> str:
+    """What the caller hears when the time recorded is not one on offer: booking's `refusals:`, said by code."""
+    return "That time isn't one I have free."
+
+
+def appointment_refusal(raw: str) -> str:
+    """What the caller hears when the booking recorded is not one they hold on offer."""
+    return "I can't find that booking."
+
+
+def service_refusal(raw: str) -> str:
+    """What the caller hears when the service recorded is not one the salon offers."""
+    return 'We do haircuts, colour and blowouts. Which would you like?'
+
+
+def time_refusal(raw: str) -> str:
+    """What the caller hears when the time asked for is not a time the diary can read."""
+    return 'What time would suit you?'
 
 
 def phone_refusal(raw: str) -> str:
@@ -184,7 +210,35 @@ def phone_refusal(raw: str) -> str:
 
 
 OFFER_AT_MOST = 6
-"""How many times the agent is shown, nearest the caller's time first. It offers up to three of them."""
+"""How many times the agent is shown, nearest the caller's time first. The caller hears up to three of them."""
+OFFER_SAID = 3
+
+
+def _listed(items: list[str], last: str = 'or') -> str:
+    return items[0] if len(items) == 1 else f'{", ".join(items[:-1])} {last} {items[-1]}'
+
+
+def _on(day: str) -> str:
+    """ "On Friday the 2nd", but "Tomorrow" and "Today" on their own."""
+    return day.capitalize() if day in ('today', 'tomorrow') else f'On {day}'
+
+
+def _times_said(state: SalonState, slots: list[dict], day: str, asked_free: bool | None) -> str:
+    """The offer as the caller hears it: the nearest times on the day, or the time they asked for when it is free."""
+    times = [
+        spoken_time(time.fromisoformat(s['time']))
+        + ('' if state.service else f' for a {spoken_service(s["service"])}')
+        for s in slots[:OFFER_SAID]
+    ]
+    if not times:
+        return f'{_on(day)} nothing is free. Would another day work?'
+    if asked_free:
+        free = (
+            f'{times[0]} {day} is free.' if day in ('today', 'tomorrow') else f'{times[0]} on {day} is free.'
+        )
+        return f'{free} I also have {_listed(times[1:])}.' if times[1:] else free
+    taken = f'{spoken_time(time.fromisoformat(state.booking_time))} is taken. ' if asked_free is False else ''
+    return f'{taken}{_on(day)} I have {_listed(times)}. Which would suit you?'
 
 
 def _discussed(salon: Salon, phone: str, state: SalonState, today: date) -> date | None:
@@ -222,12 +276,13 @@ def find_times(salon: Salon, state: SalonState) -> Times:
     now = salon.now()
     today = now.date()
     if not state.booking_day:
-        return Times(note='No day yet: ask which day they would like.')
+        return Times(note='No day yet: ask which day they would like.', say='Which day would you like?')
     if (two := ambiguous_day(state.booking_day, today, _discussed(salon, phone, state, today))) is not None:
         first, second = (spoken_day(day, today) for day in two)
         return Times(
             note=f'"{state.booking_day}" could be {first} or {second}. Nothing is offered: ask which one, '
-            'naming both dates, and record their answer as a date.'
+            'naming both dates, and record their answer as a date.',
+            say=f'Do you mean {first} or {second}?',
         )
     found = Slots.model_validate(
         salon.diary.find_slots(
@@ -241,6 +296,7 @@ def find_times(salon: Salon, state: SalonState) -> Times:
     )
     held = ', '.join(f'{spoken_service(h.service)} {h.spoken} ({h.booking_id})' for h in found.bookings)
     notes = [f'They already hold: {held}.'] if held else []
+    day = spoken_day(found.date, today) if found.date else found.day
     if found.status != 'ok':
         notes.append(
             {
@@ -250,8 +306,17 @@ def find_times(salon: Salon, state: SalonState) -> Times:
                 'closed': f'The salon is closed on {found.day}. Ask for another day.',
             }.get(found.status, f'Nothing is free on {found.day}. Ask about another day.')
         )
-        return Times(note=' '.join(notes))
+        return Times(
+            note=' '.join(notes),
+            say={
+                'need_day': 'Which day do you mean? A weekday or a date is fine.',
+                'past': f'{day.capitalize()} has already gone. Which other day would suit you?',
+                'closed': f"We're closed {day if day in ('today', 'tomorrow') else f'on {day}'}. "
+                'Which other day would suit you?',
+            }.get(found.status, f'{_on(day)} nothing is free. Would another day work?'),
+        )
     slots = _nearest([s.model_dump(mode='json') for s in found.slots], state.booking_time)[:OFFER_AT_MOST]
+    free = None
     if state.booking_time and re.fullmatch(r'\d{2}:\d{2}', state.booking_time):
         free = any(s['time'][:5] == state.booking_time for s in slots)
         notes.append(
@@ -262,18 +327,29 @@ def find_times(salon: Salon, state: SalonState) -> Times:
     return Times(
         options={s['slot_id']: f'{spoken_service(s["service"])} {s["spoken"]}' for s in slots},
         note=' '.join(notes),
+        say=_times_said(state, slots, day, free),
     )
 
 
-def held_bookings(salon: Salon, state: SalonState) -> dict[str, str]:
-    """The bookings this verified caller holds, by id, as they are said: what a move or a cancel can name."""
+def held_bookings(salon: Salon, state: SalonState) -> Times:
+    """The bookings this verified caller holds, by id, as they are said: what a move or a cancel can name.
+
+    The caller hears them only while nothing else is on the table: no booking
+    picked yet and no day asked for, which is how a move or a cancel starts.
+    Once they are looking at times, the bookings they hold are the agent's to
+    know, not a line to repeat with every offer.
+    """
     if not state.verified_phone:
-        return {}
+        return Times()
     today = salon.now().date()
-    return {
+    held = {
         h['booking_id']: f'{spoken_service(h["service"])} {h["spoken"]}'
         for h in salon.diary.show_holdings(salon.call, state.verified_phone, today)
     }
+    if not held or state.appointment or state.booking_day:
+        return Times(options=held)
+    said = _listed([f'a {words}' for words in held.values()], 'and')
+    return Times(options=held, say=f'You have {said}.' + (' Which one?' if len(held) > 1 else ''))
 
 
 def _held(salon: Salon, phone: str) -> list[Held]:

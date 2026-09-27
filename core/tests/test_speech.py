@@ -130,7 +130,7 @@ async def a_refusal_in_core_words(folder: Path):
     script, flow, call = opened(desk)
     await to_read_back(flow, call, script)
     desk.edit('T-101')
-    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}), ('say', CLAIMS[0]))
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}), ('call', 'wait', {}))
     assert said == [call.locale.withheld], said
     assert [i.status for i in call.intents if i.operation == 'resolve_ticket'] == ['rejected']
     no_model_words(call)

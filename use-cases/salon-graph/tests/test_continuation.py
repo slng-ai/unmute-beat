@@ -127,14 +127,20 @@ async def read_back_a_haircut(call, probe, *, played: bool = True) -> str:
 
 @contextmanager
 def steps(**by_step):
-    """Every step's model, scripted by the caller's words so far: `{step: fn(heard) -> move}`. Default: speak."""
+    """Every step's model, scripted by the caller's words so far: `{step: fn(heard) -> move}`. Default: speak.
+
+    On a rendered step `say` is its `wait` choice, as in `tests.script`.
+    """
     stack = ExitStack()
     for name, node in FLOW.nodes.items():
         choose = by_step.get(name)
+        rendered = getattr(FLOW.by_id.get(name), 'rendered', False)
 
-        async def stream(messages, info, choose=choose):
+        async def stream(messages, info, choose=choose, rendered=rendered):
             move = await choose(call_of[0]) if choose else ('say', 'Anything else?')
-            if move[0] == 'say':
+            if move[0] == 'say' and rendered:
+                yield {0: DeltaToolCall(name='wait', json_args='{}')}
+            elif move[0] == 'say':
                 yield move[1]
             else:
                 yield {0: DeltaToolCall(name=move[1], json_args=json.dumps(move[2] if len(move) > 2 else {}))}

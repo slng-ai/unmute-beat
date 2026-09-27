@@ -336,20 +336,25 @@ async def a_value_said_again_is_not_a_yes():
     """V6 (session 4d, defect 1): recording an unchanged value never approves a booking, move, cancel or complaint.
 
     Each reply below says the read-back's value again, and the scripted agent
-    only records it, as a model reading the words would. Nothing is carried
-    out, no `Locale.restated` is said, and the agent's own words are. A heard
-    read-back, an unheard one and one asked two turns ago are all tried.
+    only records it, as a model reading the words would, then looks again.
+    Nothing is carried out, no `Locale.restated` is said, and the caller
+    hears the salon's offer again (booking is rendered since session 4e). A
+    heard read-back, an unheard one and one asked two turns ago are all tried.
     """
-    from tests.test_business import read_back
-
     for words in REPLIES:
         script, flow, call, diary = await at_booking()
         await read_back(flow, call, script)
         said = await turn(
-            flow, call, script, words, ('collect', {'slot': slot(FRIDAY, '14:00')}), ('say', 'Sure.')
+            flow,
+            call,
+            script,
+            words,
+            ('collect', {'slot': slot(FRIDAY, '14:00')}),
+            ('call', 'options'),
+            ('call', 'wait'),
         )
         nothing_went_out(call, diary, said, [])
-        assert said == ['Sure.'], (words, said)
+        assert said == ['2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'], (words, said)
 
     script, flow, call, diary = await at_booking()
     await read_back(flow, call, script, heard=False)
@@ -437,6 +442,7 @@ async def each_problem_says_its_own_next_step():
         ('call', 'options'),
         ('collect', {'appointment': held, 'service': 'haircut', 'booking_day': 'Tuesday'}),
         ('call', 'move_appointment'),
+        ('call', 'wait'),
     )
     missing = refusals_in(script)[-1]
     assert missing.startswith('Not yet: no slot picked yet: call options'), missing

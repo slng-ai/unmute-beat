@@ -93,6 +93,8 @@ class FlowCall[S: BaseModel](CallContext):
     """For each choice field, the ids offered to this caller and how each was said. Only these can be picked."""
     _offer_words: tuple[int, str] = PrivateAttr(default=(0, ''))
     """On a rendered step, the application's words for the offer made on this turn, until `wait` says them."""
+    _refused_on: int = PrivateAttr(default=0)
+    """The turn on which a rendered step's operation met an authoritative no: `wait` says so if nothing else."""
     _locale: Locale | None = PrivateAttr(default=None)
     _version: int = PrivateAttr(default=0)
     """Bumped by every accepted change to the application state: work begun on an older version is stale."""
@@ -1403,9 +1405,10 @@ async def _carry_out(
 ) -> str | None:
     """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown.
 
-    On a rendered step an authoritative no is said by code too
-    (`Locale.withheld`, or `unsettled` while anything is unknown), instead
-    of being handed back to a model to put in its own words.
+    An authoritative no goes back to the step's agent with the refusal, to
+    choose what comes next (look again, ask). On a rendered step the agent
+    has no words of its own: its `wait` says the application's fresh offer,
+    or `Locale.withheld` when there is nothing else to say (`_refused_on`).
     """
     before = {i.id for i in call.intents if i.status == 'rejected'}
     try:
@@ -1415,11 +1418,9 @@ async def _carry_out(
         return call.locale.unsettled
     except ModelRetry:
         refused = {i.id for i in call.intents if i.status == 'rejected' and i.operation == operation.name}
-        if not rendered or not refused - before:
-            raise
-        words = call.correction(call.locale.withheld)
-        await call.speak_now(words, origin='error')
-        return words
+        if rendered and refused - before:
+            call._refused_on = call.turn
+        raise
     say = getattr(operation, 'say', '')
     return say.format_map(_Facts(receipt.model_dump())) if say and isinstance(receipt, BaseModel) else None
 
@@ -1471,8 +1472,8 @@ class ConversationStep(Step):
     `hand_over`, `goodbye`, and `wait`, after which code says, in this
     order: a read-back the reply calls for; the application's words for a
     refused value, then for the offer made this turn (a choice function's
-    `say`); the first missing `asks:` field; or `Locale.pardon`. An
-    authoritative no is said in core's fixed words (`_carry_out`).
+    `say`); `Locale.withheld` after an authoritative no this turn
+    (`_carry_out`); the first missing `asks:` field; or `Locale.pardon`.
     """
     quoted: tuple[str, ...] = ()
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
@@ -1663,6 +1664,7 @@ class ConversationStep(Step):
                         ],
                     )
                 )
+                or (call.correction(call.locale.withheld) if call._refused_on == call.turn else '')
                 or (self.asks[missing] if missing else '')
                 or call.locale.pardon
             )

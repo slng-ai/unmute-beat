@@ -7,6 +7,12 @@ instructions), so a test can inspect the provider input. A non-streamed
 request would be a separate reading of the reply, which the node-agent core
 never sends: it fails the test (P1).
 
+On a rendered step (`speech: rendered`: verify, and booking since session 4e)
+the agent has no text output, and the choice that stands where a prose step
+would speak is `wait`: there `('say', words)` is a `wait` call, and the words
+are only the script's note of what the model meant. `('text', words)` sends
+text on any step: a model that writes prose where it may not.
+
 Scripted models prove runtime properties, never language understanding.
 """
 
@@ -64,7 +70,9 @@ class Script:
             yield 'Sorry, could you say that again?'
             return
         kind, *rest = self.moves.pop(0)
-        if kind == 'say':
+        if kind == 'say' and getattr((self.flow or FLOW).by_id.get(step), 'rendered', False):
+            yield {0: DeltaToolCall(name='wait', json_args='{}')}
+        elif kind in ('say', 'text'):
             yield rest[0]
         elif kind == 'collect':
             yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': rest[0]}))}

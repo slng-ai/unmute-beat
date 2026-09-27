@@ -29,7 +29,9 @@ second, independent caller writes to the same SQLite file through its own
 * V10: live call 5: a day said as a weekday and as a date is one day, and
   keeps the times on offer;
 * V11: live call s4e-worker-bystander: the time the caller already holds is
-  theirs, not "taken".
+  theirs, not "taken";
+* V12 (session 4f): times offered for one day, then a new day in the same
+  turn: the old day's times are not said, only what can be picked now.
 """
 
 import asyncio
@@ -568,9 +570,9 @@ async def a_day_said_two_ways_is_one_day():
         ('say', 'Thursday at three is free.'),
     )
     thursday = slot('2026-10-01', '15:00')
-    assert call.state.facts.booking_day == '2026-10-01' and thursday in call._offered['slot'], (
+    assert call.state.facts.booking_day == '2026-10-01' and thursday in call._offers['slot'], (
         call.state.facts,
-        call._offered,
+        call._offers,
     )
     await turn(
         flow,
@@ -580,7 +582,7 @@ async def a_day_said_two_ways_is_one_day():
         ('collect', {'booking_day': 'Thursday'}),
         ('say', 'At three?'),
     )
-    assert thursday in call._offered.get('slot', {}), 'the same day said again took the times away'
+    assert thursday in call._offers.get('slot', {}), 'the same day said again took the times away'
     await turn(
         flow,
         call,
@@ -607,7 +609,7 @@ async def a_day_said_two_ways_is_one_day():
     )
     facts = call.state.facts
     assert (facts.booking_day, facts.slot, facts.appointment) == ('2026-10-02', '', held), facts
-    assert not [s for s in call._offered.get('slot', {}) if s.startswith('2026-10-01')], (
+    assert not [s for s in call._offers.get('slot', {}) if s.startswith('2026-10-01')], (
         'a real change of day kept the Thursday times'
     )
 
@@ -633,6 +635,29 @@ async def your_own_booking_is_not_taken():
     assert said == ['You already have a haircut tomorrow at 9:00 AM. Would you like a different time?'], said
 
 
+async def an_offer_changed_in_the_same_turn_is_not_said():
+    """V12 (session 4f): the words for an offer go with its ids, on the salon as on the desk (core R15)."""
+    script, flow, call, _ = await at_booking()
+    said = ' '.join(
+        await turn(
+            flow,
+            call,
+            script,
+            'A haircut on Thursday. No, sorry, Friday.',
+            (
+                'calls',
+                [('collect', {'values': {'service': 'haircut', 'booking_day': 'Thursday'}}), ('options', {})],
+            ),
+            ('calls', [('collect', {'values': {'booking_day': 'Friday'}}), ('wait', {})]),
+        )
+    )
+    assert 'Thursday' not in said and '1st' not in said, ("the old day's times were said", said)
+    assert 'Friday' in said and all(s.startswith('2026-10-02') for s in call._offers.get('slot', {})), (
+        said,
+        dict(call._offers),
+    )
+
+
 async def main() -> None:
     await a_taken_destination_is_refused_and_another_time_moves()
     await a_booking_changed_elsewhere_is_refused_then_offered_fresh()
@@ -646,8 +671,9 @@ async def main() -> None:
     await a_move_request_keeps_its_day()
     await a_day_said_two_ways_is_one_day()
     await your_own_booking_is_not_taken()
+    await an_offer_changed_in_the_same_turn_is_not_said()
     print(
-        'moves ok: V1-V11, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V12, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

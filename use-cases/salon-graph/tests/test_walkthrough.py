@@ -94,7 +94,7 @@ async def the_booking_walkthrough():
     assert 'Friday the 2nd at 2:00 PM' in text_of(result.messages), (
         'P13: the tool result came back to booking'
     )
-    assert list(call._offered['slot'])[:2] == [slot(FRIDAY, '14:00'), slot(FRIDAY, '13:30')], call._offered
+    assert list(call._offers['slot'])[:2] == [slot(FRIDAY, '14:00'), slot(FRIDAY, '13:30')], call._offers
     sections.append(snapshot(script, 'At the offer: times on offer, nothing pending, waiting at booking'))
     assert diary.bookings_for(PHONE, TODAY) == []
 
@@ -188,10 +188,10 @@ async def a_changed_day_offers_again_and_books_nothing_old():
         ('call', 'wait'),
     )
     assert diary.bookings_for(PHONE, TODAY) == [], 'nothing was written under the Friday approval'
-    assert call.state.facts.booking_day == '2026-10-03' and slot(FRIDAY, '14:00') not in call._offered.get(
+    assert call.state.facts.booking_day == '2026-10-03' and slot(FRIDAY, '14:00') not in call._offers.get(
         'slot', {}
     )
-    assert any('2026-10-03' in s for s in call._offered.get('slot', {})), call._offered
+    assert any('2026-10-03' in s for s in call._offers.get('slot', {})), call._offers
     assert call.state.agent == 'booking' and said[-1].startswith('2:00 PM on Saturday the 3rd is free.'), said
 
 

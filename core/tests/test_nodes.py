@@ -382,19 +382,19 @@ async def late_options_offer_nothing():
     flow = StepFlow([step], model=Script().model, state_type=ClinicState)
     for moved_on in ('request', 'step'):
         call = flow.open(ClinicState(), services=Backend())
-        call._offered = {'slot': {'1000': 'Tuesday at 10:00 AM'}}
+        call._offers.put('slot', {'1000': 'Tuesday at 10:00 AM'})
         release.clear()
         looking = asyncio.create_task(_offer(call, step.choices))
         await asyncio.sleep(0)
         if moved_on == 'request':
             call.collect(patient='P-4321')
-            call._offered = {'slot': {'1000': 'Tuesday at 10:00 AM'}}
+            call._offers.put('slot', {'1000': 'Tuesday at 10:00 AM'})
         else:
             call.commit(agent='elsewhere')
         release.set()
         result = await looking
         assert 'stale' in result, (moved_on, result)
-        assert call._offered == {'slot': {'1000': 'Tuesday at 10:00 AM'}}, (
+        assert call._offers == {'slot': {'1000': 'Tuesday at 10:00 AM'}}, (
             moved_on,
             'a stale answer replaced the offer',
         )

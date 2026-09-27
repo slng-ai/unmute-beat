@@ -105,15 +105,16 @@ def a_changed_request_drops_the_pick():
     """
     offers = {'slot': {'2026-10-02T1400|haircut': 'Friday at 2'}, 'appointment': {'BK0001': 'Friday at 9'}}
     _, _, call, _ = opened(verified_phone=PHONE)
-    call._offered = {name: dict(ids) for name, ids in offers.items()}
+    for name, ids in offers.items():
+        call._offers.put(name, ids)
     call.collect(slot='2026-10-02T1400|haircut', appointment='BK0001')
     call.collect(booking_day='Saturday')
     assert call.state.facts.slot == '' and call.state.facts.appointment == 'BK0001', call.state.facts
-    assert call._offered == {'appointment': offers['appointment']}, call._offered
+    assert call._offers == {'appointment': offers['appointment']}, call._offers
     call.collect(customer_phone=PHONE)
     assert call.state.facts.appointment == 'BK0001', 'the same number said again took the pick'
     call.collect(customer_phone=OTHER)
-    assert call.state.facts.appointment == '' and call._offered == {}, 'a pick outlived its caller'
+    assert call.state.facts.appointment == '' and call._offers == {}, 'a pick outlived its caller'
 
 
 def the_historical_short_number_is_refused():
@@ -213,8 +214,8 @@ def two_calls_share_nothing_but_the_diary():
     _, _, first, _ = opened(diary=diary)
     _, _, second, _ = opened(diary=diary)
     first.collect(booking_day='Friday')
-    first._offered = {'slot': {'x': 'y'}}
-    assert second.state.facts.booking_day == '' and second._offered == {}
+    first._offers.put('slot', {'x': 'y'})
+    assert second.state.facts.booking_day == '' and second._offers == {}
     assert first.services.call != second.services.call and first.services.diary is second.services.diary
 
 

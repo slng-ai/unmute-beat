@@ -480,7 +480,7 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
         ('call', 'options'),
         ('say', 'On Friday the 9th I have 9:00 AM. Which time works for you?'),
     )
-    assert any('2026-10-09' in s for s in call._offered['slot'])
+    assert any('2026-10-09' in s for s in call._offers['slot'])
     await turn(
         flow,
         call,
@@ -496,7 +496,7 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
     assert 'Saturday the 3rd' in str(result.content) and 'Saturday the 10th' in str(result.content), (
         result.content
     )
-    assert not call._offered.get('slot'), ('an ambiguous day offered times', call._offered)
+    assert not call._offers.get('slot'), ('an ambiguous day offered times', call._offers)
     await turn(
         flow,
         call,
@@ -506,7 +506,7 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
         ('call', 'options'),
         ('say', 'On Saturday the 10th I have 9:00 AM.'),
     )
-    assert all('2026-10-10' in s for s in call._offered['slot']), call._offered
+    assert all('2026-10-10' in s for s in call._offers['slot']), call._offers
 
 
 async def a_wait_with_nothing_to_say_offers_what_there_is():
@@ -519,7 +519,7 @@ async def a_wait_with_nothing_to_say_offers_what_there_is():
     script, flow, call, _ = await at_booking(service='haircut', booking_day='Friday', booking_time='14:00')
     said = await turn(flow, call, script, "Yes, that's my number.", ('call', 'wait'))
     assert said == ['2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'], said
-    assert slot(FRIDAY, '14:00') in call._offered['slot'] and len(script.requests) == 1, script.requests
+    assert slot(FRIDAY, '14:00') in call._offers['slot'] and len(script.requests) == 1, script.requests
 
 
 async def model_speech_never_claims_a_completed_action():

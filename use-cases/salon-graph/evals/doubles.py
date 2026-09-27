@@ -211,7 +211,7 @@ class Brain:
                 e.operation == 'book_appointment' and not e.succeeded and e.args.get('slot') == facts.slot
                 for e in call.evidence
             )
-            offered = call._offered.get('slot') or {}
+            offered = call._offers.get('slot') or {}
             if facts.slot and not refused:
                 return ('call', 'book_appointment')
             if offered and not refused:

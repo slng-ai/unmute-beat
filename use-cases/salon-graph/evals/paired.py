@@ -114,9 +114,9 @@ class Candidate:
         call = self.open(True)
         call.commit(agent='booking')
         slots = offered_times(self.diary, self.key, day)
-        call._offered = {'slot': {s['slot_id']: s['spoken'] for s in slots}}
+        call._offers.put('slot', {s['slot_id']: s['spoken'] for s in slots})
         call.collect(service='haircut', booking_day=day, booking_time=at)
-        call._offered = {'slot': {s['slot_id']: s['spoken'] for s in slots}}
+        call._offers.put('slot', {s['slot_id']: s['spoken'] for s in slots})
         call.collect(slot=next(s['slot_id'] for s in slots if s['time'] == at))
         book = self.operation('booking', 'book_appointment')
         proposal = book.proposal_for(call, self.args(book, call))
@@ -142,7 +142,7 @@ class Candidate:
         call.commit(agent='booking')
         slots = offered_times(self.diary, self.key, day)[:3]
         call.collect(service=service, booking_day=day)
-        call._offered = {'slot': {s['slot_id']: s['spoken'] for s in slots}}
+        call._offers.put('slot', {s['slot_id']: s['spoken'] for s in slots})
         call.messages = history(('caller', f'A haircut on {day}, please.'))
         call.turn_started(f'A haircut on {day}, please.')
         await self.ask('offer', offer_words(slots))

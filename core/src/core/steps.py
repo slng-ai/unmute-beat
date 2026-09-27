@@ -76,6 +76,68 @@ class FlowState[S: BaseModel](VoiceState):
     outcome: Literal['', 'completed', 'cancelled', 'failed', 'pending'] = ''
 
 
+@dataclass(frozen=True)
+class StandingOffer:
+    """One choice's offer to this caller: the ids that can be picked and the application's words for them.
+
+    One record, so nothing can take the ids and leave the words: what a
+    rendered step says about an offer is exactly what can still be picked
+    from it (session 4f: billing resolutions said after the category became
+    access). `turn` and `step` say when and by whom it was made; a refreshed
+    offer nobody asked to hear has `turn` 0 and is never announced.
+    """
+
+    ids: Mapping[str, str]
+    say: str = ''
+    turn: int = 0
+    step: str = ''
+    announced: bool = False
+
+
+class Offers(Mapping[str, Mapping[str, str]]):
+    """Every choice's standing offer on one call, read as `{choice: {id: words}}`: only these ids can be picked."""
+
+    def __init__(self) -> None:
+        self._by_choice: dict[str, StandingOffer] = {}
+
+    def __getitem__(self, name: str) -> Mapping[str, str]:
+        return self._by_choice[name].ids
+
+    def __iter__(self):
+        return iter(self._by_choice)
+
+    def __len__(self) -> int:
+        return len(self._by_choice)
+
+    def put(self, name: str, ids: Mapping[str, str], say: str = '', turn: int = 0, step: str = '') -> None:
+        """Offer these ids for this choice, replacing whatever was on offer for it."""
+        self._by_choice[name] = StandingOffer(dict(ids), say, turn, step)
+
+    def take(self, *names: str) -> None:
+        """Take these choices' offers away, ids and words together."""
+        for name in names:
+            self._by_choice.pop(name, None)
+
+    def words(self, step: str, choices: Sequence[str], turn: int) -> str:
+        """What `step` offered on `turn` and has not said yet, in the order it lists its choices."""
+        return ' '.join(o.say for _, o in self._made(step, choices, turn) if o.say)
+
+    def announce(self, step: str, choices: Sequence[str], turn: int) -> str:
+        """Those words, now said: the same offer is not said twice in one turn."""
+        said = self.words(step, choices, turn)
+        for name, offer in self._made(step, choices, turn):
+            self._by_choice[name] = replace(offer, announced=True)
+        return said
+
+    def _made(self, step: str, choices: Sequence[str], turn: int) -> list[tuple[str, StandingOffer]]:
+        found = [(name, self._by_choice.get(name)) for name in choices]
+        return [
+            (name, o)
+            for name, o in found
+            if o is not None and o.step == step and o.turn == turn and not o.announced
+        ]
+
+
 class FlowCall[S: BaseModel](CallContext):
     """One call through a configured flow: the engine's session around the application's state.
 
@@ -89,10 +151,8 @@ class FlowCall[S: BaseModel](CallContext):
     _identity_field: str = PrivateAttr(default='')
     _collectible: frozenset[str] = PrivateAttr(default=frozenset())
     _services: Any = PrivateAttr(default=None)
-    _offered: dict[str, dict[str, str]] = PrivateAttr(default_factory=dict)
-    """For each choice field, the ids offered to this caller and how each was said. Only these can be picked."""
-    _offer_words: tuple[int, str] = PrivateAttr(default=(0, ''))
-    """On a rendered step, the application's words for the offer made on this turn, until `wait` says them."""
+    _offers: Offers = PrivateAttr(default_factory=Offers)
+    """For each choice field, the ids offered to this caller, how each was said, and the offer's own words."""
     _refused_on: int = PrivateAttr(default=0)
     """The turn on which a rendered step's operation met an authoritative no: `wait` says so if nothing else."""
     _locale: Locale | None = PrivateAttr(default=None)
@@ -332,8 +392,7 @@ class FlowCall[S: BaseModel](CallContext):
             if sources & changed and name not in kept
         }
         self.update(**kept, **picks, **resets)
-        for name in stale:
-            self._offered.pop(name, None)
+        self._offers.take(*stale)
         return unoffered
 
 
@@ -646,8 +705,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             if spent:
                 facts = type(call.state.facts).model_fields
                 call.update(**{name: facts[name].get_default(call_default_factory=True) for name in spent})
-                for name in spent:
-                    call._offered.pop(name, None)
+                call._offers.take(*spent)
             again = (
                 f' {", ".join(spent)} {"is" if len(spent) == 1 else "are"} no longer on offer: call options '
                 'again, and record what the caller picks.'
@@ -659,8 +717,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             )
         if self.assign:
             call.update(**{field: data[source] for field, source in self.assign.items()})
-        for source in self.binds.values():
-            call._offered.pop(source, None)
+        call._offers.take(*self.binds.values())
         if self.say:
             words = self.say.format_map(_Facts(data))
             given = args.model_dump(mode='json')
@@ -759,7 +816,7 @@ def context(flow: StepFlow, step: Step, call: FlowCall[Any]) -> str:
         f'You are the `{step.id}` step.',
         f'Facts: {call.state.facts.model_dump_json()}',
     ]
-    offered = {name: ids for name, ids in call._offered.items() if ids}
+    offered = {name: dict(ids) for name, ids in call._offers.items() if ids}
     lines.append(
         f'On offer to the caller now, by id: {json.dumps(offered)}. Only these ids can be picked.'
         if offered
@@ -918,7 +975,7 @@ class CollectStep(Step):
     choices: Mapping[str, Callable[[Any, Any], Mapping[str, str]]] = field(default_factory=dict)
     """For a field picked from options: `(services, state) -> {id: how it is said}`, asked on arrival.
 
-    The ids go on the call as offered (`FlowCall._offered`) and the question's
+    The ids go on the call as offered (`FlowCall._offers`) and the question's
     `{options}` becomes their words, so a value can only be one the caller was
     actually offered. A receipt listing options offers nothing by itself.
     """
@@ -939,7 +996,7 @@ class CollectStep(Step):
         said = []
         for name, options in self.choices.items():
             offered = dict(options(call.services, call.state.facts))
-            call._offered[name] = offered
+            call._offers.put(name, offered)
             said.extend(offered.values())
         spoken = (
             self.question.format_map(_Facts(options=' or '.join(said))) if self.choices else self.question
@@ -1001,10 +1058,10 @@ class CollectStep(Step):
             name: value for name, value in proposed.items() if any(name in step.fields for step in listening)
         }
         for name, value in heard.items():
-            if any(name in step.choices for step in listening) and str(value) not in call._offered.get(
+            if any(name in step.choices for step in listening) and str(value) not in call._offers.get(
                 name, {}
             ):
-                offered = ', '.join(call._offered.get(name, {})) or 'none yet'
+                offered = ', '.join(call._offers.get(name, {})) or 'none yet'
                 raise ModelRetry(
                     f'Nothing was recorded: {value!r} was not offered for {name} (offered: {offered}).'
                 )
@@ -1307,7 +1364,7 @@ def _not_on_offer(call: FlowCall[Any], choices: Collection[str], values: Mapping
         if name in choices
         and value != fields[name].get_default(call_default_factory=True)
         and getattr(call.state.facts, name, None) != value
-        and str(value) not in call._offered.get(name, {})
+        and str(value) not in call._offers.get(name, {})
     ]
 
 
@@ -1351,8 +1408,9 @@ async def _offer(
 
     On a `rendered` step every answer must carry `say`, the application's
     words for it: one without is a fault in the application, and offers
-    nothing. The words are kept for `wait` to say, in the order the step
-    lists its choices. The agent is still shown the ids and notes, to read
+    nothing. The words are kept with the ids (`Offers`), so whatever takes
+    the offer takes its words too, and `wait` says them, in the order the
+    step lists its choices, only on the step and turn that made them. The agent is still shown the ids and notes, to read
     the caller's pick.
     """
     version, generation, agent = call._version, call._generation, call.state.agent
@@ -1383,10 +1441,10 @@ async def _offer(
         return {'stale': 'The request changed while these were looked up. Nothing is offered; look again.'}
     result: dict[str, Any] = {}
     for name, options in found.items():
-        call._offered[name] = dict(options.options)
+        call._offers.put(
+            name, options.options, options.say, call.turn if rendered else 0, agent if rendered else ''
+        )
         result[name] = {'options': options.options, **({'note': options.note} if options.note else {})}
-    if rendered:
-        call._offer_words = (call.turn, ' '.join(o.say for o in found.values() if o.say))
     return result
 
 
@@ -1568,7 +1626,7 @@ class ConversationStep(Step):
             except ValidationError as error:
                 binds = getattr(operation, 'binds', None) or {}
                 missing = {binds.get(str(e['loc'][0]), str(e['loc'][0])) for e in error.errors() if e['loc']}
-                return all(call._offered.get(name) for name in missing)
+                return all(call._offers.get(name) for name in missing)
             return True
 
         def read(call: FlowCall[Any]) -> Prompted | Restated | None:
@@ -1657,15 +1715,14 @@ class ConversationStep(Step):
                 return asked
             missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
             refused = _refused(ctx.messages, self.refusals)
-            turn, offer = call._offer_words
-            call._offer_words = (0, '')
+            offer = call._offers.announce(self.id, tuple(self.choices), call.turn)
             words = (
                 ' '.join(
                     filter(
                         None,
                         [
                             self.refusals[refused[0]](refused[1]) if refused else '',
-                            offer if turn == call.turn else '',
+                            offer,
                         ],
                     )
                 )
@@ -1674,9 +1731,7 @@ class ConversationStep(Step):
             )
             if not words and self.choices:
                 await _offer(call, self.choices, rendered=True)
-                turn, offer = call._offer_words
-                call._offer_words = (0, '')
-                words = offer if turn == call.turn else ''
+                words = call._offers.announce(self.id, tuple(self.choices), call.turn)
             words = words or call.locale.pardon
             await call.speak_now(words, origin='ask')
             return words

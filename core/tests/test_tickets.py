@@ -22,6 +22,7 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R10: its write audit is the salon's envelope, and names the desk's own effect.
 * R12: a pick counts only against an offer made for the state an update ends in,
   and the desk's validators read the call's clock from core's validation context.
+* R15: what a rendered step says about an offer is exactly what can still be picked from it.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -363,7 +364,7 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
         ('call', 'options', {}),
         ('say', '¿Qué ticket y qué solución?'),
     )
-    assert set(call._offered) == {'ticket_id', 'resolution'}, call._offered
+    assert set(call._offers) == {'ticket_id', 'resolution'}, call._offers
     await turn(
         flow,
         call,
@@ -384,10 +385,10 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
     )
     facts = call.state.facts
     assert facts.ticket_id == 'T-102', 'the ticket rests on no field, and a new category took it away'
-    assert facts.resolution == '' and 'resolution' not in call._offered, (
+    assert facts.resolution == '' and 'resolution' not in call._offers, (
         'a billing resolution outlived its category'
     )
-    assert 'T-102' in call._offered['ticket_id'], 'the ticket offer went with the category'
+    assert 'T-102' in call._offers['ticket_id'], 'the ticket offer went with the category'
     said = await turn(
         flow,
         call,
@@ -406,7 +407,7 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
         ('say', 'Vale.'),
     )
     facts = call.state.facts
-    assert facts.ticket_id is None and not call._offered, 'a pick offered to another account was kept'
+    assert facts.ticket_id is None and not call._offers, 'a pick offered to another account was kept'
 
     broken = HERE / '_choices_broken.yaml'
     text = (HERE / 'choices.yaml').read_text()
@@ -458,14 +459,14 @@ async def picks_follow_the_state_they_end_in(folder: Path):
     await pick('No, es de acceso.', {'category': 'access'}, ('say', 'Entendido.'))
     facts = call.state.facts
     assert facts.category == 'access', facts
-    assert facts.resolution == '' and 'resolution' not in call._offered, (
+    assert facts.resolution == '' and 'resolution' not in call._offers, (
         'A: a resolution offered for billing outlived its category, itself a choice',
         facts,
-        call._offered,
+        call._offers,
     )
 
     await pick('Facturación otra vez.', {'category': 'billing'}, ('call', 'options', {}), ('say', '¿Cuál?'))
-    assert 'refund' in call._offered['resolution'], call._offered
+    assert 'refund' in call._offers['resolution'], call._offers
     await pick(
         'Acceso, con un reembolso.',
         {'category': 'access', 'resolution': 'refund'},
@@ -483,17 +484,17 @@ async def picks_follow_the_state_they_end_in(folder: Path):
         'a value that did not change took picks away',
         facts,
     )
-    offered = {name: dict(options) for name, options in call._offered.items()}
+    offered = {name: dict(options) for name, options in call._offers.items()}
     try:
         call.collect(('category', 'resolution'), ticket_id='T-1', category='access')
     except ValidationError:
         pass
     else:
         raise AssertionError('an invalid candidate was accepted')
-    assert call.state.facts == facts and call._offered == offered, (
+    assert call.state.facts == facts and call._offers == offered, (
         'an update that failed validation changed something',
         call.state.facts,
-        call._offered,
+        call._offers,
     )
 
     await pick('Perdona, es el T-102.', {'ticket_id': 'T-102'}, ('say', 'Vale.'))
@@ -502,7 +503,7 @@ async def picks_follow_the_state_they_end_in(folder: Path):
         'a pick resting on a pick that went outlived it',
         facts,
     )
-    assert set(call._offered) == {'ticket_id'}, call._offered
+    assert set(call._offers) == {'ticket_id'}, call._offers
 
     desk = desk_in(folder / 'standing')
     script, flow, call = opened(desk, HERE / 'choices.yaml')
@@ -608,7 +609,7 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
             ('call', 'options', {}),
             ('call', 'wait', {}),
         )
-        assert 'ticket_id' not in call._offered, 'a rendered step offered choices it had no words for'
+        assert 'ticket_id' not in call._offers, 'a rendered step offered choices it had no words for'
     finally:
         wordless.unlink()
 
@@ -654,6 +655,111 @@ async def a_no_is_not_left_undone(folder: Path):
     assert call.locale.left_undone in ' '.join(said), ('an unheard read-back left undone was not said', said)
 
 
+async def spoken_offers_go_with_their_options(folder: Path):
+    """R15 (session 4f): what `wait` says about an offer is exactly what can still be picked from it.
+
+    The words for an offer and its ids are one record: whatever takes the
+    ids (a field the offer rests on changing, another caller) takes the
+    words, and an offer whose dependencies did not change keeps both. A step
+    says only the offers it made itself, so a step reached by a hand-over in
+    the same turn never says another step's offer. An update that fails
+    validation takes nothing.
+    """
+    billing_words = ('reembolso', 'abono')
+    offered = [
+        ('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
+        ('options', {}),
+    ]
+
+    script, flow, call = opened(desk_in(folder), HERE / 'rendered_choices.yaml')
+    said = ' '.join(
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, facturación. No, perdona, es de acceso.',
+            ('calls', offered),
+            ('calls', [('collect', {'values': {'category': 'access'}}), ('wait', {})]),
+        )
+    )
+    assert not any(word in said for word in billing_words), ('an offer outlived its options', said)
+    assert 'resolution' not in call._offers and 'T-101' in said, (said, dict(call._offers))
+
+    script, flow, call = opened(desk_in(folder / 'standing'), HERE / 'rendered_choices.yaml')
+    said = ' '.join(
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, facturación.',
+            ('calls', offered),
+            ('calls', [('collect', {'values': {'account_id': 'ACC-1234'}}), ('wait', {})]),
+        )
+    )
+    assert 'un reembolso o un abono' in said, ('an offer whose dependencies did not change was lost', said)
+    records = dict(call._offers._by_choice)
+    try:
+        call.collect(('resolution',), ticket_id='T-1', category='access')
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError('an invalid candidate was accepted')
+    assert call._offers._by_choice == records, (
+        'an update that failed validation took an offer or its words',
+        call._offers._by_choice,
+    )
+
+    script, flow, call = opened(desk_in(folder / 'superseded'), HERE / 'rendered_choices.yaml')
+    said = ' '.join(
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, facturación. Ah no, es la ACC-5678.',
+            ('calls', offered),
+            ('calls', [('collect', {'values': {'account_id': 'ACC-5678'}}), ('wait', {})]),
+        )
+    )
+    assert 'T-101' not in said, ('an offer made to another account was said', said)
+
+    aside = HERE / '_rendered_aside.yaml'
+    aside.write_text(
+        (HERE / 'rendered_choices.yaml')
+        .read_text()
+        .replace(
+            '  - {id: look_up,',
+            '  - id: aside\n    kind: conversation\n    agent: agent\n    prompt: prompts/faq.md\n'
+            '    speech: rendered\n    fields: [account_id]\n    exits:\n      - {to: desk, purpose: back}\n'
+            '  - {id: look_up,',
+        )
+        .replace(
+            "    exits:\n      - {to: look_up, purpose: find the ticket's current revision",
+            '    exits:\n      - {to: aside, purpose: something else}\n'
+            "      - {to: look_up, purpose: find the ticket's current revision",
+        )
+    )
+    try:
+        script, flow, call = opened(desk_in(folder / 'by_words'), aside)
+        said = ' '.join(
+            await turn(
+                flow,
+                call,
+                script,
+                'Cuenta ACC-1234, facturación. Otra cosa.',
+                ('calls', offered),
+                ('call', 'hand_over', {'to': 'aside', 'because': 'something else'}),
+                ('call', 'wait', {}),
+            )
+        )
+        assert call.state.agent == 'aside', call.state.agent
+        assert 'T-101' not in said and not any(word in said for word in billing_words), (
+            "a step said another step's offer",
+            said,
+        )
+    finally:
+        aside.unlink()
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -672,6 +778,7 @@ async def main() -> None:
                 picks_follow_the_state_they_end_in,
                 a_rendered_step_offers_in_the_desks_words,
                 a_no_is_not_left_undone,
+                spoken_offers_go_with_their_options,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -687,7 +794,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R14, no phone, date, appointment or slot')
+    print('tickets ok: R1-R15, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

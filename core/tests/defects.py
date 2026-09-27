@@ -430,7 +430,7 @@ def a_cancel_during_the_version_check_sends_again() -> bool:
         await _runs(operation, call)
         settle = call.settlement()
         assert settle is not None
-        task = asyncio.create_task(settle())
+        task = asyncio.ensure_future(settle())
         await asyncio.sleep(0.05)
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

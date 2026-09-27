@@ -19,12 +19,20 @@ the path every manifest operation takes, with a plain in-memory backend:
   reused for different arguments is refused;
 * I9: after the caller said goodbye no new change starts, and reconciliation
   of an earlier one still runs;
-* I10: the manifest checks the `Intent` parameter, `subject` and `idempotent`.
+* I10: the manifest checks the `Intent` parameter, `subject` and `idempotent`;
+* I11: a reconciled success cancelled while its current version is asked
+  for stays unknown, is sent nothing, and is settled once later;
+* I12: a version check that fails, times out or answers something that is
+  not a version leaves it unknown: no version is made up, nothing is said;
+* I13: a reconciled success below the current version is history;
+* I14: one cancelled while it is recorded is kept, repaired once, sent once;
+* I15: a repair is said only to the caller it was done for.
 """
 
 import asyncio
 import threading
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 from pydantic_ai import ModelRetry
@@ -49,7 +57,7 @@ class Store:
     """A backend that keeps what it did by intent id, as a real one would keep an idempotency key."""
 
     def __init__(self) -> None:
-        self.done: dict[str, dict[str, str]] = {}
+        self.done: dict[str, dict[str, Any]] = {}
         self.sent: list[str] = []
 
 
@@ -298,6 +306,178 @@ async def no_new_change_after_goodbye():
     assert len(store.sent) == 1
 
 
+class Versioned(BaseModel):
+    item: str
+    status: str
+    rev: int = 0
+
+
+class Versions(Store):
+    """A store that also says a resource's version now; `now` is what it answers, `hold` makes it wait forever."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.now: object = 1
+        self.hold = False
+        self.asked = 0
+        self.told: list[str] = []
+
+    async def current_version(self, kind: str, resource: str) -> object:
+        self.asked += 1
+        if self.hold:
+            await asyncio.Event().wait()
+        if isinstance(self.now, Exception):
+            raise self.now
+        return self.now
+
+
+def versioned(record: asyncio.Event | None = None):
+    """A change whose answer is always lost after it lands, reconciled by intent, its receipt versioned."""
+
+    def lost(store: Versions, args: Args, intent: Intent):
+        store.sent.append(intent.id)
+        store.done[intent.id] = {'item': args.item, 'status': 'done', 'rev': 1}
+        raise TimeoutError
+
+    class Changed(FunctionOperation):
+        name = 'probe'
+        args_type = Args
+        receipt_type = Versioned
+        needs_approval = False
+        subject, resource, version = 'item', 'thing', 'rev'
+        function_takes_intent = reconcile_takes_intent = True
+
+        async def _record(self, call, args, receipt):
+            if record is not None and not record.is_set():
+                await asyncio.Event().wait()
+            call.services.told.append(f'Done: {receipt.item}.')
+            return receipt
+
+    Changed.matches, Changed.succeeds = {'item': 'item'}, {'status': 'done'}
+    Changed.function = staticmethod(lost)
+    Changed.reconcile = staticmethod(find)
+    return Changed()
+
+
+async def cancelled(coroutine) -> None:
+    """Run it until it is waiting, then cancel it there, as Pipecat cancels a turn."""
+    task = asyncio.ensure_future(coroutine)
+    await asyncio.sleep(0.02)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError('the cancellation was swallowed')
+
+
+async def settle(call: FlowCall) -> None:
+    run = call.settlement()
+    if run is not None:
+        await run()
+
+
+async def a_cancel_during_the_version_check_keeps_it_unknown():
+    """I11 (session 4d, defect 2): reconciled as done, then cancelled while asking for the current version.
+
+    The intent stays unknown, with nothing filed, and nothing is sent again;
+    the next settlement asks again and settles it once.
+    """
+    store = Versions()
+    op, call = versioned(), session(store)
+    assert await outcome(op, call) == 'unknown'
+    store.hold = True
+    await cancelled(settle(call))
+    [intent] = call.intents
+    assert intent.status == 'unknown' and intent.id in call._unknown, intent
+    assert not call.evidence and not call._unpresented, call.evidence
+    assert await outcome(op, call) == 'unknown', 'a second invocation did not wait for reconciliation'
+    assert store.sent == [intent.id], 'a cancel during the version check let the write go out again'
+    store.hold = False
+    await settle(call)
+    assert [i.status for i in call.intents] == ['succeeded'] and len(call.evidence) == 1
+    assert store.told == ['Done: A.'], store.told
+    await settle(call)
+    assert len(call.evidence) == 1 and store.sent == [intent.id], 'repeated recovery filed or sent twice'
+
+
+async def an_unanswered_version_check_is_unknown_not_history():
+    """I12: a version check that fails, times out or answers nonsense makes up no version and says nothing."""
+    from core import operations
+
+    for answer in (RuntimeError('down'), 'three', True, None, 'slow'):
+        store = Versions()
+        op, call = versioned(), session(store)
+        assert await outcome(op, call) == 'unknown'
+        store.now = answer
+        store.hold = answer == 'slow'
+        seconds, operations.NOTE_INTENT_SECONDS = operations.NOTE_INTENT_SECONDS, 0.05
+        try:
+            await settle(call)
+        finally:
+            operations.NOTE_INTENT_SECONDS = seconds
+        [intent] = call.intents
+        assert intent.status == 'unknown' and not call.evidence and not call._versions, (
+            answer,
+            call._versions,
+        )
+        assert not store.told and not call.effective(), answer
+        assert await outcome(op, call) == 'unknown' and len(store.sent) == 1, answer
+        store.now, store.hold = 1, False
+        await settle(call)
+        assert [i.status for i in call.intents] == ['succeeded'] and len(call.evidence) == 1, answer
+        assert len(call.effective()) == 1 and store.told == ['Done: A.'], answer
+
+
+async def a_later_change_makes_a_reconciled_success_history():
+    """I13: the service is at a later version than the receipt: filed as done, never said, never standing."""
+    store = Versions()
+    op, call = versioned(), session(store)
+    assert await outcome(op, call) == 'unknown'
+    store.now = 2
+    await settle(call)
+    assert [i.status for i in call.intents] == ['succeeded'] and len(call.evidence) == 1
+    assert not store.told and not call.effective() and not call._unpresented
+
+
+async def a_cancel_while_recording_is_repaired_once():
+    """I14: reconciled and current, then cancelled while it is recorded: kept for repair, said once, sent once."""
+    store = Versions()
+    record = asyncio.Event()
+    op, call = versioned(record), session(store)
+    assert await outcome(op, call) == 'unknown'
+    await cancelled(settle(call))
+    [intent] = call.intents
+    assert intent.status == 'succeeded' and len(call.evidence) == 1 and intent.id in call._unpresented
+    await cancelled(settle(call))
+    assert intent.id in call._unpresented and len(call.evidence) == 1, 'a cancelled repair lost the receipt'
+    record.set()
+    await settle(call)
+    await settle(call)
+    assert store.told == ['Done: A.'] and not call._unpresented, store.told
+    assert store.sent == [intent.id] and len(call.evidence) == 1
+
+
+async def a_repair_is_said_only_to_its_caller():
+    """I15: a success owed a repair is not recorded into the state of a different caller now on the line."""
+    store = Versions()
+    record = asyncio.Event()
+    op, call = versioned(record), session(store)
+    call._identity_field = 'item'
+    assert await outcome(op, call) == 'unknown'
+    await cancelled(settle(call))
+    [intent] = call.intents
+    assert intent.subject == 'A' and intent.id in call._unpresented
+    record.set()
+    call.update(item='B')
+    await settle(call)
+    assert not store.told and intent.id in call._unpresented, 'caller B was told caller A was done'
+    call.update(item='A')
+    await settle(call)
+    assert store.told == ['Done: A.'] and not call._unpresented
+
+
 def manifest_checks_the_intent_parameter():
     """I10."""
     text = (HERE / 'agent.yaml').read_text()
@@ -331,10 +511,15 @@ def main() -> None:
         a_success_that_fails_to_record_is_repaired,
         restored_intents_reconcile_first,
         no_new_change_after_goodbye,
+        a_cancel_during_the_version_check_keeps_it_unknown,
+        an_unanswered_version_check_is_unknown_not_history,
+        a_later_change_makes_a_reconciled_success_history,
+        a_cancel_while_recording_is_repaired_once,
+        a_repair_is_said_only_to_its_caller,
     ):
         asyncio.run(check())
     manifest_checks_the_intent_parameter()
-    print('intents ok: I1-I10')
+    print('intents ok: I1-I15')
 
 
 if __name__ == '__main__':

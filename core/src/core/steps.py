@@ -201,6 +201,10 @@ class FlowCall[S: BaseModel](CallContext):
         failed is recorded again from its receipt, with nothing sent. No
         model is asked what happened.
 
+        A repair is said only to the caller it was done for, as `_before`
+        does: after a number correction, another caller's receipt must not be
+        assigned into this caller's state.
+
         ponytail: an intent that stays unknown is asked about once per caller
         turn, for the rest of the call. A backoff belongs here if a backend
         ever minds.
@@ -210,7 +214,11 @@ class FlowCall[S: BaseModel](CallContext):
             for intent_id, (operation, args) in self._unknown.items()
             if operation.reconcile
         ]
-        repairs = list(self._unpresented.values())
+        repairs = [
+            repair
+            for intent_id, repair in self._unpresented.items()
+            if self._intents[intent_id].subject == self.identity()
+        ]
         if not pending and not repairs:
             return None
 

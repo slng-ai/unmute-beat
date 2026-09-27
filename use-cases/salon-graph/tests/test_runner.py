@@ -10,7 +10,9 @@
 * A5: `over` lists only calls that are over, which is what a new call may
   settle (`salon.app.open_call(settle=...)`);
 * A6: the memory diagnostic (`server.live_counts`) sees a live call, and
-  stops seeing it once it is gone.
+  stops seeing it once it is gone;
+* A7: `LIVE_FAULT` kills its worker after the named caller's commit, and only
+  once `LIVE_FAULT_ARM` exists.
 
 The long checks (kills, drain, overload through the real runner) are
 `python -m evals.load faults`.
@@ -99,12 +101,44 @@ def the_memory_diagnostic_sees_a_live_call():
     assert server.live_counts(gc.get_objects())['FlowCall'] == before, 'a dropped call was still counted'
 
 
+LIVE_FAULT_CHILD = """
+import os, sys, types
+sys.path.insert(0, os.getcwd())
+os.environ.setdefault('GOOGLE_API_KEY', 'x')
+import server
+saved = []
+diary = types.SimpleNamespace(save_booking=lambda phone, *rest: saved.append(phone) or {'ok': True})
+server._arm_live_fault(diary, 'committed:+34600000009')
+diary.save_booking('+34600000001', 'book')
+diary.save_booking('+34600000009', 'book')
+print('alive', saved)
+"""
+
+
+def the_live_fault_waits_to_be_armed(folder: str):
+    """A7 (session 4e): `LIVE_FAULT` kills its worker after the named caller's commit, and only once armed.
+
+    Other callers' commits never trigger it. With `LIVE_FAULT_ARM` naming a
+    file that does not exist yet, the commit goes through and the worker
+    lives; once the file exists, the worker dies with the commit on file.
+    """
+    arm = os.path.join(folder, 'armed')
+    env = {**os.environ, 'LIVE_FAULT_ARM': arm, 'RUNNER_DB': os.path.join(folder, 'runner.db')}
+    done = subprocess.run([sys.executable, '-c', LIVE_FAULT_CHILD], env=env, capture_output=True, text=True)
+    assert done.returncode == 0 and "alive ['+34600000001', '+34600000009']" in done.stdout, done
+    Path(arm).touch()
+    done = subprocess.run([sys.executable, '-c', LIVE_FAULT_CHILD], env=env, capture_output=True, text=True)
+    assert done.returncode == 9 and 'alive' not in done.stdout, done
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate((ceiling_and_release, one_call_one_place, nothing_is_held_forever)):
             check(os.path.join(tmp, f'runner{index}.db'))
     the_memory_diagnostic_sees_a_live_call()
-    print('runner ok: A1-A6, bounded admission, one claim, nothing held by the dead, live calls counted')
+    with tempfile.TemporaryDirectory() as tmp:
+        the_live_fault_waits_to_be_armed(tmp)
+    print('runner ok: A1-A7, bounded admission, one claim, nothing held by the dead, live calls counted')
 
 
 if __name__ == '__main__':

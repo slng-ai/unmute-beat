@@ -523,8 +523,8 @@ async def ramp_step(
     """`calls` lanes side by side for `seconds`, each redialling with a new caller, on a fresh runner.
 
     `idle` keeps the runner up that long after the last call, still sampled,
-    so a memory run shows whether it gives memory back. Every sample is
-    written to `samples.json` beside the report.
+    so a memory run shows whether it gives memory back. When the calls
+    ended is written to `calls_over.json`, beside `samples.json`.
     """
     runner = Runner(out, workers, port, **(env or {}))
     ready = runner.start()
@@ -546,14 +546,13 @@ async def ramp_step(
 
     try:
         await asyncio.gather(*(lane(i) for i in (lanes or range(calls))))
-        samples.append({'at': time.perf_counter(), 'mark': 'calls over'})
+        (out / 'calls_over.json').write_text(json.dumps({'at': time.perf_counter()}))
         await asyncio.sleep(3 + idle)
     finally:
         stop.set()
         await monitor
         idle_workers = runner.workers_now()
         runner.stop()
-    (out / 'samples.json').write_text(json.dumps(samples))
     return judge(out, calls, workers, ready, records, fixtures, samples, idle_workers)
 
 

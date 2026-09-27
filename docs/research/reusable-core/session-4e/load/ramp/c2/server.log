@@ -1,0 +1,612 @@
+INFO:     Uvicorn running on http://127.0.0.1:7961 (Press CTRL+C to quit)
+INFO:     Started parent process [35452]
+2026-09-27 17:43:12.901 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-27 17:43:12.901 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+INFO:     Started server process [35454]
+INFO:     Waiting for application startup.
+2026-09-27 17:43:13.709 | INFO     | server:lifespan:350 - worker 35454 ready, warming its model clients once
+INFO:     Started server process [35455]
+INFO:     Waiting for application startup.
+2026-09-27 17:43:13.709 | INFO     | server:lifespan:350 - worker 35455 ready, warming its model clients once
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+2026-09-27 17:43:13.713 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'function:reading:stream', 'answered': True, 'input_tokens': 51, 'output_tokens': 1}
+2026-09-27 17:43:13.713 | INFO     | core.graph:_warm:259 - model warm-up: {'model': 'function:reading:stream', 'answered': True, 'input_tokens': 51, 'output_tokens': 1}
+INFO:     127.0.0.1:51978 - "POST /?fixture=c2-l1-r0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51977 - "POST /?fixture=c2-l0-r0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51979 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-27 17:43:14.986 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:223 - Detected transport: twilio (from second message)
+2026-09-27 17:43:14.986 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:278 - Parsed - Type: twilio, Data: {'stream_id': 'MZ6034b3fa27334fd1bfbf42b1ff72b733', 'call_id': 'CA2cc4fd9a6bf34e3e9cf93d65f4c9f9b4', 'body': {'fixture': 'c2-l1-r0'}, 'from': None, 'to': None}
+2026-09-27 17:43:14.986 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for twilio
+2026-09-27 17:43:14.986 | INFO     | pipecat.runner.utils:_create_telephony_transport:508 - Using pre-detected telephony provider: twilio
+INFO:     127.0.0.1:51980 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-27 17:43:14.986 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:223 - Detected transport: twilio (from second message)
+2026-09-27 17:43:14.986 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:278 - Parsed - Type: twilio, Data: {'stream_id': 'MZ720433a8a45a46f0bc170be09317af43', 'call_id': 'CA0627cb560f0f4f5da5a01b9980cd1b2b', 'body': {'fixture': 'c2-l0-r0'}, 'from': None, 'to': None}
+2026-09-27 17:43:14.987 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for twilio
+2026-09-27 17:43:14.987 | INFO     | pipecat.runner.utils:_create_telephony_transport:508 - Using pre-detected telephony provider: twilio
+2026-09-27 17:43:14.991 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-27 17:43:14.992 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-27 17:43:15.014 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-27 17:43:15.014 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-27 17:43:15.014 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-27 17:43:15.014 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-27 17:43:15.032 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-27 17:43:15.032 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-27 17:43:15.032 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0::Source -> FastAPIWebsocketInputTransport#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#0 -> Ears#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Ears#0 -> LLMUserAggregator#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0::Source -> FastAPIWebsocketInputTransport#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#0 -> PydanticAgentProcessor#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#0 -> Ears#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Ears#0 -> LLMUserAggregator#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#0 -> PydanticAgentProcessor#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PydanticAgentProcessor#0 -> Voice#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PydanticAgentProcessor#0 -> Voice#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Voice#0 -> FastAPIWebsocketOutputTransport#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Voice#0 -> FastAPIWebsocketOutputTransport#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#0 -> LLMAssistantAggregator#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#0 -> LLMAssistantAggregator#0
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#0 -> Pipeline#0::Sink
+2026-09-27 17:43:15.033 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#0 -> Pipeline#0::Sink
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#0 -> Pipeline#0
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#0 -> Pipeline#0
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0 -> PipelineWorker#0::Sink
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0 -> PipelineWorker#0::Sink
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-6d283366': added worker 'PipelineWorker#0'
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-32e5e5c9': added worker 'PipelineWorker#0'
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-6d283366': started running
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-32e5e5c9': started running
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-6d283366': starting worker 'PipelineWorker#0'
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-32e5e5c9': starting worker 'PipelineWorker#0'
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.3 min_volume=0.6
+2026-09-27 17:43:15.035 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.3 min_volume=0.6
+2026-09-27 17:43:15.109 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-09-27 17:43:15.109 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-09-27 17:43:15.109 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:start_conversation_tracing:151 - Started tracing for Conversation CA0627cb560f0f4f5da5a01b9980cd1b2b
+2026-09-27 17:43:15.109 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:start_conversation_tracing:151 - Started tracing for Conversation CA2cc4fd9a6bf34e3e9cf93d65f4c9f9b4
+2026-09-27 17:43:15.109 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 1
+2026-09-27 17:43:15.109 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 1
+2026-09-27 17:43:15.109 | ERROR    | pipecat.services.settings:validate_complete:251 - STTSettings: the following fields are NOT_GIVEN: model, language. All settings fields should be initialized in the service's __init__ (use None for unsupported fields).
+2026-09-27 17:43:15.109 | ERROR    | pipecat.services.settings:validate_complete:251 - STTSettings: the following fields are NOT_GIVEN: model, language. All settings fields should be initialized in the service's __init__ (use None for unsupported fields).
+2026-09-27 17:43:15.109 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - Ears#0: ttfs_p99_latency not set, using default 1.0s
+2026-09-27 17:43:15.109 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - Ears#0: ttfs_p99_latency not set, using default 1.0s
+2026-09-27 17:43:15.109 | INFO     | bot:on_client_connected:330 - client connected
+2026-09-27 17:43:15.109 | INFO     | bot:on_client_connected:330 - client connected
+2026-09-27 17:43:15.110 | ERROR    | pipecat.services.settings:validate_complete:251 - TTSSettings: the following fields are NOT_GIVEN: model, voice, language. All settings fields should be initialized in the service's __init__ (use None for unsupported fields).
+2026-09-27 17:43:15.110 | ERROR    | pipecat.services.settings:validate_complete:251 - TTSSettings: the following fields are NOT_GIVEN: model, voice, language. All settings fields should be initialized in the service's __init__ (use None for unsupported fields).
+2026-09-27 17:43:15.110 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?]
+2026-09-27 17:43:15.110 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?]
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-32e5e5c9': broadcasting registry: ['PipelineWorker#0']
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-6d283366': broadcasting registry: ['PipelineWorker#0']
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#0': activated
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#0': activated
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-09-27 17:43:15.111 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-09-27 17:43:15.233 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:15.233 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:15.235 | INFO     | bot:breakdown:222 - latency breakdown:  0.123s  pipeline             [pipecat]
+2026-09-27 17:43:15.235 | INFO     | bot:breakdown:222 - latency breakdown:  0.123s  pipeline             [pipecat]
+2026-09-27 17:43:15.235 | INFO     | bot:breakdown:222 - latency breakdown:  0.123s  TOTAL (from client connected)
+2026-09-27 17:43:15.235 | INFO     | bot:breakdown:222 - latency breakdown:  0.123s  TOTAL (from client connected)
+2026-09-27 17:43:15.238 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context d1e35829-98c1-461a-90c0-bff9b0a6a1d7
+2026-09-27 17:43:15.238 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context b8d302bb-555b-4e90-847a-af70de5ae14b
+2026-09-27 17:43:19.197 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:19.197 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:19.197 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:19.197 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:19.197 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:0:1~0 sent after 100 chunks, 4.00s of audio
+2026-09-27 17:43:19.197 | INFO     | core.processor:serialize:149 - mark cecfbcc1d69e:0:1~0 sent after 100 chunks, 4.00s of audio
+2026-09-27 17:43:19.228 | INFO     | core.processor:deserialize:176 - media stream: first 'mark' event from the far end
+2026-09-27 17:43:19.228 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:0:1~0 returned (counted)
+2026-09-27 17:43:19.228 | INFO     | core.processor:deserialize:176 - media stream: first 'mark' event from the far end
+2026-09-27 17:43:19.228 | INFO     | core.processor:deserialize:181 - mark cecfbcc1d69e:0:1~0 returned (counted)
+2026-09-27 17:43:21.377 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:21.377 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:21.385 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:21.386 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:21.386 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 1
+2026-09-27 17:43:21.386 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 2
+2026-09-27 17:43:21.386 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:21.386 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 1
+2026-09-27 17:43:21.386 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 2
+2026-09-27 17:43:21.386 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:21.669 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 7 transcript(s) left
+2026-09-27 17:43:21.728 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 17:43:21.728 | WARNING  | pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy:_handle_vad_user_stopped_speaking:250 - TurnAnalyzerUserTurnStopStrategy#0: VAD stop_secs (0.3s) differs from the recommended default (0.2s). Built-in p99 latency values assume stop_secs=0.2. Re-run https://github.com/pipecat-ai/stt-benchmark with your settings and pass the TTFS P99 latency result as ttfs_p99_latency to your STT service.
+2026-09-27 17:43:21.728 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:21.728 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+                 pydantic-ai v2.46.0 • Python 3.14.5
+
+      / \        agent: concierge • model: function:function:reading:stream
+     /   \         output: str | ToolOutput(output=<function Conve… • tools: 1 • capabilities: 5
+   /___.___\
+  /    |    \    observability: off — see every model and tool call live, with cost
+/      |      \    set it up free with Logfire and a GitHub login: https://pydantic.dev/ai-setup.md
+`---.._|_..---'    or use any OpenTelemetry backend: https://pydantic.dev/docs/ai/logfire/#otel
+
+                 goes away once observability is on — or PYDANTIC_AI_NO_BANNER=1
+2026-09-27 17:43:21.734 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: concierge heard "Hi, I'd like a haircut" waiting None -> ('say', 'Sure, go on.')
+2026-09-27 17:43:21.754 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Sure, go on.]
+2026-09-27 17:43:21.876 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 373f7ad5-a885-4546-9f6a-7abbf2881298
+2026-09-27 17:43:21.877 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:21.877 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:21.877 | INFO     | bot:breakdown:222 - latency breakdown:  0.141s  speech synthesis     [Voice#0]
+2026-09-27 17:43:21.877 | INFO     | bot:breakdown:222 - latency breakdown:  0.065s  pipeline             [pipecat]
+2026-09-27 17:43:21.877 | INFO     | bot:breakdown:222 - latency breakdown:  0.505s  TOTAL
+2026-09-27 17:43:21.878 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 2 user-bot latency: 0.505s
+2026-09-27 17:43:22.520 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:22.520 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:22.520 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:1:2~1 sent after 17 chunks, 0.68s of audio
+2026-09-27 17:43:22.804 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:22.804 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:1:2~1 returned (counted)
+2026-09-27 17:43:22.808 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:22.808 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 2
+2026-09-27 17:43:22.808 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 3
+2026-09-27 17:43:22.808 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:23.087 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 4 transcript(s) left
+2026-09-27 17:43:23.138 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:23.138 | WARNING  | pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy:_handle_vad_user_stopped_speaking:250 - TurnAnalyzerUserTurnStopStrategy#0: VAD stop_secs (0.3s) differs from the recommended default (0.2s). Built-in p99 latency values assume stop_secs=0.2. Re-run https://github.com/pipecat-ai/stt-benchmark with your settings and pass the TTFS P99 latency result as ttfs_p99_latency to your STT service.
+2026-09-27 17:43:24.122 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 6 transcript(s) left
+2026-09-27 17:43:24.152 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:24.710 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 1610.75
+2026-09-27 17:43:24.711 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:24.711 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:24.711 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+                 pydantic-ai v2.46.0 • Python 3.14.5
+
+      / \        agent: concierge • model: function:function:reading:stream
+     /   \         output: str | ToolOutput(output=<function Conve… • tools: 1 • capabilities: 5
+   /___.___\
+  /    |    \    observability: off — see every model and tool call live, with cost
+/      |      \    set it up free with Logfire and a GitHub login: https://pydantic.dev/ai-setup.md
+`---.._|_..---'    or use any OpenTelemetry backend: https://pydantic.dev/docs/ai/logfire/#otel
+
+                 goes away once observability is on — or PYDANTIC_AI_NO_BANNER=1
+2026-09-27 17:43:24.723 | DEBUG    | evals.doubles:stream:146 - brain c2-l0-r0: concierge heard "Hi, I'd like a haircut on Tuesday at 9 am." waiting None -> ('calls', [('collect', {'values': {'service': 'haircut', 'booking_day': 'Tuesday', 'booking_time': '09:00'}}), ('hand_over', {'to': 'booking', 'because': 'a booking'})])
+2026-09-27 17:43:24.728 | INFO     | core.turn:_hop:718 - handoff concierge -> verify (a booking)
+2026-09-27 17:43:24.730 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Is your number +34 699 00 00 00?]
+2026-09-27 17:43:24.854 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:24.855 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 7f7a2bab-0dcf-41df-8d83-b02cfbc04b09
+2026-09-27 17:43:24.855 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:24.855 | INFO     | bot:breakdown:222 - latency breakdown:  1.765s  pipeline             [pipecat]
+2026-09-27 17:43:24.855 | INFO     | bot:breakdown:222 - latency breakdown:  2.065s  TOTAL
+2026-09-27 17:43:24.855 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 2 user-bot latency: 2.066s
+2026-09-27 17:43:25.651 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 1610.75
+2026-09-27 17:43:25.651 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:25.651 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:25.652 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:25.662 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: concierge heard 'on Tuesday at 9 am.' waiting None -> ('calls', [('collect', {'values': {'service': 'haircut', 'booking_day': 'Tuesday', 'booking_time': '09:00'}}), ('hand_over', {'to': 'booking', 'because': 'a booking'})])
+2026-09-27 17:43:25.668 | INFO     | core.turn:_hop:718 - handoff concierge -> verify (a booking)
+2026-09-27 17:43:25.670 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Is your number +34 699 01 00 00?]
+2026-09-27 17:43:25.794 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:25.796 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 33efc32b-ae46-475b-86b8-6481dcfe17f9
+2026-09-27 17:43:25.796 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:25.796 | INFO     | bot:breakdown:222 - latency breakdown:  1.672s  pipeline             [pipecat]
+2026-09-27 17:43:25.796 | INFO     | bot:breakdown:222 - latency breakdown:  1.972s  TOTAL
+2026-09-27 17:43:25.796 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 3 user-bot latency: 1.972s
+2026-09-27 17:43:26.578 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:26.578 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:26.578 | INFO     | core.processor:serialize:149 - mark cecfbcc1d69e:1:2~1 sent after 44 chunks, 1.76s of audio
+2026-09-27 17:43:26.649 | INFO     | core.processor:deserialize:181 - mark cecfbcc1d69e:1:2~1 returned (counted)
+2026-09-27 17:43:27.519 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:27.519 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:27.519 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:2:3~2 sent after 44 chunks, 1.76s of audio
+2026-09-27 17:43:28.040 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:2:3~2 returned (counted)
+2026-09-27 17:43:28.040 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:28.311 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:28.311 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 2
+2026-09-27 17:43:28.312 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 3
+2026-09-27 17:43:28.312 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:28.968 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:28.968 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 3 transcript(s) left
+2026-09-27 17:43:29.022 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 17:43:29.023 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:29.023 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:29.028 | DEBUG    | evals.doubles:stream:146 - brain c2-l0-r0: verify heard "Yes, that's my number." waiting lookup_customer -> ('call', 'lookup_customer')
+2026-09-27 17:43:29.032 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Thanks, I have you.]
+2026-09-27 17:43:29.033 | INFO     | core.turn:_hop:718 - handoff verify -> booking (-)
+2026-09-27 17:43:29.037 | DEBUG    | evals.doubles:stream:146 - brain c2-l0-r0: booking heard "Yes, that's my number." waiting None -> ('call', 'options')
+2026-09-27 17:43:29.041 | DEBUG    | evals.doubles:stream:146 - brain c2-l0-r0: booking heard "Yes, that's my number." waiting None -> ('call', 'collect', {'values': {'slot': '2026-09-29T0900|haircut'}})
+2026-09-27 17:43:29.043 | INFO     | core.turn:_speak:1001 - read back book_appointment by code after collect
+2026-09-27 17:43:29.154 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Shall I book a haircut, tomorrow at 9:00 AM?]
+2026-09-27 17:43:29.155 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 4c7007c6-52bf-460e-9d84-3e08663b0f4e
+2026-09-27 17:43:29.155 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:29.156 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:29.156 | INFO     | bot:breakdown:222 - latency breakdown:  0.185s  pipeline             [pipecat]
+2026-09-27 17:43:29.156 | INFO     | bot:breakdown:222 - latency breakdown:  0.485s  TOTAL
+2026-09-27 17:43:29.156 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 3 user-bot latency: 0.485s
+2026-09-27 17:43:29.281 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 63869cbd-ee28-4666-b2a4-d61bb8c6d8d3
+2026-09-27 17:43:29.630 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:29.631 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 3
+2026-09-27 17:43:29.631 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 4
+2026-09-27 17:43:29.631 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:30.157 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:30.158 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:30.158 | INFO     | core.processor:serialize:149 - mark cecfbcc1d69e:2:3~2 sent after 26 chunks, 1.04s of audio
+2026-09-27 17:43:30.158 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:30.248 | INFO     | core.processor:deserialize:181 - mark cecfbcc1d69e:2:3~2 returned (counted)
+2026-09-27 17:43:30.389 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 5 transcript(s) left
+2026-09-27 17:43:30.442 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 17:43:30.442 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:30.442 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:30.448 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: verify heard "Yes, that's my number." waiting lookup_customer -> ('call', 'lookup_customer')
+2026-09-27 17:43:30.451 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Thanks, I have you.]
+2026-09-27 17:43:30.452 | INFO     | core.turn:_hop:718 - handoff verify -> booking (-)
+2026-09-27 17:43:30.456 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard "Yes, that's my number." waiting None -> ('call', 'options')
+2026-09-27 17:43:30.460 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard "Yes, that's my number." waiting None -> ('call', 'collect', {'values': {'slot': '2026-09-29T0900|haircut'}})
+2026-09-27 17:43:30.462 | INFO     | core.turn:_speak:1001 - read back book_appointment by code after collect
+2026-09-27 17:43:30.574 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Shall I book a haircut, tomorrow at 9:00 AM?]
+2026-09-27 17:43:30.575 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 082e442a-954d-4d88-aaa0-d230d05a4dce
+2026-09-27 17:43:30.575 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:30.576 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:30.576 | INFO     | bot:breakdown:222 - latency breakdown:  0.184s  pipeline             [pipecat]
+2026-09-27 17:43:30.576 | INFO     | bot:breakdown:222 - latency breakdown:  0.484s  TOTAL
+2026-09-27 17:43:30.576 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 4 user-bot latency: 0.484s
+2026-09-27 17:43:30.703 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context c0172719-9f31-47a2-b046-1cda23e47ebd
+2026-09-27 17:43:31.575 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:31.576 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:31.576 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:3:4~3 sent after 26 chunks, 1.04s of audio
+2026-09-27 17:43:31.576 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:31.667 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:3:4~3 returned (counted)
+2026-09-27 17:43:32.598 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:32.598 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:32.598 | INFO     | core.processor:serialize:149 - mark cecfbcc1d69e:2:4~2 sent after 61 chunks, 2.44s of audio
+2026-09-27 17:43:32.728 | INFO     | core.processor:deserialize:181 - mark cecfbcc1d69e:2:4~2 returned (counted)
+2026-09-27 17:43:34.017 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:34.017 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:34.018 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:3:5~3 sent after 61 chunks, 2.44s of audio
+2026-09-27 17:43:34.090 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:34.148 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:3:5~3 returned (counted)
+2026-09-27 17:43:34.490 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 2 transcript(s) left
+2026-09-27 17:43:34.491 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-27 17:43:34.491 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 3
+2026-09-27 17:43:34.491 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 4
+2026-09-27 17:43:34.491 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:35.049 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:35.192 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:35.192 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:35.204 | DEBUG    | evals.doubles:stream:146 - brain c2-l0-r0: booking heard 'Yes please.' waiting book_appointment -> ('call', 'book_appointment')
+2026-09-27 17:43:35.211 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [You're all set for tomorrow at 9:00 AM. Anything else I can help with?]
+2026-09-27 17:43:35.335 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:35.340 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 52874c27-1f6e-45cb-af3e-ceb224885e9f
+2026-09-27 17:43:35.909 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 4 transcript(s) left
+2026-09-27 17:43:35.912 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-27 17:43:35.913 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 4
+2026-09-27 17:43:35.913 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 5
+2026-09-27 17:43:35.913 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:36.614 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:36.615 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:36.627 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard 'Yes please.' waiting book_appointment -> ('call', 'book_appointment')
+2026-09-27 17:43:36.640 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard 'Yes please.' waiting None -> ('say', 'Sorry, that time has just gone. Shall I find you another one?')
+2026-09-27 17:43:36.642 | ERROR    | core.turn:_speak:1014 - agent run failed
+Traceback (most recent call last):
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 2242, in _run_stream
+    raise ToolRetryError(m)
+          │              └ RetryPromptPart(content='Please include your response in a tool call.', tool_call_id='pyd_ai_b84bb74e493a4fc1a1209c764139978d...
+          └ <class 'pydantic_ai.exceptions.ToolRetryError'>
+
+pydantic_ai.exceptions.ToolRetryError: Please include your response in a tool call.
+
+
+The above exception was the direct cause of the following exception:
+
+
+Traceback (most recent call last):
+
+  File "<string>", line 1, in <module>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+               │     │   └ 6
+               │     └ 9
+               └ <function _main at 0x106d7c0f0>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/multiprocessing/spawn.py", line 135, in _main
+    return self._bootstrap(parent_sentinel)
+           │    │          └ 6
+           │    └ <function BaseProcess._bootstrap at 0x106ca8b40>
+           └ <SpawnProcess name='SpawnProcess-1' parent=35452 started>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/multiprocessing/process.py", line 320, in _bootstrap
+    self.run()
+    │    └ <function BaseProcess.run at 0x106c9fe20>
+    └ <SpawnProcess name='SpawnProcess-1' parent=35452 started>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    │    │        │    │        │    └ {'config': <uvicorn.config.Config object at 0x107460050>, 'target': <bound method Process.target of <uvicorn.supervisors.mult...
+    │    │        │    │        └ <SpawnProcess name='SpawnProcess-1' parent=35452 started>
+    │    │        │    └ ()
+    │    │        └ <SpawnProcess name='SpawnProcess-1' parent=35452 started>
+    │    └ <function subprocess_started at 0x1073fdd20>
+    └ <SpawnProcess name='SpawnProcess-1' parent=35452 started>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+    │              └ [<socket.socket fd=3, family=2, type=1, proto=0, laddr=('127.0.0.1', 7961)>]
+    └ <bound method Process.target of <uvicorn.supervisors.multiprocess.Process object at 0x1074601a0>>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/uvicorn/supervisors/multiprocess.py", line 77, in target
+    self.server.run(sockets)
+    │    │          └ [<socket.socket fd=3, family=2, type=1, proto=0, laddr=('127.0.0.1', 7961)>]
+    │    └ <property object at 0x1073f5710>
+    └ <uvicorn.supervisors.multiprocess.Process object at 0x1074601a0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/uvicorn/server.py", line 86, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+           │           │    │             │                      │    │      └ <function Config.get_loop_factory at 0x107264880>
+           │           │    │             │                      │    └ <uvicorn.config.Config object at 0x107460050>
+           │           │    │             │                      └ <uvicorn.server.Server object at 0x107460c20>
+           │           │    │             └ [<socket.socket fd=3, family=2, type=1, proto=0, laddr=('127.0.0.1', 7961)>]
+           │           │    └ <function Server.serve at 0x1073d1a60>
+           │           └ <uvicorn.server.Server object at 0x107460c20>
+           └ <function run at 0x107080670>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           │      │   └ <coroutine object Server.serve at 0x107406200>
+           │      └ <function Runner.run at 0x107080b40>
+           └ <asyncio.runners.Runner object at 0x106c4e510>
+  File "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-1' coro=<Server.serve() running at /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/work...
+           │    │     └ <cyfunction Loop.run_until_complete at 0x107441e40>
+           │    └ <uvloop.Loop running=True closed=False debug=False>
+           └ <asyncio.runners.Runner object at 0x106c4e510>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/anyio/_core/_tasks.py", line 327, in _run_coro
+    retval = await self._coro
+                   │    └ <member '_coro' of 'TaskHandle' objects>
+                   └ <TaskHandle pending name='pydantic_graph.graph_builder._GraphIterator._run_tracked_task' coro=<coroutine object _GraphIterato...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_graph/graph_builder.py", line 860, in _run_tracked_task
+    result = await self._run_task(t_)
+                   │    │         └ GraphTask(node_id='booking', inputs=Moved(to='booking', prompt='Yes please.'))
+                   │    └ <function _GraphIterator._run_task at 0x10a7d9640>
+                   └ _GraphIterator(graph=<pydantic_graph.graph_builder.Graph object at 0x10f874b90
+                     stateDiagram-v2
+                       state after_turn_start <<cho...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_graph/graph_builder.py", line 911, in _run_task
+    output = await node.call(step_context)
+                   │    │    └ StepContext(_state=None, _deps=<core.turn.Turn object at 0x110372fd0>, _inputs=Moved(to='booking', prompt='Yes please.'))
+                   │    └ <property object at 0x10a681e40>
+                   └ Step(id='booking', _call=<function step_booking at 0x10f8ce6c0>, label=None)
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/core/src/core/flow.py", line 134, in run
+    return await ctx.deps.hop(name, ctx.inputs.prompt)
+                 │   │        │     │   └ <property object at 0x10a681260>
+                 │   │        │     └ StepContext(_state=None, _deps=<core.turn.Turn object at 0x110372fd0>, _inputs=Moved(to='booking', prompt='Yes please.'))
+                 │   │        └ 'booking'
+                 │   └ <property object at 0x10a6811c0>
+                 └ StepContext(_state=None, _deps=<core.turn.Turn object at 0x110372fd0>, _inputs=Moved(to='booking', prompt='Yes please.'))
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/core/src/core/turn.py", line 507, in hop
+    async for event in self._hop(prompt):
+              │        │    │    └ 'Yes please.'
+              │        │    └ <function Turn._hop at 0x10dc27690>
+              │        └ <core.turn.Turn object at 0x110372fd0>
+              └ RunStarted(step='booking')
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/core/src/core/turn.py", line 640, in _hop
+    async for event in run:
+              │        └ <async_generator object Turn._speak at 0x76ffef0790>
+              └ RunStarted(step='booking')
+
+> File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/core/src/core/turn.py", line 930, in _speak
+    async for event in events:
+              │        └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x110434e90>
+              └ PartEndEvent(index=0, part=TextPart(content='Sorry, that time has just gone. Shall I find you another one?'))
+
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 194, in __anext__
+    result = await self._task
+                   │    └ <Task finished name='Task-334' coro=<AgentRunEvents._ensure_started.<locals>.run_agent() done, defined at /Users/nicoferdi/Do...
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x110434e90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 301, in run_agent
+    result = await self._run_agent(event_stream_handler)
+                   │    │          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x110414670>
+                   │    └ <function AbstractAgent.run_stream_events.<locals>.run_agent at 0x110415e80>
+                   └ <pydantic_ai.agent.abstract.AgentRunEvents object at 0x110434e90>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 1463, in run_agent
+    return await self.run(
+                 │    └ <function AbstractAgent.run at 0x10d945640>
+                 └ Agent(model=FunctionModel(function=<bound method Brain.reading of <evals.doubles.Brain object at 0x10f64ae40>>, stream_functi...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 662, in run
+    node = await agent_run._run_node_with_hooks(node, _stream_step)  # pyright: ignore[reportPrivateUsage]
+                 │         │                    │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x110786da0>
+                 │         │                    └ CallToolsNode(model_response=ModelResponse(parts=[TextPart(content='Sorry, that time has just gone. Shall I find you another ...
+                 │         └ <function AgentRun._run_node_with_hooks at 0x10d917950>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(input_tokens=100, output_tokens=13, requests=2)>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 476, in _run_node_with_hooks
+    return await self._wrap_and_advance(run_context, node, step_fn)
+                 │    │                 │            │     └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x110786da0>
+                 │    │                 │            └ CallToolsNode(model_response=ModelResponse(parts=[TextPart(content='Sorry, that time has just gone. Shall I find you another ...
+                 │    │                 └ RunContext(deps=FlowCall[SalonState](state=FlowState[SalonState](agent='booking', pending=None, facts=SalonState(customer_pho...
+                 │    └ <function AgentRun._wrap_and_advance at 0x10d9177f0>
+                 └ <AgentRun result=<run not finished> usage=RunUsage(input_tokens=100, output_tokens=13, requests=2)>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/run.py", line 422, in _wrap_and_advance
+    result = await step_fn(node)
+                   │       └ CallToolsNode(model_response=ModelResponse(parts=[TextPart(content='Sorry, that time has just gone. Shall I find you another ...
+                   └ <function AbstractAgent.run.<locals>._stream_and_advance at 0x110786da0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 646, in _stream_and_advance
+    await _handler(run_ctx, stream)
+          │        │        └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x1103fb760>
+          │        └ RunContext(deps=FlowCall[SalonState](state=FlowState[SalonState](agent='booking', pending=None, facts=SalonState(customer_pho...
+          └ <function AgentRunEvents._ensure_started.<locals>.event_stream_handler at 0x110414670>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/agent/abstract.py", line 294, in event_stream_handler
+    async for event in events:
+                       └ <async_generator object CombinedCapability.wrap_run_event_stream at 0x1103fb760>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/combined.py", line 615, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x11044c8b0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object AbstractCapability.wrap_run_event_stream at 0x11044e980>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/abstract.py", line 862, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1103ddbe0>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1103dd250>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1103de460>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/capabilities/hooks.py", line 1033, in wrap_run_event_stream
+    async for event in stream:
+                       └ <async_generator object Hooks.wrap_run_event_stream at 0x1103de9b0>
+  [Previous line repeated 2 more times]
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py", line 98, in dispatch_event_stream
+    async for event in stream:
+                       └ <async_generator object _with_event_stream_buffer at 0x110457a00>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 209, in _with_event_stream_buffer
+    async for event in stream:
+                       └ <async_generator object CallToolsNode._run_stream at 0x11040b040>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 2248, in _run_stream
+    async for event in _run_stream():
+                       └ <function CallToolsNode._run_stream.<locals>._run_stream at 0x110787e20>
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 2244, in _run_stream
+    ctx.state.consume_output_retry(ctx.deps.max_output_retries, error=e)
+    │   │     │                    │   │    └ 1
+    │   │     │                    │   └ GraphAgentDeps(user_deps=FlowCall[SalonState](state=FlowState[SalonState](agent='booking', pending=None, facts=SalonState(cus...
+    │   │     │                    └ GraphRunContext(state=GraphAgentState(message_history=[ModelResponse(parts=[TextPart(content="Hi, you've reached Sage and Sto...
+    │   │     └ <function GraphAgentState.consume_output_retry at 0x10d8d7d70>
+    │   └ GraphAgentState(message_history=[ModelResponse(parts=[TextPart(content="Hi, you've reached Sage and Stone. Robin speaking, wh...
+    └ GraphRunContext(state=GraphAgentState(message_history=[ModelResponse(parts=[TextPart(content="Hi, you've reached Sage and Sto...
+  File "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py", line 398, in consume_output_retry
+    raise exceptions.UnexpectedModelBehavior(message) from error
+          │          │                       │             └ ToolRetryError('Please include your response in a tool call.')
+          │          │                       └ 'Exceeded maximum output retries (1)'
+          │          └ <class 'pydantic_ai.exceptions.UnexpectedModelBehavior'>
+          └ <module 'pydantic_ai.exceptions' from '/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4e/.ven...
+
+pydantic_ai.exceptions.UnexpectedModelBehavior: Exceeded maximum output retries (1)
+2026-09-27 17:43:36.677 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - PydanticAgentProcessor#0 error: agent run failed: Sorry, I had a problem there. Could you say that again?
+2026-09-27 17:43:36.677 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Sorry, I had a problem there. Could you say that again?]
+2026-09-27 17:43:36.678 | WARNING  | pipecat.pipeline.worker:_source_push_frame:1502 - PipelineWorker#0: Something went wrong: ErrorFrame#0(error: agent run failed: Sorry, I had a problem there. Could you say that again?, fatal: False)
+2026-09-27 17:43:36.802 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:36.805 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context d54978b9-b967-4ba9-a864-0b3e747c5761
+2026-09-27 17:43:39.137 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:39.138 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:39.138 | INFO     | core.processor:serialize:149 - mark cecfbcc1d69e:3:5~3 sent after 96 chunks, 3.84s of audio
+2026-09-27 17:43:39.207 | INFO     | core.processor:deserialize:181 - mark cecfbcc1d69e:3:5~3 returned (counted)
+2026-09-27 17:43:39.806 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:39.806 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:39.807 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:4:6~4 sent after 76 chunks, 3.04s of audio
+2026-09-27 17:43:39.808 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:4:6~4 returned (counted)
+2026-09-27 17:43:41.157 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:41.157 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:41.165 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:41.165 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:41.166 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 4
+2026-09-27 17:43:41.166 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 5
+2026-09-27 17:43:41.166 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 5
+2026-09-27 17:43:41.166 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 6
+2026-09-27 17:43:41.166 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:41.166 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:41.429 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 1 transcript(s) left
+2026-09-27 17:43:41.482 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:41.627 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 3 transcript(s) left
+2026-09-27 17:43:41.752 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-27 17:43:41.752 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:41.753 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:41.758 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard 'Yes, another one please.' waiting None -> ('call', 'options')
+2026-09-27 17:43:41.762 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard 'Yes, another one please.' waiting None -> ('call', 'collect', {'values': {'slot': '2026-09-29T1000|haircut'}})
+2026-09-27 17:43:41.765 | INFO     | core.turn:_speak:1001 - read back book_appointment by code after collect
+2026-09-27 17:43:41.765 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Shall I book a haircut, tomorrow at 10:00 AM?]
+2026-09-27 17:43:41.889 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:41.890 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:41.891 | INFO     | bot:breakdown:222 - latency breakdown:  0.180s  pipeline             [pipecat]
+2026-09-27 17:43:41.891 | INFO     | bot:breakdown:222 - latency breakdown:  0.480s  TOTAL
+2026-09-27 17:43:41.891 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 6 user-bot latency: 0.480s
+2026-09-27 17:43:41.892 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 870f0106-4a24-4a0a-a432-fb0d18e5129f
+2026-09-27 17:43:43.030 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 1610.75
+2026-09-27 17:43:43.030 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:43.030 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:43.031 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:43.039 | DEBUG    | evals.doubles:stream:146 - brain c2-l0-r0: booking heard "No, that's all. Bye." waiting None -> ('call', 'goodbye', {})
+2026-09-27 17:43:43.041 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Thanks for calling Sage and Stone. Have a lovely day!]
+2026-09-27 17:43:43.166 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:43.169 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:43.169 | INFO     | bot:breakdown:222 - latency breakdown:  1.736s  pipeline             [pipecat]
+2026-09-27 17:43:43.169 | INFO     | bot:breakdown:222 - latency breakdown:  2.036s  TOTAL
+2026-09-27 17:43:43.169 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 5 user-bot latency: 2.036s
+2026-09-27 17:43:43.172 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 926e69f3-7768-493f-be35-9b34fdb9cdb0
+2026-09-27 17:43:44.331 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:44.331 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:44.331 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:5:7~5 sent after 62 chunks, 2.48s of audio
+2026-09-27 17:43:44.368 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:5:7~5 returned (counted)
+2026-09-27 17:43:45.207 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:46.082 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:46.082 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:46.083 | INFO     | core.processor:serialize:149 - mark cecfbcc1d69e:4:6~4 sent after 73 chunks, 2.92s of audio
+2026-09-27 17:43:46.084 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1565 - PipelineWorker#0: received end worker frame downstream EndWorkerFrame#0(reason: None)
+2026-09-27 17:43:46.087 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1475 - PipelineWorker#0: received end worker frame upstream EndWorkerFrame#1(reason: None)
+2026-09-27 17:43:46.087 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1230 - PipelineWorker#0: Closing. Waiting for EndFrame#0(reason: None) to reach the end of the pipeline...
+2026-09-27 17:43:46.087 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 5
+2026-09-27 17:43:46.123 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1239 - PipelineWorker#0: EndFrame#0(reason: None) reached the end of the pipeline, pipeline is closing.
+2026-09-27 17:43:46.123 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-09-27 17:43:46.124 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:end_conversation_tracing:179 - Ended tracing for Conversation CA0627cb560f0f4f5da5a01b9980cd1b2b
+2026-09-27 17:43:46.125 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#0 is finishing...
+2026-09-27 17:43:46.125 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#0 has finished
+2026-09-27 17:43:46.125 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-32e5e5c9': finished running
+2026-09-27 17:43:46.169 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 2 transcript(s) left
+2026-09-27 17:43:46.171 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-27 17:43:46.172 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 6
+2026-09-27 17:43:46.172 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 7
+2026-09-27 17:43:46.172 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:46.874 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:46.874 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:46.881 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard 'Yes please.' waiting book_appointment -> ('call', 'book_appointment')
+2026-09-27 17:43:46.887 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [You're all set for tomorrow at 10:00 AM. Anything else I can help with?]
+2026-09-27 17:43:47.011 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:47.018 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 13a45203-1c9b-47a2-8ac7-2dc949a46793
+2026-09-27 17:43:50.894 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:50.894 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:50.894 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:6:8~6 sent after 98 chunks, 3.92s of audio
+2026-09-27 17:43:51.028 | INFO     | core.processor:deserialize:181 - mark 979e17cf6663:6:8~6 returned (counted)
+2026-09-27 17:43:51.948 | DEBUG    | evals.doubles:run_stt:306 - ears: speech starts
+2026-09-27 17:43:52.230 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-27 17:43:52.231 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 7
+2026-09-27 17:43:52.231 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 8
+2026-09-27 17:43:52.231 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-27 17:43:53.269 | DEBUG    | evals.doubles:run_stt:312 - ears: speech ended, 1 transcript(s) left
+2026-09-27 17:43:53.321 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:54.871 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 1610.75
+2026-09-27 17:43:54.871 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-27 17:43:54.871 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:54.871 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-27 17:43:54.883 | DEBUG    | evals.doubles:stream:146 - brain c2-l1-r0: booking heard "No, that's all. Bye." waiting None -> ('call', 'goodbye', {})
+2026-09-27 17:43:54.885 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1309 - Voice#0: Generating TTS [Thanks for calling Sage and Stone. Have a lovely day!]
+2026-09-27 17:43:55.010 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-27 17:43:55.012 | INFO     | bot:breakdown:222 - latency breakdown:  0.300s  endpointing wait     [config: VAD stop_secs]
+2026-09-27 17:43:55.013 | INFO     | bot:breakdown:222 - latency breakdown:  1.740s  pipeline             [pipecat]
+2026-09-27 17:43:55.013 | INFO     | bot:breakdown:222 - latency breakdown:  2.040s  TOTAL
+2026-09-27 17:43:55.013 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 8 user-bot latency: 2.040s
+2026-09-27 17:43:55.015 | DEBUG    | pipecat.services.tts_service:push_frame:937 - Voice#0 cleaning up TTS context 03253c08-1766-4059-96a1-bfff78a024ba
+2026-09-27 17:43:57.908 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-27 17:43:57.908 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-27 17:43:57.908 | INFO     | core.processor:serialize:149 - mark 979e17cf6663:7:9~7 sent after 73 chunks, 2.92s of audio
+2026-09-27 17:43:57.909 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1565 - PipelineWorker#0: received end worker frame downstream EndWorkerFrame#0(reason: None)
+2026-09-27 17:43:57.911 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1475 - PipelineWorker#0: received end worker frame upstream EndWorkerFrame#1(reason: None)
+2026-09-27 17:43:57.911 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1230 - PipelineWorker#0: Closing. Waiting for EndFrame#0(reason: None) to reach the end of the pipeline...
+2026-09-27 17:43:57.912 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 8
+2026-09-27 17:43:57.948 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1239 - PipelineWorker#0: EndFrame#0(reason: None) reached the end of the pipeline, pipeline is closing.
+2026-09-27 17:43:57.948 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-09-27 17:43:57.949 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:end_conversation_tracing:179 - Ended tracing for Conversation CA2cc4fd9a6bf34e3e9cf93d65f4c9f9b4
+2026-09-27 17:43:57.949 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#0 is finishing...
+2026-09-27 17:43:57.950 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#0 has finished
+2026-09-27 17:43:57.950 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-6d283366': finished running
+INFO:     Received SIGINT, exiting.
+INFO:     Terminated child process [35454]
+INFO:     Terminated child process [35455]
+INFO:     Waiting for child process [35454]
+2026-09-27 17:45:01.259 | WARNING  | server:drain:318 - worker 35454 draining: 0 call(s) running
+2026-09-27 17:45:01.259 | WARNING  | server:drain:318 - worker 35455 draining: 0 call(s) running
+2026-09-27 17:45:01.260 | WARNING  | server:drain:321 - worker 35454 drained in 0.0s; 0 call(s) left
+2026-09-27 17:45:01.260 | WARNING  | server:drain:321 - worker 35455 drained in 0.0s; 0 call(s) left
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [35455]
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [35454]
+INFO:     Waiting for child process [35455]
+INFO:     Stopping parent process [35452]

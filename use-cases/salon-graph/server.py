@@ -245,6 +245,8 @@ LIVE_FAULT = os.getenv('LIVE_FAULT', '')
 For the live worker-failure check only (session 4e): the same fault point
 as the offline F2 (`evals/doubles.py`), on the real diary, so the kill
 lands between the commit and anyone being told. Unset on every other run.
+With `LIVE_FAULT_ARM` naming a file, only once that file exists: the fault
+is armed after both calls are seen on different workers, never before.
 """
 
 
@@ -254,9 +256,11 @@ def _arm_live_fault(diary: Any, fault: str) -> None:
         raise SystemExit(f'LIVE_FAULT must be committed:<phone>, not {fault!r}')
     save = diary.save_booking
 
+    armed = os.getenv('LIVE_FAULT_ARM', '')
+
     def saving(*args: Any, **kwargs: Any) -> dict:
         result = save(*args, **kwargs)
-        if args and args[0] == phone:
+        if args and args[0] == phone and (not armed or os.path.exists(armed)):
             logger.warning('LIVE_FAULT: worker {} dies after committing a booking for {}', os.getpid(), phone)
             os._exit(9)
         return result

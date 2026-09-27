@@ -2,9 +2,9 @@
  "note": "Stage B, C and session 4d allowances. Survive sessions, worktrees and PRs. Update after every billable action; never reset. Copied from session-4c/budget.json at 8b127b2 and continued here.",
  "text": {
   "requests_allowed": null,
-  "tokens_allowed": 515000,
-  "requests_spent": 198,
-  "tokens_spent": 470853,
+  "tokens_allowed": 560000,
+  "requests_spent": 238,
+  "tokens_spent": 562138,
   "runs": [
    {
     "label": "text-1",
@@ -160,6 +160,39 @@
      }
     },
     "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; T5 turn 12 had one"
+   },
+   {
+    "label": "text-7",
+    "source": "7ec5d69 (runtime as e9d086e; only T5's evaluator check changed since)",
+    "why": "session 4d: T1-T4 on the fixed runtime, after the user raised the allowance to 560,000",
+    "cases": {
+     "T1.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19615,
+      "session": "text-T1.v1-fd67038c"
+     },
+     "T2.v1": {
+      "result": "passed",
+      "requests": 15,
+      "tokens": 38073,
+      "session": "text-T2.v1-7b4c0359"
+     },
+     "T3.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19838,
+      "session": "text-T3.v2-3aa3f7a9"
+     },
+     "T4.v2": {
+      "result": "exhausted",
+      "requests": 7,
+      "tokens": 13759,
+      "session": "text-T4.v2-9e25846a",
+      "note": "exhausted after turn 4 by the token cap, before the injected lost answer: nothing was tested. The last turn overshot the cap by 2,138 tokens (tokens are checked between turns). Not rerun: no allowance left."
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint: unknown, not zero"
    }
   ],
   "allowance_changes": [
@@ -180,8 +213,21 @@
      515000
     ],
     "requests": "no separate request cap; this set is capped at 140,000 tokens"
+   },
+   {
+    "on": "2026-09-27",
+    "by": "the user, in session 4d, after T5 cost 76,693 tokens (asked: T1-T4 need about 80k, 44,147 left)",
+    "tokens_allowed": [
+     515000,
+     560000
+    ],
+    "requests": "no separate cap; T1-T4 run with the 89,147 left as their hard cap"
    }
-  ]
+  ],
+  "overshoot": {
+   "tokens": 2138,
+   "why": "T4.v2 turn 4: one turn used more than was left; the checkpoint stops between turns, as its docstring says"
+  }
  },
  "coval_repair_pool": {
   "calls_allowed": 20,

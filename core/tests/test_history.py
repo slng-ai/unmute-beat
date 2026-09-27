@@ -1,9 +1,12 @@
 """C3 request snapshots, canonical speech, resets and prerequisite returns. Offline."""
 
 import asyncio
+import json
+import tempfile
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 
 from pipecat.frames.frames import LLMFullResponseStartFrame
 from pydantic_ai import Agent, RunContext, TemplateStr, Tool, ToolOutput
@@ -17,11 +20,14 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
+import core
 from core.graph import Node
 from core.history import paired, project
 from core.processor import PydanticAgentProcessor
 from core.state import CallContext, Handoff, VoiceState
 from core.turn import Barge, note_spoken, take_turn
+from tests.test_tickets import HERE, desk_in
+from tests.ticket_flow.tickets import DeskState
 
 
 class State(VoiceState):
@@ -416,6 +422,55 @@ def old_speech_stays_where_it_was_said():
             assert any(isinstance(p, ToolCallPart) for p in view[at - 1].parts), 'a tool result lost its call'
 
 
+async def cancelled_then_handed_over_on_a_rendered_step():
+    """Session 4e: a rendered step with choices, a turn cancelled after its tools ran, then a hand-over and back.
+
+    What the step's agent is sent next keeps the caller's words once each,
+    in the order they were said, and every tool result right after the
+    response that called it: no orphan from the cancelled run, and nothing
+    from the action step's detour out of place.
+    """
+    seen: list[list] = []
+    parked = asyncio.Event()
+    moves = [
+        ('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
+        ('options', {}),
+        ('park', None),
+        ('collect', {'values': {'ticket_id': 'T-101', 'resolution': 'refund'}}),
+        ('hand_over', {'to': 'look_up', 'because': 'find its revision'}),
+        ('resolve_ticket', {}),
+    ]
+
+    async def stream(messages, info):
+        seen.append(deepcopy(messages))
+        name, args = moves.pop(0)
+        if name == 'park':
+            parked.set()
+            await asyncio.Event().wait()
+        yield {0: DeltaToolCall(name=name, json_args=json.dumps(args))}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        desk = desk_in(Path(tmp))
+        flow = core.load(HERE / 'rendered_choices.yaml').compile(model=FunctionModel(stream_function=stream))
+        call = flow.open(DeskState(), services=desk)
+        task = asyncio.create_task(core.text_turn(flow, call, 'Cuenta ACC-1234, facturación.'))
+        await asyncio.wait_for(parked.wait(), 2)
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        reply = await core.text_turn(flow, call, 'El T-101, con un reembolso.')
+        assert reply.segments[-1].text == '¿Marco el ticket T-101 como resuelto: refund?', reply.segments
+    last = seen[-1]
+    assert last == paired(last), 'an orphaned tool call or result was sent'
+    words = [p.content for m in last for p in m.parts if isinstance(p, UserPromptPart)]
+    assert words == ['Cuenta ACC-1234, facturación.', 'El T-101, con un reembolso.'], words
+    for at, message in enumerate(last):
+        for part in message.parts:
+            if isinstance(part, ToolReturnPart):
+                called = [p.tool_call_id for p in last[at - 1].parts if isinstance(p, ToolCallPart)]
+                assert part.tool_call_id in called, ('a tool result is not right after its call', part)
+
+
 async def main():
     await snapshots()
     await snapshots(adapter=True)
@@ -431,6 +486,7 @@ async def main():
     await cancellation_before_sdk_start()
     interrupted_protocol()
     old_speech_stays_where_it_was_said()
+    await cancelled_then_handed_over_on_a_rendered_step()
     print('ok')
 
 

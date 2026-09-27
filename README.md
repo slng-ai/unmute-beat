@@ -1,5 +1,9 @@
 # SLNG Voice Harness
 
+> **Work in progress.** This README describes the architecture we are working
+> toward, not the implementation currently available on `main`. The migration
+> is ongoing; APIs, examples and behaviour may change.
+
 A reusable Python conversation engine for voice agents. An application supplies
 its state, prompts, typed functions and allowed routes. Core runs the conversation;
 Pipecat handles the audio pipeline, with speech recognition and synthesis through SLNG.
@@ -9,29 +13,8 @@ with deterministic code nodes where no language interpretation is needed.**
 The active agent understands the caller, uses its tools and chooses among declared
 exits. Core checks state updates, routes, approvals, receipts and delivery evidence.
 
-## Implementation status
-
-This README describes the migration architecture, checked against
-[PR #22 at `8b127b2`](https://github.com/slng-ai/slng-voice-harness/tree/8b127b2ebb444260d199903e3c91df1fa878eeb6)
-on 27 September 2026. At that checkpoint, **PRs #17–#22 are open** and `main`
-contains the earlier classifier-based implementation. Updating this document
-does not install the new runtime on `main`.
-
-| Area | Status at the documented checkpoint |
-|---|---|
-| Public package boundary and application authoring | Implemented in PRs [#17](https://github.com/slng-ai/slng-voice-harness/pull/17) and [#18](https://github.com/slng-ai/slng-voice-harness/pull/18). |
-| Agent-per-node architecture and salon migration | Implemented in [#19](https://github.com/slng-ai/slng-voice-harness/pull/19). No classifier pre-pass on the public manifest path. |
-| Evidence-based evaluator | Implemented in [#20](https://github.com/slng-ai/slng-voice-harness/pull/20). Missing evidence remains unknown. |
-| Write recovery, receipt-backed speech and Twilio marks | Implemented in [#21](https://github.com/slng-ai/slng-voice-harness/pull/21), with further repairs in #22 and remaining edge cases under correction. |
-| Shared backend and bounded call runner | Implemented in [#22](https://github.com/slng-ai/slng-voice-harness/pull/22); tested at up to five simultaneous calls on one MacBook. Qualification remains open. |
-| Correctness and performance hardening | In progress: consent, reconciliation cancellation, move recovery, choice invalidation, fillers, memory and cleanup. |
-| Frozen final qualification | Pending the repairs and their verification. Native latency parity is not yet established. |
-| Faro and remaining adoption work | Faro still uses the legacy path. Its migration is Session 5; final package integration and adoption are Session 6. |
-
-**Examples labelled “migration branch” require that implementation**, such as
-`feat/session-4c-mac` or a descendant. Source links for new APIs are pinned to
-the reviewed commit so they work while this README is on `main`.
-For the code currently merged into `main`, use the
+Examples labelled “migration branch” refer to the work in progress and may not
+run on `main`. For the currently merged implementation, see the
 [earlier architecture guide](https://github.com/slng-ai/slng-voice-harness/blob/176ff9fbab96e8cf795d9b40768d09051c37b8a4/README.md).
 
 ## Architecture

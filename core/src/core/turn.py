@@ -1115,16 +1115,17 @@ def _speech(event) -> str:
 
 
 async def _say_again(call: CallContext, words: str) -> str:
-    """Say an unheard receipt again, word for word: no model, no write.
+    """Say an unheard receipt again, word for word: no model, no write. At most `RECEIPT_REPEATS` times.
 
-    Whatever the caller said over it is kept for the next turn's model.
+    Whatever the caller said over it is kept for the next turn's model, and
+    once the repeats are spent their words go to the model straight away.
     Coval run BVqdGEunV3avnHrHVwq4oE: the receipt for Saturday at 9 was cut
     before any audio played, the caller went on "Yes, tomorrow at nine AM.
     That's great.", and the front desk read it as a new request and moved
     their own booking to 10. Hearing what was done comes first; a reading of
     the reply is not needed to decide that.
     """
-    call.note_receipt(words)
+    call.said_again()
     await call.speak_now(words, origin='confirmation')
     return words
 

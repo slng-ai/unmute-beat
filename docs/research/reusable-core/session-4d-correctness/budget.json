@@ -231,10 +231,10 @@
  },
  "coval_repair_pool": {
   "calls_allowed": 20,
-  "requested": 10,
-  "placed": 10,
-  "connected": 10,
-  "terminal": 10,
+  "requested": 12,
+  "placed": 12,
+  "connected": 12,
+  "terminal": 12,
   "evidence_complete": 1,
   "runs": [
    {
@@ -398,6 +398,43 @@
     "call_seconds": 300,
     "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
     "result": "failed task, safe: booked BK0001 Monday 10:00 on a heard yes; the phone confirmed by the same number said back (restated); on \"move it to Wednesday\" the agent recorded the day with an id not on offer (all refused), options answered for the old day, move had no pick and the options tool was already spent (speak_by), then the agent called goodbye and ended the call. Diary: one booking, no move, no cancel, no unknown intent, nothing false said. Verify also said the pardon line beside a whole number (collect+wait in one reply). Three fixes followed offline (V9, verify test)."
+   },
+   {
+    "label": "s4d-1r-book-move-cancel",
+    "run": "QqG5vGKRZmKftpDrDiGckV",
+    "simulation": "Ph2kPFmrQyy4MxkyxaPm2y",
+    "call_sid": "CAabad0e9c34a2e6ab66a22d6323e2dbb4",
+    "langfuse_session": "CAabad0e9c34a2e6ab66a22d6323e2dbb4",
+    "source": "e9fbb8a",
+    "set": "JCZGihHR",
+    "case": "9GH9opPTqPbRJFT2pNnJst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-2",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "retry_of": "s4d-1-book-move-cancel",
+    "result": "safe and truthful, move not exercised: the simulated caller answered the Monday offer with \"great thank you\"; nothing was booked on it (correct). The agent then said \"anything else I can help you with?\" (prose, implies done). On \"move it to Wednesday\" it booked Wednesday 10:00 as a new booking on a heard yes to its book read-back, then cancelled it on a heard yes (collect of the held id accepted, the fix from call 1), goodbye recap from the cancel receipt. Diary: BK0001 Wednesday 10:00, cancelled (revision 2). No unknown, no refusal, no hang-up."
+   },
+   {
+    "label": "s4d-2-interruptive-move",
+    "run": "YfecLtyZxmG873LwTJH72V",
+    "simulation": "f4SU9BX7ZEdXxTxUswzhd2",
+    "call_sid": "CAd33c3c246f24a504d379f1aa47a9ef5a",
+    "langfuse_session": "CAd33c3c246f24a504d379f1aa47a9ef5a",
+    "source": "e9fbb8a",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-2",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "result": "failed task, safe: booked BK0002 Monday 09:00 for +34671540102 on a heard yes; verify read the number back from wait (the call 1 fix held live). The caller cut in over the Wednesday offer with \"sorry no\"; endpointing closed that as a new turn, the rest of the sentence never joined it, the agent called goodbye and the call ended. No move, no cancel, no unknown intent, nothing false said. Turn-taking finding, handed to the lifecycle session."
    }
   ],
   "stage_c_live_ramp_cap": 8,
@@ -405,7 +442,7 @@
    "plan": "4 initial targeted calls, at most 3 narrow retries; 2 latency and 2 worker-failure calls stay reserved",
    "cap_this_session": 7,
    "test_sets": "coval-fixtures.v1.json: one single-case set per call",
-   "placed": 1
+   "placed": 3
   }
  },
  "reserved_for_later_stages": {

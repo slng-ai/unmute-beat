@@ -481,7 +481,30 @@ def a_lookup_backs_a_prose_claim() -> bool:
         manifest.unlink()
 
 
+def old_speech_is_sent_as_the_last_words() -> bool:
+    """Live call CAd33c3c (session 4d, call 3): lines from turns 2 and 6 were sent as the agent's latest words.
+
+    A line whose run was cancelled has no response of its own in the history.
+    Projection put every such line just before the latest request, on every
+    request for the rest of the call. The model read "sorry no" as the answer
+    to "Anything else I can help with?", said one turn earlier, and said goodbye.
+    """
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    from tests.test_history import drifted_history
+
+    said = [
+        p.content
+        for m in drifted_history()
+        if isinstance(m, ModelResponse)
+        for p in m.parts
+        if isinstance(p, TextPart)
+    ]
+    return said[-1] != 'For Wednesday I have nine.'
+
+
 DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
+    "old speech is sent as the agent's last words": (old_speech_is_sent_as_the_last_words, '4d live call 3'),
     'a restated value books without a yes': (a_restated_value_books, '4d defect 1'),
     'a cancel during the version check sends the write again': (
         a_cancel_during_the_version_check_sends_again,

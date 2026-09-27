@@ -1,6 +1,6 @@
 # Session 4e: state consistency, reliable speech, latency and lifecycle
 
-Branch `feat/session-4e-lifecycle`, stacked on PR #25 (`feat/session-4d-correctness`, head `31e998d`, still open).
+[PR #26](https://github.com/slng-ai/slng-voice-harness/pull/26), branch `feat/session-4e-lifecycle`, stacked on PR #25 (`feat/session-4d-correctness`, head `31e998d`, still open).
 Tested revision: `00e8aae` (every gate below). Later commits change only documents and evidence.
 
 ## Result

@@ -31,6 +31,7 @@ from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnal
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import LLMFullResponseStartFrame
+from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -201,7 +202,26 @@ def pipeline_worker(pipeline: Pipeline, session_id: str) -> PipelineWorker:
         conversation_id=session_id or None,
         enable_tracing=True,
         enable_turn_tracking=True,
+        observers=[latency_log()],
     )
+
+
+def latency_log() -> UserBotLatencyObserver:
+    """Pipecat's own breakdown of each wait, from the caller's stop to the bot's first audio, in the bot log.
+
+    Endpointing, transcription, the agent step (Pipecat calls it LLM
+    inference) and speech synthesis, each as Pipecat measured it on its own
+    clock. Session 4e reads the upstream parts from here and core's own work
+    from the spans, and never subtracts one from the other.
+    """
+    observer = UserBotLatencyObserver()
+
+    @observer.event_handler('on_latency_breakdown')
+    async def breakdown(_observer, breakdown):
+        for line in breakdown.turn_contribution_lines():
+            logger.info('latency breakdown: {}', line)
+
+    return observer
 
 
 def playback(agents: PydanticAgentProcessor, assistant_aggregator) -> None:

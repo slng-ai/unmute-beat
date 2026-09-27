@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import sys
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -558,7 +559,10 @@ class PydanticAgentProcessor(FrameProcessor):
         Every attribute stamped on the span names what it measured. `turn_first_word`
         is the model's first token and `turn_first_text_out` the first text of
         *any* kind handed to TTS, because a question going out quickly is not
-        an answer going out quickly. `unbacked_claim` is on the span because a
+        an answer going out quickly; `turn_first_useful_text_out` leaves the
+        holding line out, since a filler going out quickly is not an answer
+        either. `receipt_unheard` marks a turn whose latest receipt is known
+        not to have reached the caller, repeats spent or not. `unbacked_claim` is on the span because a
         latency table that cannot see it will reward inventing an outcome. What
         the turn was asked and what it answered go on it in Langfuse's own keys,
         so the numbers can be read against the sentence that produced them.
@@ -656,6 +660,12 @@ class PydanticAgentProcessor(FrameProcessor):
                                     'turn_first_text_out',
                                     round(min(s.at for s in spoken) - turn_started, 3),
                                 )
+                            if useful := [s.at for s in spoken if s.text and s.origin != 'tool_filler']:
+                                span.set_attribute(
+                                    'turn_first_useful_text_out', round(min(useful) - turn_started, 3)
+                                )
+                            if self._call.unheard_receipt(repeats=sys.maxsize):
+                                span.set_attribute('receipt_unheard', True)
                             span.update_name(done.agent)
                             span.set_attribute('langfuse.observation.type', 'agent')
                             span.set_attribute('agent', done.agent)

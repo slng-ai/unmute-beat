@@ -8,7 +8,9 @@
 * A4: an admitted call whose stream never came gives its place back after
   `ADMIT_SECONDS`, and a call whose worker died is closed as `lost`;
 * A5: `over` lists only calls that are over, which is what a new call may
-  settle (`salon.app.open_call(settle=...)`).
+  settle (`salon.app.open_call(settle=...)`);
+* A6: the memory diagnostic (`server.live_counts`) sees a live call, and
+  stops seeing it once it is gone.
 
 The long checks (kills, drain, overload through the real runner) are
 `python -m evals.load faults`.
@@ -77,11 +79,32 @@ def admission() -> None:
     main()
 
 
+def the_memory_diagnostic_sees_a_live_call():
+    """A6 (session 4e): `/debug/live` counts a call that is alive, and stops counting it once it is gone.
+
+    A call's class is `FlowCall[SalonState]`: counted by its own class name,
+    live calls were always 0, and a clean post-call count proved nothing.
+    """
+    import gc
+
+    from salon.app import FLOW, open_call
+
+    gc.collect()
+    before = server.live_counts(gc.get_objects())['FlowCall']
+    call = open_call(FLOW, '+34600000001')
+    assert type(call).__name__ != 'FlowCall', type(call).__name__
+    assert server.live_counts(gc.get_objects())['FlowCall'] == before + 1, 'a live call was not counted'
+    del call
+    gc.collect()
+    assert server.live_counts(gc.get_objects())['FlowCall'] == before, 'a dropped call was still counted'
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate((ceiling_and_release, one_call_one_place, nothing_is_held_forever)):
             check(os.path.join(tmp, f'runner{index}.db'))
-    print('runner ok: A1-A5, bounded admission, one claim, nothing held by the dead')
+    the_memory_diagnostic_sees_a_live_call()
+    print('runner ok: A1-A6, bounded admission, one claim, nothing held by the dead, live calls counted')
 
 
 if __name__ == '__main__':

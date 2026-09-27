@@ -15,3 +15,4 @@ was then restored with `git checkout` and the suite passed again.
 | Receipt said again once | `state.py` `unheard_receipt`: the repeat count ignored | salon `an_unheard_receipt_is_said_again_once_then_the_caller_is_heard` | "the caller was not heard": the receipt was replayed again, and the correction never reached the agent |
 | Goodbye after a no | `state.py` `last_asked_left_undone`: the answered check dropped | core R14 | "No he hecho ese último cambio." said after the caller's no |
 | No filler for a second request | `turn.py` `prepare`: the holding line on every request after the first, put back | core `a_second_request_is_no_reason_to_hold` | "One moment." in front of a fast answer after a fast tool |
+| Warm-up awaited | `graph.py` `model_clients`: the `gather` after cancel removed | core `a_warm_up_ends_before_its_client_closes` | `['client closed', 'warm-up ended']`: the client closed under a running warm-up |

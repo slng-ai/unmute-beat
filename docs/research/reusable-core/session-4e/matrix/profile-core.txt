@@ -1,0 +1,9 @@
+Operation.run              calls/run    2.0  ms/run    5.30  max   4.47
+steps._offer               calls/run    1.0  ms/run    1.42  max   1.63
+turn.project               calls/run   13.0  ms/run    1.32  max   0.29
+FlowCall.validated         calls/run   12.0  ms/run    0.78  max   0.19
+FlowCall.collect           calls/run    3.0  ms/run    0.55  max   0.28
+steps.context              calls/run    7.0  ms/run    0.49  max   0.12
+CallContext.speak_now      calls/run    6.0  ms/run    0.48  max   0.46
+CallContext.commit         calls/run    8.0  ms/run    0.43  max   0.12
+Turn._speak                calls/run    6.0  ms/run    0.02  max   0.01

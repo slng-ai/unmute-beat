@@ -231,10 +231,10 @@
  },
  "coval_repair_pool": {
   "calls_allowed": 20,
-  "requested": 9,
-  "placed": 9,
-  "connected": 9,
-  "terminal": 9,
+  "requested": 10,
+  "placed": 10,
+  "connected": 10,
+  "terminal": 10,
   "evidence_complete": 1,
   "runs": [
    {
@@ -380,13 +380,32 @@
     "result": "booked correctly (Friday 09:00) for the corrected number; the corrected number was read back and got a yes; nothing for the misspoken +34671530306.",
     "simulation": "FjUeifmxSNvJ3pF3bzj9ty",
     "call_sid": "CAe4704f576ddc6e742e91318708bac7c5"
+   },
+   {
+    "label": "s4d-1-book-move-cancel",
+    "run": "erLt4hQuMHwXCbzQf5zkHo",
+    "simulation": "JLoA9ZU5PZPojnvyXNgTs7",
+    "call_sid": "CAc82c122404913e4b2532c103286c0338",
+    "langfuse_session": "CAc82c122404913e4b2532c103286c0338",
+    "source": "e9d086e runtime (served from 032f0f3)",
+    "set": "JCZGihHR",
+    "case": "9GH9opPTqPbRJFT2pNnJst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "result": "failed task, safe: booked BK0001 Monday 10:00 on a heard yes; the phone confirmed by the same number said back (restated); on \"move it to Wednesday\" the agent recorded the day with an id not on offer (all refused), options answered for the old day, move had no pick and the options tool was already spent (speak_by), then the agent called goodbye and ended the call. Diary: one booking, no move, no cancel, no unknown intent, nothing false said. Verify also said the pardon line beside a whole number (collect+wait in one reply). Three fixes followed offline (V9, verify test)."
    }
   ],
   "stage_c_live_ramp_cap": 8,
   "session_4d": {
    "plan": "4 initial targeted calls, at most 3 narrow retries; 2 latency and 2 worker-failure calls stay reserved",
    "cap_this_session": 7,
-   "test_sets": "coval-fixtures.v1.json: one single-case set per call"
+   "test_sets": "coval-fixtures.v1.json: one single-case set per call",
+   "placed": 1
   }
  },
  "reserved_for_later_stages": {

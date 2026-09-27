@@ -666,6 +666,19 @@ async def verify_says_every_word_in_code():
         flow, call, script, 'Plus 34 680 84 04 64.', ('collect', {'customer_phone': '+34680840464'})
     )
     assert said == ['Is your number +34 680 84 04 64?'], said
+    script, flow, call, _ = opened(phone='')
+    call.commit(agent='verify')
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Plus 34 680 84 04 64.',
+        ('calls', [('collect', {'values': {'customer_phone': '+34680840464'}}), ('wait', {})]),
+    )
+    assert said == ['Is your number +34 680 84 04 64?'], (
+        'live call CAc82c12: wait beside a whole number',
+        said,
+    )
 
 
 async def main() -> None:

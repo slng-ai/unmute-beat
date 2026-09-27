@@ -23,7 +23,9 @@ second, independent caller writes to the same SQLite file through its own
 * V7: a missing pick, and a day the diary cannot place, each say their own
   next step, never "ask the caller" or "nothing is free";
 * V8: the live check's contender (`evals.contend`) takes the time when the
-  move's read-back reaches the log, and the move is refused.
+  move's read-back reaches the log, and the move is refused;
+* V9: live call CAc82c12: a day recorded beside an id not on offer is kept,
+  and a goodbye in a turn that asked for something is sent back once.
 """
 
 import asyncio
@@ -494,6 +496,42 @@ async def a_contender_takes_the_time_the_bot_reads_back():
     assert snapshot(diary.path)[0][:4] == (held, PHONE, FRIDAY, '09:00'), snapshot(diary.path)
 
 
+async def a_move_request_keeps_its_day_and_is_not_hung_up_on():
+    """V9 (live call CAc82c12, session 4d call 1): the move's day recorded beside an id not on offer yet; then `goodbye`.
+
+    The id is refused and the day and time beside it are kept, so the times
+    offered next are the new day's. A `goodbye` in a turn that recorded a
+    request is sent back once; called again, it ends the call.
+    """
+    script, flow, call, diary = await at_booking()
+    held = seed(diary)
+    await turn(
+        flow,
+        call,
+        script,
+        'Can you move it to Wednesday, same time?',
+        ('collect', {'booking_day': 'Wednesday', 'booking_time': '09:00', 'appointment': held}),
+        ('call', 'options'),
+        ('call', 'goodbye'),
+        ('say', 'Wednesday at nine is free. Shall I move it?'),
+    )
+    facts = call.state.facts
+    assert (facts.booking_day, facts.booking_time, facts.appointment) == ('Wednesday', '09:00', ''), facts
+    refusal = next(r for r in refusals_in(script) if 'on offer' in r)
+    assert refusal.startswith('Recorded: booking_day, booking_time. Not recorded:'), refusal
+    times = next(
+        str(part.content)
+        for request in script.requests
+        for part in request.messages[-1].parts
+        if getattr(part, 'tool_name', '') == 'options'
+    )
+    assert '2026-09-30T0900|haircut' in times, "the times offered were not the new day's"
+    assert not call.ended, 'the caller asked to move, and was hung up on'
+    assert 'asked for something' in refusals_in(script)[-1], refusals_in(script)
+    await turn(flow, call, script, "No, that's all. Bye.", ('call', 'goodbye'), ('call', 'goodbye'))
+    assert call.ended, 'a goodbye with no request this turn was refused'
+
+
 async def main() -> None:
     await a_taken_destination_is_refused_and_another_time_moves()
     await a_booking_changed_elsewhere_is_refused_then_offered_fresh()
@@ -504,8 +542,9 @@ async def main() -> None:
     await a_value_said_again_is_not_a_yes()
     await each_problem_says_its_own_next_step()
     await a_contender_takes_the_time_the_bot_reads_back()
+    await a_move_request_keeps_its_day_and_is_not_hung_up_on()
     print(
-        'moves ok: V1-V8, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V9, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

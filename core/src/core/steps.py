@@ -1240,6 +1240,17 @@ def _not_ready(operation: Operation, call: FlowCall[Any], error: ValidationError
     return f'Not yet: {"; ".join(said)}.'
 
 
+def _not_on_offer(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> list[str]:
+    """The choice fields among `values` whose value is not on offer now (see `_refuse_unoffered`)."""
+    return [
+        name
+        for name, value in values.items()
+        if name in choices
+        and getattr(call.state.facts, name, None) != value
+        and str(value) not in call._offered.get(name, {})
+    ]
+
+
 def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> None:
     """Refuse a value for a choice field that is not on offer to this caller now.
 
@@ -1563,6 +1574,13 @@ class ConversationStep(Step):
                     "Nothing was said: a read-back is waiting for the caller's answer. If their words agree to "
                     'it, carry it out now. If they are leaving, call goodbye again.'
                 )
+            asked_for = sorted(call._changing & set(self.fields))
+            if asked_for and call._goodbye_checked != call.turn:
+                call._goodbye_checked = call.turn
+                raise ModelRetry(
+                    f'Nothing was said: this turn the caller asked for something ({", ".join(asked_for)} '
+                    'recorded). Answer that. If their words say they are leaving, call goodbye again.'
+                )
             words = goodbye_words(flow, call, recap or [])
             call.note_departure()
             call.end_requested('caller')
@@ -1570,9 +1588,11 @@ class ConversationStep(Step):
             await call.end_call()
             return words
 
-        async def wait(ctx: RunContext[FlowCall[Any]]) -> str:
+        async def wait(ctx: RunContext[FlowCall[Any]]) -> str | Prompted:
             """Nothing to read back, carry out or hand over yet. The application asks the caller for what it still needs."""
             call = ctx.deps
+            if read_back is not None and isinstance(asked := read_back(call), Prompted):
+                return asked
             missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
             refused = _refused(ctx.messages, self.refusals)
             words = (
@@ -1583,6 +1603,7 @@ class ConversationStep(Step):
             await call.speak_now(words, origin='ask')
             return words
 
+        read_back = self._reads_back(flow)
         actions = frozenset(op.name for op in self.operations) | (
             {'hand_over'} if self.exits else frozenset()
         )
@@ -1597,10 +1618,11 @@ class ConversationStep(Step):
 
             async def collect(ctx: RunContext[FlowCall[Any]], values: BaseModel) -> str:
                 """Record exactly what the caller has just said for any of these fields. Never guess a value."""
-                proposed = values.model_dump(exclude_none=True)
+                asked = values.model_dump(exclude_none=True)
                 call = ctx.deps
+                unoffered = _not_on_offer(call, self.choices, asked)
+                proposed = {name: value for name, value in asked.items() if name not in unoffered}
                 before = {name: getattr(call.state.facts, name, None) for name in proposed}
-                _refuse_unoffered(call, self.choices, proposed)
                 for name in self.quoted:
                     if proposed.get(name) and not said_by_caller(call, str(proposed[name])):
                         raise ModelRetry(
@@ -1616,7 +1638,14 @@ class ConversationStep(Step):
                     name for name in proposed if getattr(call.state.facts, name, None) == before[name]
                 )
                 call._recorded = frozenset(proposed)
-                return f'Recorded: {", ".join(sorted(proposed)) or "nothing"}.'
+                recorded = f'Recorded: {", ".join(sorted(proposed)) or "nothing"}.'
+                if unoffered:
+                    raise ModelRetry(
+                        f'{recorded} Not recorded: '
+                        + '; '.join(f'{asked[name]!r} is not on offer for {name}' for name in unoffered)
+                        + ': call options, then record an id it returns.'
+                    )
+                return recorded
 
             collect.__annotations__ = {'ctx': RunContext[FlowCall], 'values': values_type, 'return': str}
             tools.append(Tool(collect))
@@ -1679,7 +1708,7 @@ class ConversationStep(Step):
             guarded=self.guarded,
             openings=self.opening(),
             speaks_for=frozenset(op.name for op in self.operations),
-            reads_back=self._reads_back(flow),
+            reads_back=read_back,
             model_speech=not self.rendered,
         )
 

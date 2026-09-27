@@ -169,7 +169,92 @@ def verify_says_model_digits() -> bool:
     return asyncio.run(check())
 
 
+def a_refused_pick_loses_the_new_day() -> bool:
+    """Live call CAc82c12 (session 4d, call 1): "move it to Wednesday", recorded with the id before `options`.
+
+    The id is not on offer yet, so it is refused; the new day and time beside
+    it were refused with it, and the times then offered were the old day's.
+    """
+    from tests.script import turn
+    from tests.test_business import at_booking, seed
+
+    async def check() -> bool:
+        script, flow, call, diary = await at_booking()
+        held = seed(diary)
+        await turn(
+            flow,
+            call,
+            script,
+            'Can you move it to Wednesday, same time?',
+            ('collect', {'booking_day': 'Wednesday', 'booking_time': '09:00', 'appointment': held}),
+            ('say', 'Let me look.'),
+        )
+        return call.state.facts.booking_day != 'Wednesday'
+
+    return asyncio.run(check())
+
+
+def goodbye_answers_a_request_with_a_hang_up() -> bool:
+    """Live call CAc82c12: the caller asked to move; the booking agent called `goodbye` in the same turn.
+
+    Nothing in the caller's words was a goodbye: they had just asked for a
+    change, which was recorded. The call ended with the request unanswered.
+    """
+    from tests.script import turn
+    from tests.test_business import at_booking
+
+    async def check() -> bool:
+        script, flow, call, _ = await at_booking()
+        await turn(
+            flow,
+            call,
+            script,
+            'Can you do Wednesday instead?',
+            ('collect', {'service': 'haircut', 'booking_day': 'Wednesday'}),
+            ('call', 'goodbye'),
+            ('say', 'Let me look at Wednesday.'),
+        )
+        return call.ended
+
+    return asyncio.run(check())
+
+
+def verify_waits_with_a_number_to_read_back() -> bool:
+    """Live call CAc82c12: the whole number recorded and `wait` in one reply: "Sorry, could you say that again?"
+
+    The number was complete and not yet read back; the read-back is what
+    comes next, and code knows it.
+    """
+    from tests.script import PHONE, opened, turn
+
+    async def check() -> bool:
+        script, flow, call, _ = opened(phone='')
+        call.commit(agent='verify')
+        said = await turn(
+            flow,
+            call,
+            script,
+            'Plus 34. 600 111 222.',
+            ('calls', [('collect', {'values': {'customer_phone': PHONE}}), ('wait', {})]),
+        )
+        return said != ['Is your number +34 600 11 12 22?']
+
+    return asyncio.run(check())
+
+
 DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
+    'a refused pick loses the new day recorded beside it': (
+        a_refused_pick_loses_the_new_day,
+        '4d live call 1',
+    ),
+    'goodbye hangs up on a turn that asked for a change': (
+        goodbye_answers_a_request_with_a_hang_up,
+        '4d live call 1',
+    ),
+    'verify waits with a whole number to read back': (
+        verify_waits_with_a_number_to_read_back,
+        '4d live call 1',
+    ),
     'a restated booking value books without a yes': (a_restated_booking_value_books, '4d defect 1'),
     'a move refused by the diary is left unknown': (a_refused_move_is_unknown, '4d defect 3'),
     'a day change forgets the appointment being moved': (a_day_change_forgets_the_appointment, '4d defect 4'),

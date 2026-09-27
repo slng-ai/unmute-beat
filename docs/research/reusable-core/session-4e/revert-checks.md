@@ -17,3 +17,4 @@ was then restored with `git checkout` and the suite passed again.
 | No filler for a second request | `turn.py` `prepare`: the holding line on every request after the first, put back | core `a_second_request_is_no_reason_to_hold` | "One moment." in front of a fast answer after a fast tool |
 | Warm-up awaited | `graph.py` `model_clients`: the `gather` after cancel removed | core `a_warm_up_ends_before_its_client_closes` | `['client closed', 'warm-up ended']`: the client closed under a running warm-up |
 | Live calls counted | `server.py` `live_counts`: own class name only | salon A6 | "a live call was not counted" (`FlowCall[SalonState]`) |
+| Offer instead of pardon | `steps.py` `wait`: the offer look-up before pardon disabled | salon `a_wait_with_nothing_to_say_offers_what_there_is` | "Sorry, could you say that again?" right after verify, as in live call s4e-latency-1 |

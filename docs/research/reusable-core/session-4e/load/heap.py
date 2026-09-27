@@ -13,7 +13,7 @@ every = float(sys.argv[2]) if len(sys.argv) > 2 else 20.0
 samples = json.loads((folder / 'samples.json').read_text())
 start = samples[0]['at']
 shown = -every
-for s in samples + [dict(samples[-1], at=samples[-1]['at'] + every)]:
+for s in [*samples, dict(samples[-1], at=samples[-1]['at'] + every)]:
     t = s['at'] - start
     if t - shown < every:
         continue

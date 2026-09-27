@@ -516,9 +516,7 @@ async def a_wait_with_nothing_to_say_offers_what_there_is():
     I have you." A rendered step with choices and nothing else to say looks
     its offer up by code and says the salon's words; no model is asked.
     """
-    script, flow, call, _ = await at_booking(
-        service='haircut', booking_day='Friday', booking_time='14:00'
-    )
+    script, flow, call, _ = await at_booking(service='haircut', booking_day='Friday', booking_time='14:00')
     said = await turn(flow, call, script, "Yes, that's my number.", ('call', 'wait'))
     assert said == ['2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'], said
     assert slot(FRIDAY, '14:00') in call._offered['slot'] and len(script.requests) == 1, script.requests

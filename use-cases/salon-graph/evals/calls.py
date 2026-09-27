@@ -1,6 +1,6 @@
-"""The live text checkpoint: four scripted salon calls on the real engine and the real models.
+"""The live text checkpoint: six scripted salon calls on the real engine and the real models.
 
-    uv run --env-file ../../.env python -m evals.calls              # T1 T2 T3 T4, billable
+    uv run --env-file ../../.env python -m evals.calls              # T1-T6, billable
     uv run --env-file ../../.env python -m evals.calls T2 --out /tmp/calls
 
 Each case is one call through `core.turn.run_turn` on the salon's compiled
@@ -23,7 +23,7 @@ as heard.
 
 Limits, from the Verification contract (`docs/plans/reusable-voice-core-sessions.md`):
 12 caller turns per case, 100 target model requests and 250,000 tokens across
-the four, one attempt each, no retries. A limit hit stops the case as
+the cases run, one attempt each, no retries. A limit hit stops the case as
 `exhausted`, which is not a pass. Requests are bounded before dispatch: each
 turn's `TurnBudget.model_requests` is what is left of the allowance (at most
 its usual 8), and the SDK's `UsageLimits` refuses a request past it before it
@@ -505,6 +505,53 @@ def check_t4(record: Record) -> list[str]:
     return problems
 
 
+def check_t5(record: Record) -> list[str]:
+    """Session 4d (traces ce40c124, 5edecd4c): book tomorrow at ten, move it to "the day after tomorrow", cancel it.
+
+    Decided on the diary and the write audits: the move lands on Wednesday
+    the 30th at ten, the cancel removes it, nothing is left, and no write was
+    refused, unknown or sent twice.
+    """
+    problems = [f'expected no booking left, found {record.bookings()}'] if record.bookings() else []
+    done = [(w.get('action'), w.get('status')) for w in record.writes if w.get('changes')]
+    if done != [('book_appointment', 'ok'), ('move_appointment', 'ok'), ('cancel_appointment', 'ok')]:
+        problems.append(f'expected one book, one move and one cancel, each ok: {done}')
+    moved = next(
+        (w for w in record.writes if w.get('action') == 'move_appointment' and w.get('status') == 'ok'), None
+    )
+    if moved is not None and moved['receipt'].get('date') != '2026-09-30':
+        problems.append(
+            f'"the day after tomorrow" is Wednesday the 30th; moved to {moved["receipt"].get("date")}'
+        )
+    for write in (w for w in record.writes if w.get('changes') and w.get('status') == 'ok'):
+        if not played(record, write['question']):
+            problems.append(
+                f'{write["action"]} on a read-back that did not play in full: {write["question"]!r}'
+            )
+    return problems
+
+
+def check_t6(record: Record) -> list[str]:
+    """Session 4d, defect 1: the caller refuses the booking read-back while saying its time again. Nothing is booked.
+
+    No write of any kind may land after the refusal, and the runtime never
+    says it took the repeated time as a yes.
+    """
+    problems = [f'expected no booking, found {record.bookings()}'] if record.bookings() else []
+    refused = next((t for t in record.turns if t['caller'].lower().startswith("no, don't book")), None)
+    if refused is None:
+        problems.append('the script never refused the read-back: nothing was tested')
+    problems += [
+        f'a write went out: {w["action"]} {w.get("status")}' for w in record.writes if w.get('changes')
+    ]
+    problems += [
+        f'turn {t["turn"]}: the repeated time was taken as a yes: {t["said"]!r}'
+        for t in record.turns
+        if 'same as i read back' in t['said'].lower()
+    ]
+    return problems
+
+
 def lose_first_answer(diary: Diary) -> None:
     """T4's fault: the first booking lands, its answer is lost, and the diary cannot say so the first time it is asked."""
     real_save, real_outcome = diary.save_booking, diary.outcome_of
@@ -593,6 +640,45 @@ CASES: dict[str, Case] = {
             ),
             check_t4,
             lose_first_answer,
+        ),
+        Case(
+            'T5',
+            1,
+            'Book tomorrow at ten, move it to the day after tomorrow at the same time, then cancel it.',
+            "Hi, I'd like to book a haircut tomorrow at ten, please.",
+            (
+                *PHONE_RULES,
+                Rule(('which time', 'what time'), ('Ten, please.',)),
+                Rule(('shall i book',), ('Yes, please.',)),
+                Rule(('shall i move',), ('Yes, move it.',)),
+                Rule(('shall i cancel',), ('Yes, cancel it.',)),
+                Rule(
+                    ('anything else', 'what else', 'something else'),
+                    (
+                        'Actually, can you move it to day after tomorrow, same time?',
+                        'Sorry, I cannot make it after all. Please cancel it.',
+                        "No, that's everything. Goodbye.",
+                    ),
+                ),
+            ),
+            check_t5,
+        ),
+        Case(
+            'T6',
+            1,
+            'The caller says the time back while refusing its booking read-back: "only checking".',
+            'Hi, is Friday at two free for a haircut?',
+            (
+                *PHONE_RULES,
+                Rule(('which time', 'what time'), ('Two, please.',)),
+                Rule(
+                    ('shall i book',),
+                    ("No, don't book Friday at two. I'm only checking if it is free.",),
+                ),
+                GOODBYE,
+                Rule(('would you like', 'shall i'), ("No, that's everything. Goodbye.",)),
+            ),
+            check_t6,
         ),
     )
 }

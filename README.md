@@ -279,7 +279,9 @@ This is the `booking` step in
   requires: [verified_phone]
   satisfied_by: verify
   fields: [service, booking_day, booking_time, slot, appointment]
-  choices: {slot: functions.py:find_times, appointment: functions.py:held_bookings}
+  choices:
+    slot: {function: functions.py:find_times, after: [service, booking_day, booking_time]}
+    appointment: {function: functions.py:held_bookings, after: []}
   operations: [book_appointment, move_appointment, cancel_appointment]
   reads_back: {book_appointment: [slot]}
   exits:
@@ -291,8 +293,10 @@ It names the prompt and says: this step needs `verified_phone`, and `verify`
 supplies it; it may record five fields from the caller; it may offer times
 and held bookings, looked up by the two named functions; it may carry out
 three operations, each read back in the application's own words before a
-later yes carries it out; `reads_back` says that a reply which only records
-`slot` gets `book_appointment` read back by code, with no extra request; it
+later yes carries it out; `after:` says what each offer rests on, so a new
+day takes the times away and keeps the appointment being moved; `reads_back`
+says that a reply which only records `slot` gets `book_appointment` read back
+by code, with no extra request; it
 may hand the caller to `complaints` or back to `concierge`. `guarded` turns on
 clause-at-a-time speech (section 8). No prompt or module chooses any of this;
 core builds the whole node from this declaration.
@@ -384,11 +388,15 @@ sequenceDiagram
    matches what is now being asked.
 6. A reply that only says the same value back ("Is your number +34 671 51 01
    05?" answered "No, it's six seven one, five one zero, one zero five") is a
-   yes to it. The agent only records what it heard; code finds the value
-   unchanged from the read-back the caller heard in full, says "Yes, that's
-   the same as I read back", and carries it out (`core.graph.Restated`). A
-   try that turn which was refused, or changed the value and back, is a
-   change and is read back again.
+   yes to it **only where the application says so**, and only for a lookup:
+   the salon's `lookup_customer` declares `restated: confirms`. The agent
+   only records what it heard; code finds the value unchanged from the
+   read-back the caller heard in full, says "Yes, that's the same as I read
+   back", and carries it out (`core.graph.Restated`). A try that turn which
+   was refused, or changed the value and back, is a change and is read back
+   again. For any operation that changes something, recording the same value
+   is only a record: "No, do not book Friday at two, I'm only checking" books
+   nothing, and the loader refuses `restated: confirms` on a change.
 
 This is why "yes" needs no separate reading: what makes a yes an
 authorisation is never the word itself, it is code matching an exact,
@@ -405,8 +413,9 @@ code-chosen alike (`one_action_per_reply`, `claim_or_refuse`).
   code, with no second request for it — the same read-back the agent would
   otherwise have had to ask for a request later
   (`ConversationStep.reads_back`, `Node.reads_back`). When the value it
-  records is the one just read back, the reply is the caller's yes, and code
-  carries the operation out instead (step 6 above).
+  records is the one just read back, and the operation says
+  `restated: confirms`, the reply is the caller's yes, and code carries the
+  operation out instead (step 6 above).
 - **`opens_with`.** A step entered by a hand-over can read back an operation
   on arrival, by code, when the state already gives its arguments (a carrier's
   own number) — no model request just to notice the read-back is due
@@ -651,6 +660,8 @@ The whole report is [session-4c.md](docs/research/reusable-core/session-4c.md).
 | `coval_sim serve --phone-number --campaign` owns the Twilio number for the whole campaign; jobs never touch it | Each job pointed the number at itself and restored it when it ended, so two jobs undid each other. |
 | A read-back the caller talked over, on a line that has proven delivery, counts against `CUT_READBACKS` (5); only a line that proves nothing keeps `READBACKS` (2). Each further piece of a joined turn adds 2 requests and tool calls, up to twice the turn's own (`TurnBudget.per_piece`) | Live call hzSdfMNn: an interruptive caller cut two copies of the number read-back and heard "please call back" while still trying; joined turns of eight pieces ran out of requests just hearing the number. |
 | A reply that records the same value the caller was just read back, and heard in full, is their yes: code says "Yes, that's the same as I read back" and carries it out (`core.graph.Restated`); a refused or changed try that turn makes it a change | Benchmark calls amAP5b4A and Tiv9sDHH: "no, it's" and the same digits in threes; the agent took it as a yes by itself, silently. |
+| Session 4d: only an operation that declares `restated: confirms`, a lookup, is confirmed that way; for a booking, move, cancel or complaint the same value is only a record | Review reproducer: "No, do not book Friday at two, I'm only checking", with the slot recorded again, booked. |
+| Session 4d: an offer is taken away only by a change to the fields it rests on (`after:`), or by another caller; a refused move or cancel is bound to its request; the diary's day grammar takes "day after tomorrow"; `verify` is `speech: rendered`, its questions said by code (`refusals:`) | Traces ce40c124 (three "BK0001 was not offered" refusals, an exhausted turn) and 5edecd4c (a day the diary could not place said as a full day; model digit read-backs beside code's). |
 
 The shared SQLite files use the rollback journal, not WAL: this Python's
 SQLite (3.50.4) predates the fix for the

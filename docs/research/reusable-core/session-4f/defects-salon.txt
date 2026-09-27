@@ -1,0 +1,20 @@
+2026-09-27 20:15:28.923 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:28.979 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.040 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.046 | INFO     | core.turn:_speak:1001 - read back book_appointment by code after collect
+2026-09-27 20:15:29.047 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.055 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.117 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.124 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.135 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.195 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.206 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.214 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+2026-09-27 20:15:29.272 | DEBUG    | core.turn:take_turn:1264 - turn answered in 0.01s
+fixed: a refused pick loses the new day recorded beside it
+fixed: verify waits with a whole number to read back
+fixed: a restated booking value books without a yes
+fixed: a move refused by the diary is left unknown
+fixed: a day change forgets the appointment being moved
+fixed: "day after tomorrow" names no day
+fixed: verify says a digit read-back in model words

@@ -19,6 +19,16 @@
   (the workers share one socket, so it may land on the draining worker,
   which then waits for it too), and the drained worker exits and is
   replaced.
+* F6 (session 4f): the live worker-failure pair, offline. Two runner
+  processes share the diary and the runner file; the webhook places the
+  bystander on one and the victim on the other (`MEDIA_HOSTS`); placement
+  is read from where each stream was claimed (`evals.placement`), and only
+  then is `LIVE_FAULT` armed, exactly as the live pair arms it. The victim's
+  worker dies right after its booking commits. The bystander books on the
+  other process; the dead call is closed; its runner replaces the worker;
+  admission comes back to empty; the fault fired once; the caller rings back
+  and books nothing more; a contender asking for the victim's time does not
+  get it.
 
 Limits, fixed before running (the brief): a dead session closed within 10 s,
 a replacement ready within 30 s, and a worker's tasks and descriptors back
@@ -40,6 +50,7 @@ from typing import Any
 
 from evals.doubles import Caller, Utterance, booking
 from evals.load import Phone, Record, Runner, _write_fixture, snapshot
+from evals.placement import watch
 
 DEAD_SESSION_S = 10.0
 REPLACEMENT_S = 30.0
@@ -318,6 +329,101 @@ def _alive(pid: int) -> bool:
     return True
 
 
+async def placed_case(folder: Path, port: int) -> dict[str, Any]:
+    """F6: two runner processes, the pair placed by the webhook, the live fault armed only after placement."""
+    victim_phone, bystander_phone, contender_phone = '+34698006000', '+34698006001', '+34698006002'
+    armed = folder / 'armed'
+    runner = Runner(folder, 2, port, 2, LIVE_FAULT=f'committed:{victim_phone}', LIVE_FAULT_ARM=str(armed))
+    runner.start()
+    baseline = runner.workers_now()
+    bystander = booking('placed-bystander', bystander_phone, 'Wednesday', '09:00')
+    victim = booking('placed-victim', victim_phone, 'Tuesday', '09:00')
+    try:
+        arming = asyncio.create_task(
+            asyncio.to_thread(watch, runner.ports[1], armed, folder / 'placement.json', 60.0)
+        )
+        standing = asyncio.create_task(ring(runner, bystander, 1))
+        await asyncio.sleep(0.3)
+        hit = await ring(runner, victim, 0)
+        was_armed = await arming
+        carried = calls_of(runner)
+        dead_worker = carried.get(hit.call_sid, {}).get('worker')
+        closed = await until(lambda: calls_of(runner).get(hit.call_sid, {}).get('state') == 'ended', 30)
+        replaced = await until(
+            lambda: (
+                len(runner.workers_now(fresh=1.5)) == 4
+                and any(p not in baseline for p in runner.workers_now(fresh=1.5))
+            ),
+            60,
+        )
+        survivor = await standing
+        empty = await until(
+            lambda: not [r for r in calls_of(runner).values() if r['state'] in ('admitted', 'active')], 30
+        )
+        again = await ring(runner, plain('placed-again', victim_phone, 'Tuesday'))
+        contender = await ring(runner, plain('placed-contender', contender_phone, 'Tuesday'))
+        await asyncio.sleep(3)
+        await until(
+            lambda: all(
+                w['tasks'] <= baseline.get(pid, w)['tasks'] for pid, w in runner.workers_now().items()
+            ),
+            IDLE_S,
+        )
+        settled = runner.workers_now()
+    finally:
+        runner.stop()
+    carried = calls_of(runner)
+    state = snapshot(folder / 'diary.db')
+    operations = dict(state['operations'])
+    victim_intents = [i for i in state['intents'] if i[1] == hit.call_sid]
+    at_nine = [b for b in state['bookings'] if b[2] == '2026-09-29' and b[3] == '09:00' and b[7] == 1]
+    placed = [carried.get(r.call_sid, {}) for r in (survivor, hit)]
+    report = {
+        'placement': json.loads((folder / 'placement.json').read_text()),
+        'media': [survivor.media, hit.media],
+        'claimed': [(row.get('worker'), row.get('served_port'), row.get('media_host')) for row in placed],
+        'armed': was_armed,
+        'fault_fired_once': not armed.exists(),
+        'dead_worker': dead_worker,
+        'victim_closed_by': hit.closed_by,
+        'victim_ended': carried.get(hit.call_sid, {}).get('ended'),
+        'dead_session_closed_s': closed,
+        'replacement_ready_s': replaced,
+        'bystander': {'closed_by': survivor.closed_by, 'bookings': active_for(state, bystander_phone)},
+        'admission_empty_s': empty,
+        'victim_bookings': active_for(state, victim_phone),
+        'victim_old_intents': [
+            (i[0][:8], json.loads(operations[i[0]]) if i[0] in operations else None) for i in victim_intents
+        ],
+        'ring_back_closed_by': again.closed_by,
+        'contender': {'closed_by': contender.closed_by, 'bookings': active_for(state, contender_phone)},
+        'tuesday_nine': at_nine,
+        'idle_after': idle_ok(baseline, settled),
+    }
+    report['verdict'] = {
+        'media_followed_the_webhook': all(
+            row.get('media_host', '').endswith(f':{row.get("served_port")}/ws') for row in placed
+        ),
+        'placed_on_two_processes': placed[0].get('served_port') != placed[1].get('served_port')
+        and placed[0].get('worker') != placed[1].get('worker'),
+        'armed_only_after_placement': was_armed and report['placement']['verdict'] == 'armed',
+        'victim_worker_died_after_commit': report['victim_ended'] == 'lost'
+        and len(report['victim_bookings']) == 1,
+        'fault_fired_once': report['fault_fired_once'],
+        'bystander_booked_on_the_other_process': len(report['bystander']['bookings']) == 1
+        and placed[0].get('worker') != dead_worker,
+        'dead_session_closed_in_time': closed is not None and closed <= DEAD_SESSION_S,
+        'replacement_in_time': replaced is not None and replaced <= REPLACEMENT_S,
+        'admission_recovered': empty is not None,
+        'old_intent_settled_booked': bool(victim_intents)
+        and all(r is not None and r.get('status') == 'booked' for _, r in report['victim_old_intents']),
+        'ring_back_booked_nothing_more': len(report['victim_bookings']) == 1,
+        'contender_did_not_get_the_time': len(at_nine) == 1 and at_nine[0][1] == victim_phone,
+        'idle_restored': all(v.get('ok', True) for v in report['idle_after'].values()),
+    }
+    return report
+
+
 async def faults(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -329,6 +435,7 @@ async def faults(args: argparse.Namespace) -> int:
         'F3_stale_worker_fenced': lambda: stale_case(out / 'f3', port + 10),
         'F4_overload': lambda: overload_case(out / 'f4', port + 11),
         'F5_graceful_drain': lambda: drain_case(out / 'f5', port + 12),
+        'F6_placed_pair_live_fault': lambda: placed_case(out / 'f6', port + 30),
     }
     only = set(filter(None, getattr(args, 'only', '').split(',')))
     results: dict[str, Any] = {}

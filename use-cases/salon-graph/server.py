@@ -39,6 +39,17 @@ ponytail: a draining worker still takes a stream the kernel hands it, since
 the workers share one socket. Behind a load balancer, take it out of
 rotation first.
 
+Placement, for the worker-failure check only (session 4f). Which worker of
+one uvicorn takes a stream is the kernel's choice, and on macOS one worker
+took both calls of session 4e's pair. So a pair is placed by process
+instead: two runners, each `uvicorn --workers 2` on its own port and
+tunnel, share one `RUNNER_DB` and one `DIARY_PATH`. `MEDIA_HOSTS` lists
+their public hosts; the webhook, on either, sends consecutive calls to them
+in turn (`Admission.place`). Where the stream really arrived is recorded
+when it is claimed (`served_port`, the listening port of the process that
+accepted it), never assumed from where the webhook went. Unset, every call
+streams to the host the webhook came to, as before.
+
 `VOICE_DOUBLES=1` swaps the model, STT and TTS for the offline doubles in
 `evals/doubles.py` and turns tracing off, so the whole runner can be loaded
 with no provider and no bill.
@@ -82,6 +93,8 @@ ADMIT_SECONDS = 15.0
 RUNNER_DB = os.getenv('RUNNER_DB') or 'runner.db'
 PUBLIC_HOST = os.getenv('PUBLIC_HOST', '')
 """The host Twilio reaches the stream on (a tunnel's). Empty: the host the webhook came to."""
+MEDIA_HOSTS = tuple(host for host in os.getenv('MEDIA_HOSTS', '').split(',') if host)
+"""The runners' public hosts, in order, each optionally with its scheme (`ws://` offline). Empty: no placement."""
 DOUBLES = bool(os.getenv('VOICE_DOUBLES'))
 CARRIER_NUMBER = bool(os.getenv('CARRIER_NUMBER'))
 """Offer the webhook's `From` number to the caller as theirs. Off: the salon asks, as `bot.py` does on Coval.
@@ -113,13 +126,21 @@ class Admission:
         campaign TEXT, from_number TEXT, to_number TEXT,
         state TEXT NOT NULL,
         admitted_by INTEGER, worker INTEGER, stream_sid TEXT,
-        admitted_at REAL, started_at REAL, ended_at REAL, ended TEXT
+        admitted_at REAL, started_at REAL, ended_at REAL, ended TEXT,
+        media_host TEXT, served_port INTEGER
     );
     """
+    PLACEMENT = ('media_host TEXT', 'served_port INTEGER')
+    """Columns added in session 4f: a runner file from an earlier run gets them on open."""
 
     def __init__(self, path: str) -> None:
         self.path = path
         create_schema(path, self.SCHEMA)
+        with self._tx() as db:
+            have = {row[1] for row in db.execute('PRAGMA table_info(calls)')}
+            for column in self.PLACEMENT:
+                if column.split()[0] not in have:
+                    db.execute(f'ALTER TABLE calls ADD COLUMN {column}')
 
     @contextmanager
     def _tx(self) -> Iterator[sqlite3.Connection]:
@@ -181,15 +202,35 @@ class Admission:
             )
         return True
 
-    def claim(self, call_sid: str, stream_sid: str) -> dict[str, Any] | None:
-        """This worker carries the admitted call's media now. None for a call never admitted, or claimed already."""
+    def place(self, call_sid: str, hosts: tuple[str, ...]) -> str:
+        """The stream URL for an admitted call: consecutive admissions go to `hosts` in turn. Recorded on the call.
+
+        The row id orders admissions across every runner sharing this file,
+        so a pair admitted one after the other lands on two hosts.
+
+        ponytail: round robin by admission order, which is all a pair needs;
+        the least busy host if more than a pair is ever placed.
+        """
+        with self._tx() as db:
+            row = db.execute('SELECT rowid FROM calls WHERE call_sid = ?', (call_sid,)).fetchone()
+            host = hosts[((row[0] if row else 1) - 1) % len(hosts)]
+            url = f'{host if "://" in host else "wss://" + host}/ws'
+            db.execute('UPDATE calls SET media_host = ? WHERE call_sid = ?', (url, call_sid))
+        return url
+
+    def claim(self, call_sid: str, stream_sid: str, served_port: int = 0) -> dict[str, Any] | None:
+        """This worker carries the admitted call's media now. None for a call never admitted, or claimed already.
+
+        `served_port` is the port of the process that accepted the stream:
+        where the media really arrived, whatever the webhook said.
+        """
         now = time.time()
         with self._tx() as db:
             self._reclaim(db, now)
             done = db.execute(
-                "UPDATE calls SET state = 'active', worker = ?, stream_sid = ?, started_at = ? "
+                "UPDATE calls SET state = 'active', worker = ?, stream_sid = ?, started_at = ?, served_port = ? "
                 "WHERE call_sid = ? AND state = 'admitted'",
-                (os.getpid(), stream_sid, now, call_sid),
+                (os.getpid(), stream_sid, now, served_port, call_sid),
             ).rowcount
             row = db.execute('SELECT * FROM calls WHERE call_sid = ?', (call_sid,)).fetchone()
         return dict(row) if done and row else None
@@ -246,7 +287,9 @@ For the live worker-failure check only (session 4e): the same fault point
 as the offline F2 (`evals/doubles.py`), on the real diary, so the kill
 lands between the commit and anyone being told. Unset on every other run.
 With `LIVE_FAULT_ARM` naming a file, only once that file exists: the fault
-is armed after both calls are seen on different workers, never before.
+is armed after both calls are seen on different workers, never before,
+and fires once: the dying worker takes the file with it, so its
+replacement, or the other runner, does not kill again.
 """
 
 
@@ -262,6 +305,9 @@ def _arm_live_fault(diary: Any, fault: str) -> None:
         result = save(*args, **kwargs)
         if args and args[0] == phone and (not armed or os.path.exists(armed)):
             logger.warning('LIVE_FAULT: worker {} dies after committing a booking for {}', os.getpid(), phone)
+            if armed:
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(armed)
             os._exit(9)
         return result
 
@@ -383,12 +429,15 @@ async def webhook(request: Request) -> Response:
         logger.warning('call {} refused: {} calls already admitted or active', call_sid, MAX_CALLS)
         return _twiml('<Reject reason="busy"/>')
     host = PUBLIC_HOST or request.headers.get('host', '')
+    url = (
+        await asyncio.to_thread(ADMISSION.place, call_sid, MEDIA_HOSTS) if MEDIA_HOSTS else f'wss://{host}/ws'
+    )
     params = ''.join(
         f'<Parameter name={quoteattr(name)} value={quoteattr(value)}/>'
         for name, value in (('campaign', campaign), ('fixture', request.query_params.get('fixture', '')))
         if value
     )
-    return _twiml(f'<Connect><Stream url="wss://{host}/ws">{params}</Stream></Connect>')
+    return _twiml(f'<Connect><Stream url={quoteattr(url)}>{params}</Stream></Connect>')
 
 
 @app.websocket('/ws')
@@ -399,7 +448,10 @@ async def media(websocket: WebSocket) -> None:
     transport = await create_transport(runner_args, bot.transport_params)  # ty: ignore[invalid-argument-type]
     call_data = runner_args.call_data
     call_sid = str(getattr(call_data, 'call_id', '') or '')
-    row = await asyncio.to_thread(ADMISSION.claim, call_sid, str(getattr(call_data, 'stream_id', '') or ''))
+    served = (websocket.scope.get('server') or ('', 0))[1] or 0
+    row = await asyncio.to_thread(
+        ADMISSION.claim, call_sid, str(getattr(call_data, 'stream_id', '') or ''), served
+    )
     if row is None:
         logger.warning(
             'stream for {} closed: the call was not admitted, or is already carried', call_sid or '?'

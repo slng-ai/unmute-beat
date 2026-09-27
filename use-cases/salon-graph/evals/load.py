@@ -35,6 +35,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import signal
 import sqlite3
 import statistics
@@ -128,10 +129,23 @@ class Record:
     marks_sent: int = 0
     marks_returned: int = 0
     clears: int = 0
+    media: str = ''
+    """The stream URL the webhook's TwiML gave: where this call's media was sent."""
+
+
+STREAM_URL = re.compile(r'<Stream url="([^"]+)"')
+"""Where the webhook's TwiML sends the call's media."""
 
 
 class Phone:
-    """One call as Twilio carries it, against the runner at `base`."""
+    """One call as Twilio carries it, against the runner at `base`.
+
+    Its media goes where the webhook's TwiML says (`<Stream url>`), as
+    Twilio's does, not back to the host the webhook answered on: with two
+    runners (`MEDIA_HOSTS`), that is how a call reaches the other one.
+
+    ponytail: `wss://` is dialled as `ws://`; the offline runner has no TLS.
+    """
 
     def __init__(self, base: str, caller: Caller, lane: int, cache: Path) -> None:
         self.base, self.caller, self.cache = base, caller, cache
@@ -159,7 +173,10 @@ class Phone:
             return self.record
         self.record.admitted, self.record.started = True, time.perf_counter()
         params = {'fixture': self.caller.name}
-        async with websockets.connect(f'ws://{self.base}/ws', max_size=None) as ws:
+        found = STREAM_URL.search(answer.text)
+        url = found.group(1).replace('&amp;', '&') if found else f'ws://{self.base}/ws'
+        self.record.media = url.replace('wss://', 'ws://', 1)
+        async with websockets.connect(self.record.media, max_size=None) as ws:
             await ws.send(json.dumps({'event': 'connected', 'protocol': 'Call', 'version': '1.0.0'}))
             await ws.send(
                 json.dumps(
@@ -409,10 +426,17 @@ def _write_fixture(folder: Path, caller: Caller) -> None:
 
 
 class Runner:
-    """`server.py` under uvicorn, with the doubles, its own diary, runner file, audits and stats."""
+    """`server.py` under uvicorn, with the doubles, its own diary, runner file, audits and stats.
 
-    def __init__(self, out: Path, workers: int, port: int, **env: str) -> None:
+    `processes` above one starts that many runners, each `--workers` on its
+    own port from `port` up, sharing the diary, the runner file and the
+    stats folder, with `MEDIA_HOSTS` naming them all: the placed pair of the
+    worker-failure check (F6). The webhook is the first one's.
+    """
+
+    def __init__(self, out: Path, workers: int, port: int, processes: int = 1, /, **env: str) -> None:
         self.out, self.workers, self.port = out, workers, port
+        self.ports = [port + i for i in range(processes)]
         for sub in ('audits', 'stats', 'fixtures', 'audio'):
             (out / sub).mkdir(parents=True, exist_ok=True)
         self.env = {
@@ -431,9 +455,11 @@ class Runner:
             'TWILIO_ACCOUNT_SID': 'AC' + '0' * 32,
             'TWILIO_AUTH_TOKEN': 'offline',
             'LANGFUSE_TRACING_ENABLED': 'false',
+            **({'MEDIA_HOSTS': ','.join(f'ws://127.0.0.1:{p}' for p in self.ports)} if processes > 1 else {}),
             **env,
         }
         self.process: subprocess.Popen | None = None
+        self.processes: list[subprocess.Popen] = []
         self.log = out / 'server.log'
 
     @property
@@ -442,28 +468,33 @@ class Runner:
 
     def start(self) -> float:
         started = time.perf_counter()
-        self.process = subprocess.Popen(
-            [
-                sys.executable,
-                '-m',
-                'uvicorn',
-                'server:app',
-                '--workers',
-                str(self.workers),
-                '--host',
-                '127.0.0.1',
-                '--port',
-                str(self.port),
-                '--timeout-graceful-shutdown',
-                '170',
-            ],
-            cwd=HERE,
-            env=self.env,
-            stdout=self.log.open('a'),
-            stderr=subprocess.STDOUT,
-        )
-        while len(self.workers_now()) < self.workers:
-            if self.process.poll() is not None:
+        for index, port in enumerate(self.ports):
+            log = self.log if index == 0 else self.out / f'server-{port}.log'
+            self.processes.append(
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        '-m',
+                        'uvicorn',
+                        'server:app',
+                        '--workers',
+                        str(self.workers),
+                        '--host',
+                        '127.0.0.1',
+                        '--port',
+                        str(port),
+                        '--timeout-graceful-shutdown',
+                        '170',
+                    ],
+                    cwd=HERE,
+                    env=self.env,
+                    stdout=log.open('a'),
+                    stderr=subprocess.STDOUT,
+                )
+            )
+        self.process = self.processes[0]
+        while len(self.workers_now()) < self.workers * len(self.ports):
+            if any(process.poll() is not None for process in self.processes):
                 raise RuntimeError(f'the runner exited: see {self.log}')
             if time.perf_counter() - started > 120:
                 raise RuntimeError('the runner did not become ready in 120 s')
@@ -482,8 +513,7 @@ class Runner:
 
     def rss_mb(self) -> dict[int, float]:
         pids = [str(pid) for pid in self.workers_now()]
-        if self.process is not None:
-            pids.append(str(self.process.pid))
+        pids += [str(process.pid) for process in self.processes]
         if not pids:
             return {}
         done = subprocess.run(['ps', '-o', 'pid=,rss=', '-p', ','.join(pids)], capture_output=True, text=True)
@@ -493,12 +523,14 @@ class Runner:
         }
 
     def stop(self) -> None:
-        if self.process is not None and self.process.poll() is None:
-            self.process.send_signal(signal.SIGINT)
+        for process in self.processes:
+            if process.poll() is None:
+                process.send_signal(signal.SIGINT)
+        for process in self.processes:
             try:
-                self.process.wait(30)
+                process.wait(30)
             except subprocess.TimeoutExpired:
-                self.process.kill()
+                process.kill()
 
 
 async def _monitor(runner: Runner, samples: list[dict[str, Any]], stop: asyncio.Event) -> None:

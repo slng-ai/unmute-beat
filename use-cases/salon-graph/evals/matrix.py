@@ -62,7 +62,11 @@ def bookings(line: Line) -> list[dict[str, Any]]:
 
 
 async def to_offer(line: Line) -> list[dict[str, Any]]:
-    """The caller asks for a haircut before saying who they are, is verified, and is offered Tuesday's times."""
+    """The caller asks for a haircut before saying who they are, is verified, and is offered Tuesday's times.
+
+    Since session 4f booking waits on arrival and `wait` looks the offer up (the prompt no longer asks for
+    `options` first): one booking request where session 4e's script had two.
+    """
     return [
         await line.turn(
             'I want a haircut on Tuesday.',
@@ -73,7 +77,6 @@ async def to_offer(line: Line) -> list[dict[str, Any]]:
         await line.turn(
             'Yes.',
             Reply(calls=[('lookup_customer', {})]),
-            Reply(calls=[('options', {})]),
             Reply(calls=[('wait', {})]),
         ),
     ]

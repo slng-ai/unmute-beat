@@ -654,7 +654,7 @@ The whole report is [session-4c.md](docs/research/reusable-core/session-4c.md).
 | `Operation.run` claims the intent before its first await | Two runs of one intent on one call both reached the backend. |
 | `resource:` and `version:` key and order what stands; a reconciled success below the service's `current_version` is history, never said | A restored old "resolved" stood over a newer reopen and was said to the caller. Ticket 1 and address 1 were one resource. |
 | Estimated playback (`local`) approves nothing unless a launcher names the simulation (`playout(simulate=True)`, `DELIVERY=simulated`) | Audio written to a socket, or time passing, counted as a heard read-back on a voice line with no marks. |
-| In the browser, a read-back is heard only on the page's playout report: its played RTP timestamp passed the bound the server read when the segment's last audio left (`WebRTCPlayout`, `core/client.html`) | The browser returned no marks, so a real yes could never be heard: the caller said "That sounds right" three times and heard the fallback line three times (session 4f follow-up). |
+| In the browser, a read-back is heard only on the page's playout report: its audio element played the stream without a break from before the segment began, and its played RTP timestamp passed the bound the server read when the segment's last audio left (`WebRTCPlayout`, `core/client/playout.js` on Pipecat's own client) | The browser returned no marks, so a real yes could never be heard: the caller said "That sounds right" three times and heard the fallback line three times (session 4f follow-up). A receiver timestamp alone also counted with the page's audio paused. |
 | A read-back past its limit is withdrawn: its intent terminal, nothing left pending, the fallback said once; asked again, a short line and no read-back | The same fallback line on every yes, with the read-back still actionable. |
 | `speech: rendered` steps have no model text | After a lookup alone the desk said "El ticket T-101 ha quedado solucionado definitivamente", past its claim words. |
 | The salon's diary is one SQLite file every worker shares: a trigger holds the chair, a move is one `UPDATE`, writes are keyed by intent, a reconciled write with no result is fenced with a void | Each process had its own diary, so no two calls ever contended for a time, and a lost answer did not survive a restart. |
@@ -795,14 +795,21 @@ Then open **http://localhost:7860** in Chrome, Firefox or Safari and click
 **Start call**. Each `bot.py` finds the root `.env` by walking up from its
 folder.
 
-That page is core's own client (`core/src/core/client.html`), served at `/`.
-It plays the agent and reports how far each reply has played, so a read-back
-counts as heard only once the browser has actually played it
-(`core.processor.WebRTCPlayout`). The runner's prebuilt client at
-`/client/` sends no such report: a call from it hears that this connection
-can make no changes, and ends before anyone is asked for details.
-`DELIVERY=simulated` is not needed for the browser; it is only for Coval's
-simulated carrier, which returns no marks.
+`/` sends you to `/voice/`: Pipecat's own web client (`PipecatClient` and
+`SmallWebRTCTransport` from the official npm packages, which own the
+connection, the microphone and reconnection), with one addition from core,
+`core/src/core/client/playout.js`. It tells the agent when each reply has
+played in full, so a read-back counts as heard only once the page's audio
+has actually played all of it (`core.processor.WebRTCPlayout`). Keep the tab
+playing: a paused or muted tab reports nothing, and nothing it did not play
+whole can be agreed to. The runner's prebuilt client at `/client/` sends no
+such report: a call from it hears that this connection can make no changes,
+and ends before anyone is asked for details. `DELIVERY=simulated` is not
+needed for the browser; it is only for Coval's simulated carrier, which
+returns no marks.
+
+`core/client/` rebuilds `sdk.js` from the pinned packages (`npm ci && npm
+run build`); nothing is needed to run the page.
 
 Several phone calls at once, on one host, run the salon behind its runner:
 

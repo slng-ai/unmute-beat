@@ -28,3 +28,22 @@ was made). All seven were caught.
 | F4. A report must pass its bound | `played` ignores the RTP timestamp | core W3 | `{'mark': ..., 'rtp': 544720682}`: a report short of its bound counted |
 | F5. An interruption voids pending marks | `WebRTCPlayout` ignores `InterruptionFrame` | core W4 | `TimeoutError`: the cut copy was never voided |
 | F6. A page that reports nothing is told before anything | `run_bot` greets whatever the page said on `client-ready` | salon BR3 | `["Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"]`: the greeting went out |
+
+## Follow-up 2: Pipecat's own client, playback the page really played
+
+Same method: one piece put back at a time, the file restored after each run, every edit asserted before it was
+made (raw lines: [browser2/reverts.txt](browser2/reverts.txt)). All seven were caught.
+
+| Repair | What was put back | Regression | Failure seen |
+|---|---|---|---|
+| F7. The page's output must be playing (the reported defect) | `playout.js` counts the receiver position whatever the audio element does | core C4 (Chrome) | `heard with no output playing`: the read-back was delivered with the element paused |
+| F8. A break ends the run, so resuming approves nothing that began before | both break signals removed: the element events and the failing-sample reset | core C5 (Chrome) | `heard with no output playing`: the read-back paused 1 s in and resumed was delivered |
+| F9. The server checks where the unbroken run began | `played` ignores `since` | core W3 | a report whose `since` is after the segment's `start` counted |
+| F10. A WebRTC interruption cuts only what was still to send | `note_cleared` voids every pending mark, sent ones too | core W4 | a segment whose audio was all sent was voided as a clear the browser never had |
+| F11. `reports_playback` is truthful | it says yes to every transport but a non-reporting browser | core W10 | `('local', {})`: an estimates-only transport said it could confirm |
+| F12. A malformed `client-ready` reports nothing | `about` read as a dictionary without validation | core W9 | `AttributeError: 'NoneType' object has no attribute 'get'` |
+| F13. The withdrawal's reason comes from evidence | the reason taken from which retry count ran out | core R20 | `reason: 'talked_over'` for copies that were never cut |
+
+F8 first removed only the failing-sample reset, and C5 still passed: the element's `pause` event ends the run
+by itself. Either signal alone is enough on a pause; the check needs both removed to fail.
+

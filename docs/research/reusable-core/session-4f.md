@@ -3,13 +3,257 @@
 [PR #27](https://github.com/slng-ai/slng-voice-harness/pull/27), branch `feat/session-4f-readiness`, stacked on PR #26 (`feat/session-4e-lifecycle`, head `420de86`, still open),
 which is stacked on PR #25. Tested runtime: `b36ab10`.
 
-## Follow-up: browser calls and bounded recovery
+## Follow-up 2: Pipecat's own web client, and playback the page really played
+
+The browser page is now Pipecat's own web client with one small addition from core. Before, it was a page core
+wrote itself. A report now also requires that the page's audio output played the whole segment without a break.
+A paused, blocked, detached or resumed output can no longer confirm a read-back. Live validation in a real
+browser is **pending**: the manual checkpoint is at the end of this section.
+
+The manual call before this change (Langfuse trace `cec2cb4a8cc81de19249e4e58fdab2aa`, on core's earlier
+page, simulation off) confirmed a phone number, then booked, moved and cancelled one appointment. That
+behavior is kept: the salon's BR4 now runs the same confirmation path over the new protocol, offline.
+
+### What the native components allow
+
+Checked in the installed packages, and against the official source at the same versions (the npm source maps
+are byte-identical to the GitHub tags):
+
+| Component | Version | Supported extension points | Can it carry playback evidence? |
+|---|---|---|---|
+| `pipecat-ai-prebuilt`, the stock UI at `/client/` | 1.2.1, built with `client-js` 1.13.1, `client-react` 1.8.2, `small-webrtc-transport` 1.10.8 | none at run time: no query parameter, window setting or fetched config; the `/start` endpoint and every callback are compiled in; its `<audio>` element is internal | no. Changing it means rebuilding its source, which would no longer be the stock bundle |
+| `@pipecat-ai/client-js` (`PipecatClient`) | 1.13.1 | callbacks and `.on()` events (`ServerMessage`, `TrackStarted`, `Connected` …), `sendClientMessage`, `setAboutClient` (adds fields to its own `client-ready`) | carries the messages and declares the capability; has no playback acknowledgement and no plugin system |
+| `@pipecat-ai/small-webrtc-transport` | 1.10.8 | constructor options (ICE, codecs, `mediaManager`); `onTrackStarted` hands the bot's track to the app | no public receiver: its `RTCPeerConnection` is TypeScript-`private pc`, and it exposes no `getSynchronizationSources`, `getStats` or track event. **This is the missing SDK capability.** It plays nothing itself |
+| The app's `<audio>` element | browser | Pipecat's documented vanilla pattern: the app sets `srcObject` to the bot track in `TrackStarted` | its standard state (`paused`, `muted`, `volume`, `readyState`, `srcObject`, attached to the page) says whether the output is playing |
+| Pipecat server | 1.11.0 | RTVI `client-message` in, `server-message` out; the runner's `app` takes routes registered before `main()` | no client playback message of its own |
+
+So the answer to the three questions:
+
+1. **The packaged UI cannot be extended** without rebuilding it, and a rebuilt bundle would not be the stock one.
+2. **A small source-level integration is needed**, and is what ships: core's page uses the official
+   `PipecatClient` and `SmallWebRTCTransport` for the connection, the microphone, devices and reconnection,
+   and adds one module.
+3. **One upstream capability is missing**: the transport gives the app no way to read the receiver's playout
+   position. The added module reads it from the transport's `pc` member, which exists at run time but is not
+   declared. If a version drops it, the page declares no capability, the bot refuses the call before its
+   greeting, and nothing false is ever reported. The upstream fix is a public receiver, or a playout event.
+
+### What is kept native, and the one addition
+
+```mermaid
+flowchart LR
+  sdk[PipecatClient + SmallWebRTCTransport, official] -->|connection, microphone, reconnect| bot[Pipecat bot]
+  sdk -->|bot track| audio[page audio element]
+  playout[playout.js, core] -->|watches| audio
+  playout -->|reads playout position| sdk
+  bot -->|server-message playout-mark| playout
+  playout -->|client-message playout| adapter[WebRTCPlayout]
+  adapter -->|note_mark_returned| ledger[core delivery ledger]
+```
+
+1. `core/src/core/client/sdk.js` is the official `@pipecat-ai/client-js` 1.13.1 and
+   `@pipecat-ai/small-webrtc-transport` 1.10.8, bundled unmodified into one browser module by `core/client/`
+   (`package.json` and `package-lock.json` pin them; esbuild 0.28.2; `npm ci && npm run build`). It is marked
+   generated. It is not the stock prebuilt UI, and nothing in it is edited.
+2. `index.html` is a few lines of page: Start, Hang up, and the bot's `<audio>` element, set from
+   `TrackStarted` exactly as Pipecat's documentation shows. It connects with `client.connect()` to the runner's
+   `/api/offer`.
+3. `playout.js` is core's only addition (about 100 lines). It calls `setAboutClient` so the client's own
+   `client-ready` names the capability (`playout: 'rtp-timestamp/2'`), receives each `playout-mark` through
+   `ServerMessage`, and sends `playout` reports with `sendClientMessage`.
+4. `serve_client(app)` mounts the folder at `/voice/` and sends `/` there. A launcher that never confirms
+   anything, or brings its own client, need not call it: the harness does not require this page.
+
+Nothing in core's domain code changed for this: the page, the adapter (`WebRTCPlayout` in `processor.py`) and
+the launcher are the framework integration. No LiveKit code was written.
+
+### The paused-output defect
+
+The earlier page reported as soon as the receiver's `rtpTimestamp` passed a segment's bound. An independent
+real-Chrome run paused the page's audio element before a read-back and still got `delivered`, and the desk
+sent its write once. The W3C spec allows that: the receiver's timestamp can advance with no output attached.
+
+The rule now has two halves, and both must hold:
+
+1. **The output ran without a break** from a playout position at or before the segment's `start`. `start` is
+   read when the segment's first audio frame leaves the server, less the same 80 ms margin, so it is early,
+   never late. The page's "run" begins at the first 20 ms sample where its audio element is attached to the
+   page, playing, not muted, above zero volume and holding the live bot track. Any `pause`, `emptied`,
+   `loadstart`, `waiting`, `ended` or `volumechange` event, a track that goes muted or ends, or a sample
+   where those conditions fail, ends the run. Playing again starts a new run at the position then.
+2. **The playout position passed the segment's bound**, as before.
+
+The report carries `since`, where the unbroken run began, and the server checks it too: a report whose `since`
+is after the segment's `start` counts for nothing. So resuming can never approve a segment that did not play
+whole: its `start` lies before the new run.
+
+| Case | What happens | Checked by |
+|---|---|---|
+| Normal playback | reported about 100 ms after the segment's last audio left the server; a yes resolves once | C2, C3; W1, W6; BR4 |
+| Autoplay blocked | the element stays paused: no run, no report | C7 (Chrome's strict autoplay policy) |
+| Paused before the read-back | no run, no report; the yes resolves nothing | C4; W2 |
+| Output detached (stream removed, or element removed from the page) | no run, no report | C6, both ways |
+| Paused 1 s into a 3 s read-back, playing again 0.4 s later | the read-back is never reported; the yes resolves nothing; the next read-back is reported | C5; W2; BR5 (salon) |
+| Interrupted in the middle | never heard, reads `cut` | C8; W4 |
+
+A consequence: a segment that begins less than 80 ms after the output first starts playing is not reported.
+The first greeting of a call can fall in that gap. It is safe, since a greeting needs no approval.
+
+### Interruption on WebRTC
+
+Before, an interruption voided every pending browser mark and labelled it `cut`. On WebRTC a pending mark
+means the segment's audio was all sent, and a browser has no clear: it plays what it received. So the label
+was wrong, and BR5 showed it: a read-back that simply had no report was audited as `cut` once the caller
+spoke.
+
+Now `note_cleared(sent=False)` voids only the marks still queued behind the dropped audio. Those segments were
+cut, and read `cut`. A segment already sent stays pending. If its report arrives after the caller began to
+speak, it is `early` and answers nothing (`answered_in_time`). If it never arrives, it is `unconfirmed`. Twilio
+is unchanged: its `clear` empties audio the carrier still holds, so every pending Twilio mark is still voided.
+
+### Three smaller repairs
+
+1. **`reports_playback(wiring, call)` is truthful.** It was True for every transport but a non-reporting
+   browser. Now:
+
+   | Line | Can confirm |
+   |---|---|
+   | Twilio with marks | yes |
+   | Twilio with no marks (Coval's simulator), outside simulation | no |
+   | Any line opened with `DELIVERY=simulated` | yes, recorded as simulated |
+   | A transport with estimates only, outside simulation | no |
+   | Browser that declared `rtp-timestamp/2` | yes |
+   | Browser that declared nothing, or version 1 | no |
+
+   The salon asks it before its greeting on every line, not only the browser: a phone line that could never
+   confirm now hears `Locale.unconfirmable` before anyone gives details. `coval_sim` always pairs
+   `TWILIO_MARKS=absent` with `DELIVERY=simulated`, so Coval runs are unaffected (W10).
+2. **The withdrawal's reason comes from evidence.** `CallContext.withdraw` chose `talked_over` whenever the
+   stricter counter was not the one that ran out. After one heard greeting, missing reports fill that counter
+   with no interruption at all. The reason is now the hearing of the read-back's last copy: `unconfirmed`,
+   `cut`, `early` or `failed` (R20, on the desk).
+3. **A malformed `client-ready` is handled.** `about` is read through a Pydantic model (`_About`); null, a
+   list, a string, a number or bad `platform_details` are a client that reports nothing, never an exception
+   (W9).
+
+### Evidence each transport supplies (current)
+
+| Transport | Evidence of playback | Where | Approves |
+|---|---|---|---|
+| Twilio Media Streams | returned `mark`, voided by any pending `clear` | `TwilioMarks` | yes |
+| Twilio-shaped simulator with no marks (Coval) | audio settled at real time, `local` | `TwilioMarks(echoes_marks=False)` | only with `DELIVERY=simulated`; otherwise refused before the greeting |
+| Browser, core's page (Pipecat's client with `playout.js`) | the output played without a break from before the segment's start until the playout passed its bound | `WebRTCPlayout` | yes |
+| Browser, Pipecat's prebuilt UI | none | refused on `client-ready` | no: the call ends before the greeting |
+| Browser with `DELIVERY=simulated` | audio written, `local` | `LocalPlayout` | yes, recorded as simulated |
+| Text runner | `acknowledge` | `CallContext.acknowledge` | yes, recorded as simulated |
+
+What a browser report does not prove: that a speaker played it, or that a person heard it. The page sees its
+own audio element. It cannot see the tab's mute button, system volume or the output device. Twilio's marks
+have the same kind of limit.
+
+### Offline results
+
+Provider and model requests were disabled for every check (`ALLOW_MODEL_REQUESTS` off, scripted models, speech
+doubles). No Coval call, rescoring or live model run was made.
+
+| Check asked for | Where | Result |
+|---|---|---|
+| The native UI and SDK integration itself, not a mocked acknowledgement | `tests.client_check`: core's page, the official `PipecatClient` and `SmallWebRTCTransport`, `playout.js`, in headless Chrome, against the real adapter and Pipecat's `SmallWebRTCRequestHandler` (POST and PATCH `/api/offer`) | C1-C8 pass |
+| Normal read-back then yes: one operation | C3 (desk, Chrome); W6 (desk, aiortc peer); salon BR4 (the whole call: number, booking, one booking) | pass |
+| Paused output, blocked autoplay, detached output: no false delivery | C4, C7, C6 (both ways); W2 | pass |
+| Paused mid read-back, then resumed: no retroactive authorization | C5 (desk, Chrome, the flow's own read-back); W2; salon BR5 (the number read back while the output was stopped) | pass |
+| Interrupted, stale, duplicate and wrong-call evidence: no authorization | C8, W4 (interrupted); W3 (another source, short of the bound, a late-started output, another call's mark, a malformed report, a duplicate); W5 (a reply begun before the report) | pass |
+| Unsupported capability detected before confirmation-dependent details | salon BR3 (the prebuilt UI's `client-ready`: refused before the greeting); W7; W10 (`reports_playback` per transport) | pass |
+| Malformed capability metadata handled without an exception | W9 (null, list, string, number, bad `platform_details`) | pass |
+| Missing acknowledgement recorded as unknown, not caller interruption | core R20 (desk: withdrawn as `unconfirmed`, not `talked_over`); W4 (a sent segment reads `unconfirmed`, then `early`); salon BR5 (the blocked confirmation audited `unconfirmed`, not `cut`) | pass |
+| Confirmation and recovery on the support desk and on the salon | desk: R2, R16, R19, R20, W1-W10, C1-C8; salon: B4.1-B4.6, BR1-BR5, M1-M6, E1 | pass |
+| Existing recovery and Twilio regressions | every suite below | pass |
+
+Suites on the final code (`uv run python -m tests` in each member):
+
+- core: all 16 modules ok (R20, W9, W10 new; W2-W5 rewritten for the new rule).
+- salon-graph: all 20 modules ok (BR4, BR5 new; BR1 checks the page at `/voice/`).
+- faro-language-learning, concierge-tools (5 modules), salon-pipecat-flows: all ok.
+- `tests.defects`: core exits 1, its one known limit (a prose step can still say an unbacked claim), as
+  before; salon exits 0.
+- `tests.client_check` (headless Chrome): C1-C8 ok.
+- `ruff format`, `ruff check`, and `ty check` in core, salon-graph, faro, concierge-tools and
+  salon-pipecat-flows: clean.
+- Package proof: ok; the wheel carries `core/client/index.html`, `playout.js` and `sdk.js`
+  ([browser2/package-proof.log](session-4f/browser2/package-proof.log)). `uv.lock` is unchanged.
+- `sdk.js` rebuilt from `core/client/` with `npm run build`: byte-identical (SHA-256 `c7bb762d…3008`).
+- N1-N13 matrix: every row identical to the 4f record.
+- Revert checks: seven, all caught ([revert-checks.md](session-4f/revert-checks.md),
+  [browser2/reverts.txt](session-4f/browser2/reverts.txt)).
+
+**Latency.** No model request, no round trip and no sleep were added on the server. The page samples its own
+state every 20 ms in the browser. The playout report reached the server 97 to 127 ms after the read-back's last
+audio left it, over four Chrome runs on loopback: the 80 ms margin, the browser's jitter buffer and up to one
+20 ms sample. Follow-up 1's page took 79 to 88 ms. The extra is the sample interval, and the report waits for
+the audio element as well as the receiver. That delay sits between the end of a read-back and the earliest
+moment a reply to it can count. A caller's reply is timed from its own voice onset, and normally starts later.
+The adapter's added work per segment is one more sender read, at the segment's first frame.
+
+**N12, run 6**, on this code, with the frozen protocol and tolerances: the verdict is unchanged. The relative
+rule still fails on turns 2, 4 and 5 and on the trace (89.7 ms against 56.2); the 50 ms ceiling passes (slowest
+harness turn 29.1 ms). Medians per turn, harness (native): 10.7 (7.1), 18.3 (7.9), 15.3 (30.1), 17.4 (6.3),
+18.7 (6.6) ms. Raw samples: [matrix/n12-runs/run6](session-4f/matrix/n12-runs/run6/timing.json). N12 is not
+relabelled, and no latency parity is claimed. N12 has no browser transport.
+
+### Limits
+
+- Two private fields carry the browser evidence, and each fails closed. The server reads aiortc 1.15.0's
+  last sent RTP timestamp (`_RTCRtpSender__rtp_timestamp`). The page reads `SmallWebRTCTransport`'s `pc`.
+  If either disappears, nothing is ever heard, or the call is refused before its greeting. `test_webrtc`
+  and `client_check` fail at once.
+- Headless Chrome plays to a fake audio device. The Chrome check proves the page's logic against the real
+  element and receiver, not a speaker.
+- Only core's page reports. The stock prebuilt UI, the Daily transport and any other client are refused
+  before the greeting when the flow needs confirmations (Daily was not checked).
+- `core/src/core/client/sdk.js` is a generated 650 kB file in the wheel. Upgrading the SDK means changing
+  `core/client/package.json` and rebuilding.
+- Faro's `bot.py` serves the page, but has no early refusal yet: that is session 5's.
+
+### Manual checkpoint (pending)
+
+Start the salon exactly as documented, with no simulation flag:
+
+```bash
+cd /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4f-readiness/use-cases/salon-graph
+uv run bot.py
+```
+
+Open **http://localhost:7860/voice/** in Chrome (`/` redirects there) and click **Start call**. Allow the
+microphone, and keep the tab playing. Under the buttons, "Playback reported for N replies" goes up as the
+evidence arrives.
+
+1. **Phone confirmation.** Ask to book a haircut. Give your number in two fragments. When it is read back, let
+   it finish, then say "That sounds about right." Expected: the call goes on to the booking.
+2. **Booking.** Ask for a day and time, let the booking be read back, say "Yes." Expected: one booking and
+   its confirmation.
+3. **Interruption.** Ask to move it. Interrupt the read-back halfway. Expected: it is read back again. Let it
+   finish, then say "Yes." Expected: the booking moves once.
+4. **Cancellation.** Ask to cancel it, let the read-back finish, say "Yes." Expected: cancelled once.
+5. Say "That's all, goodbye." Expected: the goodbye, and the call ends.
+6. Optional, the paused output. On a new call, open the browser's developer console before a read-back and
+   run `document.getElementById('bot').pause()`, then `.play()` a second later. Expected: that read-back is
+   read back again, and your yes to the paused copy changes nothing.
+7. Optional, the refusal: **http://localhost:7860/client/** (Pipecat's prebuilt UI). Expected: "Sorry, this
+   connection can't confirm that you've heard me…", and the call ends.
+
+Afterwards, the bot log shows `browser client sends playback reports` and one `playout report for … counted`
+line per heard segment. The Langfuse trace shows a `confirmation` span for any blocked read-back, and
+`transport: webrtc` in each write audit.
+
+## Follow-up 1: browser calls and bounded recovery
 
 The documented browser entry point (`cd use-cases/salon-graph && uv run bot.py`) could never confirm a read-back,
 and a read-back that could not be confirmed looped. Both are repaired in core, for every use case, with no
 salon code in the fix. Twilio evaluations were never evidence for this path, and none is used as evidence here.
 
-Live validation in a real browser is **pending**: the manual checkpoint is at the end of this section.
+Follow-up 2 above replaces this section's page (`client.html` is gone; the page is now Pipecat's own client
+with `playout.js`), its capability name (`rtp-timestamp/1` is no longer accepted), its interruption rule (step 7
+below), and its manual checkpoint. The incident, the root cause and the recovery transitions still stand.
 
 ### The incident
 
@@ -136,7 +380,7 @@ now names its `transport`.
 | Browser with `DELIVERY=simulated` | audio written, `local` | `LocalPlayout` | yes, recorded as simulated |
 | Text runner | `acknowledge` | `CallContext.acknowledge` | yes, recorded as simulated |
 
-### Offline results
+### Offline results (follow-up 1, commit 75dfd69)
 
 Provider requests were disabled for every check (`ALLOW_MODEL_REQUESTS` off, scripted models, speech doubles).
 No Coval call, rescoring or live model run was made.
@@ -196,35 +440,6 @@ request's context and an audit on a blocked confirmation.
 - Only core's page reports playback. Pipecat's prebuilt client, the Daily transport and any other client are
   refused before the greeting when the flow needs confirmations (Daily was not checked).
 - Faro's `bot.py` serves the page too, but has no early refusal yet: that is session 5's.
-
-### Manual browser checkpoint (pending)
-
-Start it exactly as documented, with no simulation flag:
-
-```bash
-cd /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/session-4f-readiness/use-cases/salon-graph
-uv run bot.py
-```
-
-Open **http://localhost:7860** in Chrome (Firefox and Safari also expose `rtpTimestamp`) and click
-**Start call**. The page needs the microphone and must stay open and audible. Under the buttons it counts
-"Playback reported for N replies": that number going up is the evidence arriving.
-
-1. Ask to book a haircut. When asked for a number, give it in fragments: the country code and the first
-   digits, a pause, then the rest.
-2. The salon reads it back. Wait for it to finish, then say **"That sounds about right."** Expected: the call
-   goes on to the booking. You do not hear "I couldn't get that confirmed".
-3. Ask for a time, and let the salon read the booking back. **Interrupt it** halfway. Expected: it is read back
-   again in full. Let it finish, then say "Yes." Expected: one booking, and its confirmation.
-4. Ask to move it, and when it is read back, **correct a value**: "No, make it three o'clock." Expected: a new
-   read-back with the corrected time, and nothing moved until you say yes to that one.
-5. Say **"That's all, goodbye."** Expected: the goodbye, and the call ends.
-6. Optional, the refusal: open **http://localhost:7860/client/** (Pipecat's own page) and connect. Expected:
-   "Sorry, this connection can't confirm that you've heard me…", and the call ends.
-
-Afterwards, the call's Langfuse trace shows a `confirmation` span for any blocked read-back and a `transport:
-webrtc` field in each write audit. The bot log shows `browser client sends playback reports`, then one
-`playout report for … counted` line per heard segment.
 
 ## Result
 
@@ -485,6 +700,7 @@ Files: [load/faults.json](session-4f/load/faults.json), [load/faults.log](sessio
 | 4e run 3 | 4e | 1.65 / 1.21 | 11.7 (7.0), 17.9 (8.0), 30.1 (30.6), 17.4 (6.4), 18.5 (6.8) | 32.0 | 7 / 7 | fails turns 2, 4, 5 and trace | passes |
 | 4f run 4 | offer turn is `wait` alone | 1.57 / 1.14 | 11.7 (7.1), 18.4 (8.2), 26.3 (30.8), 17.7 (6.5), 18.9 (6.6) | 27.3 | 6 / 7 | fails turns 2, 4, 5 and trace (91.9 vs 58.9) | passes |
 | 4f run 5 (browser follow-up) | as run 4 | not captured (busier: after the suites) | 11.7 (7.0), 23.5 (10.5), 19.1 (38.8), 22.2 (8.9), 23.3 (9.0) | 35.4 | 6 / 7 | fails turns 2, 4, 5 and trace (114.2 vs 73.3) | passes |
+| 4f run 6 (browser follow-up 2) | as run 4 | not captured before; 1.41 after | 10.7 (7.1), 18.3 (7.9), 15.3 (30.1), 17.4 (6.3), 18.7 (6.6) | 29.1 | 6 / 7 | fails turns 2, 4, 5 and trace (89.7 vs 56.2) | passes |
 
 The protocol, tolerances and native reference are unchanged. Every raw sample is in
 [matrix/n12-runs/run4](session-4f/matrix/n12-runs/run4/timing.json); runs 1-3 stay in the 4e folder. **N12 is

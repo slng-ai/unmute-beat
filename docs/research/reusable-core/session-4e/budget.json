@@ -1,5 +1,5 @@
 {
- "note": "Stage B, C and session 4d allowances. Survive sessions, worktrees and PRs. Update after every billable action; never reset. Copied from session-4c/budget.json at 8b127b2 and continued here.",
+ "note": "Stage B, C, session 4d and 4e allowances. Survive sessions, worktrees and PRs. Update after every billable action; never reset. Copied from session-4d-correctness/budget.json at 31e998d and continued here.",
  "text": {
   "requests_allowed": null,
   "tokens_allowed": 560000,
@@ -231,10 +231,10 @@
  },
  "coval_repair_pool": {
   "calls_allowed": 20,
-  "requested": 16,
-  "placed": 16,
-  "connected": 16,
-  "terminal": 16,
+  "requested": 18,
+  "placed": 18,
+  "connected": 18,
+  "terminal": 18,
   "evidence_complete": 1,
   "runs": [
    {
@@ -518,6 +518,66 @@
     "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
     "retry_of": "s4d-3-refused-repetition",
     "result": "target reached, passed from the diary: code read back \"Shall I book a haircut, Friday the 2nd at 2:00 PM?\"; the caller answered \"no don't book friday at two i'm only checking if it is free\"; no Restated line, no write, no intent; the agent said nothing was booked. Diary: no booking, no intent for +34671540103. Naturalness: the goodbye added the left_undone line (\"I haven't made that last change\") after an explicit no. Ended by the bot (EndFrame after goodbye)."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "bound_by": "coval_sim correlate",
+    "label": "s4e-latency-1",
+    "run": "ZMEfdPgVZBSzbvktftm5or",
+    "simulation": "XTvDQbE8fPkR6My77dyTV9",
+    "call_sid": "CA38f4af734764255749b15d92db301858",
+    "langfuse_session": "CA38f4af734764255749b15d92db301858",
+    "source": "57eac11",
+    "set": "ghsCWtAD",
+    "case": "PpRSPVAipjQMeKAFynSssw",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "campaign": "s4e-latency",
+    "why": "latency and behavior, normal: rendered offers, a taken time and its alternatives, a day said two ways",
+    "contender": {
+     "took_at": "2026-09-27T18:22:38.283+02:00",
+     "booking": "BK0002 +34671540199 2026-10-01 15:00"
+    },
+    "model_usage": {
+     "requests": 35,
+     "input_tokens": 94699,
+     "cached_tokens": 0,
+     "output_tokens": 664
+    },
+    "result": "task done, from the diary: BK0001 +34671540104 booked Tuesday 11:00, the move to Thursday 15:00 refused (the contender took it at the read-back), moved to Thursday 16:00 (revision 2). Every booking word was the salon's: offers, \"3:00 PM is taken. On Thursday the 1st I have 2:00 PM, 4:00 PM or 1:30 PM\", read-backs, receipts. No model prose, no JSON. Fault: \"Sorry, could you say that again?\" after \"Thanks, I have you.\" (booking waited on arrival without options); fixed offline in 687e343 before call 2. Latency (spans, agent review): core median 0.02 s per turn, model 1.43 s before the first useful words, TTS first audio 1.24 s, endpointing 0.3 s; Pipecat user-bot 2.3-5.4 s."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "bound_by": "coval_sim correlate",
+    "label": "s4e-latency-2",
+    "run": "JSQyJMiJumJkTenWDHy5CY",
+    "simulation": "PzAEmqnp3XqFiFjjCmDFyf",
+    "call_sid": "CA3ecd4256e7059e83494c6d5fb9e69266",
+    "langfuse_session": "CA3ecd4256e7059e83494c6d5fb9e69266",
+    "source": "829271b",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "campaign": "s4e-latency-2",
+    "why": "latency and behavior, interruptive: bounded receipt replay, rendered read-back of a relative-day move",
+    "model_usage": {
+     "requests": 38,
+     "input_tokens": 98890,
+     "cached_tokens": 0,
+     "output_tokens": 553
+    },
+    "result": "task done, from the diary: BK0001 +34671540102 booked Monday 09:00, moved to Tuesday the 29th 09:00 (\"day after tomorrow\", revision 2); one intent each, nothing unknown. The move ran on a yes that began at 18:36:59.9, after the second read-back copy's Twilio mark returned at 18:36:56.6. The booking receipt the caller talked over was said again once, then not again (4d: six times). No model prose on booking, no wrong read-back copy, no pardon line. Naturalness: verify asked for the number three times over joined pieces while the caller talked. Latency: core median 0.02 s, model 0.97 s, TTS first audio 1.26 s; the replayed receipt spoke after 0.003 s with no model."
    }
   ],
   "stage_c_live_ramp_cap": 8,
@@ -526,6 +586,11 @@
    "cap_this_session": 7,
    "test_sets": "coval-fixtures.v1.json: one single-case set per call",
    "placed": 7
+  },
+  "session_4e": {
+   "plan": "2 latency and behavior calls, then 2 worker-failure calls; never more than 4",
+   "placed": 2,
+   "left": 2
   }
  },
  "reserved_for_later_stages": {

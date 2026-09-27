@@ -109,7 +109,12 @@ async def only_the_delivered_current_proposal_authorises():
         script.label = 'accept'
         reply = await turn(flow, call, script, 'Yes.')
         assert backend.calls == 0, f'a yes to the old read-back booked after {change}'
-        assert reply.segments[-1].text.startswith('Shall I book'), 'the new arguments are read back instead'
+        if 'patient' in change:
+            assert call.state.facts.slot is None, 'a time picked by one patient was kept for another'
+        else:
+            assert reply.segments[-1].text.startswith('Shall I book'), (
+                'the new arguments are read back instead'
+            )
 
     flow, call, backend = await at_the_read_back(script)
     script.label = 'unclear'

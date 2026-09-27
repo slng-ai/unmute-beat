@@ -340,6 +340,87 @@ async def renamed_it_still_holds(folder: Path):
             del sys.modules[name]
 
 
+async def picks_rest_only_on_what_their_offer_read(folder: Path):
+    """R11 (session 4d, defect 4): two choices that rest on different fields, with no booking anywhere.
+
+    A new category takes the resolutions on offer and the one picked, and
+    keeps the ticket. Another account takes both: they were offered to
+    someone else. `after:` must name another field of the step.
+    """
+    desk = desk_in(folder)
+    desk.seed('ACC-1234', 'T-102')
+    script, flow, call = opened(desk, HERE / 'choices.yaml')
+    await turn(
+        flow,
+        call,
+        script,
+        'Cuenta ACC-1234, es de facturación.',
+        ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
+        ('call', 'options', {}),
+        ('say', '¿Qué ticket y qué solución?'),
+    )
+    assert set(call._offered) == {'ticket_id', 'resolution'}, call._offered
+    await turn(
+        flow,
+        call,
+        script,
+        'El T-102, con un reembolso.',
+        ('call', 'collect', {'values': {'ticket_id': 'T-102', 'resolution': 'refund'}}),
+        ('say', 'De acuerdo.'),
+    )
+    facts = call.state.facts
+    assert (facts.ticket_id, facts.resolution) == ('T-102', 'refund'), facts
+    await turn(
+        flow,
+        call,
+        script,
+        'Perdona, es de acceso.',
+        ('call', 'collect', {'values': {'category': 'access'}}),
+        ('say', 'Entendido.'),
+    )
+    facts = call.state.facts
+    assert facts.ticket_id == 'T-102', 'the ticket rests on no field, and a new category took it away'
+    assert facts.resolution == '' and 'resolution' not in call._offered, (
+        'a billing resolution outlived its category'
+    )
+    assert 'T-102' in call._offered['ticket_id'], 'the ticket offer went with the category'
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Con un reembolso.',
+        ('call', 'collect', {'values': {'resolution': 'refund'}}),
+        ('say', 'Vale.'),
+    )
+    assert call.state.facts.resolution == '', ('a resolution from the old offer was recorded', said)
+    await turn(
+        flow,
+        call,
+        script,
+        'Mejor la cuenta ACC-5678.',
+        ('call', 'collect', {'values': {'account_id': 'ACC-5678'}}),
+        ('say', 'Vale.'),
+    )
+    facts = call.state.facts
+    assert facts.ticket_id is None and not call._offered, 'a pick offered to another account was kept'
+
+    broken = HERE / '_choices_broken.yaml'
+    text = (HERE / 'choices.yaml').read_text()
+    for change, expected in (
+        (('after: [category]', 'after: [priority]'), "after 'priority'"),
+        (('after: [category]', 'after: [resolution]'), "after 'resolution'"),
+    ):
+        broken.write_text(text.replace(*change))
+        try:
+            core.load(broken).compile(model='test')
+        except core.FlowSpecError as error:
+            assert expected in str(error), str(error)
+        else:
+            raise AssertionError(f'{change} was accepted')
+        finally:
+            broken.unlink()
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -354,6 +435,7 @@ async def main() -> None:
                 renamed_it_still_holds,
                 a_cut_receipt_is_said_again_only_while_it_stands,
                 the_audit_names_the_backend_effect,
+                picks_rest_only_on_what_their_offer_read,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -369,7 +451,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R10, no phone, date, appointment or slot')
+    print('tickets ok: R1-R11, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

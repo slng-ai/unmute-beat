@@ -12,7 +12,12 @@ second, independent caller writes to the same SQLite file through its own
   refused, the picks are taken back, and a fresh offer moves it;
 * V3: a refused move or cancel names the booking it was about, for another
   caller's booking, one already cancelled, and a fenced attempt; each is
-  `rejected`, and nothing about it stands.
+  `rejected`, and nothing about it stands;
+* V4: trace ce40c124 replayed, the day changed in booking and via concierge:
+  book, pick the appointment, change the day, pick a time, move, cancel,
+  with no pick refused;
+* V5: two appointments held, the one picked survives a day change; an id
+  nobody offered is refused, with a refusal that says what to do.
 """
 
 import asyncio
@@ -21,7 +26,7 @@ import sqlite3
 from salon.diary import Diary
 from salon.functions import Cancel, Move, Salon, cancel, find_move, move
 from tests.script import CLOCK, PHONE, slot, turn
-from tests.test_business import FRIDAY, at_booking, seed
+from tests.test_business import FRIDAY, TUE, at_booking, seed
 
 OTHER = '+447700900123'
 """A second, synthetic caller (Ofcom's drama range)."""
@@ -170,11 +175,146 @@ def refusals_name_the_request():
         assert op.outcome(receipt.model_dump()) == 'rejected', name
 
 
+def refusals_in(script) -> list[str]:
+    """Every tool refusal the agents were sent, oldest first."""
+    from pydantic_ai.messages import RetryPromptPart
+
+    return [
+        str(part.content)
+        for request in script.requests
+        for message in request.messages[-1:]
+        for part in message.parts
+        if isinstance(part, RetryPromptPart)
+    ]
+
+
+async def book_move_and_cancel(via_concierge: bool):
+    """V4 (trace ce40c124): book, ask to move, pick the appointment, change the day, pick a new time, move, cancel.
+
+    The new day takes the times on offer away and keeps the appointment being
+    moved; the cancel after the move names the same appointment, which this
+    call has seen at the revision the move made.
+    """
+    script, flow, call, diary = await at_booking()
+    await read_back_friday(flow, call, script)
+    await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    [held] = [b['booking_id'] for b in diary.bookings_for(PHONE, CLOCK.date())]
+    await turn(
+        flow,
+        call,
+        script,
+        'Actually, can you move the appointment?',
+        ('call', 'options'),
+        ('collect', {'appointment': held}),
+        ('say', 'Which day would you like instead?'),
+    )
+    if via_concierge:
+        await turn(
+            flow,
+            call,
+            script,
+            'Same time on Tuesday.',
+            ('call', 'hand_over', {'to': 'concierge', 'because': 'they want Tuesday'}),
+            ('collect', {'booking_day': 'Tuesday', 'booking_time': '14:00'}),
+            ('call', 'hand_over', {'to': 'booking', 'because': 'move to Tuesday at two'}),
+            ('say', 'Let me look at Tuesday.'),
+        )
+    else:
+        await turn(
+            flow,
+            call,
+            script,
+            'Same time on Tuesday.',
+            ('collect', {'booking_day': 'Tuesday', 'booking_time': '14:00'}),
+            ('say', 'Let me look at Tuesday.'),
+        )
+    assert call.state.agent == 'booking' and call.state.facts.appointment == held, (
+        'the day change forgot the appointment being moved',
+        call.state,
+    )
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Two, please.',
+        ('call', 'options'),
+        ('collect', {'slot': slot(TUE, '14:00')}),
+        ('call', 'move_appointment'),
+    )
+    assert said[-1] == 'Shall I move your haircut from Friday the 2nd at 2:00 PM to tomorrow at 2:00 PM?', (
+        said
+    )
+    await turn(flow, call, script, 'Yes.', ('call', 'move_appointment'))
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Actually, just cancel it.',
+        ('collect', {'appointment': held}),
+        ('call', 'cancel_appointment'),
+    )
+    assert said[-1] == 'Shall I cancel your haircut tomorrow at 2:00 PM?', said
+    said = await turn(flow, call, script, 'Yes.', ('call', 'cancel_appointment'))
+    assert said == ["That's cancelled for you. Anything else I can help with?"], said
+    assert snapshot(diary.path) == [], snapshot(diary.path)
+    assert [i.status for i in call.intents] == ['succeeded'] * 3, call.intents
+    assert not [r for r in refusals_in(script) if 'on offer' in r], refusals_in(script)
+
+
+async def read_back_friday(flow, call, script):
+    await turn(
+        flow,
+        call,
+        script,
+        'A haircut Friday at two.',
+        ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': '14:00'}),
+        ('call', 'options'),
+        ('say', 'Two is free.'),
+    )
+    await turn(
+        flow, call, script, 'Two.', ('collect', {'slot': slot(FRIDAY, '14:00')}), ('call', 'book_appointment')
+    )
+
+
+async def two_holdings_and_a_reference_not_on_offer():
+    """V5: with two appointments held, the one picked survives a day change; an id nobody offered is refused."""
+    script, flow, call, diary = await at_booking()
+    first = seed(diary)
+    diary.find_slots(PHONE, FRIDAY, 'haircut', CLOCK, offered_to='seed', prefer='11:00')
+    second = diary.save_booking(PHONE, 'book', slot(FRIDAY, '11:00'), '', True, CLOCK, offered_to='seed')[
+        'booking_id'
+    ]
+    await turn(
+        flow,
+        call,
+        script,
+        'Move my eleven o clock.',
+        ('call', 'options'),
+        ('collect', {'appointment': 'BK9999'}),
+        ('say', 'Which one?'),
+    )
+    assert call.state.facts.appointment == '', 'an appointment nobody offered was recorded'
+    assert 'is not on offer for appointment: call options' in refusals_in(script)[-1], refusals_in(script)
+    await turn(
+        flow,
+        call,
+        script,
+        'The eleven o clock, to Saturday.',
+        ('collect', {'appointment': second}),
+        ('collect', {'service': 'haircut', 'booking_day': 'Saturday', 'booking_time': '11:00'}),
+        ('say', 'Saturday, then.'),
+    )
+    assert call.state.facts.appointment == second and first != second
+
+
 async def main() -> None:
     await a_taken_destination_is_refused_and_another_time_moves()
     await a_booking_changed_elsewhere_is_refused_then_offered_fresh()
     refusals_name_the_request()
-    print('moves ok: V1-V3, refusals bound to their request on a shared diary file')
+    await book_move_and_cancel(via_concierge=False)
+    await book_move_and_cancel(via_concierge=True)
+    await two_holdings_and_a_reference_not_on_offer()
+    print('moves ok: V1-V5, refusals bound to their request, picks kept across a day change, one shared file')
 
 
 if __name__ == '__main__':

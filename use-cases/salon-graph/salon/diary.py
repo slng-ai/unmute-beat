@@ -1167,7 +1167,23 @@ class Diary:
             result = {'status': status} | _row(
                 booking_id, offer.service, offer.day, offer.at, today, revision
             )
+            if action == 'move':
+                self._moved_here(offered_to, booking_id, revision)
             return self._record(db, operation_token, result)
+
+    def _moved_here(self, offered_to: str, booking_id: str, revision: int) -> None:
+        """The call that moved a booking it was shown has seen the revision it made (session 4d, trace ce40c124).
+
+        Without this, the cancel that follows a move in the same call was
+        refused as stale: the call was shown revision 1 and made revision 2.
+        A revision someone else makes is still never taken as seen.
+        ponytail: set before the transaction commits; a failed commit leaves
+        a revision marked seen that is not, and the next write is refused as
+        stale by the database's own check, which is the safe side.
+        """
+        with self._lock:
+            if (offered_to, booking_id) in self._shown:
+                self._shown[offered_to, booking_id] = revision
 
     @staticmethod
     def _rows(held: list[Booking], today: Date) -> list[dict]:

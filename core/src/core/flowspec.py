@@ -209,6 +209,8 @@ class _Resolver:
         """`compile(model=...)` was given: every persona's own model is set aside for it."""
         self.assigned: dict[str, set[str]] = {}
         """Declared operation to the state fields its receipt sets, checked against what the model collects."""
+        self.choice_after: dict[str, frozenset[str] | None] = {}
+        """Choice to the fields its offer rests on, as the first step that offers it declared (None: every field)."""
 
     def fail(self, where: str, problem: str) -> None:
         """Keep a problem once: one missing file named by three references is one thing to fix."""
@@ -496,14 +498,30 @@ class _Resolver:
         self._cache['declared', name] = found
         return found
 
-    def choices(self, step: str, fields: list[str], refs: Mapping[str, str]) -> dict[str, Callable[..., Any]]:
+    def choices(
+        self, step: str, fields: list[str], refs: Mapping[str, str | ChoiceSpec]
+    ) -> dict[str, Callable[..., Any]]:
         found = {}
         for name, ref in refs.items():
             if name not in fields:
                 self.fail(step, f'offers choices for {name!r}, which the step does not ask for')
-            if (choose := self.function(step, ref, 2)) is not None:
+            after = frozenset(ref.after) if isinstance(ref, ChoiceSpec) else None
+            for field_name in sorted(after or ()):
+                if field_name == name or field_name not in fields:
+                    self.fail(
+                        step, f'offers {name!r} after {field_name!r}, which is not another of its fields'
+                    )
+            if self.choice_after.setdefault(name, after) != after:
+                self.fail(step, f'offers {name!r} after other fields than another step that offers it')
+            if (
+                choose := self.function(step, ref.function if isinstance(ref, ChoiceSpec) else ref, 2)
+            ) is not None:
                 found[name] = choose
         return found
+
+    def after(self, refs: Mapping[str, str | ChoiceSpec]) -> dict[str, frozenset[str]]:
+        """The declared `after:` of each choice that has one."""
+        return {name: frozenset(ref.after) for name, ref in refs.items() if isinstance(ref, ChoiceSpec)}
 
     def persona(self, step: str, name: str) -> Any:
         """A persona's native spec, its model set aside when `compile` was given one explicitly."""
@@ -659,6 +677,21 @@ class ActionSpec(_Operated):
         )
 
 
+class ChoiceSpec(BaseModel):
+    """A choice whose offer rests on some fields only: `{function: functions.py:find_times, after: [day, time]}`.
+
+    A plain reference (`slot: clinic.py:free_times`) rests on every other
+    field: any change to the request takes its offer and its pick away. With
+    `after:`, only a change to one of those fields does; `after: []` rests on
+    none (the bookings a caller holds do not change with the day they ask
+    for). A change of the caller's identity takes every choice away.
+    """
+
+    model_config = SPEC
+    function: str
+    after: list[str]
+
+
 class HandoverSpec(BaseModel):
     """One step a conversation step may hand the caller to, and what for: the agent is shown the purpose."""
 
@@ -681,7 +714,8 @@ class ConversationSpec(StepSpec):
     """Added to the end of the prompt: a file in the flow folder, or a registry name."""
     fields: list[str] = []
     """State fields this step's agent may record from the caller (`collect`)."""
-    choices: dict[str, str] = {}
+    choices: dict[str, str | ChoiceSpec] = {}
+    """A field picked from options, and the function offering them, with the fields its offer rests on (`ChoiceSpec`)."""
     operations: list[str] = []
     """Declared operations this step's agent may carry out: each read back, and run only on its yes to a heard read-back."""
     exits: list[HandoverSpec] = []
@@ -775,6 +809,7 @@ class ConversationSpec(StepSpec):
             instructions=prompt,
             fields=tuple(self.fields),
             choices=resolve.choices(self.id, self.fields, self.choices),
+            choice_after=resolve.after(self.choices),
             operations=tuple(resolve.operation(name) for name in self.operations),
             exits=tuple(exit.to for exit in self.exits),
             purposes={exit.to: exit.purpose for exit in self.exits if exit.purpose},

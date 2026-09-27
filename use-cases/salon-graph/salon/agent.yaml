@@ -142,7 +142,10 @@ steps:
     requires: [verified_phone]
     satisfied_by: verify
     fields: [service, booking_day, booking_time, slot, appointment]
-    choices: {slot: functions.py:find_times, appointment: functions.py:held_bookings}
+    choices:
+      # A time on offer rests on what was asked for; the booking being moved or cancelled does not.
+      slot: {function: functions.py:find_times, after: [service, booking_day, booking_time]}
+      appointment: {function: functions.py:held_bookings, after: []}
     operations: [book_appointment, move_appointment, cancel_appointment]
     reads_back: {book_appointment: [slot]}
     exits:

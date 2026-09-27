@@ -98,6 +98,8 @@ class FlowCall[S: BaseModel](CallContext):
     """State fields a receipt sets (`assign`), each with the state fields its operation's arguments came from."""
     _choices: frozenset[str] = PrivateAttr(default=frozenset())
     """State fields picked from offered ids (`choices`): valid only while the request they were offered for stands."""
+    _choice_after: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
+    """The fields a choice's offer rests on, when its manifest says (`after:`); the others rest on every field."""
     _recorded: frozenset[str] = PrivateAttr(default=frozenset())
     """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
     _goodbye_checked: int = PrivateAttr(default=0)
@@ -246,23 +248,29 @@ class FlowCall[S: BaseModel](CallContext):
 
         A change takes what rested on the old value with it, in the same
         candidate: a fact a receipt set from these arguments (a corrected phone
-        number is no longer the verified one), and every offer together with
-        every pick made from one, unless the change is only a pick among the
-        offered ids or the caller's identity. "Actually, make it Saturday"
-        leaves no Friday slot behind for an old yes to book.
+        number is no longer the verified one), and each offer that rested on a
+        changed field, with the pick made from it. "Actually, make it
+        Saturday" leaves no Friday slot behind for an old yes to book.
 
-        ponytail: offers and picks are taken to rest on every other field,
-        which is right for a request (day, time, service) and too eager for a
-        field no offer reads. A per-choice `after:` list is the upgrade if a
-        flow needs it.
+        What an offer rests on is its manifest's `after:` list; without one,
+        every field but the choices and the identity. So a new day takes the
+        times away and keeps the appointment being moved, which rests on no
+        field (session 4d, defect 4: the day change cleared the appointment,
+        trace ce40c124). A known identity changed to another takes every
+        offer and pick away: they were made to someone else. Naming the
+        caller for the first time is not a change of caller.
         """
         if refused := set(fields) - self._collectible:
             raise ValueError(f'not collected from the caller: {", ".join(sorted(refused))}')
         facts = self.state.facts
         default = lambda name: type(facts).model_fields[name].get_default(call_default_factory=True)  # noqa: E731
         changed = {name for name, value in fields.items() if getattr(facts, name) != value}
-        request_changed = bool(changed - self._choices - {self._identity_field})
-        picks = {name: default(name) for name in self._choices - set(fields)} if request_changed else {}
+        request = changed - self._choices - {self._identity_field}
+        someone_else = bool(self.identity()) and self._identity_field in changed
+        stale = {
+            name for name in self._choices if someone_else or request & self._choice_after.get(name, request)
+        }
+        picks = {name: default(name) for name in stale - set(fields)}
         changed |= {name for name, value in picks.items() if getattr(facts, name) != value}
         resets = {
             name: default(name)
@@ -270,8 +278,8 @@ class FlowCall[S: BaseModel](CallContext):
             if sources & changed and name not in fields
         }
         self.update(**fields, **picks, **resets)
-        if request_changed:
-            self._offered = {}
+        for name in stale:
+            self._offered.pop(name, None)
 
 
 @dataclass(frozen=True)
@@ -1178,12 +1186,21 @@ def said_by_caller(call: CallContext, excerpt: str) -> bool:
 
 
 def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> None:
-    """Refuse a value for a choice field that was never offered to this caller."""
+    """Refuse a value for a choice field that is not on offer to this caller now.
+
+    A value the state already holds is not a new pick: it was recorded from an
+    offer, and still stands, so recording it again changes nothing (a move
+    spends the offer of the booking it moved, and the cancel that follows
+    names the same booking). The service checks ownership and revision when
+    it acts on it, whatever was offered (session 4d, trace ce40c124).
+    """
     for name, value in values.items():
-        if name in choices and str(value) not in call._offered.get(name, {}):
-            offered = ', '.join(call._offered.get(name, {})) or 'none yet'
+        if name not in choices or getattr(call.state.facts, name, None) == value:
+            continue
+        if str(value) not in call._offered.get(name, {}):
             raise ModelRetry(
-                f'Nothing was recorded: {value!r} was not offered for {name} (offered: {offered}).'
+                f'Nothing was recorded: {value!r} is not on offer for {name}: call options, then record an '
+                'id it returns.'
             )
 
 
@@ -1311,6 +1328,8 @@ class ConversationStep(Step):
     knowledge: str = ''
     fields: tuple[str, ...] = ()
     choices: Mapping[str, Callable[[Any, Any], Any]] = field(default_factory=dict)
+    choice_after: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    """The fields each choice's offer rests on, where the manifest says (`after:`). See `FlowCall.collect`."""
     operations: tuple[Operation, ...] = ()
     exits: tuple[str, ...] = ()
     purposes: Mapping[str, str] = field(default_factory=dict)
@@ -1818,6 +1837,9 @@ class StepFlow:
         call = self.call_type(state=FlowState[self.state_type](agent=self.start, facts=facts))  # ty: ignore[invalid-type-form]
         call._identity_field, call._collectible, call._derived = self.identity, self.collectible, self.derived
         call._choices = frozenset(name for step in self.steps for name in getattr(step, 'choices', {}))
+        call._choice_after = {
+            name: after for step in self.steps for name, after in getattr(step, 'choice_after', {}).items()
+        }
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale

@@ -1,0 +1,3820 @@
+[
+ {
+  "fixture": "c5-l0-r0",
+  "phone": "+34699000000",
+  "call_sid": "CA061fe11cfa55445b9ebb0020ac093aa2",
+  "lane": 0,
+  "admitted": true,
+  "started": 391274.88164075,
+  "ended": 391305.54759425,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 9 am.",
+    "ended_at": 391282.987512208,
+    "answered_at": 391284.92187775
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391288.78615175,
+    "answered_at": 391289.226254
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391294.487260625,
+    "answered_at": 391294.741494583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391300.586654375,
+    "answered_at": 391302.646175208
+   }
+  ],
+  "bot_audio_seconds": 17.462499999999967,
+  "caller_audio_seconds": 6.56,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l2-r0",
+  "phone": "+34699020000",
+  "call_sid": "CA3bad18b1e6bd4b54a2d6d3a333407fcc",
+  "lane": 2,
+  "admitted": true,
+  "started": 391274.965077833,
+  "ended": 391311.367233666,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 9 am.",
+    "ended_at": 391282.987588041,
+    "answered_at": 391284.921897166
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391288.806413541,
+    "answered_at": 391289.2262725
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391290.591900291,
+    "answered_at": 391290.927264916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391293.709225375,
+    "answered_at": 391294.62254475
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391299.225789458,
+    "answered_at": 391300.125974041
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391306.528480958,
+    "answered_at": 391308.50033275
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r0",
+  "phone": "+34699040000",
+  "call_sid": "CAeebf27b04dd140078000f352de5ca391",
+  "lane": 4,
+  "admitted": true,
+  "started": 391274.886134083,
+  "ended": 391312.045461333,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391282.968444333,
+    "answered_at": 391283.264280833
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391284.555712833,
+    "answered_at": 391284.79463175
+   },
+   {
+    "said": "on Saturday at 9 am.",
+    "ended_at": 391287.326720458,
+    "answered_at": 391289.530795708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391293.426138125,
+    "answered_at": 391293.868763041
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391299.90702,
+    "answered_at": 391300.825667166
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391307.236473666,
+    "answered_at": 391309.187778833
+   }
+  ],
+  "bot_audio_seconds": 19.52499999999996,
+  "caller_audio_seconds": 7.36,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l3-r0",
+  "phone": "+34699030000",
+  "call_sid": "CAdc4b8232f3574fe094170f1b858b1e35",
+  "lane": 3,
+  "admitted": true,
+  "started": 391274.885461541,
+  "ended": 391314.205335083,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 9 am.",
+    "ended_at": 391282.987601083,
+    "answered_at": 391284.927079208
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391288.806636291,
+    "answered_at": 391289.228872083
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391292.017971125,
+    "answered_at": 391292.374916833
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391296.827599708,
+    "answered_at": 391297.097975333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391302.767745958,
+    "answered_at": 391303.775248833
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391308.848128416,
+    "answered_at": 391311.352317416
+   }
+  ],
+  "bot_audio_seconds": 20.899999999999952,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r0",
+  "phone": "+34699010000",
+  "call_sid": "CA4363061c70f64d00a90fafd3ee3b4fc8",
+  "lane": 1,
+  "admitted": true,
+  "started": 391274.882750958,
+  "ended": 391319.853171125,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391282.967471625,
+    "answered_at": 391283.264191833
+   },
+   {
+    "said": "on Tuesday at 9 am.",
+    "ended_at": 391285.149863,
+    "answered_at": 391287.217794833
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391291.007263083,
+    "answered_at": 391291.428524666
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391296.706123083,
+    "answered_at": 391297.727805833
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391303.013911375,
+    "answered_at": 391303.345671875
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391307.506793875,
+    "answered_at": 391308.467567125
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391314.500846458,
+    "answered_at": 391316.966561666
+   }
+  ],
+  "bot_audio_seconds": 23.37499999999994,
+  "caller_audio_seconds": 9.500000000000002,
+  "marks_sent": 9,
+  "marks_returned": 9,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l0-r1",
+  "phone": "+34699000001",
+  "call_sid": "CA8a586e0ba0d1441a91822d592cf30924",
+  "lane": 0,
+  "admitted": true,
+  "started": 391305.56046025,
+  "ended": 391337.242431208,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 10 am.",
+    "ended_at": 391313.372937041,
+    "answered_at": 391315.382676291
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391319.853074125,
+    "answered_at": 391320.140349333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391325.385359916,
+    "answered_at": 391326.350231541
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391332.361755125,
+    "answered_at": 391334.347240541
+   }
+  ],
+  "bot_audio_seconds": 17.599999999999966,
+  "caller_audio_seconds": 6.5200000000000005,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l4-r1",
+  "phone": "+34699040001",
+  "call_sid": "CA33f504d20a3c4a8a83da5333a78d892c",
+  "lane": 4,
+  "admitted": true,
+  "started": 391312.057266625,
+  "ended": 391346.836633,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391318.065166583,
+    "answered_at": 391320.139910916
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391319.856957833,
+    "answered_at": 391320.139910916
+   },
+   {
+    "said": "on Saturday at 10 am.",
+    "ended_at": 391322.566208541,
+    "answered_at": 391324.599602083
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391328.384182708,
+    "answered_at": 391328.78339275
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391334.463152708,
+    "answered_at": 391335.501225375
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391341.8974855,
+    "answered_at": 391343.940241833
+   }
+  ],
+  "bot_audio_seconds": 18.974999999999962,
+  "caller_audio_seconds": 7.319999999999999,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 5
+ },
+ {
+  "fixture": "c5-l2-r1",
+  "phone": "+34699020001",
+  "call_sid": "CA9a2d2df57fec4953a2a237838ae9fb8c",
+  "lane": 2,
+  "admitted": true,
+  "started": 391311.373865333,
+  "ended": 391348.436871125,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 10 am.",
+    "ended_at": 391319.199981,
+    "answered_at": 391321.749613541
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391325.625904833,
+    "answered_at": 391326.077646291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391327.575921333,
+    "answered_at": 391327.729168916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391330.61717125,
+    "answered_at": 391331.520714708
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391336.220487791,
+    "answered_at": 391337.121935583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391343.520331208,
+    "answered_at": 391345.578830791
+   }
+  ],
+  "bot_audio_seconds": 20.074999999999957,
+  "caller_audio_seconds": 8.480000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l3-r1",
+  "phone": "+34699030001",
+  "call_sid": "CA8b27fbc1355f4015a5189b1b66d7d092",
+  "lane": 3,
+  "admitted": true,
+  "started": 391314.217808,
+  "ended": 391354.010734875,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 10 am.",
+    "ended_at": 391322.060375583,
+    "answered_at": 391324.0162315
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391327.89811325,
+    "answered_at": 391328.306016541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391331.08279025,
+    "answered_at": 391332.000069666
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391336.584058166,
+    "answered_at": 391336.945833833
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391342.898811333,
+    "answered_at": 391343.809309291
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391348.8622615,
+    "answered_at": 391350.85845725
+   }
+  ],
+  "bot_audio_seconds": 21.03749999999995,
+  "caller_audio_seconds": 8.440000000000001,
+  "marks_sent": 7,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r1",
+  "phone": "+34699010001",
+  "call_sid": "CA6fc03c4722c64a25b65d4ded0b5cfa45",
+  "lane": 1,
+  "admitted": true,
+  "started": 391319.858937708,
+  "ended": 391363.437602166,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391326.383469541,
+    "answered_at": 391326.721810375
+   },
+   {
+    "said": "on Tuesday at 10 am.",
+    "ended_at": 391328.694382958,
+    "answered_at": 391330.640623458
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391334.523416666,
+    "answered_at": 391334.944723625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391340.259674,
+    "answered_at": 391341.209198708
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391347.470237083,
+    "answered_at": 391347.811269125
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391352.513816583,
+    "answered_at": 391353.991042708
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391358.542169291,
+    "answered_at": 391360.587320041
+   }
+  ],
+  "bot_audio_seconds": 23.924999999999937,
+  "caller_audio_seconds": 9.46,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l0-r2",
+  "phone": "+34699000002",
+  "call_sid": "CA16b74019e5634e089d028c8294ab9328",
+  "lane": 0,
+  "admitted": true,
+  "started": 391337.2541825,
+  "ended": 391368.537959416,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 11 am.",
+    "ended_at": 391345.237492083,
+    "answered_at": 391347.27406575
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391351.142601875,
+    "answered_at": 391351.592871583
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391356.858804583,
+    "answered_at": 391357.839952208
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391363.701834875,
+    "answered_at": 391365.685295291
+   }
+  ],
+  "bot_audio_seconds": 17.462499999999967,
+  "caller_audio_seconds": 6.7,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l4-r2",
+  "phone": "+34699040002",
+  "call_sid": "CAc7c150b285ac485aafa0cade409c0ffa",
+  "lane": 4,
+  "admitted": true,
+  "started": 391346.850428333,
+  "ended": 391381.41861025,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391352.819018541,
+    "answered_at": 391353.199774
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391354.177066958,
+    "answered_at": 391354.532357833
+   },
+   {
+    "said": "on Saturday at 11 am.",
+    "ended_at": 391357.081398166,
+    "answered_at": 391359.607485125
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391363.009015,
+    "answered_at": 391363.376247125
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391369.165326583,
+    "answered_at": 391370.104874041
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391376.518161083,
+    "answered_at": 391378.571512375
+   }
+  ],
+  "bot_audio_seconds": 19.52499999999996,
+  "caller_audio_seconds": 7.499999999999999,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l2-r2",
+  "phone": "+34699020002",
+  "call_sid": "CA385f7c6537004fcb9f062fa09921de05",
+  "lane": 2,
+  "admitted": true,
+  "started": 391348.448852166,
+  "ended": 391383.709148,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 11 am.",
+    "ended_at": 391356.402429791,
+    "answered_at": 391358.364784541
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391362.217035041,
+    "answered_at": 391362.6134225
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391364.013011916,
+    "answered_at": 391364.295643958
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391367.071316541,
+    "answered_at": 391367.360344666
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391371.591893833,
+    "answered_at": 391372.504738875
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391378.880786583,
+    "answered_at": 391380.85101075
+   }
+  ],
+  "bot_audio_seconds": 19.52499999999996,
+  "caller_audio_seconds": 8.640000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l3-r2",
+  "phone": "+34699030002",
+  "call_sid": "CAfcea15a0fc5942ccb0162469e9b03914",
+  "lane": 3,
+  "admitted": true,
+  "started": 391354.015870041,
+  "ended": 391394.091452208,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 11 am.",
+    "ended_at": 391362.033986791,
+    "answered_at": 391363.982746291
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391367.871764083,
+    "answered_at": 391368.2820675
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391371.321783333,
+    "answered_at": 391371.563491625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391376.13824825,
+    "answered_at": 391377.101067125
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391383.054978,
+    "answered_at": 391384.038534625
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391389.439585166,
+    "answered_at": 391391.244931083
+   }
+  ],
+  "bot_audio_seconds": 21.03749999999995,
+  "caller_audio_seconds": 8.640000000000002,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r3",
+  "phone": "+34699000003",
+  "call_sid": "CA278ce4ee0e9d425fa7b6cc78726d8073",
+  "lane": 0,
+  "admitted": true,
+  "started": 391368.550256541,
+  "ended": 391398.944103583,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 12 pm.",
+    "ended_at": 391376.498160166,
+    "answered_at": 391378.479468875
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391382.360516458,
+    "answered_at": 391382.77820375
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391388.058379666,
+    "answered_at": 391389.398685708
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391394.111432583,
+    "answered_at": 391396.0585905
+   }
+  ],
+  "bot_audio_seconds": 16.63749999999997,
+  "caller_audio_seconds": 6.659999999999999,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l1-r2",
+  "phone": "+34699010002",
+  "call_sid": "CAabb05924f06e470f8d506319bc404bbd",
+  "lane": 1,
+  "admitted": true,
+  "started": 391363.447267083,
+  "ended": 391407.657685416,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391370.00184775,
+    "answered_at": 391370.347522125
+   },
+   {
+    "said": "on Tuesday at 11 am.",
+    "ended_at": 391372.451450666,
+    "answered_at": 391374.491536583
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391378.391252041,
+    "answered_at": 391378.787998291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391384.033151041,
+    "answered_at": 391384.951721708
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391391.793107875,
+    "answered_at": 391392.121025708
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391396.8214265,
+    "answered_at": 391397.749612833
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391402.752779083,
+    "answered_at": 391404.783804333
+   }
+  ],
+  "bot_audio_seconds": 23.787499999999937,
+  "caller_audio_seconds": 9.640000000000002,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l4-r3",
+  "phone": "+34699040003",
+  "call_sid": "CAe3d46c048f9c48a086776d2d69859be9",
+  "lane": 4,
+  "admitted": true,
+  "started": 391381.42920425,
+  "ended": 391416.746719166,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391387.398688958,
+    "answered_at": 391387.774599958
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391389.419441416,
+    "answered_at": 391389.682507083
+   },
+   {
+    "said": "on Saturday at 12 pm.",
+    "ended_at": 391392.2791395,
+    "answered_at": 391394.263441458
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391398.13316775,
+    "answered_at": 391398.567681333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391404.523836041,
+    "answered_at": 391405.449960958
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391411.904509125,
+    "answered_at": 391413.898121041
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 7.46,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l2-r3",
+  "phone": "+34699020003",
+  "call_sid": "CAdd18b296cc9346cbb684a31ec245873e",
+  "lane": 2,
+  "admitted": true,
+  "started": 391383.71676075,
+  "ended": 391420.580121125,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 12 pm.",
+    "ended_at": 391391.65178425,
+    "answered_at": 391393.602755958
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391397.492029875,
+    "answered_at": 391397.89334175
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391399.720498,
+    "answered_at": 391399.969259958
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391402.773285833,
+    "answered_at": 391403.650154333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391408.340361791,
+    "answered_at": 391409.303949333
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391415.713192416,
+    "answered_at": 391417.693901208
+   }
+  ],
+  "bot_audio_seconds": 19.52499999999996,
+  "caller_audio_seconds": 8.600000000000001,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r4",
+  "phone": "+34699000004",
+  "call_sid": "CAf94a2eb1887741afbf0a5fda9c1e9af3",
+  "lane": 0,
+  "admitted": true,
+  "started": 391398.9551975,
+  "ended": 391429.926194166,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 1 pm.",
+    "ended_at": 391406.8195025,
+    "answered_at": 391408.7739165
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391412.652103875,
+    "answered_at": 391413.130294083
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391418.373406166,
+    "answered_at": 391419.32628675
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391426.32931275,
+    "answered_at": 391427.005875416
+   }
+  ],
+  "bot_audio_seconds": 17.462499999999967,
+  "caller_audio_seconds": 6.579999999999999,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l3-r3",
+  "phone": "+34699030003",
+  "call_sid": "CAf55cb36f62784ad98b6b70782cb46dee",
+  "lane": 3,
+  "admitted": true,
+  "started": 391394.100825458,
+  "ended": 391433.335997791,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 12 pm.",
+    "ended_at": 391402.080042166,
+    "answered_at": 391402.531982666
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391406.698937125,
+    "answered_at": 391407.106542458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391409.944303416,
+    "answered_at": 391410.251046166
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391415.407555416,
+    "answered_at": 391416.359073833
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391422.325282416,
+    "answered_at": 391423.255094125
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391428.458913875,
+    "answered_at": 391430.490550666
+   }
+  ],
+  "bot_audio_seconds": 21.03749999999995,
+  "caller_audio_seconds": 8.580000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r4",
+  "phone": "+34699040004",
+  "call_sid": "CA34100c489b554b7aa304e9bfea4109f2",
+  "lane": 4,
+  "admitted": true,
+  "started": 391416.75706825,
+  "ended": 391450.512354375,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391422.75020925,
+    "answered_at": 391423.08496775
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391424.123690208,
+    "answered_at": 391424.522081333
+   },
+   {
+    "said": "on Saturday at 1 pm.",
+    "ended_at": 391426.880945708,
+    "answered_at": 391428.90256125
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391432.783924125,
+    "answered_at": 391433.206260916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391438.951174583,
+    "answered_at": 391439.224719666
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391445.63149725,
+    "answered_at": 391447.63548875
+   }
+  ],
+  "bot_audio_seconds": 19.52499999999996,
+  "caller_audio_seconds": 7.36,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r3",
+  "phone": "+34699010003",
+  "call_sid": "CA47c5f0b2038a4a3c9bfbaa1f601a2428",
+  "lane": 1,
+  "admitted": true,
+  "started": 391407.668228083,
+  "ended": 391451.63195625,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391414.194286958,
+    "answered_at": 391414.575669583
+   },
+   {
+    "said": "on Tuesday at 12 pm.",
+    "ended_at": 391416.624249833,
+    "answered_at": 391418.633806916
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391422.530611291,
+    "answered_at": 391422.943704
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391428.203854833,
+    "answered_at": 391429.1209395
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391435.523842083,
+    "answered_at": 391435.784616666
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391440.741849833,
+    "answered_at": 391441.74447275
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391446.751841833,
+    "answered_at": 391448.776108375
+   }
+  ],
+  "bot_audio_seconds": 23.787499999999937,
+  "caller_audio_seconds": 9.600000000000001,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l2-r4",
+  "phone": "+34699020004",
+  "call_sid": "CAd48f8bc6b95547d0a2e04e7cdea251cc",
+  "lane": 2,
+  "admitted": true,
+  "started": 391420.587574666,
+  "ended": 391455.332500416,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 1 pm.",
+    "ended_at": 391428.040420791,
+    "answered_at": 391430.016931458
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391433.8808865,
+    "answered_at": 391434.337702833
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391435.720745416,
+    "answered_at": 391436.000010833
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391438.951157291,
+    "answered_at": 391439.192646166
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391443.782006958,
+    "answered_at": 391444.081401583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391450.491977958,
+    "answered_at": 391452.471528208
+   }
+  ],
+  "bot_audio_seconds": 19.52499999999996,
+  "caller_audio_seconds": 8.520000000000001,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r5",
+  "phone": "+34699000005",
+  "call_sid": "CA613078e5aa154a4f906b23ffa32179b6",
+  "lane": 0,
+  "admitted": true,
+  "started": 391429.936706958,
+  "ended": 391461.428106375,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 2 pm.",
+    "ended_at": 391437.771105875,
+    "answered_at": 391439.959089
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391443.822970416,
+    "answered_at": 391444.275973333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391449.531948208,
+    "answered_at": 391450.422987833
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391456.292861041,
+    "answered_at": 391458.258969541
+   }
+  ],
+  "bot_audio_seconds": 17.462499999999967,
+  "caller_audio_seconds": 6.54,
+  "marks_sent": 6,
+  "marks_returned": 6,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l3-r4",
+  "phone": "+34699030004",
+  "call_sid": "CA24bec914b7b24dc38527615f9f0226b1",
+  "lane": 3,
+  "admitted": true,
+  "started": 391433.349175041,
+  "ended": 391472.510558541,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 1 pm.",
+    "ended_at": 391441.181726708,
+    "answered_at": 391443.180287708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391447.061441833,
+    "answered_at": 391447.484443625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391450.331017791,
+    "answered_at": 391450.605004
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391455.049330291,
+    "answered_at": 391456.025422458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391461.791757583,
+    "answered_at": 391462.739716958
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391467.678845291,
+    "answered_at": 391469.651576833
+   }
+  ],
+  "bot_audio_seconds": 20.899999999999952,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r5",
+  "phone": "+34699040005",
+  "call_sid": "CAf7b690d408254a198a6bd725d68c9d3e",
+  "lane": 4,
+  "admitted": true,
+  "started": 391450.519320333,
+  "ended": 391485.028716625,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391456.485657041,
+    "answered_at": 391456.856636541
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391457.848179083,
+    "answered_at": 391458.28312675
+   },
+   {
+    "said": "on Saturday at 2 pm.",
+    "ended_at": 391460.540386666,
+    "answered_at": 391462.585751708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391467.029569916,
+    "answered_at": 391467.284726416
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391472.982151125,
+    "answered_at": 391473.307132833
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391480.207708125,
+    "answered_at": 391482.180836458
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 7.339999999999999,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r6",
+  "phone": "+34699000006",
+  "call_sid": "CA6563103da7924b68a81c81c028d3c455",
+  "lane": 0,
+  "admitted": true,
+  "started": 391461.434793041,
+  "ended": 391491.605166333,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 3 pm.",
+    "ended_at": 391469.312950708,
+    "answered_at": 391471.257345625
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391475.148188875,
+    "answered_at": 391475.573185875
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391481.394744666,
+    "answered_at": 391481.744695208
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391486.767734,
+    "answered_at": 391488.737617458
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.579999999999999,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l2-r5",
+  "phone": "+34699020005",
+  "call_sid": "CAcf1d48e834af49d49a6add9345383f0a",
+  "lane": 2,
+  "admitted": true,
+  "started": 391455.345180291,
+  "ended": 391492.151523541,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 2 pm.",
+    "ended_at": 391463.697275375,
+    "answered_at": 391465.693445291
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391469.55717975,
+    "answered_at": 391469.974659458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391471.3588415,
+    "answered_at": 391471.669585208
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391474.458448083,
+    "answered_at": 391475.373121458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391479.966636166,
+    "answered_at": 391480.91430675
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391487.32131725,
+    "answered_at": 391489.291757458
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r4",
+  "phone": "+34699010004",
+  "call_sid": "CA35980316f7a742a7a6b4f277ebdca6ee",
+  "lane": 1,
+  "admitted": true,
+  "started": 391451.644597583,
+  "ended": 391495.187500583,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391458.172309583,
+    "answered_at": 391458.633117083
+   },
+   {
+    "said": "on Tuesday at 1 pm.",
+    "ended_at": 391460.520307958,
+    "answered_at": 391462.474649125
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391466.362903333,
+    "answered_at": 391467.28754
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391473.145143166,
+    "answered_at": 391474.119379416
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391479.069909125,
+    "answered_at": 391479.5249765
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391484.22231225,
+    "answered_at": 391485.274339458
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391490.286967708,
+    "answered_at": 391492.334782083
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.520000000000001,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r5",
+  "phone": "+34699030005",
+  "call_sid": "CAb8ecbf25f3054a9e8566be7a52c90dd4",
+  "lane": 3,
+  "admitted": true,
+  "started": 391472.523231625,
+  "ended": 391510.800912833,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 2 pm.",
+    "ended_at": 391480.350018791,
+    "answered_at": 391482.372745333
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391486.26233475,
+    "answered_at": 391486.69670025
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391489.467938041,
+    "answered_at": 391489.765546583
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391494.1880335,
+    "answered_at": 391494.517998083
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391500.478227041,
+    "answered_at": 391500.836097291
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391505.864314625,
+    "answered_at": 391507.891222
+   }
+  ],
+  "bot_audio_seconds": 20.899999999999952,
+  "caller_audio_seconds": 8.480000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r6",
+  "phone": "+34699040006",
+  "call_sid": "CA278a0f185a744556abe5cd4db1a6ba9b",
+  "lane": 4,
+  "admitted": true,
+  "started": 391485.034130333,
+  "ended": 391519.441266083,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391491.008126333,
+    "answered_at": 391491.440026833
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391492.379150833,
+    "answered_at": 391492.796377958
+   },
+   {
+    "said": "on Saturday at 3 pm.",
+    "ended_at": 391495.1444915,
+    "answered_at": 391497.714081583
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391501.026279541,
+    "answered_at": 391501.475372541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391507.211887458,
+    "answered_at": 391508.1223285
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391514.546120125,
+    "answered_at": 391516.583045875
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 7.36,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r7",
+  "phone": "+34699000007",
+  "call_sid": "CA8d46d701aa3340c4840686a1bc804411",
+  "lane": 0,
+  "admitted": true,
+  "started": 391491.613779583,
+  "ended": 391521.930254083,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 9 am.",
+    "ended_at": 391499.460373916,
+    "answered_at": 391501.441458041
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391505.352918,
+    "answered_at": 391505.758991208
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391511.609581625,
+    "answered_at": 391512.653340666
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391517.065696791,
+    "answered_at": 391519.030092708
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.56,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l2-r6",
+  "phone": "+34699020006",
+  "call_sid": "CAab87dfec4cdf444995970a36c199994d",
+  "lane": 2,
+  "admitted": true,
+  "started": 391492.163352875,
+  "ended": 391527.822406375,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 3 pm.",
+    "ended_at": 391500.010599833,
+    "answered_at": 391501.982903208
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391505.8440835,
+    "answered_at": 391506.20620275
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391507.586238458,
+    "answered_at": 391507.924737916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391510.719285416,
+    "answered_at": 391511.069453458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391515.625879916,
+    "answered_at": 391516.546195583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391522.986080583,
+    "answered_at": 391524.999752583
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 8.520000000000001,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r5",
+  "phone": "+34699010005",
+  "call_sid": "CA6f8acb8120d247cea696b0484ef122bc",
+  "lane": 1,
+  "admitted": true,
+  "started": 391495.199629791,
+  "ended": 391536.774800166,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391501.735597,
+    "answered_at": 391502.02616
+   },
+   {
+    "said": "on Tuesday at 2 pm.",
+    "ended_at": 391504.031677166,
+    "answered_at": 391504.409124416
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391508.28312175,
+    "answered_at": 391508.687642625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391514.566214875,
+    "answered_at": 391515.571131875
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391520.877284416,
+    "answered_at": 391521.226092666
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391525.955282541,
+    "answered_at": 391526.939393875
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391531.943936208,
+    "answered_at": 391533.920466625
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.480000000000002,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r6",
+  "phone": "+34699030006",
+  "call_sid": "CA2dccf0b7e77d4a61ba8c4ec2fa35602a",
+  "lane": 3,
+  "admitted": true,
+  "started": 391510.809005625,
+  "ended": 391550.821371875,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 3 pm.",
+    "ended_at": 391518.650614375,
+    "answered_at": 391520.636839875
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391524.522755041,
+    "answered_at": 391524.9578845
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391527.741815083,
+    "answered_at": 391528.6416385
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391533.134408958,
+    "answered_at": 391534.042410458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391539.974426583,
+    "answered_at": 391540.885776333
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391545.97428125,
+    "answered_at": 391547.947614416
+   }
+  ],
+  "bot_audio_seconds": 20.899999999999952,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r7",
+  "phone": "+34699040007",
+  "call_sid": "CAd42f55448f584e03960e307d3c5aedc8",
+  "lane": 4,
+  "admitted": true,
+  "started": 391519.453998166,
+  "ended": 391552.061287166,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391525.466170958,
+    "answered_at": 391527.316006333
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391526.846150708,
+    "answered_at": 391527.316006333
+   },
+   {
+    "said": "on Saturday at 9 am.",
+    "ended_at": 391529.597251875,
+    "answered_at": 391531.624867333
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391535.514235333,
+    "answered_at": 391535.919828166
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391541.738948583,
+    "answered_at": 391542.129642166
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391547.153434916,
+    "answered_at": 391549.180968958
+   }
+  ],
+  "bot_audio_seconds": 17.737499999999965,
+  "caller_audio_seconds": 7.36,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 5
+ },
+ {
+  "fixture": "c5-l0-r8",
+  "phone": "+34699000008",
+  "call_sid": "CAcc7fd5e7387447eeaadd05175bee5b49",
+  "lane": 0,
+  "admitted": true,
+  "started": 391521.937946416,
+  "ended": 391552.751525333,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 10 am.",
+    "ended_at": 391529.760098416,
+    "answered_at": 391531.753233083
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391535.635389333,
+    "answered_at": 391536.024787708
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391541.840320916,
+    "answered_at": 391542.838599041
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391547.877803208,
+    "answered_at": 391549.849819875
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.5200000000000005,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l2-r7",
+  "phone": "+34699020007",
+  "call_sid": "CA76876014f8b640508e328b964fa8b22c",
+  "lane": 2,
+  "admitted": true,
+  "started": 391527.83195475,
+  "ended": 391563.568249541,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 9 am.",
+    "ended_at": 391535.716724916,
+    "answered_at": 391537.737396166
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391541.65692725,
+    "answered_at": 391542.0392555
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391543.420412375,
+    "answered_at": 391543.709393291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391546.479453375,
+    "answered_at": 391547.424345708
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391552.000543666,
+    "answered_at": 391552.245970583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391558.647654125,
+    "answered_at": 391560.651083916
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r6",
+  "phone": "+34699010006",
+  "call_sid": "CA75fbfe99c35a418d807a4baade9d1f61",
+  "lane": 1,
+  "admitted": true,
+  "started": 391536.783695833,
+  "ended": 391579.499098291,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391543.319067291,
+    "answered_at": 391543.673961208
+   },
+   {
+    "said": "on Tuesday at 3 pm.",
+    "ended_at": 391545.670785875,
+    "answered_at": 391547.665518166
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391551.534074916,
+    "answered_at": 391551.970735041
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391557.799876666,
+    "answered_at": 391558.194437666
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391563.486894791,
+    "answered_at": 391563.903771083
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391568.586635083,
+    "answered_at": 391569.58924625
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391574.653283083,
+    "answered_at": 391576.648549583
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.520000000000001,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l0-r9",
+  "phone": "+34699000009",
+  "call_sid": "CA7b99bb41dbf142df81846f291c0328e2",
+  "lane": 0,
+  "admitted": true,
+  "started": 391552.762988291,
+  "ended": 391583.739818666,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 11 am.",
+    "ended_at": 391560.761305708,
+    "answered_at": 391562.753151125
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391566.629058166,
+    "answered_at": 391567.049258041
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391572.869149875,
+    "answered_at": 391573.858777916
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391578.847736375,
+    "answered_at": 391580.8507355
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.7,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l4-r8",
+  "phone": "+34699040008",
+  "call_sid": "CA688890eb6ec147cabde52e9d013c8ea7",
+  "lane": 4,
+  "admitted": true,
+  "started": 391552.066661666,
+  "ended": 391584.582461833,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391558.033472375,
+    "answered_at": 391558.397604958
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391559.38862325,
+    "answered_at": 391559.830639666
+   },
+   {
+    "said": "on Saturday at 10 am.",
+    "ended_at": 391562.137913208,
+    "answered_at": 391564.151428875
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391568.038420875,
+    "answered_at": 391568.44989825
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391574.30936775,
+    "answered_at": 391574.680035916
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391579.707163333,
+    "answered_at": 391581.708515083
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 7.319999999999999,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l3-r7",
+  "phone": "+34699030007",
+  "call_sid": "CAa6902725b5da48cf94dc9b3d4d63fa73",
+  "lane": 3,
+  "admitted": true,
+  "started": 391550.828516916,
+  "ended": 391589.43861925,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 9 am.",
+    "ended_at": 391558.708344583,
+    "answered_at": 391560.64022625
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391564.541908416,
+    "answered_at": 391564.9314915
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391567.728028583,
+    "answered_at": 391567.975302583
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391572.443297708,
+    "answered_at": 391572.69436675
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391578.643869833,
+    "answered_at": 391579.575530416
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391584.645050208,
+    "answered_at": 391586.590592375
+   }
+  ],
+  "bot_audio_seconds": 20.899999999999952,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l2-r8",
+  "phone": "+34699020008",
+  "call_sid": "CA83aa21ca1d35461f9a795e0166b82fe5",
+  "lane": 2,
+  "admitted": true,
+  "started": 391563.575396916,
+  "ended": 391599.813889,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 10 am.",
+    "ended_at": 391571.408301333,
+    "answered_at": 391573.385658875
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391577.273619875,
+    "answered_at": 391577.68259325
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391579.070051083,
+    "answered_at": 391579.36888775
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391582.174431916,
+    "answered_at": 391583.087272541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391587.690040791,
+    "answered_at": 391588.591317958
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391594.992700916,
+    "answered_at": 391596.957485625
+   }
+  ],
+  "bot_audio_seconds": 19.38749999999996,
+  "caller_audio_seconds": 8.480000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r10",
+  "phone": "+34699000010",
+  "call_sid": "CA5a88c54f62ea4f17ab89bed624dec49b",
+  "lane": 0,
+  "admitted": true,
+  "started": 391583.777652375,
+  "ended": 391614.656766875,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 12 pm.",
+    "ended_at": 391591.731583208,
+    "answered_at": 391593.686700791
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391597.577090708,
+    "answered_at": 391597.982390166
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391603.814980125,
+    "answered_at": 391604.766444083
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391609.817759458,
+    "answered_at": 391611.757543916
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.659999999999999,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l4-r9",
+  "phone": "+34699040009",
+  "call_sid": "CA3c13105ba44b473c8cf5efaaa6afd361",
+  "lane": 4,
+  "admitted": true,
+  "started": 391584.593863,
+  "ended": 391617.217432208,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391590.557271416,
+    "answered_at": 391590.942943291
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391591.918666791,
+    "answered_at": 391592.348347
+   },
+   {
+    "said": "on Saturday at 11 am.",
+    "ended_at": 391594.826684291,
+    "answered_at": 391596.867512625
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391600.737686416,
+    "answered_at": 391601.152818625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391607.050920875,
+    "answered_at": 391607.390315666
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391612.400014666,
+    "answered_at": 391614.374812
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 7.499999999999999,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r7",
+  "phone": "+34699010007",
+  "call_sid": "CA1cfab813e10c4fb7a3b546391d4b9405",
+  "lane": 1,
+  "admitted": true,
+  "started": 391579.507213291,
+  "ended": 391622.386495583,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391586.059188416,
+    "answered_at": 391586.415385583
+   },
+   {
+    "said": "on Tuesday at 9 am.",
+    "ended_at": 391588.3796995,
+    "answered_at": 391590.351429375
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391594.23725725,
+    "answered_at": 391594.657511916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391600.471829833,
+    "answered_at": 391600.881925875
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391606.238068791,
+    "answered_at": 391606.66881875
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391611.410489666,
+    "answered_at": 391612.463776375
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391617.5517265,
+    "answered_at": 391619.5399155
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.500000000000002,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r8",
+  "phone": "+34699030008",
+  "call_sid": "CA9db04a83a3384f6cbfa7c1ae3045bea5",
+  "lane": 3,
+  "admitted": true,
+  "started": 391589.448166125,
+  "ended": 391628.34403275,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 10 am.",
+    "ended_at": 391597.291094916,
+    "answered_at": 391599.357442833
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391603.244468291,
+    "answered_at": 391603.680170875
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391606.460496833,
+    "answered_at": 391606.759870333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391611.200682375,
+    "answered_at": 391611.517420333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391617.531513708,
+    "answered_at": 391618.478125541
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391623.51389225,
+    "answered_at": 391625.492070833
+   }
+  ],
+  "bot_audio_seconds": 20.899999999999952,
+  "caller_audio_seconds": 8.440000000000001,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l2-r9",
+  "phone": "+34699020009",
+  "call_sid": "CA7e902fa050394e4783c1b05e957bd9af",
+  "lane": 2,
+  "admitted": true,
+  "started": 391599.824545583,
+  "ended": 391635.768463666,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 11 am.",
+    "ended_at": 391607.838786416,
+    "answered_at": 391609.831092708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391613.737429416,
+    "answered_at": 391614.104368958
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391615.477529583,
+    "answered_at": 391616.386727541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391619.152978416,
+    "answered_at": 391620.176901791
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391624.875783041,
+    "answered_at": 391625.859097375
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391630.883403958,
+    "answered_at": 391632.857408541
+   }
+  ],
+  "bot_audio_seconds": 18.424999999999965,
+  "caller_audio_seconds": 8.640000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r11",
+  "phone": "+34699000011",
+  "call_sid": "CAdb98e3d187f94760b415aa6a56f3e929",
+  "lane": 0,
+  "admitted": true,
+  "started": 391614.668075375,
+  "ended": 391645.543224958,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 1 pm.",
+    "ended_at": 391622.550226291,
+    "answered_at": 391624.578861125
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391628.4674885,
+    "answered_at": 391628.872053916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391634.698636208,
+    "answered_at": 391635.676258625
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391640.702348666,
+    "answered_at": 391642.650760875
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.579999999999999,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l4-r10",
+  "phone": "+34699040010",
+  "call_sid": "CA47cd5583ad4e4cb398e10f2f73746383",
+  "lane": 4,
+  "admitted": true,
+  "started": 391617.230821708,
+  "ended": 391650.439916791,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391623.210476375,
+    "answered_at": 391623.580331125
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391624.591483041,
+    "answered_at": 391624.998466625
+   },
+   {
+    "said": "on Saturday at 12 pm.",
+    "ended_at": 391627.447562083,
+    "answered_at": 391629.390652041
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391633.25844275,
+    "answered_at": 391633.687212
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391639.493889333,
+    "answered_at": 391640.546628416
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391645.563388166,
+    "answered_at": 391647.593304166
+   }
+  ],
+  "bot_audio_seconds": 18.287499999999966,
+  "caller_audio_seconds": 7.46,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r8",
+  "phone": "+34699010008",
+  "call_sid": "CAa2a0b58070d34749a4d9f949a3d40e02",
+  "lane": 1,
+  "admitted": true,
+  "started": 391622.399471,
+  "ended": 391664.7188135,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391629.015669333,
+    "answered_at": 391629.4062715
+   },
+   {
+    "said": "on Tuesday at 10 am.",
+    "ended_at": 391631.308677,
+    "answered_at": 391633.251106458
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391637.172722208,
+    "answered_at": 391637.648649083
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391643.476622416,
+    "answered_at": 391643.875785125
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391649.209413958,
+    "answered_at": 391649.64112825
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391654.342739125,
+    "answered_at": 391654.767214791
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391659.822193041,
+    "answered_at": 391661.869174458
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.46,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r9",
+  "phone": "+34699030009",
+  "call_sid": "CAe03a5ced99c2454dbd39f296e28b5f1a",
+  "lane": 3,
+  "admitted": true,
+  "started": 391628.355111583,
+  "ended": 391669.527991583,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 11 am.",
+    "ended_at": 391636.318386791,
+    "answered_at": 391638.340891333
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391642.233904291,
+    "answered_at": 391642.650771791
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391648.483024208,
+    "answered_at": 391649.459160458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391654.160452375,
+    "answered_at": 391654.563222166
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391659.33520875,
+    "answered_at": 391659.690660458
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391664.698429041,
+    "answered_at": 391666.6752785
+   }
+  ],
+  "bot_audio_seconds": 22.96249999999994,
+  "caller_audio_seconds": 8.640000000000002,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l2-r10",
+  "phone": "+34699020010",
+  "call_sid": "CA0bbd5856623544d2985453f8cb941563",
+  "lane": 2,
+  "admitted": true,
+  "started": 391635.7792565,
+  "ended": 391670.425658791,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 12 pm.",
+    "ended_at": 391643.720143125,
+    "answered_at": 391645.686371791
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391649.578454833,
+    "answered_at": 391649.987116958
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391651.374755041,
+    "answered_at": 391651.679722333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391654.485642208,
+    "answered_at": 391655.451360916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391660.151962916,
+    "answered_at": 391660.56883
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391665.555461125,
+    "answered_at": 391667.582609291
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 8.600000000000001,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r12",
+  "phone": "+34699000012",
+  "call_sid": "CA9580901003e04148aa50ac355554683c",
+  "lane": 0,
+  "admitted": true,
+  "started": 391645.552505375,
+  "ended": 391676.4373135,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 2 pm.",
+    "ended_at": 391653.399053958,
+    "answered_at": 391655.354414666
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391659.254665833,
+    "answered_at": 391659.694534291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391665.494965708,
+    "answered_at": 391666.557412333
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391671.594601208,
+    "answered_at": 391673.538793958
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.54,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l4-r11",
+  "phone": "+34699040011",
+  "call_sid": "CAce16ffad2573459f838d9c3fdb0a7c60",
+  "lane": 4,
+  "admitted": true,
+  "started": 391650.450636916,
+  "ended": 391683.081241083,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391656.459030541,
+    "answered_at": 391658.213488958
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391657.822288416,
+    "answered_at": 391658.213488958
+   },
+   {
+    "said": "on Saturday at 1 pm.",
+    "ended_at": 391660.578104208,
+    "answered_at": 391662.622675958
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391666.494871125,
+    "answered_at": 391666.915399541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391672.735235083,
+    "answered_at": 391673.144036541
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391678.221942791,
+    "answered_at": 391680.233394583
+   }
+  ],
+  "bot_audio_seconds": 17.737499999999965,
+  "caller_audio_seconds": 7.36,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 5
+ },
+ {
+  "fixture": "c5-l2-r11",
+  "phone": "+34699020011",
+  "call_sid": "CA4ece219f6e7e4b85a1f92f0182893097",
+  "lane": 2,
+  "admitted": true,
+  "started": 391670.437186083,
+  "ended": 391705.735210708,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 1 pm.",
+    "ended_at": 391678.283836,
+    "answered_at": 391680.240535125
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391684.115074708,
+    "answered_at": 391684.533921458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391685.91893,
+    "answered_at": 391686.232615708
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391689.000013625,
+    "answered_at": 391690.037814333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391694.774576,
+    "answered_at": 391695.829236083
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391700.897646541,
+    "answered_at": 391702.882252791
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 8.520000000000001,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r9",
+  "phone": "+34699010009",
+  "call_sid": "CA40bbe4881d0445438fe850da2c7ad6b0",
+  "lane": 1,
+  "admitted": true,
+  "started": 391664.730569791,
+  "ended": 391707.093482083,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391671.355148791,
+    "answered_at": 391671.737822583
+   },
+   {
+    "said": "on Tuesday at 11 am.",
+    "ended_at": 391673.831644791,
+    "answered_at": 391675.854420333
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391679.769576666,
+    "answered_at": 391680.154684416
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391685.987893916,
+    "answered_at": 391686.359726833
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391691.648623208,
+    "answered_at": 391692.093188916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391696.797243541,
+    "answered_at": 391697.197896875
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391702.226295291,
+    "answered_at": 391704.201804458
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.640000000000002,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l0-r13",
+  "phone": "+34699000013",
+  "call_sid": "CA0b68bd57f0814948a503d1034b361f28",
+  "lane": 0,
+  "admitted": true,
+  "started": 391676.450065583,
+  "ended": 391707.499979375,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 3 pm.",
+    "ended_at": 391684.317538333,
+    "answered_at": 391686.367310041
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391690.234687333,
+    "answered_at": 391690.676264125
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391696.494792875,
+    "answered_at": 391697.556663291
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391702.594676375,
+    "answered_at": 391704.634574666
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.579999999999999,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l3-r10",
+  "phone": "+34699030010",
+  "call_sid": "CA1906e56d491540609969660604f07a62",
+  "lane": 3,
+  "admitted": true,
+  "started": 391669.537143041,
+  "ended": 391710.745912458,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 12 pm.",
+    "ended_at": 391677.4539685,
+    "answered_at": 391679.450939833
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391683.334335041,
+    "answered_at": 391683.742521291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391689.597773291,
+    "answered_at": 391690.641195083
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391695.35430575,
+    "answered_at": 391695.757419125
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391700.514448708,
+    "answered_at": 391700.85755225
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391705.876457958,
+    "answered_at": 391707.852311416
+   }
+  ],
+  "bot_audio_seconds": 22.96249999999994,
+  "caller_audio_seconds": 8.580000000000002,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r12",
+  "phone": "+34699040012",
+  "call_sid": "CAa986c7361fac45728d993632f09eee3a",
+  "lane": 4,
+  "admitted": true,
+  "started": 391683.093417208,
+  "ended": 391716.316977958,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391689.120854875,
+    "answered_at": 391689.518815416
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391690.47745125,
+    "answered_at": 391690.934546958
+   },
+   {
+    "said": "on Saturday at 2 pm.",
+    "ended_at": 391693.219275333,
+    "answered_at": 391695.267532166
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391699.174496208,
+    "answered_at": 391699.537218833
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391705.375303166,
+    "answered_at": 391706.359746708
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391711.416760708,
+    "answered_at": 391713.460121875
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 7.339999999999999,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r14",
+  "phone": "+34699000014",
+  "call_sid": "CA8413d9038f6447f68efd44e8dacb2718",
+  "lane": 0,
+  "admitted": true,
+  "started": 391707.510932875,
+  "ended": 391738.41004725,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 9 am.",
+    "ended_at": 391715.367899125,
+    "answered_at": 391717.363712958
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391721.251601083,
+    "answered_at": 391721.61541775
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391727.434771375,
+    "answered_at": 391728.457626
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391733.475832708,
+    "answered_at": 391735.49537575
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.56,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l2-r12",
+  "phone": "+34699020012",
+  "call_sid": "CAbce26b6754464be587aeb6995d7f24ce",
+  "lane": 2,
+  "admitted": true,
+  "started": 391705.747104541,
+  "ended": 391741.721881416,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 2 pm.",
+    "ended_at": 391713.637427166,
+    "answered_at": 391715.656002583
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391719.625180875,
+    "answered_at": 391720.033546458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391721.419558583,
+    "answered_at": 391722.297463958
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391725.069923333,
+    "answered_at": 391726.094032416
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391730.853739125,
+    "answered_at": 391731.856140166
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391736.879920208,
+    "answered_at": 391738.879699875
+   }
+  ],
+  "bot_audio_seconds": 18.424999999999965,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r13",
+  "phone": "+34699040013",
+  "call_sid": "CA14ad1a6471d54fd3b4056275228fa3d3",
+  "lane": 4,
+  "admitted": true,
+  "started": 391716.323855333,
+  "ended": 391748.96161075,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391722.349610916,
+    "answered_at": 391722.750039333
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391723.714210458,
+    "answered_at": 391724.172363458
+   },
+   {
+    "said": "on Saturday at 3 pm.",
+    "ended_at": 391726.485978833,
+    "answered_at": 391728.481455416
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391732.352151166,
+    "answered_at": 391732.787404041
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391738.616473666,
+    "answered_at": 391739.006900083
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391744.057649125,
+    "answered_at": 391746.040907958
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 7.36,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r10",
+  "phone": "+34699010010",
+  "call_sid": "CA782a9b7978be4af0880cee0d005095a5",
+  "lane": 1,
+  "admitted": true,
+  "started": 391707.1038525,
+  "ended": 391749.944747833,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391713.657853458,
+    "answered_at": 391714.011103041
+   },
+   {
+    "said": "on Tuesday at 12 pm.",
+    "ended_at": 391716.073988416,
+    "answered_at": 391718.05408275
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391721.931326708,
+    "answered_at": 391722.335466541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391728.15036125,
+    "answered_at": 391728.533836666
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391733.825835833,
+    "answered_at": 391734.274027291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391738.967582166,
+    "answered_at": 391739.950030375
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391745.010761666,
+    "answered_at": 391747.03093
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.600000000000001,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r11",
+  "phone": "+34699030011",
+  "call_sid": "CAb48a018bda6247b78a3f23f78be17ec5",
+  "lane": 3,
+  "admitted": true,
+  "started": 391710.753791958,
+  "ended": 391752.39381975,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 1 pm.",
+    "ended_at": 391718.575711791,
+    "answered_at": 391720.563895416
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391724.435800708,
+    "answered_at": 391724.855983625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391730.710505458,
+    "answered_at": 391731.752103583
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391736.437849125,
+    "answered_at": 391737.431362
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391742.235321916,
+    "answered_at": 391742.557969708
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391747.591237041,
+    "answered_at": 391749.542504166
+   }
+  ],
+  "bot_audio_seconds": 22.96249999999994,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r15",
+  "phone": "+34699000015",
+  "call_sid": "CA4c838ee8d8cf4775b2648d019f346382",
+  "lane": 0,
+  "admitted": true,
+  "started": 391738.423487791,
+  "ended": 391769.431321291,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 10 am.",
+    "ended_at": 391746.293356625,
+    "answered_at": 391748.436155958
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391752.312668416,
+    "answered_at": 391752.697119916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391758.512051916,
+    "answered_at": 391759.5190395
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391764.527225041,
+    "answered_at": 391766.540932958
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.5200000000000005,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l2-r13",
+  "phone": "+34699020013",
+  "call_sid": "CAd5ff8b78eaca4bf1b70467f2db30305e",
+  "lane": 2,
+  "admitted": true,
+  "started": 391741.728612166,
+  "ended": 391776.454449833,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 3 pm.",
+    "ended_at": 391749.59804375,
+    "answered_at": 391751.632887708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391755.511356166,
+    "answered_at": 391755.937357791
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391757.314306791,
+    "answered_at": 391757.624164291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391760.406839375,
+    "answered_at": 391761.402904041
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391766.092675125,
+    "answered_at": 391766.529877791
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391771.642617708,
+    "answered_at": 391773.6094355
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 8.520000000000001,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r14",
+  "phone": "+34699040014",
+  "call_sid": "CA12aeca195aab4d9f90342cd417d8f864",
+  "lane": 4,
+  "admitted": true,
+  "started": 391748.968651416,
+  "ended": 391781.992364333,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391754.942841083,
+    "answered_at": 391755.313720083
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391756.327132833,
+    "answered_at": 391756.7294455
+   },
+   {
+    "said": "on Saturday at 9 am.",
+    "ended_at": 391759.089068958,
+    "answered_at": 391761.063146166
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391764.936968,
+    "answered_at": 391765.346144375
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391771.171709,
+    "answered_at": 391772.13552475
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391777.170350416,
+    "answered_at": 391779.123441458
+   }
+  ],
+  "bot_audio_seconds": 18.287499999999966,
+  "caller_audio_seconds": 7.36,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l1-r11",
+  "phone": "+34699010011",
+  "call_sid": "CA978940473093430bb171e2bd5bfb0cce",
+  "lane": 1,
+  "admitted": true,
+  "started": 391749.950498125,
+  "ended": 391792.685611291,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391756.490558541,
+    "answered_at": 391756.843072958
+   },
+   {
+    "said": "on Tuesday at 1 pm.",
+    "ended_at": 391758.821955375,
+    "answered_at": 391760.794638291
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391764.69073775,
+    "answered_at": 391765.08569625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391770.908652708,
+    "answered_at": 391771.310453291
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391776.603184375,
+    "answered_at": 391776.995024291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391781.772049208,
+    "answered_at": 391782.784588083
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391787.805523916,
+    "answered_at": 391789.861911708
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.520000000000001,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r12",
+  "phone": "+34699030012",
+  "call_sid": "CA3a0ae106d73443eb98fc9a92fcaf5824",
+  "lane": 3,
+  "admitted": true,
+  "started": 391752.403103416,
+  "ended": 391794.729250333,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 2 pm.",
+    "ended_at": 391760.207143791,
+    "answered_at": 391762.216098958
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391766.092610041,
+    "answered_at": 391766.540946
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391772.395312541,
+    "answered_at": 391773.410413458
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391778.10733175,
+    "answered_at": 391779.099825375
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391783.863287416,
+    "answered_at": 391784.860850916
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391789.873811208,
+    "answered_at": 391791.872081833
+   }
+  ],
+  "bot_audio_seconds": 22.96249999999994,
+  "caller_audio_seconds": 8.480000000000002,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r16",
+  "phone": "+34699000016",
+  "call_sid": "CA2e8a7b72f0ae45939ac616514c16f722",
+  "lane": 0,
+  "admitted": true,
+  "started": 391769.445554791,
+  "ended": 391800.422397375,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 11 am.",
+    "ended_at": 391777.432127875,
+    "answered_at": 391779.437543875
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391783.309327583,
+    "answered_at": 391783.73401875
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391789.549601583,
+    "answered_at": 391790.532729041
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391795.561464291,
+    "answered_at": 391797.531424291
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.7,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l2-r14",
+  "phone": "+34699020014",
+  "call_sid": "CAbcf3a63978af40cd92ec7a90717e3b9c",
+  "lane": 2,
+  "admitted": true,
+  "started": 391776.466365125,
+  "ended": 391811.419064791,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 9 am.",
+    "ended_at": 391784.367718125,
+    "answered_at": 391786.369216708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391790.236497458,
+    "answered_at": 391792.233346958
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391793.609122583,
+    "answered_at": 391793.633005625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391795.418752291,
+    "answered_at": 391795.743675208
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391800.450099583,
+    "answered_at": 391801.494816583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391806.516489541,
+    "answered_at": 391808.530334541
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r15",
+  "phone": "+34699040015",
+  "call_sid": "CA95b06eab047240faa3e47acda43865b3",
+  "lane": 4,
+  "admitted": true,
+  "started": 391781.999574625,
+  "ended": 391815.000516333,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391787.987622041,
+    "answered_at": 391788.337964541
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391789.348053333,
+    "answered_at": 391789.76561375
+   },
+   {
+    "said": "on Saturday at 10 am.",
+    "ended_at": 391792.066308416,
+    "answered_at": 391794.092202708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391797.961760958,
+    "answered_at": 391798.385591583
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391804.21887,
+    "answered_at": 391805.189506208
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391810.217157541,
+    "answered_at": 391812.160128125
+   }
+  ],
+  "bot_audio_seconds": 18.287499999999966,
+  "caller_audio_seconds": 7.319999999999999,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r17",
+  "phone": "+34699000017",
+  "call_sid": "CA8397377fd1654aee9641595d16c0c190",
+  "lane": 0,
+  "admitted": true,
+  "started": 391800.432918041,
+  "ended": 391831.423090666,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 12 pm.",
+    "ended_at": 391808.381672166,
+    "answered_at": 391810.344801291
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391814.240761125,
+    "answered_at": 391814.635497958
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391820.492831833,
+    "answered_at": 391821.516552833
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391826.539209458,
+    "answered_at": 391828.515374875
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.659999999999999,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l1-r12",
+  "phone": "+34699010012",
+  "call_sid": "CAfbe2eb1494164b25ace1c48493fedf6d",
+  "lane": 1,
+  "admitted": true,
+  "started": 391792.696669916,
+  "ended": 391834.352761208,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391799.252128125,
+    "answered_at": 391799.598881541
+   },
+   {
+    "said": "on Tuesday at 2 pm.",
+    "ended_at": 391801.554929583,
+    "answered_at": 391801.963992333
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391805.83974575,
+    "answered_at": 391806.24737675
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391812.061430916,
+    "answered_at": 391813.041551833
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391818.3570335,
+    "answered_at": 391818.714337833
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391823.500461791,
+    "answered_at": 391824.4955005
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391829.538752625,
+    "answered_at": 391831.500335625
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.480000000000002,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r13",
+  "phone": "+34699030013",
+  "call_sid": "CAd349316a7970410383f846c5d325f3aa",
+  "lane": 3,
+  "admitted": true,
+  "started": 391794.739495833,
+  "ended": 391836.188857083,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 3 pm.",
+    "ended_at": 391802.586496625,
+    "answered_at": 391804.550240416
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391808.42187025,
+    "answered_at": 391808.831857541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391814.65164625,
+    "answered_at": 391815.643586
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391820.349998291,
+    "answered_at": 391821.309575708
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391826.019820666,
+    "answered_at": 391826.359534
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391831.362387166,
+    "answered_at": 391833.344892166
+   }
+  ],
+  "bot_audio_seconds": 22.96249999999994,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l2-r15",
+  "phone": "+34699020015",
+  "call_sid": "CA3e13513d586442989da12f5ec0d4b42e",
+  "lane": 2,
+  "admitted": true,
+  "started": 391811.4300255,
+  "ended": 391846.610622166,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 10 am.",
+    "ended_at": 391819.270451166,
+    "answered_at": 391821.227371583
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391825.104569375,
+    "answered_at": 391825.537009416
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391826.9224485,
+    "answered_at": 391827.231984583
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391830.02571775,
+    "answered_at": 391831.021117291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391835.760806541,
+    "answered_at": 391836.797830041
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391841.818694708,
+    "answered_at": 391843.765781041
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 8.480000000000002,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r16",
+  "phone": "+34699040016",
+  "call_sid": "CA8adfe3011aa04cff8ee785565a88a62e",
+  "lane": 4,
+  "admitted": true,
+  "started": 391815.006610041,
+  "ended": 391847.732147833,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391820.978671333,
+    "answered_at": 391821.392806291
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391822.362167625,
+    "answered_at": 391822.773188291
+   },
+   {
+    "said": "on Saturday at 11 am.",
+    "ended_at": 391825.249484125,
+    "answered_at": 391827.263832625
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391831.140705791,
+    "answered_at": 391831.557622333
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391837.407581875,
+    "answered_at": 391837.798870083
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391842.85840775,
+    "answered_at": 391844.890774291
+   }
+  ],
+  "bot_audio_seconds": 18.287499999999966,
+  "caller_audio_seconds": 7.499999999999999,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r18",
+  "phone": "+34699000018",
+  "call_sid": "CA7bd8e5181c2a407c86d19a7f7ff34db1",
+  "lane": 0,
+  "admitted": true,
+  "started": 391831.428877125,
+  "ended": 391862.363274541,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 1 pm.",
+    "ended_at": 391839.309691375,
+    "answered_at": 391841.327739541
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391845.250412833,
+    "answered_at": 391845.637816916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391851.455432,
+    "answered_at": 391852.413606583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391857.443164666,
+    "answered_at": 391859.417681416
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.579999999999999,
+  "marks_sent": 6,
+  "marks_returned": 6,
+  "clears": 4
+ },
+ {
+  "fixture": "c5-l1-r13",
+  "phone": "+34699010013",
+  "call_sid": "CAfcfb0f18182f45f38fbc9122523c493c",
+  "lane": 1,
+  "admitted": true,
+  "started": 391834.364178916,
+  "ended": 391875.683719416,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 391840.946336,
+    "answered_at": 391841.268089791
+   },
+   {
+    "said": "on Tuesday at 3 pm.",
+    "ended_at": 391843.287401,
+    "answered_at": 391843.733859708
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391847.610601375,
+    "answered_at": 391847.997769
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391853.866750833,
+    "answered_at": 391854.890915875
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 391860.19301575,
+    "answered_at": 391860.581144541
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391865.353936375,
+    "answered_at": 391865.691346583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391870.783939083,
+    "answered_at": 391872.831439708
+   }
+  ],
+  "bot_audio_seconds": 23.51249999999994,
+  "caller_audio_seconds": 9.520000000000001,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ },
+ {
+  "fixture": "c5-l3-r14",
+  "phone": "+34699030014",
+  "call_sid": "CA7468eb95197a46ff86308b1f8c95be6a",
+  "lane": 3,
+  "admitted": true,
+  "started": 391836.201221458,
+  "ended": 391878.512325708,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Friday at 9 am.",
+    "ended_at": 391844.058353166,
+    "answered_at": 391846.009818666
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391849.894658041,
+    "answered_at": 391850.304416625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391856.154774625,
+    "answered_at": 391857.212312916
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391861.908140416,
+    "answered_at": 391862.88184575
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391867.602980166,
+    "answered_at": 391868.608809375
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391873.612197416,
+    "answered_at": 391875.664974375
+   }
+  ],
+  "bot_audio_seconds": 22.96249999999994,
+  "caller_audio_seconds": 8.500000000000002,
+  "marks_sent": 8,
+  "marks_returned": 7,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l2-r16",
+  "phone": "+34699020016",
+  "call_sid": "CA415e2c0fb24b4418a90fd6575c507178",
+  "lane": 2,
+  "admitted": true,
+  "started": 391846.621045625,
+  "ended": 391880.114576,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Thursday at 11 am.",
+    "ended_at": 391854.611370875,
+    "answered_at": 391856.610979958
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391860.5235595,
+    "answered_at": 391860.902568416
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391862.281165541,
+    "answered_at": 391862.344611291
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391864.105645041,
+    "answered_at": 391864.495946625
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391869.203986375,
+    "answered_at": 391870.211315208
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391875.292014,
+    "answered_at": 391877.267656125
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 8.640000000000002,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l4-r17",
+  "phone": "+34699040017",
+  "call_sid": "CA737e4ee2bb0641009d74949ab2df2783",
+  "lane": 4,
+  "admitted": true,
+  "started": 391847.739687541,
+  "ended": 391880.384854541,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like",
+    "ended_at": 391853.703777208,
+    "answered_at": 391854.083307583
+   },
+   {
+    "said": "a haircut",
+    "ended_at": 391855.064053458,
+    "answered_at": 391855.493178791
+   },
+   {
+    "said": "on Saturday at 12 pm.",
+    "ended_at": 391857.928271458,
+    "answered_at": 391859.914722125
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391863.803132208,
+    "answered_at": 391864.203238416
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391870.035911458,
+    "answered_at": 391870.417752
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391875.503093791,
+    "answered_at": 391877.525928041
+   }
+  ],
+  "bot_audio_seconds": 18.149999999999967,
+  "caller_audio_seconds": 7.46,
+  "marks_sent": 7,
+  "marks_returned": 6,
+  "clears": 6
+ },
+ {
+  "fixture": "c5-l0-r19",
+  "phone": "+34699000019",
+  "call_sid": "CAb4bc0d6a15464ce7904ec4a351116fad",
+  "lane": 0,
+  "admitted": true,
+  "started": 391862.369119166,
+  "ended": 391893.198840708,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 2 pm.",
+    "ended_at": 391870.18313125,
+    "answered_at": 391872.1792995
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 391876.093579916,
+    "answered_at": 391876.457479875
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 391882.273534041,
+    "answered_at": 391883.328594583
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 391888.349823458,
+    "answered_at": 391890.357713375
+   }
+  ],
+  "bot_audio_seconds": 17.187499999999968,
+  "caller_audio_seconds": 6.54,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ }
+]

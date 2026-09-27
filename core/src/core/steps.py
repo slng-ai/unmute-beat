@@ -172,6 +172,8 @@ class FlowCall[S: BaseModel](CallContext):
     _choices: frozenset[str] = PrivateAttr(default=frozenset())
     """State fields picked from offered ids (`choices`): valid only while the request they were offered for stands."""
     _choice_after: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
+    _resource_choices: dict[str, dict[str, Callable[[Any, Any], Any]]] = PrivateAttr(default_factory=dict)
+    """Choice fields that name a resource, by its kind, with the choice function that offers them (`StepFlow`)."""
     """The fields a choice's offer rests on, when its manifest says (`after:`); the others rest on every field."""
     _recorded: frozenset[str] = PrivateAttr(default=frozenset())
     """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
@@ -705,6 +707,16 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         fresh, is the way on; reading the same pick back again would earn
         the same no (session 4d, defect 3).
 
+        A success takes back the picks it used, and then asks the
+        application's own choice function again for any choice that names a
+        resource of the kind this change touched (`StepFlow.resource_choices`):
+        the booking just made or moved is on offer again, quietly, so moving
+        or cancelling it next needs no second lookup by the model (session
+        4f, trace e67c9034: `collect(appointment="BK0002")` refused right
+        after BK0002 was booked). The domain decides what stands: a
+        cancelled booking is not offered back. Other choices, the
+        alternatives, need a fresh search.
+
         ponytail: every choice the operation binds is taken back. Per-choice
         refusal reasons belong here if a flow needs to keep the others.
         """
@@ -728,6 +740,8 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             call.update(**{field: data[source] for field, source in self.assign.items()})
             call._assigned_by.update(dict.fromkeys(self.assign, frozenset(self.binds.values())))
         call._offers.take(*self.binds.values())
+        if self.changes and (named := call._resource_choices.get(self.resource or self.subject)):
+            await _offer(call, named)
         if self.say:
             words = self.say.format_map(_Facts(data))
             given = args.model_dump(mode='json')
@@ -2036,6 +2050,20 @@ class StepFlow:
                 for assigned in getattr(operation, 'assign', {}):
                     sources = frozenset(getattr(operation, 'binds', {}).values())
                     self.derived[assigned] = self.derived.get(assigned, frozenset()) | sources
+        offered_by = {name: fn for step in self.steps for name, fn in getattr(step, 'choices', {}).items()}
+        self.resource_choices: dict[str, dict[str, Callable[[Any, Any], Any]]] = {}
+        """Choice fields that name a resource, by its kind: an operation binds the field to its `subject` argument.
+
+        Read from what the manifest already declares: move and cancel take
+        `booking_id` from `appointment`, and say their receipts are about a
+        `booking`, so `appointment` names a booking. After any successful
+        change of a booking, that choice is offered again by its own function.
+        """
+        for operation in self.operations():
+            named = getattr(operation, 'binds', {}).get(operation.subject, '')
+            if operation.subject and named in offered_by:
+                kind = operation.resource or operation.subject
+                self.resource_choices.setdefault(kind, {})[named] = offered_by[named]
         self.entry = entry or self.steps[0].id
         if self.entry not in self.by_id:
             raise ValueError(f'the entry step {self.entry} is not a step')
@@ -2082,6 +2110,7 @@ class StepFlow:
         call._choice_after = {
             name: after for step in self.steps for name, after in getattr(step, 'choice_after', {}).items()
         }
+        call._resource_choices = self.resource_choices
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale

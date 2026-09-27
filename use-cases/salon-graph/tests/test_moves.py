@@ -31,7 +31,10 @@ second, independent caller writes to the same SQLite file through its own
 * V11: live call s4e-worker-bystander: the time the caller already holds is
   theirs, not "taken";
 * V12 (session 4f): times offered for one day, then a new day in the same
-  turn: the old day's times are not said, only what can be picked now.
+  turn: the old day's times are not said, only what can be picked now;
+* V13 (session 4f, trace e67c9034): the booking this call just made is on
+  offer to move or cancel with no second lookup; another caller's booking is
+  still refused; with two held, code picks neither.
 """
 
 import asyncio
@@ -635,6 +638,83 @@ async def your_own_booking_is_not_taken():
     assert said == ['You already have a haircut tomorrow at 9:00 AM. Would you like a different time?'], said
 
 
+async def the_booking_just_made_can_be_moved_without_looking_it_up():
+    """V13 (session 4f, live call s4e-worker-affected, trace e67c9034, observation abbc0e2a).
+
+    Booked BK0002, then asked to move it: `collect(appointment="BK0002")` was
+    refused as not on offer, and `options` returned the same booking. Now a
+    successful change offers the resource it touched again, by the salon's
+    own `held_bookings`, so the same id goes from book to move to cancel with
+    no "not on offer" retry. It is still only an offer: another caller's
+    booking is refused, and with two bookings held nothing is picked for the
+    caller.
+    """
+    script, flow, call, diary = await at_booking()
+    await read_back_friday(flow, call, script)
+    await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    [held] = [b['booking_id'] for b in diary.bookings_for(PHONE, CLOCK.date())]
+    theirs = take(diary.path, OTHER, TUE, '11:00')
+    before = len(script.requests)
+    await turn(
+        flow,
+        call,
+        script,
+        'Can I move that one?',
+        ('collect', {'appointment': theirs}),
+        ('say', 'Which appointment?'),
+    )
+    assert call.state.facts.appointment == '', "another caller's booking was picked"
+    await turn(
+        flow,
+        call,
+        script,
+        'The one I just booked.',
+        ('collect', {'appointment': held}),
+        ('say', 'Which day would you like instead?'),
+    )
+    assert call.state.facts.appointment == held, (
+        'the booking just made was not on offer',
+        dict(call._offers),
+    )
+    assert len(script.requests) - before == 4, ('a known booking cost extra requests', script.steps[before:])
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Tuesday at two.',
+        (
+            'calls',
+            [('collect', {'values': {'booking_day': 'Tuesday', 'booking_time': '14:00'}}), ('options', {})],
+        ),
+        ('collect', {'slot': slot(TUE, '14:00')}),
+        ('call', 'move_appointment'),
+    )
+    assert said[-1] == 'Shall I move your haircut from Friday the 2nd at 2:00 PM to tomorrow at 2:00 PM?', (
+        said
+    )
+    await turn(flow, call, script, 'Yes.', ('call', 'move_appointment'))
+    assert held in call._offers['appointment'], 'the booking just moved was not on offer to cancel'
+    await turn(flow, call, script, 'Cancel it, actually.', ('call', 'cancel_appointment'))
+    said = await turn(flow, call, script, 'Yes.', ('call', 'cancel_appointment'))
+    assert said == ["That's cancelled for you. Anything else I can help with?"], said
+    assert snapshot(diary.path) == [(theirs, OTHER, TUE, '11:00', 1)], snapshot(diary.path)
+    assert [i.status for i in call.intents] == ['succeeded'] * 3, call.intents
+    moved = [e.resource for e in call.evidence if e.changes]
+    assert moved == [held] * 3, ('one booking should carry the whole call', moved)
+    assert held not in call._offers.get('appointment', {}), 'a cancelled booking was offered back'
+    assert not [r for r in refusals_in(script) if 'on offer' in r and held in r], refusals_in(script)
+
+    script, flow, call, diary = await at_booking()
+    seed(diary, FRIDAY, '09:00')
+    await read_back_friday(flow, call, script)
+    await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    assert len(call._offers['appointment']) == 2 and call.state.facts.appointment == '', (
+        'with two bookings held, one was picked for the caller',
+        dict(call._offers),
+        call.state.facts,
+    )
+
+
 async def an_offer_changed_in_the_same_turn_is_not_said():
     """V12 (session 4f): the words for an offer go with its ids, on the salon as on the desk (core R15)."""
     script, flow, call, _ = await at_booking()
@@ -672,8 +752,9 @@ async def main() -> None:
     await a_day_said_two_ways_is_one_day()
     await your_own_booking_is_not_taken()
     await an_offer_changed_in_the_same_turn_is_not_said()
+    await the_booking_just_made_can_be_moved_without_looking_it_up()
     print(
-        'moves ok: V1-V12, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V13, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

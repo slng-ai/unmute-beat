@@ -465,7 +465,7 @@ Use this with the conversation above, including earlier speech fragments.
 Written by the application, not by the caller. It is true now; the conversation may be older.
 You are the `booking` step.
 Facts: {"customer_phone":"+34600111222","verified_phone":"+34600111222","customer_status":"existing","service":"haircut","booking_day":"2026-10-02","booking_time":"14:00","slot":"2026-10-02T1430|haircut","appointment":"","booked":"BK0001","booked_spoken":"Friday the 2nd at 2:30 PM","complaint":"","wanted_outcome":"","complaint_reference":""}
-Nothing is on offer to the caller now.
+On offer to the caller now, by id: {"appointment": {"BK0001": "haircut Friday the 2nd at 2:30 PM"}}. Only these ids can be picked.
 Done on this call: lookup_customer {"phone": "+34600111222"} -> {"customer_status": "existing", "customer_phone": "+34600111222"}
 Done on this call: book_appointment {"phone": "+34600111222", "slot": "2026-10-02T1430|haircut"} -> {"status": "booked", "phone": "+34600111222", "booking_id": "BK0001", "revision": 1, "service": "haircut", "spoken": "Friday the 2nd at 2:30 PM", "service_spoken": "haircut", "reason": ""}
 Can recap on goodbye, by reference: <ref>: "You're booked for Friday the 2nd at 2:30 PM.".

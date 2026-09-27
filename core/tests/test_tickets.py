@@ -25,6 +25,7 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R15: what a rendered step says about an offer is exactly what can still be picked from it.
 * R16: only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
 * R17: a receipt said again on request, past the automatic limit, only while it stands, with nothing sent.
+* R18: after a change, the resources it named are offered again by the desk's own function.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -659,6 +660,61 @@ async def a_no_is_not_left_undone(folder: Path):
     assert call.locale.left_undone in ' '.join(said), ('an unheard read-back left undone was not said', said)
 
 
+async def a_changed_resource_stays_on_offer(folder: Path):
+    """R18 (session 4f): after a change, the resources it named are offered again, by the desk's own function.
+
+    The same rule as the salon's V13, with no booking: `resolve_ticket` binds
+    `ticket_id` to its subject and says its receipts are about a `ticket`, so
+    after a resolve the desk's `ticket_offer` is asked again, quietly. The
+    caller can go on to another of their tickets, or back to this one, with
+    no second lookup; a ticket that is not theirs is still refused.
+    """
+    desk = desk_in(folder)
+    desk.seed('ACC-1234', 'T-102')
+    script, flow, call = opened(desk, HERE / 'rendered_choices.yaml')
+    await turn(
+        flow,
+        call,
+        script,
+        'Cuenta ACC-1234, facturación, el T-101 con un reembolso.',
+        (
+            'calls',
+            [('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}), ('options', {})],
+        ),
+        ('call', 'collect', {'values': {'ticket_id': 'T-101', 'resolution': 'refund'}}),
+        ('call', 'hand_over', {'to': 'look_up', 'because': 'find its revision'}),
+        ('call', 'resolve_ticket', {}),
+    )
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    assert said == ['Ticket T-101 resuelto. ¿Algo más?'], said
+    assert set(call._offers['ticket_id']) == {'T-101', 'T-102'}, (
+        'the tickets were not offered again',
+        dict(call._offers),
+    )
+    assert call._offers.words('desk', ('ticket_id',), call.turn) == '', 'a quiet refresh was announced'
+    await turn(
+        flow,
+        call,
+        script,
+        'Es el T-999.',
+        ('call', 'collect', {'values': {'ticket_id': 'T-999'}}),
+        ('call', 'wait', {}),
+    )
+    assert call.state.facts.ticket_id == 'T-101', ('a ticket nobody offered was recorded', call.state.facts)
+    await turn(
+        flow,
+        call,
+        script,
+        'Y el T-102.',
+        ('call', 'collect', {'values': {'ticket_id': 'T-102'}}),
+        ('call', 'wait', {}),
+    )
+    assert call.state.facts.ticket_id == 'T-102', (
+        'a ticket on the account needed a second lookup',
+        call.state.facts,
+    )
+
+
 async def a_receipt_is_said_again_when_asked(folder: Path):
     """R17 (session 4f): the caller asks to hear what was done, and code says it again: no write, no new intent.
 
@@ -958,6 +1014,7 @@ async def main() -> None:
                 spoken_offers_go_with_their_options,
                 a_question_is_not_a_no,
                 a_receipt_is_said_again_when_asked,
+                a_changed_resource_stays_on_offer,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -973,7 +1030,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R17, no phone, date, appointment or slot')
+    print('tickets ok: R1-R18, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

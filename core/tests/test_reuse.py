@@ -350,7 +350,11 @@ async def a_retried_request_ends_on_the_callers_words():
     with scripted(chosen_time=''):
         said, _ = await take_turn(call, nodes, 'How much is it?', TurnBudget(first_part=0.2))
     last = sent[-1]
-    assert said == 'It is 40 euros.' and heard[-1] in call.locale.holding, (said, heard)
+    assert said == 'It is 40 euros.' and not set(heard) & set(call.locale.holding), (
+        'a provider stall is not a line to fill (session 4e)',
+        said,
+        heard,
+    )
     said_before = [p.content for m in last for p in m.parts if isinstance(p, TextPart)]
     assert isinstance(last[-1], ModelRequest) and not set(said_before) & set(call.locale.holding), last
     assert [p.content for p in last[-1].parts if isinstance(p, UserPromptPart)] == ['How much is it?'], last
@@ -400,10 +404,13 @@ async def a_slow_turn_says_one_holding_line():
     assert not any(s.origin == 'tool_filler' for s in call.spoken), call.spoken
 
 
-async def a_second_request_says_the_holding_line_as_it_goes_out():
-    """A tool's result going back to the model is a whole round trip: the holding line goes out then, not on the timer.
+async def a_second_request_is_no_reason_to_hold():
+    """A fast tool and a fast answer after it get no holding line: a second request is not time waited (session 4e).
 
-    Not on a turn of one request, and not after a tool that spoke its own line.
+    Until session 4e the line went out with every second request, so the
+    caller heard "One moment" just before an answer that was about to play.
+    Only work that lasts past `hold_after` is covered (`test_nodes` P10), and
+    a tool that speaks its own line gets nothing in front of it.
     """
     budget = TurnBudget(hold_after=10.0)
 
@@ -427,8 +434,8 @@ async def a_second_request_says_the_holding_line_as_it_goes_out():
 
     call, heard, _ = opened()
     said, _ = await take_turn(call, looked_up(speaks=False), 'How much is it?', budget)
-    assert [s.origin for s in call.spoken] == ['tool_filler', 'model'], call.spoken
-    assert heard[-1] in call.locale.holding and said == 'It is 40 euros.', (heard, said)
+    assert [s.origin for s in call.spoken] == ['model'], call.spoken
+    assert not set(heard) & set(call.locale.holding) and said == 'It is 40 euros.', (heard, said)
 
     call, heard, _ = opened()
     await take_turn(call, looked_up(speaks=True), 'How much is it?', budget)
@@ -575,7 +582,7 @@ async def main():
     await a_reading_that_changes_the_call_gets_a_fresh_run()
     await a_request_that_sends_nothing_is_tried_again()
     await a_slow_turn_says_one_holding_line()
-    await a_second_request_says_the_holding_line_as_it_goes_out()
+    await a_second_request_is_no_reason_to_hold()
     await a_retried_request_ends_on_the_callers_words()
     await the_engine_speaks_the_calls_own_language()
     no_salon_code_is_loaded()

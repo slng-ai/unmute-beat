@@ -324,10 +324,19 @@ def find_times(salon: Salon, state: SalonState) -> Times:
         )
     if found.price_euros is not None:
         notes.append(f'The price is {found.price_euros} euros.')
+    say = _times_said(state, slots, day, free)
+    own = next(
+        (h for h in found.bookings if h.date == found.date and str(h.time)[:5] == state.booking_time), None
+    )
+    if free is False and own is not None:
+        notes.append(f"{state.booking_time} is their own booking {own.booking_id}, not someone else's.")
+        say = (
+            f'You already have a {spoken_service(own.service)} {own.spoken}. Would you like a different time?'
+        )
     return Times(
         options={s['slot_id']: f'{spoken_service(s["service"])} {s["spoken"]}' for s in slots},
         note=' '.join(notes),
-        say=_times_said(state, slots, day, free),
+        say=say,
     )
 
 

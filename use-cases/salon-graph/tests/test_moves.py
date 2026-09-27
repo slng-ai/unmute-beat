@@ -25,7 +25,11 @@ second, independent caller writes to the same SQLite file through its own
 * V8: the live check's contender (`evals.contend`) takes the time when the
   move's read-back reaches the log, and the move is refused;
 * V9: live call CAc82c12: a day recorded beside an id not on offer is kept,
-  and the times offered next are that day's.
+  and the times offered next are that day's;
+* V10: live call 5: a day said as a weekday and as a date is one day, and
+  keeps the times on offer;
+* V11: live call s4e-worker-bystander: the time the caller already holds is
+  theirs, not "taken".
 """
 
 import asyncio
@@ -608,6 +612,27 @@ async def a_day_said_two_ways_is_one_day():
     )
 
 
+async def your_own_booking_is_not_taken():
+    """V11 (session 4e, live call s4e-worker-bystander): the caller's own time was offered away as "taken".
+
+    Moved to Tuesday at nine, the caller said "Tuesday at nine" again; the
+    offer said "9:00 AM is taken. On Tuesday I have 10:00 AM ...", and they
+    moved to ten. The time they asked for is theirs: the salon says so.
+    """
+    script, flow, call, diary = await at_booking()
+    seed(diary, TUE, '09:00')
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Tuesday at nine, yes.',
+        ('collect', {'service': 'haircut', 'booking_day': 'Tuesday', 'booking_time': '09:00'}),
+        ('call', 'options'),
+        ('call', 'wait'),
+    )
+    assert said == ['You already have a haircut tomorrow at 9:00 AM. Would you like a different time?'], said
+
+
 async def main() -> None:
     await a_taken_destination_is_refused_and_another_time_moves()
     await a_booking_changed_elsewhere_is_refused_then_offered_fresh()
@@ -620,8 +645,9 @@ async def main() -> None:
     await a_contender_takes_the_time_the_bot_reads_back()
     await a_move_request_keeps_its_day()
     await a_day_said_two_ways_is_one_day()
+    await your_own_booking_is_not_taken()
     print(
-        'moves ok: V1-V10, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V11, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

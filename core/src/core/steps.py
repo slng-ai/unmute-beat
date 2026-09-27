@@ -1241,18 +1241,7 @@ def _not_ready(operation: Operation, call: FlowCall[Any], error: ValidationError
 
 
 def _not_on_offer(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> list[str]:
-    """The choice fields among `values` whose value is not on offer now (see `_refuse_unoffered`)."""
-    return [
-        name
-        for name, value in values.items()
-        if name in choices
-        and getattr(call.state.facts, name, None) != value
-        and str(value) not in call._offered.get(name, {})
-    ]
-
-
-def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> None:
-    """Refuse a value for a choice field that is not on offer to this caller now.
+    """The choice fields among `values` whose value is not on offer to this caller now.
 
     A value the state already holds is not a new pick: it was recorded from an
     offer, and still stands, so recording it again changes nothing (a move
@@ -1260,14 +1249,13 @@ def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: M
     names the same booking). The service checks ownership and revision when
     it acts on it, whatever was offered (session 4d, trace ce40c124).
     """
-    for name, value in values.items():
-        if name not in choices or getattr(call.state.facts, name, None) == value:
-            continue
-        if str(value) not in call._offered.get(name, {}):
-            raise ModelRetry(
-                f'Nothing was recorded: {value!r} is not on offer for {name}: call options, then record an '
-                'id it returns.'
-            )
+    return [
+        name
+        for name, value in values.items()
+        if name in choices
+        and getattr(call.state.facts, name, None) != value
+        and str(value) not in call._offered.get(name, {})
+    ]
 
 
 SPEAK_BY = 3

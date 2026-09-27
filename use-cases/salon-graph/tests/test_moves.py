@@ -17,7 +17,9 @@ second, independent caller writes to the same SQLite file through its own
   book, pick the appointment, change the day, pick a time, move, cancel,
   with no pick refused;
 * V5: two appointments held, the one picked survives a day change; an id
-  nobody offered is refused, with a refusal that says what to do.
+  nobody offered is refused, with a refusal that says what to do;
+* V6: a value said again (a no, a question, a condition, a quotation; heard,
+  unheard or stale) approves no booking, move, cancel or complaint.
 """
 
 import asyncio
@@ -307,6 +309,110 @@ async def two_holdings_and_a_reference_not_on_offer():
     assert call.state.facts.appointment == second and first != second
 
 
+REPLIES = (
+    'No, do not book it. I am only checking if it is free.',
+    'Is that one free?',
+    'Only if it is still free on Friday.',
+    'I said "that one". Not yet, though.',
+)
+"""Replies that name the read-back's value again and agree to nothing: a no, a question, a condition, a quotation."""
+
+
+def nothing_went_out(call, diary, said: list[str], before: list[tuple]) -> None:
+    assert snapshot(diary.path) == before and not diary.complaints(), ('a value said again wrote', said)
+    assert call.locale.restated not in said, said
+    assert all(i.status == 'prepared' for i in call.intents), call.intents
+    assert not call.approved(), 'a value said again approved the read-back'
+
+
+async def a_value_said_again_is_not_a_yes():
+    """V6 (session 4d, defect 1): recording an unchanged value never approves a booking, move, cancel or complaint.
+
+    Each reply below says the read-back's value again, and the scripted agent
+    only records it, as a model reading the words would. Nothing is carried
+    out, no `Locale.restated` is said, and the agent's own words are. A heard
+    read-back, an unheard one and one asked two turns ago are all tried.
+    """
+    from tests.test_business import read_back
+
+    for words in REPLIES:
+        script, flow, call, diary = await at_booking()
+        await read_back(flow, call, script)
+        said = await turn(
+            flow, call, script, words, ('collect', {'slot': slot(FRIDAY, '14:00')}), ('say', 'Sure.')
+        )
+        nothing_went_out(call, diary, said, [])
+        assert said == ['Sure.'], (words, said)
+
+    script, flow, call, diary = await at_booking()
+    await read_back(flow, call, script, heard=False)
+    said = await turn(
+        flow, call, script, 'Friday at two.', ('collect', {'slot': slot(FRIDAY, '14:00')}), ('say', 'Sure.')
+    )
+    nothing_went_out(call, diary, said, [])
+
+    script, flow, call, diary = await at_booking()
+    await read_back(flow, call, script)
+    await turn(flow, call, script, 'How much is it?', ('say', 'It is 28 euros.'))
+    said = await turn(
+        flow, call, script, 'Friday at two.', ('collect', {'slot': slot(FRIDAY, '14:00')}), ('say', 'Sure.')
+    )
+    nothing_went_out(call, diary, said, [])
+
+    for words in REPLIES:
+        script, flow, call, diary = await at_booking()
+        held = seed(diary)
+        await ask_to_move(flow, call, script, held, '14:00')
+        before = snapshot(diary.path)
+        said = await turn(
+            flow,
+            call,
+            script,
+            words,
+            ('collect', {'appointment': held, 'slot': slot(FRIDAY, '14:00')}),
+            ('say', 'Sure.'),
+        )
+        nothing_went_out(call, diary, said, before)
+
+        script, flow, call, diary = await at_booking()
+        held = seed(diary)
+        said = await turn(
+            flow,
+            call,
+            script,
+            'Cancel my Friday haircut.',
+            ('call', 'options'),
+            ('collect', {'appointment': held}),
+            ('call', 'cancel_appointment'),
+        )
+        assert said[-1] == 'Shall I cancel your haircut Friday the 2nd at 9:00 AM?', said
+        before = snapshot(diary.path)
+        said = await turn(flow, call, script, words, ('collect', {'appointment': held}), ('say', 'Sure.'))
+        nothing_went_out(call, diary, said, before)
+
+    complaint = 'The colour came out patchy and uneven'
+    script, flow, call, diary = await at_booking()
+    call.commit(agent='complaints')
+    said = await turn(
+        flow,
+        call,
+        script,
+        f'{complaint}.',
+        ('collect', {'complaint': complaint}),
+        ('call', 'record_complaint'),
+    )
+    assert said[-1].startswith('Shall I record your complaint in your words'), said
+    said = await turn(
+        flow,
+        call,
+        script,
+        f'No, do not file it. {complaint}, that is all I said.',
+        ('collect', {'complaint': complaint}),
+        ('say', 'Understood, nothing is filed.'),
+    )
+    nothing_went_out(call, diary, said, [])
+
+
 async def main() -> None:
     await a_taken_destination_is_refused_and_another_time_moves()
     await a_booking_changed_elsewhere_is_refused_then_offered_fresh()
@@ -314,7 +420,10 @@ async def main() -> None:
     await book_move_and_cancel(via_concierge=False)
     await book_move_and_cancel(via_concierge=True)
     await two_holdings_and_a_reference_not_on_offer()
-    print('moves ok: V1-V5, refusals bound to their request, picks kept across a day change, one shared file')
+    await a_value_said_again_is_not_a_yes()
+    print(
+        'moves ok: V1-V6, refusals bound to their request, picks kept across a day change, no yes by repetition'
+    )
 
 
 if __name__ == '__main__':

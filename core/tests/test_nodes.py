@@ -501,20 +501,63 @@ async def a_recorded_pick_is_read_back_by_code():
 
 
 async def the_same_value_said_again_is_a_yes():
-    """F5: benchmark calls amAP5b4A and Tiv9sDHH (session 4c): "no, it's <the same digits>" to a heard read-back.
+    """F5: benchmark calls amAP5b4A and Tiv9sDHH (session 4c): "no, it's <the same value>" to a heard read-back.
 
     The caller's words decide nothing here: the scripted agent only records
-    what it heard, and code compares the value with the read-back.
+    what it heard, and code compares the value with the read-back. Code
+    carries it out only where the application's policy says the same value
+    is a yes (`restated: confirms`, a lookup). For a booking, recording the
+    same slot is only a record (session 4d, defect 1): the step's own agent
+    reads the reply, and "No, do not book ten" books nothing.
     """
+    patient = {'values': {'patient': 'P-1234'}}
+    script = Script()
+    flow, call = opened('restated.yaml', script)
+    said = await turn(flow, call, script, 'P-1234.', ('call', 'collect', patient))
+    assert said == ['Is your patient number P-1234?'], said
+    before = len(script.steps)
+    said = await turn(flow, call, script, 'No, it is P 1 2 3 4.', ('call', 'collect', patient))
+    assert said[:2] == [call.locale.restated, 'Thanks, P-1234.'], said
+    assert len(script.steps) - before == 1, ('the restated value asked no second request', script.steps)
+
+    script = Script()
+    flow, call = opened('restated.yaml', script)
+    await turn(flow, call, script, 'P-1234.', ('call', 'collect', patient), heard=False)
+    said = await turn(flow, call, script, 'No, it is P 1 2 3 4.', ('call', 'collect', patient))
+    assert call.locale.restated not in said and said == ['Is your patient number P-1234?'], (
+        'the same value after an unheard read-back carried it out',
+        said,
+    )
+
     ten = {'values': {'slot': '1000'}}
+    for words, reply in (
+        ('No, do not book ten. I am only checking if it is free.', 'Ten is free. Nothing is booked.'),
+        ('Is ten free?', 'Ten is free.'),
+        ('Only if ten is still free.', 'It is.'),
+        ('"Ten", I said. Not booked yet.', 'Understood.'),
+    ):
+        script = Script()
+        flow, call = opened('reads_back.yaml', script)
+        await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+        said = await turn(flow, call, script, words, ('call', 'collect', ten), ('say', reply))
+        assert call.services.calls == 0 and call.locale.restated not in said, (
+            words,
+            'a value said again booked',
+        )
+        assert said == [reply], (words, said)
+
     script = Script()
     flow, call = opened('reads_back.yaml', script)
     await turn(flow, call, script, 'P-1234 at ten.', *FILL)
-    before = len(script.steps)
-    said = await turn(flow, call, script, 'No, it is ten o clock.', ('call', 'collect', ten))
+    said = await turn(
+        flow, call, script, 'Yes, ten.', ('calls', [('collect', ten), ('book', {})]), ('call', 'book', {})
+    )
+    assert call.services.calls == 0 and said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', (
+        'a yes beside a recorded value is read back again, never approved in the same reply',
+        said,
+    )
+    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
     assert call.services.bookings == {'CL001': ('P-1234', '1000')}, said
-    assert said[:2] == [call.locale.restated, 'Booked for Tuesday at 10:00 AM, reference CL001.'], said
-    assert len(script.steps) - before == 1, ('the restated value asked no second request', script.steps)
 
     script = Script()
     flow, call = opened('reads_back.yaml', script)
@@ -523,30 +566,38 @@ async def the_same_value_said_again_is_a_yes():
     assert call.services.calls == 0 and said == ['Shall I book Tuesday at 9:00 AM for P-1234?'], said
 
     script = Script()
-    flow, call = opened('reads_back.yaml', script)
-    await turn(flow, call, script, 'P-1234 at ten.', *FILL, heard=False)
-    said = await turn(flow, call, script, 'No, it is ten o clock.', ('call', 'collect', ten))
-    assert call.services.calls == 0 and call.locale.restated not in said, (
-        'the same value after an unheard read-back carried it out',
-        said,
-    )
-    assert said == ['Shall I book Tuesday at 10:00 AM for P-1234?'], said
-
-    script = Script()
-    flow, call = opened('reads_back.yaml', script)
-    await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+    flow, call = opened('restated.yaml', script)
+    await turn(flow, call, script, 'P-1234.', ('call', 'collect', patient))
     said = await turn(
         flow,
         call,
         script,
-        'No, half nine. Well, ten then.',
-        ('call', 'collect', {'values': {'slot': '0930'}}),
-        ('call', 'collect', ten),
+        'No, P-56. Well, P-1234 then.',
+        ('call', 'collect', {'values': {'patient': 'P-56'}}),
+        ('call', 'collect', patient),
     )
-    assert call.services.calls == 0 and call.locale.restated not in said, (
-        'a refused change, then the old value, was taken as a yes to it',
+    assert call.locale.restated not in said and not call.evidence, (
+        'a refused change, then the old value, was taken as a yes',
         said,
     )
+
+    text = (HERE / 'reads_back.yaml').read_text()
+    broken = HERE / '_restated_broken.yaml'
+    broken.write_text(
+        text.replace(
+            '    readback: clinic.py:booking_words\n',
+            '    readback: clinic.py:booking_words\n    restated: confirms\n',
+            1,
+        )
+    )
+    try:
+        core.load(broken).compile(model='test')
+    except core.FlowSpecError as error:
+        assert 'restated: confirms is only for a read-back of a lookup' in str(error), str(error)
+    else:
+        raise AssertionError('restated: confirms was accepted on a booking')
+    finally:
+        broken.unlink()
 
 
 def reads_back_is_checked_at_load():

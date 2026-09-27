@@ -1,0 +1,27 @@
+# A patient number read back before it is looked up, and the clinic's own policy that saying it again confirms it.
+# `restated: confirms` is the application's choice, and only a lookup (changes: false) may make it (session 4d).
+version: 1
+id: clinic-restated
+state: clinic.py:ClinicState
+identity: patient
+services: clinic.py:Backend
+agents:
+  receptionist:
+    prompt: prompts/receptionist.md
+operations:
+  confirm_patient:
+    function: clinic.py:look_up
+    changes: false
+    restated: confirms
+    args: {patient: patient}
+    readback: clinic.py:patient_words
+    matches: {patient: patient}
+    say: 'Thanks, {patient}.'
+steps:
+  - id: desk
+    kind: conversation
+    agent: receptionist
+    prompt: prompts/desk.md
+    fields: [patient]
+    operations: [confirm_patient]
+    reads_back: {confirm_patient: [patient]}

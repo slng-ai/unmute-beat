@@ -111,6 +111,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     """Whether it changes a business resource. Separate from `needs_approval`: a lookup may need neither."""
     idempotent: ClassVar[bool] = False
     """The backend dedups by the intent id, so an intent whose outcome is unknown may be sent again, as itself."""
+    confirms_by_restating: ClassVar[bool] = False
+    """The caller saying the read-back's value again confirms it (`restated: confirms`). Only ever a lookup."""
     subject: ClassVar[str] = ''
     """The receipt field naming the resource it acts on (a booking id, a ticket id). See `CallContext.effective`."""
     resource: ClassVar[str] = ''

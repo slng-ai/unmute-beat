@@ -1416,8 +1416,11 @@ class ConversationStep(Step):
         name). So where a new booking and a move of a held one are both
         possible, which one the caller means is the model's to read, as
         before. When that exact question is already waiting, heard in full,
-        the caller has said its value again: `Restated`, carried out by code.
-        None when something it rests on is still changing.
+        the caller has said its value again: `Restated`, carried out by code,
+        only for an operation whose manifest says so (`restated: confirms`,
+        a lookup). For any other, recording the same value is only a record:
+        None, and the step's own agent reads the reply (session 4d, defect 1).
+        None too when something it rests on is still changing.
         """
         if not self.reads_back:
             return None
@@ -1444,7 +1447,7 @@ class ConversationStep(Step):
                 except ValidationError:
                     return None
                 if call.pending(operation.name, value=proposal.value) is not None:
-                    if not operation.needs_approval or any(
+                    if not operation.confirms_by_restating or any(
                         call._tries[name] != call._kept[name]
                         for name in call._changing & _resting_on(operation)
                     ):

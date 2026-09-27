@@ -45,6 +45,8 @@ operations:
   lookup_customer:
     function: functions.py:lookup_customer
     changes: false
+    # The user's rule (session 4c, finding 12): the same number said back is a yes to its read-back.
+    restated: confirms
     args: {phone: customer_phone}
     readback: functions.py:number_words
     matches: {customer_phone: phone}

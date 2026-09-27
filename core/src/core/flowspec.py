@@ -410,7 +410,14 @@ class _Resolver:
             'version': decl.version,
             'rejects': dict(decl.rejects),
             'idempotent': decl.idempotent,
+            'confirms_by_restating': decl.restated == 'confirms',
         }
+        if decl.restated == 'confirms' and (decl.changes or decl.approval != 'readback'):
+            self.fail(
+                where,
+                'restated: confirms is only for a read-back of a lookup (changes: false, approval: readback): '
+                'a value said again is never a yes to a change',
+            )
         function = self.domain_function(where, decl.function)
         hints = _hints(function) if function is not None else {}
         params = list(inspect.signature(function).parameters) if function is not None else []
@@ -936,6 +943,16 @@ class OperationSpec(BaseModel):
     """Receipt fields that must equal an argument: `{customer_phone: phone}`. A receipt about someone else counts for nothing."""
     approval: Literal['readback', 'none'] = 'readback'
     """`readback`: only after a heard read-back of these exact arguments and a yes. `none`: a read or a lookup."""
+    restated: Literal['confirms'] | None = None
+    """`confirms`: a caller who answers the heard read-back by saying its value again has confirmed it.
+
+    The application's policy, for a lookup only (`changes: false`): the
+    salon's rule that the same phone number said back is a yes. Without it,
+    recording the unchanged value is only a record, and the step's own agent
+    reads the reply. The loader refuses it on anything that changes a
+    resource: a value said again ("No, do not book Friday at two, I'm only
+    checking") is never consent to a booking, move, cancel or complaint.
+    """
     readback: str = ''
     """`file.py:words`, taking the arguments, returning the sentence the caller agrees to."""
     reconcile: str = ''

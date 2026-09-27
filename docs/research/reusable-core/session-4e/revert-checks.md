@@ -18,3 +18,4 @@ was then restored with `git checkout` and the suite passed again.
 | Warm-up awaited | `graph.py` `model_clients`: the `gather` after cancel removed | core `a_warm_up_ends_before_its_client_closes` | `['client closed', 'warm-up ended']`: the client closed under a running warm-up |
 | Live calls counted | `server.py` `live_counts`: own class name only | salon A6 | "a live call was not counted" (`FlowCall[SalonState]`) |
 | Offer instead of pardon | `steps.py` `wait`: the offer look-up before pardon disabled | salon `a_wait_with_nothing_to_say_offers_what_there_is` | "Sorry, could you say that again?" right after verify, as in live call s4e-latency-1 |
+| Own booking not "taken" | `salon/functions.py` `find_times`: the own-booking line disabled | salon V11 | "9:00 AM is taken. Tomorrow I have 10:00 AM ..." about the caller's own booking, as in live call s4e-worker-bystander |

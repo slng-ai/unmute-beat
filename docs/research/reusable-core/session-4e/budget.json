@@ -231,10 +231,10 @@
  },
  "coval_repair_pool": {
   "calls_allowed": 20,
-  "requested": 18,
-  "placed": 18,
-  "connected": 18,
-  "terminal": 18,
+  "requested": 20,
+  "placed": 20,
+  "connected": 20,
+  "terminal": 20,
   "evidence_complete": 1,
   "runs": [
    {
@@ -578,6 +578,64 @@
      "output_tokens": 553
     },
     "result": "task done, from the diary: BK0001 +34671540102 booked Monday 09:00, moved to Tuesday the 29th 09:00 (\"day after tomorrow\", revision 2); one intent each, nothing unknown. The move ran on a yes that began at 18:36:59.9, after the second read-back copy's Twilio mark returned at 18:36:56.6. The booking receipt the caller talked over was said again once, then not again (4d: six times). No model prose on booking, no wrong read-back copy, no pardon line. Naturalness: verify asked for the number three times over joined pieces while the caller talked. Latency: core median 0.02 s, model 0.97 s, TTS first audio 1.26 s; the replayed receipt spoke after 0.003 s with no model."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "26a5b73",
+    "campaign": "s4e-worker",
+    "fault": "LIVE_FAULT=committed:+34671540101, LIVE_FAULT_ARM=<state>/armed: never armed",
+    "placement": "both calls on worker 42639 (runner record, s4e-worker.placement.json); the watcher did not arm the fault, so no worker was killed: worker-failure verification incomplete",
+    "label": "s4e-worker-affected",
+    "run": "gzxkFucBcXUMx8RG8uAGb8",
+    "simulation": "unknown",
+    "call_sid": "CAf07651f2c66de160eafe0aa91f5298a4",
+    "langfuse_session": "CAf07651f2c66de160eafe0aa91f5298a4",
+    "bound_by": "elimination: the campaign had exactly two calls, and coval_sim bound the other to the bystander. coval_sim reported FAIL for this job after \"coval runs get: HTTP 502\"; `coval runs get` later returned status COMPLETED",
+    "set": "JCZGihHR",
+    "case": "9GH9opPTqPbRJFT2pNnJst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "model_usage": {
+     "requests": 27,
+     "input_tokens": 74942,
+     "cached_tokens": 0,
+     "output_tokens": 539
+    },
+    "result": "no fault injected (placement). As a normal call, task done from the diary: BK0002 +34671540101 booked Monday 10:00, moved to Wednesday 10:00 (revision 2), cancelled (revision 3): the case's expected diary exactly (4d calls 1 and 2 did not reach it). Ended pipeline_end."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "26a5b73",
+    "campaign": "s4e-worker",
+    "fault": "LIVE_FAULT=committed:+34671540101, LIVE_FAULT_ARM=<state>/armed: never armed",
+    "placement": "both calls on worker 42639 (runner record, s4e-worker.placement.json); the watcher did not arm the fault, so no worker was killed: worker-failure verification incomplete",
+    "label": "s4e-worker-bystander",
+    "run": "cCSJk34cuKVo3Ra7SDJM4p",
+    "simulation": "hM5EAgJQcg8K2f8TeRDosV",
+    "call_sid": "CA3cd7a2566a2756c450e265090d97fb5e",
+    "langfuse_session": "CA3cd7a2566a2756c450e265090d97fb5e",
+    "bound_by": "coval_sim correlate",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "model_usage": {
+     "requests": 53,
+     "input_tokens": 141140,
+     "cached_tokens": 5137,
+     "output_tokens": 823
+    },
+    "result": "no fault injected. Outcome fail against the case: BK0001 +34671540102 booked Monday 09:00, moved to Tuesday 09:00 (correct), then moved again to Tuesday 10:00 (revision 3). After the move receipt (said again once) the simulated caller repeated its request; the agent looked the times up and the salon said \"9:00 AM is taken\" about the caller's own booking; the caller accepted 10:00, heard the read-back and said yes (authorization holds). Fixed offline in 985522f (V11: \"You already have ...\"). Not re-run live: no calls left."
    }
   ],
   "stage_c_live_ramp_cap": 8,
@@ -589,8 +647,8 @@
   },
   "session_4e": {
    "plan": "2 latency and behavior calls, then 2 worker-failure calls; never more than 4",
-   "placed": 2,
-   "left": 2
+   "placed": 4,
+   "left": 0
   }
  },
  "reserved_for_later_stages": {

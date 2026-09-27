@@ -324,13 +324,19 @@ def _write(salon: Salon, token: str, phone: str, attempt, expected: dict[str, st
     about something else: nobody knows what happened, so it is an unknown
     outcome, never "nothing happened", and core will not let it be tried again
     until its `find_*` reconciliation has been asked.
+
+    A refusal names the booking the request was about (session 4d, defect 3):
+    core binds every receipt to its request by `matches`, and a move or cancel
+    refusal with no booking id was about nothing, so it stayed unknown. That
+    id is the request's own, not an effect: no revision, nothing moved.
     """
+    asked = expected.get('booking_id', '')
     try:
         raw = attempt()
     except AlreadyHoldsError as refused:
-        return Written(status='refused', phone=phone, reason=str(refused))
+        return Written(status='refused', phone=phone, booking_id=asked, reason=str(refused))
     except RefusedError as refused:
-        return Written(status='refused', phone=phone, reason=str(refused))
+        return Written(status='refused', phone=phone, booking_id=asked, reason=str(refused))
     except Exception as error:
         found = salon.diary.outcome_of(token)
         if found is None:
@@ -417,11 +423,12 @@ def _found(salon: Salon, token: str, phone: str, expected: dict[str, str]) -> Wr
 
     Never "not yet": a write nobody has an answer for is fenced (`void`), so
     a worker still holding it can never land it later, and the caller hears
-    that nothing was done, which is then true for good.
+    that nothing was done, which is then true for good. The fence names the
+    booking the request was about, as a refusal does.
     """
     raw = salon.diary.outcome_or_void(token)
     if raw.get('status') == 'void':
-        return Written(status='void', phone=phone)
+        return Written(status='void', phone=phone, booking_id=expected.get('booking_id', ''))
     written = _written(raw, phone)
     if why := _disagrees(raw, expected):
         raise OutcomeUnknownError(why)

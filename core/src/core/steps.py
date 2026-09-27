@@ -566,10 +566,33 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         return data
 
     async def _record(self, call: FlowCall[Any], args: BaseModel, receipt: BaseModel) -> Any:
+        """Commit a success; for a refusal, tell the model and take back the picks it was built from.
+
+        A refused change leaves the caller's choices as they were shown, and
+        the service has just said they do not work together (a time taken
+        since, a booking changed since it was shown). Offering them again,
+        fresh, is the way on; reading the same pick back again would earn
+        the same no (session 4d, defect 3).
+
+        ponytail: every choice the operation binds is taken back. Per-choice
+        refusal reasons belong here if a flow needs to keep the others.
+        """
         data = receipt.model_dump()
         if not self.succeeded(data):
+            spent = sorted(set(self.binds.values()) & call._choices)
+            if spent:
+                facts = type(call.state.facts).model_fields
+                call.update(**{name: facts[name].get_default(call_default_factory=True) for name in spent})
+                for name in spent:
+                    call._offered.pop(name, None)
+            again = (
+                f' {", ".join(spent)} {"is" if len(spent) == 1 else "are"} no longer on offer: call options '
+                'again, and record what the caller picks.'
+                if spent
+                else ''
+            )
             raise ModelRetry(
-                f'Nothing was done: the {self.name} service answered {data}. Do not say it was done.'
+                f'Nothing was done: the {self.name} service answered {data}. Do not say it was done.{again}'
             )
         if self.assign:
             call.update(**{field: data[source] for field, source in self.assign.items()})

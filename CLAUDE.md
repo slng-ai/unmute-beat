@@ -147,7 +147,7 @@ cd use-cases/concierge-tools && uv run --env-file ../../.env python load_report.
 cd use-cases/concierge-tools && uv run python -m matrix run      # N1-N13, both arms, offline; `time` for N12
 cd use-cases/salon-graph && uv run python -m evals.load ramp --calls 1,2,5 --seconds 60 --workers 2 --out /tmp/load   # offline runner ramp
 cd use-cases/salon-graph && uv run python -m evals.load faults --out /tmp/faults   # offline worker kills, stale worker, overload, drain
-docs/research/reusable-core/session-2/package-proof.sh         # the wheel, installed outside the checkout
+docs/research/reusable-core/session-4d-correctness/package-proof.sh   # the wheel, installed outside the checkout
 ```
 
 `uv run python -m tests` turns `ALLOW_MODEL_REQUESTS` off *before* any module

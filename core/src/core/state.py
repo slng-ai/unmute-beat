@@ -620,8 +620,11 @@ class CallContext(BaseModel):
     """The intent of the last read-back put to the caller, whatever happened to the question since."""
     _last_asked_serial: int = PrivateAttr(default=0)
     """The serial of that read-back (`ProposalLedger.serial`)."""
-    _replied_to: set[int] = PrivateAttr(default_factory=set)
-    """Questions the caller heard in full and then answered: a reply began after the latest copy played."""
+    _declined: dict[int, int] = PrivateAttr(default_factory=dict)
+    """Read-backs the active step's agent read the caller as turning down (`decline`), by serial, with the turn.
+
+    A joined turn that rewinds drops the ones recorded on it: they were read from half a sentence.
+    """
     _judged: set[str] = PrivateAttr(default_factory=set)
     """Question copies already counted as heard or not (`note_unheard_readbacks`)."""
     _turn_usage: tuple[int, Any] | None = PrivateAttr(default=None)
@@ -1219,23 +1222,45 @@ class CallContext(BaseModel):
             self._last_asked_intent, self._last_asked_serial = intent, self._proposals.serial
 
     def last_asked_left_undone(self) -> bool:
-        """Whether the change last read back to the caller was left waiting: never made, and never answered.
+        """Whether the change last read back to the caller was left waiting: never made, and never turned down.
 
-        Never made: its intent was never dispatched. Never answered: no reply
-        began after it played in full (`_replied_to`). A read-back the caller
-        heard and answered, whose step's agent then did not carry it out, was
-        turned down or changed ("No, don't book Friday at two"), not left
-        waiting: telling them "I haven't made that last change" as they leave
-        says what they just asked for as if it were a failure (session 4d,
-        live call 7). The agent's choice is the typed decision; no word of the
-        reply is read here.
+        Never made: its intent was never dispatched. Never turned down: the
+        active step's agent never read a reply to it as a no (`decline`). A
+        read-back the caller turned down ("No, don't book Friday at two") is
+        not left waiting: telling them "I haven't made that last change" as
+        they leave says what they asked for as if it were a failure (session
+        4d, live call 7). A reply that only asked something ("Before I answer,
+        what are your hours?") left it waiting, and they are told (session
+        4f): when a reply began says nothing about what it meant. A revision
+        puts a fresh read-back, which is then the last one asked. The agent's
+        typed call is the decision; no word of the reply is read here.
         """
         intent = self._intents.get(self._last_asked_intent)
         return (
             intent is not None
             and intent.status == 'prepared'
-            and self._last_asked_serial not in self._replied_to
+            and self._last_asked_serial not in self._declined
         )
+
+    def decline(self) -> bool:
+        """The active step's agent read the caller's reply as a no to the pending read-back: record it, and spend it.
+
+        Only the question this turn can answer counts (`pending_question`:
+        last turn's, same identity, heard in full), and only a read-back of an
+        operation. It is consumed, so no later yes can approve it. False, with
+        nothing recorded, when there is no such question: a caller cannot turn
+        down what they did not hear.
+        """
+        question = self._proposals.pending(self)
+        if question is None or not getattr(question, 'intent', ''):
+            return False
+        self._declined[self._proposals.serial] = self._turn
+        self.answered()
+        return True
+
+    def declined_this_turn(self) -> bool:
+        """Whether a read-back was turned down on this caller turn: a rendered step says so, not "pardon"."""
+        return self._turn in self._declined.values()
 
     def pending_question(self) -> Any:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
@@ -1980,6 +2005,7 @@ class CallContext(BaseModel):
             )
             self._pieces.append(heard)
             self._proposals.rewind(self)
+            self._declined = {serial: turn for serial, turn in self._declined.items() if turn != self._turn}
         else:
             self._turn += 1
             self._pieces = [heard]
@@ -1987,8 +2013,6 @@ class CallContext(BaseModel):
             self._acted = False
             self._proposals.age(self)
             self._proposals.open_turn()
-            if self._proposals.pending(self) is not None:
-                self._replied_to.add(self._proposals.serial)
         self._spoken_over = missed
         self.heard = ' '.join(p for p in self._pieces if p)
         self._inputs[self._turn] = self.heard

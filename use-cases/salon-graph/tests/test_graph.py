@@ -73,7 +73,7 @@ async def each_node_is_offered_its_own_tools():
     concierge, booking = script.requests
     assert concierge.tools == ['collect', 'goodbye', 'hand_over'], concierge.tools
     assert set(booking.tools) == {
-        'book_appointment', 'cancel_appointment', 'collect', 'goodbye', 'hand_over',
+        'book_appointment', 'cancel_appointment', 'collect', 'decline', 'goodbye', 'hand_over',
         'move_appointment', 'options', 'wait',
     }, booking.tools  # fmt: skip
     assert 'lookup_customer' not in booking.tools and 'record_complaint' not in booking.tools

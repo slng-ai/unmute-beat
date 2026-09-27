@@ -23,6 +23,7 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R12: a pick counts only against an offer made for the state an update ends in,
   and the desk's validators read the call's clock from core's validation context.
 * R15: what a rendered step says about an offer is exactly what can still be picked from it.
+* R16: only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -632,18 +633,20 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
 async def a_no_is_not_left_undone(folder: Path):
     """R14 (session 4e, live call 7): a goodbye after a read-back the caller heard and turned down.
 
-    The agent did not carry it out: that was the caller's no, not a change
-    left waiting, so the goodbye does not say `left_undone`. A read-back the
-    caller never heard in full still gets it as they leave. Neither reads a
-    word of the reply: what counts is whether a reply began after the
-    read-back played, and what the agent chose.
+    The agent read the reply as a no (`decline`, beside `goodbye` in one
+    response): that was the caller's choice, not a change left waiting, so
+    the goodbye does not say `left_undone`. A read-back the caller never
+    heard in full still gets it as they leave. Neither reads a word of the
+    reply: what counts is what the agent chose.
     """
     desk = desk_in(folder)
     script, flow, call = opened(desk)
     await to_read_back(flow, call, script)
+    requests = len(script.steps)
     said = await turn(
-        flow, call, script, 'No, déjalo así. Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {})
+        flow, call, script, 'No, déjalo así. Adiós.', ('calls', [('decline', {}), ('goodbye', {})])
     )
+    assert len(script.steps) == requests + 1, ('a no and a goodbye took more than one request', script.steps)
     assert call.locale.left_undone not in ' '.join(said), ('a no was told it was left undone', said)
     assert said[-1].endswith(SPANISH_GOODBYE) and desk.sent() == 0, said
 
@@ -653,6 +656,114 @@ async def a_no_is_not_left_undone(folder: Path):
     await core.text_turn(flow, call, 'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.')
     said = await turn(flow, call, script, 'Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {}))
     assert call.locale.left_undone in ' '.join(said), ('an unheard read-back left undone was not said', said)
+
+
+async def a_question_is_not_a_no(folder: Path):
+    """R16 (session 4f): only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
+
+    The reproducer: the resolve is read back and heard, the caller asks the
+    opening hours first, the desk hands them to the FAQ, and they leave. No
+    write happened and the request is still open, so the goodbye says it was
+    left undone. Against it: an explicit no (nothing said about it, and a
+    later yes approves nothing), a revision (its own fresh read-back, left
+    waiting if they go), a resolve carried out (no line), a no to a
+    read-back they never heard in full (nothing to turn down), and a no
+    spoken in half a sentence the caller then carried on from (dropped with
+    the piece it was read from).
+
+    The revision also shows a field set by a receipt resting on that
+    receipt's own request: the revision the look-up found stands when the
+    resolution changes, since the look-up never sent a resolution.
+    """
+
+    async def leave(flow, call, script) -> str:
+        return ' '.join(
+            await turn(flow, call, script, 'Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {}))
+        )
+
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    await turn(
+        flow,
+        call,
+        script,
+        'Antes de responder, ¿cuál es su horario?',
+        ('call', 'hand_over', {'to': 'faq', 'because': 'a general question'}),
+        ('say', 'De nueve a cinco, de lunes a viernes.'),
+    )
+    said = await leave(flow, call, script)
+    [intent] = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert call.locale.left_undone in said, ('a question was taken as a no', said)
+    assert desk.sent() == 0 and intent.status == 'prepared', (desk.sent(), intent.status)
+
+    desk = desk_in(folder / 'standing')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    said = await turn(flow, call, script, 'No.', ('calls', [('decline', {}), ('wait', {})]))
+    assert said == [call.locale.declined], ('a no was not said back as a no', said)
+    said = await turn(flow, call, script, 'Bueno, sí, hazlo.', ('call', 'resolve_ticket', {}))
+    assert desk.sent() == 0 and said[-1].startswith('¿Marco el ticket T-101'), (
+        'a yes after a no approved the read-back it turned down',
+        said,
+    )
+    await turn(flow, call, script, 'No, mejor no.', ('calls', [('decline', {}), ('wait', {})]))
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone not in said and desk.sent() == 0, said
+
+    desk = desk_in(folder / 'superseded')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Mejor pon que la arregló el técnico.',
+        ('call', 'collect', {'values': {'resolution': 'la arregló el técnico'}}),
+        ('call', 'resolve_ticket', {}),
+    )
+    assert said[-1] == '¿Marco el ticket T-101 como resuelto: la arregló el técnico?', (
+        'a new resolution took the revision the look-up found, and the look-up would not run again',
+        said,
+    )
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone in said and desk.sent() == 0, (
+        'a revision left waiting was not said',
+        said,
+    )
+
+    desk = desk_in(folder / 'wrong_ticket')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone not in said and desk.sent() == 1, said
+
+    desk = desk_in(folder / 'lose_answer')
+    script, flow, call = opened(desk)
+    script.moves = list(TO_READ_BACK)
+    await core.text_turn(flow, call, 'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.')
+    await turn(flow, call, script, 'No.', ('calls', [('decline', {}), ('wait', {})]))
+    assert not call._declined, ('a read-back never heard in full was turned down', call._declined)
+
+    desk = desk_in(folder / 'invented')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    script.moves = [('calls', [('decline', {}), ('wait', {})])]
+    reply = await core.text_turn(flow, call, 'No.')
+    call.acknowledge(reply.segments[0].id, heard='')
+    call.note_barge()
+    await turn(
+        flow,
+        call,
+        script,
+        '... espera, ¿cuál es el horario?',
+        ('call', 'hand_over', {'to': 'faq', 'because': 'a general question'}),
+        ('say', 'De nueve a cinco.'),
+    )
+    assert not call._declined, ('a no kept from a piece the caller carried on from', call._declined)
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone in said, said
 
 
 async def spoken_offers_go_with_their_options(folder: Path):
@@ -779,6 +890,7 @@ async def main() -> None:
                 a_rendered_step_offers_in_the_desks_words,
                 a_no_is_not_left_undone,
                 spoken_offers_go_with_their_options,
+                a_question_is_not_a_no,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -794,7 +906,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R15, no phone, date, appointment or slot')
+    print('tickets ok: R1-R16, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

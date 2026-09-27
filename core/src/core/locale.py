@@ -85,6 +85,13 @@ class Locale:
     """Said before the line is closed, once reminders went unanswered."""
     pardon: str = ''
     """Said on a rendered step (`speech: rendered`) when its agent chose to wait and nothing is missing to ask for."""
+    declined: str = ''
+    """Said on a rendered step when its agent read the caller's reply as a no to the read-back (`decline`): nothing was done.
+
+    Before whatever else `wait` says (the offer, what is still needed), and
+    instead of `pardon`: after "No." the caller hears their no was taken,
+    never "Sorry, could you say that again?".
+    """
     restated: str = ''
     """Said before a read-back is carried out because the caller answered it by saying the same value again.
 
@@ -109,6 +116,7 @@ ENGLISH = Locale(
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
     pardon='Sorry, could you say that again?',
+    declined="All right, I haven't changed anything.",
     restated="Yes, that's the same as I read back.",
 )
 
@@ -126,5 +134,6 @@ SPANISH = Locale(
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
     pardon='Perdona, ¿me lo repites?',
+    declined='De acuerdo, no he cambiado nada.',
     restated='Sí, es lo mismo que te he leído.',
 )

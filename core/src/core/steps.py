@@ -159,7 +159,16 @@ class FlowCall[S: BaseModel](CallContext):
     _version: int = PrivateAttr(default=0)
     """Bumped by every accepted change to the application state: work begun on an older version is stale."""
     _derived: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
-    """State fields a receipt sets (`assign`), each with the state fields its operation's arguments came from."""
+    """State fields a receipt sets (`assign`), each with the state fields any operation setting it binds."""
+    _assigned_by: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
+    """Each state field a receipt of this call set, with the state fields that receipt's arguments came from.
+
+    What the value rests on is the request that produced it, not every
+    operation that could have: a ticket's revision from a look-up rests on
+    the account and ticket, not on the resolution a later resolve would
+    send (session 4f: a new resolution wiped the looked-up revision, and
+    the look-up, already done, would not run again).
+    """
     _choices: frozenset[str] = PrivateAttr(default=frozenset())
     """State fields picked from offered ids (`choices`): valid only while the request they were offered for stands."""
     _choice_after: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
@@ -388,7 +397,7 @@ class FlowCall[S: BaseModel](CallContext):
         changed |= {name for name, value in picks.items() if getattr(facts, name) != value}
         resets = {
             name: default(name)
-            for name, sources in self._derived.items()
+            for name, sources in (self._derived | self._assigned_by).items()
             if sources & changed and name not in kept
         }
         self.update(**kept, **picks, **resets)
@@ -717,6 +726,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             )
         if self.assign:
             call.update(**{field: data[source] for field, source in self.assign.items()})
+            call._assigned_by.update(dict.fromkeys(self.assign, frozenset(self.binds.values())))
         call._offers.take(*self.binds.values())
         if self.say:
             words = self.say.format_map(_Facts(data))
@@ -1501,6 +1511,11 @@ class ConversationStep(Step):
     (`CallContext.approve`), through the same `Operation.run` a controlled
     flow uses. No second model reads the reply. A reply that also changes the
     request (`collect` beside the operation) gets a fresh read-back instead.
+    A reply the agent reads as a no calls `decline` (`CallContext.decline`):
+    the question is spent, and a goodbye does not tell the caller the change
+    was left undone. A question in reply is not a no, and leaves it waiting
+    (session 4f). `decline` is a function tool, so under Pydantic AI's
+    `graceful` end strategy it runs beside `wait` or `goodbye` in one response.
 
     `requires` names state facts this step needs before it runs, and
     `satisfied_by` the step that establishes them; the graph interposes it
@@ -1699,7 +1714,9 @@ class ConversationStep(Step):
                 call._goodbye_checked = call.turn
                 raise ModelRetry(
                     "Nothing was said: a read-back is waiting for the caller's answer. If their words agree to "
-                    'it, carry it out now. If they are leaving, call goodbye again.'
+                    'it, carry it out now. '
+                    + ('If their words turned it down, call decline as well. ' if confirms else '')
+                    + 'If they are leaving, call goodbye again.'
                 )
             words = goodbye_words(flow, call, recap or [])
             call.note_departure()
@@ -1732,11 +1749,14 @@ class ConversationStep(Step):
             if not words and self.choices:
                 await _offer(call, self.choices, rendered=True)
                 words = call._offers.announce(self.id, tuple(self.choices), call.turn)
+            if call.declined_this_turn():
+                words = ' '.join(filter(None, [call.locale.declined, words]))
             words = words or call.locale.pardon
             await call.speak_now(words, origin='ask')
             return words
 
         read_back = self._reads_back(flow)
+        confirms = any(op.needs_approval for op in self.operations)
         actions = frozenset(op.name for op in self.operations) | (
             {'hand_over'} if self.exits else frozenset()
         )
@@ -1792,6 +1812,15 @@ class ConversationStep(Step):
                 return await _offer(ctx.deps, self.choices, rendered=True)
 
             tools.append(Tool(offer, name='options') if self.rendered else Tool(options))
+        if confirms:
+
+            async def decline(ctx: RunContext[FlowCall[Any]]) -> str:
+                """The caller said no to the read-back they are answering. Nothing is carried out."""
+                if ctx.deps.decline():
+                    return 'Recorded: they turned it down. Nothing was done.'
+                return 'Nothing recorded: no read-back they heard in full is waiting for an answer.'
+
+            tools.append(Tool(decline))
         for operation in self.operations:
             outputs.append(
                 ToolOutput(

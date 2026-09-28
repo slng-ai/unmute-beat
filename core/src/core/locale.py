@@ -72,7 +72,16 @@ class Locale:
     evaluate.
     """
     gave_up: str = ''
-    """Said instead of a read-back the caller never heard in full (`core.steps.READBACKS`, `CUT_READBACKS`): nothing was done."""
+    """Said once, instead of a read-back past its limit (`core.steps.READBACKS`, `CUT_READBACKS`), as core withdraws it.
+
+    Nothing was done, and it is not read back again on this call
+    (`CallContext.withdraw`); asked for again, the caller hears `withdrawn`.
+    """
+    unconfirmable: str = ''
+    """Said instead of the greeting when the line cannot report playback (`core.processor.reports_playback`) and the
+    flow needs confirmations: the caller is told before giving anything, and the call ends."""
+    withdrawn: str = ''
+    """Said when a read-back already given up on (`gave_up`) is asked for again: it stays undone on this call."""
     left_undone: str = ''
     """Said in a goodbye when the change last read back was never made, so a caller leaving knows it."""
     still_there: str = ''
@@ -85,6 +94,13 @@ class Locale:
     """Said before the line is closed, once reminders went unanswered."""
     pardon: str = ''
     """Said on a rendered step (`speech: rendered`) when its agent chose to wait and nothing is missing to ask for."""
+    declined: str = ''
+    """Said on a rendered step when its agent read the caller's reply as a no to the read-back (`decline`): nothing was done.
+
+    Before whatever else `wait` says (the offer, what is still needed), and
+    instead of `pardon`: after "No." the caller hears their no was taken,
+    never "Sorry, could you say that again?".
+    """
     restated: str = ''
     """Said before a read-back is carried out because the caller answered it by saying the same value again.
 
@@ -105,10 +121,14 @@ ENGLISH = Locale(
     goodbye='Thanks for calling. Goodbye.',
     gave_up="I'm sorry, I couldn't get that confirmed on this line, so I haven't made that change. "
     'Please call back and we can do it then.',
+    unconfirmable="Sorry, this connection can't confirm that you've heard me, so I can't make any changes on it. "
+    'Please call back on a supported line. Goodbye.',
+    withdrawn="I still can't confirm that on this line, so it stays as it was.",
     left_undone="I haven't made that last change.",
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
     pardon='Sorry, could you say that again?',
+    declined="All right, I haven't changed anything.",
     restated="Yes, that's the same as I read back.",
 )
 
@@ -122,9 +142,13 @@ SPANISH = Locale(
     goodbye='Gracias por llamar. Adiós.',
     gave_up='Lo siento, no he podido confirmarlo por esta línea, así que no he hecho ese cambio. '
     'Llámanos otra vez y lo hacemos entonces.',
+    unconfirmable='Lo siento, esta conexión no puede confirmar que me has oído, así que no puedo hacer cambios por ella. '
+    'Llámanos por una línea compatible. Adiós.',
+    withdrawn='Sigo sin poder confirmarlo por esta línea, así que queda como estaba.',
     left_undone='No he hecho ese último cambio.',
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
     pardon='Perdona, ¿me lo repites?',
+    declined='De acuerdo, no he cambiado nada.',
     restated='Sí, es lo mismo que te he leído.',
 )

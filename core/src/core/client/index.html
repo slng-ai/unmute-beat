@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice call</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --bg: #f5f5f7; --muted: #6e6e73; --accent: #0a66c2; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #f5f5f7; --bg: #1d1d1f; --muted: #a1a1a6; --accent: #4c9aff; } }
+  body { margin: 0; padding: 32px 16px; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+  main { max-width: 520px; margin: 0 auto; }
+  button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  #stop { background: transparent; color: var(--accent); }
+  p { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Voice call</h1>
+  <p>Pipecat's web client, with one addition: it tells the agent when each reply has played in full, so a yes
+    counts only for a read-back you heard. Keep this tab playing.</p>
+  <button id="start">Start call</button>
+  <button id="stop" disabled>Hang up</button>
+  <p id="status">Not connected.</p>
+  <p id="heard"></p>
+  <audio id="bot" autoplay></audio>
+</main>
+<script type="module">
+/*
+ * Pipecat's PipecatClient and SmallWebRTCTransport (sdk.js, built unmodified from the official packages) do
+ * the connection, microphone, devices and reconnection. The bot's track plays in this page's <audio>, as in
+ * Pipecat's vanilla examples. playout.js adds the playback reports.
+ */
+import { PipecatClient, SmallWebRTCTransport } from './sdk.js';
+import { reportPlayout } from './playout.js';
+
+const status = document.getElementById('status');
+const heard = document.getElementById('heard');
+const audio = document.getElementById('bot');
+const startButton = document.getElementById('start');
+const stopButton = document.getElementById('stop');
+let client = null;
+let reported = 0;
+
+function ended() {
+  client = null;
+  startButton.disabled = false;
+  stopButton.disabled = true;
+}
+
+async function start() {
+  startButton.disabled = true;
+  status.textContent = 'Connecting.';
+  client = new PipecatClient({
+    transport: new SmallWebRTCTransport(),
+    enableMic: true,
+    enableCam: false,
+    callbacks: {
+      onTrackStarted: (track, participant) => {
+        if (track.kind === 'audio' && !participant?.local) audio.srcObject = new MediaStream([track]);
+      },
+      onBotReady: () => { status.textContent = 'Connected.'; stopButton.disabled = false; },
+      onBotStartedSpeaking: () => { status.textContent = 'Agent speaking.'; },
+      onBotStoppedSpeaking: () => { status.textContent = 'Listening.'; },
+      onDisconnected: () => { status.textContent = 'Call ended.'; ended(); },
+    },
+  });
+  if (!reportPlayout(client, audio, () => { heard.textContent = `Playback reported for ${++reported} replies.`; })) {
+    status.textContent = 'This client cannot report playback: the agent will not be able to confirm anything.';
+  }
+  try {
+    await client.connect({ webrtcRequestParams: { endpoint: '/api/offer' } });
+  } catch (error) {
+    status.textContent = `Could not connect: ${error.message}`;
+    ended();
+  }
+}
+
+startButton.onclick = start;
+stopButton.onclick = () => client && client.disconnect();
+</script>
+</body>
+</html>

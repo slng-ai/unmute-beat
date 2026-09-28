@@ -1,0 +1,6 @@
+unresolved intents: []
+restored into the new session: []
+bookings for the victim: [('BK0001', '2026-09-28', '10:00', 1, 1)]
+result on file for its intent: [('{"status": "booked", "booking_id": "BK0001", "service": "haircut", "date": "2026-09-28", "time": "10:00", "spoken": "tomorrow at 10:00 AM", "revision": 1}',)]
+held, as the new session offers it: {'BK0001': 'haircut tomorrow at 10:00 AM'} | You have a haircut tomorrow at 10:00 AM.
+offline ring-back ok: the committed booking is on file once, owed nothing, and held for the caller

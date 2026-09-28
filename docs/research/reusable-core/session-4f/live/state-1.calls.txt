@@ -1,0 +1,2 @@
+call_sid|campaign|from_number|to_number|state|admitted_by|worker|stream_sid|admitted_at|started_at|ended_at|ended|media_host|served_port
+CAfb240f6fd29325c77c5ae6338a7d5ecf|s4f-1-v11|+17183051836|+447427919928|ended|69104|69105|MZ126ca8b7765815ecddf665fb6d530d52|1790533441.455553|1790533442.7610261|1790533628.2637749|pipeline_end|None|7860

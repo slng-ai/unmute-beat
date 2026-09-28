@@ -22,6 +22,13 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R10: its write audit is the salon's envelope, and names the desk's own effect.
 * R12: a pick counts only against an offer made for the state an update ends in,
   and the desk's validators read the call's clock from core's validation context.
+* R15: what a rendered step says about an offer is exactly what can still be picked from it.
+* R16: only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
+* R17: a receipt said again on request, past the automatic limit, only while it stands, with nothing sent.
+* R18: after a change, the resources it named are offered again by the desk's own function.
+* R19: a read-back with no playback evidence is withdrawn once, and stays withdrawn; the caller can go on.
+* R20: on a line that proved delivery, read-backs whose marks never came back are withdrawn as unconfirmed,
+  never recorded as cut.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -33,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -363,7 +371,7 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
         ('call', 'options', {}),
         ('say', '¿Qué ticket y qué solución?'),
     )
-    assert set(call._offered) == {'ticket_id', 'resolution'}, call._offered
+    assert set(call._offers) == {'ticket_id', 'resolution'}, call._offers
     await turn(
         flow,
         call,
@@ -384,10 +392,10 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
     )
     facts = call.state.facts
     assert facts.ticket_id == 'T-102', 'the ticket rests on no field, and a new category took it away'
-    assert facts.resolution == '' and 'resolution' not in call._offered, (
+    assert facts.resolution == '' and 'resolution' not in call._offers, (
         'a billing resolution outlived its category'
     )
-    assert 'T-102' in call._offered['ticket_id'], 'the ticket offer went with the category'
+    assert 'T-102' in call._offers['ticket_id'], 'the ticket offer went with the category'
     said = await turn(
         flow,
         call,
@@ -406,7 +414,7 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
         ('say', 'Vale.'),
     )
     facts = call.state.facts
-    assert facts.ticket_id is None and not call._offered, 'a pick offered to another account was kept'
+    assert facts.ticket_id is None and not call._offers, 'a pick offered to another account was kept'
 
     broken = HERE / '_choices_broken.yaml'
     text = (HERE / 'choices.yaml').read_text()
@@ -458,14 +466,14 @@ async def picks_follow_the_state_they_end_in(folder: Path):
     await pick('No, es de acceso.', {'category': 'access'}, ('say', 'Entendido.'))
     facts = call.state.facts
     assert facts.category == 'access', facts
-    assert facts.resolution == '' and 'resolution' not in call._offered, (
+    assert facts.resolution == '' and 'resolution' not in call._offers, (
         'A: a resolution offered for billing outlived its category, itself a choice',
         facts,
-        call._offered,
+        call._offers,
     )
 
     await pick('Facturación otra vez.', {'category': 'billing'}, ('call', 'options', {}), ('say', '¿Cuál?'))
-    assert 'refund' in call._offered['resolution'], call._offered
+    assert 'refund' in call._offers['resolution'], call._offers
     await pick(
         'Acceso, con un reembolso.',
         {'category': 'access', 'resolution': 'refund'},
@@ -483,17 +491,17 @@ async def picks_follow_the_state_they_end_in(folder: Path):
         'a value that did not change took picks away',
         facts,
     )
-    offered = {name: dict(options) for name, options in call._offered.items()}
+    offered = {name: dict(options) for name, options in call._offers.items()}
     try:
         call.collect(('category', 'resolution'), ticket_id='T-1', category='access')
     except ValidationError:
         pass
     else:
         raise AssertionError('an invalid candidate was accepted')
-    assert call.state.facts == facts and call._offered == offered, (
+    assert call.state.facts == facts and call._offers == offered, (
         'an update that failed validation changed something',
         call.state.facts,
-        call._offered,
+        call._offers,
     )
 
     await pick('Perdona, es el T-102.', {'ticket_id': 'T-102'}, ('say', 'Vale.'))
@@ -502,7 +510,7 @@ async def picks_follow_the_state_they_end_in(folder: Path):
         'a pick resting on a pick that went outlived it',
         facts,
     )
-    assert set(call._offered) == {'ticket_id'}, call._offered
+    assert set(call._offers) == {'ticket_id'}, call._offers
 
     desk = desk_in(folder / 'standing')
     script, flow, call = opened(desk, HERE / 'choices.yaml')
@@ -608,7 +616,7 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
             ('call', 'options', {}),
             ('call', 'wait', {}),
         )
-        assert 'ticket_id' not in call._offered, 'a rendered step offered choices it had no words for'
+        assert 'ticket_id' not in call._offers, 'a rendered step offered choices it had no words for'
     finally:
         wordless.unlink()
 
@@ -631,18 +639,20 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
 async def a_no_is_not_left_undone(folder: Path):
     """R14 (session 4e, live call 7): a goodbye after a read-back the caller heard and turned down.
 
-    The agent did not carry it out: that was the caller's no, not a change
-    left waiting, so the goodbye does not say `left_undone`. A read-back the
-    caller never heard in full still gets it as they leave. Neither reads a
-    word of the reply: what counts is whether a reply began after the
-    read-back played, and what the agent chose.
+    The agent read the reply as a no (`decline`, beside `goodbye` in one
+    response): that was the caller's choice, not a change left waiting, so
+    the goodbye does not say `left_undone`. A read-back the caller never
+    heard in full still gets it as they leave. Neither reads a word of the
+    reply: what counts is what the agent chose.
     """
     desk = desk_in(folder)
     script, flow, call = opened(desk)
     await to_read_back(flow, call, script)
+    requests = len(script.steps)
     said = await turn(
-        flow, call, script, 'No, déjalo así. Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {})
+        flow, call, script, 'No, déjalo así. Adiós.', ('calls', [('decline', {}), ('goodbye', {})])
     )
+    assert len(script.steps) == requests + 1, ('a no and a goodbye took more than one request', script.steps)
     assert call.locale.left_undone not in ' '.join(said), ('a no was told it was left undone', said)
     assert said[-1].endswith(SPANISH_GOODBYE) and desk.sent() == 0, said
 
@@ -652,6 +662,508 @@ async def a_no_is_not_left_undone(folder: Path):
     await core.text_turn(flow, call, 'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.')
     said = await turn(flow, call, script, 'Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {}))
     assert call.locale.left_undone in ' '.join(said), ('an unheard read-back left undone was not said', said)
+
+
+async def a_changed_resource_stays_on_offer(folder: Path):
+    """R18 (session 4f): after a change, the resources it named are offered again, by the desk's own function.
+
+    The same rule as the salon's V13, with no booking: `resolve_ticket` binds
+    `ticket_id` to its subject and says its receipts are about a `ticket`, so
+    after a resolve the desk's `ticket_offer` is asked again, quietly. The
+    caller can go on to another of their tickets, or back to this one, with
+    no second lookup; a ticket that is not theirs is still refused.
+    """
+    desk = desk_in(folder)
+    desk.seed('ACC-1234', 'T-102')
+    script, flow, call = opened(desk, HERE / 'rendered_choices.yaml')
+    await turn(
+        flow,
+        call,
+        script,
+        'Cuenta ACC-1234, facturación, el T-101 con un reembolso.',
+        (
+            'calls',
+            [('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}), ('options', {})],
+        ),
+        ('call', 'collect', {'values': {'ticket_id': 'T-101', 'resolution': 'refund'}}),
+        ('call', 'hand_over', {'to': 'look_up', 'because': 'find its revision'}),
+        ('call', 'resolve_ticket', {}),
+    )
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    assert said == ['Ticket T-101 resuelto. ¿Algo más?'], said
+    assert set(call._offers['ticket_id']) == {'T-101', 'T-102'}, (
+        'the tickets were not offered again',
+        dict(call._offers),
+    )
+    assert call._offers.words('desk', ('ticket_id',), call.turn) == '', 'a quiet refresh was announced'
+    await turn(
+        flow,
+        call,
+        script,
+        'Es el T-999.',
+        ('call', 'collect', {'values': {'ticket_id': 'T-999'}}),
+        ('call', 'wait', {}),
+    )
+    assert call.state.facts.ticket_id == 'T-101', ('a ticket nobody offered was recorded', call.state.facts)
+    await turn(
+        flow,
+        call,
+        script,
+        'Y el T-102.',
+        ('call', 'collect', {'values': {'ticket_id': 'T-102'}}),
+        ('call', 'wait', {}),
+    )
+    assert call.state.facts.ticket_id == 'T-102', (
+        'a ticket on the account needed a second lookup',
+        call.state.facts,
+    )
+
+
+async def a_receipt_is_said_again_when_asked(folder: Path):
+    """R17 (session 4f): the caller asks to hear what was done, and code says it again: no write, no new intent.
+
+    The automatic repeat of a receipt the caller cut off stays at one
+    (`RECEIPT_REPEATS`). Past it, an explicit request still gets the receipt
+    (`say_again`), in the desk's words, from the receipt that still stands:
+    after a reopen superseded the resolve, the reopen is what is said. A
+    requested copy the caller cuts off is not marked heard and brings no
+    automatic repeat. Nothing is ever sent again.
+    """
+    receipt = 'Ticket T-101 resuelto. ¿Algo más?'
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    script.moves = [('call', 'resolve_ticket', {})]
+    reply = await core.text_turn(flow, call, 'Sí.')
+    call.acknowledge(reply.segments[-1].id, heard='')
+    script.moves = [('call', 'wait', {})]
+    reply = await core.text_turn(flow, call, '¿Perdona?')
+    assert [s.text for s in reply.segments] == [receipt], reply.segments
+    call.acknowledge(reply.segments[-1].id, heard='')
+    said = await turn(flow, call, script, '¿Qué?', ('call', 'wait', {}))
+    assert receipt not in said, ('the automatic repeat went past its limit', said)
+    intents = len(call.intents)
+
+    script.moves = [('call', 'say_again', {})]
+    reply = await core.text_turn(flow, call, '¿Me lo repites, por favor?')
+    assert [s.text for s in reply.segments] == [receipt], ('a requested repeat was not said', reply.segments)
+    call.acknowledge(reply.segments[-1].id, heard='')
+    assert reply.segments[-1].delivered != 'delivered', 'a requested copy the caller cut off counted as heard'
+    said = await turn(flow, call, script, 'Vale.', ('call', 'wait', {}))
+    assert receipt not in said, ('a cut requested copy brought an automatic repeat', said)
+    assert desk.sent() == 1 and len(call.intents) == intents, (
+        'saying a receipt again sent something',
+        desk.sent(),
+    )
+
+    [standing] = call.effective()
+    call.note_evidence(
+        'reopen_ticket',
+        standing.args,
+        {**standing.receipt, 'status': 'open'},
+        intent='e' * 32,
+        resource='T-101',
+        kind=standing.kind,
+        version=(standing.version or 0) + 1,
+    )
+    said = await turn(flow, call, script, '¿Cómo quedó?', ('call', 'say_again', {}))
+    assert said == ['Ticket T-101 reabierto. ¿Algo más?'], (
+        'a superseded receipt was said as the outcome',
+        said,
+    )
+
+    script, flow, call = opened(desk_in(folder / 'standing'), HERE / 'rendered_choices.yaml')
+    said = await turn(flow, call, script, '¿Me lo repites?', ('call', 'say_again', {}))
+    assert said and not any('resuelto' in s for s in said), (
+        'nothing stands, and something was said as done',
+        said,
+    )
+    assert said == ['No veo tickets en esa cuenta. ¿El problema es de facturación o de acceso?'], (
+        'with nothing standing, a rendered step says what wait would',
+        said,
+    )
+
+
+async def a_question_is_not_a_no(folder: Path):
+    """R16 (session 4f): only the agent's `decline` turns a read-back down; a question in reply leaves it waiting.
+
+    The reproducer: the resolve is read back and heard, the caller asks the
+    opening hours first, the desk hands them to the FAQ, and they leave. No
+    write happened and the request is still open, so the goodbye says it was
+    left undone. Against it: an explicit no (nothing said about it, and a
+    later yes approves nothing), a revision (its own fresh read-back, left
+    waiting if they go), a resolve carried out (no line), a no to a
+    read-back they never heard in full (nothing to turn down), and a no
+    spoken in half a sentence the caller then carried on from (dropped with
+    the piece it was read from).
+
+    The revision also shows a field set by a receipt resting on that
+    receipt's own request: the revision the look-up found stands when the
+    resolution changes, since the look-up never sent a resolution.
+    """
+
+    async def leave(flow, call, script) -> str:
+        return ' '.join(
+            await turn(flow, call, script, 'Adiós.', ('call', 'goodbye', {}), ('call', 'goodbye', {}))
+        )
+
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    await turn(
+        flow,
+        call,
+        script,
+        'Antes de responder, ¿cuál es su horario?',
+        ('call', 'hand_over', {'to': 'faq', 'because': 'a general question'}),
+        ('say', 'De nueve a cinco, de lunes a viernes.'),
+    )
+    said = await leave(flow, call, script)
+    [intent] = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert call.locale.left_undone in said, ('a question was taken as a no', said)
+    assert desk.sent() == 0 and intent.status == 'prepared', (desk.sent(), intent.status)
+
+    desk = desk_in(folder / 'standing')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    said = await turn(flow, call, script, 'No.', ('calls', [('decline', {}), ('wait', {})]))
+    assert said == [call.locale.declined], ('a no was not said back as a no', said)
+    said = await turn(flow, call, script, 'Bueno, sí, hazlo.', ('call', 'resolve_ticket', {}))
+    assert desk.sent() == 0 and said[-1].startswith('¿Marco el ticket T-101'), (
+        'a yes after a no approved the read-back it turned down',
+        said,
+    )
+    await turn(flow, call, script, 'No, mejor no.', ('calls', [('decline', {}), ('wait', {})]))
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone not in said and desk.sent() == 0, said
+
+    desk = desk_in(folder / 'superseded')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Mejor pon que la arregló el técnico.',
+        ('call', 'collect', {'values': {'resolution': 'la arregló el técnico'}}),
+        ('call', 'resolve_ticket', {}),
+    )
+    assert said[-1] == '¿Marco el ticket T-101 como resuelto: la arregló el técnico?', (
+        'a new resolution took the revision the look-up found, and the look-up would not run again',
+        said,
+    )
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone in said and desk.sent() == 0, (
+        'a revision left waiting was not said',
+        said,
+    )
+
+    desk = desk_in(folder / 'wrong_ticket')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone not in said and desk.sent() == 1, said
+
+    desk = desk_in(folder / 'lose_answer')
+    script, flow, call = opened(desk)
+    script.moves = list(TO_READ_BACK)
+    await core.text_turn(flow, call, 'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.')
+    await turn(flow, call, script, 'No.', ('calls', [('decline', {}), ('wait', {})]))
+    assert not call._declined, ('a read-back never heard in full was turned down', call._declined)
+
+    desk = desk_in(folder / 'invented')
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    script.moves = [('calls', [('decline', {}), ('wait', {})])]
+    reply = await core.text_turn(flow, call, 'No.')
+    call.acknowledge(reply.segments[0].id, heard='')
+    call.note_barge()
+    await turn(
+        flow,
+        call,
+        script,
+        '... espera, ¿cuál es el horario?',
+        ('call', 'hand_over', {'to': 'faq', 'because': 'a general question'}),
+        ('say', 'De nueve a cinco.'),
+    )
+    assert not call._declined, ('a no kept from a piece the caller carried on from', call._declined)
+    said = await leave(flow, call, script)
+    assert call.locale.left_undone in said, said
+
+
+async def spoken_offers_go_with_their_options(folder: Path):
+    """R15 (session 4f): what `wait` says about an offer is exactly what can still be picked from it.
+
+    The words for an offer and its ids are one record: whatever takes the
+    ids (a field the offer rests on changing, another caller) takes the
+    words, and an offer whose dependencies did not change keeps both. A step
+    says only the offers it made itself, so a step reached by a hand-over in
+    the same turn never says another step's offer. An update that fails
+    validation takes nothing.
+    """
+    billing_words = ('reembolso', 'abono')
+    offered = [
+        ('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
+        ('options', {}),
+    ]
+
+    script, flow, call = opened(desk_in(folder), HERE / 'rendered_choices.yaml')
+    said = ' '.join(
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, facturación. No, perdona, es de acceso.',
+            ('calls', offered),
+            ('calls', [('collect', {'values': {'category': 'access'}}), ('wait', {})]),
+        )
+    )
+    assert not any(word in said for word in billing_words), ('an offer outlived its options', said)
+    assert 'resolution' not in call._offers and 'T-101' in said, (said, dict(call._offers))
+
+    script, flow, call = opened(desk_in(folder / 'standing'), HERE / 'rendered_choices.yaml')
+    said = ' '.join(
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, facturación.',
+            ('calls', offered),
+            ('calls', [('collect', {'values': {'account_id': 'ACC-1234'}}), ('wait', {})]),
+        )
+    )
+    assert 'un reembolso o un abono' in said, ('an offer whose dependencies did not change was lost', said)
+    records = dict(call._offers._by_choice)
+    try:
+        call.collect(('resolution',), ticket_id='T-1', category='access')
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError('an invalid candidate was accepted')
+    assert call._offers._by_choice == records, (
+        'an update that failed validation took an offer or its words',
+        call._offers._by_choice,
+    )
+
+    script, flow, call = opened(desk_in(folder / 'superseded'), HERE / 'rendered_choices.yaml')
+    said = ' '.join(
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, facturación. Ah no, es la ACC-5678.',
+            ('calls', offered),
+            ('calls', [('collect', {'values': {'account_id': 'ACC-5678'}}), ('wait', {})]),
+        )
+    )
+    assert 'T-101' not in said, ('an offer made to another account was said', said)
+
+    aside = HERE / '_rendered_aside.yaml'
+    aside.write_text(
+        (HERE / 'rendered_choices.yaml')
+        .read_text()
+        .replace(
+            '  - {id: look_up,',
+            '  - id: aside\n    kind: conversation\n    agent: agent\n    prompt: prompts/faq.md\n'
+            '    speech: rendered\n    fields: [account_id]\n    exits:\n      - {to: desk, purpose: back}\n'
+            '  - {id: look_up,',
+        )
+        .replace(
+            "    exits:\n      - {to: look_up, purpose: find the ticket's current revision",
+            '    exits:\n      - {to: aside, purpose: something else}\n'
+            "      - {to: look_up, purpose: find the ticket's current revision",
+        )
+    )
+    try:
+        script, flow, call = opened(desk_in(folder / 'by_words'), aside)
+        said = ' '.join(
+            await turn(
+                flow,
+                call,
+                script,
+                'Cuenta ACC-1234, facturación. Otra cosa.',
+                ('calls', offered),
+                ('call', 'hand_over', {'to': 'aside', 'because': 'something else'}),
+                ('call', 'wait', {}),
+            )
+        )
+        assert call.state.agent == 'aside', call.state.agent
+        assert 'T-101' not in said and not any(word in said for word in billing_words), (
+            "a step said another step's offer",
+            said,
+        )
+    finally:
+        aside.unlink()
+
+
+def spans(exporter: InMemorySpanExporter) -> InMemorySpanExporter:
+    """Collect this process's finished spans in `exporter`, on the one global provider."""
+    provider = trace.get_tracer_provider()
+    if not isinstance(provider, TracerProvider):
+        provider = TracerProvider()
+        trace.set_tracer_provider(provider)
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    return exporter
+
+
+def estimated(call, reply) -> None:
+    """Play a reply on a transport that only estimates playback: every mark settled `local`, as `LocalPlayout` did.
+
+    The browser path before session 4f's repair: audio written, or time for
+    it to play, and nothing from the far end. The caller's reply begins after.
+    """
+    now = time.perf_counter()
+    for sent in reply.segments:
+        segment = next(s for s in call.all_spoken if s.id == sent.id)
+        segment.at = now - 2
+        name = call.mark_for(sent.id)
+        call.note_mark_sent(name, now - 1, media=320)
+        call.note_mark_returned(name, now - 0.5, local=True)
+    call.note_onset(now)
+
+
+async def estimated_turn(flow, call, script: Script, words: str, *moves) -> list[str]:
+    script.moves = list(moves)
+    reply = await core.text_turn(flow, call, words)
+    estimated(call, reply)
+    return [s.text for s in reply.segments]
+
+
+async def an_unconfirmed_read_back_is_withdrawn_once(folder: Path):
+    """R19 (session 4f follow-up, Langfuse trace 369560b8): a read-back with no playback evidence ends, once.
+
+    The browser incident on the desk: every segment only estimated as played,
+    no simulation. The caller says yes three times; the agent calls the
+    resolve each time. Before the repair the intent stayed prepared, and the
+    caller heard `gave_up` again on every yes. Now the second unconfirmed
+    copy withdraws it (`CallContext.withdraw`): `gave_up` once, nothing
+    pending, the intent terminal, and a `confirmation` span naming the
+    transport and why. Then, specified: confirming again hears `withdrawn`
+    with no read-back, no new intent and no dispatch; a different question is
+    answered; stopping says the goodbye, with `left_undone` (the caller may
+    have talked over `gave_up` too); a corrected value is a new question, read back with its own
+    allowance, and here acknowledged, so a yes to it resolves once. The
+    model is told the evidence is missing, never that the caller did not hear.
+    """
+    exporter = spans(InMemorySpanExporter())
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    call.note_transport('estimated')
+    script.moves = list(TO_READ_BACK)
+    estimated(call, await core.text_turn(flow, call, 'Resuelve el ticket T-101, cuenta ACC-1234.'))
+    readback = '¿Marco el ticket T-101 como resuelto: la impresora ya imprime?'
+
+    said = await estimated_turn(flow, call, script, 'Me parece bien.', ('call', 'resolve_ticket', {}))
+    assert said == [readback], said
+    told = script.told[-1]
+    assert 'missing evidence, not a sign they missed it' in told and 'did not hear' not in told, told
+    said = await estimated_turn(flow, call, script, 'Sí, correcto.', ('call', 'resolve_ticket', {}))
+    assert said == [call.locale.gave_up], said
+    [intent] = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert intent.status == 'withdrawn' and call.pending_question() is None and desk.sent() == 0, intent
+    [withdrawn] = [
+        json.loads(str(s.attributes['confirmation.audit']))
+        for s in exporter.get_finished_spans()
+        if s.name == 'confirmation'
+        and s.attributes
+        and 'withdrawn' in str(s.attributes['confirmation.audit'])
+    ]
+    assert withdrawn['reason'] == 'unconfirmed' and withdrawn['transport'] == 'estimated', withdrawn
+    assert {c['heard_by'] for c in withdrawn['copies']} == {'local'} and not withdrawn['simulated_playout']
+    assert {c['hearing'] for c in withdrawn['copies']} == {'unconfirmed'}, withdrawn
+
+    for words in ('¡Pero si te lo estoy confirmando!', 'Que sí, hazlo.'):
+        said = await estimated_turn(flow, call, script, words, ('call', 'resolve_ticket', {}))
+        assert said == [call.locale.withdrawn], ('confirming again read it back or looped the fallback', said)
+    assert [i.id for i in call.intents if i.operation == 'resolve_ticket'] == [intent.id], call.intents
+    assert call.intents[-1].readbacks == intent.readbacks and desk.sent() == 0, call.intents
+    assert 'Withdrawn: resolve_ticket' in script.told[-1], 'the model was not told it was withdrawn'
+
+    said = await estimated_turn(
+        flow,
+        call,
+        script,
+        '¿Cuál es vuestro horario?',
+        ('call', 'hand_over', {'to': 'faq', 'because': 'a general question'}),
+        ('say', 'De nueve a cinco.'),
+    )
+    assert said == ['De nueve a cinco.'] and call.pending_question() is None, said
+    said = await estimated_turn(flow, call, script, 'Adiós.', ('call', 'goodbye', {}))
+    assert said[-1].endswith(SPANISH_GOODBYE) and call.locale.left_undone in ' '.join(said), said
+    assert desk.sent() == 0
+
+    desk = desk_in(folder / 'standing')
+    script, flow, call = opened(desk)
+    call.note_transport('estimated')
+    script.moves = list(TO_READ_BACK)
+    estimated(call, await core.text_turn(flow, call, 'Resuelve el ticket T-101, cuenta ACC-1234.'))
+    for words in ('Sí.', 'Sí.'):
+        said = await estimated_turn(flow, call, script, words, ('call', 'resolve_ticket', {}))
+    assert said == [call.locale.gave_up], said
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Pon mejor que la arregló el técnico.',
+        ('call', 'collect', {'values': {'resolution': 'la arregló el técnico'}}),
+        ('call', 'resolve_ticket', {}),
+    )
+    assert said == ['¿Marco el ticket T-101 como resuelto: la arregló el técnico?'], said
+    first, second = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert (first.status, second.status, second.readbacks) == ('withdrawn', 'prepared', 0), call.intents
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    assert desk.sent() == 1 and said == ['Ticket T-101 resuelto. ¿Algo más?'], (desk.sent(), said)
+
+
+def unacknowledged(call, reply, heard: int = 0) -> None:
+    """Every segment's mark sent after its audio; only the first `heard` came back, as the far end's own marks."""
+    now = time.perf_counter()
+    for index, sent in enumerate(reply.segments):
+        segment = next(s for s in call.all_spoken if s.id == sent.id)
+        segment.at = now - 2
+        name = call.mark_for(sent.id)
+        call.note_mark_sent(name, now - 1, media=320)
+        if index < heard:
+            call.note_mark_returned(name, now - 0.5)
+    call.note_onset(now)
+
+
+async def a_missing_acknowledgement_is_not_a_cut(folder: Path):
+    """R20: a line that proved one segment heard, then returned no mark for any read-back copy.
+
+    Nobody cut in. The copies count against the larger `CUT_READBACKS`
+    allowance, because the line has proven delivery, but the withdrawal's
+    audit says what the evidence says: `unconfirmed`, not talked over.
+    """
+    exporter = spans(InMemorySpanExporter())
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    call.note_transport('webrtc')
+    script.moves = list(TO_READ_BACK)
+    reply = await core.text_turn(flow, call, 'Resuelve el ticket T-101, cuenta ACC-1234.')
+    unacknowledged(call, reply, heard=len(reply.segments) - 1)
+    said: list[str] = []
+    for _ in range(8):
+        script.moves = [('call', 'resolve_ticket', {})]
+        reply = await core.text_turn(flow, call, 'Sí.')
+        unacknowledged(call, reply)
+        said = [s.text for s in reply.segments]
+        if said == [call.locale.gave_up]:
+            break
+    assert said == [call.locale.gave_up] and desk.sent() == 0, said
+    [intent] = [i for i in call.intents if i.operation == 'resolve_ticket']
+    assert intent.status == 'withdrawn' and intent.readbacks == 0 and intent.cut_readbacks, intent
+    [withdrawn] = [
+        json.loads(str(s.attributes['confirmation.audit']))
+        for s in exporter.get_finished_spans()
+        if s.name == 'confirmation'
+        and s.attributes
+        and '"withdrawn"' in str(s.attributes['confirmation.audit'])
+    ]
+    assert withdrawn['reason'] == 'unconfirmed' and withdrawn['transport'] == 'webrtc', withdrawn
+    assert {c['hearing'] for c in withdrawn['copies']} == {'unconfirmed'}, withdrawn
+    assert {c['heard_by'] for c in withdrawn['copies']} == {'none'}, withdrawn
 
 
 async def main() -> None:
@@ -672,6 +1184,12 @@ async def main() -> None:
                 picks_follow_the_state_they_end_in,
                 a_rendered_step_offers_in_the_desks_words,
                 a_no_is_not_left_undone,
+                spoken_offers_go_with_their_options,
+                a_question_is_not_a_no,
+                a_receipt_is_said_again_when_asked,
+                a_changed_resource_stays_on_offer,
+                an_unconfirmed_read_back_is_withdrawn_once,
+                a_missing_acknowledgement_is_not_a_cut,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -687,7 +1205,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R14, no phone, date, appointment or slot')
+    print('tickets ok: R1-R20, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

@@ -44,7 +44,7 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 
 from core.graph import model_clients
 from core.observability import setup
-from core.processor import PydanticAgentProcessor, playout, record_ending
+from core.processor import PydanticAgentProcessor, playout, record_ending, serve_client
 from faro import AGENTS, GREETING, STT_LANGUAGE, TTS_LANGUAGE, close_call, open_call
 
 NAME = 'faro call'
@@ -227,6 +227,8 @@ async def bot(runner_args: RunnerArguments) -> None:
 
 
 if __name__ == '__main__':
-    from pipecat.runner.run import main
+    from pipecat.runner.run import app, main
+
+    serve_client(app)
 
     main()

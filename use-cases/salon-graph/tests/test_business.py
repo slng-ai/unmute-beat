@@ -341,6 +341,84 @@ async def a_result_about_another_slot_is_not_this_booking():
         assert not call.evidence, (wrong, 'an answer to another question was filed as this booking')
 
 
+async def complaint_words_are_the_salons():
+    """Session 4f, item 4: every consequential line of a complaint is the salon's, from validated evidence.
+
+    The read-back, the receipt with its reference and next step, the same
+    receipt said again when the caller asks for the reference, and the
+    goodbye's recap are all rendered by `functions.py` and the manifest from
+    the diary's validated answer. Complaints stays a prose step for its
+    ordinary conversation (empathy, questions), and that is the weaker
+    guarantee: `a_prose_reference_is_the_known_limit` names what it lets
+    through.
+    """
+    script, flow, call, diary = opened(verified_phone=PHONE, customer_status='existing')
+    call.commit(agent='complaints')
+    said = await turn(
+        flow,
+        call,
+        script,
+        'The colour came out patchy and uneven. I want a partial refund.',
+        (
+            'collect',
+            {'complaint': 'The colour came out patchy and uneven', 'wanted_outcome': 'a partial refund'},
+        ),
+        ('call', 'record_complaint'),
+    )
+    assert said[-1].startswith('Shall I record your complaint in your words: The colour came out patchy'), (
+        said
+    )
+    receipt = (
+        "That's on record, reference CX0001. That one goes to the manager, who will call you back. "
+        'Your requested resolution is pending approval. Anything else I can help with?'
+    )
+    said = await turn(flow, call, script, 'Yes.', ('call', 'record_complaint'))
+    assert said == [receipt], said
+    said = await turn(flow, call, script, 'Sorry, what was the reference?', ('call', 'say_again'))
+    assert said == [receipt] and len(diary.complaints()) == 1, ('the reference was not said by code', said)
+    [ref] = flow.recaps(call)
+    said = await turn(flow, call, script, 'Thanks, bye.', ('call', 'goodbye', {'recap': [ref]}))
+    assert said == ['Your complaint is on record, reference CX0001. ' + call.locale.goodbye], said
+
+
+async def a_prose_reference_is_the_known_limit():
+    """The named negative test for complaints' prose (session 4f): model words that invent a reference are said.
+
+    A prose step's ordinary words are model text. The claim guard catches
+    the salon's claim verbs (`locale.claims`), not an invented number, so
+    "your reference number is ZZ999" reaches the caller. What is guaranteed
+    is only what code renders: the receipt, `say_again` and the recap. If
+    this starts failing, the prose guarantee got stronger: update the report.
+    """
+    script, flow, call, diary = opened(verified_phone=PHONE, customer_status='existing')
+    call.commit(agent='complaints')
+    said = await turn(
+        flow, call, script, 'What is my reference?', ('text', 'Your reference number is ZZ999.')
+    )
+    assert said == ['Your reference number is ZZ999.'] and diary.complaints() == [], said
+
+
+async def a_booking_is_said_again_when_asked():
+    """R17 on the salon (session 4f): "could you repeat that?" gets the booking's own receipt again, from code.
+
+    After the automatic repeat of a cut receipt is spent, an explicit request
+    still gets it (`say_again`), with no write and no new intent.
+    """
+    script, flow, call, diary = await at_booking()
+    await read_back(flow, call, script)
+    receipt = "You're all set for Friday the 2nd at 2:00 PM. Anything else I can help with?"
+    said = await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    assert said == [receipt], said
+    intents = len(call.intents)
+    for words in ('Sorry, could you repeat that?', 'Once more, please?'):
+        said = await turn(flow, call, script, words, ('call', 'say_again'))
+        assert said == [receipt], (words, said)
+    assert booked(diary) == [('haircut', FRIDAY, '14:00')] and len(call.intents) == intents, (
+        'saying the receipt again wrote something',
+        booked(diary),
+    )
+
+
 async def a_receipt_cut_before_it_played_is_said_again_not_moved():
     """J + P7: session 3's stress call, offline. The receipt for 9:00 never played; the caller said
     "Yes, tomorrow at nine AM. That's great." The booking stays, is said again with no model, and nothing moves.
@@ -480,7 +558,7 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
         ('call', 'options'),
         ('say', 'On Friday the 9th I have 9:00 AM. Which time works for you?'),
     )
-    assert any('2026-10-09' in s for s in call._offered['slot'])
+    assert any('2026-10-09' in s for s in call._offers['slot'])
     await turn(
         flow,
         call,
@@ -496,7 +574,7 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
     assert 'Saturday the 3rd' in str(result.content) and 'Saturday the 10th' in str(result.content), (
         result.content
     )
-    assert not call._offered.get('slot'), ('an ambiguous day offered times', call._offered)
+    assert not call._offers.get('slot'), ('an ambiguous day offered times', call._offers)
     await turn(
         flow,
         call,
@@ -506,7 +584,7 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
         ('call', 'options'),
         ('say', 'On Saturday the 10th I have 9:00 AM.'),
     )
-    assert all('2026-10-10' in s for s in call._offered['slot']), call._offered
+    assert all('2026-10-10' in s for s in call._offers['slot']), call._offers
 
 
 async def a_wait_with_nothing_to_say_offers_what_there_is():
@@ -519,7 +597,7 @@ async def a_wait_with_nothing_to_say_offers_what_there_is():
     script, flow, call, _ = await at_booking(service='haircut', booking_day='Friday', booking_time='14:00')
     said = await turn(flow, call, script, "Yes, that's my number.", ('call', 'wait'))
     assert said == ['2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'], said
-    assert slot(FRIDAY, '14:00') in call._offered['slot'] and len(script.requests) == 1, script.requests
+    assert slot(FRIDAY, '14:00') in call._offers['slot'] and len(script.requests) == 1, script.requests
 
 
 async def model_speech_never_claims_a_completed_action():
@@ -730,6 +808,9 @@ async def main() -> None:
     await model_speech_never_claims_a_completed_action()
     await a_goodbye_never_claims_a_booking_nothing_made()
     await one_action_per_reply_and_one_budget_per_turn()
+    await a_booking_is_said_again_when_asked()
+    await complaint_words_are_the_salons()
+    await a_prose_reference_is_the_known_limit()
     print('business ok: A-L on the diary, identity, dates, claims')
 
 

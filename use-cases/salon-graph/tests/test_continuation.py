@@ -106,9 +106,9 @@ def booking_call():
 def offer_friday_at_nine(call) -> None:
     """The diary offers Friday's times to this call, and the caller's pick of 9:00 is recorded."""
     slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.services.call)['slots']
-    call._offered = {'slot': {s['slot_id']: s['spoken'] for s in slots}}
+    call._offers.put('slot', {s['slot_id']: s['spoken'] for s in slots})
     call.collect(service='haircut', booking_day='Friday', booking_time='09:00')
-    call._offered = {'slot': {s['slot_id']: s['spoken'] for s in slots}}
+    call._offers.put('slot', {s['slot_id']: s['spoken'] for s in slots})
     call.collect(slot=next(s['slot_id'] for s in slots if s['time'] == '09:00'))
 
 

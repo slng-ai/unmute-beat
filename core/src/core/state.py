@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_chec
 from uuid import uuid4
 
 from loguru import logger
+from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
 
@@ -74,6 +75,7 @@ def present(value: object) -> bool:
 RECEIPT_REPEATS = 1
 """How often an unheard receipt is said again without being asked (`CallContext.unheard_receipt`)."""
 _FILLERS = frozenset({'entry', 'tool_filler'})
+_tracer = trace.get_tracer('voice.confirmations')
 """Lines that cover a silence and answer nothing: hearing one does not end the caller's turn."""
 SPEECH_CHARS_PER_SECOND = 15.0
 """About how fast a voice says English text. Audio that stopped in under half its words' time was cut off.
@@ -211,6 +213,9 @@ class Spoken:
     """When its mark came back (or its acknowledgement arrived), on the segments' clock (`time.perf_counter`)."""
     cleared: bool = False
     """A clear was sent while its mark was still pending: the audio may have been cut, so it never counts as heard."""
+    lost: Literal['', 'cleared', 'silent', 'failed'] = ''
+    """Why `cleared` was set, from the transport's own record: a clear went out (the caller cut in), the segment
+    had no audio at all, or synthesis failed while it was pending. Evidence it did not play, never a guess."""
 
     @property
     def delivered(self) -> Literal['delivered', 'interrupted', 'unknown']:
@@ -294,16 +299,24 @@ class Checkpoint:
     """The caller turn the detour began on. Everything the caller said after it was said to the prerequisite."""
 
 
-type IntentStatus = Literal['prepared', 'dispatched', 'unknown', 'succeeded', 'rejected']
+type IntentStatus = Literal['prepared', 'dispatched', 'unknown', 'succeeded', 'rejected', 'withdrawn']
 """Where one business intent stands.
 
 `prepared`: known not dispatched. `dispatched`: handed to the backend and not
 answered yet. `unknown`: it may or may not have landed (cancelled, timed out,
 lost, or answered in a shape or about a subject that cannot be trusted).
 `succeeded` and `rejected`: a validated receipt, or a validated
-reconciliation, said which. Only those two are terminal.
+reconciliation, said which. `withdrawn`: never dispatched, and taken back by
+core because its read-back could not be confirmed (`CallContext.withdraw`).
+Those three are terminal. A withdrawn intent also keeps its arguments: the
+same operation, arguments and caller find it again for the rest of the call,
+so retrying never buys a fresh read-back allowance.
 """
 OPEN_INTENT: frozenset[str] = frozenset({'prepared', 'dispatched', 'unknown'})
+type Hearing = Literal['heard', 'early', 'cut', 'failed', 'unconfirmed']
+"""What the evidence says about one copy of a question (`CallContext.hearing`). Only `heard` can be agreed to."""
+HELD_INTENT: frozenset[str] = OPEN_INTENT | {'withdrawn'}
+"""The statuses under which the same operation, arguments and caller find the same intent (`CallContext.intent_for`)."""
 
 
 class Intent(BaseModel):
@@ -612,6 +625,12 @@ class CallContext(BaseModel):
     """Succeeded intents whose local recording (state, speech) failed after the receipt: repaired, never re-sent."""
     _simulated_playout: bool = PrivateAttr(default=False)
     """Whether an estimated playback may count as heard. Off unless a launcher chose it (`simulate_playout`)."""
+    _transport: str = PrivateAttr(default='')
+    """Which transport carries the call's speech, as its launcher wired it (`note_transport`); '' for none.
+
+    Recorded in every blocked, withdrawn and dispatched confirmation, so an
+    audit says which kind of evidence it could have had.
+    """
     _claimed: set[str] = PrivateAttr(default_factory=set)
     """Intents a run of `Operation.run` is sending right now. A second run of one of them is refused."""
     _versions: dict[tuple[str, str], int] = PrivateAttr(default_factory=dict)
@@ -620,8 +639,11 @@ class CallContext(BaseModel):
     """The intent of the last read-back put to the caller, whatever happened to the question since."""
     _last_asked_serial: int = PrivateAttr(default=0)
     """The serial of that read-back (`ProposalLedger.serial`)."""
-    _replied_to: set[int] = PrivateAttr(default_factory=set)
-    """Questions the caller heard in full and then answered: a reply began after the latest copy played."""
+    _declined: dict[int, int] = PrivateAttr(default_factory=dict)
+    """Read-backs the active step's agent read the caller as turning down (`decline`), by serial, with the turn.
+
+    A joined turn that rewinds drops the ones recorded on it: they were read from half a sentence.
+    """
     _judged: set[str] = PrivateAttr(default_factory=set)
     """Question copies already counted as heard or not (`note_unheard_readbacks`)."""
     _turn_usage: tuple[int, Any] | None = PrivateAttr(default=None)
@@ -629,6 +651,8 @@ class CallContext(BaseModel):
     _departed: bool = PrivateAttr(default=False)
     """The caller said goodbye: no new consequential intent starts after it. See `note_departure`."""
     _pending_marks: dict[str, str] = PrivateAttr(default_factory=dict)
+    _sent_marks: set[str] = PrivateAttr(default_factory=set)
+    """Pending marks the transport has sent: all their segment's audio went out before them."""
     """Marks sent and not yet returned, by name, with the segment each one follows. See `mark_for`."""
     _clears: int = PrivateAttr(default=0)
     """How many clears this call sent: part of every mark's name, so a mark from before one is told apart."""
@@ -860,15 +884,17 @@ class CallContext(BaseModel):
         back at once and prove nothing: the segment is never delivered.
         """
         self._log_playback('sent', name, at)
+        if name in self._pending_marks:
+            self._sent_marks.add(name)
         if media == 0 and (segment := self._marked(name)) is not None:
-            segment.cleared = True
+            segment.cleared, segment.lost = True, 'silent'
             self._log_playback('silent', name, at, segment.proposal)
 
     def note_speech_failed(self, at: float) -> None:
         """Speech synthesis reported an error while marks were pending: those segments may be partial or silent."""
         for name in list(self._pending_marks):
             if (segment := self._marked(name)) is not None:
-                segment.cleared = True
+                segment.cleared, segment.lost = True, 'failed'
                 self._log_playback('failed', name, at, segment.proposal)
 
     def _marked(self, name: str) -> Spoken | None:
@@ -885,6 +911,7 @@ class CallContext(BaseModel):
         Unrelated, duplicate and stale names change nothing.
         """
         segment_id = self._pending_marks.pop(name, None)
+        self._sent_marks.discard(name)
         segment = next((s for s in self.all_spoken if s.id == segment_id), None) if segment_id else None
         if segment is None or segment.interrupted or segment.cleared:
             self._log_playback('ignored', name, at)
@@ -893,6 +920,15 @@ class CallContext(BaseModel):
         segment.simulated = local and self._simulated_playout
         self._log_playback('written' if local else 'played', name, at, segment.proposal)
         return True
+
+    def note_transport(self, name: str) -> None:
+        """Name the transport this call's speech goes out on (`core.processor.playout`, or a text runner)."""
+        self._transport = name
+
+    @property
+    def transport(self) -> str:
+        """The transport named by `note_transport`, '' when none was."""
+        return self._transport
 
     def simulate_playout(self) -> None:
         """Let an estimated playback (`local`) count as heard on this call. For a test or development launcher only.
@@ -908,18 +944,26 @@ class CallContext(BaseModel):
         """Whether estimated playback counts as heard on this call (`simulate_playout`)."""
         return self._simulated_playout
 
-    def note_cleared(self, at: float) -> None:
+    def note_cleared(self, at: float, *, sent: bool = True) -> None:
         """The transport is about to clear the audio it holds: every mark still pending may now come back for nothing.
 
         Recorded before the clear goes out, so a mark returned in answer to
         it can never pass for playback. A segment whose mark already came back
         keeps it: clearing later audio does not unplay earlier audio.
+
+        `sent=False` is for a far end that keeps all it was sent (a browser has
+        no clear): only the marks still queued behind the dropped audio are
+        voided. A segment whose mark was already sent had all its audio sent,
+        and stays pending for the far end's own report.
         """
-        for name, segment_id in self._pending_marks.items():
+        for name, segment_id in list(self._pending_marks.items()):
+            if not sent and name in self._sent_marks:
+                continue
             if (segment := next((s for s in self.all_spoken if s.id == segment_id), None)) is not None:
-                segment.cleared = True
+                segment.cleared, segment.lost = True, 'cleared'
                 self._log_playback('cleared', name, at, segment.proposal)
-        self._pending_marks.clear()
+            del self._pending_marks[name]
+            self._sent_marks.discard(name)
         self._clears += 1
 
     def note_onset(self, at: float) -> None:
@@ -1219,23 +1263,143 @@ class CallContext(BaseModel):
             self._last_asked_intent, self._last_asked_serial = intent, self._proposals.serial
 
     def last_asked_left_undone(self) -> bool:
-        """Whether the change last read back to the caller was left waiting: never made, and never answered.
+        """Whether the change last read back to the caller was left waiting: never made, and never turned down.
 
-        Never made: its intent was never dispatched. Never answered: no reply
-        began after it played in full (`_replied_to`). A read-back the caller
-        heard and answered, whose step's agent then did not carry it out, was
-        turned down or changed ("No, don't book Friday at two"), not left
-        waiting: telling them "I haven't made that last change" as they leave
-        says what they just asked for as if it were a failure (session 4d,
-        live call 7). The agent's choice is the typed decision; no word of the
-        reply is read here.
+        Never made: its intent was never dispatched, or core withdrew it
+        (`withdraw`: the caller may have talked over that line too). Never turned down: the
+        active step's agent never read a reply to it as a no (`decline`). A
+        read-back the caller turned down ("No, don't book Friday at two") is
+        not left waiting: telling them "I haven't made that last change" as
+        they leave says what they asked for as if it were a failure (session
+        4d, live call 7). A reply that only asked something ("Before I answer,
+        what are your hours?") left it waiting, and they are told (session
+        4f): when a reply began says nothing about what it meant. A revision
+        puts a fresh read-back, which is then the last one asked. The agent's
+        typed call is the decision; no word of the reply is read here.
         """
         intent = self._intents.get(self._last_asked_intent)
         return (
             intent is not None
-            and intent.status == 'prepared'
-            and self._last_asked_serial not in self._replied_to
+            and intent.status in ('prepared', 'withdrawn')
+            and self._last_asked_serial not in self._declined
         )
+
+    def decline(self) -> bool:
+        """The active step's agent read the caller's reply as a no to the pending read-back: record it, and spend it.
+
+        Only the question this turn can answer counts (`pending_question`:
+        last turn's, same identity, heard in full), and only a read-back of an
+        operation. It is consumed, so no later yes can approve it. False, with
+        nothing recorded, when there is no such question: a caller cannot turn
+        down what they did not hear.
+        """
+        question = self._proposals.pending(self)
+        if question is None or not getattr(question, 'intent', ''):
+            return False
+        self._declined[self._proposals.serial] = self._turn
+        self.answered()
+        return True
+
+    def declined_this_turn(self) -> bool:
+        """Whether a read-back was turned down on this caller turn: a rendered step says so, not "pardon"."""
+        return self._turn in self._declined.values()
+
+    def hearing(self, segment: Spoken | None) -> Hearing:
+        """What the evidence says about one copy of a question, for the model's context and the audits.
+
+        `heard`: delivered (`Spoken.delivered`) and played out before the reply
+        began. `early`: delivered, but the reply began before its playback
+        ended. `cut`: the caller cut in on it, or a clear went out while it was
+        pending. `failed`: it had no audio, or synthesis failed. `unconfirmed`:
+        no evidence either way, which is not evidence the caller missed it.
+        Only `heard` can be agreed to.
+        """
+        if segment is None:
+            return 'unconfirmed'
+        if segment.interrupted or segment.lost == 'cleared':
+            return 'cut'
+        if segment.lost:
+            return 'failed'
+        if segment.delivered == 'delivered':
+            return 'heard' if self.answered_in_time(segment) else 'early'
+        return 'unconfirmed'
+
+    def last_hearing(self) -> Hearing | None:
+        """`hearing` for the latest copy of last turn's question, or None when there is none to answer."""
+        if self._proposals.last(self) is None:
+            return None
+        copies = self._proposals.copies(self)
+        return self.hearing(copies[-1] if copies else None)
+
+    def delivery_record(self, serial: int) -> dict[str, Any]:
+        """How a question's copies reached the caller, as far as evidence goes: for a blocked or withdrawn read-back.
+
+        The transport (`transport`), whether estimates count (`simulated_playout`),
+        and per copy what said it played (`heard_by`: `mark` is the far end's
+        own acknowledgement), what stopped it (`lost`) and the verdict
+        (`hearing`). Observed facts only: no copy is summarised as unheard.
+        """
+        copies = [s for s in self.all_spoken if serial and s.proposal == serial]
+        return {
+            'transport': self.transport,
+            'simulated_playout': self._simulated_playout,
+            'copies': [
+                {
+                    'segment': s.id,
+                    'heard_by': s.heard_by or 'none',
+                    'lost': s.lost,
+                    'hearing': self.hearing(s),
+                    'simulated': s.simulated,
+                }
+                for s in copies
+            ],
+        }
+
+    def note_confirmation(self, event: Literal['blocked', 'withdrawn'], about: str, reason: str) -> None:
+        """One `confirmation` span for a read-back that could not be agreed to, or was taken back. Nothing was sent.
+
+        A `write` span exists only for a dispatched action; this is the record
+        of the ones that never got that far, and why: the hearing of its last
+        copy (`hearing`), or what else stood in the way.
+        """
+        record = {'event': event, 'about': about, 'reason': reason, 'call': self._id, 'turn': self._turn}
+        record |= self.delivery_record(self._confirmation_serial())
+        with _tracer.start_as_current_span('confirmation') as span:
+            span.set_attribute('confirmation.audit', json.dumps(record, default=str))
+        logger.info(
+            'confirmation {} for {}: {} on {}', event, about, reason, self.transport or 'no transport'
+        )
+
+    def _confirmation_serial(self) -> int:
+        """The serial of the read-back a confirmation record is about: the one asked, else the last one asked."""
+        return self._proposals.serial if self._proposals.asked is not None else self._last_asked_serial
+
+    def withdraw(self, intent_id: str) -> None:
+        """Take back a prepared intent whose read-back could not be confirmed: terminal, never dispatched, nothing pending.
+
+        The question about it is spent, so no later reply can agree to it; the
+        intent stays withdrawn, so the same operation, arguments and caller
+        find it again (`intent_for`) and never get a fresh read-back
+        allowance. Nothing is owed: it never reached a service. A goodbye
+        still says `left_undone` for it (`last_asked_left_undone`).
+
+        The audit's reason is the hearing of the read-back's last copy
+        (`hearing`): `unconfirmed` when evidence is missing, `cut` only when
+        the caller did cut in. Which retry count ran out says neither: a line
+        that proved one segment heard counts every later unacknowledged copy
+        as talked over.
+        """
+        intent = self._intents.get(intent_id)
+        if intent is None or intent.status != 'prepared':
+            return
+        serial = self._confirmation_serial()
+        copies = [s for s in self.all_spoken if serial and s.proposal == serial]
+        reason = self.hearing(copies[-1] if copies else None)
+        self.note_confirmation('withdrawn', intent.operation, reason)
+        self.set_intent(intent_id, status='withdrawn')
+        if getattr(self._proposals.asked, 'intent', '') == intent_id:
+            self._proposals.consume()
+            self._approved = (0, -1)
 
     def pending_question(self) -> Any:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
@@ -1441,7 +1605,11 @@ class CallContext(BaseModel):
         return tuple(f for f in latest.values() if self.is_latest(f.kind, f.resource, f.version))
 
     def open_intent(self, operation: str, args: str) -> Intent | None:
-        """The open intent for this operation and these arguments under the caller now on the line, if there is one."""
+        """The intent for this operation and these arguments under the caller now on the line, if one is held.
+
+        Held means open, or withdrawn (`HELD_INTENT`): a read-back core took
+        back is found again, never replaced by a fresh intent.
+        """
         subject = self.identity()
         return next(
             (
@@ -1450,7 +1618,7 @@ class CallContext(BaseModel):
                 if i.operation == operation
                 and i.args == args
                 and i.subject == subject
-                and i.status in OPEN_INTENT
+                and i.status in HELD_INTENT
             ),
             None,
         )
@@ -1498,17 +1666,12 @@ class CallContext(BaseModel):
         cancellation and a retry after a timeout all find the same intent, so
         none of them can manufacture a fresh identity past the retry guard.
         Once it succeeded or was refused, the same arguments make a new one.
+        Once it was withdrawn, they find it again (`open_intent`): it is never
+        read back or dispatched on this call.
         """
-        subject = self.identity()
-        for intent in reversed(self._intents.values()):
-            if (
-                intent.operation == operation
-                and intent.args == args
-                and intent.subject == subject
-                and intent.status in OPEN_INTENT
-            ):
-                return intent
-        made = Intent(id=uuid4().hex, operation=operation, args=args, subject=subject)
+        if (held := self.open_intent(operation, args)) is not None:
+            return held
+        made = Intent(id=uuid4().hex, operation=operation, args=args, subject=self.identity())
         self._intents[made.id] = made
         return made
 
@@ -1980,6 +2143,7 @@ class CallContext(BaseModel):
             )
             self._pieces.append(heard)
             self._proposals.rewind(self)
+            self._declined = {serial: turn for serial, turn in self._declined.items() if turn != self._turn}
         else:
             self._turn += 1
             self._pieces = [heard]
@@ -1987,8 +2151,6 @@ class CallContext(BaseModel):
             self._acted = False
             self._proposals.age(self)
             self._proposals.open_turn()
-            if self._proposals.pending(self) is not None:
-                self._replied_to.add(self._proposals.serial)
         self._spoken_over = missed
         self.heard = ' '.join(p for p in self._pieces if p)
         self._inputs[self._turn] = self.heard

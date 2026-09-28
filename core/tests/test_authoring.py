@@ -196,7 +196,7 @@ async def the_controlled_clinic_books_and_takes_back():
     assert said(reply) == ['I have Tuesday at 9:00 AM or Tuesday at 10:00 AM. Which works for you?'], said(
         reply
     )
-    assert call._offered == {'slot': clinic.TIMES}, call._offered
+    assert call._offers == {'slot': clinic.TIMES}, call._offers
     reply = await turn(flow, call, script, 'Ten, please.', ('collect', {'slot': '1000'}))
     assert said(reply) == ['Shall I book Tuesday at 10:00 AM for P-1234?'] and backend.calls == 0
     reply = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))

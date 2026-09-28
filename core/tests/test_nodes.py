@@ -25,6 +25,9 @@ the exact question, runs the operation and checks every move. What is checked:
   heard in full, is their yes: code says so and carries it out, with no
   second request. A different value is read back again; the same value after
   a read-back nobody heard carries out nothing;
+* P19 (session 4f): on a prose step too, a question asked in reply to a
+  read-back leaves it waiting, and a goodbye says so; only the agent's
+  `decline` turns it down (core's desk R16, on the clinic);
 * silence: a caller quiet after a read-back is asked if they are still there
   and hears the read-back again, a yes to that copy books, and silence that
   goes on ends the call with a goodbye.
@@ -66,6 +69,8 @@ class Script:
     def __init__(self) -> None:
         self.moves: list[tuple[Any, ...]] = []
         self.steps: list[str] = []
+        self.told: list[str] = []
+        """Everything each request was sent (instructions and messages), as text, for checks on what a step was told."""
         self.call: core.FlowCall | None = None
         self.delay = 0.0
         self.model = FunctionModel(self.reading, stream_function=self.agent)
@@ -75,6 +80,7 @@ class Script:
 
     async def agent(self, messages: Any, info: AgentInfo):
         self.steps.append(self.call.state.agent if self.call is not None else '?')
+        self.told.append(f'{getattr(info, "instructions", "") or ""}\n{messages!r}')
         if self.delay:
             await asyncio.sleep(self.delay)
         if not self.moves:
@@ -382,19 +388,19 @@ async def late_options_offer_nothing():
     flow = StepFlow([step], model=Script().model, state_type=ClinicState)
     for moved_on in ('request', 'step'):
         call = flow.open(ClinicState(), services=Backend())
-        call._offered = {'slot': {'1000': 'Tuesday at 10:00 AM'}}
+        call._offers.put('slot', {'1000': 'Tuesday at 10:00 AM'})
         release.clear()
         looking = asyncio.create_task(_offer(call, step.choices))
         await asyncio.sleep(0)
         if moved_on == 'request':
             call.collect(patient='P-4321')
-            call._offered = {'slot': {'1000': 'Tuesday at 10:00 AM'}}
+            call._offers.put('slot', {'1000': 'Tuesday at 10:00 AM'})
         else:
             call.commit(agent='elsewhere')
         release.set()
         result = await looking
         assert 'stale' in result, (moved_on, result)
-        assert call._offered == {'slot': {'1000': 'Tuesday at 10:00 AM'}}, (
+        assert call._offers == {'slot': {'1000': 'Tuesday at 10:00 AM'}}, (
             moved_on,
             'a stale answer replaced the offer',
         )
@@ -655,6 +661,23 @@ async def silence_gets_a_reminder_then_a_goodbye():
     assert call.ended == 'abandoned' and closed and call.spoken[-1].text == ENGLISH.idle_goodbye, call.ended
 
 
+async def a_question_is_not_a_no_on_the_clinic():
+    """P19: the decline rule outside the desk: a prose step with two operations and no hand-over."""
+    for declined in (False, True):
+        script = Script()
+        flow, call = opened('one_agent.yaml', script)
+        await turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}))
+        if declined:
+            said = await turn(
+                flow, call, script, 'No, leave it. Bye.', ('calls', [('decline', {}), ('goodbye', {})])
+            )
+        else:
+            await turn(flow, call, script, 'Before I say, do you take walk-ins?', ('say', 'We do, mornings.'))
+            said = await turn(flow, call, script, 'Bye.', ('call', 'goodbye', {}))
+        assert call.services.calls == 0, said
+        assert (ENGLISH.left_undone in ' '.join(said)) is not declined, (declined, said)
+
+
 async def main() -> None:
     await no_reader_runs_in_any_pattern()
     public_path_loads_no_reader()
@@ -671,9 +694,10 @@ async def main() -> None:
     await the_same_value_said_again_is_a_yes()
     reads_back_is_checked_at_load()
     await silence_gets_a_reminder_then_a_goodbye()
+    await a_question_is_not_a_no_on_the_clinic()
     print(
         'nodes ok: no reader, hostile calls, mixed reply, holding, code node, late options, unheard receipt, '
-        'no echo, code read-back'
+        'no echo, code read-back, a question is not a no'
     )
 
 

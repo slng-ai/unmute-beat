@@ -21,3 +21,6 @@ data/
 
 # coval_sim's default run log: local memory of launches. A session's own log is kept under docs/research/.
 use-cases/concierge-tools/runs.jsonl
+
+# core/client builds core/src/core/client/sdk.js; its packages are not committed.
+node_modules/

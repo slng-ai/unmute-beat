@@ -11,8 +11,11 @@
   settle (`salon.app.open_call(settle=...)`);
 * A6: the memory diagnostic (`server.live_counts`) sees a live call, and
   stops seeing it once it is gone;
-* A7: `LIVE_FAULT` kills its worker after the named caller's commit, and only
-  once `LIVE_FAULT_ARM` exists.
+* A7: `LIVE_FAULT` kills its worker after the named caller's commit, only
+  once `LIVE_FAULT_ARM` exists, and only once: the dying worker removes it;
+* A8 (session 4f): two runner processes on one runner file place
+  consecutive calls on their hosts in turn; a claim records the port the
+  stream arrived on; the arming check refuses two calls on one process.
 
 The long checks (kills, drain, overload through the real runner) are
 `python -m evals.load faults`.
@@ -129,6 +132,37 @@ def the_live_fault_waits_to_be_armed(folder: str):
     Path(arm).touch()
     done = subprocess.run([sys.executable, '-c', LIVE_FAULT_CHILD], env=env, capture_output=True, text=True)
     assert done.returncode == 9 and 'alive' not in done.stdout, done
+    assert not Path(arm).exists(), 'the fault stayed armed after it fired'
+    done = subprocess.run([sys.executable, '-c', LIVE_FAULT_CHILD], env=env, capture_output=True, text=True)
+    assert done.returncode == 0, ('the fault fired twice', done)
+
+
+def calls_are_placed_on_two_processes(path: str):
+    """A8: the webhook's placement, the claim's record of where media arrived, and the arming verdict."""
+    from evals.placement import verdict
+
+    first, second = Admission(path), Admission(path)
+    hosts = ('ws://127.0.0.1:9001', 'a.trycloudflare.com')
+    for runner, sid in ((first, 'CA-a'), (second, 'CA-b'), (first, 'CA-c')):
+        assert runner.admit(sid, 'pair', '', '')
+    urls = [runner.place(sid, hosts) for runner, sid in ((first, 'CA-a'), (second, 'CA-b'), (first, 'CA-c'))]
+    assert urls == ['ws://127.0.0.1:9001/ws', 'wss://a.trycloudflare.com/ws', 'ws://127.0.0.1:9001/ws'], urls
+    assert first.claim('CA-a', 'MZa', 9001)['served_port'] == 9001
+    assert second.claim('CA-b', 'MZb', 9002)['served_port'] == 9002
+    rows = {row['call_sid']: row for row in first.calls()}
+    assert rows['CA-b']['media_host'] == 'wss://a.trycloudflare.com/ws', rows['CA-b']
+    pid = os.getpid()
+    apart = [{'worker': pid, 'served_port': 9001}, {'worker': pid + 1, 'served_port': 9002}]
+    assert verdict(apart) == 'armed'
+    assert verdict([apart[0], {'worker': pid, 'served_port': 9001}]).startswith('same worker')
+    assert verdict([apart[0], {'worker': pid + 1, 'served_port': 9001}]).startswith('same runner process')
+    old = sqlite3.connect(path + '.old')
+    old.execute('CREATE TABLE calls (call_sid TEXT PRIMARY KEY, state TEXT NOT NULL, worker INTEGER)')
+    old.close()
+    upgraded = {
+        row[1] for row in sqlite3.connect(Admission(path + '.old').path).execute('PRAGMA table_info(calls)')
+    }
+    assert {'media_host', 'served_port'} <= upgraded, upgraded
 
 
 def main() -> None:
@@ -138,7 +172,9 @@ def main() -> None:
     the_memory_diagnostic_sees_a_live_call()
     with tempfile.TemporaryDirectory() as tmp:
         the_live_fault_waits_to_be_armed(tmp)
-    print('runner ok: A1-A7, bounded admission, one claim, nothing held by the dead, live calls counted')
+    with tempfile.TemporaryDirectory() as tmp:
+        calls_are_placed_on_two_processes(os.path.join(tmp, 'placed.db'))
+    print('runner ok: A1-A8, bounded admission, one claim, nothing held by the dead, live calls counted')
 
 
 if __name__ == '__main__':

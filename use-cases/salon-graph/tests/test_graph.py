@@ -73,8 +73,8 @@ async def each_node_is_offered_its_own_tools():
     concierge, booking = script.requests
     assert concierge.tools == ['collect', 'goodbye', 'hand_over'], concierge.tools
     assert set(booking.tools) == {
-        'book_appointment', 'cancel_appointment', 'collect', 'goodbye', 'hand_over',
-        'move_appointment', 'options', 'wait',
+        'book_appointment', 'cancel_appointment', 'collect', 'decline', 'goodbye', 'hand_over',
+        'move_appointment', 'options', 'say_again', 'wait',
     }, booking.tools  # fmt: skip
     assert 'lookup_customer' not in booking.tools and 'record_complaint' not in booking.tools
 
@@ -104,7 +104,7 @@ async def first_requests_are_pinned():
         booking_time='14:00',
     )
     call.commit(agent='booking')
-    call._offered = {'slot': {'2026-10-02T1400|haircut': 'haircut Friday the 2nd at 2:00 PM'}}
+    call._offers.put('slot', {'2026-10-02T1400|haircut': 'haircut Friday the 2nd at 2:00 PM'})
     await turn(flow, call, script, 'Two works.', ('say', 'Great.'))
     requests['booking, verified, a time on offer'] = pinned(script)['booking']
     script, flow, call, _ = opened(verified_phone=PHONE, customer_status='existing')

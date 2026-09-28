@@ -357,8 +357,13 @@ class Repository:
         call_seconds: int,
         state: Path,
         workers: int,
+        media_hosts: tuple[str, ...] = (),
     ) -> Process:
         """The agency's runner (`server.py` under uvicorn, `workers` processes) on one port, for a real phone line.
+
+        `media_hosts` is set when several runners share `state` (`serve
+        --processes`): every runner's public host, so the webhook places
+        consecutive calls on them in turn (`server.py`, `MEDIA_HOSTS`).
 
         Its diary and call record are files in `state`, kept after the run: the
         diary's bookings and intents and the runner's calls are the evidence a
@@ -394,6 +399,7 @@ class Repository:
                 'PUBLIC_HOST': host,
                 'DIARY_PATH': str(state / 'diary.db'),
                 'RUNNER_DB': str(state / 'runner.db'),
+                **({'MEDIA_HOSTS': ','.join(media_hosts)} if media_hosts else {}),
                 **(profile.model_dump() if profile else {}),
             },
             log,
@@ -742,6 +748,7 @@ class ReleaseCheck:
         *,
         phone_number: str = '',
         campaign: str = '',
+        processes: int = 1,
     ) -> None:
         """Start the agency's bot behind a tunnel, print the host, and keep both up until stopped.
 
@@ -753,7 +760,18 @@ class ReleaseCheck:
         runner, when it has one (`server.py`), and the number owned for the
         whole of it (`Campaign`). Jobs sent at it (`run --host`) never touch
         the number; it is given back once, after every call is over.
+
+        `processes` above one, on a campaign only, is the worker-failure
+        pair's arrangement (session 4f): that many runners, each on its own
+        port (from `--port` up) and its own tunnel, sharing one `--state`
+        (one diary, one call record), with every tunnel's host in
+        `MEDIA_HOSTS`. The number points at the first; its webhook sends
+        consecutive calls to the runners in turn, so a pair lands on two
+        processes whatever the kernel does. Each runner's `LIVE_FAULT` and
+        `LIVE_FAULT_ARM` come from the environment, as for one runner.
         """
+        if processes > 1 and not (phone_number and self.repo.serves_many(agency)):
+            raise ValueError('several runner processes are only for a phone-line campaign on server.py')
         if not self.repo.limits_itself(agency):
             raise ValueError(f'{agency} has no call limit of its own; serve only a bot with MAX_CALL_SECONDS')
         if phone_number and not campaign:
@@ -762,21 +780,26 @@ class ReleaseCheck:
         log = self.workdir / f'{agency}-bot.log'
         env = self.repo.env()
         with contextlib.ExitStack() as stack:
-            tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
+            ports = [self.port + i for i in range(processes)]
+            tunnels = [stack.enter_context(Tunnel(port, self.workdir)) for port in ports]
+            tunnel = tunnels[0]
             if phone_number and self.repo.serves_many(agency):
-                stack.enter_context(
-                    self.repo.runner(
-                        agency,
-                        env,
-                        tunnel.host,
-                        log,
-                        self.port,
-                        speech,
-                        call_seconds,
-                        self.state,
-                        self.workers,
+                hosts = tuple(t.host for t in tunnels) if processes > 1 else ()
+                for port, each in zip(ports, tunnels, strict=True):
+                    stack.enter_context(
+                        self.repo.runner(
+                            agency,
+                            env,
+                            each.host,
+                            log if port == self.port else log.with_name(f'{agency}-bot-{port}.log'),
+                            port,
+                            speech,
+                            call_seconds,
+                            self.state,
+                            self.workers,
+                            hosts,
+                        )
                     )
-                )
             else:
                 stack.enter_context(
                     self.repo.bot(
@@ -797,6 +820,8 @@ class ReleaseCheck:
                 f'{log}; state {self.state}); stop with SIGTERM or Ctrl-C',
                 flush=True,
             )
+            if processes > 1:
+                print(f'runners on ports {ports}, media hosts {[t.host for t in tunnels]}', flush=True)
             threading.Event().wait()
 
     def add(self, agency: str) -> str:
@@ -885,6 +910,12 @@ def _parser() -> argparse.ArgumentParser:
     serve.add_argument('--phone-number', default='', help='own this Twilio number for the whole campaign')
     serve.add_argument('--campaign', default='', help="the campaign's label, carried by every call")
     serve.add_argument('--workers', type=int, default=2, help="the runner's worker processes")
+    serve.add_argument(
+        '--processes',
+        type=int,
+        default=1,
+        help='runners sharing --state, each on its own port and tunnel, calls placed in turn (a campaign only)',
+    )
     serve.add_argument('--state', type=Path, help="where the runner's diary and call record are kept")
     serve.add_argument(
         '--log', type=Path, default=Path('runs.jsonl'), help='the run log, beside the campaigns'
@@ -930,6 +961,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.call_seconds,
                     phone_number=args.phone_number,
                     campaign=args.campaign,
+                    processes=args.processes,
                 )
             return 0
         if args.command == 'add':

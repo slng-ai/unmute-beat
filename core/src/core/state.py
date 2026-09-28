@@ -71,6 +71,8 @@ def present(value: object) -> bool:
     return value is not None and value != ''
 
 
+RECEIPT_REPEATS = 1
+"""How often an unheard receipt is said again without being asked (`CallContext.unheard_receipt`)."""
 _FILLERS = frozenset({'entry', 'tool_filler'})
 """Lines that cover a silence and answer nothing: hearing one does not end the caller's turn."""
 SPEECH_CHARS_PER_SECOND = 15.0
@@ -546,8 +548,8 @@ class CallContext(BaseModel):
     """
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
     """The one question this call is waiting on an answer to. See `core.proposals`."""
-    _told: tuple[int, str, str] = PrivateAttr(default=(0, '', ''))
-    """The turn, words and intent of the latest receipt speech (`note_receipt`)."""
+    _told: tuple[int, str, str, int] = PrivateAttr(default=(0, '', '', 0))
+    """The turn, words and intent of the latest receipt speech (`note_receipt`), and how often it was said again."""
     _approved: tuple[int, int] = PrivateAttr(default=(0, -1))
     """The question serial the active step's agent approved, and the turn generation that did. See `approve`."""
     _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
@@ -616,6 +618,10 @@ class CallContext(BaseModel):
     """The newest version known for each resource (kind, id): a receipt below it is history. See `is_latest`."""
     _last_asked_intent: str = PrivateAttr(default='')
     """The intent of the last read-back put to the caller, whatever happened to the question since."""
+    _last_asked_serial: int = PrivateAttr(default=0)
+    """The serial of that read-back (`ProposalLedger.serial`)."""
+    _replied_to: set[int] = PrivateAttr(default_factory=set)
+    """Questions the caller heard in full and then answered: a reply began after the latest copy played."""
     _judged: set[str] = PrivateAttr(default_factory=set)
     """Question copies already counted as heard or not (`note_unheard_readbacks`)."""
     _turn_usage: tuple[int, Any] | None = PrivateAttr(default=None)
@@ -1210,12 +1216,26 @@ class CallContext(BaseModel):
         """Record that this question has gone out to the caller, on this turn."""
         self._proposals.ask(self, proposal)
         if intent := getattr(proposal, 'intent', ''):
-            self._last_asked_intent = intent
+            self._last_asked_intent, self._last_asked_serial = intent, self._proposals.serial
 
     def last_asked_left_undone(self) -> bool:
-        """Whether the change last read back to the caller was never made: its intent was never dispatched."""
+        """Whether the change last read back to the caller was left waiting: never made, and never answered.
+
+        Never made: its intent was never dispatched. Never answered: no reply
+        began after it played in full (`_replied_to`). A read-back the caller
+        heard and answered, whose step's agent then did not carry it out, was
+        turned down or changed ("No, don't book Friday at two"), not left
+        waiting: telling them "I haven't made that last change" as they leave
+        says what they just asked for as if it were a failure (session 4d,
+        live call 7). The agent's choice is the typed decision; no word of the
+        reply is read here.
+        """
         intent = self._intents.get(self._last_asked_intent)
-        return intent is not None and intent.status == 'prepared'
+        return (
+            intent is not None
+            and intent.status == 'prepared'
+            and self._last_asked_serial not in self._replied_to
+        )
 
     def pending_question(self) -> Any:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
@@ -1260,10 +1280,15 @@ class CallContext(BaseModel):
 
     def note_receipt(self, words: str, intent: str = '') -> None:
         """These words just told the caller what the business did. Kept so they can be said again if unheard."""
-        self._told = (self.turn, words, intent)
+        self._told = (self.turn, words, intent, 0)
 
-    def unheard_receipt(self) -> str:
-        """The latest receipt speech, if it is known not to have reached the caller: cut, or never started.
+    def said_again(self) -> None:
+        """The latest receipt was just said again, on this turn: the same receipt, for the same intent, once more."""
+        _turn, words, intent, repeats = self._told
+        self._told = (self.turn, words, intent, repeats + 1)
+
+    def unheard_receipt(self, repeats: int = RECEIPT_REPEATS) -> str:
+        """The latest receipt speech, if it is known not to have reached the caller and may be said again.
 
         Last turn's, or this turn's when the caller spoke before any of it
         played: then their words continue the turn it was said in
@@ -1272,9 +1297,17 @@ class CallContext(BaseModel):
         Known means evidence, as for the missed-speech note: a copy the caller
         cut in on, or one whose audio never started on a runtime that reports
         playback. No record of the words is not evidence, and gives ''.
+
+        Said again at most `repeats` times (`RECEIPT_REPEATS` without asking):
+        a caller who talks over it once more is heard, not talked over in turn
+        (session 4d, live call 6: the move's receipt said six times). Past
+        that it is still unheard, never marked delivered: the evidence says
+        what it says. A receipt a later change superseded is never said again.
         """
-        turn, words, intent = self._told
-        if not words or turn not in (self.turn - 1, self.turn) or (turn == self.turn and not self.continuing):
+        turn, words, intent, said = self._told
+        if not words or said >= repeats:
+            return ''
+        if turn not in (self.turn - 1, self.turn) or (turn == self.turn and not self.continuing):
             return ''
         filed = next((e for e in self._evidence if e.intent and e.intent == intent), None)
         if filed is not None and filed.changes and filed not in self.effective():
@@ -1855,7 +1888,19 @@ class CallContext(BaseModel):
             if not updates:
                 return
         candidate = self.state.model_dump() | deepcopy(updates)
-        self.state = type(self.state).model_validate(candidate, extra='forbid')
+        self.state = type(self.state).model_validate(
+            candidate, extra='forbid', context=self.validation_context()
+        )
+
+    def validation_context(self) -> dict[str, Any]:
+        """What an application's validators may read (`ValidationInfo.context`) whenever core validates its state.
+
+        The call's own clock, read once per call (`today`), so a validator can
+        turn "Thursday" into one date, the same date all call long. Plain
+        values, no services and nothing that changes under a validator: a
+        validator does no I/O and needs no core import to read it.
+        """
+        return {'today': self.today.date, 'now': self.today.at}
 
     async def say(self, text: str, origin: str = 'entry', tool_call_id: str = '') -> None:
         """Speak one fixed line now, without waiting for the model.
@@ -1942,6 +1987,8 @@ class CallContext(BaseModel):
             self._acted = False
             self._proposals.age(self)
             self._proposals.open_turn()
+            if self._proposals.pending(self) is not None:
+                self._replied_to.add(self._proposals.serial)
         self._spoken_over = missed
         self.heard = ' '.join(p for p in self._pieces if p)
         self._inputs[self._turn] = self.heard

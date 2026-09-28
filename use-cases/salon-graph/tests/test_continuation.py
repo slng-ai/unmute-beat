@@ -30,6 +30,7 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from core.history import project
 from core.policies import TurnBudget
 from core.processor import PydanticAgentProcessor
+from core.state import RECEIPT_REPEATS
 from core.steps import Prompted, _args
 from core.turn import Turn
 from salon import diary
@@ -127,14 +128,20 @@ async def read_back_a_haircut(call, probe, *, played: bool = True) -> str:
 
 @contextmanager
 def steps(**by_step):
-    """Every step's model, scripted by the caller's words so far: `{step: fn(heard) -> move}`. Default: speak."""
+    """Every step's model, scripted by the caller's words so far: `{step: fn(heard) -> move}`. Default: speak.
+
+    On a rendered step `say` is its `wait` choice, as in `tests.script`.
+    """
     stack = ExitStack()
     for name, node in FLOW.nodes.items():
         choose = by_step.get(name)
+        rendered = getattr(FLOW.by_id.get(name), 'rendered', False)
 
-        async def stream(messages, info, choose=choose):
+        async def stream(messages, info, choose=choose, rendered=rendered):
             move = await choose(call_of[0]) if choose else ('say', 'Anything else?')
-            if move[0] == 'say':
+            if move[0] == 'say' and rendered:
+                yield {0: DeltaToolCall(name='wait', json_args='{}')}
+            elif move[0] == 'say':
                 yield move[1]
             else:
                 yield {0: DeltaToolCall(name=move[1], json_args=json.dumps(move[2] if len(move) > 2 else {}))}
@@ -393,6 +400,54 @@ async def an_unheard_receipt_is_said_again_and_not_booked_again():
     assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the booking was made again'
 
 
+async def an_unheard_receipt_is_said_again_once_then_the_caller_is_heard():
+    """Session 4d, live call 6: the move's receipt was said again every time the caller talked over it (six times).
+
+    It is said again once, by code. When the caller talks over that copy
+    too, their words go to the node's agent, which records their correction.
+    The receipt is still unheard (not marked delivered), and nothing is
+    booked twice. (A receipt a later change superseded is never said again:
+    core `test_tickets` R9.)
+    """
+    call = booking_call()
+    call_of[0] = call
+    probe = Probe(call)
+    await read_back_a_haircut(call, probe)
+    requests: list[str] = []
+
+    async def booking(call):
+        requests.append(call.heard)
+        if call.heard == 'Yes.':
+            return ('call', 'book_appointment')
+        if 'ten' in call.heard and call.state.facts.booking_time != '10:00':
+            return ('call', 'collect', {'values': {'booking_time': '10:00'}})
+        return ('say', 'Of course.')
+
+    with steps(booking=booking):
+        probe.interrupt()
+        await probe._turn('Yes.')
+        receipt = next(s for s in call.spoken if s.generated.startswith("You're all set"))
+        call._playback_known = True
+        call.turn_ended(interrupted=False)
+        probe.interrupt()
+        await probe._turn('Hello? Is it booked?')
+        assert probe.fixed()[-1] == receipt.generated and requests == ['Yes.'], (probe.fixed(), requests)
+        call.turn_ended(interrupted=False)
+        before = len(probe.fixed())
+        probe.interrupt()
+        await probe._turn('Sorry, can we make it at ten?')
+        assert len(requests) > 1 and requests[-1].endswith('Sorry, can we make it at ten?'), (
+            'the caller was not heard',
+            requests,
+        )
+        assert receipt.generated not in probe.fixed()[before:], 'the receipt was said a third time unasked'
+        assert call.state.facts.booking_time == '10:00', 'the correction said over the receipt was lost'
+        assert call.unheard_receipt(RECEIPT_REPEATS + 1) == receipt.generated, (
+            'running out of repeats marked the receipt heard'
+        )
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the booking was made again'
+
+
 async def a_yes_with_a_new_request_is_verified_and_the_rest_kept():
     """Coval run hdbogMqB, AJ4t (P5, phone read-back): "Yes, that number is right; can we make it Saturday instead?"
 
@@ -437,7 +492,7 @@ async def a_yes_with_a_new_request_is_verified_and_the_rest_kept():
     assert facts.verified_phone == PHONE and facts.customer_phone == PHONE, (
         'the yes did not verify the unchanged number'
     )
-    assert facts.booking_day == 'Saturday', 'the new day was lost'
+    assert facts.booking_day == '2026-09-26', ('the new day was lost', facts)
     assert call.state.agent == 'booking', call.state.agent
 
 
@@ -634,6 +689,7 @@ async def main() -> None:
     await a_read_back_cut_off_is_not_agreed_to()
     await the_next_reply_is_told_what_was_not_heard()
     await an_unheard_receipt_is_said_again_and_not_booked_again()
+    await an_unheard_receipt_is_said_again_once_then_the_caller_is_heard()
     await a_yes_with_a_new_request_is_verified_and_the_rest_kept()
     await a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends()
     a_report_never_unhears_a_line_that_played()

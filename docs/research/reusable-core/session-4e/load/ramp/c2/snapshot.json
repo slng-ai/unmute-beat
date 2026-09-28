@@ -1,0 +1,54 @@
+{
+ "bookings": [
+  [
+   "BK0001",
+   "+34699000000",
+   "2026-09-29",
+   "09:00",
+   29844420,
+   29844465,
+   1,
+   1
+  ],
+  [
+   "BK0002",
+   "+34699010000",
+   "2026-09-29",
+   "10:00",
+   29844480,
+   29844525,
+   1,
+   1
+  ]
+ ],
+ "intents": [
+  [
+   "d8c7b141169a4d53b3ae409acdf2bdd8",
+   "CA0627cb560f0f4f5da5a01b9980cd1b2b",
+   "book_appointment",
+   "+34699000000"
+  ],
+  [
+   "622c1205a35c48f78a016f5795e8c24f",
+   "CA2cc4fd9a6bf34e3e9cf93d65f4c9f9b4",
+   "book_appointment",
+   "+34699010000"
+  ],
+  [
+   "1a67ec7483d9453284bfe2f7d7afd71a",
+   "CA2cc4fd9a6bf34e3e9cf93d65f4c9f9b4",
+   "book_appointment",
+   "+34699010000"
+  ]
+ ],
+ "operations": [
+  [
+   "d8c7b141169a4d53b3ae409acdf2bdd8",
+   "{\"status\": \"booked\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-09-29\", \"time\": \"09:00\", \"spoken\": \"tomorrow at 9:00 AM\", \"revision\": 1}"
+  ],
+  [
+   "1a67ec7483d9453284bfe2f7d7afd71a",
+   "{\"status\": \"booked\", \"booking_id\": \"BK0002\", \"service\": \"haircut\", \"date\": \"2026-09-29\", \"time\": \"10:00\", \"spoken\": \"tomorrow at 10:00 AM\", \"revision\": 1}"
+  ]
+ ]
+}

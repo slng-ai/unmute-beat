@@ -288,8 +288,6 @@ class Turn:
         self._hops_run = 0
         self._stalls = 0
         """Step requests this turn that sent nothing in time (`TurnBudget.first_part`). The first is tried again."""
-        self._step_requests = 0
-        """Step requests sent this turn, over every run: the second one is when a holding line goes out."""
         self._holding: asyncio.Task[None] | None = None
         """The holding-line timer, armed only while a tool or an application action is running."""
         self._channel: asyncio.Queue[tuple[object, asyncio.Future[None] | None]] = asyncio.Queue()
@@ -301,17 +299,17 @@ class Turn:
     async def _hold(self) -> None:
         """Say one holding line (`Locale.holding`), only while nothing has been said in this turn.
 
-        Said when a second step request of the turn goes out (`_speak`), and
-        on the `TurnBudget.hold_after` timer for any other silence that lasts.
-        A second request means a whole model round trip is still ahead: a
-        tool's result going back to the model, a retry, or the step a
-        hand-over just entered: 0.7 s or more before the answer over seven
-        calls of 2026-09-25, and most of the turns that waited long.
+        Said on the `TurnBudget.hold_after` timer, armed only while a tool or
+        an application action is running: work the caller is waiting on that
+        has lasted. Never because a request is the turn's second: a count of
+        requests is not time waited, and a fast tool followed by a fast
+        answer put "One moment" in front of an answer that was about to play
+        (session 4e; it had been said on every second request since
+        2026-09-25). A model slow to answer is the provider's stall, handled
+        on its own (`TurnBudget.first_part`), not a line to fill.
 
-        Not when the readings finish, and not when a tool starts. The step's
-        first request goes out with the readings (`_Early`), so its answer is
-        usually ready when they finish; and a tool that speaks its own line
-        would get the holding line right in front of it.
+        Not when a tool starts: a tool that speaks its own line would get the
+        holding line right in front of it.
 
         Once per caller turn, and never after the answer started: the check is
         on the turn's own speech ledger, which records model text before it
@@ -849,9 +847,6 @@ class Turn:
             nonlocal requested, stall
             requested += 1
             call._response = f'{run_id}:{requested}'
-            if self._step_requests:
-                await self._hold()
-            self._step_requests += 1
             disarm()
             stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
             messages = project(call, request.messages, excluded=excluded)
@@ -1115,16 +1110,17 @@ def _speech(event) -> str:
 
 
 async def _say_again(call: CallContext, words: str) -> str:
-    """Say an unheard receipt again, word for word: no model, no write.
+    """Say an unheard receipt again, word for word: no model, no write. At most `RECEIPT_REPEATS` times.
 
-    Whatever the caller said over it is kept for the next turn's model.
+    Whatever the caller said over it is kept for the next turn's model, and
+    once the repeats are spent their words go to the model straight away.
     Coval run BVqdGEunV3avnHrHVwq4oE: the receipt for Saturday at 9 was cut
     before any audio played, the caller went on "Yes, tomorrow at nine AM.
     That's great.", and the front desk read it as a new request and moved
     their own booking to 10. Hearing what was done comes first; a reading of
     the reply is not needed to decide that.
     """
-    call.note_receipt(words)
+    call.said_again()
     await call.speak_now(words, origin='confirmation')
     return words
 

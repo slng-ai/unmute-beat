@@ -143,19 +143,27 @@ steps:
     kind: conversation
     agent: robin
     prompt: prompts/booking.md
-    guarded: true
+    # Every word here is the salon's: offers (each choice's `say`), refusals, read-backs and receipts (session 4e:
+    # the model spoke its own copy of a move read-back with a wrong day, and a copy of the options as JSON).
+    speech: rendered
     requires: [verified_phone]
     satisfied_by: verify
     fields: [service, booking_day, booking_time, slot, appointment]
     choices:
-      # A time on offer rests on what was asked for; the booking being moved or cancelled does not.
-      slot: {function: functions.py:find_times, after: [service, booking_day, booking_time]}
+      # The booking being moved or cancelled rests on no field; a time on offer rests on what was asked for.
+      # Listed in the order the caller hears them.
       appointment: {function: functions.py:held_bookings, after: []}
+      slot: {function: functions.py:find_times, after: [service, booking_day, booking_time]}
+    refusals:
+      slot: functions.py:slot_refusal
+      appointment: functions.py:appointment_refusal
+      service: functions.py:service_refusal
+      booking_time: functions.py:time_refusal
     operations: [book_appointment, move_appointment, cancel_appointment]
     reads_back: {book_appointment: [slot]}
     exits:
       - {to: complaints, purpose: 'a complaint about a past service'}
-      - {to: concierge, purpose: 'they give up booking, or ask about something unrelated to booking'}
+      - {to: concierge, purpose: 'they give up booking, ask a question such as a price, or ask about something unrelated to booking'}
 
   - id: complaints
     kind: conversation

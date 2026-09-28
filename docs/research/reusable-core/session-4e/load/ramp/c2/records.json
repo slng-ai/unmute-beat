@@ -1,0 +1,91 @@
+[
+ {
+  "fixture": "c2-l0-r0",
+  "phone": "+34699000000",
+  "call_sid": "CA0627cb560f0f4f5da5a01b9980cd1b2b",
+  "lane": 0,
+  "admitted": true,
+  "started": 390941.496859416,
+  "ended": 390972.641934958,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut on Tuesday at 9 am.",
+    "ended_at": 390949.440101958,
+    "answered_at": 390951.447843416
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 390955.322553583,
+    "answered_at": 390955.7500355
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 390960.99974325,
+    "answered_at": 390961.930512083
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 390967.819957708,
+    "answered_at": 390969.760905
+   }
+  ],
+  "bot_audio_seconds": 17.462499999999967,
+  "caller_audio_seconds": 6.56,
+  "marks_sent": 6,
+  "marks_returned": 5,
+  "clears": 4
+ },
+ {
+  "fixture": "c2-l1-r0",
+  "phone": "+34699010000",
+  "call_sid": "CA2cc4fd9a6bf34e3e9cf93d65f4c9f9b4",
+  "lane": 1,
+  "admitted": true,
+  "started": 390941.495719791,
+  "ended": 390984.461099291,
+  "closed_by": "bot",
+  "turns": [
+   {
+    "said": "Hi, I'd like a haircut",
+    "ended_at": 390948.120305458,
+    "answered_at": 390948.471849083
+   },
+   {
+    "said": "on Tuesday at 9 am.",
+    "ended_at": 390950.439780375,
+    "answered_at": 390952.423281875
+   },
+   {
+    "said": "Yes, that's my number.",
+    "ended_at": 390956.739936875,
+    "answered_at": 390957.170406375
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 390962.420467541,
+    "answered_at": 390963.396016166
+   },
+   {
+    "said": "Yes, another one please.",
+    "ended_at": 390968.159728166,
+    "answered_at": 390968.484462583
+   },
+   {
+    "said": "Yes please.",
+    "ended_at": 390972.641769375,
+    "answered_at": 390973.608584708
+   },
+   {
+    "said": "No, that's all. Bye.",
+    "ended_at": 390979.61981975,
+    "answered_at": 390981.612718
+   }
+  ],
+  "bot_audio_seconds": 23.37499999999994,
+  "caller_audio_seconds": 9.500000000000002,
+  "marks_sent": 9,
+  "marks_returned": 8,
+  "clears": 7
+ }
+]

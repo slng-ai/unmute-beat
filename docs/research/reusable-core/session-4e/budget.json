@@ -1,0 +1,703 @@
+{
+ "note": "Stage B, C, session 4d and 4e allowances. Survive sessions, worktrees and PRs. Update after every billable action; never reset. Copied from session-4d-correctness/budget.json at 31e998d and continued here.",
+ "text": {
+  "requests_allowed": null,
+  "tokens_allowed": 560000,
+  "requests_spent": 238,
+  "tokens_spent": 562138,
+  "runs": [
+   {
+    "label": "text-1",
+    "source": "2dda8bd..35d6f9d working tree at 35d6f9d",
+    "cases": {
+     "T1.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19393,
+      "session": "text-T1.v1-a7a00fb6"
+     },
+     "T2.v1": {
+      "result": "passed",
+      "requests": 14,
+      "tokens": 34770,
+      "session": "text-T2.v1-dcb8574d"
+     },
+     "T3.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19566,
+      "session": "text-T3.v2-20fb7475"
+     },
+     "T4.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19430,
+      "session": "text-T4.v2-165a9569"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended); Langfuse sessions hold the full record"
+   },
+   {
+    "label": "text-2",
+    "source": "1d5c43a (the final runtime; the goodbye tool description changed after text-1)",
+    "cases": {
+     "T1.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19487,
+      "session": "text-T1.v1-985111b6"
+     },
+     "T2.v1": {
+      "result": "passed",
+      "requests": 14,
+      "tokens": 34894,
+      "session": "text-T2.v1-3f3fc504"
+     },
+     "T3.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19703,
+      "session": "text-T3.v2-2631f19e"
+     },
+     "T4.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19549,
+      "session": "text-T4.v2-d2a271c7"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended); Langfuse sessions hold the full record"
+   },
+   {
+    "label": "text-3",
+    "source": "f823d4e, the Stage C runtime",
+    "why": "the two salon cases Stage C touches most: a plain booking, and a lost answer reconciled through the new void fence; no salon prompt changed",
+    "cases": {
+     "T1.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19526,
+      "session": "text-T1.v1-60177c0a"
+     },
+     "T4.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19558,
+      "session": "text-T4.v2-ae5e1016"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; the Langfuse sessions hold the full record"
+   },
+   {
+    "label": "text-4",
+    "source": "f823d4e, the Stage C runtime",
+    "why": "the rest of T1-T4 on the same runtime, once the user raised the token allowance to 500,000",
+    "cases": {
+     "T2.v1": {
+      "result": "passed",
+      "requests": 13,
+      "tokens": 31664,
+      "session": "text-T2.v1-7f8fd93f"
+     },
+     "T3.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19698,
+      "session": "text-T3.v2-06b13d56"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; the Langfuse sessions hold the full record"
+   },
+   {
+    "label": "text-5",
+    "source": "6feb64b, the same-value confirmation and the new verify step 3",
+    "why": "the verify prompt changed (step 3: a number said back is recorded and compared by code), so the four salon cases run again before any voice call",
+    "cases": {
+     "T1.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19627,
+      "session": "text-T1.v1-da80c10a"
+     },
+     "T2.v1": {
+      "result": "passed",
+      "requests": 15,
+      "tokens": 38039,
+      "session": "text-T2.v1-a27a46d1"
+     },
+     "T3.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19793,
+      "session": "text-T3.v2-5ab27d25"
+     },
+     "T4.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19653,
+      "session": "text-T4.v2-702afb80"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; the Langfuse sessions hold the full record"
+   },
+   {
+    "label": "text-6",
+    "source": "e9d086e (all six fixes; clean tree)",
+    "why": "session 4d: the two new focused cases first, T5 (move with a relative day, cancel) and T6 (refused read-back repeating its time)",
+    "cases": {
+     "T5.v1": {
+      "result": "off-script",
+      "requests": 25,
+      "tokens": 76693,
+      "session": "text-T5.v1-61c6706d",
+      "note": "off-script at turn 12 of 12: booked Tuesday 10:00, moved to \"day after tomorrow\" = Wednesday 30th 10:00 (correct); the cancel read-back got a yes and the model answered in text, withheld as a claim; nothing cancelled, nothing false said. The booking model twice spoke its own read-back as prose (turns 7, 10)."
+     },
+     "T6.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19810,
+      "session": "text-T6.v1-f88b35ec"
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint (a request whose span never ended): unknown, not zero; T5 turn 12 had one"
+   },
+   {
+    "label": "text-7",
+    "source": "7ec5d69 (runtime as e9d086e; only T5's evaluator check changed since)",
+    "why": "session 4d: T1-T4 on the fixed runtime, after the user raised the allowance to 560,000",
+    "cases": {
+     "T1.v1": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19615,
+      "session": "text-T1.v1-fd67038c"
+     },
+     "T2.v1": {
+      "result": "passed",
+      "requests": 15,
+      "tokens": 38073,
+      "session": "text-T2.v1-7b4c0359"
+     },
+     "T3.v2": {
+      "result": "passed",
+      "requests": 9,
+      "tokens": 19838,
+      "session": "text-T3.v2-3aa3f7a9"
+     },
+     "T4.v2": {
+      "result": "exhausted",
+      "requests": 7,
+      "tokens": 13759,
+      "session": "text-T4.v2-9e25846a",
+      "note": "exhausted after turn 4 by the token cap, before the injected lost answer: nothing was tested. The last turn overshot the cap by 2,138 tokens (tokens are checked between turns). Not rerun: no allowance left."
+     }
+    },
+    "cancelled_requests": "not counted by the checkpoint: unknown, not zero"
+   }
+  ],
+  "allowance_changes": [
+   {
+    "on": "2026-09-26",
+    "by": "the user, in the Stage C session",
+    "tokens_allowed": [
+     250000,
+     500000
+    ],
+    "requests": "no separate request cap named; tokens are the limit, and each run keeps its per-turn request bound"
+   },
+   {
+    "on": "2026-09-27",
+    "by": "the user, in session 4d (asked to run all of T1-T6 when told it needs about 10k more than was left)",
+    "tokens_allowed": [
+     500000,
+     515000
+    ],
+    "requests": "no separate request cap; this set is capped at 140,000 tokens"
+   },
+   {
+    "on": "2026-09-27",
+    "by": "the user, in session 4d, after T5 cost 76,693 tokens (asked: T1-T4 need about 80k, 44,147 left)",
+    "tokens_allowed": [
+     515000,
+     560000
+    ],
+    "requests": "no separate cap; T1-T4 run with the 89,147 left as their hard cap"
+   }
+  ],
+  "overshoot": {
+   "tokens": 2138,
+   "why": "T4.v2 turn 4: one turn used more than was left; the checkpoint stops between turns, as its docstring says"
+  }
+ },
+ "coval_repair_pool": {
+  "calls_allowed": 20,
+  "requested": 20,
+  "placed": 20,
+  "connected": 20,
+  "terminal": 20,
+  "evidence_complete": 1,
+  "runs": [
+   {
+    "label": "s4b-B-stress-1",
+    "run": "SdkVkoJjcCk56p2rWNK9ns",
+    "simulation": "S3DKpHVpf2iioCdujDrpeP",
+    "call_sid": "CA48477ad8cbee47a7af96f8254d7800f3",
+    "langfuse_session": "CA48477ad8cbee47a7af96f8254d7800f3",
+    "source": "da8120a",
+    "case": "GRdmreeb7SP4G8yegtMntC",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "result": "failed task, safe: Coval returned no marks, so no read-back could be heard; the number read-back hit the two-try fallback and nothing was written. Caller silent about 20 s after each full read-back."
+   },
+   {
+    "label": "s4b-B-stress-2",
+    "run": "9mM4QPgeDVf9se9AWqU29g",
+    "simulation": "unknown-sim",
+    "call_sid": "unknown-sid",
+    "langfuse_session": "unknown-sid",
+    "source": "dce11cb",
+    "case": "GRdmreeb7SP4G8yegtMntC",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "result": "diagnostic, failed task, safe: Coval's simulator returned no marks (confirmed by logging); TWILIO_MARKS=absent settled every segment at real time; the simulated caller stayed silent about 20 s after each fully played read-back and answered only after the reminder, over its repeat, so the fallback fired. Test-side fault: the simulated carrier."
+   },
+   {
+    "label": "s4b-B-twilio-stress-1",
+    "run": "FzMcHyvpwhkEULPdUrPc6H",
+    "simulation": "dTJmpxEYwyYWgMysFJNVVe",
+    "call_sid": "CA2f57eed1cfb8b3c485f64bcb11c2f4ba",
+    "langfuse_session": "CA2f57eed1cfb8b3c485f64bcb11c2f4ba",
+    "source": "a72d33d",
+    "case": "GRdmreeb7SP4G8yegtMntC",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "result": "passed, all five dimensions (three rest on an agent review, coval-twilio-1-evidence.json): real Twilio line, 15 of 15 marks returned, Friday to Saturday correction mid read-back, two cut read-backs replayed in full, one booking BK0001 Saturday 2026-10-03 09:00, goodbye recap from the receipt, caller hung up (Twilio stop). Caller answered 3-4 s after each read-back. Coval reports no call SID on a phone line; bound by hand from the bot log. Agent PEivYdEtwEa65QSraG5fMQ."
+   },
+   {
+    "label": "s4c-live-1",
+    "run": "hzSdfMNn4DyK9yRiUnhDfi",
+    "simulation": "8hDkLVRBRnTaxnqchVcQ8K",
+    "call_sid": "CAcd4b196eec2a33d7cf3e471a5449c5be",
+    "langfuse_session": "CAcd4b196eec2a33d7cf3e471a5449c5be",
+    "source": "6024758",
+    "case": "GRdmreeb7SP4G8yegtMntC",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-live",
+    "call_seconds": 180,
+    "bound_by": "hand: the only call the runner recorded for the campaign in the run window. Coval gives no CallSid on a phone line, and the call wrote no intent to correlate on, so coval_sim said unknown",
+    "result": "failed task, safe: no write, no claim, ended by the 180 s ceiling. The interruptive caller spoke over the phone read-backs. A yes that began before its read-back played out was not counted. Two unheard copies gave the fallback line, twice. Two joined turns ran out of their 8-request budget. Joined pieces also led to wrong numbers being read back. 18 of 19 marks counted; the ignored one was for a cleared segment."
+   },
+   {
+    "label": "s4c-restate-R-1",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "UysFwYC6eCZY4XjhWmyqt4",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12: a number said back after no is confirmed by code and said aloud",
+    "result": "booked correctly (Monday 09:00). Answered the number read-back \"no, it's\" with the same digits; the model called lookup_customer itself with no collect, so the lookup ran silently (the old path), not through Restated.",
+    "simulation": "DASdb96wbFL6AtsPVtsFNK",
+    "call_sid": "CA6a5374a68eb9559edcbdcfd429708fef"
+   },
+   {
+    "label": "s4c-restate-R-2",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "jHJdQvi5cLatL3s7D4GBoo",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12",
+    "result": "booked correctly (Tuesday 09:00). STT added a digit to the restated number; the digits did not fit, the bot asked which part was wrong, read the right number back and got a yes.",
+    "simulation": "m5HJ2vFhswLycEQaW78a7S",
+    "call_sid": "CA6c88714109c0d5f907b101d0e92b0f65"
+   },
+   {
+    "label": "s4c-restate-R-3",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "QYL3i8sk8ZiXtZvL5Rf2L5",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12",
+    "result": "booked correctly (Wednesday 09:00). Restated: \"Yes, that's the same as I read back. Thanks, I have you.\"",
+    "simulation": "QPwennqoXTDsyYfM9CUVmU",
+    "call_sid": "CAaced8a8b2f7aaf0684eb4ceee408b455"
+   },
+   {
+    "label": "s4c-restate-R-4",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "PxncamaDJP4xxK5NXKSkst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12",
+    "result": "booked correctly (Thursday 09:00). Restated: \"Yes, that's the same as I read back. Thanks, I have you.\"",
+    "simulation": "EMXpSVYaeBoEHdBSTNKkgg",
+    "call_sid": "CA666dd414c21c5353c582590cf39e4725"
+   },
+   {
+    "label": "s4c-restate-R-5",
+    "run": "gVH4ML72NmkJHjcagxUikH",
+    "set": "DmJJChjD",
+    "source": "6feb64b",
+    "case": "CrouaBCnH22Kka5gEitnG9",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4c-R",
+    "call_seconds": 300,
+    "why": "finding 12: a real correction is still read back again",
+    "result": "booked correctly (Friday 09:00) for the corrected number; the corrected number was read back and got a yes; nothing for the misspoken +34671530306.",
+    "simulation": "FjUeifmxSNvJ3pF3bzj9ty",
+    "call_sid": "CAe4704f576ddc6e742e91318708bac7c5"
+   },
+   {
+    "label": "s4d-1-book-move-cancel",
+    "run": "erLt4hQuMHwXCbzQf5zkHo",
+    "simulation": "JLoA9ZU5PZPojnvyXNgTs7",
+    "call_sid": "CAc82c122404913e4b2532c103286c0338",
+    "langfuse_session": "CAc82c122404913e4b2532c103286c0338",
+    "source": "e9d086e runtime (served from 032f0f3)",
+    "set": "JCZGihHR",
+    "case": "9GH9opPTqPbRJFT2pNnJst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "result": "failed task, safe: booked BK0001 Monday 10:00 on a heard yes; the phone confirmed by the same number said back (restated); on \"move it to Wednesday\" the agent recorded the day with an id not on offer (all refused), options answered for the old day, move had no pick and the options tool was already spent (speak_by), then the agent called goodbye and ended the call. Diary: one booking, no move, no cancel, no unknown intent, nothing false said. Verify also said the pardon line beside a whole number (collect+wait in one reply). Three fixes followed offline (V9, verify test)."
+   },
+   {
+    "label": "s4d-1r-book-move-cancel",
+    "run": "QqG5vGKRZmKftpDrDiGckV",
+    "simulation": "Ph2kPFmrQyy4MxkyxaPm2y",
+    "call_sid": "CAabad0e9c34a2e6ab66a22d6323e2dbb4",
+    "langfuse_session": "CAabad0e9c34a2e6ab66a22d6323e2dbb4",
+    "source": "e9fbb8a",
+    "set": "JCZGihHR",
+    "case": "9GH9opPTqPbRJFT2pNnJst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-2",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "retry_of": "s4d-1-book-move-cancel",
+    "result": "safe and truthful, move not exercised: the simulated caller answered the Monday offer with \"great thank you\"; nothing was booked on it (correct). The agent then said \"anything else I can help you with?\" (prose, implies done). On \"move it to Wednesday\" it booked Wednesday 10:00 as a new booking on a heard yes to its book read-back, then cancelled it on a heard yes (collect of the held id accepted, the fix from call 1), goodbye recap from the cancel receipt. Diary: BK0001 Wednesday 10:00, cancelled (revision 2). No unknown, no refusal, no hang-up."
+   },
+   {
+    "label": "s4d-2-interruptive-move",
+    "run": "YfecLtyZxmG873LwTJH72V",
+    "simulation": "f4SU9BX7ZEdXxTxUswzhd2",
+    "call_sid": "CAd33c3c246f24a504d379f1aa47a9ef5a",
+    "langfuse_session": "CAd33c3c246f24a504d379f1aa47a9ef5a",
+    "source": "e9fbb8a",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-2",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "result": "failed task, safe: booked BK0002 Monday 09:00 for +34671540102 on a heard yes; verify read the number back from wait (the call 1 fix held live). The caller cut in over the Wednesday offer with \"sorry no\"; endpointing closed that as a new turn, the rest of the sentence never joined it, the agent called goodbye and the call ended. No move, no cancel, no unknown intent, nothing false said. Turn-taking finding, handed to the lifecycle session."
+   },
+   {
+    "label": "s4d-3-refused-repetition",
+    "run": "Pb7rhkkNWfxVHX9HC9itZX",
+    "simulation": "iz3DeeJnDVXBQbQQ2CfLWj",
+    "call_sid": "CAb54c544267bf70f88873f6e0928a6637",
+    "langfuse_session": "CAb54c544267bf70f88873f6e0928a6637",
+    "bound_by": "hand: the only call on serve s4d-correctness-3 at the time",
+    "source": "3a4c3e4",
+    "set": "MmqxRgZW",
+    "case": "XGAeqKFdquEjwVha8pUDBF",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "result": "safe, target not reached: the simulated caller only asked whether Friday at two was free, so no booking was read back and the refused repetition never happened. Diary: no booking, no intent. The agent said nothing was booked. New finding: the booking model wrote a copy of the options tool result as text (\"data/options: {...}\", its own order, not the real one) and it was spoken: a model output fault on a prose step. The history sent to the model was in order (the drift fix held). Ended by the caller (CancelFrame after the goodbye)."
+   },
+   {
+    "label": "s4d-4-taken-then-alternative",
+    "run": "8g6fMVkEpwb5RrJvyCwL5D",
+    "simulation": "irE4H3ZnV7qXxLxBukeeiA",
+    "call_sid": "CA4e59647f812c4073f27ea57d75b5797f",
+    "langfuse_session": "CA4e59647f812c4073f27ea57d75b5797f",
+    "bound_by": "coval_sim correlate",
+    "source": "3a4c3e4",
+    "set": "ghsCWtAD",
+    "case": "PpRSPVAipjQMeKAFynSssw",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "contender": {
+     "took_at": "2026-09-27T14:40:00.059+02:00",
+     "booking": "BK0002 +34671540199 2026-10-01 15:00 revision 1",
+     "matched": "Shall I move your haircut from Tuesday the 29th at 11:00 AM to Thursday the 1st at 3:00 PM?"
+    },
+    "result": "task done, one fault. Diary exactly as expected: BK0001 +34671540104 booked Tuesday 11:00 on a heard yes, moved to Thursday 16:00 (revision 2) on a heard yes after the move to 15:00 was refused by the diary (the contender held it; intent rejected with its booking id, the fix for defect 3 live); the agent said the time was taken and offered 2 PM or 4 PM; goodbye recap from the standing receipt. Intents: book, move 15:00 (rejected), move 16:00. No unknown. Fault: the first move turn ran out of requests (\"Sorry, I am going round in circles there\"): the booking model handed over to concierge for no reason after options, concierge recorded booking_day again as 2026-10-01 instead of thursday, a spelling change that core counted as a change, so the slot offer was cleared and the slot refused. State finding for the next session: values by meaning, not spelling."
+   },
+   {
+    "label": "s4d-2r-interruptive-move",
+    "run": "gAGgJysB7bsUTYNq82RhHS",
+    "simulation": "VpoAHxREEnLRKPU7zYmp2h",
+    "call_sid": "CA51ab472f9f7b58cd0d27c2353de6c04a",
+    "langfuse_session": "CA51ab472f9f7b58cd0d27c2353de6c04a",
+    "bound_by": "coval_sim correlate",
+    "source": "3a4c3e4",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "retry_of": "s4d-2-interruptive-move",
+    "result": "task done, one false phrase partly spoken. Diary exactly as expected: BK0003 +34671540102 booked Monday 09:00 on a heard yes, moved to Tuesday the 29th 09:00 (\"day after tomorrow\", revision 2) on a heard yes; no write for Wednesday. Authorization by code: the move question \"from tomorrow at 9:00 AM to Tuesday the 29th at 9:00 AM?\" played in full (Twilio mark 12:48:31.8Z), yes answered at 12:48:35.1Z. Just before it, the booking model spoke its own copy of the read-back with a wrong source day (\"from Wednesday the 30th\", origin model), cut while playing: the prose-step limit, seen live (text T5 saw it twice). The caller talked over the move receipt five times and it was said again each time (naturalness, lifecycle). Ended by the caller (CancelFrame)."
+   },
+   {
+    "label": "s4d-3r-refused-repetition-v2",
+    "run": "E87gmpv7aBSz6qYQ5Yu3YW",
+    "simulation": "8ZDGSVUcgUMF6HCX8KuSkW",
+    "call_sid": "CAe1250a6d4169cdaf80417ca998971daf",
+    "langfuse_session": "CAe1250a6d4169cdaf80417ca998971daf",
+    "bound_by": "hand: the only call on serve s4d-correctness-3 at the time (coval_sim printed call unknown)",
+    "source": "3a4c3e4",
+    "set": "mJQUNQ2D",
+    "case": "JCv6vGsXkxpEt4w3MRBXXW",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "campaign": "s4d-correctness-3",
+    "call_seconds": 300,
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "retry_of": "s4d-3-refused-repetition",
+    "result": "target reached, passed from the diary: code read back \"Shall I book a haircut, Friday the 2nd at 2:00 PM?\"; the caller answered \"no don't book friday at two i'm only checking if it is free\"; no Restated line, no write, no intent; the agent said nothing was booked. Diary: no booking, no intent for +34671540103. Naturalness: the goodbye added the left_undone line (\"I haven't made that last change\") after an explicit no. Ended by the bot (EndFrame after goodbye)."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "bound_by": "coval_sim correlate",
+    "label": "s4e-latency-1",
+    "run": "ZMEfdPgVZBSzbvktftm5or",
+    "simulation": "XTvDQbE8fPkR6My77dyTV9",
+    "call_sid": "CA38f4af734764255749b15d92db301858",
+    "langfuse_session": "CA38f4af734764255749b15d92db301858",
+    "source": "57eac11",
+    "set": "ghsCWtAD",
+    "case": "PpRSPVAipjQMeKAFynSssw",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "campaign": "s4e-latency",
+    "why": "latency and behavior, normal: rendered offers, a taken time and its alternatives, a day said two ways",
+    "contender": {
+     "took_at": "2026-09-27T18:22:38.283+02:00",
+     "booking": "BK0002 +34671540199 2026-10-01 15:00"
+    },
+    "model_usage": {
+     "requests": 35,
+     "input_tokens": 94699,
+     "cached_tokens": 0,
+     "output_tokens": 664
+    },
+    "result": "task done, from the diary: BK0001 +34671540104 booked Tuesday 11:00, the move to Thursday 15:00 refused (the contender took it at the read-back), moved to Thursday 16:00 (revision 2). Every booking word was the salon's: offers, \"3:00 PM is taken. On Thursday the 1st I have 2:00 PM, 4:00 PM or 1:30 PM\", read-backs, receipts. No model prose, no JSON. Fault: \"Sorry, could you say that again?\" after \"Thanks, I have you.\" (booking waited on arrival without options); fixed offline in 687e343 before call 2. Latency (spans, agent review): core median 0.02 s per turn, model 1.43 s before the first useful words, TTS first audio 1.24 s, endpointing 0.3 s; Pipecat user-bot 2.3-5.4 s."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "bound_by": "coval_sim correlate",
+    "label": "s4e-latency-2",
+    "run": "JSQyJMiJumJkTenWDHy5CY",
+    "simulation": "PzAEmqnp3XqFiFjjCmDFyf",
+    "call_sid": "CA3ecd4256e7059e83494c6d5fb9e69266",
+    "langfuse_session": "CA3ecd4256e7059e83494c6d5fb9e69266",
+    "source": "829271b",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "campaign": "s4e-latency-2",
+    "why": "latency and behavior, interruptive: bounded receipt replay, rendered read-back of a relative-day move",
+    "model_usage": {
+     "requests": 38,
+     "input_tokens": 98890,
+     "cached_tokens": 0,
+     "output_tokens": 553
+    },
+    "result": "task done, from the diary: BK0001 +34671540102 booked Monday 09:00, moved to Tuesday the 29th 09:00 (\"day after tomorrow\", revision 2); one intent each, nothing unknown. The move ran on a yes that began at 18:36:59.9, after the second read-back copy's Twilio mark returned at 18:36:56.6. The booking receipt the caller talked over was said again once, then not again (4d: six times). No model prose on booking, no wrong read-back copy, no pardon line. Naturalness: verify asked for the number three times over joined pieces while the caller talked. Latency: core median 0.02 s, model 0.97 s, TTS first audio 1.26 s; the replayed receipt spoke after 0.003 s with no model."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "26a5b73",
+    "campaign": "s4e-worker",
+    "fault": "LIVE_FAULT=committed:+34671540101, LIVE_FAULT_ARM=<state>/armed: never armed",
+    "placement": "both calls on worker 42639 (runner record, s4e-worker.placement.json); the watcher did not arm the fault, so no worker was killed: worker-failure verification incomplete",
+    "label": "s4e-worker-affected",
+    "run": "gzxkFucBcXUMx8RG8uAGb8",
+    "simulation": "unknown",
+    "call_sid": "CAf07651f2c66de160eafe0aa91f5298a4",
+    "langfuse_session": "CAf07651f2c66de160eafe0aa91f5298a4",
+    "bound_by": "elimination: the campaign had exactly two calls, and coval_sim bound the other to the bystander. coval_sim reported FAIL for this job after \"coval runs get: HTTP 502\"; `coval runs get` later returned status COMPLETED",
+    "set": "JCZGihHR",
+    "case": "9GH9opPTqPbRJFT2pNnJst",
+    "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+    "model_usage": {
+     "requests": 27,
+     "input_tokens": 74942,
+     "cached_tokens": 0,
+     "output_tokens": 539
+    },
+    "result": "no fault injected (placement). As a normal call, task done from the diary: BK0002 +34671540101 booked Monday 10:00, moved to Wednesday 10:00 (revision 2), cancelled (revision 3): the case's expected diary exactly (4d calls 1 and 2 did not reach it). Ended pipeline_end."
+   },
+   {
+    "agent": "PEivYdEtwEa65QSraG5fMQ",
+    "line": "real Twilio, agent PEivYdEtwEa65QSraG5fMQ, +447427919928",
+    "metrics": [
+     "7VHk6dTjvBcuV6XYPmaeGq"
+    ],
+    "call_seconds": 300,
+    "profile": "docs/research/reusable-core/session-3/speech-profile.v1.env",
+    "source": "26a5b73",
+    "campaign": "s4e-worker",
+    "fault": "LIVE_FAULT=committed:+34671540101, LIVE_FAULT_ARM=<state>/armed: never armed",
+    "placement": "both calls on worker 42639 (runner record, s4e-worker.placement.json); the watcher did not arm the fault, so no worker was killed: worker-failure verification incomplete",
+    "label": "s4e-worker-bystander",
+    "run": "cCSJk34cuKVo3Ra7SDJM4p",
+    "simulation": "hM5EAgJQcg8K2f8TeRDosV",
+    "call_sid": "CA3cd7a2566a2756c450e265090d97fb5e",
+    "langfuse_session": "CA3cd7a2566a2756c450e265090d97fb5e",
+    "bound_by": "coval_sim correlate",
+    "set": "TrUGva6q",
+    "case": "A3eP8AKJGdtE22CFXv6Z8S",
+    "persona": "VSruLZYYyz3w7fkdUaheDR",
+    "model_usage": {
+     "requests": 53,
+     "input_tokens": 141140,
+     "cached_tokens": 5137,
+     "output_tokens": 823
+    },
+    "result": "no fault injected. Outcome fail against the case: BK0001 +34671540102 booked Monday 09:00, moved to Tuesday 09:00 (correct), then moved again to Tuesday 10:00 (revision 3). After the move receipt (said again once) the simulated caller repeated its request; the agent looked the times up and the salon said \"9:00 AM is taken\" about the caller's own booking; the caller accepted 10:00, heard the read-back and said yes (authorization holds). Fixed offline in 985522f (V11: \"You already have ...\"). Not re-run live: no calls left."
+   }
+  ],
+  "stage_c_live_ramp_cap": 8,
+  "session_4d": {
+   "plan": "4 initial targeted calls, at most 3 narrow retries; 2 latency and 2 worker-failure calls stay reserved",
+   "cap_this_session": 7,
+   "test_sets": "coval-fixtures.v1.json: one single-case set per call",
+   "placed": 7
+  },
+  "session_4e": {
+   "plan": "2 latency and behavior calls, then 2 worker-failure calls; never more than 4",
+   "placed": 4,
+   "left": 0
+  }
+ },
+ "reserved_for_later_stages": {
+  "candidate_final_normal": 10,
+  "candidate_final_interruptive": 10,
+  "native_normal_top_up": 10,
+  "native_interruptive_top_up": 12
+ },
+ "stage_c_benchmark": {
+  "note": "The user asked on 2026-09-26 for a 20-call Coval benchmark, 10 normal and 10 interruptive, drawn from the reserved pool. Four batches of five at once, each on a fresh diary.",
+  "calls_allowed": 20,
+  "placed": 20,
+  "batches": [
+   {
+    "batch": "A",
+    "run": "c77fpUwGHjNYHBoFntSpNW",
+    "set": "normal",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_normal",
+    "result": "5 of 5 correct from the diary: one haircut each, on the asked weekday morning; no stray bookings; all ended pipeline_end, 94-106 s. load_report: delivery pass 5 of 5 (marks), no fail; outcome, authorization, completion, operational unknown until reviewed."
+   },
+   {
+    "batch": "B",
+    "run": "C4jjBivqK5PSCLpkVmNzhA",
+    "set": "interruptive",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_interruptive",
+    "result": "5 of 5 correct from the diary: one haircut each on the changed-to day, 09:00; one intent per caller, none for the first-asked day; no stray bookings; all ended pipeline_end, 143-209 s."
+   },
+   {
+    "batch": "C",
+    "run": "8Z7Qce4UCagv3FXEfNRxAz",
+    "set": "normal",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_normal",
+    "result": "5 of 5 correct from the diary: one haircut each on the asked weekday morning; no stray bookings; all ended pipeline_end, 91-113 s."
+   },
+   {
+    "batch": "D",
+    "run": "UMuV6YLmiX4Bx87GACWzCZ",
+    "set": "interruptive",
+    "source": "a48b98a",
+    "calls": 5,
+    "from": "candidate_final_interruptive",
+    "result": "5 of 5 correct from the diary: one haircut each on the changed-to day, 09:00; one intent per caller, none for the first-asked day; no stray bookings; all ended pipeline_end, 139-225 s."
+   }
+  ]
+ }
+}

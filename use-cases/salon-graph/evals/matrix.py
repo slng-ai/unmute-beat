@@ -74,7 +74,7 @@ async def to_offer(line: Line) -> list[dict[str, Any]]:
             'Yes.',
             Reply(calls=[('lookup_customer', {})]),
             Reply(calls=[('options', {})]),
-            Reply(text='On Tuesday I have 9:00 or 9:30 AM. Which time works for you?'),
+            Reply(calls=[('wait', {})]),
         ),
     ]
 
@@ -169,9 +169,7 @@ async def cut_receipt() -> dict[str, Any]:
         line.playout.playback = 'full'
         await line.worker.queue_frame(InterruptionFrame())
         await asyncio.sleep(0.1)
-        after = await line.turn(
-            'Sorry, is it booked?', Reply(text='Yes, you are booked for Tuesday at nine.')
-        )
+        after = await line.turn('Sorry, is it booked?', Reply(calls=[('wait', {})]))
         return {'passed': len(bookings(line)) == 1, 'bookings': len(bookings(line)), 'after': after}
 
 
@@ -195,7 +193,8 @@ async def bad_slot() -> dict[str, Any]:
         turn = await line.turn(
             'Quarter past nine.',
             pick('09:15'),
-            Reply(text='Quarter past is not a time I can offer. Which time works?'),
+            Reply(calls=[('options', {})]),
+            Reply(calls=[('wait', {})]),
         )
         return {
             'passed': not bookings(line) and 'Shall I book' not in turn['heard'],

@@ -12,7 +12,8 @@ false:
 * S4: after the ticket was resolved and then reopened;
 * S5: in a fresh process that restores the old resolve after the reopen;
 * S6: an authoritative no (a stale revision) is said in core's words;
-* S7: the loader refuses a rendered step that offers choices;
+* S7: the loader refuses a rendered step that is also `guarded`: it has no model
+  prose to guard. (Its choices are worded by the application: `test_tickets` R13.)
 * S8: on a prose step that is not guarded, a claim after a lookup alone, or
   after a refused change, is corrected out loud: neither stands, so neither
   backs it (session 4d, defect 6). A claim beside a change that does stand
@@ -129,13 +130,13 @@ async def a_refusal_in_core_words(folder: Path):
     script, flow, call = opened(desk)
     await to_read_back(flow, call, script)
     desk.edit('T-101')
-    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}), ('say', CLAIMS[0]))
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}), ('call', 'wait', {}))
     assert said == [call.locale.withheld], said
     assert [i.status for i in call.intents if i.operation == 'resolve_ticket'] == ['rejected']
     no_model_words(call)
 
 
-def no_rendered_choices(folder: Path):
+def no_guarded_rendered_step(folder: Path):
     """S7."""
     copy = folder / 'choices'
     copy.mkdir()
@@ -150,16 +151,16 @@ def no_rendered_choices(folder: Path):
         .read_text()
         .replace(
             '    speech: rendered\n',
-            '    speech: rendered\n    choices: {ticket_id: tickets.py:find_effect}\n',
+            '    speech: rendered\n    guarded: true\n',
         )
     )
     (copy / 'agent.yaml').write_text(text)
     try:
         core.load(copy / 'agent.yaml').compile()
     except core.FlowSpecError as error:
-        assert 'rendered' in str(error), error
+        assert 'rendered and guarded' in str(error), error
         return
-    raise AssertionError('a rendered step was allowed to offer choices')
+    raise AssertionError('a rendered step was allowed to guard model prose it cannot have')
 
 
 async def rendered_claims() -> None:
@@ -233,7 +234,7 @@ async def main() -> None:
         await after_an_unknown_answer(folder)
         await after_a_reopen(folder)
         await a_refusal_in_core_words(folder)
-        no_rendered_choices(folder)
+        no_guarded_rendered_step(folder)
     await a_prose_claim_is_corrected_unless_a_change_stands()
     print('speech ok: S1-S8, a rendered step says no model words; a prose claim nothing backs is corrected')
 

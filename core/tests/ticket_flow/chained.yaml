@@ -1,0 +1,38 @@
+# choices.yaml with a chain of choices: the ticket, then the category offered for it, then the resolution offered for that category.
+# A choice resting on another choice (session 4e): a new ticket takes the category offer and its pick, and that takes the resolution.
+version: 1
+id: support-desk-chained
+state: tickets.py:DeskState
+identity: account_id
+entry: desk
+locale:
+  base: spanish
+agents:
+  agent:
+    prompt: prompts/agent.md
+operations:
+  resolve_ticket:
+    function: tickets.py:resolve
+    args: {account_id: account_id, ticket_id: ticket_id, revision: revision, resolution: resolution}
+    readback: tickets.py:resolve_words
+    reconcile: tickets.py:find_effect
+    subject: ticket_id
+    resource: ticket
+    version: now_revision
+    idempotent: true
+    matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    succeeds: {status: resolved}
+    rejects: {status: stale}
+    assign: {revision: now_revision, ticket_status: status}
+    say: 'Ticket {ticket_id} resuelto. ¿Algo más?'
+steps:
+  - id: desk
+    kind: conversation
+    agent: agent
+    prompt: prompts/desk.md
+    fields: [account_id, ticket_id, category, resolution]
+    choices:
+      ticket_id: {function: tickets.py:open_tickets, after: []}
+      category: {function: tickets.py:categories, after: [ticket_id]}
+      resolution: {function: tickets.py:resolutions, after: [category]}
+    operations: [resolve_ticket]

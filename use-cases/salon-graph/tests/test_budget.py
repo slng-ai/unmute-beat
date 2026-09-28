@@ -21,6 +21,7 @@ debugging session can import one module without running every check in it.
 import asyncio
 import json
 from contextlib import ExitStack
+from datetime import timedelta
 
 from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
 from pydantic_ai import ModelRequest, RetryPromptPart
@@ -409,7 +410,9 @@ async def a_superseded_turn_cannot_move_the_caller():
 
     assert read, 'the tool ran'
     assert call.state.agent == 'concierge', f'a superseded turn moved the caller to {call.state.agent}'
-    assert call.state.facts.booking_day == 'tomorrow', 'the work the tool did is not pretended away'
+    assert call.state.facts.booking_day == str(call.today.date + timedelta(days=1)), (
+        'the work the tool did is not pretended away'
+    )
 
 
 async def main():

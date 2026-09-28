@@ -18,10 +18,12 @@ today's date and the days ahead (`core.clock.Today`).
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationInfo
 
+from salon.diary import WEEKDAYS, day_phrases, resolve_day
 from salon.models.shapes import Phone, Service, Verification
 
 _WANTS = re.compile(r'^(?:\d{2}:\d{2}|morning|afternoon|evening)$')
@@ -60,7 +62,78 @@ def _describes_something(value: str) -> str:
     return value
 
 
+def bare_weekday(words: str) -> int | None:
+    """The weekday these words name on their own ("Saturday", "on Saturday instead"), or None."""
+    phrases = day_phrases(words)
+    index = {name.casefold(): number for number, name in enumerate(WEEKDAYS)}
+    return index.get(phrases[0]) if len(phrases) == 1 else None
+
+
+def ambiguous_day(words: str, today: date, discussed: date | None) -> tuple[date, date] | None:
+    """Two dates a bare weekday could mean beside the date under discussion, or None when it means one.
+
+    "Saturday instead", said about "Friday next week", is the Saturday after
+    that Friday to one caller and the coming Saturday to another (session 3:
+    three live calls, two different dates). Read from today it is the coming
+    one; read beside the date under discussion it is the one in that week.
+    When those differ, neither is chosen: the caller is asked, with both dates.
+    """
+    weekday = bare_weekday(words)
+    if weekday is None or discussed is None:
+        return None
+    coming = resolve_day(words, today)
+    beside = discussed - timedelta(days=discussed.weekday()) + timedelta(days=weekday)
+    if coming is None or beside < today or beside == coming:
+        return None
+    return coming, beside
+
+
+_ISO_DAY = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def _as_date(value: str) -> date | None:
+    try:
+        return date.fromisoformat(value) if _ISO_DAY.match(value) else None
+    except ValueError:
+        return None
+
+
+def _day_meant(value: str, info: ValidationInfo) -> str:
+    """The day asked for as the date it means (YYYY-MM-DD) once it can mean only one; else the caller's words.
+
+    Read on the call's clock (`today` in the validation context core passes),
+    so "Thursday" and "2026-10-01" are one value, and a change of spelling is
+    no change of request (session 4d, live call 5: the day recorded again as
+    a date took the times on offer away). A date is kept as it is, so it is
+    never read again as the call goes on.
+
+    A bare weekday is a date only when it cannot mean two: beside the day
+    under discussion (the day asked for before, `before`) it may name
+    another week (`ambiguous_day`), and then it stays words, so the times
+    lookup asks the caller which one. So does one said about a booking being
+    moved when no day was asked for yet: that booking's date is the diary's,
+    and a validator reads no diary. Words the policy cannot place stay words.
+    Without a context (a model built outside a call) nothing is read.
+    """
+    context = info.context or {}
+    today = context.get('today')
+    if not value or not isinstance(today, date) or _ISO_DAY.match(value):
+        return value
+    day = resolve_day(value, today)
+    if day is None:
+        return value
+    before = context.get('before')
+    discussed = _as_date(getattr(before, 'booking_day', ''))
+    if bare_weekday(value) is not None:
+        if discussed is None and getattr(before, 'appointment', ''):
+            return value
+        if ambiguous_day(value, today, discussed) is not None:
+            return value
+    return day.isoformat()
+
+
 TimeWanted = Annotated[str, AfterValidator(_time_wanted)]
+DayMeant = Annotated[str, AfterValidator(_day_meant)]
 ComplaintWords = Annotated[str, AfterValidator(_describes_something)]
 
 
@@ -85,7 +158,7 @@ class SalonState(BaseModel):
     service: Service | None = Field(
         None, description='The service the caller wants: haircut, hair-color or blowout.'
     )
-    booking_day: str = Field(
+    booking_day: DayMeant = Field(
         '',
         description=(
             'The day the caller asked for, in their own words ("Friday", "this Friday", "Saturday next week"), '

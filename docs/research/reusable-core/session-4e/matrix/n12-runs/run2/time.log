@@ -1,0 +1,61 @@
+17:21  up 9 days,  8:41, 10 users, load averages: 1.94 1.83 1.54
+delay 0.0: repetition 1 of 23
+delay 0.0: repetition 2 of 23
+delay 0.0: repetition 3 of 23
+delay 0.0: repetition 4 of 23
+delay 0.0: repetition 5 of 23
+delay 0.0: repetition 6 of 23
+delay 0.0: repetition 7 of 23
+delay 0.0: repetition 8 of 23
+delay 0.0: repetition 9 of 23
+delay 0.0: repetition 10 of 23
+delay 0.0: repetition 11 of 23
+delay 0.0: repetition 12 of 23
+delay 0.0: repetition 13 of 23
+delay 0.0: repetition 14 of 23
+delay 0.0: repetition 15 of 23
+delay 0.0: repetition 16 of 23
+delay 0.0: repetition 17 of 23
+delay 0.0: repetition 18 of 23
+delay 0.0: repetition 19 of 23
+delay 0.0: repetition 20 of 23
+delay 0.0: repetition 21 of 23
+delay 0.0: repetition 22 of 23
+delay 0.0: repetition 23 of 23
+delay 0.05: repetition 1 of 23
+delay 0.05: repetition 2 of 23
+delay 0.05: repetition 3 of 23
+delay 0.05: repetition 4 of 23
+delay 0.05: repetition 5 of 23
+delay 0.05: repetition 6 of 23
+delay 0.05: repetition 7 of 23
+delay 0.05: repetition 8 of 23
+delay 0.05: repetition 9 of 23
+delay 0.05: repetition 10 of 23
+delay 0.05: repetition 11 of 23
+delay 0.05: repetition 12 of 23
+delay 0.05: repetition 13 of 23
+delay 0.05: repetition 14 of 23
+delay 0.05: repetition 15 of 23
+delay 0.05: repetition 16 of 23
+delay 0.05: repetition 17 of 23
+delay 0.05: repetition 18 of 23
+delay 0.05: repetition 19 of 23
+delay 0.05: repetition 20 of 23
+delay 0.05: repetition 21 of 23
+delay 0.05: repetition 22 of 23
+delay 0.05: repetition 23 of 23
+{
+  "turns_within_tolerance": [
+    true,
+    false,
+    true,
+    false,
+    false
+  ],
+  "trace_within_tolerance": false,
+  "harness_turn_max_ms": 31.94795799208805,
+  "harness_turns_within_max": true,
+  "passed": false
+}
+17:25  up 9 days,  8:45, 10 users, load averages: 1.55 1.62 1.50

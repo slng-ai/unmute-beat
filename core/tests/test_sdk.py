@@ -29,7 +29,7 @@ from pydantic_ai import Agent, TemplateStr
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import core
-from core.graph import Node
+from core.graph import Node, model_clients
 from core.steps import FlowCall, FlowState
 from core.turn import take_turn
 from tests.test_public import Script, opened, turn
@@ -158,7 +158,35 @@ async def the_collect_schema_is_the_states_own():
     assert 'reference' not in text, 'a field no collect step names was offered to the model'
 
 
+async def a_warm_up_ends_before_its_client_closes():
+    """Session 4e: `model_clients` cancels a warm-up still running and waits for it before the client closes.
+
+    Before, the task was only cancelled: it could still be inside its request
+    while the exit stack closed the client under it.
+    """
+    order: list[str] = []
+    started = asyncio.Event()
+
+    async def hangs(messages, info: AgentInfo):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            order.append('warm-up ended')
+
+    class Recorded(FunctionModel):
+        async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool | None:
+            order.append('client closed')
+            return await super().__aexit__(exc_type, exc_val, exc_tb)
+
+    async with model_clients({'only': Node(Agent(Recorded(hangs)))}, warm=True) as warmed:
+        await asyncio.wait_for(started.wait(), 2)
+    assert order == ['warm-up ended', 'client closed'], order
+    assert warmed and not warmed[0]['answered'], warmed
+
+
 async def main() -> None:
+    await a_warm_up_ends_before_its_client_closes()
     whole_candidates_refuse_nested_unknown_keys()
     the_model_cannot_write_a_verified_identity()
     prompts_see_the_state_and_nothing_else()

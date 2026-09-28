@@ -206,6 +206,9 @@ async def model_clients(nodes: dict[str, Node[Any]], warm: bool = False):
     gets one record per warm-up sent (model, tokens, whether it answered), so
     a launcher can count every one. A worker that owns its clients for its
     whole life (salon-graph's `server.py`) warms once; `bot.py` warms per call.
+
+    On the way out a warm-up still running is cancelled and awaited before
+    the clients close, so no request is left using a closed client.
     """
     seen = set()
     warmed: list[dict[str, Any]] = []
@@ -225,6 +228,7 @@ async def model_clients(nodes: dict[str, Node[Any]], warm: bool = False):
         finally:
             for task in warming:
                 task.cancel()
+            await asyncio.gather(*warming, return_exceptions=True)
 
 
 async def _warm(model: Model, settings: ModelSettings | None, warmed: list[dict[str, Any]]) -> None:

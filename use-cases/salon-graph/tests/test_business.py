@@ -130,7 +130,7 @@ async def no_a_condition_or_a_change_writes_nothing():
     said = await turn(
         flow, call, script, 'Yes, if it is under 30 euros?', ('say', 'It is 28 euros. Shall I go ahead?')
     )
-    assert booked(diary) == [] and said == ['It is 28 euros. Shall I go ahead?']
+    assert booked(diary) == [] and said[-1].startswith('2:00 PM on Friday the 2nd is free.'), said
     said = await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
     assert booked(diary) == [] and said[-1].startswith('Shall I book'), 'the price answer was not a read-back'
 
@@ -509,20 +509,49 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
     assert all('2026-10-10' in s for s in call._offered['slot']), call._offered
 
 
+async def a_wait_with_nothing_to_say_offers_what_there_is():
+    """Session 4e, live call s4e-latency-1: back from verify, booking's agent waited without looking at the times.
+
+    The caller heard "Sorry, could you say that again?" right after "Thanks,
+    I have you." A rendered step with choices and nothing else to say looks
+    its offer up by code and says the salon's words; no model is asked.
+    """
+    script, flow, call, _ = await at_booking(service='haircut', booking_day='Friday', booking_time='14:00')
+    said = await turn(flow, call, script, "Yes, that's my number.", ('call', 'wait'))
+    assert said == ['2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'], said
+    assert slot(FRIDAY, '14:00') in call._offered['slot'] and len(script.requests) == 1, script.requests
+
+
 async def model_speech_never_claims_a_completed_action():
-    """Claims: on a writing step, only a receipt says something is done, in any supported language."""
+    """Claims: on a writing step, only a receipt says something is done, in any supported language.
+
+    Booking is rendered (session 4e): a model that writes a claim, or a copy
+    of the options it was shown, says nothing at all. On a guarded prose step
+    (concierge, complaints) a claim is withheld and a truthful line is not.
+    """
     script, flow, call, diary = await at_booking()
     said = await turn(
-        flow, call, script, 'Book Friday at two.', ('say', "I've booked you for Friday at two. See you then.")
+        flow,
+        call,
+        script,
+        'Book Friday at two.',
+        ('text', "I've booked you for Friday at two. See you then."),
+        ('text', '{"slot": {"options": {"2026-10-02T1400|haircut": "haircut Friday the 2nd at 2:00 PM"}}}'),
     )
-    assert booked(diary) == [] and "I've booked" not in ' '.join(said), said
-    assert said[-1] == 'Sorry -- nothing has been changed yet. Let me check where we are.', said
+    assert booked(diary) == [] and not [s for s in said if 'booked' in s or '{' in s], said
+    copy = 'Shall I move your haircut from Wednesday the 30th at 9:00 AM to Tuesday the 29th at 9:00 AM?'
+    said = await turn(flow, call, script, 'Move it to the day after tomorrow.', ('text', copy))
+    assert copy not in said, ("the model's own copy of a read-back was said (live call 6)", said)
+    assert not [s for s in call.all_spoken if s.kind == 'model'], 'model words reached the caller on booking'
+
+    script, flow, call, diary = opened(verified_phone=PHONE, customer_status='existing')
     said = await turn(
         flow, call, script, 'Did it save?', ('say', 'Nothing was saved yet. Which time would you like?')
     )
     assert said == ['Nothing was saved yet. Which time would you like?'], (
         'a truthful "nothing was saved" was withheld'
     )
+    call.commit(agent='booking')
     await read_back(flow, call, script)
     await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
     call.commit(agent='complaints')
@@ -697,6 +726,7 @@ async def main() -> None:
     await the_same_number_said_back_is_a_yes()
     await verify_says_every_word_in_code()
     await a_bare_weekday_beside_another_week_is_asked_about()
+    await a_wait_with_nothing_to_say_offers_what_there_is()
     await model_speech_never_claims_a_completed_action()
     await a_goodbye_never_claims_a_booking_nothing_made()
     await one_action_per_reply_and_one_budget_per_turn()

@@ -25,7 +25,11 @@ second, independent caller writes to the same SQLite file through its own
 * V8: the live check's contender (`evals.contend`) takes the time when the
   move's read-back reaches the log, and the move is refused;
 * V9: live call CAc82c12: a day recorded beside an id not on offer is kept,
-  and the times offered next are that day's.
+  and the times offered next are that day's;
+* V10: live call 5: a day said as a weekday and as a date is one day, and
+  keeps the times on offer;
+* V11: live call s4e-worker-bystander: the time the caller already holds is
+  theirs, not "taken".
 """
 
 import asyncio
@@ -35,7 +39,7 @@ import time
 from salon.diary import Diary
 from salon.functions import Cancel, Move, Salon, cancel, find_move, move
 from tests.script import CLOCK, PHONE, slot, turn
-from tests.test_business import FRIDAY, TUE, at_booking, seed
+from tests.test_business import FRIDAY, TUE, at_booking, read_back, seed
 
 OTHER = '+447700900123'
 """A second, synthetic caller (Ofcom's drama range)."""
@@ -336,20 +340,25 @@ async def a_value_said_again_is_not_a_yes():
     """V6 (session 4d, defect 1): recording an unchanged value never approves a booking, move, cancel or complaint.
 
     Each reply below says the read-back's value again, and the scripted agent
-    only records it, as a model reading the words would. Nothing is carried
-    out, no `Locale.restated` is said, and the agent's own words are. A heard
-    read-back, an unheard one and one asked two turns ago are all tried.
+    only records it, as a model reading the words would, then looks again.
+    Nothing is carried out, no `Locale.restated` is said, and the caller
+    hears the salon's offer again (booking is rendered since session 4e). A
+    heard read-back, an unheard one and one asked two turns ago are all tried.
     """
-    from tests.test_business import read_back
-
     for words in REPLIES:
         script, flow, call, diary = await at_booking()
         await read_back(flow, call, script)
         said = await turn(
-            flow, call, script, words, ('collect', {'slot': slot(FRIDAY, '14:00')}), ('say', 'Sure.')
+            flow,
+            call,
+            script,
+            words,
+            ('collect', {'slot': slot(FRIDAY, '14:00')}),
+            ('call', 'options'),
+            ('call', 'wait'),
         )
         nothing_went_out(call, diary, said, [])
-        assert said == ['Sure.'], (words, said)
+        assert said == ['2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'], (words, said)
 
     script, flow, call, diary = await at_booking()
     await read_back(flow, call, script, heard=False)
@@ -437,6 +446,7 @@ async def each_problem_says_its_own_next_step():
         ('call', 'options'),
         ('collect', {'appointment': held, 'service': 'haircut', 'booking_day': 'Tuesday'}),
         ('call', 'move_appointment'),
+        ('call', 'wait'),
     )
     missing = refusals_in(script)[-1]
     assert missing.startswith('Not yet: no slot picked yet: call options'), missing
@@ -514,7 +524,7 @@ async def a_move_request_keeps_its_day():
         ('say', 'Wednesday at nine is free. Shall I move it?'),
     )
     facts = call.state.facts
-    assert (facts.booking_day, facts.booking_time, facts.appointment) == ('Wednesday', '09:00', ''), facts
+    assert (facts.booking_day, facts.booking_time, facts.appointment) == ('2026-09-30', '09:00', ''), facts
     refusal = next(r for r in refusals_in(script) if 'on offer' in r)
     assert refusal.startswith('Recorded: booking_day, booking_time. Not recorded:'), refusal
     times = next(
@@ -524,6 +534,103 @@ async def a_move_request_keeps_its_day():
         if getattr(part, 'tool_name', '') == 'options'
     )
     assert '2026-09-30T0900|haircut' in times, "the times offered were not the new day's"
+
+
+async def a_day_said_two_ways_is_one_day():
+    """V10 (live call CA4e5964, session 4d call 5): "thursday", then "2026-10-01" from concierge, is one request.
+
+    Booked Tuesday, asked to move to Thursday, the times shown; booking then
+    handed over to concierge, which recorded the day again as a date. The
+    state holds the day as the date it means, so nothing changed: the time
+    on offer stays pickable and the move is read back. A real change of day
+    still takes the times away.
+    """
+    script, flow, call, diary = await at_booking()
+    await read_back(flow, call, script, day='Tuesday', at='11:00', words='Tuesday at eleven.')
+    await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    [held] = [b['booking_id'] for b in diary.bookings_for(PHONE, CLOCK.date())]
+    await turn(
+        flow,
+        call,
+        script,
+        'Can you move it?',
+        ('call', 'options'),
+        ('collect', {'appointment': held}),
+        ('say', 'Which day?'),
+    )
+    await turn(
+        flow,
+        call,
+        script,
+        'Thursday at three.',
+        ('collect', {'booking_day': 'thursday', 'booking_time': '15:00'}),
+        ('call', 'options'),
+        ('say', 'Thursday at three is free.'),
+    )
+    thursday = slot('2026-10-01', '15:00')
+    assert call.state.facts.booking_day == '2026-10-01' and thursday in call._offered['slot'], (
+        call.state.facts,
+        call._offered,
+    )
+    await turn(
+        flow,
+        call,
+        script,
+        'Thursday, yes.',
+        ('collect', {'booking_day': 'Thursday'}),
+        ('say', 'At three?'),
+    )
+    assert thursday in call._offered.get('slot', {}), 'the same day said again took the times away'
+    await turn(
+        flow,
+        call,
+        script,
+        'Yes, Thursday the first.',
+        ('call', 'hand_over', {'to': 'concierge', 'because': 'confirm the day'}),
+        ('collect', {'booking_day': '2026-10-01'}),
+        ('call', 'hand_over', {'to': 'booking', 'because': 'move to Thursday at three'}),
+        ('collect', {'slot': thursday}),
+        ('call', 'move_appointment'),
+    )
+    assert not [r for r in refusals_in(script) if 'on offer' in r], (
+        'a day spelled again took the time on offer away',
+        refusals_in(script),
+    )
+    assert call.state.facts.slot == thursday, call.state.facts
+    await turn(
+        flow,
+        call,
+        script,
+        'Actually, Friday.',
+        ('collect', {'booking_day': 'friday'}),
+        ('say', 'Let me look at Friday.'),
+    )
+    facts = call.state.facts
+    assert (facts.booking_day, facts.slot, facts.appointment) == ('2026-10-02', '', held), facts
+    assert not [s for s in call._offered.get('slot', {}) if s.startswith('2026-10-01')], (
+        'a real change of day kept the Thursday times'
+    )
+
+
+async def your_own_booking_is_not_taken():
+    """V11 (session 4e, live call s4e-worker-bystander): the caller's own time was offered away as "taken".
+
+    Moved to Tuesday at nine, the caller said "Tuesday at nine" again; the
+    offer said "9:00 AM is taken. On Tuesday I have 10:00 AM ...", and they
+    moved to ten. The time they asked for is theirs: the salon says so.
+    """
+    script, flow, call, diary = await at_booking()
+    seed(diary, TUE, '09:00')
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Tuesday at nine, yes.',
+        ('collect', {'service': 'haircut', 'booking_day': 'Tuesday', 'booking_time': '09:00'}),
+        ('call', 'options'),
+        ('call', 'wait'),
+    )
+    assert said == ['You already have a haircut tomorrow at 9:00 AM. Would you like a different time?'], said
 
 
 async def main() -> None:
@@ -537,8 +644,10 @@ async def main() -> None:
     await each_problem_says_its_own_next_step()
     await a_contender_takes_the_time_the_bot_reads_back()
     await a_move_request_keeps_its_day()
+    await a_day_said_two_ways_is_one_day()
+    await your_own_booking_is_not_taken()
     print(
-        'moves ok: V1-V9, refusals bound to their request, picks kept across a day change, no yes by repetition'
+        'moves ok: V1-V11, refusals bound to their request, picks kept across a day change, no yes by repetition'
     )
 
 

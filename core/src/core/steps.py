@@ -31,7 +31,7 @@ import inspect
 import json
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -91,6 +91,10 @@ class FlowCall[S: BaseModel](CallContext):
     _services: Any = PrivateAttr(default=None)
     _offered: dict[str, dict[str, str]] = PrivateAttr(default_factory=dict)
     """For each choice field, the ids offered to this caller and how each was said. Only these can be picked."""
+    _offer_words: tuple[int, str] = PrivateAttr(default=(0, ''))
+    """On a rendered step, the application's words for the offer made on this turn, until `wait` says them."""
+    _refused_on: int = PrivateAttr(default=0)
+    """The turn on which a rendered step's operation met an authoritative no: `wait` says so if nothing else."""
     _locale: Locale | None = PrivateAttr(default=None)
     _version: int = PrivateAttr(default=0)
     """Bumped by every accepted change to the application state: work begun on an older version is stale."""
@@ -137,11 +141,25 @@ class FlowCall[S: BaseModel](CallContext):
         facts = self.state.facts
         if unknown := set(fields) - set(type(facts).model_fields):
             raise ValueError(f'no such field on {type(facts).__name__}: {", ".join(sorted(unknown))}')
-        candidate = type(facts).model_validate(facts.model_dump() | deepcopy(fields), extra='forbid')
-        self.commit(facts=candidate)
+        self.commit(facts=self.validated(facts.model_dump() | deepcopy(fields)))
         if self.state.facts is not facts:
             self._version += 1
             self.take_owed()
+
+    def validation_context(self) -> dict[str, Any]:
+        """The call's clock, and the application state as it stands before this change (`before`).
+
+        `before` is the committed state, which is replaced whole and never
+        changed in place: a validator can read what the caller was talking
+        about (a day under discussion) without any service.
+        """
+        return super().validation_context() | {'before': self.state.facts}
+
+    def validated(self, values: Mapping[str, Any]) -> Any:
+        """The application's model built from these values, validated with this call's context, or `ValidationError`."""
+        return type(self.state.facts).model_validate(
+            values, extra='forbid', context=self.validation_context()
+        )
 
     def take_owed(self) -> None:
         """Once the caller is known, take back what earlier calls still owe them, to settle before anything new.
@@ -244,7 +262,7 @@ class FlowCall[S: BaseModel](CallContext):
 
         return settle
 
-    def collect(self, **fields: Any) -> None:
+    def collect(self, offered: Collection[str] = (), /, **fields: Any) -> list[str]:
         """What the caller said, as a model heard it: only fields a collect step asks for.
 
         Anything else (verification, approval, a receipt) is refused before it
@@ -257,34 +275,66 @@ class FlowCall[S: BaseModel](CallContext):
         changed field, with the pick made from it. "Actually, make it
         Saturday" leaves no Friday slot behind for an old yes to book.
 
-        What an offer rests on is its manifest's `after:` list; without one,
-        every field but the choices and the identity. So a new day takes the
+        A change is a change of meaning: the values are validated first, with
+        the call's context, and compared as the application's model holds
+        them. "Thursday" recorded again as the date it already stands for is
+        no change, and takes nothing away (session 4d, live call 5).
+
+        What an offer rests on is its manifest's `after:` list, which may name
+        another choice; without one, every field but the choices and the
+        identity. An offer taken away counts as a change, so what rested on
+        it goes too: a new ticket takes the category offered for it, and that
+        takes the resolution offered for the category. A new day takes the
         times away and keeps the appointment being moved, which rests on no
-        field (session 4d, defect 4: the day change cleared the appointment,
-        trace ce40c124). A known identity changed to another takes every
-        offer and pick away: they were made to someone else. Naming the
-        caller for the first time is not a change of caller.
+        field (session 4d, defect 4). A known identity changed to another
+        takes every offer and pick away: they were made to someone else.
+        Naming the caller for the first time is not a change of caller.
+
+        A pick counts only against an offer made for the state this update
+        ends in. For the choice fields named in `offered`, a new pick must be
+        on offer now, and a pick whose offer this same update takes away came
+        from an offer that no longer stands (session 4e: "access, with a
+        refund", said about the billing resolutions). A value the state
+        already holds is not a new pick. Refused picks are left out and their
+        names returned; the rest is recorded. Nothing changes when the
+        candidate is not a valid state (`ValidationError`).
         """
         if refused := set(fields) - self._collectible:
             raise ValueError(f'not collected from the caller: {", ".join(sorted(refused))}')
         facts = self.state.facts
         default = lambda name: type(facts).model_fields[name].get_default(call_default_factory=True)  # noqa: E731
-        changed = {name for name, value in fields.items() if getattr(facts, name) != value}
-        request = changed - self._choices - {self._identity_field}
+        unoffered = _not_on_offer(self, offered, fields)
+        kept = {name: value for name, value in fields.items() if name not in unoffered}
+        candidate = self.validated(facts.model_dump() | deepcopy(kept))
+        changed = {name for name in kept if getattr(facts, name) != getattr(candidate, name)}
         someone_else = bool(self.identity()) and self._identity_field in changed
-        stale = {
-            name for name in self._choices if someone_else or request & self._choice_after.get(name, request)
-        }
-        picks = {name: default(name) for name in stale - set(fields)}
+        plain = changed - self._choices - {self._identity_field}
+        stale: set[str] = set()
+        while True:
+            moved = changed | stale
+            found = {
+                name
+                for name in self._choices
+                if someone_else
+                or ((moved - {name}) & self._choice_after[name] if name in self._choice_after else plain)
+            }
+            if found <= stale:
+                break
+            stale |= found
+        late = [name for name in offered if name in stale and kept.get(name, default(name)) != default(name)]
+        unoffered += late
+        kept = {name: value for name, value in kept.items() if name not in late}
+        picks = {name: default(name) for name in stale if name not in kept}
         changed |= {name for name, value in picks.items() if getattr(facts, name) != value}
         resets = {
             name: default(name)
             for name, sources in self._derived.items()
-            if sources & changed and name not in fields
+            if sources & changed and name not in kept
         }
-        self.update(**fields, **picks, **resets)
+        self.update(**kept, **picks, **resets)
         for name in stale:
             self._offered.pop(name, None)
+        return unoffered
 
 
 @dataclass(frozen=True)
@@ -1240,19 +1290,22 @@ def _not_ready(operation: Operation, call: FlowCall[Any], error: ValidationError
     return f'Not yet: {"; ".join(said)}.'
 
 
-def _not_on_offer(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> list[str]:
+def _not_on_offer(call: FlowCall[Any], choices: Collection[str], values: Mapping[str, Any]) -> list[str]:
     """The choice fields among `values` whose value is not on offer to this caller now.
 
     A value the state already holds is not a new pick: it was recorded from an
     offer, and still stands, so recording it again changes nothing (a move
     spends the offer of the booking it moved, and the cancel that follows
     names the same booking). The service checks ownership and revision when
-    it acts on it, whatever was offered (session 4d, trace ce40c124).
+    it acts on it, whatever was offered (session 4d, trace ce40c124). A
+    field's default is no pick either: it takes a pick back.
     """
+    fields = type(call.state.facts).model_fields
     return [
         name
         for name, value in values.items()
         if name in choices
+        and value != fields[name].get_default(call_default_factory=True)
         and getattr(call.state.facts, name, None) != value
         and str(value) not in call._offered.get(name, {})
     ]
@@ -1270,14 +1323,22 @@ class Options(BaseModel):
     this). The note is how the domain says something the ids cannot, such as
     a day that could mean two dates: the agent reads it and asks the caller,
     and only the ids are ever offered.
+
+    On a rendered step the object also carries `say`: what the caller hears
+    about this offer, in the application's words, including when nothing is
+    free or the day could mean two dates. Core never words an offer. ''
+    says nothing for this choice.
     """
 
     model_config = ConfigDict(extra='forbid')
     options: dict[str, str] = {}
     note: str = ''
+    say: str = ''
 
 
-async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any], Any]]) -> dict[str, Any]:
+async def _offer(
+    call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any], Any]], rendered: bool = False
+) -> dict[str, Any]:
     """Ask each choice function for this caller's options, and record them as offered, unless the call moved on.
 
     A choice function may be sync or async, and may take long: the caller can
@@ -1287,6 +1348,12 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     answer computed for a state that is no longer the call's, or in a turn the
     caller has left, is returned as stale and offers nothing, so it can never
     replace the current offer or make an old slot pickable.
+
+    On a `rendered` step every answer must carry `say`, the application's
+    words for it: one without is a fault in the application, and offers
+    nothing. The words are kept for `wait` to say, in the order the step
+    lists its choices. The agent is still shown the ids and notes, to read
+    the caller's pick.
     """
     version, generation, agent = call._version, call._generation, call.state.agent
     found: dict[str, Options] = {}
@@ -1296,6 +1363,10 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
                 answer = await choose(call.services, call.state.facts)
             else:
                 answer = await _result(await asyncio.to_thread(choose, call.services, call.state.facts))
+            if rendered and not hasattr(answer, 'say'):
+                raise TypeError(
+                    f'the choice function for {name} returned no words to say, on a rendered step'
+                )
         except Exception as error:
             logger.exception('choice function for {} failed', name)
             return {
@@ -1304,7 +1375,9 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
         found[name] = (
             Options(options=dict(answer))
             if isinstance(answer, Mapping)
-            else Options(options=dict(answer.options), note=getattr(answer, 'note', ''))
+            else Options(
+                options=dict(answer.options), note=getattr(answer, 'note', ''), say=getattr(answer, 'say', '')
+            )
         )
     if call._version != version or call._generation != generation or call.state.agent != agent:
         return {'stale': 'The request changed while these were looked up. Nothing is offered; look again.'}
@@ -1312,6 +1385,8 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     for name, options in found.items():
         call._offered[name] = dict(options.options)
         result[name] = {'options': options.options, **({'note': options.note} if options.note else {})}
+    if rendered:
+        call._offer_words = (call.turn, ' '.join(o.say for o in found.values() if o.say))
     return result
 
 
@@ -1330,9 +1405,10 @@ async def _carry_out(
 ) -> str | None:
     """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown.
 
-    On a rendered step an authoritative no is said by code too
-    (`Locale.withheld`, or `unsettled` while anything is unknown), instead
-    of being handed back to a model to put in its own words.
+    An authoritative no goes back to the step's agent with the refusal, to
+    choose what comes next (look again, ask). On a rendered step the agent
+    has no words of its own: its `wait` says the application's fresh offer,
+    or `Locale.withheld` when there is nothing else to say (`_refused_on`).
     """
     before = {i.id for i in call.intents if i.status == 'rejected'}
     try:
@@ -1342,11 +1418,9 @@ async def _carry_out(
         return call.locale.unsettled
     except ModelRetry:
         refused = {i.id for i in call.intents if i.status == 'rejected' and i.operation == operation.name}
-        if not rendered or not refused - before:
-            raise
-        words = call.correction(call.locale.withheld)
-        await call.speak_now(words, origin='error')
-        return words
+        if rendered and refused - before:
+            call._refused_on = call.turn
+        raise
     say = getattr(operation, 'say', '')
     return say.format_map(_Facts(receipt.model_dump())) if say and isinstance(receipt, BaseModel) else None
 
@@ -1395,9 +1469,16 @@ class ConversationStep(Step):
     """`speech: rendered`: the agent chooses and code words everything. No text output, so no model prose to TTS.
 
     Its outputs are the step's operations (read back, then carried out),
-    `hand_over`, `goodbye`, and `wait`, after which code asks for the first
-    missing `asks:` field, or says `Locale.pardon`. An authoritative no is
-    said in core's fixed words (`_carry_out`).
+    `hand_over`, `goodbye`, and `wait`, after which code says, in this
+    order: a read-back the reply calls for; the application's words for a
+    refused value, then for the offer made this turn (a choice function's
+    `say`); `Locale.withheld` after an authoritative no this turn
+    (`_carry_out`); the first missing `asks:` field; with none of these and
+    choices on the step, the offer as it stands, looked up by code; or
+    `Locale.pardon`. Session 4e, live call s4e-latency-1: booking's agent
+    waited on arrival from verify without looking at the times, and the
+    caller heard "Sorry, could you say that again?" after "Thanks, I have
+    you." What there is to offer is code's to look up; no model is asked.
     """
     quoted: tuple[str, ...] = ()
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
@@ -1570,17 +1651,33 @@ class ConversationStep(Step):
             return words
 
         async def wait(ctx: RunContext[FlowCall[Any]]) -> str | Prompted:
-            """Nothing to read back, carry out or hand over yet. The application asks the caller for what it still needs."""
+            """Nothing to read back, carry out or hand over yet. The application tells the caller what is on offer, or asks for what it still needs."""
             call = ctx.deps
             if read_back is not None and isinstance(asked := read_back(call), Prompted):
                 return asked
             missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
             refused = _refused(ctx.messages, self.refusals)
+            turn, offer = call._offer_words
+            call._offer_words = (0, '')
             words = (
-                (self.refusals[refused[0]](refused[1]) if refused else '')
+                ' '.join(
+                    filter(
+                        None,
+                        [
+                            self.refusals[refused[0]](refused[1]) if refused else '',
+                            offer if turn == call.turn else '',
+                        ],
+                    )
+                )
+                or (call.correction(call.locale.withheld) if call._refused_on == call.turn else '')
                 or (self.asks[missing] if missing else '')
-                or call.locale.pardon
             )
+            if not words and self.choices:
+                await _offer(call, self.choices, rendered=True)
+                turn, offer = call._offer_words
+                call._offer_words = (0, '')
+                words = offer if turn == call.turn else ''
+            words = words or call.locale.pardon
             await call.speak_now(words, origin='ask')
             return words
 
@@ -1601,20 +1698,19 @@ class ConversationStep(Step):
                 """Record exactly what the caller has just said for any of these fields. Never guess a value."""
                 asked = values.model_dump(exclude_none=True)
                 call = ctx.deps
-                unoffered = _not_on_offer(call, self.choices, asked)
-                proposed = {name: value for name, value in asked.items() if name not in unoffered}
-                before = {name: getattr(call.state.facts, name, None) for name in proposed}
+                before = {name: getattr(call.state.facts, name, None) for name in asked}
                 for name in self.quoted:
-                    if proposed.get(name) and not said_by_caller(call, str(proposed[name])):
+                    if asked.get(name) and not said_by_caller(call, str(asked[name])):
                         raise ModelRetry(
                             f"Nothing was recorded: {name} must be the caller's own words, copied from what "
                             'they said. Punctuation and case may differ; nothing else may.'
                         )
                 try:
-                    flow.record(call, proposed)
+                    unoffered = flow.record(call, asked, self.choices)
                 except ValidationError as error:
                     problems = '; '.join(e['msg'] for e in error.errors())
                     raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
+                proposed = {name: value for name, value in asked.items() if name not in unoffered}
                 call._kept.update(
                     name for name in proposed if getattr(call.state.facts, name, None) == before[name]
                 )
@@ -1636,7 +1732,11 @@ class ConversationStep(Step):
                 """The options you may offer the caller now, by id, for what they asked. Only an offered id can be recorded. Say them in your own words."""
                 return await _offer(ctx.deps, self.choices)
 
-            tools.append(Tool(options))
+            async def offer(ctx: RunContext[FlowCall[Any]]) -> dict[str, Any]:
+                """The options on offer to the caller now, by id, for what they asked. Only an offered id can be recorded. Then call wait: the application tells the caller what is on offer."""
+                return await _offer(ctx.deps, self.choices, rendered=True)
+
+            tools.append(Tool(offer, name='options') if self.rendered else Tool(options))
         for operation in self.operations:
             outputs.append(
                 ToolOutput(
@@ -1897,7 +1997,8 @@ class StepFlow:
 
         The state is copied in and validated as the flow's model, so the
         object the caller passed can change afterwards without reaching the
-        call. Services are kept as given: whether a client is shared between
+        call; once the call has its clock, it is validated again with the
+        call's context (`validation_context`). Services are kept as given: whether a client is shared between
         calls or made per call is the application's decision.
 
         `intents` are unresolved intents an earlier process persisted (through
@@ -1917,6 +2018,7 @@ class StepFlow:
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale
+        call.state = call.state.model_copy(update={'facts': call.validated(facts.model_dump())})
         call._reconcile_with = {op.name: (op, op.args_type) for op in self.operations()}
         if intents:
             call.restore(list(intents), call._reconcile_with)
@@ -2002,17 +2104,23 @@ class StepFlow:
         resets |= self._resting_on(list(names), set(names))
         call.collect(**resets)
 
-    def record(self, call: FlowCall[Any], updates: Mapping[str, Any]) -> None:
+    def record(
+        self, call: FlowCall[Any], updates: Mapping[str, Any], offered: Collection[str] = ()
+    ) -> list[str]:
         """Commit the caller's values as one state candidate, resetting whatever rested on a value that changed.
 
-        Raises `ValidationError` and changes nothing when the candidate is not
-        a valid state.
+        Returns the picks among `offered` that were not on offer for the state
+        this update ends in, left out (`FlowCall.collect`). Raises
+        `ValidationError` and changes nothing when the candidate is not a
+        valid state.
         """
         facts = call.state.facts
-        candidate = type(facts).model_validate(facts.model_dump() | deepcopy(dict(updates)), extra='forbid')
+        unoffered = _not_on_offer(call, offered, updates)
+        updates = {name: value for name, value in updates.items() if name not in unoffered}
+        candidate = call.validated(facts.model_dump() | deepcopy(updates))
         changed = [
             name
             for name in updates
             if present(getattr(facts, name)) and getattr(facts, name) != getattr(candidate, name)
         ]
-        call.collect(**dict(updates), **self._resting_on(changed, set(updates)))
+        return unoffered + call.collect(offered, **updates, **self._resting_on(changed, set(updates)))

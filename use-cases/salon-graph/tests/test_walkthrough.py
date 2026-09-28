@@ -10,9 +10,9 @@ Each step asserts which node is active, what each provider request was sent
 (the requested time, the offer, the pending read-back, the receipt), and
 what the diary holds. It also writes the booking node's rendered context at
 the offer, the pending read-back and after the receipt to
-`docs/research/reusable-core/session-4c/booking-context.md`, so the
-design can be reviewed from what the agent actually sees. Session 4's copy
-stays as it was measured. A recap reference is an intent id, random per run,
+`docs/research/reusable-core/session-4e/booking-context.md`, so the
+design can be reviewed from what the agent actually sees. Session 4's and 4c's copies
+stay as they were measured. A recap reference is an intent id, random per run,
 so the snapshot writes it as `<ref>`.
 
 Covers D1-D6, P4, P13, P14, P15 and P17 (scripted). Scripted models prove the
@@ -28,8 +28,10 @@ from tests.script import CLOCK, PHONE, Script, opened, slot, text_of, turn
 
 TODAY = CLOCK.date()
 FRIDAY = '2026-10-02'
+OFFER = '2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'
+"""The salon's own words for the Friday offer: the booking step is rendered (session 4e)."""
 SNAPSHOTS = (
-    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4c' / 'booking-context.md'
+    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4e' / 'booking-context.md'
 )
 REF = re.compile(r'\b[0-9a-f]{8}(?=: ")')
 """A recap reference in the rendered context: an intent id's first characters, different every run."""
@@ -61,7 +63,7 @@ async def the_booking_walkthrough():
     assert call.state.agent == 'verify' and call.state.pending == 'booking', call.state
     assert said == ['Is your number +34 600 11 12 22?'], said
     facts = call.state.facts
-    assert (facts.service, facts.booking_day, facts.booking_time) == ('haircut', 'Friday', '14:00')
+    assert (facts.service, facts.booking_day, facts.booking_time) == ('haircut', '2026-10-02', '14:00')
     assert not facts.verified_phone, 'a number from the carrier is not an identity'
 
     said = await turn(
@@ -71,7 +73,7 @@ async def the_booking_walkthrough():
         "Yes, that's my number.",
         ('call', 'lookup_customer'),
         ('call', 'options'),
-        ('say', 'I have Friday at 2:00 or 2:30 PM. Which time works for you?'),
+        ('call', 'wait'),
     )
     assert script.steps[2:] == ['verify', 'booking', 'booking'], (
         'P13: no concierge, router or reader',
@@ -79,7 +81,7 @@ async def the_booking_walkthrough():
     )
     assert call.state.agent == 'booking' and call.state.pending is None and facts is not call.state.facts
     assert call.state.facts.verified_phone == PHONE and call.state.facts.booking_time == '14:00', 'P4: kept'
-    assert said == ['Thanks, I have you.', 'I have Friday at 2:00 or 2:30 PM. Which time works for you?']
+    assert said == ['Thanks, I have you.', OFFER], said
     entered = script.requests[3]
     assert 'Your role: booking' in entered.instructions and 'Your role: verify' not in entered.instructions, (
         'P15: booking enters with its own instructions, never the verification ones'
@@ -96,10 +98,11 @@ async def the_booking_walkthrough():
     sections.append(snapshot(script, 'At the offer: times on offer, nothing pending, waiting at booking'))
     assert diary.bookings_for(PHONE, TODAY) == []
 
-    said = await turn(flow, call, script, 'Yes.', ('say', 'Sure. Which one, 2:00 or 2:30?'))
+    said = await turn(flow, call, script, 'Yes.', ('call', 'options'), ('call', 'wait'))
     assert call.state.agent == 'booking' and not call.state.facts.slot, (
         'P17: a bare yes to two times picks none'
     )
+    assert said == [OFFER], ("the offer is said again, in the salon's words", said)
     assert diary.bookings_for(PHONE, TODAY) == [] and not call.evidence[1:], 'P17: and books none'
 
     later = slot(FRIDAY, '14:30')
@@ -127,10 +130,6 @@ async def the_booking_walkthrough():
         'D6: booking stays'
     )
 
-    said = await turn(flow, call, script, 'What do I owe for that?', ('say', 'A haircut is 28 euros.'))
-    sections.append(snapshot(script, 'After the receipt: the booking on record, offers spent'))
-    assert call.state.agent == 'booking' and 'book_appointment' in script.requests[-1].instructions
-
     await turn(
         flow,
         call,
@@ -139,6 +138,7 @@ async def the_booking_walkthrough():
         ('call', 'hand_over', {'to': 'complaints', 'because': 'a complaint about a past visit'}),
         ('say', "I'm sorry something went wrong. What happened?"),
     )
+    sections.append(snapshot(script, 'After the receipt: the booking on record, offers spent'))
     assert call.state.agent == 'complaints', 'P14: the booking agent chose the declared complaints exit'
     complaint = script.requests[-1]
     assert 'book_appointment' in complaint.instructions and booked['booking_id'] in complaint.instructions, (
@@ -185,14 +185,14 @@ async def a_changed_day_offers_again_and_books_nothing_old():
         'Actually, make it Saturday.',
         ('calls', [('collect', {'values': {'booking_day': 'Saturday'}}), ('book_appointment', {})]),
         ('call', 'options'),
-        ('say', 'On Saturday I have 2:00 PM. Does that work?'),
+        ('call', 'wait'),
     )
     assert diary.bookings_for(PHONE, TODAY) == [], 'nothing was written under the Friday approval'
-    assert call.state.facts.booking_day == 'Saturday' and slot(FRIDAY, '14:00') not in call._offered.get(
+    assert call.state.facts.booking_day == '2026-10-03' and slot(FRIDAY, '14:00') not in call._offered.get(
         'slot', {}
     )
     assert any('2026-10-03' in s for s in call._offered.get('slot', {})), call._offered
-    assert call.state.agent == 'booking' and said[-1].startswith('On Saturday'), said
+    assert call.state.agent == 'booking' and said[-1].startswith('2:00 PM on Saturday the 3rd is free.'), said
 
 
 async def a_spoken_answer_stays_and_an_invented_exit_fails():

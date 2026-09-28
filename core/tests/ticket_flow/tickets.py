@@ -28,15 +28,24 @@ import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, ValidationInfo
 
 from core import Intent
 
 type AccountId = Annotated[str, StringConstraints(pattern=r'^ACC-\d{4}$')]
 type TicketId = Annotated[str, StringConstraints(pattern=r'^T-\d{3}$')]
+
+
+def _on_the_calls_clock(value: str, info: ValidationInfo) -> str:
+    """A relative day as the date it means today, from the call's validation context; a date is kept as it is."""
+    days = {'hoy': 0, 'mañana': 1}.get(value.strip().lower())
+    if days is None or not info.context or 'today' not in info.context:
+        return value
+    return (info.context['today'] + timedelta(days=days)).isoformat()
 
 
 class DeskState(BaseModel):
@@ -52,6 +61,8 @@ class DeskState(BaseModel):
     revision: int = 0
     """The ticket's revision as the backend last said it. Only a receipt sets it."""
     ticket_status: str = ''
+    follow_up: Annotated[str, AfterValidator(_on_the_calls_clock)] = ''
+    """When to call the customer back: "hoy" or "mañana" is kept as the date it means on the call's clock."""
 
 
 class TicketRef(BaseModel):
@@ -265,9 +276,46 @@ RESOLUTIONS = {
 """How a problem of each category can be closed: what `choices.yaml` offers, by the category the caller gave."""
 
 
+def categories(desk: Desk, state: DeskState) -> dict[str, str]:
+    """What the picked ticket's problem can be about (`chained.yaml`): offered only once a ticket is picked."""
+    return {'billing': 'facturación', 'access': 'acceso'} if state.ticket_id else {}
+
+
 def resolutions(desk: Desk, state: DeskState) -> dict[str, str]:
     """The resolutions on offer for the category recorded: a new category is a new offer."""
     return RESOLUTIONS.get(state.category, {})
+
+
+class Offer(BaseModel):
+    """A choice's options and the desk's own words for them, for a rendered step (`rendered_choices.yaml`)."""
+
+    options: dict[str, str]
+    say: str
+
+
+def ticket_offer(desk: Desk, state: DeskState) -> Offer:
+    """The caller's tickets, and how the desk offers them."""
+    tickets = open_tickets(desk, state)
+    return Offer(
+        options=tickets,
+        say=f'Veo {" y ".join(tickets.values())}. ¿Cuál es?' if tickets else 'No veo tickets en esa cuenta.',
+    )
+
+
+def resolution_offer(desk: Desk, state: DeskState) -> Offer:
+    """The resolutions for the category recorded, and how the desk offers them; with no category, it asks for one."""
+    found = resolutions(desk, state)
+    return Offer(
+        options=found,
+        say=f'Puedo dejarlo como {" o ".join(found.values())}. ¿Qué prefiere?'
+        if found
+        else '¿El problema es de facturación o de acceso?',
+    )
+
+
+def not_offered(value: str) -> str:
+    """What the desk says when the caller picks something it did not offer."""
+    return f'{value} no es una de las opciones que tengo.'
 
 
 def look_up(desk: Desk, ref: TicketRef) -> Found:

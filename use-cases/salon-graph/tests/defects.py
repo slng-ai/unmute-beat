@@ -189,7 +189,7 @@ def a_refused_pick_loses_the_new_day() -> bool:
             ('collect', {'booking_day': 'Wednesday', 'booking_time': '09:00', 'appointment': held}),
             ('say', 'Let me look.'),
         )
-        return call.state.facts.booking_day != 'Wednesday'
+        return call.state.facts.booking_day != '2026-09-30'
 
     return asyncio.run(check())
 

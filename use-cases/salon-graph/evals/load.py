@@ -511,10 +511,22 @@ async def _monitor(runner: Runner, samples: list[dict[str, Any]], stop: asyncio.
 
 
 async def ramp_step(
-    out: Path, calls: int, seconds: float, workers: int, port: int, lanes: list[int] | None = None
+    out: Path,
+    calls: int,
+    seconds: float,
+    workers: int,
+    port: int,
+    lanes: list[int] | None = None,
+    idle: float = 0.0,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """`calls` lanes side by side for `seconds`, each redialling with a new caller, on a fresh runner."""
-    runner = Runner(out, workers, port)
+    """`calls` lanes side by side for `seconds`, each redialling with a new caller, on a fresh runner.
+
+    `idle` keeps the runner up that long after the last call, still sampled,
+    so a memory run shows whether it gives memory back. When the calls
+    ended is written to `calls_over.json`, beside `samples.json`.
+    """
+    runner = Runner(out, workers, port, **(env or {}))
     ready = runner.start()
     samples: list[dict[str, Any]] = []
     stop = asyncio.Event()
@@ -534,13 +546,14 @@ async def ramp_step(
 
     try:
         await asyncio.gather(*(lane(i) for i in (lanes or range(calls))))
-        await asyncio.sleep(3)
+        (out / 'calls_over.json').write_text(json.dumps({'at': time.perf_counter()}))
+        await asyncio.sleep(3 + idle)
     finally:
         stop.set()
         await monitor
-        idle = runner.workers_now()
+        idle_workers = runner.workers_now()
         runner.stop()
-    return judge(out, calls, workers, ready, records, fixtures, samples, idle)
+    return judge(out, calls, workers, ready, records, fixtures, samples, idle_workers)
 
 
 def snapshot(path: Path) -> dict[str, list[tuple]]:
@@ -750,7 +763,8 @@ async def ramp(args: argparse.Namespace) -> int:
         seconds = args.seconds if calls == max(int(c) for c in args.calls.split(',')) else 0
         step = out / f'c{calls}'
         lanes = [int(x) for x in args.lanes.split(',')] if args.lanes else None
-        report = await ramp_step(step, calls, seconds, args.workers, args.port + index, lanes)
+        env = ({'LIVE_STATS': '1'} if args.live else {}) | ({'TRACEMALLOC': '1'} if args.tracemalloc else {})
+        report = await ramp_step(step, calls, seconds, args.workers, args.port + index, lanes, args.idle, env)
         reports['steps'][str(calls)] = report
         print(json.dumps({'calls': calls, 'overlap': report['overlap'], 'verdict': report['verdict']}))
         (out / 'ramp.json').write_text(json.dumps(reports, indent=1))
@@ -769,6 +783,13 @@ def main() -> int:
     r.add_argument('--out', required=True)
     r.add_argument(
         '--lanes', default='', help='only these lanes (their variants), for looking at one kind of call'
+    )
+    r.add_argument(
+        '--idle', type=float, default=0.0, help='seconds to keep the runner up after the last call'
+    )
+    r.add_argument('--live', action='store_true', help='workers count their live per-call objects')
+    r.add_argument(
+        '--tracemalloc', action='store_true', help='workers trace the Python heap (it costs memory)'
     )
     f = sub.add_parser('faults')
     f.add_argument('--port', type=int, default=7990)

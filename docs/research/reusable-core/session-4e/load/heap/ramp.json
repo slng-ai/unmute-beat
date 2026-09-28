@@ -1,0 +1,124 @@
+{
+ "host": {
+  "cpu": "Apple M5 Pro",
+  "cores": "15",
+  "perflevel0_cores": "5",
+  "perflevel1_cores": "10",
+  "ram_bytes": 25769803776,
+  "os": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "python": "3.14.5",
+  "source": "1882c1a2ce7ed9fc612f5367be6eedac2a3b3134",
+  "dirty": true
+ },
+ "limits": {
+  "max_active_calls": 5,
+  "unauthorised_effects": 0,
+  "duplicate_effects": 0,
+  "capacity_violations": 0,
+  "cross_call_leaks": 0,
+  "loop_lag_p99_ms": 100.0,
+  "rss_share_of_ram": 0.8,
+  "sustained_seconds_at_5": 60.0
+ },
+ "steps": {
+  "5": {
+   "calls": 5,
+   "workers": 2,
+   "ready_s": 2.0878642500028946,
+   "placed": 19,
+   "admitted": 19,
+   "rejected": 0,
+   "closed_by": {
+    "bot": 19
+   },
+   "overlap": {
+    "max": 5,
+    "seconds_at": {
+     "0": 0.0,
+     "1": 15.25,
+     "2": 4.5,
+     "3": 6.75,
+     "4": 8.25,
+     "5": 125.75
+    },
+    "longest_run_at_max_s": 125.75,
+    "span_s": 160.46094866702333
+   },
+   "booked_calls": 18,
+   "bookings_active": 18,
+   "duplicate_effects": 0,
+   "capacity_violations": 0,
+   "bookings_for_nobody": 0,
+   "cross_call_leaks": 0,
+   "unauthorised_effects": 0,
+   "writes_audited": 18,
+   "loop_lag_p99_ms_max": 41.894500015769154,
+   "rss_mb_max": 1013.859375,
+   "rss_mb_first_last": [
+    407.78125,
+    817.1875
+   ],
+   "ram_mb": 24576.0,
+   "turn_latency_s": {
+    "n": 109,
+    "p50": 0.9408469999907538,
+    "p90": 2.076249709003605,
+    "max": 2.873305041983258
+   },
+   "duty_cycle": {
+    "speech_seconds": 532.6974999999992,
+    "connected_seconds": 706.4573459129897,
+    "share": 0.7540405702931263,
+    "bot_seconds": 379.6374999999992,
+    "caller_seconds": 153.06000000000003
+   },
+   "marks": {
+    "sent": 138,
+    "returned": 122,
+    "clears": 109
+   },
+   "runner_calls": {
+    "pipeline_end": 19
+   },
+   "idle_workers": {
+    "39108": {
+     "tasks": 3,
+     "fds": 20,
+     "active": []
+    },
+    "39109": {
+     "tasks": 3,
+     "fds": 20,
+     "active": []
+    }
+   },
+   "warm_ups": {
+    "39108": [
+     {
+      "model": "function:reading:stream",
+      "answered": true,
+      "input_tokens": 51,
+      "output_tokens": 1
+     }
+    ],
+    "39109": [
+     {
+      "model": "function:reading:stream",
+      "answered": true,
+      "input_tokens": 51,
+      "output_tokens": 1
+     }
+    ]
+   },
+   "verdict": {
+    "no_unauthorised": true,
+    "no_duplicates": true,
+    "no_capacity_violation": true,
+    "no_leak": true,
+    "lag_p99_ok": true,
+    "rss_ok": true,
+    "ceiling_held": true
+   }
+  }
+ }
+}

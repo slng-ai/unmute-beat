@@ -239,8 +239,49 @@ else:
     FLOW, SPEECH = bot.FLOW, None
 
 
+LIVE_FAULT = os.getenv('LIVE_FAULT', '')
+"""`committed:<phone>`: this worker dies right after the diary commits a booking for that caller.
+
+For the live worker-failure check only (session 4e): the same fault point
+as the offline F2 (`evals/doubles.py`), on the real diary, so the kill
+lands between the commit and anyone being told. Unset on every other run.
+With `LIVE_FAULT_ARM` naming a file, only once that file exists: the fault
+is armed after both calls are seen on different workers, never before.
+"""
+
+
+def _arm_live_fault(diary: Any, fault: str) -> None:
+    point, _, phone = fault.partition(':')
+    if point != 'committed' or not phone:
+        raise SystemExit(f'LIVE_FAULT must be committed:<phone>, not {fault!r}')
+    save = diary.save_booking
+
+    armed = os.getenv('LIVE_FAULT_ARM', '')
+
+    def saving(*args: Any, **kwargs: Any) -> dict:
+        result = save(*args, **kwargs)
+        if args and args[0] == phone and (not armed or os.path.exists(armed)):
+            logger.warning('LIVE_FAULT: worker {} dies after committing a booking for {}', os.getpid(), phone)
+            os._exit(9)
+        return result
+
+    diary.save_booking = saving
+
+
+if LIVE_FAULT:
+    _arm_live_fault(bot.DIARY, LIVE_FAULT)
+
+
 STATS_DIR = os.getenv('STATS_DIR', '')
 """Where each worker writes its own `/stats` once a second (`<pid>.json`): a load driver reads every worker's."""
+LIVE_STATS = bool(os.getenv('LIVE_STATS'))
+"""With `STATS_DIR`, also count the live per-call objects (`live_counts`) every `LIVE_EVERY` seconds.
+
+A full heap scan on the event loop: for an offline memory run, never a real call.
+"""
+LIVE_EVERY = 10.0
+LIVE: dict[str, Any] = {}
+"""The latest live-object counts, and the Python heap tracemalloc sees (0 unless `TRACEMALLOC` is set)."""
 
 
 async def _sample_lag() -> None:
@@ -253,6 +294,13 @@ async def _sample_lag() -> None:
         ticks += 1
         if ticks % int(REAP_EVERY / LAG_EVERY) == 0:
             await asyncio.to_thread(ADMISSION.over)
+        if STATS_DIR and LIVE_STATS and ticks % int(LIVE_EVERY / LAG_EVERY) == 0:
+            import gc
+            import tracemalloc
+
+            gc.collect()
+            LIVE.update(live_counts(gc.get_objects()))
+            LIVE['python_heap_mb'] = round(tracemalloc.get_traced_memory()[0] / 2**20, 1)
         if STATS_DIR and ticks % int(1 / LAG_EVERY) == 0:
             path = os.path.join(STATS_DIR, f'{os.getpid()}.json')
             with open(path + '.tmp', 'w') as out:
@@ -299,14 +347,16 @@ async def lifespan(app: FastAPI):
     _drain_on_signal()
     sampler = asyncio.create_task(_sample_lag())
     global WARMED
-    async with model_clients(FLOW.nodes, warm=True) as warmed:
-        app.state.warmed = WARMED = warmed
-        app.state.started = time.time()
-        logger.info('worker {} ready, warming its model clients once', os.getpid())
-        yield
-    sampler.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await sampler
+    try:
+        async with model_clients(FLOW.nodes, warm=True) as warmed:
+            app.state.warmed = WARMED = warmed
+            app.state.started = time.time()
+            logger.info('worker {} ready, warming its model clients once', os.getpid())
+            yield
+    finally:
+        sampler.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sampler
 
 
 app = FastAPI(lifespan=lifespan)
@@ -438,6 +488,7 @@ def _stats() -> dict[str, Any]:
         'fds': _fds(),
         'lag': lag,
         'warmed': WARMED,
+        **({'live': dict(LIVE)} if LIVE else {}),
     }
 
 
@@ -454,6 +505,23 @@ LIVE_TYPES = (
 """The per-call objects `/debug/live` counts: after a call ends, each should be gone."""
 
 
+def live_counts(objects: list[Any]) -> dict[str, int]:
+    """How many objects of each of `LIVE_TYPES` are in `objects`, subclasses included.
+
+    Matched on every class in the object's MRO, not its own class name: a
+    call is a `FlowCall[SalonState]`, a class Pydantic makes for the
+    parameter, whose name is not `FlowCall`. Matched on the name alone, the
+    count of live calls was always 0 (session 4e).
+    """
+    counts = dict.fromkeys(LIVE_TYPES, 0)
+    for o in objects:
+        for cls in type(o).__mro__:
+            if cls.__name__ in counts:
+                counts[cls.__name__] += 1
+                break
+    return counts
+
+
 @app.get('/debug/live')
 async def live(request: Request, chain: str = '') -> JSONResponse:
     """With the doubles only: how many of each per-call object are alive, and what holds one of `chain`.
@@ -467,10 +535,10 @@ async def live(request: Request, chain: str = '') -> JSONResponse:
 
     gc.collect()
     objects = gc.get_objects()
-    counts = {name: sum(1 for o in objects if type(o).__name__ == name) for name in LIVE_TYPES}
+    counts = live_counts(objects)
     held: list[list[str]] = []
     if chain:
-        found = next((o for o in objects if type(o).__name__ == chain), None)
+        found = next((o for o in objects if any(c.__name__ == chain for c in type(o).__mro__)), None)
         frontier = [found] if found is not None else []
         for _ in range(5):
             step = [

@@ -24,6 +24,7 @@ import subprocess
 import sys
 from contextlib import ExitStack
 from dataclasses import replace
+from datetime import timedelta
 from tempfile import TemporaryDirectory
 
 from pipecat.frames.frames import (
@@ -521,7 +522,9 @@ async def a_barge_in_after_a_tool_still_moves_nobody():
 
     assert finished.status == 'interrupted', finished
     assert call.state.agent == 'concierge', 'an interrupted turn does not move the caller'
-    assert call.state.facts.booking_day == 'tomorrow', 'and the request it did record is not undone'
+    assert call.state.facts.booking_day == str(call.today.date + timedelta(days=1)), (
+        'and the request it did record is not undone'
+    )
 
 
 async def an_interrupted_fixed_line_leaves_an_earlier_answer_alone():

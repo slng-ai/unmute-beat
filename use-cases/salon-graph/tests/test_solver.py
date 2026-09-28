@@ -179,7 +179,7 @@ async def one_request_turns():
         assert not call.state.customer_verified and call.state.agent == 'verify'
         question = call.pending_question()
         assert question is None and call._asked is not None and call._asked.value == '+34600111234'
-        assert '234' in call.spoken[-1].text and call.spoken[-1].origin == 'ask'
+        assert '12 34' in call.spoken[-1].text and call.spoken[-1].origin == 'ask'
 
     for which in ('booking-switch-complaint-details', 'booking-interrupted-switch'):
         call = voiced(await pending(case(which), answered=False))

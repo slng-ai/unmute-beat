@@ -11,8 +11,8 @@ Two contracts:
   assignment, nothing on a default, and nothing on a nested model handed in
   ready-made. Each of those is a separate opt-in and each has its own check
   below.
-* **Structural validity is not identity.** A number can be a real Spanish
-  number and still be the wrong person's. The three facts are kept apart and
+* **Structural validity is not identity.** A number can be a real number
+  and still be the wrong person's. The three facts are kept apart and
   tested apart.
 
 Asserts, no pytest, no fixtures, same as the rest.
@@ -24,10 +24,10 @@ debugging session can import one module without running every check in it.
 import asyncio
 from datetime import date, datetime, time
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from core.state import STRICT, CallContext, VoiceState, present
-from salon.models.shapes import unsupported_region
+from salon.models.shapes import Spoken, SubmittedPhone, phone_length
 from salon.models.state import (
     Appointment,
     Phone,
@@ -242,8 +242,8 @@ def the_historical_short_number_is_refused():
     is a validation error on the tool's own argument, so the tool body never
     runs.
     """
-    error = _refused(SalonState, customer_phone='+348340464')
-    assert not unsupported_region(error), 'it is malformed, not foreign'
+    _refused(SalonState, customer_phone='+348340464')
+    assert phone_length('+348340464') == 'too short'
 
 
 def a_whole_valid_number_is_accepted():
@@ -263,7 +263,7 @@ def absence_is_not_a_wrong_value():
 
 
 def a_number_is_never_completed_for_the_caller():
-    """Digits with no country code are a question, not a Spanish number.
+    """Digits with no country code are a question, not a number from some country we picked.
 
     `PhoneNumberValidator(default_region='ES')` would have turned this into
     +34600111222 on its own. That is the guess `verify.md` tells the model
@@ -273,17 +273,39 @@ def a_number_is_never_completed_for_the_caller():
     _refused(SalonState, customer_phone='0600111222')
 
 
-def another_country_is_a_different_conversation():
-    """A valid US number is refused, and refused *differently*.
+def any_country_is_a_number():
+    """A valid number from any country is accepted, in E.164, and read out by its own country code.
 
-    One is "say that again", the other is "we can only look up Spanish
-    numbers, which country are you calling from". The agent needs to tell them
-    apart, so the distinction is carried and tested rather than collapsed.
+    The salon used to refuse every number but a Spanish one (session 3, A1).
+    One-, two- and three-digit country codes each split where the code ends,
+    grouped by libphonenumber (`Spoken`), not three characters in.
     """
-    foreign = _refused(SalonState, customer_phone='+16502530000')
-    assert unsupported_region(foreign)
-    malformed = _refused(SalonState, customer_phone='not a number')
-    assert not unsupported_region(malformed)
+    for phone, spoken in (
+        ('+12025550123', '+1 202-555-0123'),
+        ('+442079460958', '+44 20 7946 0958'),
+        ('+353861234567', '+353 86 123 4567'),
+        ('+34671273454', '+34 671 27 34 54'),
+    ):
+        assert SalonState(customer_phone=phone).customer_phone == phone
+        assert Spoken.validate_python(phone) == spoken, Spoken.validate_python(phone)
+    _refused(SalonState, customer_phone='not a number')
+    _refused(SalonState, customer_phone='+999123456789')
+
+
+def a_submitted_number_says_what_is_wrong():
+    """A lookup argument is refused with the one thing to do next, for any country, and '' is never a number."""
+    submitted = TypeAdapter(SubmittedPhone)
+    for bad, says in (
+        ('', 'never look up an empty number'),
+        ('600111222', "verification_guidance 'country'"),
+        ('+3467127345', "verification_guidance 'incomplete'"),
+        ('+346712734544', "verification_guidance 'correction'"),
+        ('+1202555012', "verification_guidance 'incomplete'"),
+        ('+999123456789', "verification_guidance 'correction'"),
+    ):
+        error = _refused(submitted.validate_python, bad)
+        assert says in str(error), (bad, str(error))
+    assert submitted.validate_python('+12025550123') == '+12025550123'
 
 
 def a_number_shaped_non_number_is_refused():
@@ -716,7 +738,8 @@ async def main():
     a_whole_valid_number_is_accepted()
     absence_is_not_a_wrong_value()
     a_number_is_never_completed_for_the_caller()
-    another_country_is_a_different_conversation()
+    any_country_is_a_number()
+    a_submitted_number_says_what_is_wrong()
     a_number_shaped_non_number_is_refused()
     a_number_said_in_pieces_arrives_whole()
     a_corrected_digit_group_replaces_the_whole_number()

@@ -54,6 +54,14 @@ class TurnBudget:
     tool_calls: int = 8
     seconds: float = 20.0
     repair_retries: int = 2
+    output_retries: int = 1
+    """Retries for a run's output alone (Pydantic AI's `retries={'output': ...}`): an empty reply, or an output that fails validation.
+
+    Session 2's matrix (N6 `empty_output`): a doubly empty structured reply
+    cost 3 step requests with one budget of 2 for both, native's rerun cost 1.
+    One output retry keeps one repair of a malformed output and reaches the
+    fixed line a request sooner; tool refusals keep `repair_retries`.
+    """
     first_part: float = 1.5
     """Seconds a step request may go without its first part before it is cancelled and its run tried again, once.
 

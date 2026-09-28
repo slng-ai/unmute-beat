@@ -1,0 +1,198 @@
+{
+  "aci": "0.1",
+  "ok": true,
+  "resource": "simulations",
+  "operation": "get",
+  "data": {
+    "name": "simulations/L2T4QnHbJcCoUDoKJGScY9",
+    "simulation_id": "L2T4QnHbJcCoUDoKJGScY9",
+    "run_id": "DDxDkFaSDhpvNc4Yax7vE6",
+    "status": "COMPLETED",
+    "create_time": "2026-09-25T15:21:11.518627Z",
+    "test_case_id": "GRdmreeb7SP4G8yegtMntC",
+    "has_audio": true,
+    "agent_id": "JxGgSPA55DcFcDcvbKAUQM",
+    "persona_id": "VSruLZYYyz3w7fkdUaheDR",
+    "test_set_id": "K3Xwqi7g",
+    "transcript": [
+      {
+        "role": "assistant",
+        "content": "Hi. You've reached Sage and Stone."
+      },
+      {
+        "role": "assistant",
+        "content": "Robin speaking. What can I do for you?"
+      },
+      {
+        "role": "user",
+        "content": "Hi, Robin. I’d like to book a haircut for this Friday morning, please."
+      },
+      {
+        "role": "assistant",
+        "content": "Which phone number should I use?"
+      },
+      {
+        "role": "assistant",
+        "content": "Please say it with the country code."
+      },
+      {
+        "role": "user",
+        "content": "Sure, it’s plus three four, six seven one—"
+      },
+      {
+        "role": "assistant",
+        "content": "Please give me the rest of the digits."
+      },
+      {
+        "role": "user",
+        "content": "Plus three four, six seven one—"
+      },
+      {
+        "role": "user",
+        "content": "Two seven three, four five four."
+      },
+      {
+        "role": "assistant",
+        "content": "Let me read that back to you."
+      },
+      {
+        "role": "assistant",
+        "content": "34671273454."
+      },
+      {
+        "role": "assistant",
+        "content": "Have I got that right?"
+      },
+      {
+        "role": "user",
+        "content": "Yes, that’s correct."
+      },
+      {
+        "role": "assistant",
+        "content": "Thank you. I have you now. For a haircut on Friday the second, I have 9AM, 09:30AM,"
+      },
+      {
+        "role": "assistant",
+        "content": "AM,"
+      },
+      {
+        "role": "assistant",
+        "content": "Which time works for you?"
+      },
+      {
+        "role": "user",
+        "content": "Nine o’clock in the morning works for me, thanks."
+      },
+      {
+        "role": "assistant",
+        "content": "Shall I book you in for a haircut?"
+      },
+      {
+        "role": "assistant",
+        "content": "Friday the second at 9AM?"
+      },
+      {
+        "role": "user",
+        "content": "Actually, can we make it Saturday morning instead?"
+      },
+      {
+        "role": "assistant",
+        "content": "For a haircut tomorrow?"
+      },
+      {
+        "role": "assistant",
+        "content": "I have 9AM, 09:30AM, 10AM."
+      },
+      {
+        "role": "assistant",
+        "content": "Which time works for you?"
+      },
+      {
+        "role": "user",
+        "content": "Nine o’clock in the morning on Saturday sounds perfect."
+      },
+      {
+        "role": "user",
+        "content": "Nine o’clock in the morning is perfect, thank you."
+      },
+      {
+        "role": "assistant",
+        "content": "Shall I book you in for a haircut,"
+      },
+      {
+        "role": "assistant",
+        "content": "tomorrow at 9AM?"
+      },
+      {
+        "role": "user",
+        "content": "Yes, please. That’s great."
+      },
+      {
+        "role": "assistant",
+        "content": "Lovely. That's your haircut booked for tomorrow at 9AM."
+      },
+      {
+        "role": "assistant",
+        "content": "What else can I do?"
+      },
+      {
+        "role": "user",
+        "content": "Perfect, thank you. I do not need anything else. Goodbye!"
+      },
+      {
+        "role": "tool",
+        "content": "{\"function\": \"end_conversation\", \"arguments\": {\"reason\": \"The booking is complete, I confirmed I need nothing else, and both parties have exchanged goodbyes.\"}, \"result\": {\"status\": \"success\"}}"
+      }
+    ],
+    "call_sid": "CAcbb53e76304a48bea8408d7e567aa00d",
+    "destination": null,
+    "is_public": false,
+    "metric_values": null,
+    "notes": null,
+    "source": null
+  },
+  "warnings": [],
+  "next_actions": [
+    {
+      "id": "simulations.metrics",
+      "label": "List simulation metrics",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "metrics",
+        "L2T4QnHbJcCoUDoKJGScY9"
+      ],
+      "safe": true,
+      "primary": true,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.audio",
+      "label": "Get simulation audio URL",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "audio",
+        "L2T4QnHbJcCoUDoKJGScY9"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    },
+    {
+      "id": "simulations.context",
+      "label": "simulations context",
+      "argv": [
+        "coval",
+        "--agent",
+        "simulations",
+        "context"
+      ],
+      "safe": true,
+      "primary": false,
+      "requires_confirmation": false
+    }
+  ]
+}

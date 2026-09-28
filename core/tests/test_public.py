@@ -1,7 +1,7 @@
 """The public boundary, end to end: a clinic built on `import core` alone books one appointment over text.
 
-The clinic (`tests/clinic_flow`) supplies a state model, a service, one
-operation and a flow file. This drives it through `core.load`, `compile`,
+The clinic (`tests/clinic_flow`) supplies a state model, a service, typed
+domain functions and a manifest (`agent.yaml`). This drives it through `core.load`, `compile`,
 `open`, `text_turn` and `acknowledge`, with a scripted model standing where
 a provider would, and checks the backend, the receipt and the evidence.
 It also counts what the clinic had to write, against what the native
@@ -21,7 +21,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 import core
 from tests.clinic_flow.clinic import Backend, ClinicState
 
-FLOW = Path(__file__).parent / 'clinic_flow' / 'flow.yaml'
+FLOW = Path(__file__).parent / 'clinic_flow' / 'agent.yaml'
 CLOCK = datetime.fromisoformat('2026-09-28T08:30:00+02:00')
 
 
@@ -42,7 +42,13 @@ class Script:
 
     def reading(self, messages: Any, info: AgentInfo) -> ModelResponse:
         self.readings += 1
-        return ModelResponse(parts=[TextPart(json.dumps({'confirmation': self.label}))])
+        wanted = info.model_request_parameters.output_object
+        key = (
+            'take_back'
+            if wanted is not None and 'take_back' in json.dumps(wanted.json_schema)
+            else 'confirmation'
+        )
+        return ModelResponse(parts=[TextPart(json.dumps({key: self.label}))])
 
     async def agent(self, messages: Any, info: AgentInfo):
         self.agent_requests += 1
@@ -79,7 +85,9 @@ async def one_booking_through_the_public_boundary():
 
     reply = await turn(flow, call, script, 'My number is P-1234.', patient='P-1234')
     assert call.state.facts.patient == 'P-1234' and call.state.agent == 'slot', call.state
-    assert reply.text == '' and reply.segments[-1].text.startswith('I have Tuesday at 9'), reply
+    assert reply.text == '' and reply.segments[-1].text == (
+        'I have Tuesday at 9:00 AM or Tuesday at 10:00 AM. Which works for you?'
+    ), reply
     delivered(call, reply)
 
     reply = await turn(flow, call, script, 'Ten, please.', slot='1000')
@@ -94,7 +102,10 @@ async def one_booking_through_the_public_boundary():
     reply = await turn(flow, call, script, 'Yes, please.')
     assert backend.bookings == {'CL001': ('P-1234', '1000')}, backend.bookings
     assert call.state.facts.reference == 'CL001' and call.state.outcome == 'completed', call.state
-    assert reply.segments[-1].text == 'Booked for 1000, reference CL001. Goodbye.', reply.segments
+    assert [s.text for s in reply.segments] == [
+        'Booked for Tuesday at 10:00 AM, reference CL001.',
+        'Anything else?',
+    ]
     assert script.readings == 1 and script.agent_requests == 2, (script.readings, script.agent_requests)
     [filed] = call.evidence
     assert filed.operation == 'book' and filed.receipt['reference'] == 'CL001' and filed.identity == 'P-1234'
@@ -123,8 +134,17 @@ def what_the_application_wrote():
     """
     source = (Path(__file__).parent / 'clinic_flow' / 'clinic.py').read_text()
     classes = {node.name for node in ast.walk(ast.parse(source)) if isinstance(node, ast.ClassDef)}
-    assert classes == {'Contact', 'ClinicState', 'Appointment', 'Booked', 'Backend', 'Book'}, classes
-    assert 'CallContext' not in source and 'ProposalLedger' not in source and 'from core.' not in source
+    assert classes == {
+        'Contact',
+        'ClinicState',
+        'Appointment',
+        'Booked',
+        'Cancellation',
+        'Cancelled',
+        'Backend',
+    }
+    assert 'CallContext' not in source and 'Operation' not in source.replace('OutcomeUnknownError', '')
+    assert 'from core.' not in source and 'ProposalLedger' not in source
     native = Path(__file__).parents[2] / 'use-cases' / 'salon-pipecat-flows' / 'graph_salon'
     if native.exists():
         inventory = {

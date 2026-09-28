@@ -1,0 +1,4 @@
+Direct use of automatic function calling (AFC) in AsyncModels.generate_content is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message. Similarly, direct use of AFC in AsyncModels.generate_content_stream is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message_stream.
+choose        v2 all  r1 gemini-3.5-flash-lite  accuracy 1.00 of 22  false accepts 0  median 0.99s  429 tokens in  named 1.00
+take-back     v3 all  r1 gemini-3.5-flash-lite  accuracy 1.00 of 17  false accepts 0  median 1.02s  472 tokens in
+closing       v3 all  r1 gemini-3.5-flash-lite  accuracy 1.00 of 22  false accepts 0  median 0.95s  292 tokens in

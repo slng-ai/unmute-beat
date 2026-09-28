@@ -26,16 +26,18 @@ the eligibility check are asked for and run again.
 
 from __future__ import annotations
 
+import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, create_model
 from pydantic.fields import FieldInfo
 from pydantic_ai import Agent, ModelRetry, RunContext, Tool, ToolOutput
+from pydantic_ai.agent.spec import AgentSpec
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.messages import ModelMessage, ModelRequest, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import Model
@@ -49,10 +51,11 @@ from core.decisions import Accept, Clarify, Conditional, NoDecision, Reject, Rev
 from core.desk import Desk
 from core.graph import Exit, LocalAction, Node, Opening, lent
 from core.interpreters import Interpreter
-from core.operations import Operation, OutcomeUnknownError
-from core.policies import one_action_per_reply, request_clock, speak_by
+from core.locale import Locale
+from core.operations import Operation, OutcomeUnknownError, operation_token
+from core.policies import claim_or_refuse, one_action_per_reply, request_clock, speak_by
 from core.proposals import BaseProposal, Proposal
-from core.readings import CONFIRM, ReadBackInput
+from core.readings import CONFIRM, TAKE_BACK, ReadBackInput, TakeBackInput
 from core.state import CallContext, Handoff, VoiceState, present
 
 
@@ -87,6 +90,16 @@ class FlowCall[S: BaseModel](CallContext):
     _identity_field: str = PrivateAttr(default='')
     _collectible: frozenset[str] = PrivateAttr(default=frozenset())
     _services: Any = PrivateAttr(default=None)
+    _unknown: set[str] = PrivateAttr(default_factory=set)
+    """Operation tokens whose outcome the service left unknown: settled before any retry (`FunctionOperation`)."""
+    _offered: dict[str, dict[str, str]] = PrivateAttr(default_factory=dict)
+    """For each choice field, the ids offered to this caller and how each was said. Only these can be picked."""
+    _locale: Locale | None = PrivateAttr(default=None)
+
+    @property
+    def locale(self) -> Locale:
+        """The flow file's `locale:`, else the class default."""
+        return self._locale or self.default_locale
 
     @property
     def services(self) -> Any:
@@ -230,6 +243,103 @@ class ConfirmedOperation[ArgsT: BaseModel, ReceiptT: BaseModel](
         return receipt
 
 
+async def _result(value: Any) -> Any:
+    """A domain function's answer, whether it was written sync or async."""
+    return await value if inspect.isawaitable(value) else value
+
+
+class FunctionOperation(ConfirmedOperation[Any, Any]):
+    """An ordinary typed domain function, declared in the manifest, run through the one `Operation.run` boundary.
+
+    The application writes `def book(clinic: Backend, appointment: Appointment) -> Booked`
+    and declares it under `operations:`. Its second parameter is the argument
+    model and its return annotation the receipt model: the function's own
+    signature is the schema, and YAML only connects it (`FlowSpec` builds one
+    subclass per declaration, so no application writes one).
+
+    `binds` takes each argument from a named state field, never from a model's
+    words. `assign` copies receipt fields into state fields once the receipt
+    validates and `succeeds` holds; `say` is the receipt's speech. A receipt
+    that validates but does not say it succeeded is filed as evidence, assigns
+    nothing, says nothing and completes nothing. An outcome the function
+    reports unknown (`OutcomeUnknownError`) is settled by `reconcile`, with the
+    same arguments and caller, before anything runs again; without a
+    `reconcile` it is never retried in this call.
+    """
+
+    function: ClassVar[Callable[..., Any]]
+    binds: ClassVar[Mapping[str, str]] = {}
+    """Argument name to the state field it is taken from."""
+    assign: ClassVar[Mapping[str, str]] = {}
+    """State field to the receipt field it is set from."""
+    succeeds: ClassVar[Mapping[str, Any]] = {}
+    """Receipt fields and the values that mean it worked, like `{status: booked}`. Empty: a valid receipt is success."""
+    matches: ClassVar[Mapping[str, str]] = {}
+    """Receipt fields that must equal an argument, like `{customer_phone: phone}`: a receipt about someone else is refused."""
+    readback: ClassVar[Callable[[Any], str] | None] = None
+    reconcile: ClassVar[Callable[..., Any] | None] = None
+    """`(services, args) -> receipt | None`: what the service did with an attempt whose outcome was unknown."""
+    say: ClassVar[str] = ''
+
+    def proposal(self, args: BaseModel) -> Proposal:
+        if self.readback is None:
+            raise NotImplementedError(f'{self.name} is declared without a readback')
+        return BaseProposal(about=self.name, spoken=self.readback(args), value=args.model_dump_json())
+
+    def succeeded(self, receipt: Mapping[str, Any]) -> bool:
+        return all(receipt.get(name) == value for name, value in self.succeeds.items())
+
+    def _token(self, call: FlowCall[Any], args: BaseModel) -> str:
+        return operation_token(self.name, args.model_dump_json(), call.identity())
+
+    async def _before(self, call: FlowCall[Any], args: BaseModel) -> Any:
+        token = self._token(call, args)
+        if token not in call._unknown:
+            return None
+        if self.reconcile is None:
+            raise OutcomeUnknownError(
+                f'{self.name}: an earlier attempt may have landed, so it is not retried'
+            )
+        found = await _result(self.reconcile(call.services, args))
+        call._unknown.discard(token)
+        if found is None:
+            return None
+        receipt = self.receipt_type.model_validate(
+            found.model_dump() if isinstance(found, BaseModel) else found
+        )
+        call.note_evidence(self.name, args.model_dump(mode='json'), receipt.model_dump(mode='json'))
+        return await self._record(call, args, receipt)
+
+    async def _execute(self, call: FlowCall[Any], args: BaseModel, grant: Any) -> Any:
+        try:
+            raw = await _result(self.function(call.services, args))
+        except OutcomeUnknownError:
+            call._unknown.add(self._token(call, args))
+            raise
+        data = raw.model_dump() if isinstance(raw, BaseModel) else raw
+        given = args.model_dump()
+        if wrong := [
+            f for f, arg in self.matches.items() if not isinstance(data, Mapping) or data.get(f) != given[arg]
+        ]:
+            raise ModelRetry(
+                f'Nothing was done: the {self.name} service answered about a different {", ".join(wrong)}. '
+                'Do not say it was done.'
+            )
+        return data
+
+    async def _record(self, call: FlowCall[Any], args: BaseModel, receipt: BaseModel) -> Any:
+        data = receipt.model_dump()
+        if not self.succeeded(data):
+            raise ModelRetry(
+                f'Nothing was done: the {self.name} service answered {data}. Do not say it was done.'
+            )
+        if self.assign:
+            call.update(**{field: data[source] for field, source in self.assign.items()})
+        if self.say:
+            await call.speak_now(self.say.format_map(_Facts(data)), origin='confirmation')
+        return receipt
+
+
 @dataclass(frozen=True, kw_only=True)
 class Step(ABC):
     """One step of a flow: what it needs, what it produces, and whether it is done."""
@@ -237,6 +347,8 @@ class Step(ABC):
     id: str
     then: str = ''
     """The step after this one. Empty means the next listed step that is not already done."""
+    spec: AgentSpec | None = None
+    """The persona's native `AgentSpec` (model, settings, retries) this step's agent is built from, if it names one."""
 
     @property
     def produces(self) -> frozenset[str]:
@@ -262,14 +374,23 @@ class Step(ABC):
         """This step as a node the turn engine runs."""
 
 
-def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list) -> Agent[Any, object]:
-    return Agent[Any, object](
-        flow.model,
-        name=step.id,
+def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list, **agent: Any) -> Agent[Any, object]:
+    """A step's agent, from its persona's native `AgentSpec`: its model unless the flow's was given explicitly.
+
+    `FlowSpec.compile(model=...)` strips each persona's model, so an explicit
+    model is used everywhere; otherwise a persona's own model wins over the
+    flow's default. Settings and instructions merge, as `Agent.from_spec` does.
+    """
+    spec = step.spec or AgentSpec()
+    return Agent.from_spec(
+        spec,
         deps_type=flow.call_type,
-        output_type=outputs,  # type: ignore[arg-type]
+        model=None if spec.model else flow.model,
+        name=step.id,
+        output_type=outputs,
         instructions=instructions,
         model_settings=flow.settings,
+        **agent,
     )
 
 
@@ -288,10 +409,15 @@ def _optional(info: FieldInfo) -> Any:
 
 
 def _args(operation: Operation, call: FlowCall[Any]) -> BaseModel:
-    """An operation's arguments, taken field by field from the application state, validated whole."""
+    """An operation's arguments, taken field by field from the application state, validated whole.
+
+    A declared operation names the state field each argument comes from
+    (`FunctionOperation.binds`); otherwise the argument's own name is the field.
+    """
     facts = call.state.facts
+    binds = getattr(operation, 'binds', None) or {}
     return operation.args_type.model_validate(
-        {name: getattr(facts, name) for name in operation.args_type.model_fields}
+        {name: getattr(facts, binds.get(name, name)) for name in operation.args_type.model_fields}
     )
 
 
@@ -331,6 +457,13 @@ class CollectStep(Step):
     """Whether a caller may answer later collect steps early, in the same breath."""
     prompt: Any = None
     """This step's own instructions (text or a compiled template), from its prompt file. None writes them from the fields."""
+    choices: Mapping[str, Callable[[Any, Any], Mapping[str, str]]] = field(default_factory=dict)
+    """For a field picked from options: `(services, state) -> {id: how it is said}`, asked on arrival.
+
+    The ids go on the call as offered (`FlowCall._offered`) and the question's
+    `{options}` becomes their words, so a value can only be one the caller was
+    actually offered. A receipt listing options offers nothing by itself.
+    """
 
     @property
     def produces(self) -> frozenset[str]:
@@ -343,8 +476,17 @@ class CollectStep(Step):
     def done(self, call: FlowCall[Any]) -> bool:
         return FieldsPresent(*self.fields).is_met(dict(call.state.facts))
 
-    def ask(self) -> Prompted:
-        return Prompted(about=f'collect:{self.id}', spoken=self.question)
+    def ask(self, call: FlowCall[Any]) -> Prompted:
+        """The question, with this caller's options offered in it when the step has choices."""
+        said = []
+        for name, options in self.choices.items():
+            offered = dict(options(call.services, call.state.facts))
+            call._offered[name] = offered
+            said.extend(offered.values())
+        spoken = (
+            self.question.format_map(_Facts(options=' or '.join(said))) if self.choices else self.question
+        )
+        return Prompted(about=f'collect:{self.id}', spoken=spoken)
 
     def node(self, flow: StepFlow) -> Node[Any]:
         listening = [self, *(flow.collects_after(self) if self.lookahead else [])]
@@ -384,7 +526,7 @@ class CollectStep(Step):
             """Ask the question on arrival, or move straight on if it was answered early."""
             if self.done(call):
                 return Handoff(to=flow.next_after(self, call))
-            return self.ask()
+            return self.ask(call)
 
         return arrive
 
@@ -400,6 +542,14 @@ class CollectStep(Step):
         heard = {
             name: value for name, value in proposed.items() if any(name in step.fields for step in listening)
         }
+        for name, value in heard.items():
+            if any(name in step.choices for step in listening) and str(value) not in call._offered.get(
+                name, {}
+            ):
+                offered = ', '.join(call._offered.get(name, {})) or 'none yet'
+                raise ModelRetry(
+                    f'Nothing was recorded: {value!r} was not offered for {name} (offered: {offered}).'
+                )
         try:
             flow.record(call, heard)
         except ValidationError as error:
@@ -415,7 +565,7 @@ class CollectStep(Step):
                 raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
         if self.done(call):
             return Handoff(to=flow.next_after(self, call))
-        return self.ask()
+        return self.ask(call)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -471,7 +621,7 @@ class ConfirmStep(Step):
                 case Accept():
                     return LocalAction('confirm', lambda: _moved(self.then))
                 case Reject():
-                    return LocalAction('reject', lambda: _consumed(call, self.on_reject))
+                    return LocalAction('reject', lambda: _revised(flow, call, self.on_reject))
                 case Revise():
                     return LocalAction('revise', lambda: _revised(flow, call, self.on_revise))
                 case Conditional() | Clarify():
@@ -492,13 +642,12 @@ async def _moved(to: str) -> Handoff:
     return Handoff(to=to)
 
 
-async def _consumed(call: FlowCall[Any], to: str) -> Handoff:
-    call.answered()
-    return Handoff(to=to)
-
-
 async def _revised(flow: StepFlow, call: FlowCall[Any], to: str) -> Handoff:
-    """Go back to the step being revised, forgetting its answer so it is asked again."""
+    """Go back to the step a no or a change points at, forgetting its answer so it is asked again.
+
+    A no to "Shall I book Tuesday at 10?" is a no to that time: kept, the
+    step would be skipped as done and the same read-back asked again.
+    """
     call.answered()
     flow.forget(call, flow.by_id[to].produces)
     return Handoff(to=to)
@@ -553,13 +702,71 @@ class ActionStep(Step):
         return _node(flow, self, agent, openings=(Opening(self.operation.name, 'handoff', _entered, act),))
 
 
+def _values(flow: StepFlow, name: str, fields: Sequence[str]) -> type[BaseModel]:
+    """The collect tool's argument: each field's own type from the state, constraints kept, every one optional."""
+    state = flow.state_type.model_fields
+    return create_model(  # ty: ignore[no-matching-overload]
+        name,
+        __config__=ConfigDict(extra='forbid'),
+        **{
+            field: (_optional(state[field]), Field(None, description=state[field].description))
+            for field in fields
+        },
+    )
+
+
+def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> None:
+    """Refuse a value for a choice field that was never offered to this caller."""
+    for name, value in values.items():
+        if name in choices and str(value) not in call._offered.get(name, {}):
+            offered = ', '.join(call._offered.get(name, {})) or 'none yet'
+            raise ModelRetry(
+                f'Nothing was recorded: {value!r} was not offered for {name} (offered: {offered}).'
+            )
+
+
+async def _carry_out(
+    call: FlowCall[Any], operation: Operation, usage: RunUsage | None, limits: UsageLimits | None
+) -> str | None:
+    """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown."""
+    try:
+        receipt = await operation.run(call, _args(operation, call), usage=usage, usage_limits=limits)
+    except OutcomeUnknownError:
+        await call.speak_now(call.locale.unsettled, origin='confirmation')
+        return call.locale.unsettled
+    say = getattr(operation, 'say', '')
+    return say.format_map(_Facts(receipt.model_dump())) if say and isinstance(receipt, BaseModel) else None
+
+
 @dataclass(frozen=True, kw_only=True)
 class ConversationStep(Step):
-    """Answer from instructions and knowledge; stays active every turn until the caller says goodbye."""
+    """Answer from instructions and knowledge; stays active every turn until the caller says goodbye.
+
+    The same step can do the business itself, as one agent or as a specialist
+    handed to: `fields` it may record from the caller (`collect`), `choices`
+    it may offer (`options`), declared `operations` it may carry out, and
+    `exits` it may hand the caller to (`hand_over`). An operation is read back
+    in the application's words and runs only on a delivered read-back and a
+    yes, through the same `Operation.run` a controlled flow uses. A reply to
+    that read-back is read by code before any model runs (`advance`), so a
+    yes carries out the operation without a model request.
+    """
 
     instructions: Any
     """Text, or a compiled template from a prompt file (which already carries any knowledge)."""
     knowledge: str = ''
+    fields: tuple[str, ...] = ()
+    choices: Mapping[str, Callable[[Any, Any], Mapping[str, str]]] = field(default_factory=dict)
+    operations: tuple[Operation, ...] = ()
+    exits: tuple[str, ...] = ()
+
+    @property
+    def produces(self) -> frozenset[str]:
+        return frozenset(self.fields)
+
+    @property
+    def elsewhere(self) -> tuple[str, ...]:
+        return self.exits
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def goodbye(ctx: RunContext[FlowCall[Any]], words: str) -> str:
@@ -573,30 +780,185 @@ class ConversationStep(Step):
             await ctx.deps.end_call()
             return words
 
+        actions = frozenset(op.name for op in self.operations) | (
+            {'hand_over'} if self.exits else frozenset()
+        )
+        outputs: list[Any] = [str, ToolOutput(goodbye, name='goodbye')]
+        tools: list[Any] = []
+        if self.fields:
+            values_type = _values(flow, f'{self.id.title()}Values', self.fields)
+
+            async def collect(ctx: RunContext[FlowCall[Any]], values: BaseModel) -> str:
+                """Record exactly what the caller has just said for any of these fields. Never guess a value."""
+                proposed = values.model_dump(exclude_none=True)
+                _refuse_unoffered(ctx.deps, self.choices, proposed)
+                try:
+                    flow.record(ctx.deps, proposed)
+                except ValidationError as error:
+                    problems = '; '.join(e['msg'] for e in error.errors())
+                    raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
+                return f'Recorded: {", ".join(sorted(proposed)) or "nothing"}.'
+
+            collect.__annotations__ = {'ctx': RunContext[FlowCall], 'values': values_type, 'return': str}
+            tools.append(Tool(collect))
+        if self.choices:
+
+            async def options(ctx: RunContext[FlowCall[Any]]) -> dict[str, dict[str, str]]:
+                """The options you may offer the caller, by id. Only an offered id can be recorded. Say them in your own words."""
+                offered = {}
+                for name, choose in self.choices.items():
+                    offered[name] = dict(choose(ctx.deps.services, ctx.deps.state.facts))
+                    ctx.deps._offered[name] = offered[name]
+                return offered
+
+            tools.append(Tool(options))
+        for operation in self.operations:
+            outputs.append(
+                ToolOutput(
+                    self._operate(operation, actions),
+                    name=operation.name,
+                    description=f"{operation.name}: read it back to the caller in the application's words. "
+                    'It is carried out only after they agree to that read-back.',
+                    sequential=True,
+                )
+            )
+        if self.exits:
+            outputs.append(ToolOutput(self._hand_over(actions), name='hand_over', sequential=True))
+
+        async def advance(call: FlowCall[Any], usage: RunUsage, limits: UsageLimits) -> LocalAction | None:
+            """A reply to one of this step's read-backs, decided by code: a yes carries it out, a no drops it."""
+            for operation in (op for op in self.operations if op.needs_approval):
+                try:
+                    proposal = operation.proposal(_args(operation, call))
+                except ValidationError:
+                    continue
+                if call.pending(proposal.about, value=proposal.value) is None:
+                    continue
+                reading = await flow.interpreter.interpret(call, usage=usage, usage_limits=limits)
+                match reading.decision:
+                    case Accept():
+                        return LocalAction(
+                            operation.name, lambda op=operation: _carry_out(call, op, usage, limits)
+                        )
+                    case Reject():
+                        return LocalAction('reject', lambda: _declined(call))
+                return None
+            return None
+
         text = self.instructions
         if self.knowledge and isinstance(text, str):
             text += f'\n\nKnowledge:\n{self.knowledge}'
-        agent = _agent(flow, self, text, [str, ToolOutput(goodbye, name='goodbye')])
-        return _node(flow, self, agent)
+        agent = _agent(
+            flow,
+            self,
+            text,
+            outputs,
+            tools=tools,
+            capabilities=[one_action_per_reply(actions)] if actions else None,
+        )
+        return _node(flow, self, agent, advance=advance if self.operations else None)
+
+    def _operate(self, operation: Operation, actions: frozenset[str]):
+        async def operate(ctx: RunContext[FlowCall[Any]]) -> Prompted | str | None:
+            claim_or_refuse(ctx, actions)
+            call = ctx.deps
+            try:
+                args = _args(operation, call)
+            except ValidationError as error:
+                missing = ', '.join(str(e['loc'][0]) for e in error.errors() if e['loc'])
+                raise ModelRetry(f'Not yet: {missing} missing. Ask the caller and record it first.') from None
+            if operation.needs_approval:
+                proposal = operation.proposal(args)
+                if call.pending(proposal.about, value=proposal.value) is None:
+                    return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
+            return await _carry_out(call, operation, ctx.usage, ctx.usage_limits)
+
+        return operate
+
+    def _hand_over(self, actions: frozenset[str]):
+        exits = self.exits
+
+        async def hand_over(ctx: RunContext[FlowCall[Any]], to: str, because: str) -> Handoff:
+            """Hand the caller to the step that serves what they asked for.
+
+            Args:
+                to: Where they go.
+                because: One short sentence: what the caller wants. Never spoken.
+            """
+            claim_or_refuse(ctx, actions)
+            if to not in exits:
+                raise ModelRetry(f'{to!r} is not a step this one hands over to: {", ".join(exits)}.')
+            return Handoff(to=to, because=because)
+
+        return hand_over
+
+
+def _told(call: FlowCall[Any]) -> str:
+    """What the caller was told was done: the receipt speech of the latest turn that had any."""
+    told = [s for s in call.all_spoken if s.origin == 'confirmation' and s.generated]
+    latest = told[-1].turn if told else None
+    return ' '.join(s.generated for s in told if s.turn == latest)
+
+
+async def _declined(call: FlowCall[Any]) -> None:
+    """The caller said no to the read-back: it is answered, and the step's model replies to them."""
+    call.answered()
 
 
 @dataclass(frozen=True, kw_only=True)
 class End(Step):
-    """Say one closing line and record how the flow ended. `say` may use the facts: `{field}`."""
+    """Say one closing line and record how the flow ended. `say` may use the facts: `{field}`.
+
+    `take_back` is where a caller who takes the result back is sent, normally
+    a confirm step for the undo operation. Each reply after a completed
+    ending is read against what they were told (`TAKE_BACK`); only a clear
+    withdrawal moves them, and the undo still needs its own read-back and yes.
+    """
 
     outcome: Literal['completed', 'cancelled', 'failed', 'pending']
     say: str
+    take_back: str = ''
+
+    @property
+    def elsewhere(self) -> tuple[str, ...]:
+        return (self.take_back,) if self.take_back else ()
+
+    def said(self, call: FlowCall[Any]) -> str:
+        return self.say.format_map(_Facts(call.state.facts.model_dump()))
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def close(call: FlowCall[Any]) -> str:
             """Record the outcome and say it."""
             call.commit(outcome=self.outcome)
-            words = self.say.format_map(_Facts(call.state.facts.model_dump()))
+            words = self.said(call)
             await call.speak_now(words, origin='confirmation')
             return words
 
+        async def advance(call: FlowCall[Any], usage: RunUsage, limits: UsageLimits) -> LocalAction | None:
+            """A reply that takes the result back goes to the undo; anything else is the step's model's.
+
+            Only once this ending has closed (its outcome is recorded): on the
+            turn it is reached, the caller's words were the yes that got here.
+            """
+            if call.state.outcome != self.outcome or not call.heard.strip() or flow.take_back is None:
+                return None
+            reading = await flow.take_back.classify(
+                TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=_told(call)),
+                usage=usage,
+                usage_limits=limits,
+            )
+            if reading.take_back != 'withdraw':  # ty: ignore[unresolved-attribute]
+                return None
+            return LocalAction('take_back', lambda: _moved(self.take_back))
+
         agent = _agent(flow, self, 'The request is finished. Answer briefly; do not start a new one.', [str])
-        return _node(flow, self, agent, openings=(Opening('close', 'handoff', _entered, close),))
+        return _node(
+            flow,
+            self,
+            agent,
+            advance=advance if self.take_back else None,
+            openings=(Opening('close', 'handoff', _entered, close),),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -845,6 +1207,10 @@ class StepFlow:
         state_type: type[BaseModel] = NoFacts,
         identity: str = '',
         call_type: type[CallContext] | None = None,
+        entry: str = '',
+        services: Callable[[], Any] | None = None,
+        locale: Locale | None = None,
+        version: str = '',
     ) -> None:
         self.state_type = state_type
         """The application's state model: every call's `state.facts`."""
@@ -865,17 +1231,37 @@ class StepFlow:
                 if to and to not in self.by_id:
                     raise ValueError(f'{step.id} sends the caller to {to}, which is not a step')
         self.collectible = frozenset(
-            name for s in self.steps if isinstance(s, CollectStep) for name in s.fields
+            name for s in self.steps if isinstance(s, CollectStep | ConversationStep) for name in s.fields
         )
-        """The only state fields a model may write: the ones some collect step asks the caller for."""
+        """The only state fields a model may write: the ones some collect or conversation step asks the caller for."""
+        self.entry = entry or self.steps[0].id
+        if self.entry not in self.by_id:
+            raise ValueError(f'the entry step {self.entry} is not a step')
+        self.services = services
+        """Makes one call's services when `open` is given none: the manifest's `services:` factory."""
+        self.locale = locale
+        self.version = version
+        """The application's own version, from the manifest (`app_version`): what a trace or a report names."""
         self.model = model
         self.settings = settings
         self.interpreter = interpreter if interpreter is not None else confirm_interpreter(model, settings)
+        self.take_back = (
+            Classifier(
+                model,
+                TakeBackInput,
+                output_model('TakeBackReading', {'take_back': TAKE_BACK}),
+                context='The person was told something had been done for them, which they could still take back.',
+                model_settings=settings,
+            )
+            if any(isinstance(s, End) and s.take_back for s in self.steps)
+            else None
+        )
+        """The reading of a reply after a completed ending, built only for a flow whose ending can be taken back."""
         self.nodes: dict[str, Node[Any]] = {step.id: step.node(self) for step in self.steps}
 
     @property
     def start(self) -> str:
-        return self.steps[0].id
+        return self.entry
 
     def open(
         self, state: BaseModel, *, services: Any = None, clock: Callable[[], datetime] | None = None
@@ -892,7 +1278,9 @@ class StepFlow:
         facts = self.state_type.model_validate(deepcopy(state.model_dump()), extra='forbid')
         call = self.call_type(state=FlowState[self.state_type](agent=self.start, facts=facts))  # ty: ignore[invalid-type-form]
         call._identity_field, call._collectible = self.identity, self.collectible
-        call._services, call._clock = services, clock
+        if services is None and self.services is not None:
+            services = self.services()
+        call._services, call._clock, call._locale = services, clock, self.locale
         return call
 
     def sequence(self) -> list[Step]:
@@ -905,10 +1293,8 @@ class StepFlow:
 
     def destinations(self, step: Step) -> tuple[str, ...]:
         """Every step this one can hand the caller to: onward (skipping done steps), or elsewhere."""
-        if isinstance(step, AgentStep):
+        if isinstance(step, AgentStep | End | ConversationStep):
             return step.elsewhere
-        if isinstance(step, End | ConversationStep):
-            return ()
         order = self.sequence()
         onward = [s.id for s in order[order.index(step) + 1 :]] if not step.then else [step.then]
         return tuple(dict.fromkeys([*onward, *step.elsewhere, *([self.finish] if self.finish else [])]))

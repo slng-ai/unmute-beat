@@ -1,0 +1,18 @@
+2026-09-25 17:13:36.918 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (The caller wants to book a haircut on Friday morning.)
+Direct use of automatic function calling (AFC) in AsyncModels.generate_content is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message. Similarly, direct use of AFC in AsyncModels.generate_content_stream is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message_stream.
+2026-09-25 17:13:38.465 | INFO     | core.turn:_hop:673 - handoff verify -> booking (the caller is identified)
+T1.v1: passed  turns 6  requests 15  tokens 6508+201  session text-T1.v1-b922f36d  -> ../../docs/research/reusable-core/session-3/text/T1.v1.json
+2026-09-25 17:13:42.011 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (The caller wants to book a haircut on Tuesday.)
+2026-09-25 17:13:43.363 | INFO     | core.turn:_hop:673 - handoff verify -> booking (the caller is identified)
+T2.v1: passed  turns 8  requests 22  tokens 12915+317  session text-T2.v1-99a5679e  -> ../../docs/research/reusable-core/session-3/text/T2.v1.json
+2026-09-25 17:13:49.314 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (Book a colour on Thursday at two in the afternoon)
+2026-09-25 17:13:51.759 | INFO     | core.turn:_hop:673 - handoff verify -> booking (the caller is identified)
+T3.v2: failed  turns 6  requests 17  tokens 12402+277  session text-T3.v2-e273a89c  -> ../../docs/research/reusable-core/session-3/text/T3.v2.json
+    the reply to the verification yes did not offer the requested 2 PM: 'Thanks, I have you. For a hair colour on Thursday the 1st, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?'
+2026-09-25 17:13:55.670 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (The caller wants to book a haircut.)
+2026-09-25 17:13:57.435 | INFO     | core.turn:_hop:673 - handoff verify -> booking (the caller is identified)
+2026-09-25 17:13:59.979 | INFO     | core.turn:_hop:673 - handoff booking -> concierge (The booking system encountered a technical issue and cannot write further on this call.)
+T4.v2: off-script  turns 5  requests 16  tokens 11478+282  session text-T4.v2-5de95999  -> ../../docs/research/reusable-core/session-3/text/T4.v2.json
+    turn 5: the script has no reply to "One moment. I'm so sorry, we had a little hiccup on the system end. I'm going to make sure that's sorted for you—please don't try booking again right now, and I'll confirm everything is all set shortly."
+    (check, not decisive) the lost outcome was never recovered from the diary
+allowance left: 30 requests, 205620 tokens

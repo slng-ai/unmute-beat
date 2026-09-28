@@ -1,0 +1,23 @@
+== harness: 4 calls
+   CA37e3c1a6a4eb456cbf2520fafe671089       turns= 10 requests= 18 (classifier 14, step 4) cancelled=15 in= 11794 out=  312 tasks=1
+      confirm_customer ok; agent said 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'; caller said "yes that's correct" answered: 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
+      save_booking ok; agent said 'Shall I book you in for a haircut, tomorrow at 9:00 AM?'; caller said "yes that's great" answered: 'Shall I book you in for a haircut, tomorrow at 9:00 AM?'
+   CA3c66cd073bec4e699752196587a7456e       turns= 14 requests= 26 (classifier 18, step 8) cancelled=15 in= 20333 out=  483 tasks=1
+      confirm_customer ok; agent said 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'; caller said "yes that's correct" answered: 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
+      save_booking ok; agent said 'Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?'; caller said "that's perfect" answered: 'Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?'
+   CAcbb53e76304a48bea8408d7e567aa00d       turns= 10 requests= 19 (classifier 14, step 5) cancelled=16 in= 13404 out=  347 tasks=1
+      confirm_customer ok; agent said 'Thank you, I have you now.'; caller said "yes that's correct" answered: 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
+      save_booking ok; agent said 'Shall I book you in for a haircut, tomorrow at 9:00 AM?'; caller said "yes please that's great" answered: 'Shall I book you in for a haircut, tomorrow at 9:00 AM?'
+   CAd6533bcb01444d4da5b63188ffd39e78       turns=  3 requests=  2 (classifier 0, step 2) cancelled= 1 in=  3105 out=   62 tasks=0
+   input tokens per call: mean 12159 (3105 to 20333); per caller turn 1314; output 1204
+   requests: 65 completed over 37 caller turns (1.76 per turn), 47 cancelled or unreported
+   tokens per completed task: 16212 (3 tasks)
+   write audit: 3 of 3 writes answered a matching question put on an earlier turn
+   calls in a row per turn: 0: 4 turns, 1: 28 turns, 2: 5 turns
+   latency: p50 2.08s p90 3.40s max 4.25s, 32 of 37 turns timed
+      classifier only              turns= 15 p50 2.07s max 2.68s
+      1 in a row                   turns= 11 p50 1.86s max 2.96s
+      1 in a row, classifier first turns=  4 p50 4.02s max 4.25s
+      2 in a row                   turns=  2 p50 2.15s max 2.89s
+   answer time (answering work to first speech): p50 0.88s p90 1.03s max 1.16s, 33 turns
+   waited over 2 s before any work started (turn taking): 6 of 32 turns

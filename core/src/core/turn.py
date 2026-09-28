@@ -866,7 +866,7 @@ class Turn:
                 output_type=output_type,
                 usage=self.usage,
                 usage_limits=self.limits,
-                retries=self.budget.repair_retries,
+                retries={'tools': self.budget.repair_retries, 'output': self.budget.output_retries},
             ) as events:
                 if hold is None:
                     barge.attach(events)

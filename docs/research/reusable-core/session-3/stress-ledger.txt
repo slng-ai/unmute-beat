@@ -1,0 +1,17 @@
+== harness: 1 calls
+   CA7ca49095d1194811a5bab4c274a58b00       turns= 12 requests= 27 (classifier 22, step 5) cancelled=31 in= 17951 out=  496 tasks=2
+      confirm_customer ok; agent said 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'; caller said "yes that's correct" answered: 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
+      save_booking ok; agent said "Lovely, that's your haircut booked for tomorrow at 9:00 AM. What else can I do?"; caller said "yes please that's perfect" answered: 'Shall I book you in for a haircut, tomorrow at 9:00 AM?'
+      save_booking ok; agent said 'Shall I move your appointment to tomorrow at 10:00 AM?'; caller said 'at ten am is perfect' answered: 'Shall I move your appointment to tomorrow at 10:00 AM?'
+   input tokens per call: mean 17951 (17951 to 17951); per caller turn 1496; output 496
+   requests: 27 completed over 12 caller turns (2.25 per turn), 31 cancelled or unreported
+   tokens per completed task: 8976 (2 tasks)
+   write audit: 2 of 2 writes answered a matching question put on an earlier turn
+   calls in a row per turn: 0: 1 turns, 1: 10 turns, 3: 1 turns
+   latency: p50 2.27s p90 3.89s max 4.57s, 11 of 12 turns timed
+      classifier only              turns=  6 p50 2.09s max 3.89s
+      1 in a row                   turns=  3 p50 2.05s max 3.13s
+      1 in a row, classifier first turns=  1 p50 4.57s max 4.57s
+      3 in a row, classifier first turns=  1 p50 2.90s max 2.90s
+   answer time (answering work to first speech): p50 1.00s p90 1.14s max 1.18s, 11 turns
+   waited over 2 s before any work started (turn taking): 2 of 11 turns

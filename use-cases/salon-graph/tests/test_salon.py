@@ -1363,7 +1363,7 @@ async def a_complaint_nobody_answered_for_blocks_the_next_write():
 async def a_recovered_result_still_has_to_answer_the_request():
     """The contradiction refused on the first attempt, offered again on the second.
 
-    Reproduced by the second recheck. `_settle` held only a token, so it took
+    Reproduced by the second recheck. `settle` held only a token, so it took
     the action from whatever status came back: a `cancelled` result correctly
     refused as an answer to `book` was accepted on recovery as an ordinary
     cancellation, stored with `action='cancel'`, and read out to the caller.

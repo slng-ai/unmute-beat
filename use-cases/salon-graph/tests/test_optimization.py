@@ -95,7 +95,11 @@ async def approvals_and_receipts():
         ]
         assert len(receipt) == 1 and call.state.appointment.booking_id in str(receipt)
         call.turn_started(answer)
-        assert (await agents.advance(call)) is None, 'the same approval cannot write twice'
+        again = await agents.advance(call)
+        assert again is None or again.name == 'receipt', 'the same approval cannot write twice'
+        if again is not None:
+            assert await again.run() == call.held('undo').told, 'the unheard receipt, said again'
+        assert call.state.writes == 1 and len(books.bookings_for(PHONE, CLOCK.date())) == 1
 
     for words in (
         'Yes, but Saturday.',

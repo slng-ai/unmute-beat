@@ -181,7 +181,7 @@ def _answered[Result: BaseModel](
             _unknown(call, pending, f'the {book} answered in a shape this cannot read')
 
 
-async def _settle(call: SalonCall) -> str:
+async def settle(call: SalonCall) -> str:
     """Finish an earlier write whose outcome was never established, or refuse to move past it.
 
     Until it is settled, a second write is how one caller gets two

@@ -1,0 +1,1141 @@
+2026-09-25 17:21:05.474 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-09-25 17:21:06.539 | DEBUG    | pipecat.transports.smallwebrtc.connection:<module>:67 - [SCTP] USERDATA_MAX_LENGTH set to 1100
+INFO:     Started server process [54260]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:7861 (Press CTRL+C to quit)
+
+╭─────────────────────────────────────────────────────╮
+│ ᓚᘏᗢ PIPECAT DEVELOPMENT RUNNER                      │
+│                                                     │
+│ Learn about running bots locally and in production: │
+│ https://docs.pipecat.ai/pipecat/deployment/overview │
+╰─────────────────────────────────────────────────────╯
+
+🚀 Bot ready! (Twilio)
+   → Open: http://localhost:7861
+   → XML webhook: http://localhost:7861/
+   → WebSocket:   ws://localhost:7861/ws
+   → Allowed origins: all (no restriction)
+
+Looking for dist directory at: /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/reusable-core-s3/.venv/lib/python3.14/site-packages/pipecat_ai_prebuilt/client/dist
+INFO:     127.0.0.1:58851 - "GET / HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:58852 - "GET /client/ HTTP/1.1" 200 OK
+2026-09-25 17:21:19.222 | DEBUG    | pipecat.runner.run:start_call:1456 - POST TWILIO XML
+INFO:     18.222.106.131:0 - "POST / HTTP/1.1" 200 OK
+2026-09-25 17:21:19.421 | DEBUG    | pipecat.runner.run:start_call:1456 - POST TWILIO XML
+INFO:     18.188.238.163:0 - "POST / HTTP/1.1" 200 OK
+2026-09-25 17:21:19.492 | DEBUG    | pipecat.runner.run:start_call:1456 - POST TWILIO XML
+INFO:     18.222.106.131:0 - "POST / HTTP/1.1" 200 OK
+2026-09-25 17:21:19.529 | DEBUG    | pipecat.runner.run:start_call:1456 - POST TWILIO XML
+INFO:     18.116.115.227:0 - "POST / HTTP/1.1" 200 OK
+INFO:     18.188.238.163:0 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-25 17:21:21.133 | DEBUG    | pipecat.runner.run:_handle_telephony_ws:1473 - WebSocket connection accepted
+2026-09-25 17:21:21.313 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:223 - Detected transport: twilio (from second message)
+2026-09-25 17:21:21.313 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:278 - Parsed - Type: twilio, Data: {'stream_id': 'MZ1ea448450ff540c2a4187d3abfbc748a', 'call_id': 'CAd6533bcb01444d4da5b63188ffd39e78', 'body': {}, 'from': None, 'to': None}
+2026-09-25 17:21:21.313 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for twilio
+2026-09-25 17:21:21.313 | INFO     | pipecat.runner.utils:_create_telephony_transport:508 - Using pre-detected telephony provider: twilio
+2026-09-25 17:21:21.335 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-25 17:21:21.385 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-25 17:21:21.386 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/reusable-core-s3/.venv/lib/python3.14/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-25 17:21:21.403 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0::Source -> FastAPIWebsocketInputTransport#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#0 -> SlngSTTService#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngSTTService#0 -> LLMUserAggregator#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#0 -> PydanticAgentProcessor#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PydanticAgentProcessor#0 -> SlngTTSService#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngTTSService#0 -> FastAPIWebsocketOutputTransport#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#0 -> LLMAssistantAggregator#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#0 -> Pipeline#0::Sink
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#0 -> Pipeline#0
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0 -> PipelineWorker#0::Sink
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-3943fe2d': added worker 'PipelineWorker#0'
+2026-09-25 17:21:21.404 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-3943fe2d': started running
+WARNING:google_genai.models:Direct use of automatic function calling (AFC) in AsyncModels.generate_content is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message. Similarly, direct use of AFC in AsyncModels.generate_content_stream is not recommended. Instead, we recommend to use AFC in AsyncChat.send_message_stream.
+2026-09-25 17:21:21.419 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-3943fe2d': starting worker 'PipelineWorker#0'
+INFO:     18.116.115.227:0 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-25 17:21:21.420 | DEBUG    | pipecat.runner.run:_handle_telephony_ws:1473 - WebSocket connection accepted
+2026-09-25 17:21:21.420 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.2 min_volume=0.6
+2026-09-25 17:21:21.496 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-09-25 17:21:21.496 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:start_conversation_tracing:151 - Started tracing for Conversation CAd6533bcb01444d4da5b63188ffd39e78
+2026-09-25 17:21:21.496 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 1
+2026-09-25 17:21:21.496 | DEBUG    | pipecat_slng.stt:_connect_websocket:306 - Connecting to SLNG STT (deepgram/nova:3)
+2026-09-25 17:21:21.499 | INFO     | __main__:on_client_connected:229 - client connected
+2026-09-25 17:21:21.533 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:223 - Detected transport: twilio (from second message)
+2026-09-25 17:21:21.533 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:278 - Parsed - Type: twilio, Data: {'stream_id': 'MZ0136cad54c104674acdcdeb29324e6d4', 'call_id': 'CA37e3c1a6a4eb456cbf2520fafe671089', 'body': {}, 'from': None, 'to': None}
+2026-09-25 17:21:21.533 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for twilio
+2026-09-25 17:21:21.533 | INFO     | pipecat.runner.utils:_create_telephony_transport:508 - Using pre-detected telephony provider: twilio
+2026-09-25 17:21:21.535 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-25 17:21:21.554 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-25 17:21:21.554 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/reusable-core-s3/.venv/lib/python3.14/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-25 17:21:21.568 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#2::Source -> FastAPIWebsocketInputTransport#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#1 -> SlngSTTService#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngSTTService#1 -> LLMUserAggregator#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#1 -> PydanticAgentProcessor#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PydanticAgentProcessor#1 -> SlngTTSService#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngTTSService#1 -> FastAPIWebsocketOutputTransport#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#1 -> LLMAssistantAggregator#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#1 -> Pipeline#2::Sink
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#1::Source -> RTVIProcessor#1
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#1 -> Pipeline#2
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#2 -> PipelineWorker#1::Sink
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-8fa9cd60': added worker 'PipelineWorker#1'
+2026-09-25 17:21:21.569 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-8fa9cd60': started running
+2026-09-25 17:21:21.570 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-8fa9cd60': starting worker 'PipelineWorker#1'
+INFO:     18.222.106.131:0 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-25 17:21:21.570 | DEBUG    | pipecat.runner.run:_handle_telephony_ws:1473 - WebSocket connection accepted
+2026-09-25 17:21:21.571 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.2 min_volume=0.6
+2026-09-25 17:21:21.571 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#1: Starting. Waiting for StartFrame#1 to reach the end of the pipeline...
+2026-09-25 17:21:21.571 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:start_conversation_tracing:151 - Started tracing for Conversation CA37e3c1a6a4eb456cbf2520fafe671089
+2026-09-25 17:21:21.571 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 1
+2026-09-25 17:21:21.571 | DEBUG    | pipecat_slng.stt:_connect_websocket:306 - Connecting to SLNG STT (deepgram/nova:3)
+2026-09-25 17:21:21.574 | INFO     | __main__:on_client_connected:229 - client connected
+INFO:     18.222.106.131:0 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-25 17:21:21.614 | DEBUG    | pipecat.runner.run:_handle_telephony_ws:1473 - WebSocket connection accepted
+2026-09-25 17:21:21.681 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:223 - Detected transport: twilio (from second message)
+2026-09-25 17:21:21.681 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:278 - Parsed - Type: twilio, Data: {'stream_id': 'MZ8f88ec43dc4347b19ab9a3312ebb2261', 'call_id': 'CAcbb53e76304a48bea8408d7e567aa00d', 'body': {}, 'from': None, 'to': None}
+2026-09-25 17:21:21.681 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for twilio
+2026-09-25 17:21:21.681 | INFO     | pipecat.runner.utils:_create_telephony_transport:508 - Using pre-detected telephony provider: twilio
+2026-09-25 17:21:21.683 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-25 17:21:21.706 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-25 17:21:21.706 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/reusable-core-s3/.venv/lib/python3.14/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#4::Source -> FastAPIWebsocketInputTransport#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#2 -> SlngSTTService#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngSTTService#2 -> LLMUserAggregator#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#2 -> PydanticAgentProcessor#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PydanticAgentProcessor#2 -> SlngTTSService#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngTTSService#2 -> FastAPIWebsocketOutputTransport#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#2 -> LLMAssistantAggregator#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#2 -> Pipeline#4::Sink
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#2::Source -> RTVIProcessor#2
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#2 -> Pipeline#4
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#4 -> PipelineWorker#2::Sink
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-8bc159ff': added worker 'PipelineWorker#2'
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-8bc159ff': started running
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:223 - Detected transport: twilio (from second message)
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:278 - Parsed - Type: twilio, Data: {'stream_id': 'MZ94cc290bada04d56b537b29b790a5822', 'call_id': 'CA3c66cd073bec4e699752196587a7456e', 'body': {}, 'from': None, 'to': None}
+2026-09-25 17:21:21.723 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for twilio
+2026-09-25 17:21:21.724 | INFO     | pipecat.runner.utils:_create_telephony_transport:508 - Using pre-detected telephony provider: twilio
+2026-09-25 17:21:21.725 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-25 17:21:21.744 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-25 17:21:21.744 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/nicoferdi/Documents/GitHub/slng_voice_harness/.claude/worktrees/reusable-core-s3/.venv/lib/python3.14/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#6::Source -> FastAPIWebsocketInputTransport#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#3 -> SlngSTTService#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngSTTService#3 -> LLMUserAggregator#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#3 -> PydanticAgentProcessor#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PydanticAgentProcessor#3 -> SlngTTSService#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking SlngTTSService#3 -> FastAPIWebsocketOutputTransport#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#3 -> LLMAssistantAggregator#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#3 -> Pipeline#6::Sink
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#3::Source -> RTVIProcessor#3
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#3 -> Pipeline#6
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#6 -> PipelineWorker#3::Sink
+2026-09-25 17:21:21.758 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-bb7d35e7': added worker 'PipelineWorker#3'
+2026-09-25 17:21:21.759 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-8bc159ff': starting worker 'PipelineWorker#2'
+2026-09-25 17:21:21.759 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-bb7d35e7': started running
+2026-09-25 17:21:21.760 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-bb7d35e7': starting worker 'PipelineWorker#3'
+2026-09-25 17:21:21.760 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.2 min_volume=0.6
+2026-09-25 17:21:21.760 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.2 min_volume=0.6
+2026-09-25 17:21:21.760 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#2: Starting. Waiting for StartFrame#2 to reach the end of the pipeline...
+2026-09-25 17:21:21.760 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:start_conversation_tracing:151 - Started tracing for Conversation CAcbb53e76304a48bea8408d7e567aa00d
+2026-09-25 17:21:21.760 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#3: Starting. Waiting for StartFrame#3 to reach the end of the pipeline...
+2026-09-25 17:21:21.760 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 1
+2026-09-25 17:21:21.761 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:start_conversation_tracing:151 - Started tracing for Conversation CA3c66cd073bec4e699752196587a7456e
+2026-09-25 17:21:21.761 | DEBUG    | pipecat_slng.stt:_connect_websocket:306 - Connecting to SLNG STT (deepgram/nova:3)
+2026-09-25 17:21:21.764 | INFO     | __main__:on_client_connected:229 - client connected
+2026-09-25 17:21:21.764 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 1
+2026-09-25 17:21:21.764 | DEBUG    | pipecat_slng.stt:_connect_websocket:306 - Connecting to SLNG STT (deepgram/nova:3)
+2026-09-25 17:21:21.766 | INFO     | __main__:on_client_connected:229 - client connected
+2026-09-25 17:21:21.904 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - SlngSTTService#1: ttfs_p99_latency not set, using default 1.0s
+2026-09-25 17:21:21.904 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - SlngSTTService#0: ttfs_p99_latency not set, using default 1.0s
+2026-09-25 17:21:21.979 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - SlngSTTService#3: ttfs_p99_latency not set, using default 1.0s
+2026-09-25 17:21:21.984 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - SlngSTTService#2: ttfs_p99_latency not set, using default 1.0s
+2026-09-25 17:21:22.066 | DEBUG    | pipecat_slng.stt:_process_message:395 - SlngSTTService#1: SLNG STT session ready (id=70f3cbce-999e-4b45-afe6-125fa3dfb5ab)
+2026-09-25 17:21:22.085 | DEBUG    | pipecat_slng.stt:_process_message:395 - SlngSTTService#2: SLNG STT session ready (id=c0bf8eeb-b784-4083-8479-b5e5bcf134de)
+2026-09-25 17:21:22.100 | DEBUG    | pipecat_slng.stt:_process_message:395 - SlngSTTService#3: SLNG STT session ready (id=cb57ccc5-3ac8-404e-8326-53eb7d71288b)
+2026-09-25 17:21:22.125 | DEBUG    | pipecat_slng.stt:_process_message:395 - SlngSTTService#0: SLNG STT session ready (id=74c70950-2292-47f1-9c65-2cb774a431e1)
+2026-09-25 17:21:22.161 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?]
+2026-09-25 17:21:22.161 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-25 17:21:22.162 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-09-25 17:21:22.162 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-3943fe2d': broadcasting registry: ['PipelineWorker#0']
+2026-09-25 17:21:22.162 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#0': activated
+2026-09-25 17:21:22.162 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-09-25 17:21:22.162 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?]
+2026-09-25 17:21:22.162 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:21:22.163 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#1' ready (local)
+2026-09-25 17:21:22.163 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-8fa9cd60': broadcasting registry: ['PipelineWorker#1']
+2026-09-25 17:21:22.163 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#1': activated
+2026-09-25 17:21:22.163 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#1: StartFrame#1 reached the end of the pipeline, pipeline is now ready.
+2026-09-25 17:21:22.202 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?]
+2026-09-25 17:21:22.202 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:21:22.202 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#3' ready (local)
+2026-09-25 17:21:22.202 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-bb7d35e7': broadcasting registry: ['PipelineWorker#3']
+2026-09-25 17:21:22.202 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#3': activated
+2026-09-25 17:21:22.202 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#3: StartFrame#3 reached the end of the pipeline, pipeline is now ready.
+2026-09-25 17:21:22.205 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?]
+2026-09-25 17:21:22.205 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:21:22.206 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#2' ready (local)
+2026-09-25 17:21:22.206 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-8bc159ff': broadcasting registry: ['PipelineWorker#2']
+2026-09-25 17:21:22.206 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#2': activated
+2026-09-25 17:21:22.206 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#2: StartFrame#2 reached the end of the pipeline, pipeline is now ready.
+2026-09-25 17:21:22.324 | DEBUG    | pipecat_slng.tts:_process_message:1140 - SlngTTSService#0: SLNG TTS session ready (id=207369c9-a73d-4b5c-a37f-0da49d1be723)
+2026-09-25 17:21:22.335 | DEBUG    | pipecat_slng.tts:_process_message:1140 - SlngTTSService#2: SLNG TTS session ready (id=2461b9d7-3dca-4e97-b543-abc725140fd4)
+2026-09-25 17:21:22.340 | DEBUG    | pipecat_slng.tts:_process_message:1140 - SlngTTSService#3: SLNG TTS session ready (id=53bb07d5-a163-4981-9c90-a6a369bddf26)
+2026-09-25 17:21:22.354 | DEBUG    | pipecat_slng.tts:_process_message:1140 - SlngTTSService#1: SLNG TTS session ready (id=4a6e9164-c640-47f4-9f60-8396d7df909f)
+2026-09-25 17:21:24.450 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 2.287s
+2026-09-25 17:21:24.457 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 2.295s (0.008s leading silence)
+2026-09-25 17:21:24.457 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context 7fd12c34-3e38-441c-8961-887005b93a02
+2026-09-25 17:21:24.460 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:24.482 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 2.280s
+2026-09-25 17:21:24.484 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 2.282s (0.002s leading silence)
+2026-09-25 17:21:24.484 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 3f8a8d6a-9e67-4431-9972-11cd656d3f06
+2026-09-25 17:21:24.487 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:24.591 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 2.386s
+2026-09-25 17:21:24.593 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 2.402s (0.016s leading silence)
+2026-09-25 17:21:24.593 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context ef65fcc9-41fa-4be6-8131-fd76749074a1
+2026-09-25 17:21:24.596 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:24.605 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 2.466s
+2026-09-25 17:21:24.607 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 2.471s (0.005s leading silence)
+2026-09-25 17:21:24.607 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context 34bf9712-f121-49b9-b5ea-70dc3bebf0aa
+2026-09-25 17:21:24.610 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:28.661 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:28.661 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:28.970 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:28.970 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:29.559 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:29.559 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:29.773 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:29.773 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:31.162 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 1
+2026-09-25 17:21:31.474 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 1
+2026-09-25 17:21:32.060 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 1
+2026-09-25 17:21:32.075 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:21:32.075 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:21:32.076 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 2
+2026-09-25 17:21:32.076 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.001s
+2026-09-25 17:21:32.273 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 1
+2026-09-25 17:21:32.422 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:32.453 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: TranscriptionUserTurnStartStrategy#3)
+2026-09-25 17:21:32.453 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:21:32.453 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 2
+2026-09-25 17:21:33.099 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-25 17:21:33.099 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-25 17:21:33.099 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 2
+2026-09-25 17:21:33.122 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: TranscriptionUserTurnStartStrategy#2)
+2026-09-25 17:21:33.122 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:21:33.122 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 2
+2026-09-25 17:21:33.375 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.356s
+2026-09-25 17:21:33.462 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:33.909 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:33.969 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.313s
+2026-09-25 17:21:33.970 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.715s
+2026-09-25 17:21:33.970 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-25 17:21:33.970 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-25 17:21:34.216 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-25 17:21:34.216 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-25 17:21:34.218 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 0.002s
+2026-09-25 17:21:34.255 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:34.301 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.297s
+2026-09-25 17:21:34.301 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.473s
+2026-09-25 17:21:34.302 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:34.302 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:34.684 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:21:34.684 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:21:34.686 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.002s
+2026-09-25 17:21:35.323 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:35.368 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.295s
+2026-09-25 17:21:35.368 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 2.654s
+2026-09-25 17:21:35.369 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:35.369 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:36.180 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (book a haircut for this friday morning)
+2026-09-25 17:21:36.183 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:36.184 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:21:36.184 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#1: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:36.185 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#1 usage characters: 69
+2026-09-25 17:21:36.869 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:36.911 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.292s
+2026-09-25 17:21:36.911 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 2.932s
+2026-09-25 17:21:36.912 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:36.912 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:37.016 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:37.129 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 0.946s
+2026-09-25 17:21:37.130 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 0.951s (0.005s leading silence)
+2026-09-25 17:21:37.131 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context fbea8193-0649-48d0-822a-cd5ed2867d04
+2026-09-25 17:21:37.132 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:37.133 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 2 user-bot latency: 2.059s
+2026-09-25 17:21:37.159 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.384s
+2026-09-25 17:21:37.160 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-25 17:21:37.160 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-25 17:21:37.160 | INFO     | core.state:turn_started:1321 - turn 1 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:21:37.439 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:37.504 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.299s
+2026-09-25 17:21:37.504 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:37.504 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:37.505 | INFO     | core.state:turn_started:1321 - turn 1 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:21:37.555 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (book a haircut for this friday morning)
+2026-09-25 17:21:37.556 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:37.557 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:21:37.557 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:37.557 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 69
+2026-09-25 17:21:38.190 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (book a haircut for this friday morning)
+2026-09-25 17:21:38.194 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:38.196 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-25 17:21:38.197 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#0: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:38.197 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#0 usage characters: 69
+2026-09-25 17:21:38.265 | INFO     | core.turn:_hop:673 - handoff concierge -> verify (Book a haircut for this Friday morning)
+2026-09-25 17:21:38.267 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:38.268 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:21:38.268 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [Which phone number should I use? Please say it with the country code.]
+2026-09-25 17:21:38.268 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 69
+2026-09-25 17:21:38.474 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.918s
+2026-09-25 17:21:38.477 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.918s (0.000s leading silence)
+2026-09-25 17:21:38.478 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context f609f82c-629c-48c1-81e6-42fa6daf4e88
+2026-09-25 17:21:38.479 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:38.481 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 2 user-bot latency: 1.861s
+2026-09-25 17:21:39.139 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 0.945s
+2026-09-25 17:21:39.143 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 0.945s (0.000s leading silence)
+2026-09-25 17:21:39.143 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context 96e3bf1a-8d79-4aec-b257-19357c867935
+2026-09-25 17:21:39.145 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:39.147 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 2 user-bot latency: 2.372s
+2026-09-25 17:21:39.282 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 1.016s
+2026-09-25 17:21:39.285 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 1.016s (0.000s leading silence)
+2026-09-25 17:21:39.285 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context 9774e505-8373-4377-95d4-87ec64682e74
+2026-09-25 17:21:39.287 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:39.289 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 2 user-bot latency: 2.083s
+2026-09-25 17:21:40.714 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:40.714 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:41.881 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:41.881 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:42.548 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:42.548 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:42.811 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:42.811 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:43.215 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 2
+2026-09-25 17:21:43.432 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:21:43.432 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:21:43.433 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 3
+2026-09-25 17:21:43.434 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.001s
+2026-09-25 17:21:43.745 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:43.791 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.278s
+2026-09-25 17:21:43.792 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:43.792 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:44.383 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 2
+2026-09-25 17:21:44.579 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:21:44.579 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:21:44.580 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 3
+2026-09-25 17:21:44.580 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:21:44.592 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:21:44.592 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:21:44.594 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.002s
+2026-09-25 17:21:44.830 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:44.860 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.281s
+2026-09-25 17:21:44.861 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:44.861 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:45.048 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 2
+2026-09-25 17:21:45.227 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:21:45.295 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.318s
+2026-09-25 17:21:45.312 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 2
+2026-09-25 17:21:45.417 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:21:45.417 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:21:45.418 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:21:45.843 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:21:45.843 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:21:45.844 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 3
+2026-09-25 17:21:45.845 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.001s
+2026-09-25 17:21:46.084 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: TranscriptionUserTurnStartStrategy#0)
+2026-09-25 17:21:46.085 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-25 17:21:46.085 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 3
+2026-09-25 17:21:46.145 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.223s
+2026-09-25 17:21:46.164 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:46.164 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:46.164 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:46.225 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:46.309 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.317s
+2026-09-25 17:21:46.309 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.677s
+2026-09-25 17:21:46.310 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:46.310 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:46.310 | INFO     | core.state:turn_started:1321 - turn 2 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:21:46.417 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:21:46.459 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.282s
+2026-09-25 17:21:47.006 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:21:47.007 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:21:47.008 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.001s
+2026-09-25 17:21:47.143 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:47.145 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:21:47.147 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#1: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:47.147 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#1 usage characters: 38
+2026-09-25 17:21:47.590 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:47.611 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:21:47.648 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.308s
+2026-09-25 17:21:47.649 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.591s
+2026-09-25 17:21:47.649 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:47.649 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:47.650 | INFO     | core.state:turn_started:1321 - turn 2 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:21:47.695 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 0.552s
+2026-09-25 17:21:47.695 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 0.606s (0.054s leading silence)
+2026-09-25 17:21:47.696 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context 20cc875c-3015-4605-b696-27cc20397b48
+2026-09-25 17:21:47.696 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:47.697 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 3 user-bot latency: 1.705s
+2026-09-25 17:21:47.741 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.366s
+2026-09-25 17:21:47.741 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 1.124s
+2026-09-25 17:21:48.174 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:21:48.210 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.286s
+2026-09-25 17:21:48.457 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:48.460 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:21:48.462 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:48.462 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 38
+2026-09-25 17:21:48.788 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:48.878 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#0 TTFB: 0.341s
+2026-09-25 17:21:48.879 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#0 processing time: 1.023s
+2026-09-25 17:21:48.880 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-25 17:21:48.880 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-25 17:21:49.001 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.544s
+2026-09-25 17:21:49.002 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.603s (0.059s leading silence)
+2026-09-25 17:21:49.002 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context a9ad8583-12b6-4afa-b72a-cf0ef42e0d83
+2026-09-25 17:21:49.003 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:49.004 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 3 user-bot latency: 1.664s
+2026-09-25 17:21:49.497 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:49.497 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:49.650 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.205s
+2026-09-25 17:21:49.651 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.687s
+2026-09-25 17:21:49.680 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#0: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:49.681 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#0: warm standby selection
+2026-09-25 17:21:49.682 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#0: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:49.682 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#0 usage characters: 38
+2026-09-25 17:21:49.695 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:49.696 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:49.696 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:49.696 | INFO     | core.state:turn_started:1321 - turn 2 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:21:50.158 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:50.161 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:21:50.163 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:50.163 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 38
+2026-09-25 17:21:50.221 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#0 TTFB: 0.541s
+2026-09-25 17:21:50.223 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#0 TTFA: 0.592s (0.051s leading silence)
+2026-09-25 17:21:50.224 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#0 cleaning up TTS context 105c6758-72b3-4f64-a777-4cc3329c9c85
+2026-09-25 17:21:50.225 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:50.226 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 3 user-bot latency: 1.688s
+2026-09-25 17:21:50.645 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:50.645 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:50.720 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 0.562s
+2026-09-25 17:21:50.722 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 0.590s (0.028s leading silence)
+2026-09-25 17:21:50.722 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context 31c507e2-f3ec-452a-9eb1-51300f1c8527
+2026-09-25 17:21:50.723 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:50.724 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 3 user-bot latency: 1.279s
+2026-09-25 17:21:51.583 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: TranscriptionUserTurnStartStrategy#1)
+2026-09-25 17:21:51.583 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:21:51.585 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 3
+2026-09-25 17:21:51.585 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 4
+2026-09-25 17:21:52.026 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:52.026 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:52.398 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:52.449 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.296s
+2026-09-25 17:21:52.450 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.857s
+2026-09-25 17:21:52.451 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:52.451 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:52.527 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:52.527 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:52.850 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: TranscriptionUserTurnStartStrategy#2)
+2026-09-25 17:21:52.850 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:21:52.851 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 3
+2026-09-25 17:21:52.851 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 4
+2026-09-25 17:21:53.113 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:21:53.113 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:21:53.115 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.003s
+2026-09-25 17:21:53.147 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 3
+2026-09-25 17:21:53.778 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:21:53.778 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:21:53.779 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 4
+2026-09-25 17:21:53.779 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:21:53.809 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:53.843 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.285s
+2026-09-25 17:21:53.844 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:53.844 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:21:53.844 | INFO     | core.state:turn_started:1321 - turn 3 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:21:53.957 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:21:54.063 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.340s
+2026-09-25 17:21:54.063 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.606s
+2026-09-25 17:21:54.529 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 3
+2026-09-25 17:21:54.612 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:21:54.637 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.276s
+2026-09-25 17:21:54.723 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:54.768 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.285s
+2026-09-25 17:21:54.769 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.406s
+2026-09-25 17:21:54.769 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:54.769 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:54.934 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Let me read that back to you: +34 671 27 34 54. Have I got that right?]
+2026-09-25 17:21:54.935 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:21:55.489 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:55.491 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:21:55.492 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:55.492 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 38
+2026-09-25 17:21:55.604 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:21:55.604 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:21:55.606 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.001s
+2026-09-25 17:21:55.607 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 0.118s
+2026-09-25 17:21:55.607 | DEBUG    | pipecat_slng.tts:_retire_stream_locked:729 - SlngTTSService#2: retiring TTS stream (interrupted mid-utterance)
+2026-09-25 17:21:55.608 | ERROR    | pipecat.processors.frame_processor:push_error_frame:1001 - SlngTTSService#2 error: SLNG TTS context b16e4855-d662-44ef-8677-e9b67c6b0b0d abandoned: interrupted mid-utterance
+2026-09-25 17:21:55.608 | WARNING  | pipecat.pipeline.worker:_source_push_frame:1502 - PipelineWorker#2: Something went wrong: ErrorFrame#0(error: SLNG TTS context b16e4855-d662-44ef-8677-e9b67c6b0b0d abandoned: interrupted mid-utterance, fatal: False)
+2026-09-25 17:21:55.710 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:55.740 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.279s
+2026-09-25 17:21:55.740 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.627s
+2026-09-25 17:21:55.741 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:55.741 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:55.754 | DEBUG    | pipecat_slng.tts:_handle_audio_bytes:1113 - SlngTTSService#2: dropping 86794 audio bytes with no wire turn
+2026-09-25 17:21:56.388 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:56.391 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:21:56.392 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:56.393 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 38
+2026-09-25 17:21:56.483 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.095s
+2026-09-25 17:21:56.484 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.123s (0.028s leading silence)
+2026-09-25 17:21:56.484 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context e3f880f2-6af1-4930-970c-07a2e34d769b
+2026-09-25 17:21:56.485 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:56.486 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 4 user-bot latency: 1.025s
+2026-09-25 17:21:56.496 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 1.562s
+2026-09-25 17:21:56.499 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 1.567s (0.005s leading silence)
+2026-09-25 17:21:56.499 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context 5f191ab4-76bd-4797-8344-c5c05a06e1af
+2026-09-25 17:21:56.502 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:56.503 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 4 user-bot latency: 2.944s
+2026-09-25 17:21:56.782 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: TranscriptionUserTurnStartStrategy#3)
+2026-09-25 17:21:56.782 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:21:56.783 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 4
+2026-09-25 17:21:56.783 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 5
+2026-09-25 17:21:56.784 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:56.807 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:56.897 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.332s
+2026-09-25 17:21:56.898 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:56.898 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:56.898 | INFO     | core.state:turn_started:1321 - turn 3 continues with piece 2: the caller went on before any answer played out (guidance:queued:cut:blank)
+2026-09-25 17:21:57.203 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:21:57.203 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:21:57.204 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.002s
+2026-09-25 17:21:57.228 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:57.261 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.283s
+2026-09-25 17:21:57.262 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.444s
+2026-09-25 17:21:57.262 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:57.262 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:21:57.263 | INFO     | core.state:turn_started:1321 - turn 3 continues with piece 2: the caller went on before any answer played out (guidance:playing:cut)
+2026-09-25 17:21:58.024 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [One moment.]
+2026-09-25 17:21:58.031 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:21:58.216 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:21:58.258 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.293s
+2026-09-25 17:21:58.259 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:58.259 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:21:58.259 | INFO     | core.state:turn_started:1321 - turn 3 continues with piece 3: the caller went on before any answer played out (nothing said)
+2026-09-25 17:21:58.389 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.365s
+2026-09-25 17:21:58.390 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.367s (0.002s leading silence)
+2026-09-25 17:21:58.390 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context f90c062b-5f64-4078-9505-55507d3b9899
+2026-09-25 17:21:58.391 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:21:58.392 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 5 user-bot latency: 1.413s
+2026-09-25 17:21:58.814 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Please give me the rest of the digits.]
+2026-09-25 17:21:58.816 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:21:58.818 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [One moment.Please give me the rest of the digits.]
+2026-09-25 17:21:58.818 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 49
+2026-09-25 17:21:58.964 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.150s
+2026-09-25 17:21:58.965 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.178s (0.028s leading silence)
+2026-09-25 17:21:58.965 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context a2a752cf-11dc-4585-8fb7-b90a32d34471
+2026-09-25 17:21:59.087 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Let me read that back to you: +34 671 27 34 54. Have I got that right?]
+2026-09-25 17:21:59.088 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:21:59.392 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:21:59.392 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:21:59.392 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:00.847 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 1.759s
+2026-09-25 17:22:00.850 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 1.759s (0.000s leading silence)
+2026-09-25 17:22:00.850 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context a0939f06-18e5-4eb3-b88e-dc76009f22c9
+2026-09-25 17:22:00.856 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:00.857 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 4 user-bot latency: 2.891s
+2026-09-25 17:22:01.231 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:01.232 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:03.057 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:22:03.058 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:22:03.059 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 5
+2026-09-25 17:22:03.059 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 6
+2026-09-25 17:22:03.059 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:22:03.467 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:03.540 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.320s
+2026-09-25 17:22:03.624 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:03.624 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:04.148 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:04.237 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.339s
+2026-09-25 17:22:04.238 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.497s
+2026-09-25 17:22:04.986 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:05.032 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.294s
+2026-09-25 17:22:05.033 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.431s
+2026-09-25 17:22:05.707 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.207s
+2026-09-25 17:22:05.708 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.489s
+2026-09-25 17:22:05.749 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:06.126 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 4
+2026-09-25 17:22:06.383 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.204s
+2026-09-25 17:22:06.383 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.405s
+2026-09-25 17:22:06.414 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:06.415 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:06.415 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:07.200 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: TranscriptionUserTurnStartStrategy#1)
+2026-09-25 17:22:07.201 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:22:07.202 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 5
+2026-09-25 17:22:07.289 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Let me read that back to you: +34 671 27 34 54. Have I got that right?]
+2026-09-25 17:22:07.290 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:22:07.924 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:07.955 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.281s
+2026-09-25 17:22:07.955 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.440s
+2026-09-25 17:22:07.956 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:07.956 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:08.826 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Thanks, I have you.]
+2026-09-25 17:22:08.827 | INFO     | core.turn:_hop:673 - handoff verify -> booking (the caller is identified)
+2026-09-25 17:22:08.829 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:22:08.829 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#1: Generating TTS [Thanks, I have you.]
+2026-09-25 17:22:08.829 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#1 usage characters: 19
+2026-09-25 17:22:08.831 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:08.977 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:08.978 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:09.131 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 1.842s
+2026-09-25 17:22:09.137 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 1.842s (0.000s leading silence)
+2026-09-25 17:22:09.137 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 7d95d96e-09e0-4c99-9628-024a5c5dcc97
+2026-09-25 17:22:09.142 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:09.144 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 6 user-bot latency: 2.964s
+2026-09-25 17:22:09.261 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 0.430s
+2026-09-25 17:22:09.264 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 0.438s (0.008s leading silence)
+2026-09-25 17:22:09.264 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context 103f97a4-a7d6-4dd9-b9f0-0fec26c9a322
+2026-09-25 17:22:09.266 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:09.268 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 5 user-bot latency: 1.594s
+2026-09-25 17:22:09.270 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:22:09.270 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#1: Generating TTS [For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:09.271 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#1 usage characters: 93
+2026-09-25 17:22:10.508 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:10.508 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:11.480 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 4
+2026-09-25 17:22:11.775 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context d9138741-2a0e-4852-ad8c-739ab7614e56
+2026-09-25 17:22:11.781 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:11.886 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: TranscriptionUserTurnStartStrategy#2)
+2026-09-25 17:22:11.886 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:22:11.886 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 5
+2026-09-25 17:22:13.494 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:13.532 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.288s
+2026-09-25 17:22:13.533 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.770s
+2026-09-25 17:22:13.534 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:13.534 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:14.516 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Thank you, I have you now.]
+2026-09-25 17:22:14.516 | INFO     | core.turn:_hop:673 - handoff verify -> booking (the caller is identified)
+2026-09-25 17:22:14.517 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:22:14.517 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [Thank you, I have you now.]
+2026-09-25 17:22:14.518 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 26
+2026-09-25 17:22:14.519 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:15.016 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 0.498s
+2026-09-25 17:22:15.017 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 0.501s (0.003s leading silence)
+2026-09-25 17:22:15.017 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context c3cb3a7f-e3ce-4d45-af03-2e27ccfd5f55
+2026-09-25 17:22:15.019 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:15.019 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 5 user-bot latency: 1.774s
+2026-09-25 17:22:15.020 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:22:15.020 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:15.020 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 93
+2026-09-25 17:22:16.619 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:16.620 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:16.745 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:16.745 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:17.378 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context df8d3867-f001-407b-8b1f-f96a1ea1ce8f
+2026-09-25 17:22:17.382 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:18.943 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:18.943 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:19.246 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 6
+2026-09-25 17:22:19.738 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: TranscriptionUserTurnStartStrategy#3)
+2026-09-25 17:22:19.738 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:22:19.739 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 7
+2026-09-25 17:22:20.738 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:20.776 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.279s
+2026-09-25 17:22:20.777 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.758s
+2026-09-25 17:22:20.778 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:20.778 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:21.444 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 5
+2026-09-25 17:22:21.773 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Thanks, I have you.]
+2026-09-25 17:22:21.773 | INFO     | core.turn:_hop:673 - handoff verify -> booking (the caller is identified)
+2026-09-25 17:22:21.775 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:22:21.775 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [Thanks, I have you.]
+2026-09-25 17:22:21.775 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 19
+2026-09-25 17:22:21.777 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:22.185 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.408s
+2026-09-25 17:22:22.186 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.414s (0.006s leading silence)
+2026-09-25 17:22:22.186 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 03864dea-49d6-44e1-a8a0-e97498459653
+2026-09-25 17:22:22.186 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:22:22.186 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [For a haircut on Friday the 2nd, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:22.186 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 93
+2026-09-25 17:22:22.187 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:22.188 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 7 user-bot latency: 1.690s
+2026-09-25 17:22:23.270 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:23.270 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:24.066 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:24.066 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:24.852 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context c22c128e-86d2-474b-913c-8289837705ee
+2026-09-25 17:22:24.855 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:26.569 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 5
+2026-09-25 17:22:26.948 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:22:26.949 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:22:26.950 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 6
+2026-09-25 17:22:26.950 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.001s
+2026-09-25 17:22:27.083 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:22:27.084 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:22:27.085 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 6
+2026-09-25 17:22:27.085 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.001s
+2026-09-25 17:22:28.005 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:28.033 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.279s
+2026-09-25 17:22:28.034 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:28.034 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:28.356 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:22:28.356 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:22:28.358 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.002s
+2026-09-25 17:22:28.680 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:28.721 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.290s
+2026-09-25 17:22:28.722 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:28.722 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:28.722 | INFO     | core.state:turn_started:1321 - turn 5 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:22:28.934 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:29.391 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:29.437 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.296s
+2026-09-25 17:22:29.437 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.395s
+2026-09-25 17:22:29.438 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:29.438 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:29.675 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?]
+2026-09-25 17:22:29.677 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:22:30.399 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?]
+2026-09-25 17:22:30.401 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:22:30.566 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 0.891s
+2026-09-25 17:22:30.570 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 0.892s (0.001s leading silence)
+2026-09-25 17:22:30.570 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context be8178d4-ff8f-469e-a143-63d6fe98ae13
+2026-09-25 17:22:30.572 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:30.573 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 6 user-bot latency: 2.141s
+2026-09-25 17:22:31.369 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 0.970s
+2026-09-25 17:22:31.372 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 0.971s (0.001s leading silence)
+2026-09-25 17:22:31.373 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context 42b6e6d3-e5eb-4b91-b73d-a363ac5c2503
+2026-09-25 17:22:31.375 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:31.376 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 6 user-bot latency: 2.235s
+2026-09-25 17:22:32.138 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:32.138 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:34.255 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:34.255 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:34.640 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 7
+2026-09-25 17:22:34.856 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:34.856 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:35.098 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:22:35.098 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:22:35.099 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 8
+2026-09-25 17:22:35.099 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:22:36.268 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:36.320 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.302s
+2026-09-25 17:22:36.323 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:36.323 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:36.394 | WARNING  | core.interpreters:interpret:102 - chosen_offer interpretation failed: ConnectError
+2026-09-25 17:22:36.699 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:22:36.700 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:22:36.701 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.002s
+2026-09-25 17:22:36.758 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 6
+2026-09-25 17:22:37.014 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:37.061 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.283s
+2026-09-25 17:22:37.062 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:37.062 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:37.063 | INFO     | core.state:turn_started:1321 - turn 6 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:22:37.358 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 6
+2026-09-25 17:22:37.965 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?]
+2026-09-25 17:22:37.968 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:22:38.122 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: TranscriptionUserTurnStartStrategy#2)
+2026-09-25 17:22:38.123 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:22:38.124 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 7
+2026-09-25 17:22:38.904 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.940s
+2026-09-25 17:22:38.906 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.944s (0.004s leading silence)
+2026-09-25 17:22:38.906 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 44f9c466-47d4-461c-bc99-24f9000da216
+2026-09-25 17:22:38.908 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:38.909 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 8 user-bot latency: 2.130s
+2026-09-25 17:22:40.766 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:40.844 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.308s
+2026-09-25 17:22:40.844 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 2.482s
+2026-09-25 17:22:42.323 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 1610.75
+2026-09-25 17:22:42.323 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:42.323 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:42.323 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:42.368 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: TranscriptionUserTurnStartStrategy#1)
+2026-09-25 17:22:42.368 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:22:42.368 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 7
+2026-09-25 17:22:42.429 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:42.429 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:43.056 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [For a haircut tomorrow, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:43.059 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:22:43.061 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [For a haircut tomorrow, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:43.061 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 84
+2026-09-25 17:22:44.487 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 1.431s
+2026-09-25 17:22:44.489 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 1.467s (0.036s leading silence)
+2026-09-25 17:22:44.489 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context d02d30bc-e205-425d-84cf-1700b08e1674
+2026-09-25 17:22:44.493 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:44.494 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 7 user-bot latency: 3.958s
+2026-09-25 17:22:44.931 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 8
+2026-09-25 17:22:44.994 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 2.040s
+2026-09-25 17:22:45.082 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:45.097 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: TranscriptionUserTurnStartStrategy#3)
+2026-09-25 17:22:45.097 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:22:45.098 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 9
+2026-09-25 17:22:45.548 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:45.576 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.278s
+2026-09-25 17:22:45.576 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.359s
+2026-09-25 17:22:45.834 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:45.834 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:45.834 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.161s
+2026-09-25 17:22:46.718 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [For a haircut tomorrow, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:46.721 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:22:46.722 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#1: Generating TTS [For a haircut tomorrow, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:46.722 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#1 usage characters: 84
+2026-09-25 17:22:47.886 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 1.987s
+2026-09-25 17:22:47.937 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:48.223 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 1.505s
+2026-09-25 17:22:48.227 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 1.558s (0.053s leading silence)
+2026-09-25 17:22:48.227 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context 75795843-5562-4207-96cd-afaacd23cb7c
+2026-09-25 17:22:48.231 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:48.232 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 7 user-bot latency: 3.398s
+2026-09-25 17:22:49.498 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 1610.75
+2026-09-25 17:22:49.498 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-25 17:22:49.498 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:49.498 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:49.498 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.196s
+2026-09-25 17:22:50.451 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [For a haircut tomorrow, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:50.453 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:22:50.454 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [For a haircut tomorrow, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:50.454 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 84
+2026-09-25 17:22:50.974 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:50.974 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:51.931 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 1.480s
+2026-09-25 17:22:51.935 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 1.485s (0.005s leading silence)
+2026-09-25 17:22:51.936 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context e8840749-6785-4726-9a1a-49b527ad62d3
+2026-09-25 17:22:51.938 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:22:51.940 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 9 user-bot latency: 4.249s
+2026-09-25 17:22:53.476 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 7
+2026-09-25 17:22:54.017 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:22:54.017 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:22:54.018 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 9
+2026-09-25 17:22:54.018 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 10
+2026-09-25 17:22:54.018 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:22:54.020 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:54.084 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:22:54.084 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:22:54.084 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 8
+2026-09-25 17:22:54.085 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.001s
+2026-09-25 17:22:54.794 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:22:54.795 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:22:56.269 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:56.284 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:56.350 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.305s
+2026-09-25 17:22:56.351 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:56.351 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:57.021 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:57.022 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:22:57.023 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.196s
+2026-09-25 17:22:57.024 | INFO     | core.state:turn_started:1321 - turn 7 continues with piece 2: the caller went on before any answer played out (ask:playing:cut)
+2026-09-25 17:22:57.293 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: TranscriptionUserTurnStartStrategy#2)
+2026-09-25 17:22:57.293 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:22:57.294 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 7
+2026-09-25 17:22:57.712 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:22:57.712 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:22:57.713 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 8
+2026-09-25 17:22:57.713 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.001s
+2026-09-25 17:22:58.047 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [That's Saturday the 3rd, not tomorrow: for a haircut, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:58.050 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:22:58.051 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [That's Saturday the 3rd, not tomorrow: for a haircut, I have 9:00 AM, 9:30 AM, 10:00 AM. Which time works for you?]
+2026-09-25 17:22:58.051 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 114
+2026-09-25 17:22:58.719 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:58.754 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.282s
+2026-09-25 17:22:58.755 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:58.755 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:58.953 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:22:58.953 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:22:58.955 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.002s
+2026-09-25 17:22:59.048 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:59.121 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.305s
+2026-09-25 17:22:59.121 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 1.719s
+2026-09-25 17:22:59.122 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:59.122 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:59.122 | INFO     | core.state:turn_started:1321 - turn 7 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:22:59.202 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:22:59.202 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:22:59.203 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.001s
+2026-09-25 17:22:59.356 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:59.396 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.285s
+2026-09-25 17:22:59.396 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:59.397 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:22:59.397 | INFO     | core.state:turn_started:1321 - turn 7 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:22:59.692 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:22:59.743 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.301s
+2026-09-25 17:22:59.744 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:59.744 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:22:59.745 | INFO     | core.state:turn_started:1321 - turn 7 continues with piece 3: the caller went on before any answer played out (nothing said)
+2026-09-25 17:23:00.088 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 2.041s
+2026-09-25 17:23:00.094 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 2.041s (0.000s leading silence)
+2026-09-25 17:23:00.095 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 9d86ba4d-2cd9-4952-91c0-e579e18b9aa7
+2026-09-25 17:23:00.103 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:00.104 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 10 user-bot latency: 4.084s
+2026-09-25 17:23:00.410 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Shall I book you in for a haircut, tomorrow at 9:00 AM?]
+2026-09-25 17:23:00.411 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:23:00.620 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Shall I book you in for a haircut, tomorrow at 9:00 AM?]
+2026-09-25 17:23:00.621 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:23:01.276 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 0.866s
+2026-09-25 17:23:01.280 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 0.870s (0.004s leading silence)
+2026-09-25 17:23:01.281 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context bd03a605-43c6-42d5-a9c7-44791b84ea06
+2026-09-25 17:23:01.282 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:01.284 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 8 user-bot latency: 2.172s
+2026-09-25 17:23:01.418 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 0.798s
+2026-09-25 17:23:01.420 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 0.801s (0.003s leading silence)
+2026-09-25 17:23:01.420 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context 96fa4c00-9274-4380-9654-907355d9e7c6
+2026-09-25 17:23:01.421 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:01.422 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 8 user-bot latency: 1.979s
+2026-09-25 17:23:04.364 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:04.364 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:04.384 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:04.384 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:06.864 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 8
+2026-09-25 17:23:06.884 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 8
+2026-09-25 17:23:09.827 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:09.827 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:11.982 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: TranscriptionUserTurnStartStrategy#2)
+2026-09-25 17:23:11.982 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:23:11.982 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 9
+2026-09-25 17:23:12.329 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 10
+2026-09-25 17:23:12.356 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: TranscriptionUserTurnStartStrategy#1)
+2026-09-25 17:23:12.356 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:23:12.357 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 9
+2026-09-25 17:23:13.038 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:13.075 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.283s
+2026-09-25 17:23:13.075 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.281s
+2026-09-25 17:23:13.076 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:23:13.076 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:23:13.994 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.231s
+2026-09-25 17:23:13.995 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.312s
+2026-09-25 17:23:14.015 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:14.016 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:23:14.016 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:23:14.233 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Done, tomorrow at 9:00 AM. Anything else?]
+2026-09-25 17:23:14.235 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:23:14.235 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#1: Generating TTS [Done, tomorrow at 9:00 AM. Anything else?]
+2026-09-25 17:23:14.235 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#1 usage characters: 41
+2026-09-25 17:23:15.014 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Lovely, that's your haircut booked for tomorrow at 9:00 AM. What else can I do?]
+2026-09-25 17:23:15.016 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:23:15.017 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [Lovely, that's your haircut booked for tomorrow at 9:00 AM. What else can I do?]
+2026-09-25 17:23:15.017 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 79
+2026-09-25 17:23:15.048 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 0.815s
+2026-09-25 17:23:15.050 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 0.815s (0.000s leading silence)
+2026-09-25 17:23:15.050 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context d8d78bb5-8d84-4d42-8551-74b3625f49a0
+2026-09-25 17:23:15.052 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:15.053 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 9 user-bot latency: 2.260s
+2026-09-25 17:23:16.433 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 1.419s
+2026-09-25 17:23:16.438 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#2 TTFA: 1.428s (0.009s leading silence)
+2026-09-25 17:23:16.438 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#2 cleaning up TTS context 602edee0-136f-427d-9e2d-f89b2a2b5a38
+2026-09-25 17:23:16.440 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:16.441 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 9 user-bot latency: 2.677s
+2026-09-25 17:23:17.618 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:23:17.618 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:23:17.619 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 11
+2026-09-25 17:23:17.620 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:23:18.093 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:18.093 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:19.143 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.204s
+2026-09-25 17:23:19.188 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:19.188 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:19.188 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:19.915 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?]
+2026-09-25 17:23:19.917 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:23:20.595 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 9
+2026-09-25 17:23:20.829 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.914s
+2026-09-25 17:23:20.833 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.922s (0.008s leading silence)
+2026-09-25 17:23:20.833 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 416da766-513c-4e47-9313-5df2d85c3686
+2026-09-25 17:23:20.835 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:20.836 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 11 user-bot latency: 1.897s
+2026-09-25 17:23:21.033 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: TranscriptionUserTurnStartStrategy#1)
+2026-09-25 17:23:21.033 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:23:21.034 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 10
+2026-09-25 17:23:21.321 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:21.322 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:22.322 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:22.387 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.315s
+2026-09-25 17:23:22.388 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.660s
+2026-09-25 17:23:22.391 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:23:22.391 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:23:23.116 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#1: User started speaking (strategy: VADUserTurnStartStrategy#1)
+2026-09-25 17:23:23.116 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#1: broadcasting interruption
+2026-09-25 17:23:23.118 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#1 processing time: 0.002s
+2026-09-25 17:23:23.822 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 9
+2026-09-25 17:23:23.949 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:23.989 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#1 TTFB: 0.291s
+2026-09-25 17:23:23.990 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#1: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:23:23.990 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#1: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#1)
+2026-09-25 17:23:23.990 | INFO     | core.state:turn_started:1321 - turn 9 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:23:24.417 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: TranscriptionUserTurnStartStrategy#3)
+2026-09-25 17:23:24.418 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:23:24.418 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 11
+2026-09-25 17:23:24.419 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 12
+2026-09-25 17:23:24.420 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:24.481 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: TranscriptionUserTurnStartStrategy#2)
+2026-09-25 17:23:24.481 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:23:24.481 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 10
+2026-09-25 17:23:24.937 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#1: Generating TTS [Thanks for calling. Goodbye.]
+2026-09-25 17:23:24.940 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#1: warm standby selection
+2026-09-25 17:23:24.941 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#1: Generating TTS [Thanks for calling. Goodbye.]
+2026-09-25 17:23:24.941 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#1 usage characters: 28
+2026-09-25 17:23:25.251 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.487s
+2026-09-25 17:23:25.305 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:25.553 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#1 TTFB: 0.617s
+2026-09-25 17:23:25.554 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#1 TTFA: 0.626s (0.009s leading silence)
+2026-09-25 17:23:25.554 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#1 cleaning up TTS context 05a5302e-e1fb-46cb-b6e7-e8e80dcec7ed
+2026-09-25 17:23:25.555 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:25.556 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 10 user-bot latency: 1.857s
+2026-09-25 17:23:26.670 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:26.742 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.324s
+2026-09-25 17:23:26.743 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 2.125s
+2026-09-25 17:23:26.744 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:26.744 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:26.745 | INFO     | core.state:turn_started:1321 - turn 8 continues with piece 2: the caller went on before any answer played out (ask:playing:cut)
+2026-09-25 17:23:27.294 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:27.339 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.295s
+2026-09-25 17:23:27.339 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 1.416s
+2026-09-25 17:23:27.340 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:23:27.340 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:23:27.357 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:27.357 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:27.357 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1565 - PipelineWorker#1: received end worker frame downstream EndWorkerFrame#0(reason: None)
+2026-09-25 17:23:27.358 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1475 - PipelineWorker#1: received end worker frame upstream EndWorkerFrame#1(reason: None)
+2026-09-25 17:23:27.358 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1230 - PipelineWorker#1: Closing. Waiting for EndFrame#0(reason: None) to reach the end of the pipeline...
+2026-09-25 17:23:27.358 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 10
+2026-09-25 17:23:27.359 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_stt_usage_metrics:352 - SlngSTTService#1 usage audio seconds: 125.070
+2026-09-25 17:23:27.359 | DEBUG    | pipecat_slng.stt:_disconnect_websocket:350 - Disconnecting from SLNG STT
+2026-09-25 17:23:27.457 | DEBUG    | pipecat_slng.tts:_disconnect_websocket:813 - Disconnecting from SLNG TTS
+2026-09-25 17:23:27.685 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?]
+2026-09-25 17:23:27.688 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:23:27.723 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#2: User started speaking (strategy: VADUserTurnStartStrategy#2)
+2026-09-25 17:23:27.724 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#2: broadcasting interruption
+2026-09-25 17:23:27.725 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#2 processing time: 0.002s
+2026-09-25 17:23:27.749 | ERROR    | pipecat.serializers.twilio:_hang_up_call:268 - Failed to terminate Twilio call CA37e3c1a6a4eb456cbf2520fafe671089: Status 401, Response: {"code":20003,"message":"auth account AC00000000000000000000000000000000 does not exist","more_info":"https://www.twilio.com/docs/errors/20003","status":401}
+2026-09-25 17:23:27.750 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1239 - PipelineWorker#1: EndFrame#0(reason: None) reached the end of the pipeline, pipeline is closing.
+2026-09-25 17:23:27.750 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#1: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-09-25 17:23:27.751 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:end_conversation_tracing:179 - Ended tracing for Conversation CA37e3c1a6a4eb456cbf2520fafe671089
+2026-09-25 17:23:27.752 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#1 is finishing...
+2026-09-25 17:23:27.752 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#1 has finished
+2026-09-25 17:23:27.752 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-8fa9cd60': finished running
+2026-09-25 17:23:28.133 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:28.180 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#2 TTFB: 0.296s
+2026-09-25 17:23:28.181 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#2: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:23:28.181 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#2: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#2)
+2026-09-25 17:23:28.181 | INFO     | core.state:turn_started:1321 - turn 9 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:23:28.642 | INFO     | __main__:on_client_disconnected:247 - client disconnected
+2026-09-25 17:23:28.699 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 1.014s
+2026-09-25 17:23:28.702 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 1.018s (0.004s leading silence)
+2026-09-25 17:23:28.702 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 08613f97-83f4-4d9a-bff7-11794e84f0b9
+2026-09-25 17:23:28.705 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:28.707 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 12 user-bot latency: 2.287s
+2026-09-25 17:23:28.878 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#2: Generating TTS [Thanks for calling. Goodbye.]
+2026-09-25 17:23:28.880 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#2: warm standby selection
+2026-09-25 17:23:28.881 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#2: Generating TTS [Thanks for calling. Goodbye.]
+2026-09-25 17:23:28.881 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#2 usage characters: 28
+2026-09-25 17:23:28.882 | DEBUG    | pipecat.pipeline.worker:_cancel:1130 - Cancelling pipeline worker PipelineWorker#2
+2026-09-25 17:23:28.882 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1230 - PipelineWorker#2: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-09-25 17:23:28.882 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 10
+2026-09-25 17:23:28.883 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_stt_usage_metrics:352 - SlngSTTService#2 usage audio seconds: 128.292
+2026-09-25 17:23:28.883 | DEBUG    | pipecat_slng.stt:_disconnect_websocket:350 - Disconnecting from SLNG STT
+2026-09-25 17:23:28.968 | DEBUG    | pipecat_slng.tts:_disconnect_websocket:813 - Disconnecting from SLNG TTS
+2026-09-25 17:23:29.020 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#2 TTFB: 0.141s
+2026-09-25 17:23:29.022 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:1221 - PipelineWorker#2: CancelFrame#0(reason: None) reached the end of the pipeline.
+2026-09-25 17:23:29.022 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#2: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-09-25 17:23:29.022 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:end_conversation_tracing:179 - Ended tracing for Conversation CAcbb53e76304a48bea8408d7e567aa00d
+2026-09-25 17:23:29.023 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#2 is finishing...
+2026-09-25 17:23:29.023 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#2 has finished
+2026-09-25 17:23:29.024 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-8bc159ff': finished running
+2026-09-25 17:23:32.628 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:32.629 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:35.131 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 12
+2026-09-25 17:23:40.870 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:23:40.870 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:23:40.871 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 13
+2026-09-25 17:23:40.872 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:23:41.270 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:41.359 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.340s
+2026-09-25 17:23:41.360 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:41.360 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:42.179 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:23:42.179 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:23:42.180 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:23:42.509 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:42.567 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.291s
+2026-09-25 17:23:42.567 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:42.567 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:42.568 | INFO     | core.state:turn_started:1321 - turn 9 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:23:43.438 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Done, Saturday the 3rd at 9:00 AM. Anything else?]
+2026-09-25 17:23:43.439 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:23:43.439 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [Done, Saturday the 3rd at 9:00 AM. Anything else?]
+2026-09-25 17:23:43.439 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 49
+2026-09-25 17:23:44.337 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.900s
+2026-09-25 17:23:44.341 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.903s (0.003s leading silence)
+2026-09-25 17:23:44.345 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 5c852396-8bc0-47a0-bc6e-0e1b980c8922
+2026-09-25 17:23:44.348 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:44.349 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 13 user-bot latency: 2.072s
+2026-09-25 17:23:47.909 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:47.909 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:50.412 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 13
+2026-09-25 17:23:51.053 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: TranscriptionUserTurnStartStrategy#3)
+2026-09-25 17:23:51.054 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:23:51.055 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_started:213 - Started tracing for Turn 14
+2026-09-25 17:23:52.147 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:52.178 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.280s
+2026-09-25 17:23:52.178 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.519s
+2026-09-25 17:23:52.179 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:52.179 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:52.980 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#3: User started speaking (strategy: VADUserTurnStartStrategy#3)
+2026-09-25 17:23:52.980 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#3: broadcasting interruption
+2026-09-25 17:23:52.981 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - SlngSTTService#3 processing time: 0.001s
+2026-09-25 17:23:54.057 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-25 17:23:54.114 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngSTTService#3 TTFB: 0.296s
+2026-09-25 17:23:54.114 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1359 - LLMUserAggregator#3: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:54.114 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#3: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#3)
+2026-09-25 17:23:54.115 | INFO     | core.state:turn_started:1321 - turn 10 continues with piece 2: the caller went on before any answer played out (nothing said)
+2026-09-25 17:23:55.224 | DEBUG    | pipecat_slng.tts:run_tts:1244 - SlngTTSService#3: Generating TTS [Thanks for calling. Goodbye.]
+2026-09-25 17:23:55.226 | DEBUG    | pipecat_slng.tts:_prepare_input_turn:510 - SlngTTSService#3: warm standby selection
+2026-09-25 17:23:55.227 | DEBUG    | pipecat.services.tts_service:process_frame:821 - SlngTTSService#3: Generating TTS [Thanks for calling. Goodbye.]
+2026-09-25 17:23:55.227 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - SlngTTSService#3 usage characters: 28
+2026-09-25 17:23:55.730 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - SlngTTSService#3 TTFB: 0.506s
+2026-09-25 17:23:55.732 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - SlngTTSService#3 TTFA: 0.507s (0.001s leading silence)
+2026-09-25 17:23:55.732 | DEBUG    | pipecat.services.tts_service:push_frame:937 - SlngTTSService#3 cleaning up TTS context 90952668-c97a-4402-aa91-3724d5e1b7ea
+2026-09-25 17:23:55.734 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-25 17:23:55.735 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_latency_measured:103 - Turn 14 user-bot latency: 1.916s
+2026-09-25 17:23:57.256 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-25 17:23:57.257 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-25 17:23:57.257 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1565 - PipelineWorker#3: received end worker frame downstream EndWorkerFrame#3(reason: None)
+2026-09-25 17:23:57.259 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1475 - PipelineWorker#3: received end worker frame upstream EndWorkerFrame#4(reason: None)
+2026-09-25 17:23:57.259 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1230 - PipelineWorker#3: Closing. Waiting for EndFrame#1(reason: None) to reach the end of the pipeline...
+2026-09-25 17:23:57.259 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:_handle_turn_ended:233 - Ended tracing for Turn 14
+2026-09-25 17:23:57.259 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_stt_usage_metrics:352 - SlngSTTService#3 usage audio seconds: 154.632
+2026-09-25 17:23:57.260 | DEBUG    | pipecat_slng.stt:_disconnect_websocket:350 - Disconnecting from SLNG STT
+2026-09-25 17:23:57.359 | DEBUG    | pipecat_slng.tts:_disconnect_websocket:813 - Disconnecting from SLNG TTS
+2026-09-25 17:23:57.584 | ERROR    | pipecat.serializers.twilio:_hang_up_call:268 - Failed to terminate Twilio call CA3c66cd073bec4e699752196587a7456e: Status 401, Response: {"code":20003,"message":"auth account AC00000000000000000000000000000000 does not exist","more_info":"https://www.twilio.com/docs/errors/20003","status":401}
+2026-09-25 17:23:57.585 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1239 - PipelineWorker#3: EndFrame#1(reason: None) reached the end of the pipeline, pipeline is closing.
+2026-09-25 17:23:57.585 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#3: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-09-25 17:23:57.585 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:end_conversation_tracing:179 - Ended tracing for Conversation CA3c66cd073bec4e699752196587a7456e
+2026-09-25 17:23:57.586 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#3 is finishing...
+2026-09-25 17:23:57.586 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#3 has finished
+2026-09-25 17:23:57.587 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-bb7d35e7': finished running
+2026-09-25 17:24:21.501 | WARNING  | __main__:hang_up_after:240 - call ceiling of 180s reached: hanging up
+2026-09-25 17:24:21.502 | DEBUG    | pipecat.pipeline.worker:_cancel:1130 - Cancelling pipeline worker PipelineWorker#0
+2026-09-25 17:24:21.502 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1230 - PipelineWorker#0: Closing. Waiting for CancelFrame#1(reason: None) to reach the end of the pipeline...
+2026-09-25 17:24:21.502 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_stt_usage_metrics:352 - SlngSTTService#0 usage audio seconds: 179.457
+2026-09-25 17:24:21.503 | DEBUG    | pipecat_slng.stt:_disconnect_websocket:350 - Disconnecting from SLNG STT
+2026-09-25 17:24:21.575 | WARNING  | __main__:hang_up_after:240 - call ceiling of 180s reached: hanging up
+2026-09-25 17:24:21.602 | DEBUG    | pipecat_slng.tts:_disconnect_websocket:813 - Disconnecting from SLNG TTS
+2026-09-25 17:24:21.767 | WARNING  | __main__:hang_up_after:240 - call ceiling of 180s reached: hanging up
+2026-09-25 17:24:21.908 | ERROR    | pipecat.serializers.twilio:_hang_up_call:268 - Failed to terminate Twilio call CAd6533bcb01444d4da5b63188ffd39e78: Status 401, Response: {"code":20003,"message":"auth account AC00000000000000000000000000000000 does not exist","more_info":"https://www.twilio.com/docs/errors/20003","status":401}
+2026-09-25 17:24:21.910 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:1221 - PipelineWorker#0: CancelFrame#1(reason: None) reached the end of the pipeline.
+2026-09-25 17:24:21.910 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-09-25 17:24:21.910 | DEBUG    | pipecat.utils.tracing.turn_trace_observer:end_conversation_tracing:179 - Ended tracing for Conversation CAd6533bcb01444d4da5b63188ffd39e78
+2026-09-25 17:24:21.911 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#0 is finishing...
+2026-09-25 17:24:21.912 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#0 has finished
+2026-09-25 17:24:21.912 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-3943fe2d': finished running
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [54260]

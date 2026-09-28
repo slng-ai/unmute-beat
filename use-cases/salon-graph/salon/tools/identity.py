@@ -23,18 +23,12 @@ from core.graph import Opening
 from core.operations import Operation
 from core.policies import claim_or_refuse
 from salon.models.receipts import CustomerLookup
-from salon.models.shapes import SubmittedPhone
+from salon.models.shapes import Spoken, SubmittedPhone, digits_after_code, phone_length
 from salon.models.state import Handoff, SalonCall
 from salon.tools.asking import Ask
 from salon.tools.policy import ACTIONS
 
 _PHONE = TypeAdapter(SubmittedPhone)
-
-
-def _readback(phone: str) -> str:
-    """A number as digits to read out, grouped the way a person says one."""
-    country, rest = phone[:3], phone[3:]
-    return ' '.join([country, rest[:3], rest[3:6], rest[6:]]).strip()
 
 
 async def ask_number(ctx: RunContext[SalonCall], phone: SubmittedPhone) -> Ask:
@@ -55,21 +49,19 @@ async def readback_number(call: SalonCall, phone: str) -> Ask:
     return Ask(
         about='phone',
         value=phone,
-        spoken=f'Let me read that back to you: {_readback(phone)}. Have I got that right?',
+        spoken=f'Let me read that back to you: {Spoken.validate_python(phone)}. Have I got that right?',
     )
 
 
 async def verification_guidance(
     ctx: RunContext[SalonCall],
-    topic: Literal['number', 'country', 'incomplete', 'correction', 'unsupported'],
+    topic: Literal['number', 'country', 'incomplete', 'correction'],
 ) -> str:
     """Ask for missing phone information. For a complete number, use ask_number instead."""
     return await guide(ctx.deps, topic)
 
 
-async def guide(
-    call: SalonCall, topic: Literal['number', 'country', 'incomplete', 'correction', 'unsupported']
-) -> str:
+async def guide(call: SalonCall, topic: Literal['number', 'country', 'incomplete', 'correction']) -> str:
     """Say the fixed question for a missing piece of the number. Shared by the tool and the step's opening."""
     return await say_guidance(call, _GUIDANCE[topic])
 
@@ -86,7 +78,6 @@ _GUIDANCE = {
     'country': 'Which country is that phone number from?',
     'incomplete': 'Please give me the rest of the digits.',
     'correction': 'Please say the full number again, with the country code.',
-    'unsupported': 'I can look up Spanish phone numbers. Do you have a Spanish number I can use?',
 }
 """The fixed lines for a missing piece of the number.
 
@@ -210,49 +201,59 @@ _PHONE_CONTENT = re.compile(
 """Anything in an utterance that might be a number or a correction to one."""
 
 
-_SPANISH_RUN = re.compile(r'\+\s*3\s*4(?:[\s.,-]*\d)+')
-"""A "+34" and the digit groups after it, however the pauses split them: "+34 6. 71. 2. 73. 4. 5. 4."."""
+_PLUS_RUN = re.compile(r'(?:\+|\bplus\b)\s*\d(?:[\s.,-]*\d)*', re.IGNORECASE)
+"""A "+" and the digit groups after it, however the pauses split them: "+34 6. 71. 2. 73. 4. 5. 4."."""
+
+
+def _last_plus_number(words: str) -> str:
+    """The last "+" the caller said and every digit after it, as "+" and digits, or ''.
+
+    The last one, so a caller who starts again ("+34 671... no, +44 20...")
+    replaces the old number instead of adding to it. A word between two digit
+    groups ends the number, so "Friday at 9" after it is not part of it.
+    """
+    runs = _PLUS_RUN.findall(words)
+    return '+' + re.sub(r'\D', '', runs[-1]) if runs else ''
 
 
 def number_heard(words: str) -> str:
-    """The Spanish number the caller said whole, as the last "+34" and exactly nine digits after it, or ''.
+    """The number the caller said whole, in E.164, or ''.
 
     Coval run L5RWCS7b, K3: the caller said "+34 6. 71. 2. / 73. 4. / 5. /
     4." and then "+34. / 671. / 273. 45. / 4.", nine digits both times, and
     the model counted neither and asked for "the rest of the digits" twice.
-    Speech-to-text writes digits as numerals, so counting them is code's job.
-    Anything else (ten digits, digits in words, no "+34", a number that is
-    not a real Spanish one) is '' and the model handles it, as before.
+    Speech-to-text writes digits as numerals, so joining them is code's job,
+    and whether they are a number is libphonenumber's (`SubmittedPhone`), for
+    any country. No "+", no number: the country code is never guessed.
     """
-    runs = _SPANISH_RUN.findall(words)
-    if not runs:
-        return ''
-    digits = re.sub(r'\D', '', runs[-1])
-    if len(digits) != 11:
+    if not (candidate := _last_plus_number(words)):
         return ''
     try:
-        return _PHONE.validate_python(f'+{digits}')
+        return _PHONE.validate_python(candidate)
     except ValidationError:
         return ''
 
 
 def number_problem(words: str) -> str:
-    """Why the "+34" number the caller said is not a number, as a line to say, or ''.
+    """Why the number the caller said is not a number, as a line to say, or ''.
 
-    Only too many digits: a Spanish number has nine after "+34", and speech
-    to text sometimes hears one more (Coval run 4bLgLR4t, cases 06 and 13:
-    "672. 1. 273"). Too few is a caller still going, and stays with the model.
+    Too many digits: speech to text sometimes hears one more (Coval run
+    4bLgLR4t, cases 06 and 13: "672. 1. 273"). A country code no country has,
+    or digits of a possible length that are no real number, is a re-ask. Too
+    few is a caller still going, and digits with no "+" are missing country
+    information: both stay with the model, which asks (`verification_guidance`).
     """
-    runs = _SPANISH_RUN.findall(words)
-    if not runs:
+    if not (candidate := _last_plus_number(words)) or number_heard(words):
         return ''
-    after = len(re.sub(r'\D', '', runs[-1])) - 2
-    if after <= 9:
-        return ''
-    return (
-        f'I heard {after} digits after +34, and a Spanish number has nine. '
-        'Could you say the whole number again, please?'
-    )
+    match phone_length(candidate):
+        case 'too short':
+            return ''
+        case 'too long':
+            return (
+                f'I heard {digits_after_code(candidate)}, which is more than a number there has. '
+                'Could you say the whole number again, please?'
+            )
+    return 'That does not sound like a real phone number. Could you say it again, with the country code?'
 
 
 def _waiting_for_a_number(call: SalonCall) -> bool:

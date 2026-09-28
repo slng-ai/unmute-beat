@@ -44,6 +44,7 @@ from salon.models.state import SalonCall, SalonState
 from salon.tools.desk import DESK, clarify, switch_task
 from salon.tools.identity import readback_number
 from salon.tools.policy import ACTIONS, SPEAK_BY
+from salon.tools.writes import settle
 
 __all__ = ['BUILDER', 'EXITS', 'advance', 'build', 'complaint_ready', 'decided', 'solve', 'verified']
 
@@ -63,7 +64,17 @@ async def advance(
     while application guards still own every write. With the solver live,
     `solve` reads the reply instead and can also answer a correction or a
     change of task.
+
+    A write whose outcome is still unknown is settled first, by code, on the
+    caller's next words, whatever they are: the diary is asked what it did,
+    and a write that landed is confirmed in the diary's words. One the diary
+    still cannot answer is refused, and the step's model is told why. Live
+    text T4.v2, session 3: settling waited for the model to try the write
+    again, and a model that did as it was told never did.
     """
+    if call.state.unresolved is not None and call.heard.strip():
+        action = 'record_complaint' if call.state.unresolved.action == 'complaint' else 'save_booking'
+        return LocalAction(action, lambda: settle(call))
     if classification.INTERPRETER == 'solver':
         return await solve(call, usage, usage_limits)
     await classify_reply(call, usage=usage, usage_limits=usage_limits, before_model=True)

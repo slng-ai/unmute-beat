@@ -1,0 +1,15 @@
+agency       salon (use-cases/salon-graph)
+agent        JxGgSPA55DcFcDcvbKAUQM voice-harness-salon-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      DWTXGNixUZH86QUSR5Dv72, XjYZ7er6k72ho6d8ccmsPC, ma5psdGKoHbWtdv8BFXGtx, 29BlkepvvX19ebbLDB0y6Q
+iterations   4
+mutations    none
+simulations  4 = 1 case(s) x 4 iteration(s) x 1
+call limit   180s each, enforced by bot.py (MAX_CALL_SECONDS)
+concurrency  4 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        session-3-bulk-stress
+launched run DDxDkFaSDhpvNc4Yax7vE6 (session-3-bulk-stress salon K3Xwqi7g 05d6e7a5)
+WAIT  salon  test set K3Xwqi7g  run DDxDkFaSDhpvNc4Yax7vE6
+      run still IN PROGRESS after 2700s: not failed, and still running at Coval
+      log: /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-0e2cpfht/salon-bot.log

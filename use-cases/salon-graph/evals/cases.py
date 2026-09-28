@@ -80,7 +80,7 @@ class Case(BaseModel):
 
 
 PHONE = '+34600111222'
-READBACK = 'Let me read that back to you: +34 600 111 222. Have I got that right?'
+READBACK = 'Let me read that back to you: +34 600 11 12 22. Have I got that right?'
 BOOKING = 'Shall I book a haircut on Friday at three?'
 COMPLAINT = "I'll record that your haircut was uneven and you'd like a refund. Is that right?"
 CHOICE = 'Would you like to move your existing appointment, or add another one?'

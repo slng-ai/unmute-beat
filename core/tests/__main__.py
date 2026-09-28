@@ -37,6 +37,7 @@ MODULES = (
     'tests.test_public',
     'tests.test_session',
     'tests.test_sdk',
+    'tests.test_authoring',
 )
 
 

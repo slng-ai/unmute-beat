@@ -1,0 +1,44 @@
+# The clinic as a controlled flow: collect the patient, offer two times, read one back, book it on a heard yes.
+version: 1
+id: clinic-booking
+app_version: '2026.09.25'
+state: clinic.py:ClinicState
+identity: patient
+services: clinic.py:Backend
+locale: english
+greeting: Hello, this is the clinic. How can I help?
+agents:
+  receptionist:
+    prompt: prompts/receptionist.md
+operations:
+  book:
+    function: clinic.py:book
+    args: {patient: patient, slot: slot}
+    readback: clinic.py:booking_words
+    reconcile: clinic.py:find_booking
+    succeeds: {status: booked}
+    assign: {reference: reference}
+    say: 'Booked for {when}, reference {reference}.'
+  cancel:
+    function: clinic.py:cancel
+    args: {reference: reference}
+    readback: clinic.py:cancel_words
+    succeeds: {status: cancelled}
+    say: 'Booking {reference} is cancelled.'
+steps:
+  - {id: patient, kind: collect, agent: receptionist, prompt: prompts/patient.md, question: 'What is your patient number?', fields: [patient]}
+  - id: slot
+    kind: collect
+    agent: receptionist
+    prompt: prompts/slot.md
+    question: 'I have {options}. Which works for you?'
+    fields: [slot]
+    choices: {slot: clinic.py:free_times}
+  - {id: confirm, kind: confirm, operation: book, then: book, on_reject: slot, on_revise: slot}
+  - {id: book, kind: action, operation: book, then: done, on_error: failed, on_unknown: unsure}
+  - {id: done, kind: end, outcome: completed, say: 'Anything else?', take_back: undo}
+  - {id: undo, kind: confirm, operation: cancel, then: cancel, on_reject: done, on_revise: done}
+  - {id: cancel, kind: action, operation: cancel, then: cancelled, on_error: failed}
+  - {id: cancelled, kind: end, outcome: cancelled, say: Nothing is booked now. Goodbye.}
+  - {id: failed, kind: end, outcome: failed, say: Nothing was booked. Please call again.}
+  - {id: unsure, kind: end, outcome: pending, say: We will check the diary and call you back.}

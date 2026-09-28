@@ -1,0 +1,13 @@
+agency       salon (use-cases/salon-graph)
+agent        JxGgSPA55DcFcDcvbKAUQM voice-harness-salon-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      DWTXGNixUZH86QUSR5Dv72, XjYZ7er6k72ho6d8ccmsPC, ma5psdGKoHbWtdv8BFXGtx, 29BlkepvvX19ebbLDB0y6Q
+iterations   4
+mutations    none
+simulations  4 = 1 case(s) x 4 iteration(s) x 1
+call limit   180s each, enforced by bot.py (MAX_CALL_SECONDS)
+concurrency  4 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        session-3-bulk-normal
+launched run ZxwAUevQMgwM52hBVVxqfs (session-3-bulk-normal salon kQ8b6nMZ db4f6628)
+ok    salon  test set kQ8b6nMZ  run ZxwAUevQMgwM52hBVVxqfs

@@ -6,6 +6,10 @@ The scope is **salon-graph for recurring live verification**, both live text con
 
 **Continuing after session 1:** its implementation and [baseline report](../research/reusable-core/session-1.md) landed in main at `3613b99` through PR #15. That session used an earlier playbook and recorded two Coval calls. Preserve its evidence and unresolved defects; do not rerun session 1 just to adopt these expanded instructions. Reconcile the cumulative run ledger before launching anything: those calls count toward the 14-call cap. Source inventories below describe the planning revision; inspect the actual inherited implementation before adding or replacing anything.
 
+**Session 3 handoff, checked 25 September 2026:** [PR #17](https://github.com/slng-ai/slng-voice-harness/pull/17) is open against main at `47f41923064f57fa01847785a46d14c1999a1fd5`, branch `feat/session-2-public-boundary`. This includes the reviewed fixes at `6c9f75c` plus the runner's explicit `--concurrency` support. PRs #15 and #16 are merged. Its `docs/research/reusable-core/session-2.md`, especially section 10b, records the implemented foundation, offline repairs and remaining voice issues. Start session 3 in a child worktree/branch from the latest head and target its PR at `feat/session-2-public-boundary`; use updated main if #17 has merged. Do not start from the older planning branch.
+
+Session 2's offline matrix/package checks passed, but live audio is incomplete: normal harness latency exceeded the frozen limit, native dropped its receipt audio, and both stress calls hit an STT outage. Six Coval calls have been used: four harness and two native. **Eight salon-graph calls remain for sessions 3–6; zero native calls remain.** Prompt 3 below embeds the repair gate, speech-profile preflight and two-call allocation. These current instructions supersede the original checkpoint order/profile where they differ; they do not declare the remaining gates passed.
+
 ## Session boundaries
 
 Run these sequentially, carrying forward the previous session's code and evidence. They are milestones, not time estimates. A failing gate means continue or repair that session, not start a wider migration.
@@ -14,12 +18,12 @@ Run these sequentially, carrying forward the previous session's code and evidenc
 |---|---|---|---|
 | 1 | Baseline and bounded evaluation tools | 0 + verification foundation | Reproduce current behavior; launch only intended calls |
 | 2 | Installable public boundary, typed session, explicit delivery and native-runtime quality gate | 1–2 + delivery prerequisite | Clean installation; native comparison matrix; no approval from unheard speech; measured runtime overhead |
-| 3 | Complete ordinary authoring on the clinic fixture | 3 | Config, data models, prompts and domain functions suffice |
+| 3 | Repair the inherited stress case, then complete ordinary authoring on clinic | 3 + session-2 handoff | Validated international phone input; delivered speech evidence; config, models, prompts and domain functions suffice |
 | 4 | Salon migrated to the public authoring contract | 4 | Existing business behavior through the new entry point |
 | 5 | Faro migrated using the same contract | 5 | Identity and persistence acceptance offline; salon remains sound |
 | 6 | Shared launcher, tooling consumers, compatibility cleanup | 6–7 | All five consumers use useful public imports; isolated installation works |
 
-Every session finishes with deterministic checks, a bounded live text salon evaluation, and a two-call Coval salon-graph checkpoint. Session 2 also runs two matching native Pipecat calls, for four calls at that checkpoint only. Session 1 records the reference result; sessions 2–6 compare against it and the previous accepted checkpoint. A known baseline defect is explicitly recorded and assigned to its repair session, never silently treated as correct behavior.
+Every session finishes with deterministic checks, a bounded live text salon evaluation, and at most two Coval salon-graph calls. Session 2 also has its two matching native calls, already spent. Session 3 allocates its first call to the inherited stress repair and its second to final regression, as detailed in prompt 3; there is no additional two-call checkpoint. Compare timings only within a matched speech/model profile. A known baseline defect is explicitly recorded and assigned to its repair session, never silently treated as correct behavior.
 
 ## Decisions carried into the implementation briefs
 
@@ -232,9 +236,11 @@ Freeze these cases in session 1. Reuse a calm persona and a suitable interruptiv
 
 Budget: **2 salon-graph simulations × 6 sessions + 2 native simulations in session 2 = 14 maximum planned calls**, including the reference checkpoint. Propose a verified 180-second per-call ceiling: at most 42 audio minutes if enforced. This is not a currency quote and excludes model/TTS/telephony/evaluator charges. Verify account pricing for money estimates. If the service/transport cannot enforce the duration ceiling, report that before launch; polling timeout is not a call-duration cap. Paid retries consume a separately assigned allowance; unused allowance is not an instruction to launch more variants.
 
+**Current allocation after session 2:** six calls used, eight harness calls remaining, reserved as at most two per session 3–6. Session 3's stress repair call consumes its first slot, not a separate allowance; prompt 3 defines its final slot. Failed and inconclusive calls still count. The historical 42-minute figure assumed a hard 180-second ceiling; session 2 recorded a native call at 188 seconds with shutdown grace. Keep actual audio duration and enforced grace in the ledger, rather than claiming the nominal bound was met.
+
 At the original planning revision, coval_sim defaulted to all attached sets and could target several agents sharing a set. Session 1 has since added exact jobs, read-only planning, simulation limits and a run log; inspect and extend that implementation for session 2's native target instead of rebuilding it. Verify cases and expanded variants immediately before launch. Prefer two explicitly selected one-case sets/persona jobs, or verified exact-case filtering. One iteration does not mean one call. Do not copy the historical VkpkmRMV broad-set example, which described 18 calls.
 
-Launch sequentially and review the first result before launching the second. Stop new paid launches on critical failure. Reconcile uncertain launch status by ID before retrying. Verify remote termination and clean up bot/tunnel processes; local polling expiry alone does not cancel a remote run.
+Dependent repair/verification calls run sequentially and are reviewed before the next launch. The user permits independent, already-budgeted jobs in parallel using `coval_sim --port`, with separate ports, bot/tunnel processes, fixtures and logs. Ports alone are insufficient: `Runner.run` changes the Coval agent's callback URL, so do not overlap jobs on the same agent ID. Prefer useful offline work while one voice job runs; do not create extra calls or native jobs to fill parallel slots. Stop new paid launches on critical failure. Reconcile uncertain launch status by ID before retrying. Verify remote termination and clean up bot/tunnel processes; local polling expiry alone does not cancel a remote run.
 
 Use Coval skills as needed: coval-resources for inventory; build-test-suite, design-persona and configure-metrics for the checkpoint; then **either** quick-eval **or** launch-run → watch-run → get-results. Do not launch twice by invoking both workflows. Use coval-compare-runs for matched checkpoints/native comparisons and coval-eval-audit when the evaluation's coverage or score is misleading; these do not authorize new runs. Use download-audio/trace diagnostics for missing evidence or failures. Accent, noise and broad adversarial sweeps are separate paid expansions. Carry selected IDs and authorization across sessions; only unresolved resources or changed spending scope need new input.
 
@@ -242,7 +248,7 @@ Use Coval skills as needed: coval-resources for inventory; build-test-suite, des
 
 - Applicable deterministic and replay checks pass. From session 2 onward, unknown/interrupted delivery cannot authorize consequential action. No unauthorized write, identity leakage, duplicate write, lost acknowledged business result, or unsupported completion claim.
 - All four bounded live text cases meet deterministic business assertions. Inspect semantic failures against delivered transcript and classifier input/output. When interpretation changes, reuse salon's eval machinery for a small supported-language consent set within the recorded model allowance; do not launch its whole model comparison matrix.
-- Both salon-graph Coval calls meet expected behaviors and have business/audit evidence. In session 2, record matched native outcomes independently; a native failure can demonstrate a difference but cannot excuse a harness failure. COMPLETED status or high composite score is insufficient. Match call IDs to receipts and audio. Trigger-dependent coverage passes only when the trigger occurred and behavior was correct.
+- The assigned salon-graph Coval calls meet expected behaviors and have business/audit evidence; prompt 3 explicitly changes its case allocation. In session 2, record matched native outcomes independently; a native failure can demonstrate a difference but cannot excuse a harness failure. COMPLETED status or high composite score is insufficient. Match call IDs to receipts and audio. Trigger-dependent coverage passes only when the trigger occurred and behavior was correct. An earlier call does not validate later changes to the path it exercised.
 - Record caller acoustic speech end, runtime endpoint, transcript availability, model/classifier durations and requests, backend duration, first audible output, interrupting speech start and last audible obsolete output. Use one monotonic clock for local differences and document external audio alignment/error. Endpoint delay = endpoint minus acoustic end; response latency = first audible output minus acoustic end; barge-in stop latency = last obsolete output minus interrupting speech start. Keep these separate from text/token latency.
 - Freeze numeric timing budgets in session 1, using product limits or explicitly provisional limits. A matched live median response/stop latency rise above max(200 ms, 20% of baseline) is a provisional investigation trigger, not statistical proof. Do not widen limits after seeing regression. Report sample count and raw ranges; two calls cannot substantiate p95, reliability or capacity. Negative response latency can indicate agent-over-user speech; do not clamp it away.
 - Missing credentials, unavailable required metrics, absent triggers or exhausted budget mean **incomplete**, not passed. Finish useful offline work, leave live gates pending, and do not claim full verification. Session 1 may record existing defects as baseline debt. Critical approval/delivery debt is due in session 2; all critical debt must be resolved for final acceptance.
@@ -464,12 +470,95 @@ DELIVER AND STOP
 Save session-2.md, a concrete public import/session example, the ownership table, the SDK-reuse decisions and each remaining compatibility consumer. Include the completed N1–N13 comparison with source/test/trace evidence, package/settings hashes, request topology, raw paired timings and remaining gaps. Report foundation correctness, native common-case parity, stronger delivery guarantees, runtime overhead and live audio evidence separately. Gate: clean isolated installation, concrete state on the engine, atomic/ownership/isolation checks, repaired unknown-delivery invariant, preserved current apps, applicable native runtime rows passing and documented live results. N13's full authoring proof is due in session 3. Leave absent live evidence pending; make only dimension-specific supported comparisons. Do not yet migrate the full salon/Faro authoring or redesign the solver.
 ~~~
 
-## Prompt 3 — Complete the ordinary authoring contract
+## Prompt 3 — Repair the inherited voice issues and complete the ordinary authoring contract
 
-Copy this complete block after the package/session boundary is verified.
+Copy this complete block into the session-3 worktree. It includes the session-2 handoff; no separate pasted handoff is required. Keep the shared architecture, N1–N13 matrix and verification sections available in the repository.
 
 ~~~text
-Implement session 3 of the reusable voice core migration. Read AGENTS.md, CLAUDE.md, docs/plans/reusable-voice-core-roadmap.md, the Verification contract, and session-2.md. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Live evaluation remains salon-graph only with the same bounded allowance.
+Implement session 3 of the reusable voice core migration: first repair and check the inherited interruptive-speaker problems, then complete the ordinary authoring contract. This prompt incorporates the user's session-2 handoff and overrides older checkpoint order/profile instructions where they conflict. Apply pydantic, python-dev, building-pydantic-ai-agents and ponytail:ponytail. Keep assert-script tests, uv, Ruff and ty. No LangChain dependency; scripted/Pydantic AI text conversations use the existing core runner. All paid text/voice evaluation targets salon-graph only.
+
+START FROM THE CORRECT PARENT AND STACK THE PR
+
+The user is starting from feat/session-2-public-boundary and moving this task to a worktree. PR https://github.com/slng-ai/slng-voice-harness/pull/17 is open against main; the latest checked head is 47f41923064f57fa01847785a46d14c1999a1fd5, which contains the reviewed fixes at 6c9f75ce495a41be89116566b09409a96eef2843. Sessions 1 and 1b/resources (#15 and #16) are already merged. Session 3 must inherit the latest #17 head, not start from the old baseline or planning branch.
+
+1. Inspect git status, branch, HEAD, worktree list and current remote PR #17 status before editing. Preserve existing user changes. If #17 remains open, fetch its current head and verify the session-3 checkout contains that parent and 6c9f75c (or inspect an explicitly rewritten equivalent). If the worktree already has a session-3 branch, keep it; otherwise create a feat/ child branch there. Never commit session-3 work onto the parent branch or reset another worktree.
+2. While #17 is open, the session-3 PR base is feat/session-2-public-boundary. Record its exact parent SHA and inspect the parent-to-child diff so the PR shows session-3 changes only. If #17 is merged before starting, use updated main containing its changes; a squash merge need not contain the old SHA as an ancestor. If it merges during this session, transplant only the child commits onto updated main and retarget to main, verifying no parent changes are duplicated. Do not rewrite the parent's history.
+3. Read AGENTS.md, CLAUDE.md, README.md, docs/plans/reusable-voice-core-roadmap.md, and docs/plans/reusable-voice-core-sessions.md (Harness architecture and framework reuse, N1–N13 acceptance matrix, Verification contract). Then read docs/research/reusable-core/session-1.md and docs/research/reusable-core/session-2.md in full, especially sections 8, 9, 10, 10b, 12 and 13, and the evidence they link. Recover missing files from #17 rather than repeating evaluations. If the repository still has the old prompt 3, incorporate this updated block into the plan and record the changed allocation/profile in session-3.md.
+4. A new worktree does not inherit another worktree's untracked .env or uncommitted documentation. Use the existing approved credentials source through process environment without printing/committing keys or changing another running session's environment. Verify imports and bot paths resolve to THIS checkout. Opening update: actual parent/child SHAs, inherited evidence, unresolved gates and remaining call allowance.
+
+INHERITED RESULTS: PRESERVE THE FIXES, DO NOT REBUILD THEM
+
+At 6c9f75c, core.load -> compile -> open -> core.text_turn with explicit segment acknowledgement is public; FlowState[S]/FlowCall[S], atomic collect/update, Evidence/receipt_for, delivery serials and optional voice/tracing extras are implemented. core/tests/clinic_flow, test_public, test_session, test_delivery, test_sdk and test_package cover the foundation. The session-2 report records clean offline checks and an isolated wheel installation. Reuse that API.
+
+Session 2 already repaired these problems offline; no later Coval calls verified the repairs:
+- HeardValue.turns and CallContext.heard_since join a number across separate turns. Salon uses turns=3. The exact sequence '+34 671' -> the bot's request for the rest is fully heard -> '273 454' now reaches read-back. The regression fails when turns=1.
+- Offer._snapshot refuses a choice reading against an offer whose speech never played. This prevents a repeated identity confirmation from silently selecting 9 AM.
+- _missed tells the next turn when reply audio never started, as well as when it was cut. Generated speech or TTS completion is still not proof of delivery.
+
+Keep those regressions and their failure sensitivity. Do not move these completed fixes back into session 4.
+
+Evidence limits to carry forward:
+- Offline native matrix and N12 pass under their recorded protocol; N13 is only the public-boundary foundation, to be completed here. Native move/cancel and disconnect coverage remain partial. A warm hand-over measurement was slower on the harness outside the frozen protocol; retain that finding.
+- Live text T1/T2/T4 passed. T3.v2 still loses the requested 2 PM across the identity detour and offers other Thursday times; session 4 owns that existing defect. Preserve its failing evidence and do not weaken it to claim four passes. If this session changes the shared mechanism responsible, repair and verify it here. T4.v2 unknown-write reconciliation already passed; retain it while adapting operations.
+- Normal harness voice booked correctly but breached the frozen audio-latency budget: median 2.46 s versus 2.29 s. Native booked but its receipt audio was cut off. Both stress calls hit a simultaneous SLNG STT outage, and barge-in during the appointment read-back was not exercised. Thus live parity and stress acceptance are incomplete, even though the judge returned scores.
+- Historical runs: normal harness BChXtqzgWq5HxzxP69aoKo; normal native XMnnft82s6MitKPjiiQpJz; stress harness RXcDFLJXHnN7dEddsLyptv; stress native ZTKVhxqTAhRAekBhG9jAsC. Use their existing recordings/traces; no native rerun is authorized.
+
+PHASE A — REPAIR THE STRESS PATH BEFORE THE AUTHORING REFACTOR
+
+A1. Validate international phone input through the existing Pydantic phone types.
+
+Inspect salon/tools/identity.py, salon/models/shapes.py, their callers, state/receipt types, prompts and fixtures. Removing _SPANISH_RUN alone is insufficient: SubmittedPhone/Phone currently use PhoneNumberValidator(supported_regions=['ES']), Spanish length diagnostics, and Spanish-only guidance; _readback assumes a three-character country prefix. Use the existing pydantic-extra-types/phonenumbers dependency to support valid international numbers, normalize to E.164, and render the confirmed number without corrupting country codes or digits. Keep the distinction between an absent state value and a required submitted number. Never invent a country code, accept malformed/incomplete input, or look up an empty number. Ask for missing country information.
+
+Reuse HeardValue.turns/CallContext.heard_since rather than creating a second phone accumulator. Handle pieces across premature endpoints and across genuinely separate turns. A correction/restart replaces the relevant old candidate; do not concatenate an old full number, unrelated appointment digits or another identity into the new number. Keep bounded per-session evidence and exact-number read-back before lookup. A valid number is not consent, and a valid unknown customer is not malformed input.
+
+Verify with small offline cases using library-validated fixtures: the exact '+34 671'/'273 454' sequence, a non-Spanish number, one- and three-digit country calling codes, a corrected number, missing country information, invalid/too-long input, replayed yes and interrupted/unheard read-back. Assert the normalized value AND lookup count/arguments: zero before the matching delivered read-back and acceptance, exactly one afterward. Review affected model-facing descriptions/snapshots intentionally. Keep native reference runtime code frozen; document the changed phone-support profile rather than silently editing the comparator.
+
+A2. Change the speech launch profile, with a compatibility check before spending a Coval call.
+
+User-selected target settings for both salon-graph and salon-pipecat-flows:
+- SLNG_STT_MODEL=deepgram/nova:3-en, hosted in the EU.
+- SLNG_TTS_MODEL=slng/fish/tts:s2.1-pro, hosted in eu-north or eu-west.
+- SLNG_BASE_URL set to the verified regional host; the existing Pipecat services use this one host for BOTH STT and TTS. Use configuration/environment overrides; do not edit the native runtime or hard-code the switch into core.
+
+Inspect the locked pipecat-slng implementation and SLNG's current model/region/voice catalogue. Verify the exact STT identifier: installed SDK documentation names slng/deepgram/nova:3-en, while the handoff requests deepgram/nova:3-en; the bridge inserts the supplied model in the URL without normalizing this prefix. Resolve this from supported routing evidence, record any necessary correction, and do not silently select a different model or region. An EU hostname alone is not proof the chosen model processes audio in the EU. Verify both models work through the SDK's /v1/bridges/unmute endpoints; native-provider WebSocket examples use different protocols.
+
+Verify a Fish-compatible SLNG_TTS_VOICE; do not carry over the old Cartesia UUID blindly. Check language, output encoding/sample rate, streaming and cancellation settings against the actual transport. Both bots already read the model/base-URL/voice environment variables. Use a reusable, secret-free launch-profile record plus process-local overrides, preserving the native source digest. Preflight uses read-only catalogue/configuration evidence and offline SDK checks; the allocated harness stress call supplies actual audio evidence, not an unbudgeted probe loop. Any native construction/configuration check is offline: no native Coval or billable native provider probe remains in scope. If the requested EU model/voice combination cannot be verified, report that exact live prerequisite and continue useful offline work without claiming it is configured successfully.
+
+Read https://docs.slng.ai/llms.txt for the current official Pipecat integration, region and Fish S2.1 Pro documentation. The Nova English reference is https://docs.slng.ai/api-reference/stt/deepgram-nova-3/nova-3-english-ws ; at preparation its published region list did not establish EU availability, so deployment availability must be checked. Do not infer availability from a model name.
+
+Give the resulting profile a version/hash and record resolved model IDs, region evidence, voice, SDK/lock versions, transport, VAD/endpointing and unchanged LLM settings. This replaces the old speech profile, so there is no matched end-to-end latency comparison with sessions 1/2. Preserve those measurements and the unresolved latency finding. Freeze a stated product/provisional timing target before the new measurement; do not widen the old threshold after seeing results. Offline N12 runtime comparisons remain useful when their inputs/settings are unchanged.
+
+A3. Evaluate persistent interruption/missed-speech context.
+
+Inspect core history projection, turn instructions and the existing _missed path. Consider retaining a compact factual missed-speech note beyond the next turn only if a focused scenario shows the existing delivered-history view is insufficient. This is a model-input change, not cleanup. If implemented, retain actual heard content and valid tool-call/result pairs, avoid duplicate notes or retaining unbounded transcripts, and never promote a queued/cut segment to delivered. Prove with offline projected requests that a later turn knows the caller missed an offer/receipt, recovers the correct content and does not repeat the backend write. If the existing mechanism already meets this requirement, keep it and record the evidence. Make this decision before the stress call so that call checks the final chosen behavior.
+
+A4. Run offline checks, then the one allocated stress repair call.
+
+Run Ruff/format, core and salon ty/assert suites, affected consumer suites, delivery/history/continuation/recovery checks and applicable native matrix rows. Use the existing concierge-tools matrix runner and package-proof script, not replacement harnesses. Preserve the N1–N13 criteria: a failure requires a minimal regression and a shared fix when the defect belongs to core. No red acceptance check becomes green by lowering its expected result.
+
+Read the relevant Coval skills: coval-resources and coval-eval-audit for existing resources/evidence, then EITHER quick-eval OR launch-run -> watch-run -> get-results. Use coval-compare-runs and audio/trace analysis where applicable. Reuse the existing sets/personas/metrics; do not trigger broad accent/noise/adversarial suites or both launch workflows.
+
+The user has already authorized this bounded check; do not ask again for the same scope. Reconcile the run ledger first. Expected salon-graph target: agent JxGgSPA55DcFcDcvbKAUQM, agency salon. Verify the current target mapping and exact expanded case count before launch. First run the read-only plan from use-cases/concierge-tools:
+
+uv run python -m coval_sim plan --agency salon --agent JxGgSPA55DcFcDcvbKAUQM --test-set K3Xwqi7g --persona VSruLZYYyz3w7fkdUaheDR --iterations 1 --max-simulations 1 --concurrency 1 --label session-3-stress-repair --port 7861 --log ../../docs/research/reusable-core/session-3/coval-runs.jsonl
+
+Use an available port and the verified process environment. When preflight passes, run the same job with 'run' in place of 'plan', once. Preserve its intent/run ID; never change labels or delete log entries to bypass an uncertain launch. Verify the existing call ceiling and shutdown grace; polling timeout alone is not a call-duration limit.
+
+Audit the actual audio plus STT/playback/operation traces: the split number is joined and read back without repeated requests for already supplied digits; no choice is inferred from an unheard offer; a cut/unplayed read-back cannot authorize; corrected intent reaches one matching backend effect; an unheard receipt is recovered without executing again. Check whether premature endpointing, agent-over-user speech and read-back barge-in actually happened. If absent, mark that trigger not exercised. STT/TTS outage, missing recording, elapsed run completion or a high judge score cannot be counted as a pass.
+
+CALL BUDGET AND PARALLEL WORK
+
+Six of the global 14 calls are already spent. Eight salon-graph calls remain for sessions 3–6, at most two per session. Zero native calls remain. Failed, inconclusive and accidentally expanded simulations count too; reconcile any uncertain launch before assigning the balance.
+
+Session 3 call 1 is the stress repair above. Reserve call 2 for the final authoring revision: use the same stress case if authoring changes affect its core/voice path; otherwise use normal set kQ8b6nMZ/persona MUFJdYAHdBHU6UbRRu4ykM. Record that choice before launch. These are the session's two calls, not a prerequisite call plus a fresh two-call checkpoint. A final stress repeat uses the explicitly reserved second slot; there are no automatic retries. Any unexercised normal/stress trigger remains a visible coverage gap. Keep six calls reserved for sessions 4–6. Do not spend an unused slot merely to fill the allowance.
+
+The observed 9–10 minutes per Coval run mostly followed the call: in one run the bot was ready around 7 s, Coval dialled after 29 s, audio lasted 86 s, and total completion was 535 s. This does not prove every future delay is on Coval; record stages separately. Use the wait for independent offline checks, documentation or fixture work, keeping the tested source/profile fixed until evidence is captured.
+
+Independent already-authorized jobs may overlap using distinct --port values, separate bot/tunnel/fixture/log resources and separate Coval agent IDs. Runner.run updates each agent's callback URL, so two concurrent launches on JxGgSPA55DcFcDcvbKAUQM can redirect each other's calls even with different ports. Do not run this session's two dependent checks in parallel, create extra agents/calls to fill idle time, or launch a native job. If an independent job's isolation cannot be established, run sequentially. Concurrent provider outages in session 2 did not prove their cause.
+
+Commit 47f4192 also adds --concurrency N for several calls within ONE planned run, distinct from --port for separate jobs. It requires a bot with its own per-call limit and marks concurrent latency as incomparable to sequential latency. This session's repair and final checks depend on different code stages, so keep --concurrency 1 and --max-simulations 1 for each; the new option does not expand the allowance.
+
+Review Phase A before broader authoring changes. Repair critical consent/delivery failures first. External-service failure or absent triggers leave live acceptance pending; finish useful independent offline work without pretending the stress gate passed or exhausting later sessions' allowance. Carry the separate implementation/offline/live statuses into the report.
 
 HARNESS VISION AND FRAMEWORK READING
 
@@ -490,7 +579,7 @@ An ordinary new application must consist of agent.yaml, fields-only Pydantic mod
 
 READ AND EXTEND
 
-Start in core/src/core/flowspec.py (FlowSpec, resolver, diagnostics and compile), steps.py (standard kinds, ConfirmedOperation, AgentBuilder and StepFlow), completion.py, graph.py, flow.py, operations.py, policies.py, readings.py, interpreters.py, conversation.py and decisions.py. Trace core/tests/clinic.py and test_reuse.py. Preserve the existing pydantic_graph execution and core.turn engine; do not implement another scheduler.
+Start in core/src/core/__init__.py and the session-2 public boundary, then flowspec.py (FlowSpec, resolver, diagnostics and compile), steps.py (standard kinds, ConfirmedOperation, AgentBuilder and StepFlow), completion.py, graph.py, flow.py, operations.py, policies.py, readings.py, interpreters.py, conversation.py and decisions.py. Trace the new core/tests/clinic_flow, test_public.py and test_sdk.py as well as the older clinic.py/test_reuse.py. Preserve the existing pydantic_graph execution and core.turn engine; do not implement another scheduler.
 
 DEFINE THE MINIMUM MANIFEST
 
@@ -523,6 +612,8 @@ Adapt typed ordinary functions into the existing shared Operation boundary. Both
 validate full arguments → settle unresolved previous outcome → check current preconditions and exact approval → consume one authorized attempt → call backend → validate and match receipt → atomically apply allowed assignments/invalidation → record audit → render outcome.
 
 Keep one flow-changing/business-mutating action per model reply, and a shared turn-wide budget across classifications, direct actions, tools and graph hops. A direct transition must recheck authorization. Tool visibility is not authorization; direct calls with stale or forbidden inputs must still fail.
+
+Resolve session 2's open turn-policy question explicitly: a doubly empty structured reply used more requests than native because of SDK output retries. Reuse SDK retry/usage controls if a bounded policy can reduce that work while preserving valid structured outputs and one truthful recovery. Record actual classifier/step/retry counts and any tradeoff; do not widen the N6 bound or optimize by weakening validation.
 
 Successful speech requires a successful receipt for that operation, subject and arguments. A failed receipt, generic saves counter, acted_this_turn flag, or unrelated successful action cannot justify “booked/saved/activated.” An action attempt is not success. Transactional steps use application-rendered speech; free-form coaching/conversation remains possible with its stated weaker wording guarantee. Do not expose partial tool arguments as executable operations.
 
@@ -564,9 +655,17 @@ ACCEPTANCE
 - Complete N13: show the same clinic's domain functions/state reused across all three agency patterns, no application session/interpreter subclasses, no repeated approval/speech/budget plumbing, typed prompt failures caught at startup and no core edits to add the application. Include an author-file inventory against the native reference, separating domain logic, configuration and shared runtime work.
 - SDK reuse is executable: native spec/template construction, concrete output validation, tool preparation and graph transitions each have a relevant check. Re-run affected N1–N12 cases; a smaller manifest must not regress the native-runtime gate.
 
-Run common checks, affected-member checks, installed-package/resource proof, frozen four-case live-text salon evaluation and at most TWO Coval salon calls. Clinic is offline proof of the new API; salon voice calls verify shared-engine regression. Do not claim voice has exercised an API path that the call did not actually use.
+FINAL VERIFICATION AND HANDOFF
 
-Save session-3.md with the actual manifest schema/public imports, valid minimal example, invalid-definition examples, operation/interpretation evidence and measured authored orchestration versus domain code. Gate: complete ordinary authoring works on clinic and the real salon slice with one engine and one consent authority. Stop before full application migration.
+Run the shared Ruff/format/core/salon commands and ty/assert suites in every affected consumer. Re-run the existing N1–N13 matrix, completing N13 and preserving recorded native coverage gaps. Repeat N12's frozen timing protocol only if the changed execution path warrants it; separate engine overhead from real speech timing. Build/install the wheel outside the checkout using the session-2 proof as the starting point; assert public imports, packaged prompts/manifests, core-only optional-import isolation and clinic/salon-slice execution without sibling-source imports.
+
+Run the same four live-text salon cases once against the final code, using explicit segment acknowledgements: at most 12 caller turns each, 100 target requests total and, only if needed, 48 adaptive caller requests. Preserve the recorded finite token/spend limits; Phase A probes or additional model checks count toward the same session allowance. T3 remains an explicitly owned session-4 failure if untouched, not an accepted behavior or a fabricated four-case pass. Other new failures must be diagnosed and fixed. Use offline replay for iteration before considering any further paid request.
+
+After cheap checks pass, run only the remaining, preassigned second Coval call described above. If it was already consumed during a necessary repair, there is no fresh final allowance: record exactly which later changes lack live evidence. Clinic proves the new author API offline; salon voice calls prove only the shared paths they actually execute. Do not claim the old salon entry point has validated the full manifest migration, or that one successful call closes all overlap/latency questions.
+
+Save docs/research/reusable-core/session-3.md with parent/child SHAs, dependency/lock and speech-profile hashes, actual manifest schema/public imports, valid minimal example, invalid-definition examples, operation/interpretation evidence and authored orchestration versus domain-code inventory. Link exact commands/results, request/token counts, run/simulation/trace IDs, audio and receipts, spent/remaining calls, observed/missing interruption triggers, and the status of every inherited finding. Keep implementation, deterministic, semantic and voice verdicts separate. Show the updated N1–N13 status and concrete outstanding work, not just an aggregate score.
+
+Gate: ordinary authoring works on clinic and the real salon slice with one engine and one consent authority, without losing the session-2 delivery/receipt guarantees. Fix defects found in this scope; do not merely list them. Provider outages and unobserved triggers can remain honestly pending within the fixed budget. Stop before the full salon/Faro migration. Commit the session-3 changes and open a reviewable PR stacked on feat/session-2-public-boundary while #17 remains open, otherwise against updated main. Attach/link the PR and report its base, exact tested revision and remaining gates.
 ~~~
 
 ## Prompt 4 — Migrate salon-graph through the public contract
@@ -881,6 +980,7 @@ Before starting a session, verify:
 - The preceding docs/research/reusable-core/session-N.md report and its referenced evidence are available. Carry forward actual failures, pending gates, scenario versions and exact run IDs.
 - The requested skills are available and AGENTS.md/CLAUDE.md have been read. Existing credentials remain in the runtime configuration; never paste secrets into a session prompt.
 - Session 2 can read the independent native reference and knows each job's target, allowed cases and remaining cumulative budget. Existing launches count even if their result failed or was inconclusive; reconcile uncertain launches before any retry.
+- For session 3, use the complete updated prompt above: parent PR #17 at `47f4192` (or its verified successor/merged main), section 10b of its report, and eight remaining harness calls with no native allowance. Copy the updated block before moving if these documentation edits are not yet committed to your starting branch. The first stress repair is part of session 3's two calls.
 
 Each session's opening update should identify its starting revision, the reports/resources it found, unresolved predecessor findings and its assigned evaluation allowance. Missing context is a handoff gap to recover from files/artifacts, not a reason to repeat paid evaluations. If requirements have changed since an earlier checkpoint, record the change and resulting comparison limits.
 

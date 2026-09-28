@@ -307,9 +307,18 @@ class HeardValue[C: CallContext](Act[C]):
 class TakeBack[C: CallContext](Act[C]):
     """Something done in this call that the caller can still take back, on whatever turn they do.
 
-    Only `withdraw` acts. A `change` (the same thing, another day, time or
+    `withdraw` offers the undo. A `change` (the same thing, another day, time or
     service) is left to the step's model, which can move it; offering the
     undo there was offering a cancel to a caller who asked to move.
+
+    A caller who keeps it without having heard it is told it again, word for
+    word, with no model and no write. Coval run BVqdGEunV3avnHrHVwq4oE: the
+    receipt for Saturday at 9 was cut before any audio played, the caller went
+    on "Yes, tomorrow at nine AM. That's great.", and the front desk's model,
+    told what they had missed, read it as a new request and moved their own
+    booking to 10. Unheard means evidence of it (cut, or never started on a
+    runtime that reports playback), as for the missed-speech note; no record
+    of the words is not evidence, and nothing is said again.
     """
 
     name: str
@@ -339,9 +348,28 @@ class TakeBack[C: CallContext](Act[C]):
 
     def rule(self, call: C) -> LocalAction | None:
         held = self._standing(call)
-        if held is None or self.label(call, self.name) != 'withdraw':
+        if held is None:
             return None
-        return self.on_withdraw(call, held)
+        label = self.label(call, self.name)
+        if label == 'withdraw':
+            return self.on_withdraw(call, held)
+        if label == 'keep' and _unheard(call, held.told):
+            return LocalAction('receipt', lambda: _say_again(call, held.told))
+        return None
+
+
+async def _say_again(call: CallContext, words: str) -> str:
+    await call.speak_now(words, origin='confirmation')
+    return words
+
+
+def _unheard(call: CallContext, told: str) -> bool:
+    """Whether the latest copy of these words is known not to have reached the caller: cut, or never started."""
+    copies = [s for s in call.all_spoken if s.generated and s.generated.strip() in told]
+    if not copies or not told.strip():
+        return False
+    last = copies[-1]
+    return last.interrupted or (call._playback_known and last.playback == 'queued')
 
 
 @dataclass(kw_only=True)

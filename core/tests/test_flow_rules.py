@@ -107,6 +107,22 @@ async def a_lookup_is_carried_out_by_code_and_moves_the_caller(folder: Path):
     assert said == ['¿Reabro el ticket T-101?'] and call.state.agent == 'reopen', (said, call.state.agent)
     assert script.steps == ['desk'], 'the move and the read-back needed no request of the step it moved to'
 
+    desk, script, flow, call = opened(folder / 'unknown')
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Cuenta ACC-1234, ticket T-999.',
+        ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'ticket_id': 'T-999'}}),
+        ('say', 'No encuentro ese ticket. ¿Me dice el número otra vez?'),
+    )
+    assert said == ['No encuentro ese ticket. ¿Me dice el número otra vez?'] and call.state.agent == 'desk', (
+        said
+    )
+    assert script.steps == ['desk', 'desk'] and 'find_ticket refused' in script.told[1], (
+        'a refused carried operation goes back to the step, with the refusal, in the same turn'
+    )
+
     desk, script, flow, call = opened(folder / 'hostile')
     await turn(flow, call, script, 'Hola.', ('call', 'find_ticket', {}))
     assert call.state.agent == 'desk' and not call.evidence, 'a model cannot call a carried-out operation'

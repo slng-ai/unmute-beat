@@ -2211,8 +2211,9 @@ class StepFlow:
     call holds its own application state (`open`). No step of it asks a
     second model what a reply meant: each agent node reads its own replies.
     Construction refuses a flow whose destinations do not exist, whose ids
-    repeat, or that has business steps and no `End` with outcome `completed`,
-    so a broken flow fails where it is defined rather than on a call.
+    repeat, or whose steps run in order (a collect, confirm or action step
+    with no `then`) with no `End` with outcome `completed` to finish on, so
+    a broken flow fails where it is defined rather than on a call.
     """
 
     def __init__(
@@ -2242,8 +2243,11 @@ class StepFlow:
         if len(self.by_id) != len(self.steps):
             raise ValueError('step ids must be unique')
         finished = [s for s in self.steps if isinstance(s, End) and s.outcome == 'completed']
-        if any(isinstance(s, CollectStep | ConfirmStep | ActionStep) for s in self.steps) and not finished:
-            raise ValueError('a flow with business steps needs an End with outcome completed')
+        onward = [
+            s for s in self.steps if isinstance(s, CollectStep | ConfirmStep | ActionStep) and not s.then
+        ]
+        if onward and not finished:
+            raise ValueError('a flow whose steps run in order needs an End with outcome completed')
         self.finish = finished[0].id if finished else ''
         for step in self.steps:
             for to in (step.then, *step.elsewhere):

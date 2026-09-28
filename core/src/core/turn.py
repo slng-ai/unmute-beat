@@ -670,11 +670,27 @@ class Turn:
                 run = self._speak(node, None if call.input_retained else prompt)
 
         call._return_status, call._entered = '', ''
-        if isinstance(output, Restated):
+        while isinstance(output, Restated):
             if barge.hit:
                 return
-            about, output = output.about, await output.run(self.usage, self.limits)
-            succeeded = {*succeeded, about}
+            about = output.about
+            try:
+                output = await output.run(self.usage, self.limits)
+            except ModelRetry as error:
+                call.retain_action(about, {'refused': str(error)})
+                call._return_status = f'Application action {about} refused: {error}'
+                output = None
+                async for event in self._speak(node, None):
+                    if isinstance(event, _Outcome):
+                        output, succeeded = event.output, event.succeeded
+                    elif isinstance(event, _Failed):
+                        yield event
+                        return
+                    elif not isinstance(event, _Stalled):
+                        yield event
+                call._return_status, call._entered = '', ''
+            else:
+                succeeded = {*succeeded, about}
         if isinstance(output, Question) and not barge.hit:
             await call.speak_now(output.put(call), origin='ask')
         if not isinstance(output, Handoff):

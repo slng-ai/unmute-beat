@@ -1,0 +1,7 @@
+FAIL a_cancel_of_a_held_booking_needs_no_lookup: AssertionError: booking still offers options (line 275)
+FAIL a_read_back_after_a_receipt_cut_again_approves_nothing: AssertionError: ['Sorry, I had a problem there. Could you say that again?'] (line 293)
+FAIL a_refused_value_is_said_in_the_live_argument_shape: AssertionError: (('call', 'collect', {'slot': '2026-10-02T0915|haircut'}), ['On Friday the 2nd I have 9:00 AM, 9:30 AM or 10:00 AM. Which would suit you?']) (line 284)
+FAIL a_request_over_a_cut_receipt_is_read_back_in_the_same_turn: AssertionError: ["You're all set for Friday the 2nd at 9:00 AM. Anything else I can help with?"] (line 202)
+FAIL a_time_and_its_slot_recorded_together_are_read_back: AssertionError: (['Sorry, I had a problem there. Could you say that again?'], 3) (line 165)
+PASS an_agreement_over_a_cut_receipt_changes_nothing
+PASS choices_that_do_not_hold_for_the_final_state_are_refused

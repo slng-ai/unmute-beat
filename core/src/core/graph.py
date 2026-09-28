@@ -54,6 +54,13 @@ class LocalAction:
 
     name: str
     run: Callable[[], Awaitable[object]]
+    answers: bool = True
+    """False: what it says is not the answer to the caller's words, so the step's model still reads them after it.
+
+    A receipt said again because the caller spoke over it is the first thing
+    they must hear, and says nothing about what they said over it (session
+    4g, trace 28723e6b: "move it to Saturday" was dropped, and said again).
+    """
 
 
 @dataclass(frozen=True)

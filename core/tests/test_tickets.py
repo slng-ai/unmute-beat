@@ -29,6 +29,10 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
 * R19: a read-back with no playback evidence is withdrawn once, and stays withdrawn; the caller can go on.
 * R20: on a line that proved delivery, read-backs whose marks never came back are withdrawn as unconfirmed,
   never recorded as cut.
+* R21: a pick counts on the offer for the state the update ends in, made by code: right for it, recorded;
+  wrong for it, refused.
+* R23: supplied dependent picks survive a fresh parent, regardless of YAML order; cyclic dependencies fail.
+* R22: a change asked for over a cut receipt is read in the same turn: the receipt, then its read-back.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -60,6 +64,7 @@ SPANISH_GOODBYE = 'Gracias por llamar al soporte. Hasta pronto.'
 
 
 def desk_in(folder: Path) -> Desk:
+    folder.mkdir(parents=True, exist_ok=True)
     desk = Desk(folder / 'desk.db')
     desk.seed('ACC-1234', 'T-101')
     return desk
@@ -392,7 +397,7 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
     )
     facts = call.state.facts
     assert facts.ticket_id == 'T-102', 'the ticket rests on no field, and a new category took it away'
-    assert facts.resolution == '' and 'resolution' not in call._offers, (
+    assert facts.resolution == '' and not set(call._offers.get('resolution', {})) & {'refund', 'credit'}, (
         'a billing resolution outlived its category'
     )
     assert 'T-102' in call._offers['ticket_id'], 'the ticket offer went with the category'
@@ -414,7 +419,10 @@ async def picks_rest_only_on_what_their_offer_read(folder: Path):
         ('say', 'Vale.'),
     )
     facts = call.state.facts
-    assert facts.ticket_id is None and not call._offers, 'a pick offered to another account was kept'
+    assert facts.ticket_id is None and not call._offers.get('ticket_id'), (
+        'a pick offered to another account was kept',
+        dict(call._offers),
+    )
 
     broken = HERE / '_choices_broken.yaml'
     text = (HERE / 'choices.yaml').read_text()
@@ -466,10 +474,10 @@ async def picks_follow_the_state_they_end_in(folder: Path):
     await pick('No, es de acceso.', {'category': 'access'}, ('say', 'Entendido.'))
     facts = call.state.facts
     assert facts.category == 'access', facts
-    assert facts.resolution == '' and 'resolution' not in call._offers, (
+    assert facts.resolution == '' and not set(call._offers.get('resolution', {})) & {'refund', 'credit'}, (
         'A: a resolution offered for billing outlived its category, itself a choice',
         facts,
-        call._offers,
+        dict(call._offers),
     )
 
     await pick('Facturación otra vez.', {'category': 'billing'}, ('call', 'options', {}), ('say', '¿Cuál?'))
@@ -510,7 +518,10 @@ async def picks_follow_the_state_they_end_in(folder: Path):
         'a pick resting on a pick that went outlived it',
         facts,
     )
-    assert set(call._offers) == {'ticket_id'}, call._offers
+    assert not call._offers.get('resolution'), (
+        'an offer resting on a pick that went outlived it',
+        dict(call._offers),
+    )
 
     desk = desk_in(folder / 'standing')
     script, flow, call = opened(desk, HERE / 'choices.yaml')
@@ -563,7 +574,6 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
         script,
         'Cuenta ACC-1234, es de facturación.',
         ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
-        ('call', 'options', {}),
         ('call', 'wait', {}),
     )
     assert said == [offered], said
@@ -585,10 +595,12 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
         script,
         'Con un cambio de contraseña.',
         ('call', 'collect', {'values': {'resolution': 'reset'}}),
-        ('call', 'options', {}),
         ('call', 'wait', {}),
     )
-    assert said == [f'reset no es una de las opciones que tengo. {offered}'], said
+    assert said == [
+        'reset no es una de las opciones que tengo. '
+        'Puedo dejarlo como un reembolso o un abono en la cuenta. ¿Qué prefiere?'
+    ], ('a refused pick is followed by its own choice offered again, and only that (session 4g)', said)
 
     said = await turn(
         flow,
@@ -613,7 +625,6 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
             script,
             'Cuenta ACC-1234.',
             ('call', 'collect', {'values': {'account_id': 'ACC-1234'}}),
-            ('call', 'options', {}),
             ('call', 'wait', {}),
         )
         assert 'ticket_id' not in call._offers, 'a rendered step offered choices it had no words for'
@@ -903,10 +914,7 @@ async def spoken_offers_go_with_their_options(folder: Path):
     validation takes nothing.
     """
     billing_words = ('reembolso', 'abono')
-    offered = [
-        ('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
-        ('options', {}),
-    ]
+    offered = [('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}})]
 
     script, flow, call = opened(desk_in(folder), HERE / 'rendered_choices.yaml')
     said = ' '.join(
@@ -920,7 +928,11 @@ async def spoken_offers_go_with_their_options(folder: Path):
         )
     )
     assert not any(word in said for word in billing_words), ('an offer outlived its options', said)
-    assert 'resolution' not in call._offers and 'T-101' in said, (said, dict(call._offers))
+    assert set(call._offers.get('resolution', {})) == {'reset', 'unlock'} and 'T-101' in said, (
+        'the offer standing is not the one for the state the update ended in',
+        said,
+        dict(call._offers),
+    )
 
     script, flow, call = opened(desk_in(folder / 'standing'), HERE / 'rendered_choices.yaml')
     said = ' '.join(
@@ -1166,6 +1178,218 @@ async def a_missing_acknowledgement_is_not_a_cut(folder: Path):
     assert {c['heard_by'] for c in withdrawn['copies']} == {'none'}, withdrawn
 
 
+async def a_pick_counts_on_the_offer_for_the_state_it_ends_in(folder: Path):
+    """R21 (session 4g): a category and a resolution in one update, where the resolution is right for the new one.
+
+    "Es de acceso: que me desbloqueen la cuenta", with billing's resolutions
+    on offer. The resolution rests on the category, and this update changes
+    it, so the offer it could come from is access's, made by code for the
+    state the update ends in, with no request for `options`. `unlock` is on
+    it and is recorded, in the same reply. `refund` beside access is still
+    refused (R12's case B), and a made-up resolution too. On the rendered
+    desk the pick is refused in the desk's words when it does not hold, and
+    the offer said is access's, never billing's (R15).
+    """
+    for manifest in ('choices.yaml', 'rendered_choices.yaml'):
+        desk = desk_in(folder / manifest)
+        script, flow, call = opened(desk, HERE / manifest)
+        rendered = manifest.startswith('rendered')
+        offer = () if rendered else (('call', 'options', {}),)
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, el T-101, de facturación.',
+            (
+                'call',
+                'collect',
+                {'values': {'account_id': 'ACC-1234', 'ticket_id': 'T-101', 'category': 'billing'}},
+            ),
+            *offer,
+            ('call', 'wait', {}) if rendered else ('say', '¿Qué solución?'),
+        )
+        assert set(call._offers['resolution']) == {'refund', 'credit'}, (manifest, call._offers)
+        requests = len(script.steps)
+        said = await turn(
+            flow,
+            call,
+            script,
+            'No, es de acceso: que me desbloqueen la cuenta.',
+            ('call', 'collect', {'category': 'access', 'resolution': 'unlock'}),
+            ('call', 'wait', {}) if rendered else ('say', 'Vale.'),
+        )
+        facts = call.state.facts
+        assert (facts.category, facts.resolution) == ('access', 'unlock'), (manifest, facts, said)
+        assert len(script.steps) - requests == 2, (manifest, 'a pick for the new category needed a lookup')
+        for words, values in (
+            ('Acceso, con un reembolso.', {'category': 'access', 'resolution': 'refund'}),
+            ('Con lo que sea.', {'resolution': 'whatever'}),
+        ):
+            await turn(
+                flow,
+                call,
+                script,
+                'Facturación.',
+                ('call', 'collect', {'category': 'billing'}),
+                ('call', 'wait', {}) if rendered else ('say', 'Vale.'),
+            )
+            said = await turn(
+                flow,
+                call,
+                script,
+                words,
+                ('call', 'collect', values),
+                ('call', 'wait', {}) if rendered else ('say', 'Vale.'),
+            )
+            assert call.state.facts.resolution == '', (manifest, words, call.state.facts)
+            if rendered:
+                assert said[-1].startswith(f'{values["resolution"]} no es una de las opciones que tengo.'), (
+                    said
+                )
+                if values.get('category') == 'access':
+                    assert 'reembolso o un abono' not in said[-1], ('billing was offered beside access', said)
+        assert desk.sent() == 0
+
+
+async def a_request_over_a_cut_receipt_is_read(folder: Path):
+    """R22 (session 4g): the caller asks for a change over a receipt cut before it played. No booking, no slot.
+
+    The receipt is said again by code; then the desk's agent reads what the
+    caller said, in the same turn, and the reopen is read back: nothing is
+    sent until a heard yes, and the resolve is not sent twice. A plain "vale"
+    over a cut receipt gets the receipt and nothing else, and changes nothing.
+    """
+    receipt = 'Ticket T-101 resuelto. ¿Algo más?'
+    for words, moves in (
+        ('Perdona, ¿puedes reabrirlo? Sigue sin imprimir.', (('call', 'reopen_ticket', {}),)),
+        ('Vale, gracias.', (('call', 'wait', {}),)),
+    ):
+        desk = desk_in(folder / ('reopen' if 'reabrir' in words else 'agree'))
+        script, flow, call = opened(desk)
+        await to_read_back(flow, call, script)
+        script.moves = [('call', 'resolve_ticket', {})]
+        reply = await core.text_turn(flow, call, 'Sí.')
+        call.acknowledge(reply.segments[-1].id, heard='')
+        assert reply.segments[-1].generated == receipt and desk.sent() == 1, reply.segments
+        facts, requests = call.state.facts, len(script.steps)
+        said = await turn(flow, call, script, words, *moves)
+        if 'reabrir' in words:
+            assert said == [receipt, '¿Reabro el ticket T-101?'], said
+            assert len(script.steps) - requests == 1, 'the request over the receipt was not read'
+            assert desk.sent() == 1 and desk.ticket('T-101') == (2, 'resolved'), 'reopened before a yes'
+            said = await turn(flow, call, script, 'Sí.', ('call', 'reopen_ticket', {}))
+            assert said == ['Ticket T-101 reabierto. ¿Algo más?'] and desk.ticket('T-101') == (3, 'open'), (
+                said
+            )
+            assert desk.sent() == 2, 'the resolve was sent again'
+        else:
+            assert said == [receipt] and call.state.facts == facts and desk.sent() == 1, said
+
+
+async def chained_picks_survive_a_fresh_parent(folder: Path) -> None:
+    """R23: supplied children are rechecked after a fresh parent, in dependency order, never YAML order."""
+    original = (HERE / 'chained.yaml').read_text()
+    choices = (
+        '      ticket_id: {function: tickets.py:open_tickets, after: []}\n',
+        '      category: {function: tickets.py:categories, after: [ticket_id]}\n',
+        '      resolution: {function: tickets.py:resolutions, after: [category]}\n',
+    )
+    manifest = HERE / '_chained_review.yaml'
+    try:
+        for reverse in (False, True):
+            manifest.write_text(
+                original.replace(''.join(choices), ''.join(reversed(choices))) if reverse else original
+            )
+            desk = desk_in(folder / str(reverse))
+            script, flow, call = opened(desk, manifest)
+            await turn(
+                flow,
+                call,
+                script,
+                'Cuenta ACC-1234, T-101, facturación, un reembolso.',
+                (
+                    'call',
+                    'collect',
+                    {
+                        'account_id': 'ACC-1234',
+                        'ticket_id': 'T-101',
+                        'category': 'billing',
+                        'resolution': 'refund',
+                    },
+                ),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-101',
+                'billing',
+                'refund',
+            ), (reverse, call.state.facts)
+            assert 'T-102' not in call._offers['ticket_id']
+            desk.seed('ACC-1234', 'T-102')
+            await turn(
+                flow,
+                call,
+                script,
+                'Perdona, el T-102, facturación, un reembolso.',
+                ('call', 'collect', {'ticket_id': 'T-102', 'category': 'billing', 'resolution': 'refund'}),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-102',
+                'billing',
+                'refund',
+            ), (reverse, call.state.facts)
+            assert 'Recorded: category, resolution, ticket_id.' in script.told[-1], script.told[-1]
+            desk.seed('ACC-1234', 'T-103')
+            await turn(
+                flow,
+                call,
+                script,
+                'El T-103, de acceso, con un reembolso.',
+                ('call', 'collect', {'ticket_id': 'T-103', 'category': 'access', 'resolution': 'refund'}),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-103',
+                'access',
+                '',
+            ), (reverse, call.state.facts)
+            assert 'Recorded: category, ticket_id.' in script.told[-1], script.told[-1]
+            assert 'Not recorded:' in script.told[-1], script.told[-1]
+
+            def unavailable(services: Desk, facts: DeskState) -> dict[str, str]:
+                raise RuntimeError('choice service unavailable')
+
+            flow.steps[0].choices['resolution'] = unavailable
+            desk.seed('ACC-1234', 'T-104')
+            await turn(
+                flow,
+                call,
+                script,
+                'El T-104, facturación, un reembolso.',
+                ('call', 'collect', {'ticket_id': 'T-104', 'category': 'billing', 'resolution': 'refund'}),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-104',
+                'billing',
+                '',
+            ), (reverse, call.state.facts)
+            assert 'Recorded: category, ticket_id.' in script.told[-1], script.told[-1]
+            assert 'Not recorded:' in script.told[-1] and 'unavailable' in script.told[-1], script.told[-1]
+            assert desk.sent() == 0, 'recording a choice must not dispatch an operation'
+
+        manifest.write_text(original.replace('after: [ticket_id]', 'after: [resolution]'))
+        try:
+            core.load(manifest).compile(model=Script().model)
+        except core.FlowSpecError as error:
+            assert 'cycle' in str(error), error
+        else:
+            raise AssertionError('a cycle of choice dependencies compiled')
+    finally:
+        manifest.unlink(missing_ok=True)
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -1190,6 +1414,9 @@ async def main() -> None:
                 a_changed_resource_stays_on_offer,
                 an_unconfirmed_read_back_is_withdrawn_once,
                 a_missing_acknowledgement_is_not_a_cut,
+                a_pick_counts_on_the_offer_for_the_state_it_ends_in,
+                a_request_over_a_cut_receipt_is_read,
+                chained_picks_survive_a_fresh_parent,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -1205,7 +1432,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R20, no phone, date, appointment or slot')
+    print('tickets ok: R1-R23, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

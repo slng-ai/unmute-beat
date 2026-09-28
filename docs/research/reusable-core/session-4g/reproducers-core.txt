@@ -1,0 +1,4 @@
+PASS a_cut_receipt_is_said_again_only_while_it_stands
+FAIL a_pick_counts_on_the_offer_for_the_state_it_ends_in: AssertionError: ('choices.yaml', DeskState(account_id='ACC-1234', ticket_id=None, resolution='', category='access', revision=0, ticket_status='', follow_up=''), ['Vale.']) (line 1210)
+FAIL a_request_over_a_cut_receipt_is_read: AssertionError: ['Ticket T-101 resuelto. ¿Algo más?'] (line 1250)
+PASS picks_follow_the_state_they_end_in

@@ -70,7 +70,6 @@ def a_refused_move_is_unknown() -> bool:
             script,
             'Can you move my Friday haircut to two?',
             ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': '14:00'}),
-            ('call', 'options'),
             ('say', 'Two is free. Shall I move it?'),
         )
         await turn(
@@ -109,7 +108,6 @@ def a_day_change_forgets_the_appointment() -> bool:
             call,
             script,
             'I want to move my Friday haircut.',
-            ('call', 'options'),
             ('collect', {'appointment': held}),
             ('say', 'Which day would you like instead?'),
         )
@@ -119,7 +117,6 @@ def a_day_change_forgets_the_appointment() -> bool:
             script,
             'Tuesday at ten.',
             ('collect', {'service': 'haircut', 'booking_day': 'Tuesday', 'booking_time': '10:00'}),
-            ('call', 'options'),
             ('say', 'Ten is free on Tuesday.'),
         )
         said = await turn(

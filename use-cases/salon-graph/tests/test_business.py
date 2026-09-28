@@ -40,7 +40,6 @@ async def read_back(flow, call, script, day='Friday', at='14:00', words='Friday 
         script,
         words,
         ('collect', {'service': 'haircut', 'booking_day': day, 'booking_time': at}),
-        ('call', 'options'),
         ('say', 'Which time works for you?'),
     )
     return await turn(
@@ -158,7 +157,6 @@ async def a_move_moves_the_callers_own_booking_once():
         script,
         'Can you move my Friday haircut to two?',
         ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': '14:00'}),
-        ('call', 'options'),
         ('say', 'Two is free. Shall I move it?'),
     )
     said = await turn(
@@ -201,7 +199,6 @@ async def a_cancellation_is_a_real_write_and_the_slot_books_again():
         call,
         script,
         'Actually, cancel that.',
-        ('call', 'options'),
         ('collect', {'appointment': held['booking_id']}),
         ('call', 'cancel_appointment'),
     )
@@ -421,45 +418,50 @@ async def a_booking_is_said_again_when_asked():
 
 async def a_receipt_cut_before_it_played_is_said_again_not_moved():
     """J + P7: session 3's stress call, offline. The receipt for 9:00 never played; the caller said
-    "Yes, tomorrow at nine AM. That's great." The booking stays, is said again with no model, and nothing moves.
-    """
-    script, flow, call, diary = await at_booking()
-    await turn(
-        flow,
-        call,
-        script,
-        'A haircut tomorrow at nine.',
-        ('collect', {'service': 'haircut', 'booking_day': 'tomorrow', 'booking_time': '09:00'}),
-        ('call', 'options'),
-        ('say', 'Nine is free.'),
-    )
-    await turn(
-        flow,
-        call,
-        script,
-        'Nine, please.',
-        ('collect', {'slot': slot(TUE, '09:00')}),
-        ('call', 'book_appointment'),
-    )
-    script.moves = [('call', 'book_appointment')]
-    import core
+    "Yes, tomorrow at nine AM. That's great." The booking stays and is said again first, by code.
 
-    reply = await core.text_turn(flow, call, 'Yes.')
-    receipt = next(s for s in reply.segments if s.text.startswith("You're all set"))
-    call.acknowledge(receipt.id, heard='')
-    requests = len(script.requests)
-    said = await turn(
-        flow,
-        call,
-        script,
-        "Yes, tomorrow at nine AM. That's great.",
-        ('call', 'options'),
-        ('collect', {'slot': slot(TUE, '10:00')}),
-        ('call', 'book_appointment'),
-    )
-    assert len(script.requests) == requests and said == [receipt.generated], ('said again, no model', said)
-    assert booked(diary) == [('haircut', TUE, '09:00')], booked(diary)
-    assert [e.operation for e in call.evidence] == ['book_appointment']
+    Then booking's agent reads the reply (session 4g). Read as agreement, it
+    waits, and nothing more is said. Misread as a new request (a 10:00 slot
+    and a booking: session 3's front desk moved the booking to 10), it can
+    only reach a read-back of a second appointment: nothing is booked or
+    moved without a heard yes to that.
+    """
+    for misread in (False, True):
+        script, flow, call, diary = await at_booking()
+        await turn(
+            flow,
+            call,
+            script,
+            'A haircut tomorrow at nine.',
+            ('collect', {'service': 'haircut', 'booking_day': 'tomorrow', 'booking_time': '09:00'}),
+            ('say', 'Nine is free.'),
+        )
+        await turn(
+            flow,
+            call,
+            script,
+            'Nine, please.',
+            ('collect', {'slot': slot(TUE, '09:00')}),
+            ('call', 'book_appointment'),
+        )
+        script.moves = [('call', 'book_appointment')]
+        import core
+
+        reply = await core.text_turn(flow, call, 'Yes.')
+        receipt = next(s for s in reply.segments if s.text.startswith("You're all set"))
+        call.acknowledge(receipt.id, heard='')
+        moves = (
+            (('collect', {'booking_time': '10:00', 'slot': slot(TUE, '10:00')}), ('call', 'book_appointment'))
+            if misread
+            else (('call', 'wait'),)
+        )
+        said = await turn(flow, call, script, "Yes, tomorrow at nine AM. That's great.", *moves)
+        assert said[0] == receipt.generated, ('the receipt came first, said by code', said)
+        assert said[1:] == ([] if not misread else [said[1]]) and (
+            not misread or said[1].startswith('Shall I book you a second appointment')
+        ), said
+        assert booked(diary) == [('haircut', TUE, '09:00')], booked(diary)
+        assert [e.operation for e in call.evidence] == ['book_appointment']
 
 
 async def an_identity_is_the_lookup_of_the_number_agreed_to():
@@ -555,7 +557,6 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
         script,
         'A haircut on Friday next week.',
         ('collect', {'service': 'haircut', 'booking_day': 'Friday next week'}),
-        ('call', 'options'),
         ('say', 'On Friday the 9th I have 9:00 AM. Which time works for you?'),
     )
     assert any('2026-10-09' in s for s in call._offers['slot'])
@@ -565,11 +566,10 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
         script,
         'Saturday instead.',
         ('collect', {'booking_day': 'Saturday'}),
-        ('call', 'options'),
         ('say', 'Do you mean Saturday the 3rd or Saturday the 10th?'),
     )
     result = next(
-        p for m in reversed(call.messages) for p in m.parts if getattr(p, 'tool_name', '') == 'options'
+        p for m in reversed(call.messages) for p in m.parts if getattr(p, 'tool_name', '') == 'collect'
     )
     assert 'Saturday the 3rd' in str(result.content) and 'Saturday the 10th' in str(result.content), (
         result.content
@@ -581,7 +581,6 @@ async def a_bare_weekday_beside_another_week_is_asked_about():
         script,
         'The 10th.',
         ('collect', {'booking_day': '2026-10-10'}),
-        ('call', 'options'),
         ('say', 'On Saturday the 10th I have 9:00 AM.'),
     )
     assert all('2026-10-10' in s for s in call._offers['slot']), call._offers
@@ -733,7 +732,7 @@ async def one_action_per_reply_and_one_budget_per_turn():
     assert booked(diary) == [('haircut', FRIDAY, '14:00')] and call.state.agent == 'booking', call.state.agent
 
     script, flow, call, diary = await at_booking()
-    loop = [('call', 'options')] * 20
+    loop = [('collect', {})] * 20
     said = await turn(flow, call, script, 'Hm.', *loop)
     assert (
         said[-1] in ("Sorry, I'm going round in circles there. Could you say that again?",)

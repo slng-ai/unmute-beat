@@ -25,7 +25,8 @@ second, independent caller writes to the same SQLite file through its own
 * V8: the live check's contender (`evals.contend`) takes the time when the
   move's read-back reaches the log, and the move is refused;
 * V9: live call CAc82c12: a day recorded beside an id not on offer is kept,
-  and the times offered next are that day's;
+  and the times offered next are that day's; since session 4g the caller's own
+  booking beside it is judged on the offer code makes for that state, and kept;
 * V10: live call 5: a day said as a weekday and as a date is one day, and
   keeps the times on offer;
 * V11: live call s4e-worker-bystander: the time the caller already holds is
@@ -79,7 +80,6 @@ async def ask_to_move(flow, call, script, held: str, at: str) -> list[str]:
         script,
         f'Can you move my Friday haircut to {at}?',
         ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': at}),
-        ('call', 'options'),
         ('say', 'That is free. Shall I move it?'),
     )
     return await turn(
@@ -117,7 +117,7 @@ async def a_taken_destination_is_refused_and_another_time_moves():
     assert snapshot(diary.path) == [(held, PHONE, FRIDAY, '09:00', 1), (theirs, OTHER, FRIDAY, '14:00', 1)]
     assert call.state.facts.slot == '' and call.state.facts.appointment == '', 'the refused picks stayed'
     retry = str(script.requests[-1].messages[-1].parts)
-    assert 'no longer on offer: call options again' in retry, retry
+    assert 'no longer on offer: get a fresh offer' in retry, retry
     said = await ask_to_move(flow, call, script, held, '15:00')
     assert (
         said[-1] == 'Shall I move your haircut from Friday the 2nd at 9:00 AM to Friday the 2nd at 3:00 PM?'
@@ -222,7 +222,6 @@ async def book_move_and_cancel(via_concierge: bool):
         call,
         script,
         'Actually, can you move the appointment?',
-        ('call', 'options'),
         ('collect', {'appointment': held}),
         ('say', 'Which day would you like instead?'),
     )
@@ -255,7 +254,6 @@ async def book_move_and_cancel(via_concierge: bool):
         call,
         script,
         'Two, please.',
-        ('call', 'options'),
         ('collect', {'slot': slot(TUE, '14:00')}),
         ('call', 'move_appointment'),
     )
@@ -286,7 +284,6 @@ async def read_back_friday(flow, call, script):
         script,
         'A haircut Friday at two.',
         ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': '14:00'}),
-        ('call', 'options'),
         ('say', 'Two is free.'),
     )
     await turn(
@@ -307,12 +304,13 @@ async def two_holdings_and_a_reference_not_on_offer():
         call,
         script,
         'Move my eleven o clock.',
-        ('call', 'options'),
         ('collect', {'appointment': 'BK9999'}),
         ('say', 'Which one?'),
     )
     assert call.state.facts.appointment == '', 'an appointment nobody offered was recorded'
-    assert 'is not on offer for appointment: call options' in refusals_in(script)[-1], refusals_in(script)
+    assert 'is not on offer for appointment. Only an id on offer' in refusals_in(script)[-1], refusals_in(
+        script
+    )
     await turn(
         flow,
         call,
@@ -359,7 +357,6 @@ async def a_value_said_again_is_not_a_yes():
             script,
             words,
             ('collect', {'slot': slot(FRIDAY, '14:00')}),
-            ('call', 'options'),
             ('call', 'wait'),
         )
         nothing_went_out(call, diary, said, [])
@@ -402,7 +399,6 @@ async def a_value_said_again_is_not_a_yes():
             call,
             script,
             'Cancel my Friday haircut.',
-            ('call', 'options'),
             ('collect', {'appointment': held}),
             ('call', 'cancel_appointment'),
         )
@@ -448,13 +444,12 @@ async def each_problem_says_its_own_next_step():
         call,
         script,
         'Move my Friday haircut to Tuesday.',
-        ('call', 'options'),
         ('collect', {'appointment': held, 'service': 'haircut', 'booking_day': 'Tuesday'}),
         ('call', 'move_appointment'),
         ('call', 'wait'),
     )
     missing = refusals_in(script)[-1]
-    assert missing.startswith('Not yet: no slot picked yet: call options'), missing
+    assert missing.startswith('Not yet: no slot picked yet: record the id they pick'), missing
     assert 'ask the caller' not in missing, missing
     await turn(
         flow,
@@ -462,11 +457,10 @@ async def each_problem_says_its_own_next_step():
         script,
         'Whenever suits.',
         ('collect', {'booking_day': 'whenever suits'}),
-        ('call', 'options'),
         ('say', 'Which day would you like?'),
     )
     [options] = [
-        r for r in script.requests[-1].messages[-1].parts if getattr(r, 'tool_name', '') == 'options'
+        r for r in script.requests[-1].messages[-1].parts if getattr(r, 'tool_name', '') == 'collect'
     ]
     note = str(options.content)
     assert 'Nothing was looked up' in note and 'says nothing about what is free' in note, note
@@ -514,8 +508,11 @@ async def a_contender_takes_the_time_the_bot_reads_back():
 async def a_move_request_keeps_its_day():
     """V9 (live call CAc82c12, session 4d call 1): the move's day recorded beside an id not on offer yet.
 
-    The id is refused and the day and time beside it are kept, so the times
-    offered next are the new day's.
+    The day and time beside it are kept, so the times offered next are the
+    new day's. Since session 4g the id is judged on the offer code makes for
+    the state the update ends in: this caller's own booking is on it, so it
+    is recorded too, in the same reply (before, it was refused, and the model
+    had to call `options` and record it again).
     """
     script, flow, call, diary = await at_booking()
     held = seed(diary)
@@ -525,18 +522,16 @@ async def a_move_request_keeps_its_day():
         script,
         'Can you move it to Wednesday, same time?',
         ('collect', {'booking_day': 'Wednesday', 'booking_time': '09:00', 'appointment': held}),
-        ('call', 'options'),
         ('say', 'Wednesday at nine is free. Shall I move it?'),
     )
     facts = call.state.facts
-    assert (facts.booking_day, facts.booking_time, facts.appointment) == ('2026-09-30', '09:00', ''), facts
-    refusal = next(r for r in refusals_in(script) if 'on offer' in r)
-    assert refusal.startswith('Recorded: booking_day, booking_time. Not recorded:'), refusal
+    assert (facts.booking_day, facts.booking_time, facts.appointment) == ('2026-09-30', '09:00', held), facts
+    assert not [r for r in refusals_in(script) if 'on offer' in r], refusals_in(script)
     times = next(
         str(part.content)
         for request in script.requests
         for part in request.messages[-1].parts
-        if getattr(part, 'tool_name', '') == 'options'
+        if getattr(part, 'tool_name', '') == 'collect'
     )
     assert '2026-09-30T0900|haircut' in times, "the times offered were not the new day's"
 
@@ -559,7 +554,6 @@ async def a_day_said_two_ways_is_one_day():
         call,
         script,
         'Can you move it?',
-        ('call', 'options'),
         ('collect', {'appointment': held}),
         ('say', 'Which day?'),
     )
@@ -569,7 +563,6 @@ async def a_day_said_two_ways_is_one_day():
         script,
         'Thursday at three.',
         ('collect', {'booking_day': 'thursday', 'booking_time': '15:00'}),
-        ('call', 'options'),
         ('say', 'Thursday at three is free.'),
     )
     thursday = slot('2026-10-01', '15:00')
@@ -632,7 +625,6 @@ async def your_own_booking_is_not_taken():
         script,
         'Tuesday at nine, yes.',
         ('collect', {'service': 'haircut', 'booking_day': 'Tuesday', 'booking_time': '09:00'}),
-        ('call', 'options'),
         ('call', 'wait'),
     )
     assert said == ['You already have a haircut tomorrow at 9:00 AM. Would you like a different time?'], said
@@ -684,7 +676,7 @@ async def the_booking_just_made_can_be_moved_without_looking_it_up():
         'Tuesday at two.',
         (
             'calls',
-            [('collect', {'values': {'booking_day': 'Tuesday', 'booking_time': '14:00'}}), ('options', {})],
+            [('collect', {'values': {'booking_day': 'Tuesday', 'booking_time': '14:00'}})],
         ),
         ('collect', {'slot': slot(TUE, '14:00')}),
         ('call', 'move_appointment'),
@@ -702,7 +694,7 @@ async def the_booking_just_made_can_be_moved_without_looking_it_up():
     moved = [e.resource for e in call.evidence if e.changes]
     assert moved == [held] * 3, ('one booking should carry the whole call', moved)
     assert held not in call._offers.get('appointment', {}), 'a cancelled booking was offered back'
-    assert not [r for r in refusals_in(script) if 'on offer' in r and held in r], refusals_in(script)
+    assert not [r for r in refusals_in(script) if f"'{held}' is not on offer" in r], refusals_in(script)
 
     script, flow, call, diary = await at_booking()
     seed(diary, FRIDAY, '09:00')
@@ -726,7 +718,7 @@ async def an_offer_changed_in_the_same_turn_is_not_said():
             'A haircut on Thursday. No, sorry, Friday.',
             (
                 'calls',
-                [('collect', {'values': {'service': 'haircut', 'booking_day': 'Thursday'}}), ('options', {})],
+                [('collect', {'values': {'service': 'haircut', 'booking_day': 'Thursday'}})],
             ),
             ('calls', [('collect', {'values': {'booking_day': 'Friday'}}), ('wait', {})]),
         )

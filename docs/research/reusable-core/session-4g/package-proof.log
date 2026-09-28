@@ -1,0 +1,79 @@
+== build
+2d1b983ddce06d2f0f31a021d4a37b3c2433e9d9b3c6690541c24b90156e1c41  /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/tmp.4wzWRduuZJ/dist/slng_voice_core-0.1.0-py3-none-any.whl
+== the applications, copied: the clinic and the support desk, as packages
+== fresh environment: the wheel alone, its dependencies held to the workspace lock
+Resolved 145 packages in 2ms
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+genai-prices==0.1.7
+griffelib==2.3.0
+h11==0.16.0
+httpcore==1.0.9
+httpcore2==2.13.0
+httpx==0.28.1
+httpx2==2.13.0
+idna==3.20
+logfire-api==5.1.0
+loguru==0.7.3
+opentelemetry-api==1.44.0
+pydantic==2.13.5
+pydantic-ai-slim==2.46.0
+pydantic-core==2.46.5
+pydantic-graph==2.46.0
+pydantic-handlebars==0.2.1
+pyyaml==6.0.3
+slng-voice-core @ file:///var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/tmp.4wzWRduuZJ/dist/slng_voice_core-0.1.0-py3-none-any.whl
+truststore==0.10.4
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+== run from another directory, no key: nothing is found relative to the working directory
+2026-09-28 10:30:23.964 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.04s
+2026-09-28 10:30:23.971 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.014 | INFO     | core.turn:_hop:726 - handoff faq -> desk (resolve a ticket)
+2026-09-28 10:30:24.021 | INFO     | core.turn:_hop:726 - handoff desk -> look_up (its revision)
+2026-09-28 10:30:24.022 | INFO     | core.turn:_hop:726 - handoff look_up -> desk (-)
+2026-09-28 10:30:24.028 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.02s
+2026-09-28 10:30:24.037 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.039 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.00s
+2026-09-28 10:30:24.043 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.00s
+2026-09-28 10:30:24.051 | INFO     | core.turn:_hop:726 - handoff faq -> desk (resolve a ticket)
+2026-09-28 10:30:24.058 | INFO     | core.turn:_hop:726 - handoff desk -> look_up (its revision)
+2026-09-28 10:30:24.059 | INFO     | core.turn:_hop:726 - handoff look_up -> desk (-)
+2026-09-28 10:30:24.067 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.02s
+2026-09-28 10:30:24.075 | INFO     | core.turn:_hop:726 - handoff faq -> desk (resolve a ticket)
+2026-09-28 10:30:24.082 | INFO     | core.turn:_hop:726 - handoff desk -> look_up (its revision)
+2026-09-28 10:30:24.083 | INFO     | core.turn:_hop:726 - handoff look_up -> desk (-)
+2026-09-28 10:30:24.089 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.02s
+2026-09-28 10:30:24.096 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.102 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.110 | INFO     | core.turn:_hop:726 - handoff faq -> desk (resolve a ticket)
+2026-09-28 10:30:24.117 | INFO     | core.turn:_hop:726 - handoff desk -> look_up (its revision)
+2026-09-28 10:30:24.119 | INFO     | core.turn:_hop:726 - handoff look_up -> desk (-)
+2026-09-28 10:30:24.124 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.02s
+2026-09-28 10:30:24.131 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.136 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.144 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.146 | INFO     | core.operations:_settled:317 - resolve_ticket for ticket T-101 is history: a later change stands
+2026-09-28 10:30:24.151 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.170 | INFO     | core.turn:_speak:1009 - read back confirm_patient by code after collect
+2026-09-28 10:30:24.171 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.176 | INFO     | core.turn:_speak:1005 - confirm_patient restated unchanged after its read-back: carried out
+2026-09-28 10:30:24.177 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.199 | INFO     | core.turn:_speak:1009 - read back book by code after collect
+2026-09-28 10:30:24.200 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.209 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.237 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.245 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+2026-09-28 10:30:24.252 | DEBUG    | core.turn:take_turn:1279 - turn answered in 0.01s
+core from /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/tmp.4wzWRduuZJ/app/.venv/lib/python3.14/site-packages/core/__init__.py
+clinic booked once: Booked for Tuesday at 10:00 AM, reference CL001.
+desk resolved once, the lost answer reconciled by its intent: Ticket T-101 resuelto. ¿Algo más?
+a fresh session reconciled the persisted intent, nothing sent again
+a rendered step said no model words: ['Tengo el ticket T-101.', 'Perdona, ¿me lo repites?']
+a pending answer settled nothing, and made no second intent
+an old resolve restored after the reopen is history, never said
+restated: confirms on a lookup only; a booking value said again booked nothing
+a new category took the resolution and kept the ticket (after:)
+installed scenario ok
+package proof ok, in /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/tmp.4wzWRduuZJ

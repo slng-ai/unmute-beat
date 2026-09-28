@@ -196,7 +196,6 @@ async def bad_slot() -> dict[str, Any]:
         turn = await line.turn(
             'Quarter past nine.',
             pick('09:15'),
-            Reply(calls=[('options', {})]),
             Reply(calls=[('wait', {})]),
         )
         return {

@@ -2,7 +2,7 @@
 
     caller asks for Friday at 2 -> concierge hands to booking -> core interposes verify
     -> verify reads the number back by code, looks it up on a heard yes -> core returns to booking
-    -> booking looks up times (tool result comes back to booking) -> offers, waits at booking
+    -> booking records the request, and collect's result brings back the offer code made for it -> offers, waits
     -> bare "yes" to two times: booking asks which -> "the later one": read back
     -> "yes": booked once, receipt spoken by code -> "actually, I want to complain": handoff
 
@@ -10,8 +10,8 @@ Each step asserts which node is active, what each provider request was sent
 (the requested time, the offer, the pending read-back, the receipt), and
 what the diary holds. It also writes the booking node's rendered context at
 the offer, the pending read-back and after the receipt to
-`docs/research/reusable-core/session-4e/booking-context.md`, so the
-design can be reviewed from what the agent actually sees. Session 4's and 4c's copies
+`docs/research/reusable-core/session-4g/booking-context.md`, so the
+design can be reviewed from what the agent actually sees. Session 4's, 4c's and 4e's copies
 stay as they were measured. A recap reference is an intent id, random per run,
 so the snapshot writes it as `<ref>`.
 
@@ -31,7 +31,7 @@ FRIDAY = '2026-10-02'
 OFFER = '2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'
 """The salon's own words for the Friday offer: the booking step is rendered (session 4e)."""
 SNAPSHOTS = (
-    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4e' / 'booking-context.md'
+    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4g' / 'booking-context.md'
 )
 REF = re.compile(r'\b[0-9a-f]{8}(?=: ")')
 """A recap reference in the rendered context: an intent id's first characters, different every run."""
@@ -72,7 +72,7 @@ async def the_booking_walkthrough():
         script,
         "Yes, that's my number.",
         ('call', 'lookup_customer'),
-        ('call', 'options'),
+        ('collect', {'booking_time': '14:00'}),
         ('call', 'wait'),
     )
     assert script.steps[2:] == ['verify', 'booking', 'booking'], (
@@ -91,14 +91,14 @@ async def the_booking_walkthrough():
         'P15: the shared state carries the requested time'
     )
     result = script.requests[4]
-    assert 'Friday the 2nd at 2:00 PM' in text_of(result.messages), (
-        'P13: the tool result came back to booking'
-    )
+    assert 'On offer now' in text_of(result.messages) and 'Friday the 2nd at 2:00 PM' in text_of(
+        result.messages
+    ), "P13: collect's result, with the offer code made for it, came back to booking"
     assert list(call._offers['slot'])[:2] == [slot(FRIDAY, '14:00'), slot(FRIDAY, '13:30')], call._offers
     sections.append(snapshot(script, 'At the offer: times on offer, nothing pending, waiting at booking'))
     assert diary.bookings_for(PHONE, TODAY) == []
 
-    said = await turn(flow, call, script, 'Yes.', ('call', 'options'), ('call', 'wait'))
+    said = await turn(flow, call, script, 'Yes.', ('call', 'wait'))
     assert call.state.agent == 'booking' and not call.state.facts.slot, (
         'P17: a bare yes to two times picks none'
     )
@@ -166,7 +166,6 @@ async def a_changed_day_offers_again_and_books_nothing_old():
         script,
         'A haircut on Friday at two.',
         ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': '14:00'}),
-        ('call', 'options'),
         ('say', 'Two is free on Friday. Shall I take it?'),
     )
     await turn(
@@ -184,7 +183,6 @@ async def a_changed_day_offers_again_and_books_nothing_old():
         script,
         'Actually, make it Saturday.',
         ('calls', [('collect', {'values': {'booking_day': 'Saturday'}}), ('book_appointment', {})]),
-        ('call', 'options'),
         ('call', 'wait'),
     )
     assert diary.bookings_for(PHONE, TODAY) == [], 'nothing was written under the Friday approval'
@@ -210,7 +208,9 @@ async def a_spoken_answer_stays_and_an_invented_exit_fails():
         ('say', "I can't transfer you there."),
     )
     assert call.state.agent == 'booking', 'an exit booking does not declare moved the caller'
-    assert 'options' in script.requests[0].tools and 'hand_over' in script.requests[0].tools
+    assert 'options' not in script.requests[0].tools and 'hand_over' in script.requests[0].tools, (
+        'a rendered step offers what code looks up, and has no options tool (session 4g)'
+    )
 
 
 async def main() -> None:

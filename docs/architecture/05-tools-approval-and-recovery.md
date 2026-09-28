@@ -1,159 +1,327 @@
 # 05 — Tools, approval and recovery
 
-A tool call is a request from the model. It is not proof that the requested action is allowed, that the backend performed it, or that the caller heard the result.
+A model selecting a tool establishes what it wants to do. Core must still check whether the action is allowed, track whether it was sent, and validate what the backend says happened. Speaking the result is another step, with its own delivery evidence.
 
-Core keeps those decisions separate. The application defines its functions and rules; the harness checks the request, tracks what was sent and records what the result establishes.
+Continue the example from [chapter 02](02-a-conversation-from-start-to-finish.md): caller A-42 wants record R-17 marked complete. The lookup has established that it is open at revision 1. This chapter builds the `apply_change` operation, follows its approval and receipt, then repeats the sequence with a lost backend response.
 
-## From a tool to an application function
+## 1. Define the operation's inputs and result
 
-The model can use ordinary tools such as `collect` to record facts. A declared operation is the boundary for calling an application service, whether that service reads information or changes it.
+The application's state can be incomplete while the conversation is in progress. An operation's argument model describes what must be present before that operation can run.
 
-An application supplies a Python function with typed arguments and a typed result. Here is the signature of the support desk's resolve function; its implementation is in [`tickets.py`](../../core/tests/ticket_flow/tickets.py):
+Add these models to the example's `models.py`, alongside `ApplicationState` from [chapter 03](03-typed-state-and-history.md):
 
 ```python
-def resolve(desk: Desk, args: Resolve, intent: Intent) -> Changed:
-    ...
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class ChangeArgs(BaseModel):
+    caller_id: str = Field(min_length=1)
+    record_id: str = Field(min_length=1)
+    revision: int = Field(ge=1)
+    requested_change: str = Field(min_length=1)
+
+
+class ChangeResult(BaseModel):
+    caller_id: str
+    record_id: str
+    revision: int
+    requested_change: str
+    now_revision: int = Field(ge=1)
+    status: Literal['complete', 'stale', 'pending']
 ```
 
-`desk` is the call's service object. `Resolve` describes the required arguments. `Changed` describes the receipt. The optional third parameter, `Intent`, supplies the stable identifier used by this backend to recognize a repeated attempt.
+`ChangeArgs` refuses empty identifiers and revision `0`, even though the initial conversation state permits them. `ChangeResult` describes this example backend's response: it echoes the request, reports the resulting version, and distinguishes completion, an obsolete-version refusal and unfinished processing.
 
-Core reads those annotations and builds a `FunctionOperation`. Application authors do not need to write an operation subclass for this path. A synchronous function runs in a worker thread; an asynchronous function is awaited.
+These status words belong to the application. Core does not know what “complete” means until the manifest declares it. The backend must also validate ownership and permitted state transitions; a well-typed identifier does not establish access to a record.
 
-Pydantic AI supplies the model's [function-tool machinery](https://pydantic.dev/docs/ai/tools-toolsets/tools/). Core's declared operations add state-bound arguments, approval, intents and receipts. They are exposed as output tools, so the turn engine can handle a read-back or fixed result without asking the model to paraphrase it.
+## 2. Wrap the backend in typed functions
 
-## The declaration connects state, function and result
+The application connects its backend through ordinary functions. In `functions.py`, the wrappers might look like this:
 
-This is the complete `resolve_ticket` entry under `operations:` in the [support-desk manifest](../../core/tests/ticket_flow/agent.yaml):
+```python
+from core import Intent
+
+from .models import ChangeArgs, ChangeResult
+
+
+def apply_change(backend, args: ChangeArgs, intent: Intent) -> ChangeResult:
+    return backend.apply(args, intent.id)
+
+
+def change_words(args: ChangeArgs) -> str:
+    return f'Mark record {args.record_id} {args.requested_change}?'
+
+
+def find_change(backend, args: ChangeArgs, intent: Intent) -> ChangeResult | None:
+    return backend.find(intent.id)
+```
+
+This is a function-boundary example, not a backend implementation. The application must provide `backend.apply` and `backend.find`. When using relative imports as above, the application folder also needs an `__init__.py` so it can be imported as a Python package.
+
+The function receives the call's service object, validated arguments and, optionally, the `Intent`. Core supplies that third parameter when it is annotated `Intent`; this backend uses its id to recognize repeated attempts. `find_change` retrieves the result of that same attempt rather than guessing from the record's current status.
+
+Compilation reads the annotations and constructs a `FunctionOperation`. The author does not need to subclass core's operation classes for this path. A synchronous function runs in a worker thread, while an asynchronous function is awaited. Core validates returned data against the receipt model; a Python return annotation alone is not runtime validation.
+
+## 3. Connect state, function and receipt in the manifest
+
+The `apply_change` entry under `operations:` is:
 
 ```yaml
-resolve_ticket:
-  function: tickets.py:resolve
-  args: {account_id: account_id, ticket_id: ticket_id, revision: revision, resolution: resolution}
-  readback: tickets.py:resolve_words
-  reconcile: tickets.py:find_effect
-  subject: ticket_id
-  resource: ticket
-  version: now_revision
-  idempotent: true
-  matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
-  succeeds: {status: resolved}
-  rejects: {status: stale}
-  assign: {revision: now_revision, ticket_status: status}
-  say: 'Ticket {ticket_id} resuelto. ¿Algo más?'
-  recap: 'El ticket {ticket_id} queda resuelto.'
+operations:
+  apply_change:
+    function: functions.py:apply_change
+    args:
+      caller_id: caller_id
+      record_id: record_id
+      revision: revision
+      requested_change: requested_change
+    readback: functions.py:change_words
+    reconcile: functions.py:find_change
+    subject: record_id
+    resource: record
+    version: now_revision
+    idempotent: true
+    matches:
+      caller_id: caller_id
+      record_id: record_id
+      revision: revision
+      requested_change: requested_change
+    succeeds: {status: complete}
+    rejects: {status: stale}
+    assign: {revision: now_revision, status: status}
+    say: 'Record {record_id} is {status}.'
+    recap: 'Record {record_id} is {status}.'
 ```
 
-Read it in three groups:
+This is an operation excerpt. The complete manifest also includes the state, persona, steps and `fetch_record` lookup from the preceding chapters. Here, `idempotent: true` assumes the backend really deduplicates by intent id, as explained below.
 
-| Group | What it means |
+The mappings have specific directions:
+
+| Declaration | Meaning in this example |
 |---|---|
-| `function`, `args`, `readback` | Which function runs, which state field supplies each argument, and how the proposed action is read back. |
-| `matches`, `succeeds`, `rejects`, `assign`, `say` | How to check the result, decide its outcome, update facts and speak its result. `assign` maps state field → receipt field. |
-| `reconcile`, `idempotent`, `subject`, `resource`, `version`, `recap` | How to recover an uncertain result and identify which resource and version a receipt describes. |
+| `args` | Argument field → state field. Build `ChangeArgs` from the call's current facts. |
+| `matches` | Receipt field → argument field. Require the returned caller, record, original revision and requested change to match this attempt. |
+| `succeeds` / `rejects` | Receipt values that establish success or an authoritative refusal. Other outcomes of a change remain unknown. |
+| `assign` | State field → receipt field. On success, replace the state revision with `now_revision` and copy the status. |
+| `say` / `recap` | Wording rendered from receipt fields for the immediate result and an eligible later recap. |
+| `subject`, `resource`, `version` | The receipt's record identifier, its resource kind and the resulting version used to order effects. |
+| `reconcile` / `idempotent` | How to discover the original outcome and whether the same uncertain intent can safely be resent. |
 
-The model selects `resolve_ticket`; it does not provide a second unchecked copy of the account, ticket or revision. Core builds those arguments from validated state according to `args`.
+The model selects `apply_change`; it does not submit another unchecked copy of these arguments. Core takes them from validated state and validates them again as `ChangeArgs`.
 
-Two switches remain independent: `approval: none` removes the read-back requirement, and `changes: false` declares a read with no business effect. The desk lookup declares both. A read can require approval, and an application can declare a change without conversational approval if that is its intended policy. Types do not choose that policy for it.
+Approval and business effects are separate settings. By default, this operation requires approval and declares a change. The lookup instead declares both `approval: none` and `changes: false`. A read can require approval, and an application can explicitly permit a change without conversational approval. The manifest chooses that policy; types do not choose it automatically.
 
-## Approval belongs to a particular question
+## 4. Read back one exact proposal
 
-A **read-back** is the application's exact statement of what it is about to do. A **proposal** records that action and its arguments while waiting for the caller's reply.
+With the facts from the lookup, core can build:
 
-For a conversation node whose operation requires approval:
+```python
+ChangeArgs(
+    caller_id='A-42',
+    record_id='R-17',
+    revision=1,
+    requested_change='complete',
+)
+```
 
-1. The agent first selects the operation. Core validates the state-bound arguments, records the proposal and speaks the read-back. It sends no change to the backend.
-2. The adapter records delivery evidence for that proposal's speech segment. Generating text or starting TTS is insufficient.
-3. The caller replies. The same node agent interprets the reply. If it understands agreement, it selects the operation again; there is no separate classifier deciding yes or no first.
-4. Core checks that this reply can answer the pending proposal: the operation and arguments match, the identity is still the same, the latest read-back copy has the required delivery evidence before the reply, and the approving work is current.
-5. Authorization consumes that answer. It cannot authorize another action as well.
+The `request` agent selects `apply_change`. Core prepares an intent, records a **proposal** for those exact arguments and renders:
 
-The model's interpretation is still a model decision. These checks prevent a yes from being applied to the wrong or unconfirmed proposal; they do not prove that the model understood every phrase correctly. Live language evaluations remain necessary.
+> Mark record R-17 complete?
 
-If the caller corrects an argument, the old proposal cannot approve the new one. If the agent reads a clear no, `decline` consumes the pending question without executing it. A question in reply is not automatically a rejection. If delivery repeatedly cannot be confirmed, core withdraws the prepared intent and says one fallback line. The same request then stays withdrawn on that call; corrected arguments can form a new proposal.
+Nothing has been dispatched to the backend yet. A proposal is the question waiting for an answer; an intent is the tracked attempt that may eventually be sent.
 
-There is one pending proposal slot per call. Asking another replaces it. This is a deliberate limit of the current design, not a queue of independent approvals.
+The voice adapter must establish delivery of the proposal's speech segment. Generating its text or starting TTS is insufficient. A text application uses `call.acknowledge(...)` as explicit simulated delivery, as shown in chapter 02.
 
-## Send an intent, then establish the outcome
+There is one pending proposal slot per call. Another proposal replaces it. The call does not hold a queue of independent questions that one later “yes” can approve together.
 
-An **intent** is core's record of a particular attempt at an operation. Its identifier stays the same when that uncertain attempt is checked or safely retried.
+## 5. Bind the reply to that proposal
+
+The caller says “Yes.” The same node agent interprets the reply and selects `apply_change` again. No separate classifier first decides whether the answer was agreement.
+
+Core then checks the reading against the session:
+
+1. The operation and its current arguments match the pending proposal.
+2. The caller identity still matches the identity associated with that question.
+3. The latest read-back copy has the required delivery evidence, and the reply began after it finished playing.
+4. The approving work is still current, and the answer has not already been consumed.
+
+A valid answer authorizes this action and is consumed. It cannot also authorize a different write in the same model reply.
+
+| Reply or event | Consequence |
+|---|---|
+| A valid yes after the read-back was delivered | The matching operation may execute |
+| “Actually, R-18” | Changed arguments need their own proposal and approval |
+| A clear no, interpreted through `decline` | Consume the pending question without executing its operation |
+| A question about the proposed change | Not automatically a rejection; the question can remain pending |
+| A reply before playback finishes, or without confirmed delivery | It cannot approve this read-back |
+| Repeated inability to confirm delivery | Bounded attempts end in withdrawal and a fallback line |
+
+After withdrawal, the same arguments remain withdrawn on that call; asking again does not create an unlimited retry allowance. Corrected arguments can form a new proposal.
+
+The model still decides what the reply means. The runtime checks prevent that interpretation from approving a stale, mismatched or unconfirmed proposal; they do not establish perfect language understanding. Live evaluation is needed for that part.
+
+## 6. Dispatch the intent and validate the receipt
+
+After authorization, core claims the intent so another task on this call cannot dispatch it concurrently. If the service provides `note_intent(intent)`, core asks it to persist the intent before dispatch. A failure at that persistence step means the operation is not sent.
+
+Core then marks the intent dispatched and invokes `apply_change`. Suppose the backend commits the change and returns:
+
+```python
+ChangeResult(
+    caller_id='A-42',
+    record_id='R-17',
+    revision=1,
+    requested_change='complete',
+    now_revision=2,
+    status='complete',
+)
+```
+
+The two revision fields answer different questions: `revision=1` identifies the version this request acted on, while `now_revision=2` identifies the effect it produced.
+
+Core validates the response shape, checks `matches`, and applies the declared outcome rules:
+
+| Response | Established outcome | State and speech |
+|---|---|---|
+| Matching result with `status='complete'` | `succeeded` | Assign revision 2 and status, then render “Record R-17 is complete.” |
+| Matching result with `status='stale'` | `rejected` | Do not assign success facts or speak the success line |
+| Matching result with `status='pending'` | `unknown` | The backend has not established a final outcome |
+| Wrong record, invalid data or a lost response | `unknown` | Do not infer either success or failure |
+
+A receipt is recorded as evidence before success presentation awaits further work. If local state presentation or speech is then interrupted, core can repair that presentation from the stored receipt. It does not need to send the business change again or ask another model to paraphrase its result.
+
+## 7. Follow a lost response through recovery
+
+Now change just one part of the successful sequence: the backend commits revision 2, but the response never reaches core.
+
+```mermaid
+sequenceDiagram
+    participant Core
+    participant Backend
+    Core->>Backend: Apply approved change with intent I-7
+    Backend->>Backend: Commit effect and store result for I-7
+    Note over Core,Backend: Response is lost after the commit
+    Core->>Core: Keep I-7 as unknown
+    Core->>Backend: Find result for I-7
+    Backend-->>Core: Matching receipt at revision 2
+    Core->>Core: Validate and record success
+    Note over Core,Backend: No second change is needed
+```
+
+`I-7` is an illustrative intent id. The important property is that reconciliation asks about the same attempt that was dispatched.
+
+Core cannot infer failure from cancellation, timeout or malformed data after dispatch. The backend may already have committed. A synchronous function running in a worker thread can even finish after the task awaiting it is cancelled. These cases leave the intent **unknown**, with the original arguments retained for reconciliation.
+
+An explicit `Refused` exception has a different meaning: the application knows no effect happened and none will. An ordinary retry signal after dispatch does not provide that certainty.
+
+The intent's main transitions are:
 
 ```mermaid
 stateDiagram-v2
     [*] --> prepared
-    prepared --> withdrawn: read-back cannot be confirmed
     prepared --> dispatched: authorized and sent
+    prepared --> withdrawn: read-back cannot be confirmed
     dispatched --> succeeded: validated success
     dispatched --> rejected: authoritative refusal
     dispatched --> unknown: no trustworthy final result
     unknown --> succeeded: reconciliation confirms success
     unknown --> rejected: reconciliation confirms refusal
-    unknown --> dispatched: safe retry of the same intent
-    withdrawn --> [*]
+    unknown --> dispatched: same intent and safe resend
     succeeded --> [*]
     rejected --> [*]
+    withdrawn --> [*]
 ```
 
-Before dispatch, `Operation.run` validates the arguments, handles any earlier unsettled attempt, checks authorization and claims the intent so another task cannot dispatch it concurrently. If the application provides `services.note_intent(...)`, core asks it to persist the intent before sending the operation.
+`unknown` is not a synonym for failed. It means the application still lacks enough evidence to settle that attempt.
 
-After dispatch, core validates the receipt and checks the operation's declared result rules. A receipt for another account, ticket or requested revision cannot establish this attempt's result. For a change, a result such as `pending` that matches neither `succeeds` nor `rejects` leaves the outcome unknown.
+## 8. Reconcile before deciding to resend
 
-Core records the established outcome and receipt before awaiting result presentation. If speech or local state presentation then fails, the success remains recorded for repair; core does not send the business action again just to recover its confirmation line.
+On a later turn, core can call `find_change` with the original arguments and intent before another model request. The backend looks up the stored result by intent id; core validates the answer through the operation's result rules.
 
-## Why cancellation does not mean failure
-
-Consider this sequence:
-
-1. The backend commits the requested change.
-2. The caller interrupts, or the connection fails.
-3. The task waiting for the backend result is cancelled before core receives it.
-
-The change may already exist. Marking it “failed” and trying a fresh request could duplicate it. Core therefore records an unknown outcome after cancellation or another uncertain error following dispatch. A synchronous function running in a thread can even finish after its waiting task has been cancelled.
-
-An explicit `Refused` exception is different: it states that the service rejected the action. An ordinary retry signal or malformed response after dispatch does not provide that certainty.
-
-## Reconcile before deciding to resend
-
-**Reconciliation** means asking the backend what happened to the original intent. The application supplies this lookup; core validates its answer before clearing the unknown outcome.
-
-| Reconciliation result | What core can conclude |
+| Reconciliation response | Next step |
 |---|---|
-| A valid success for the same request | Record the success and present it if it still applies. |
-| A declared final refusal | Record rejection; a new attempt must follow the application's rules. |
-| No record yet, invalid data, a mismatched result, or another failure | The outcome remains unknown. Absence of a result is not proof that nothing happened. |
+| Matching, validated success | Settle the intent and present the result if it still applies |
+| A declared terminal refusal | Settle it as rejected |
+| No stored result yet | Keep it unknown; absence of a result does not prove absence of an effect |
+| Invalid data, a mismatched receipt or another error | Keep it unknown and preserve the dispatch guard |
 
-An unknown change can be resent as the **same intent** only when the application declares `idempotent: true`. That means the backend really recognizes the intent ID and avoids applying its effect twice. The setting does not add that behavior to a database or external API. A pure read is also eligible for resend because it declares no business effect.
+An unknown change can be resent as the **same intent** only if it is declared `idempotent: true`. A pure read is also resendable because it declares no business effect. Reconciliation itself does not blindly repeat the operation.
 
-While a change is unresolved, core also blocks a different intent for the same operation and identity. This is a per-call safeguard. Cross-process ownership, resource access, version checks and duplicate prevention still require backend support.
+For the declaration above to be truthful, the backend must recognize `intent.id` and prevent a duplicate effect. A common implementation commits the resource change and a result keyed by intent id in the same database transaction. If the same id arrives again, it returns that result rather than applying another change. The YAML setting does not add this behavior to a database or external API.
 
-In the support fixture, the resource change and its recorded effect commit in one SQLite transaction. The backend can then return that stored effect when asked about the intent again. Its revision check also refuses a change based on an obsolete version of the ticket.
+The id stays stable while that attempt is uncertain or retried. It is not a permanent hash of the arguments: a later, separately approved business action can need a new intent even if its arguments are identical.
 
-## A receipt is history; its result may no longer be current
+While a change remains dispatched or unknown, core also blocks a different intent of the same operation for the same caller identity. This is a per-call safeguard. Ownership checks, concurrent edits and duplicate prevention across workers still need backend enforcement. In this example, the backend's revision check refuses a request based on a version that has already changed.
 
-The call's evidence retains receipts. Suppose a ticket was resolved and then reopened. Both events happened, but only the later version describes its current state.
+## 9. Distinguish recorded history from the current effect
 
-The application identifies a resource through `resource` and the receipt field named by `subject`, and orders changes using `version`. Core's `effective()` view selects the standing successful effects for recaps. An application can also provide `current_version(...)` so a reconciled result is checked against newer backend changes. Without that hook, core only knows the versions recorded in this call.
+Suppose R-17 was completed at revision 2, then another operation reopened it at revision 3. Both receipts are historical facts. Only revision 3 describes the standing effect.
 
-This is why replaying receipt speech is different from executing an operation. Repeating a result uses recorded evidence and wording. It makes no new intent and sends no new change. A superseded receipt should not be presented as the current result.
+The declarations `resource: record`, `subject: record_id` and `version: now_revision` identify the resource and order successful changes to it. Core's `effective()` view selects the standing successful effects for recaps by resource kind and id, using application versions rather than receipt arrival order.
 
-## What recovery across processes requires
+An optional `services.current_version(kind, resource)` hook lets core check a reconciled success against newer backend changes. If it reports revision 3, a late success receipt at revision 2 is recorded as history rather than assigned and spoken as current. If that version check fails or returns no usable version, the outcome stays unknown pending a trustworthy check. Without the hook, core only knows the versions recorded in this call.
 
-An in-memory intent does not survive a killed process by itself. Durable recovery needs the application to keep the intent and effect records and retrieve unresolved intents for the relevant session or identity.
+Repeating receipt wording is separate from executing an operation. The `say_again` output uses an eligible recorded result and sends no new business change. An automatic repeat after interrupted playback likewise uses the receipt. A superseded receipt must not become the current result merely because its speech was never heard.
 
-The public opening method accepts `flow.open(..., intents=...)`. Restored unresolved intents are treated as unknown and checked before another conflicting attempt. The services may also expose `owed(identity)` to retrieve work left uncertain by earlier calls.
+## 10. Restore unresolved work after a process restart
 
-This restores the ability to settle actions. It does not automatically restore microphone connections, the full conversation history or a graph paused inside an old process.
+If the process dies after dispatch, its in-memory call records disappear. Durable recovery needs the application to persist the intent before sending it, record backend effects, and retrieve unresolved work afterward.
+
+A new process can open a call with those saved intents:
+
+```python
+call = flow.open(
+    ApplicationState(caller_id='A-42'),
+    services=backend,
+    intents=saved_unresolved_intents,
+)
+```
+
+`saved_unresolved_intents` is supplied by the application's durable store. Core treats restored unresolved intents as unknown and reconciles them before another conflicting attempt. Services can also expose `owed(identity)` to retrieve unresolved actions left by earlier calls once the caller is known.
+
+This restores the ability to settle actions. It does not restore the old microphone connection, full history, pending conversation or a graph suspended inside the previous process. Those require separate application persistence if they are needed.
+
+## Exercise recovery offline
+
+The support-desk fixture implements this pattern with `resolve_ticket` and a SQLite backend. Its fault switches can lose a committed response or return a receipt for the wrong resource. Core's intent tests also cover a thread finishing after cancellation and restoration into a fresh call.
+
+From the repository root after `uv sync --all-packages`:
+
+```bash
+uv run --directory core python - <<'PY'
+import asyncio
+import tempfile
+from pathlib import Path
+
+from pydantic_ai import models
+
+models.ALLOW_MODEL_REQUESTS = False
+
+from tests.test_intents import (
+    a_thread_commits_after_cancellation,
+    restored_intents_reconcile_first,
+)
+from tests.test_tickets import a_doubtful_answer_is_reconciled_by_intent
+
+with tempfile.TemporaryDirectory() as folder:
+    asyncio.run(a_doubtful_answer_is_reconciled_by_intent(Path(folder)))
+
+asyncio.run(a_thread_commits_after_cancellation())
+asyncio.run(restored_intents_reconcile_first())
+print('Lost responses, late thread completion and restored intents reconciled without duplicate effects.')
+PY
+```
+
+These checks use scripted models and controlled faults. They test the runtime's handling of uncertain outcomes; each real backend still needs to satisfy its declared reconciliation and idempotency contract.
 
 ## Check this against the code
 
-| Implementation and tests | What they establish |
-|---|---|
-| [`FunctionOperation` and `ConversationStep`](../../core/src/core/steps.py) | Typed function binding, read-backs, outcomes and receipt presentation. |
-| [`Operation.run`](../../core/src/core/operations.py) | Authorization, intent claims, dispatch and result recording. |
-| [`ProposalLedger`](../../core/src/core/proposals.py), [`CallContext`](../../core/src/core/state.py) | Exact question binding, delivery, withdrawal, intent restoration and effective receipts. |
-| [Intent tests](../../core/tests/test_intents.py) | Cancellation after a commit, late thread completion, invalid reconciliation, stable IDs and recovery in a fresh call. |
-| [Outcome tests](../../core/tests/test_outcomes.py) | Non-final receipts, failed persistence and checks against repeated dispatch. |
-| [Support-desk tests and backend](../../core/tests/test_tickets.py) | Heard approval, stale revisions, wrong-resource results, process death, renamed domain fields and receipt-only repetition. |
-
-These are runtime guarantees exercised with controlled faults and scripted models. They do not establish perfect intent recognition, universal backend safety or production capacity.
+- [Function binding and node tools](../../core/src/core/steps.py): `FunctionOperation`, `ConversationStep`, reconciliation and receipt presentation.
+- [Operation execution](../../core/src/core/operations.py): `Operation.run`, dispatch, intent claims, outcome validation and current-version checks.
+- [Proposal ledger](../../core/src/core/proposals.py) and [session records](../../core/src/core/state.py): exact question binding, delivery, withdrawal, restoration and effective receipts.
+- [Intent tests](../../core/tests/test_intents.py) and [outcome tests](../../core/tests/test_outcomes.py): cancellation, safe retries, late effects, malformed results and recovery.
+- [Support-desk backend](../../core/tests/ticket_flow/tickets.py) and [tests](../../core/tests/test_tickets.py): durable intent records, stale revisions, process death and receipt-only repetition.
 
 [← Typed flows and node agents](04-typed-flows-and-node-agents.md) · [Reading guide](README.md)

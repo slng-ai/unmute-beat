@@ -2,7 +2,7 @@
 
 **A reusable conversation runtime for voice applications.** An application defines its own typed state, conversational nodes, prompts and backend functions. The harness runs that definition and manages the conversation across turns, corrections, interruptions and tool calls.
 
-The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the architecture on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32): salon and Faro use the public node-agent path, and the legacy classifier path has been removed. Live qualification and performance optimization remain open.
+The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the architecture on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32): salon and Faro use the public node-agent path, and the legacy classifier path has been removed. The final live qualification did not pass: see [Live verification](#live-verification).
 
 For a beginner-friendly explanation, start with the [architecture guide](docs/architecture/README.md). It first explains agents, tools and nodes, then follows a conversation: asking for missing information, replying after a lookup and confirming a change. Python, YAML and recovery details come afterward.
 
@@ -74,6 +74,31 @@ For voice delivery, the Pipecat adapter supports Twilio marks and a browser inte
 
 The corresponding mechanisms live in [steps](core/src/core/steps.py), [operations](core/src/core/operations.py), [state](core/src/core/state.py), [history](core/src/core/history.py) and the [Pipecat adapter](core/src/core/processor.py).
 
+## Live verification
+
+The final live qualification ran on 28 September 2026, on revision `76bf4ed`. Its runtime is identical to PR #36's `ff13f14`. Coval's simulated caller dialled a real Twilio number. The call ran through Pipecat and this harness on one MacBook, one call at a time, and every read-back counted as heard only when its own Twilio playback mark came back.
+
+**The revision did not qualify.** One of ten normal calls booked an appointment the caller had refused. The interruptive cohort was not run.
+
+| Run | Calls | Passed | Failed | Unknown |
+|---|---|---|---|---|
+| [Normal callers, GKAmHKaj](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/GKAmHKajJGTn3wSG9ztSZb) | 10 | 9 | 1 | 0 |
+| Interruptive callers | 0 of 10 planned | not run | not run | not run |
+
+The failed call: the caller said "No, don't book that, I'll call back another time". Turn taking ended the turn halfway through the sentence. Speech-to-text returned "No, don't. Book that." The booking node's agent read that as a yes. Core allowed the write: the read-back had been delivered and the answer came after it, and core does not judge what the words mean. That gap is the open repair.
+
+What the other nine calls exercised, each one checked against the salon's own database and the call's trace:
+
+- **Typed state.** A phone number given in pieces, a corrected number, and a changed day were each recorded as validated state. Nothing was looked up or booked for the wrong number.
+- **Permitted transitions.** A price question during a read-back went to the front-desk node and came back. Nothing was booked until a fresh read-back got a fresh yes.
+- **Approval tied to delivered speech.** In all 21 writes, the read-back's Twilio mark came back before the caller's answer began.
+- **Receipt-backed results.** Bookings, a move and a cancel of existing appointments, and a repeated confirmation were all said from the database's receipts. No call made a duplicate or cross-customer change.
+- **Recovery after interruption.** Not exercised live in this qualification, because the interruptive cohort did not run.
+
+Time to the first useful answer was a median 1.92 s and a p90 of 3.38 s, measured on the server over 65 turns. No holding line was used. These are not a comparison with the native builds.
+
+The salon is the demanding evaluation application. These conversation mechanisms belong to the reusable package, not to the salon. Opening the Coval run needs access to the SLNG Coval workspace. The [detailed report](docs/qualification/final-qualification.md) has every call, the failure's full timeline, tokens, cost and the budget.
+
 ## Reuse and deployment are separate questions
 
 A compiled flow is shared while each call gets its own state, history, pending proposals and budgets. Application services may be shared deliberately. Their databases must enforce ownership, concurrency and idempotency; isolated conversation state does not make a shared backend safe by itself.
@@ -82,7 +107,7 @@ The harness does not supply a universal database, distributed scheduler or autom
 
 The latency goal is small measured runtime overhead, while avoiding unnecessary model requests for work code already knows how to perform. Typed flows can narrow prompts and tool sets, but do not automatically lower token usage. Speed, token cost and accuracy need comparable measurements on the chosen model, transport and workload.
 
-Current qualification remains open: the N12 absolute overhead ceiling passes, its relative rule still fails, and native latency parity is not established. The [cleanup report](docs/research/reusable-core/core-cleanup.md) records the current implementation and its limits; the [preceding salon qualification report](docs/research/reusable-core/session-4g.md) covers its earlier voice checks. These limits concern the evidence available today, not application-specific requirements imposed by core.
+The N12 absolute overhead ceiling passes, its relative rule still fails, and native latency parity is not established. The [cleanup report](https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/core-cleanup.md) records the current implementation and its limits. Earlier session reports are in the [research archive](https://github.com/slng-ai/slng-voice-harness/tree/ff13f14/docs/research/reusable-core). These limits concern the evidence available today, not application-specific requirements imposed by core.
 
 ## Try an existing integration
 
@@ -104,4 +129,4 @@ uv run --directory core python -m tests
 
 The suite disables model requests. It verifies runtime behavior with scripted models; live evaluations are needed to assess language understanding and audio behavior.
 
-Faro, a bilingual language-learning companion, uses the same public path: eight conversation nodes and one code node. Its node agent proposes a grade; Faro's typed functions validate and save it and apply the learning rules. Its fixed core lines follow the learner's language. Its new build has offline evidence only; see the [cleanup report](docs/research/reusable-core/core-cleanup.md). See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.
+Faro, a bilingual language-learning companion, uses the same public path: eight conversation nodes and one code node. Its node agent proposes a grade; Faro's typed functions validate and save it and apply the learning rules. Its fixed core lines follow the learner's language. Its new build has offline evidence only; see the [cleanup report](https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/core-cleanup.md). See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.

@@ -14,6 +14,15 @@ Its 50 ms ceiling passes.
 
 Branch: `perf/core-optimization`. Baseline: `e0edb30` (merged main, PR #32). The code measured as the
 candidate is `0d7fc69`. Later commits on the branch add only documents and evidence.
+
+The branch was then rebased onto main at `1d826a5`, which added architecture documents only (PRs #33 and
+#34). The measured commits and their rebased copies carry identical code
+(`git diff` over `core`, `use-cases`, `uv.lock` and `pyproject.toml` is empty):
+
+| Measured as | On the branch now | Change |
+|---|---|---|
+| `3bf8d3f` (`fix1`) | `19c0cab` | the steps table owns its graph |
+| `0d7fc69` (`hooks`) | `0100897` | one `Hooks` per step agent |
 Evidence is in [`optimization/`](optimization/): the scripts, and their raw output in
 [`optimization/results/`](optimization/results/).
 
@@ -344,7 +353,8 @@ the native arm, which is the pinned reference's known result.
 
 ## Acceptance gates
 
-On the branch at `ad6319f` plus the evidence files, each command's real last line:
+On the branch before the rebase (code as `0d7fc69`), each command's real last line. The rebase brought
+in documents only. `ruff` and the core suite were run again after it, with the same result.
 
 | Gate | Result |
 |---|---|

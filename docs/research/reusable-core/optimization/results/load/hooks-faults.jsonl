@@ -1,7 +1,0 @@
-{"F0_kill_before_intent_recorded": {"bystander_went_on": true, "dead_session_closed_in_time": true, "replacement_in_time": true, "one_booking_for_the_victim": true, "old_intent_settled": true, "no_duplicates": true, "idle_restored": true}}
-{"F1_kill_after_intent_recorded": {"bystander_went_on": true, "dead_session_closed_in_time": true, "replacement_in_time": true, "one_booking_for_the_victim": true, "old_intent_settled": true, "no_duplicates": true, "idle_restored": true}}
-{"F2_kill_after_commit": {"bystander_went_on": true, "dead_session_closed_in_time": true, "replacement_in_time": true, "one_booking_for_the_victim": true, "old_intent_settled": true, "no_duplicates": true, "idle_restored": true}}
-{"F3_stale_worker_fenced": {"old_intent_voided": true, "one_booking": true}}
-{"F4_overload": {"five_admitted_one_refused": true, "places_freed": true}}
-{"F5_graceful_drain": {"drained_call_finished": true, "new_call_served_not_dropped": true, "drained_worker_exited": true, "replaced": true}}
-{"F6_placed_pair_live_fault": {"media_followed_the_webhook": true, "placed_on_two_processes": true, "armed_only_after_placement": true, "victim_worker_died_after_commit": true, "fault_fired_once": true, "bystander_booked_on_the_other_process": true, "dead_session_closed_in_time": true, "replacement_in_time": true, "admission_recovered": true, "old_intent_settled_booked": true, "ring_back_booked_nothing_more": true, "contender_did_not_get_the_time": true, "idle_restored": true}}

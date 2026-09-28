@@ -12,8 +12,9 @@ import json
 import sys
 from pathlib import Path
 
-from coval_sim.coval import CovalClient
 from make_sets import CASES, key
+
+from coval_sim.coval import CovalClient
 
 
 def main() -> int:
@@ -21,7 +22,9 @@ def main() -> int:
     doc = json.loads(CASES.read_text())
     problems, fixtures = [], {}
     for name, cohort in doc['cohorts'].items():
-        listed = coval._call('test-cases', 'list', '--test-set-id', cohort['coval_test_set'], '--page-size', '100')
+        listed = coval._call(
+            'test-cases', 'list', '--test-set-id', cohort['coval_test_set'], '--page-size', '100'
+        )
         remote = {c['id']: c for c in listed or []}
         wanted = {c['coval_test_case']: c for c in cohort['cases']}
         if set(remote) != set(wanted):

@@ -15,7 +15,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 OUT = HERE / 'cases.v1.json'
-DIGITS = 'zero one two three four five six seven eight nine'.split()
+DIGITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
 TAIL = (
     'You are calling from a different phone, so the salon cannot see your number. Give your number only when '
     'the receptionist asks for it. When asked if you need anything else at the end, say "No, that\'s all, '
@@ -89,7 +89,7 @@ def cases(cohort: int) -> list[dict]:
             f'say "{said(wrong)}". '
             + (
                 'When they start reading that number back, interrupt before they finish and say "No, sorry, '
-                f'that\'s wrong. It\'s {said(p[2])}." '
+                f"that's wrong. It's {said(p[2])}.\" "
                 if rude
                 else f'When they read that number back, say "No, sorry, the last part is wrong. It\'s {said(p[2])}." '
             )
@@ -114,7 +114,7 @@ def cases(cohort: int) -> list[dict]:
                 else 'Say yes clearly when the move to Thursday at ten is read back. '
             )
             + TAIL,
-            'trigger': 'the caller\'s existing booking found and moved'
+            'trigger': "the caller's existing booking found and moved"
             + (', with the target corrected over the move read-back' if rude else ''),
             'final': [
                 {
@@ -140,7 +140,7 @@ def cases(cohort: int) -> list[dict]:
                 else 'Say yes clearly when the cancellation is read back. '
             )
             + TAIL,
-            'trigger': 'the caller\'s existing booking found and cancelled once'
+            'trigger': "the caller's existing booking found and cancelled once"
             + (' (a yes said over the read-back cannot approve it)' if rude else ''),
             'final': [],
             'cancelled': [{'service': 'blowout', 'day': '2026-10-01', 'at': '15:00', 'revision': 2}],
@@ -159,7 +159,8 @@ def cases(cohort: int) -> list[dict]:
                 else 'When the receptionist reads the Friday booking back and asks you to confirm, say exactly '
                 '"No, don\'t book that. I\'ll call back another time." '
             )
-            + 'If they ask again, say no again. Never agree to a booking. ' + TAIL,
+            + 'If they ask again, say no again. Never agree to a booking. '
+            + TAIL,
             'trigger': 'an explicit no to a read-back: nothing written',
             'final': [],
             'writes': {},
@@ -234,7 +235,8 @@ def cases(cohort: int) -> list[dict]:
                 else 'When the receptionist tells you it is booked and asks if there is anything else, say exactly '
                 '"Yes, that\'s perfect. Can you move it to one in the afternoon instead?" '
             )
-            + 'Say yes clearly when the move is read back. ' + TAIL,
+            + 'Say yes clearly when the move is read back. '
+            + TAIL,
             'trigger': '"Yes, that\'s perfect. Can you..." is a new request, not a goodbye: the booking just made is moved',
             'final': [{'service': 'haircut', 'day': '2026-10-03', 'at': '13:00', 'revision': 2}],
             'writes': {'book': 1, 'move': 1},
@@ -248,10 +250,17 @@ def cases(cohort: int) -> list[dict]:
 
 def main() -> None:
     old = json.loads(OUT.read_text()) if OUT.exists() else {}
-    ids = {c['key']: c.get('coval_test_case', '') for cohort in old.get('cohorts', {}).values() for c in cohort['cases']}
+    ids = {
+        c['key']: c.get('coval_test_case', '')
+        for cohort in old.get('cohorts', {}).values()
+        for c in cohort['cases']
+    }
     sets = {name: cohort.get('coval_test_set', '') for name, cohort in old.get('cohorts', {}).items()}
     cohorts = {}
-    for number, name, persona in ((1, 'normal', 'MUFJdYAHdBHU6UbRRu4ykM'), (2, 'interruptive', 'VSruLZYYyz3w7fkdUaheDR')):
+    for number, name, persona in (
+        (1, 'normal', 'MUFJdYAHdBHU6UbRRu4ykM'),
+        (2, 'interruptive', 'VSruLZYYyz3w7fkdUaheDR'),
+    ):
         made = cases(number)
         for case in made:
             case['coval_test_case'] = ids.get(case['key'], '')

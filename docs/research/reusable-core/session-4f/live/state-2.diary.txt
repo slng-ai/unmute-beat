@@ -1,8 +1,0 @@
-== bookings
-1|BK0001|+34671540105|haircut|2026-09-30|14:00|29846160|29846205|chair|2|1
-== intents
-524b31924e81401f8bd3ea44620d0b3b|CA46c31c4c6b3c3dc05709294876ac9e08|book_appointment|{"phone":"+34671540105","slot":"2026-09-29T1400|haircut"}|+34671540105
-270a838dff6a44cdb1c2328678df67a4|CA46c31c4c6b3c3dc05709294876ac9e08|move_appointment|{"phone":"+34671540105","slot":"2026-09-30T1400|haircut","booking_id":"BK0001"}|+34671540105
-== operations
-524b31924e81401f8bd3ea44620d0b3b|{"status": "booked", "booking_id": "BK0001", "service": "haircut", "date": "2026-09-29", "time": "14:00", "spoken": "Tuesday the 29th at 2:00 PM", "revision": 1}
-270a838dff6a44cdb1c2328678df67a4|{"status": "moved", "booking_id": "BK0001", "service": "haircut", "date": "2026-09-30", "time": "14:00", "spoken": "Wednesday the 30th at 2:00 PM", "revision": 2}

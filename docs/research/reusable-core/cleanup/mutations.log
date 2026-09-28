@@ -1,6 +1,0 @@
-caught: help is ignored :: AssertionError: help before the answer
-caught: a missed item before is ignored :: AssertionError: right after a correction is recorded as assisted
-caught: the country code check is off :: AssertionError: a +34 the caller never said is not added by the model
-caught: answers need not be the caller words :: AssertionError: nothing recorded, nobody moved
-caught: learner facts before confirmation :: AssertionError: learner facts were held before a confirmed phone: {'learner_id': 1}
-caught: a coach answer is not assisted back in the lesson :: AssertionError: help is the store record, before the coach speaks

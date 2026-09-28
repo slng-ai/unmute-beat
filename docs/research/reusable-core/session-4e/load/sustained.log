@@ -1,5 +1,0 @@
-17:48  up 9 days,  9:08, 10 users, load averages: 1.31 1.23 1.24
-2026-09-27 17:48:45.589 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ
-{"calls": 5, "overlap": {"max": 5, "seconds_at": {"0": 0.0, "1": 13.0, "2": 0.5, "3": 1.5, "4": 2.75, "5": 600.75}, "longest_run_at_max_s": 600.75, "span_s": 618.3171999580227}, "verdict": {"no_unauthorised": true, "no_duplicates": true, "no_capacity_violation": true, "no_leak": true, "lag_p99_ok": true, "rss_ok": true, "ceiling_held": true}}
-exit=0
-18:04  up 9 days,  9:23, 10 users, load averages: 1.26 1.12 1.17

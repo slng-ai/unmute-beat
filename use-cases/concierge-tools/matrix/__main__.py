@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 SCENARIOS = HERE / 'scenarios.v2.json'
-OUT = ROOT / 'docs' / 'research' / 'reusable-core' / 'session-2'
+OUT = ROOT / 'data' / 'matrix'
 
 
 class Arm(BaseModel):

@@ -39,8 +39,8 @@ For the two common questions, go directly to [asking naturally for missing infor
 
 ## Implementation status
 
-This guide describes the implementation on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32). Both salon and Faro use the public manifest path; the old classifier modules, `kind: agent` and application-defined `call:` classes have been removed. The [cleanup report](../research/reusable-core/core-cleanup.md#5-public-compatibility-changes) lists the replacements for those APIs.
+This guide describes the implementation on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32). Both salon and Faro use the public manifest path; the old classifier modules, `kind: agent` and application-defined `call:` classes have been removed. The [cleanup report](https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/core-cleanup.md#5-public-compatibility-changes) lists the replacements for those APIs.
 
-The new Faro build has offline verification only. Its live grading accuracy is still unmeasured, and receipt recovery has routing limits described in chapter 05. [The documentation review](../research/reusable-core/pr32-architecture-review.md) records what was checked at this revision.
+The new Faro build has offline verification only. Its live grading accuracy is still unmeasured, and receipt recovery has routing limits described in chapter 05. [The documentation review](https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/pr32-architecture-review.md) records what was checked at this revision.
 
 [Start with the stack and boundaries →](01-stack-and-boundaries.md)

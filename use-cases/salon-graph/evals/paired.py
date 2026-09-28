@@ -7,7 +7,7 @@
 
 The same file runs in both arms, each in its own checkout and process, so
 importing `salon` can only ever load that arm's salon. For every case in
-`docs/research/reusable-core/session-4/cases.json`, in order, it seeds the
+`evals/paired-cases.json`, in order, it seeds the
 same state (a heard read-back, an offer on the table, a receipt that was cut),
 puts the same prior dialogue in the history, and sends one caller reply
 through the arm's real turn engine and its real model. It records what the
@@ -55,9 +55,7 @@ TURN_REQUESTS = 4
 A turn's own budget is 8 requests; 4 keeps the 32-request allowance a hard cap and still fits every reply either
 arm needs in the offline runs. A reply that needs more ends `exhausted` and is reported as an incomplete measurement.
 """
-CASES = (
-    Path(__file__).resolve().parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4' / 'cases.json'
-)
+CASES = Path(__file__).with_name('paired-cases.json')
 
 
 def history(*lines: tuple[str, str]) -> list:

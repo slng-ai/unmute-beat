@@ -4,7 +4,7 @@
 (`fixtures/session4_calls.json`: their conversation, turn and write spans
 only; `fixtures/session4_evidence.json`: an agent's reading of them). Each
 rule below once gave a false pass or a false failure: the independent review
-of PR #20 (`docs/research/reusable-core/session-4b-evaluator-review.md`)
+of PR #20 (https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/session-4b-evaluator-review.md)
 found the ones marked "review". Then the command itself, run as a process,
 for its exit status. Asserts, no pytest, no network.
 """

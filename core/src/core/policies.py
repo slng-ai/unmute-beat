@@ -111,7 +111,7 @@ def request_clock(into: Hooks | None = None) -> Hooks:
     `into` registers the hook on an agent's existing `Hooks` rather than a
     new one, as every policy here does: Pydantic AI dispatches each
     capability separately, and measured about 110 us per run for each extra
-    `Hooks` on a bare agent (`docs/research/reusable-core/core-optimization.md`).
+    `Hooks` on a bare agent (the core optimization report, https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/core-optimization.md).
     """
     hooks = into if into is not None else Hooks()
 

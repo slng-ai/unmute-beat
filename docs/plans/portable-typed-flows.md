@@ -1,7 +1,7 @@
 # Plan: portable typed conversation flows
 
 Written 2026-09-23 against `452698d`. Based on
-[`docs/research/portable-typed-flows.md`](../research/portable-typed-flows.md).
+[`docs/research/portable-typed-flows.md`](https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/portable-typed-flows.md).
 
 This is a plan, not a decision to migrate. Each phase ends with a check. If a
 check fails, we stop and rethink before starting the next phase.

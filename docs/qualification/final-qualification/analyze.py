@@ -71,7 +71,9 @@ def call_metrics(sid: str, rows: list[dict]) -> dict:
                 return t.start.timestamp() + float(t.attrs.get('metrics.ttfb') or 0)
 
             entry['useful_audio_s'] = round(entry['any_audio_s'] + heard(useful) - heard(first), 3)
-        entry['tts_ttfb_s'] = float(first.attrs['metrics.ttfb']) if first and first.attrs.get('metrics.ttfb') else None
+        entry['tts_ttfb_s'] = (
+            float(first.attrs['metrics.ttfb']) if first and first.attrs.get('metrics.ttfb') else None
+        )
         inside = [o for o in done if turn.start <= o.start and (turn.end is None or o.start <= turn.end)]
         entry['requests'] = len(inside)
         entry['model_s'] = round(sum((o.end - o.start).total_seconds() for o in inside if o.end), 3)
@@ -116,7 +118,9 @@ def main() -> None:
         'turns_with_no_useful_audio': sum(t['useful_audio_s'] is None for t in turns),
         'requests_completed': sum(c['requests_completed'] for c in calls),
         'requests_cancelled_or_unreported': sum(c['requests_cancelled_or_unreported'] for c in calls),
-        'tokens': {k: sum(c['tokens'][k] for c in calls) for k in ('input_uncached', 'input_cached', 'output')},
+        'tokens': {
+            k: sum(c['tokens'][k] for c in calls) for k in ('input_uncached', 'input_cached', 'output')
+        },
         'cost_usd': round(sum(c['cost_usd'] for c in calls), 6),
         'model_s_per_turn_median': quantile([t['model_s'] for t in turns], 0.5),
         'tts_ttfb_s_median': quantile([t['tts_ttfb_s'] for t in turns if t['tts_ttfb_s'] is not None], 0.5),

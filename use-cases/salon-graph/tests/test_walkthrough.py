@@ -10,9 +10,8 @@ Each step asserts which node is active, what each provider request was sent
 (the requested time, the offer, the pending read-back, the receipt), and
 what the diary holds. It also writes the booking node's rendered context at
 the offer, the pending read-back and after the receipt to
-`docs/research/reusable-core/session-4g/booking-context.md`, so the
-design can be reviewed from what the agent actually sees. Session 4's, 4c's and 4e's copies
-stay as they were measured. A recap reference is an intent id, random per run,
+`tests/golden/booking-context.md`, so the
+design can be reviewed from what the agent actually sees. A recap reference is an intent id, random per run,
 so the snapshot writes it as `<ref>`.
 
 Covers D1-D6, P4, P13, P14, P15 and P17 (scripted). Scripted models prove the
@@ -30,9 +29,7 @@ TODAY = CLOCK.date()
 FRIDAY = '2026-10-02'
 OFFER = '2:00 PM on Friday the 2nd is free. I also have 1:30 PM or 2:30 PM.'
 """The salon's own words for the Friday offer: the booking step is rendered (session 4e)."""
-SNAPSHOTS = (
-    Path(__file__).parents[3] / 'docs' / 'research' / 'reusable-core' / 'session-4g' / 'booking-context.md'
-)
+SNAPSHOTS = Path(__file__).parent / 'golden' / 'booking-context.md'
 REF = re.compile(r'\b[0-9a-f]{8}(?=: ")')
 """A recap reference in the rendered context: an intent id's first characters, different every run."""
 

@@ -32,7 +32,9 @@ def main() -> None:
     cases = json.loads(CASES.read_text())['cohorts'][cohort]['cases']
     seed = json.loads((state / 'seed.json').read_text())
     db = sqlite3.connect(f'file:{state / "diary.db"}?mode=ro', uri=True)
-    bookings = rows(db, 'SELECT booking_id, phone, service, day, at, revision, active FROM bookings ORDER BY id')
+    bookings = rows(
+        db, 'SELECT booking_id, phone, service, day, at, revision, active FROM bookings ORDER BY id'
+    )
     intents = rows(
         db,
         'SELECT i.id, i.session, i.operation, i.args, i.subject, o.result FROM intents i '
@@ -73,10 +75,18 @@ def main() -> None:
                 want['revision'],
             ) and (held['booking_id'] in seeded) == bool(want.get('seeded'))
 
-        if len(active) != len(case['final']) or not all(any(same(h, w) for h in active) for w in case['final']):
-            problems.append(f'active {[(b["service"], b["day"], b["at"], b["revision"]) for b in active]}, want {case["final"]}')
+        if len(active) != len(case['final']) or not all(
+            any(same(h, w) for h in active) for w in case['final']
+        ):
+            problems.append(
+                f'active {[(b["service"], b["day"], b["at"], b["revision"]) for b in active]}, want {case["final"]}'
+            )
         for want in case.get('cancelled', []):
-            if not any((b['service'], b['day'], b['at'], b['revision']) == (want['service'], want['day'], want['at'], want['revision']) for b in gone):
+            if not any(
+                (b['service'], b['day'], b['at'], b['revision'])
+                == (want['service'], want['day'], want['at'], want['revision'])
+                for b in gone
+            ):
                 problems.append(f'no cancelled booking {want}')
         if dict(done) != case['writes']:
             problems.append(f'successful writes {dict(done)}, want {case["writes"]}')
@@ -91,7 +101,12 @@ def main() -> None:
             'active': active,
             'cancelled': gone,
             'writes': [
-                {'operation': i['operation'], 'session': i['session'], 'args': i['args'], 'result': i['result']}
+                {
+                    'operation': i['operation'],
+                    'session': i['session'],
+                    'args': i['args'],
+                    'result': i['result'],
+                }
                 for i in writes
             ],
             'lookups': [{'session': i['session'], 'ok': bool(i['result'])} for i in lookups],

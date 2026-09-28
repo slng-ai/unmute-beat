@@ -415,7 +415,7 @@ def test_explicit_cases() -> None:
     assert parsed.cases == ['c3', 'c1'], 'the command line reaches plan'
 
 
-PROFILE = Repository.find(Path.cwd()).root / 'docs/research/reusable-core/session-3/speech-profile.v1.env'
+PROFILE = Path(__file__).parent / 'fixtures' / 'speech-profile.v1.env'
 
 
 def test_speech_profile() -> None:

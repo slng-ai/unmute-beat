@@ -39,7 +39,7 @@ agent's label is not a human one, and the report says which a pass rests on.
 Without evidence, a call can fail on deterministic facts but never pass on
 semantic ones. The audit fields a pass needs that no session-4 build wrote
 yet (`proposal_args`, `playback`, `operation`) are Stage B's to emit
-(`docs/research/reusable-core/session-4b-evaluator.md`).
+(https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/session-4b-evaluator.md).
 
 Diagnostics that are not verdicts stay as before: model text beside an
 operation, holding lines, request chains, latency, endpointing, and the first

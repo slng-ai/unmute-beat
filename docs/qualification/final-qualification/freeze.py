@@ -58,12 +58,20 @@ def main() -> None:
             'head': git('rev-parse', 'HEAD'),
             'branch': git('rev-parse', '--abbrev-ref', 'HEAD'),
             'pr36_head': 'ff13f1444c68de2de25093c8ddb1d8f778f7367c',
-            'runtime_diff_from_pr36_head': git('diff', '--stat', 'ff13f1444c68de2de25093c8ddb1d8f778f7367c', 'HEAD', '--', *runtime)
+            'runtime_diff_from_pr36_head': git(
+                'diff', '--stat', 'ff13f1444c68de2de25093c8ddb1d8f778f7367c', 'HEAD', '--', *runtime
+            )
             or 'none',
             'runtime_status': git('status', '--porcelain', '--', *runtime) or 'clean',
-            'trees': {path: git('rev-parse', f'HEAD:{path}') for path in ('core/src', 'use-cases/salon-graph')},
+            'trees': {
+                path: git('rev-parse', f'HEAD:{path}') for path in ('core/src', 'use-cases/salon-graph')
+            },
         },
-        'dependencies': {'uv.lock_sha256': sha(ROOT / 'uv.lock'), 'python': platform.python_version(), **versions},
+        'dependencies': {
+            'uv.lock_sha256': sha(ROOT / 'uv.lock'),
+            'python': platform.python_version(),
+            **versions,
+        },
         'application': {
             'manifest': 'use-cases/salon-graph/salon/agent.yaml',
             'manifest_sha256': sha(SALON / 'salon/agent.yaml'),
@@ -103,7 +111,11 @@ def main() -> None:
             'delivery': 'marks: only a returned Twilio mark delivers a read-back',
             'server': 'use-cases/salon-graph/server.py under uvicorn, started by coval_sim run (a lone run: one campaign)',
             'workers': 2,
-            'max_calls': int(re.search(r"MAX_CALLS = int\(os.getenv\('MAX_CALLS'\) or (\d+)\)", (SALON / 'server.py').read_text())[1]),
+            'max_calls': int(
+                re.search(
+                    r"MAX_CALLS = int\(os.getenv\('MAX_CALLS'\) or (\d+)\)", (SALON / 'server.py').read_text()
+                )[1]
+            ),
             'concurrency': 1,
             'call_seconds': cases['call_seconds'],
             'drain_seconds': cases['call_seconds'] + 20,

@@ -1,8 +1,0 @@
-Prompt 'harness-reading/still-agreed-label:candidate' not found during refresh, evicting from cache.
-Prompt 'harness-reading/request-kept-label:candidate' not found during refresh, evicting from cache.
-harness-reading/confirm: 48 items, prompt v3 ['production', 'candidate']
-harness-reading/choose: 21 items, prompt v2 ['candidate', 'latest']
-harness-reading/take-back: 16 items, prompt v3 ['candidate', 'latest']
-harness-reading/still-agreed: 5 items, prompt v1 ['production', 'latest']
-harness-reading/closing: 16 items, prompt v3 ['candidate', 'latest']
-harness-reading/request-kept: 7 items, prompt v1 ['production', 'latest']

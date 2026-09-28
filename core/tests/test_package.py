@@ -3,7 +3,7 @@
 Each check runs in a fresh interpreter with the model and tracing keys
 removed, so what it sees is what an application importing `core` gets. The
 installed-wheel version of the same proof, in a project outside the
-checkout, is `docs/research/reusable-core/session-2/package-proof.sh`.
+checkout, is `scripts/package-proof.sh`.
 """
 
 import os

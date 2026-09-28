@@ -5,7 +5,7 @@ fixed diary clock (Monday 28 September 2026). The scripted choices include
 hostile ones, so a guard is shown to hold at execution, not because a model
 obeyed its prompt. Letters follow session 4's matrix; P numbers its
 node-agent acceptance list. What each old module asserted, and where it
-lives now, is in `docs/research/reusable-core/session-4.md`.
+lives now, is in the session 4 report (https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/session-4.md).
 """
 
 import asyncio

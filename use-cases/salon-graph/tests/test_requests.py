@@ -2,7 +2,7 @@
 
 The session 4e prompt had booking call `collect`, then `options`, then `wait`
 for every offer; the live traces showed the request after `options` called
-only `wait` in 13 of 15 cases (`docs/research/reusable-core/session-4f/booking_requests.py`),
+only `wait` in 13 of 15 cases (`booking_requests.py`, https://github.com/slng-ai/slng-voice-harness/tree/ff13f14/docs/research/reusable-core/session-4f),
 and `wait` looks the offer up itself. The session 4f prompt records and waits
 in one reply, calls `options` only for an id it cannot see, turns a no down
 with `decline`, and says a receipt again with `say_again`.

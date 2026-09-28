@@ -36,7 +36,9 @@ def main() -> None:
                 'INSERT INTO bookings (phone, service, day, at, starts, ends) VALUES (?, ?, ?, ?, ?, ?)',
                 (case['phone'], seed['service'], seed['day'], seed['at'], starts, ends),
             )
-            db.execute('UPDATE bookings SET booking_id = ? WHERE id = ?', (f'BK{row.lastrowid:04d}', row.lastrowid))
+            db.execute(
+                'UPDATE bookings SET booking_id = ? WHERE id = ?', (f'BK{row.lastrowid:04d}', row.lastrowid)
+            )
     made = {
         'cohort': cohort,
         'diary': str(path),
@@ -45,7 +47,10 @@ def main() -> None:
             dict(zip(('booking_id', 'phone', 'service', 'day', 'at', 'revision', 'active'), r, strict=True))
             for r in db.execute('SELECT booking_id, phone, service, day, at, revision, active FROM bookings')
         ],
-        'counts': {t: db.execute(f'SELECT count(*) FROM {t}').fetchone()[0] for t in ('operations', 'intents', 'complaints')},
+        'counts': {
+            t: db.execute(f'SELECT count(*) FROM {t}').fetchone()[0]
+            for t in ('operations', 'intents', 'complaints')
+        },
     }
     db.close()
     (state / 'seed.json').write_text(json.dumps(made, indent=1) + '\n')

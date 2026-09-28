@@ -11,7 +11,7 @@
   `golden/agents.json`: the prompt, the application state core renders, the
   tools and the outputs. Tool docstrings are prompt text, so any change is a
   diff to review. `BLESS_AGENTS=1` rewrites it; the parent's pins are kept as
-  `docs/research/reusable-core/session-4/agents.parent.json`.
+  `agents.parent.json` in the research archive (https://github.com/slng-ai/slng-voice-harness/tree/ff13f14/docs/research/reusable-core/session-4).
 """
 
 import asyncio

@@ -58,7 +58,7 @@ DIARY_PATH=salon.db RUNNER_DB=runner.db uv run uvicorn server:app --workers 2 --
 
 The runner admits at most five calls and answers busy past that. It is
 qualified on one MacBook for five calls at once
-([session-4c.md](../../docs/research/reusable-core/session-4c.md)). That is not
+([session-4c.md](https://github.com/slng-ai/slng-voice-harness/blob/ff13f14/docs/research/reusable-core/session-4c.md)). That is not
 a production capacity claim. For live Coval calls on a real Twilio line, use
 `coval_sim serve` in `../concierge-tools`, which starts this runner.
 

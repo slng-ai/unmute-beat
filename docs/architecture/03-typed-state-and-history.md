@@ -88,6 +88,8 @@ The same integer can therefore have different authority depending on its source.
 | `call.collect(...)` | The collection machinery | Flow-level collectible fields, validation and dependent-value resets |
 | `call.update(...)` | Trusted application code and receipt handling | Known fields and a valid complete replacement state |
 
+A collectible field can also hold an agent judgement rather than a caller quotation. Faro, for example, lets its examiner record a typed grade and feedback. Validating the grade limits its allowed values; it does not prove the judgement correct. Faro's application code decides what that grade means for progress, using the stored exercise and whether the learner received help. Those teaching rules do not belong to core.
+
 The direct `call.collect` method is not a substitute for the node-specific tool schema. It knows the fields collected across the flow; the generated tool narrows those to the active node's fields. `call.update` deliberately allows trusted code to assign backend-derived facts.
 
 Use these paths instead of assigning `call.state.facts.revision` directly. Direct mutation bypasses validation and the runtime's tracking.
@@ -133,6 +135,8 @@ The guarantee applies to each validated update. A `collect` tool invocation can 
 Validators can also normalize equivalent inputs before core compares them. If the application's validator stores both “complete” and “ COMPLETE ” as `complete`, recording the second spelling does not count as a changed request.
 
 Core supplies the call's `today`, `now`, previous facts as `before`, and the caller's words this turn as `heard` through Pydantic's validation context. An application can use these to interpret a relative date consistently, validate a correction against the previous state, or refuse a new value the caller never said. The whole state is validated on every change, so a check on `heard` compares with `before` and leaves an unchanged value alone. Core supplies the context; the application supplies the interpretation. It does not invoke a model to normalize values.
+
+A language field or property can also select the call's fixed phrases through `language:` and `locales:` in the manifest. Changing it affects this call's future core lines, not another caller's language, the STT model or the TTS voice. Application functions still supply their own questions and receipt wording. [Chapter 04](04-typed-flows-and-node-agents.md#8-choose-who-writes-the-spoken-answer) shows this boundary.
 
 ## 6. Keep choices tied to the facts that produced them
 

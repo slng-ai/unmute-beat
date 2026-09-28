@@ -2,7 +2,7 @@
 
 **A reusable conversation runtime for voice applications.** An application defines its own typed state, conversational nodes, prompts and backend functions. The harness runs that definition and manages the conversation across turns, corrections, interruptions and tool calls.
 
-The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the node-agent architecture now merged into `main`. Qualification and migration of the remaining examples are still in progress.
+The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the architecture on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32): salon and Faro use the public node-agent path, and the legacy classifier path has been removed. Live qualification and performance optimization remain open.
 
 For a step-by-step explanation, start with the [architecture guide](docs/architecture/README.md). Its five chapters move from the voice stack to turns, typed state, graph routing and operation recovery.
 
@@ -54,11 +54,11 @@ Three libraries have distinct roles in the implementation:
 
 An application brings an `agent.yaml` manifest, its state model, prompt files and typed Python functions. `core.load(...)` reads the definition; `compile(...)` checks its references and builds a reusable flow; `flow.open(...)` creates an independent call with its own state and services. See the [manifest compiler](core/src/core/flowspec.py) and [graph implementation](core/src/core/flow.py).
 
-A `conversation` node has its own prompt, writable fields, choices, operations and exits. Its agent interprets the caller's words and selects an action or a permitted destination. No classifier runs before it, in any application. A node can stay active for several turns, and a turn can involve several model requests or nodes.
+A `conversation` node has its own prompt, writable fields, choices, operations and exits. Its agent interprets the caller's words and selects an action or a permitted destination. Core runs no classifier before it. A node can stay active for several turns, and a turn can involve several model requests or nodes.
 
-An `action` node runs deterministic code and follows a declared result path without a model request. Prerequisites can route through another node and return to the unfinished request. An operation's receipt can name the node the caller goes to next (`route:`), from the application's own records, and an operation with no read-back can be carried out by code straight after the agent records its input (`carries_out:`). The application decides the shape of its graph: a small single-agent flow and a structured multi-node flow use the same runtime.
+An `action` node runs deterministic code and follows a declared result path without a model request. Prerequisites can route through another node and return to the unfinished request. On a conversation step, an operation's receipt can name the next node (`route:`), and an approval-free operation can run immediately after the agent records a declared trigger field (`carries_out:`). Start-of-turn reconciliation currently repairs the effect and its presentation without following that receipt route; see [recovery limits](docs/architecture/05-tools-approval-and-recovery.md#8-reconcile-before-deciding-to-resend). The application decides the shape of its graph: a small single-agent flow and a structured multi-node flow use the same runtime.
 
-State is shared across nodes **within a call**, not across callers. Updates validate a complete candidate state before committing it. Application validators can use the call's clock and previous state. Declared dependencies invalidate choices and derived facts when their inputs change; moving to another node preserves the call's state and conversation history.
+State is shared across nodes **within a call**, not across callers. Updates validate a complete candidate state before committing it. Application validators can use the call's clock, previous state and accepted caller words. Declared dependencies invalidate choices and derived facts when their inputs change; moving to another node preserves the call's state and conversation history.
 
 These types make contracts executable. They do not guarantee that a model interpreted a caller correctly.
 
@@ -68,7 +68,7 @@ For an operation requiring approval, the application supplies the read-back. Cor
 
 An operation has a tracked intent. If execution is interrupted after dispatch and the outcome is uncertain, it stays unknown until reconciliation establishes what happened. Applications provide reconciliation and backend idempotency where required. A typed receipt establishes the result; generated prose alone does not.
 
-Nodes can use `speech: rendered` when the application needs code to produce every spoken line. In ordinary prose nodes, the model supplies conversational language, with weaker guarantees about its wording. These are generic choices available to any application.
+Nodes can use `speech: rendered` to keep free-form model output out of speech and let code render the reply. Application receipt fields can still contain model-written content, such as feedback, so rendered speech does not guarantee semantic accuracy. In ordinary prose nodes, the model supplies conversational language, with weaker guarantees about its wording. These are generic choices available to any application.
 
 For voice delivery, the Pipecat adapter supports Twilio marks and a browser integration built on the official Pipecat client SDK plus a small playback-reporting module. Browser reports require continuous playback of the segment, rather than merely sending its audio. They cannot prove that a person heard a physical speaker. The browser implementation has offline Chrome coverage; support across other browsers is not yet qualified.
 
@@ -82,7 +82,7 @@ The harness does not supply a universal database, distributed scheduler or autom
 
 The latency goal is small measured runtime overhead, while avoiding unnecessary model requests for work code already knows how to perform. Typed flows can narrow prompts and tool sets, but do not automatically lower token usage. Speed, token cost and accuracy need comparable measurements on the chosen model, transport and workload.
 
-Current qualification remains open: the N12 absolute overhead ceiling passes, its relative rule still fails, and native latency parity is not established. The [latest implementation report](docs/research/reusable-core/session-4g.md) separates offline proofs from remaining live checks. These limits concern the evidence available today, not application-specific requirements imposed by core.
+Current qualification remains open: the N12 absolute overhead ceiling passes, its relative rule still fails, and native latency parity is not established. The [cleanup report](docs/research/reusable-core/core-cleanup.md) records the current implementation and its limits; the [preceding salon qualification report](docs/research/reusable-core/session-4g.md) covers its earlier voice checks. These limits concern the evidence available today, not application-specific requirements imposed by core.
 
 ## Try an existing integration
 
@@ -104,4 +104,4 @@ uv run --directory core python -m tests
 
 The suite disables model requests. It verifies runtime behavior with scripted models; live evaluations are needed to assess language understanding and audio behavior.
 
-Faro, a bilingual language-learning companion, uses the same public path since session 5: nine nodes, its grading and placement in its own typed functions, and its fixed lines in the learner's language. Its new build has offline evidence only; see the [cleanup report](docs/research/reusable-core/core-cleanup.md). See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.
+Faro, a bilingual language-learning companion, uses the same public path: eight conversation nodes and one code node. Its node agent proposes a grade; Faro's typed functions validate and save it and apply the learning rules. Its fixed core lines follow the learner's language. Its new build has offline evidence only; see the [cleanup report](docs/research/reusable-core/core-cleanup.md). See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.

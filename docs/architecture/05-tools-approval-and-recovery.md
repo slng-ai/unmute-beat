@@ -105,7 +105,8 @@ The mappings have specific directions:
 | `matches` | Receipt field → argument field. Require the returned caller, record, original revision and requested change to match this attempt. |
 | `succeeds` / `rejects` | Receipt values that establish success or an authoritative refusal. Other outcomes of a change remain unknown. |
 | `assign` | State field → receipt field. On success, replace the state revision with `now_revision` and copy the status. |
-| `say` / `recap` | Wording rendered from receipt fields for the immediate result and an eligible later recap. |
+| `say` / `recap` | Wording rendered from receipt fields for the immediate result and an eligible later recap. A `say` template that renders empty emits no speech. |
+| `route` (optional, not used above) | The receipt field naming a conversation step's destination after immediate success; it does not move the call during start-of-turn reconciliation. |
 | `subject`, `resource`, `version` | The receipt's record identifier, its resource kind and the resulting version used to order effects. |
 | `reconcile` / `idempotent` | How to discover the original outcome and whether the same uncertain intent can safely be resent. |
 
@@ -146,6 +147,8 @@ Core then checks the reading against the session:
 2. The caller identity still matches the identity associated with that question.
 3. The latest read-back copy has the required delivery evidence, and the reply began after it finished playing.
 4. The approving work is still current, and the answer has not already been consumed.
+
+When a configured `reads_back` rule runs after collection and finds that the application changed a pending read-back's wording for the same arguments, for example after a language switch, it puts a new copy of the question. The next answer must follow delivery of that copy. Merely changing a language field does not authorize anything.
 
 A valid answer authorizes this action and is consumed. It cannot also authorize a different write in the same model reply.
 
@@ -189,6 +192,8 @@ Core validates the response shape, checks `matches`, and applies the declared ou
 | Matching result with `status='stale'` | `rejected` | Do not assign success facts or speak the success line |
 | Matching result with `status='pending'` | `unknown` | The backend has not established a final outcome |
 | Wrong record, invalid data or a lost response | `unknown` | Do not infer either success or failure |
+
+A receipt proves what the backend contract establishes, not the truth of every model judgement used as input. In Faro, a receipt can prove that an attempt and grade were saved once. Whether that grade correctly assesses the learner is a separate evaluation.
 
 A receipt is recorded as evidence before success presentation awaits further work. If local state presentation or speech is then interrupted, core can repair that presentation from the stored receipt. It does not need to send the business change again or ask another model to paraphrase its result.
 
@@ -246,6 +251,10 @@ On a later turn, core can call `find_change` with the original arguments and int
 | A declared terminal refusal | Settle it as rejected |
 | No stored result yet | Keep it unknown; absence of a result does not prove absence of an effect |
 | Invalid data, a mismatched receipt or another error | Keep it unknown and preserve the dispatch guard |
+
+**Settling an effect is not the same as resuming its route.** In the current implementation, start-of-turn reconciliation validates the receipt, repairs assigned facts and presents applicable result wording, but does not execute its `route:` destination. Immediate success through a conversation step does execute that route. An application must not assume both paths land on the same node.
+
+Faro exposes this limit when a lost response would have finished placement: recovery can settle the saved attempt while the call remains in assessment. Its next attempt is refused; calling back resumes from the store. Only Faro's `record_attempt` currently supplies reconciliation and idempotent retry. Other uncertain Faro writes remain unresolved. These are open application/recovery limits, not evidence of complete fault recovery.
 
 An unknown change can be resent as the **same intent** only if it is declared `idempotent: true`. A pure read is also resendable because it declares no business effect. Reconciliation itself does not blindly repeat the operation.
 
@@ -323,5 +332,6 @@ These checks use scripted models and controlled faults. They test the runtime's 
 - [Proposal ledger](../../core/src/core/proposals.py) and [session records](../../core/src/core/state.py): exact question binding, delivery, withdrawal, restoration and effective receipts.
 - [Intent tests](../../core/tests/test_intents.py) and [outcome tests](../../core/tests/test_outcomes.py): cancellation, safe retries, late effects, malformed results and recovery.
 - [Support-desk backend](../../core/tests/ticket_flow/tickets.py) and [tests](../../core/tests/test_tickets.py): durable intent records, stale revisions, process death and receipt-only repetition.
+- [Flow-rule tests](../../core/tests/test_flow_rules.py): receipt routing on immediate success and operations triggered by collection. [Faro's cleanup report](../research/reusable-core/core-cleanup.md#what-is-not-verified) records the narrower recovery and live-validation coverage of that application.
 
 [← Typed flows and node agents](04-typed-flows-and-node-agents.md) · [Reading guide](README.md)

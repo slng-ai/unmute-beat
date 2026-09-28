@@ -2,5 +2,5 @@
 
 Agent instructions for this repo live in [CLAUDE.md](CLAUDE.md). Read that.
 
-Not to be confused with this project's own `AGENTS` table in `use-cases/salon-graph/salon/agents.py`,
-which is the routing graph: a different thing that happens to share the name.
+Application graphs are declared in their `agent.yaml` manifests. They are separate from these
+repository instructions; the salon's old hand-written `AGENTS` table has been retired.

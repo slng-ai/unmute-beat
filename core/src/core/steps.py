@@ -49,6 +49,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.completion import FieldsPresent, ReceiptMatched
+from core.flow import Nodes
 from core.graph import Exit, LocalAction, Node, Opening, Restated, holds
 from core.locale import Locale
 from core.operations import Operation, OutcomeUnknownError, _tracer
@@ -2258,7 +2259,8 @@ class StepFlow:
         """The application's own version, from the manifest (`app_version`): what a trace or a report names."""
         self.model = model
         self.settings = settings
-        self.nodes: dict[str, Node[Any]] = {step.id: step.node(self) for step in self.steps}
+        self.nodes: dict[str, Node[Any]] = Nodes({step.id: step.node(self) for step in self.steps})
+        """The steps table, owning its graph (`core.flow.Nodes`): built here, once per compile."""
 
     @property
     def start(self) -> str:

@@ -6,14 +6,20 @@ A scripted yes tests authorisation, not whether a model understands consent.
 """
 
 import asyncio
+import gc
+import weakref
 from contextlib import suppress
+from typing import Any
+from unittest.mock import patch
 
 from pydantic import ValidationError
 
 import core
+from core.flow import Flow
+from core.flowspec import load as load_text
 from core.state import turn_generation
 from tests.clinic_flow.clinic import Backend, ClinicState, Contact
-from tests.test_public import Script, delivered, opened, turn
+from tests.test_public import CLOCK, FLOW, Script, delivered, opened, turn
 
 
 def raises(error: type[Exception], fn, *args, **kwargs) -> None:
@@ -228,6 +234,92 @@ async def late_work_for_somebody_else_writes_nothing_visible():
     assert filed.generation == old and filed.receipt == {'reference': 'CL007'}
 
 
+def flows_alive() -> int:
+    gc.collect()
+    return sum(isinstance(o, core.StepFlow) for o in gc.get_objects())
+
+
+async def a_discarded_flow_is_collected():
+    """A compiled flow nobody holds goes with its graph and agents, and compiling again and again keeps none.
+
+    The graph belongs to its steps table (`core.flow.Nodes`), not to a
+    process-wide cache that held every table ever compiled.
+    """
+    script = Script()
+    flow, call, _ = opened(script)
+    delivered(call, await turn(flow, call, script, 'P-1234.', patient='P-1234'))
+    held = [weakref.ref(flow), weakref.ref(Flow.of(flow.nodes)), weakref.ref(flow.nodes['patient'].agent)]
+    del flow, call
+    before = flows_alive()
+    assert all(ref() is None for ref in held), 'a discarded flow, its graph or an agent is still held'
+    for _ in range(50):
+        core.load(FLOW).compile(model=script.model)
+    assert flows_alive() == before, 'repeated compiles retained their flows'
+
+
+async def a_call_carries_on_while_other_flows_come_and_go():
+    """Other definitions compiled, used and dropped around a call waiting on a read-back leave it untouched."""
+    script = Script()
+    flow, call, backend = await at_the_read_back(script)
+    other = Script()
+    for _ in range(3):
+        elsewhere, their_call, _ = opened(other)
+        delivered(their_call, await turn(elsewhere, their_call, other, 'P-9999.', patient='P-9999'))
+    del elsewhere, their_call
+    gc.collect()
+    script.label = 'accept'
+    await turn(flow, call, script, 'Yes.')
+    assert backend.bookings == {'CL001': ('P-1234', '1000')}, backend.bookings
+
+
+class Told(Script):
+    """The clinic's script, also recording each request's instructions."""
+
+    def __init__(self) -> None:
+        self.told: list[str] = []
+        super().__init__()
+
+    async def agent(self, messages: Any, info: Any):
+        self.told.append(info.instructions or '')
+        async for part in super().agent(messages, info):
+            yield part
+
+
+async def the_same_routing_with_another_prompt_shares_nothing():
+    """Two compiles with the same steps and moves, one prompt changed: each its own graph, agents, words and services."""
+    text = FLOW.read_text()
+    changed = text.replace('prompt: prompts/patient.md', 'prompt: prompts/front.md')
+    assert changed != text
+    one, two = Told(), Told()
+    first = core.load(FLOW).compile(model=one.model)
+    second = load_text(changed, root=FLOW.parent).compile(model=two.model)
+    assert Flow.of(first.nodes).moves == Flow.of(second.nodes).moves, 'the same routing'
+    assert Flow.of(first.nodes) is not Flow.of(second.nodes)
+    assert first.nodes['patient'].agent is not second.nodes['patient'].agent
+    ours, theirs = Backend(), Backend()
+    a = first.open(ClinicState(), services=ours, clock=lambda: CLOCK)
+    b = second.open(ClinicState(), services=theirs, clock=lambda: CLOCK)
+    await turn(first, a, one, 'P-1111.', patient='P-1111')
+    await turn(second, b, two, 'P-2222.', patient='P-2222')
+    assert one.told and all('patient number' in t and 'Greet the caller' not in t for t in one.told), one.told
+    assert two.told and all('Greet the caller' in t for t in two.told), two.told
+    assert a.services is ours and b.services is theirs
+    assert (a.state.facts.patient, b.state.facts.patient) == ('P-1111', 'P-2222')
+
+
+async def the_graph_is_built_once_per_compile():
+    """Turns and calls on a compiled flow walk the graph built with it: none is built per turn or per call."""
+    with patch.object(Flow, '_build', autospec=True, side_effect=Flow._build) as build:
+        script = Script()
+        flow, call, _ = await at_the_read_back(script)
+        script.label = 'accept'
+        await turn(flow, call, script, 'Yes.')
+        again = flow.open(ClinicState(), services=Backend(), clock=lambda: CLOCK)
+        delivered(again, await turn(flow, again, script, 'P-2222.', patient='P-2222'))
+    assert build.call_count == 1, build.call_count
+    assert build.call_args.args[0] is Flow.of(flow.nodes)
+
+
 async def main() -> None:
     await invalid_updates_change_nothing()
     await the_model_writes_only_collected_fields()
@@ -238,7 +330,14 @@ async def main() -> None:
     await a_cut_confirmation_keeps_the_booking_once()
     await a_correction_invalidates_completion_not_the_record()
     await late_work_for_somebody_else_writes_nothing_visible()
-    print('session ok: atomic state, owned fields, isolation, freshness, stale work, evidence')
+    await a_discarded_flow_is_collected()
+    await a_call_carries_on_while_other_flows_come_and_go()
+    await the_same_routing_with_another_prompt_shares_nothing()
+    await the_graph_is_built_once_per_compile()
+    print(
+        'session ok: atomic state, owned fields, isolation, freshness, stale work, evidence, '
+        'definitions owned and collected'
+    )
 
 
 if __name__ == '__main__':

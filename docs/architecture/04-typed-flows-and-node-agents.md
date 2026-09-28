@@ -18,7 +18,9 @@ A conversation node can stay active for several caller turns. It can collect mis
 
 The graph does not require one node per sentence or per tool. In this example, `apply_change` remains an operation on `request`: proposing it and executing it do not require separate nodes. A simpler application could combine `front` and `request` if separating their responsibilities added no useful boundary.
 
-The package also offers `collect` and `confirm` steps for structured form-style flows. The [clinic definitions](../../core/tests/clinic_flow/) demonstrate those alongside conversation-based flows. This chapter follows the public `conversation` and `action` path.
+There are five supported step kinds: `collect`, `confirm`, `action`, `conversation` and `end`. A `collect` step gathers a form's typed fields. A `confirm` step renders its read-back in code and uses an agent to interpret the answer; it is not an entirely model-free node. The [clinic definitions](../../core/tests/clinic_flow/) demonstrate those alongside conversation-based flows. This chapter follows the `conversation` and `action` path.
+
+The old hand-built `kind: agent` and `call:` application class are no longer supported. Application authors supply a plain state model and declared steps; core creates the call and node agents.
 
 ## 2. Connect the application files
 
@@ -130,7 +132,7 @@ The stages have different jobs:
 1. **Load the manifest.** `core.load` parses YAML, validates the declaration shape and records the application folder for resolving file references.
 2. **Resolve the definitions.** Compilation finds the state model, functions, argument and receipt types, personas and prompt files. It checks that fields and destinations exist and that operation bindings fit their types. `FlowSpec.problems()` can inspect definition problems without running a model.
 3. **Build runtime steps and nodes.** Each declared kind becomes its corresponding step object. `StepFlow` calls each step's `node` method and stores the resulting `Node` under its id in `flow.nodes`.
-4. **Build legal routes.** `Flow.of(flow.nodes)` derives permitted moves, including automatic returns and prerequisite routes. Pydantic Graph's `GraphBuilder` turns those into executable steps and decisions. Core caches the graph for that node table.
+4. **Build legal routes.** `Flow.of(flow.nodes)` derives permitted moves, including receipt destinations, automatic returns and prerequisite routes. Pydantic Graph's `GraphBuilder` turns those into executable steps and decisions. Core caches the graph for that node table.
 
 Missing prompts, unknown fields or exits, incompatible function bindings and cyclic choice dependencies fail before a call runs. Compilation checks the wiring; it does not prove that a prompt will produce the right interpretation of every caller reply.
 
@@ -152,7 +154,7 @@ For `request`, the declaration above produces these choices:
 
 `decline` is available because this operation requires approval. `say_again` is available because it is a change with receipt wording. These are generated capabilities, not functions the application must implement itself.
 
-The distinction between an ordinary function tool and an **output tool** explains the control flow. `collect` can return information to the agent so it can choose another action in the same run. Operations and handoffs are output tools: their selection returns control to the engine, which can speak fixed words or enter another node.
+The distinction between an ordinary function tool and an **output tool** explains the control flow. `collect` can return information to the agent so it can choose another action in the same run. Model-visible operations and handoffs are output tools: their selection returns control to the engine, which can speak fixed words or enter another node. With a `carries_out` declaration, a collection-only response can also return control directly to code for its declared operation, without another model request.
 
 A handoff's destination schema lists only that node's declared exits. Core also enforces routes during execution. The turn policy permits only one action that moves the caller or changes the business per model reply; requesting several does not make them all execute.
 
@@ -201,14 +203,30 @@ Routing checks the required facts and inserts the prerequisite when they are mis
 
 The current return mechanism has one pending destination, not a stack of nested detours. A second interposition replaces the waiting destination. Keep that limit in mind when designing prerequisites that themselves need prerequisites.
 
-Two more rules let code act where the application already knows the next step:
+Two more rules let a conversation step use code where the next action is already known.
 
-| Declaration | What code does |
-|---|---|
-| `route: next` on an operation | After a success, the caller moves to the step the receipt's `next` field names. Its type must be a `Literal` of step ids; the loader checks each one, and the graph knows every move before a call runs. The move wins over a prerequisite's return, and it ends the turn unless the new step opens with something of its own. |
-| `carries_out: {save_answer: [grade]}` on a step | A reply that only records `grade` makes core run `save_answer` at once, with no second request. The agent is never offered that operation, so it runs only on values this reply recorded. A refusal goes back to the agent in the same turn. The operation must declare `approval: none`. |
+**Follow a receipt with `route:`.** An operation can declare `route: next`, meaning that its receipt's `next` field names the destination. That field must have a type such as `Literal['request', 'review']`; compilation checks that these steps exist and includes the routes in the graph. These destinations do not become model-selectable `hand_over` exits unless the application also declares them as exits.
 
-Faro, the language-learning example, uses both: the store's checkpoint decides where a returning learner resumes, and an exercise answer is recorded by the examiner and saved by code in the same reply.
+After the operation succeeds, a different destination takes precedence over a prerequisite's pending return. The engine moves there and ends the turn unless that node has an opening of its own. A receipt naming the current step, or an allowed empty string, requests no new move; normal return handling still applies.
+
+This routing is implemented for operations executed by conversation steps. An `action` step follows its own `then`, `returns`, `on_error` and `on_unknown` rules. Start-of-turn reconciliation does not apply the receipt route either; [chapter 05](05-tools-approval-and-recovery.md#8-reconcile-before-deciding-to-resend) explains that recovery limit.
+
+**Run an operation after collection with `carries_out:`.** The [routed support desk](../../core/tests/ticket_flow/routed.yaml) declares:
+
+```yaml
+carries_out: {find_ticket: [ticket_id]}
+```
+
+Here `find_ticket` is a declared operation with `approval: none`, validated arguments and receipt wording. It is not also listed in this node's model-visible `operations`. The rule means:
+
+1. The agent returns only successful `collect` calls, with no model prose or other selected action.
+2. The latest collection records at least one declared trigger field, here `ticket_id`, and the operation's complete arguments can be built from state.
+3. Code runs the first eligible carried operation in declaration order through the ordinary operation boundary. No second model request is needed just to select it.
+4. Its receipt can assign facts, speak a result and name a route. An authoritative refusal returns to the same node's agent with the reason; it does not silently retry the save.
+
+The trigger must be newly recorded, but **not every argument must be new**. For example, `account_id` can already be in state when `ticket_id` is collected. Applications must validate the combination and any domain preconditions. This rule selects one operation; it is not a queue that runs every matching save.
+
+Faro uses these same mechanisms. It has eight conversation nodes and one deterministic `help` node. Its examiner records an answer and a grade; code saves the attempt. The receipt reports where the store says the learner should continue. Its agents can still choose declared detours, such as asking the coach for help. Thus receipts determine progress after saves without removing the agents' conversational choices.
 
 ## 8. Choose who writes the spoken answer
 
@@ -216,13 +234,22 @@ Faro, the language-learning example, uses both: the store's checkpoint decides w
 
 For example, `asks` speaks the first missing-field question automatically on handoff. On a later reply, if the record identifier is still missing and the agent chooses `wait`, code can say that field's `asks` line. Selecting `apply_change` produces the application's read-back or receipt wording. Selecting `say_again` speaks a recorded result. `wait` means “choose the appropriate rendered response,” not “sleep.”
 
-Rendered speech gives control over wording, while intent interpretation and field extraction still depend on the agent. A prose node's optional `guarded` mode can filter unsupported completion claims using application-supplied rules, but that is a best-effort check. A rendered node has no model prose to guard and cannot also declare `guarded`.
+Rendered speech prevents free-form agent output from going directly to TTS. It does not make every receipt field model-independent: Faro includes agent-written feedback in the receipt text its application returns. Templates and application validation control that path, but the feedback and grade still need semantic evaluation. Intent interpretation and field extraction also still depend on the agent. A prose node's optional `guarded` mode can filter unsupported completion claims using application-supplied rules, but that is a best-effort check. A rendered node has no model prose to guard and cannot also declare `guarded`.
 
 Additional declarations such as `opens_with` and `reads_back` can make code select a predictable read-back on arrival or after collection. They are useful when the application already knows that next action; the simpler sequence above does not need them.
 
-A flow can also follow the caller's language. The manifest names a state field (`language: explanation`) and a locale for each of its values (`locales: {EN: ..., ES: ...}`). Core's own lines then follow that field during the call. If a read-back is waiting and the application now words it differently for the same value, core puts it again in the new words, so the next yes answers words the caller heard.
+A flow can also follow the caller's language. The manifest names a state field or property and maps its values to locales. This excerpt assumes an `explanation` attribute on the application state:
 
-`flow.greeting(call, words)` returns the application's greeting followed by what the entry step opens with: its `opens_with` read-back when the state already gives the arguments, such as a caller ID, or its first `asks` line. Passed to `core.greet`, a read-back becomes the question the first reply answers.
+```yaml
+language: explanation
+locales:
+  EN: english
+  ES: spanish
+```
+
+Core's own lines follow that value during the call. An unmapped value falls back to `locale:`, or core's default if none is supplied. This does not translate prompts, `asks` strings or backend wording, and does not switch STT or TTS. Applications choose those separately. When a configured `reads_back` rule runs after collection and finds new wording for the same pending value, core puts the question again in those words. The next yes must follow delivery of that copy.
+
+`flow.greeting(call, words)` returns the application's greeting followed by what the entry step opens with: its `opens_with` read-back when the state already gives the arguments, such as a caller ID, or its first `asks` line. Passed to `core.greet` and sent through the launcher's audio path, a read-back becomes the question the first reply answers. Its delivery must still be acknowledged; constructing a greeting does not prove playback.
 
 ## Inspect a compiled graph offline
 

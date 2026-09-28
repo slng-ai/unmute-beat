@@ -81,7 +81,7 @@ Read this as a capability map:
 - `speech: rendered` means code supplies every spoken line on `request`. On arrival, `asks` immediately asks for the first missing field without running the agent. On later replies, the agent can choose `wait` to ask for a missing field, but cannot send its own prose to the caller.
 - `kind: action` runs `fetch_record` without a model request to choose the action. `returns: true` remembers which node handed over and returns there after success. Errors and unknown outcomes go to `request` as declared.
 
-The `done` step supplies the completion endpoint required for a flow containing an action step. It is not an extra hop after every successful lookup or change. A conversation node can also end the call through its `goodbye` output.
+The `done` step supplies the completion endpoint required here because `lookup` is an action step with no explicit `then`. An action with an explicit `then` does not by itself require that endpoint. It is not an extra hop after every successful lookup or change. A conversation node can also end the call through its `goodbye` output.
 
 ## 3. Build the executable graph
 
@@ -98,7 +98,7 @@ There are three concrete transformations:
 
 1. **Read the definition.** `core.load` parses the manifest into a `FlowSpec`. It validates its shape and keeps the folder used to resolve Python references and prompt paths.
 2. **Build the nodes.** `compile` checks references and types, builds the steps, and constructs `StepFlow.nodes`, keyed by step id. Here, `front` and `request` each get their own agent with their own prompt, tools and outputs, even though they share a persona. `lookup` gets the code-entry behavior for `fetch_record`; `done` gets the ending behavior.
-3. **Build the routes.** Compilation calls `Flow.of(flow.nodes)`. Core derives legal moves from exits, return paths and any declared prerequisites, then uses Pydantic Graph's `GraphBuilder` to create an executable step for each node and routing decisions after it. The result is cached for that node table.
+3. **Build the routes.** Compilation calls `Flow.of(flow.nodes)`. Core derives legal moves from exits, declared receipt destinations, return paths and prerequisites, then uses Pydantic Graph's `GraphBuilder` to create an executable step for each node and routing decisions after it. The result is cached for that node table.
 
 For example, `front` may hand over to `request`, but not directly to `lookup`. After `lookup`, code can return to the waiting `request` node. The generated graph also contains a start decision that can resume at the call's current node, and an end branch for finishing the current turn. An undeclared move has no matching route and is rejected at runtime.
 
@@ -124,7 +124,7 @@ call = flow.open(ApplicationState(), services=backend)
 
 `ApplicationState` is the application's Pydantic model, and `backend` is the service object used by its functions. Core validates and copies the state into the call. The call starts at `front`, with its own history, proposals, speech records and intents. The compiled flow can be shared across calls; each call keeps its own position and facts. Whether the service object itself is shared is the application's choice.
 
-Opening a call does not start a microphone or phone connection. A voice launcher connects it to Pipecat and supplies the greeting. Pipecat's user aggregator passes recognized input to `PydanticAgentProcessor`, which invokes the turn engine. A text application invokes the same engine with `core.text_turn(flow, call, words)`.
+Opening a call does not start a microphone or phone connection. A voice launcher connects it to Pipecat and supplies the greeting. If the entry step has an `opens_with` read-back or an `asks` question, `flow.greeting(call, words)` can include it. The launcher passes that result to `core.greet` and sends its speech through the normal audio path. A greeting that contains a read-back needs playback evidence before the first reply can approve it. Pipecat's user aggregator passes recognized input to `PydanticAgentProcessor`, which invokes the turn engine. A text application invokes the same engine with `core.text_turn(flow, call, words)`.
 
 ## 5. Follow caller input through the graph
 
@@ -187,6 +187,8 @@ The operation now dispatches the intent to the backend. On a validated successfu
 | Lookup completed | Back at `request` | Revision 1, status `open` | Read only |
 | Read-back spoken | `request` | Exact proposal awaiting an answer | No change dispatched |
 | Approved operation succeeds | `request` | Receipt establishes revision 2, status `complete` | Change committed |
+
+In this example the operation leaves the call at `request`. A conversation step can instead follow a destination named by the receipt (`route:`), or run an approval-free operation immediately after collecting its input (`carries_out:`). These optional rules are explained in [chapter 04](04-typed-flows-and-node-agents.md#7-let-code-handle-returns-and-prerequisites).
 
 Completing the operation does not end the conversation. The caller can make another request in the same call. If they say they are finished, the agent can select `goodbye`; core renders eligible receipt recaps and the farewell, and requests the call's end.
 

@@ -42,10 +42,12 @@ The application's **backend** is the database or API that does its business work
 | A plain Pydantic state model | Holds the call's domain facts and validates candidate updates. |
 | Node names and prompts | Creates an agent for each conversational step. |
 | Writable fields, choices and operations | Builds the tools available in that step. |
-| Exits and prerequisites | Builds and enforces the graph's routes. |
+| Exits, prerequisites and receipt destinations | Builds the permitted routes; agents choose declared exits, while code can follow a validated result. |
 | Typed backend functions | Validates arguments and results at the operation boundary. |
 | Read-back and result wording | Speaks precise application statements without asking the model to invent them. |
 | Services and persistence | Performs domain work and, where provided, persists and reconciles intents. |
+
+The salon, the support-desk fixture and Faro all use this boundary. Faro adds a teaching example: its agent judges an answer, its application functions record progress, and its store determines where the learner resumes. Core contains no lesson, grade or booking rule. There is no shared classifier before the node agents.
 
 ## Why use a separate conversation layer?
 
@@ -82,6 +84,7 @@ There are two usable execution boundaries today: the text driver and the Pipecat
 | [Public exports](../../core/src/core/__init__.py), [package dependencies](../../core/pyproject.toml) | The package boundary and optional integrations. |
 | [Pipecat processor](../../core/src/core/processor.py), [turn engine](../../core/src/core/turn.py) | Frames are adapted outside the conversation engine. |
 | [Public API tests](../../core/tests/test_public.py), [node tests](../../core/tests/test_nodes.py) | Public loading and node execution, including the absence of a classifier pre-pass. |
-| [Reuse tests](../../core/tests/test_tickets.py) | The same mechanisms applied to another domain and renamed fields. |
+| [Reuse tests](../../core/tests/test_tickets.py), [flow-rule tests](../../core/tests/test_flow_rules.py) | Another domain and renamed fields; receipt routing, automatic operations and per-call language. |
+| [Faro manifest](../../use-cases/faro-language-learning/faro/agent.yaml), [Faro tests](../../use-cases/faro-language-learning/tests/test_faro.py) | A learning application on the same public path, with its own grading and storage rules. |
 
 [Reading guide](README.md) · [Next: a conversation from start to finish →](02-a-conversation-from-start-to-finish.md)

@@ -2,6 +2,10 @@
 
 The harness runs the conversation inside a voice application. The application defines what the agent can do; core keeps track of what the caller said, what the agent knows and which actions are allowed. This guide starts with that division of work and gradually explains how it is implemented.
 
+This guide describes the implementation on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32). Both salon and Faro use the public manifest path; the old classifier modules, `kind: agent` and application-defined `call:` classes have been removed. The [cleanup report](../research/reusable-core/core-cleanup.md#5-public-compatibility-changes) lists the replacements for those APIs.
+
+The new Faro build has offline verification only. Its live grading accuracy is still unmeasured, and receipt recovery has routing limits described in chapter 05. [The documentation review](../research/reusable-core/pr32-architecture-review.md) records what was checked at this revision.
+
 ## Reading order
 
 | Chapter | The question it answers |

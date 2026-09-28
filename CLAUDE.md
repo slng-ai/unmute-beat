@@ -258,6 +258,11 @@ reader modules and the hand-built step were retired in session 5, with Faro,
 their last user (`docs/research/reusable-core/core-cleanup.md`).
 `core/tests/test_nodes.py` checks they are gone and never imported. Faro's
 new build has had no live run: its grading and step choices are unmeasured.
+A conversation operation follows `route:` on immediate success, but start-of-turn
+settlement only repairs state and speech; it does not follow that route. Faro's
+`record_attempt` is its only reconciled/idempotent operation, so a lost reply
+at a phase boundary can leave the current node behind the store's checkpoint.
+See `docs/research/reusable-core/core-cleanup.md` for that limit.
 
 The support desk's write step, the salon's `verify` step (since session 4d)
 and `booking` step (since session 4e) are `speech: rendered`, so nothing they

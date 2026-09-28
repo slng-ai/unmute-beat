@@ -1,12 +1,26 @@
 # 05 — Tools, approval and recovery
 
-A model selecting a tool establishes what it wants to do. Core must still check whether the action is allowed, track whether it was sent, and validate what the backend says happened. Speaking the result is another step, with its own delivery evidence.
+“Please do it,” “I sent the request,” and “It is done” are three different things. This chapter explains how the harness keeps them separate when an agent uses a tool.
+
+There are three records to remember:
+
+| Name | Plain meaning | Example |
+|---|---|---|
+| Proposal | The exact action being asked about | “Mark record R-17 complete?” |
+| Intent | A tracked attempt to perform that action, with its own identifier | Attempt I-7, which may be prepared, sent or still uncertain |
+| Receipt | The backend's answer about the attempt | R-17 was changed to `complete` at revision 2 |
+
+An intent is like a tracking number for one attempted change. If the answer is lost, core can ask what happened to that same attempt. That lookup is called **reconciliation**. It works only if the application provides a way to find the original result.
+
+For a change requiring approval, the successful path is: propose it → establish that the read-back played → interpret the reply → check approval → send the operation → validate its result → speak the result. Asking the model to say “done” is not evidence that the backend changed.
 
 Continue the example from [chapter 02](02-a-conversation-from-start-to-finish.md): caller A-42 wants record R-17 marked complete. The lookup has established that it is open at revision 1. This chapter builds the `apply_change` operation, follows its approval and receipt, then repeats the sequence with a lost backend response.
 
 ## 1. Define the operation's inputs and result
 
-The application's state can be incomplete while the conversation is in progress. An operation's argument model describes what must be present before that operation can run.
+An **operation** is an application function run through core's checks. Its **arguments** are the values sent to it. Its **result** is the backend answer that core must check before treating the work as finished.
+
+The state can be incomplete while the assistant asks questions. The operation's argument model is stricter: it describes what must be present before the function can run. For example, we can talk while the record number is unknown, but cannot apply a change to an unknown record.
 
 Add these models to the example's `models.py`, alongside `ApplicationState` from [chapter 03](03-typed-state-and-history.md):
 
@@ -97,7 +111,7 @@ operations:
 
 This is an operation excerpt. The complete manifest also includes the state, persona, steps and `fetch_record` lookup from the preceding chapters. Here, `idempotent: true` assumes the backend really deduplicates by intent id, as explained below.
 
-The mappings have specific directions:
+Each mapping connects one named value to another. For example, `assign: {revision: now_revision}` means “put the receipt's `now_revision` value into the state's `revision` field.” The directions are:
 
 | Declaration | Meaning in this example |
 |---|---|
@@ -258,7 +272,7 @@ Faro exposes this limit when a lost response would have finished placement: reco
 
 An unknown change can be resent as the **same intent** only if it is declared `idempotent: true`. A pure read is also resendable because it declares no business effect. Reconciliation itself does not blindly repeat the operation.
 
-For the declaration above to be truthful, the backend must recognize `intent.id` and prevent a duplicate effect. A common implementation commits the resource change and a result keyed by intent id in the same database transaction. If the same id arrives again, it returns that result rather than applying another change. The YAML setting does not add this behavior to a database or external API.
+**Idempotent** here means that sending the same attempt again does not make the change twice. For the declaration above to be truthful, the backend must recognize `intent.id` and prevent a duplicate effect. A common implementation commits the resource change and a result keyed by intent id in the same database transaction. If the same id arrives again, it returns that result rather than applying another change. The YAML setting does not add this behavior to a database or external API.
 
 The id stays stable while that attempt is uncertain or retried. It is not a permanent hash of the arguments: a later, separately approved business action can need a new intent even if its arguments are identical.
 

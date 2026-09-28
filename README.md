@@ -4,7 +4,7 @@
 
 The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the architecture on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32): salon and Faro use the public node-agent path, and the legacy classifier path has been removed. Live qualification and performance optimization remain open.
 
-For a step-by-step explanation, start with the [architecture guide](docs/architecture/README.md). Its five chapters move from the voice stack to turns, typed state, graph routing and operation recovery.
+For a beginner-friendly explanation, start with the [architecture guide](docs/architecture/README.md). It first explains agents, tools and nodes, then follows a conversation: asking for missing information, replying after a lookup and confirming a change. Python, YAML and recovery details come afterward.
 
 ## One runtime, different applications
 

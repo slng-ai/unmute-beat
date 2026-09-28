@@ -23,6 +23,8 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+from collections.abc import Callable
+
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import LLMFullResponseStartFrame
@@ -33,6 +35,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.runner.types import RunnerArguments, WebSocketRunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.tts_service import TextAggregationMode
@@ -43,6 +46,7 @@ from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
 import faro
+from core import StepFlow
 from core.graph import model_clients
 from core.observability import setup
 from core.processor import PydanticAgentProcessor, playout, record_ending, reports_playback, serve_client
@@ -154,7 +158,15 @@ def playback(agents: PydanticAgentProcessor, assistant_aggregator) -> None:
         agents.note_spoken(message.content, message.interrupted, timestamp=message.timestamp)
 
 
-async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
+async def run_bot(
+    transport: BaseTransport,
+    runner_args: RunnerArguments,
+    *,
+    flow: StepFlow | None = None,
+    speech: Callable[[], tuple[FrameProcessor, FrameProcessor]] | None = None,
+    warm: bool = True,
+    trace: bool = True,
+) -> None:
     """One call: build the pipeline around the agency and run it until the line drops.
 
     Pipecat's `LLMContext` is kept even though no model reads it: the
@@ -165,12 +177,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     On a phone route the session is the carrier's call id (Twilio's
     `callSid`), so a call and its trace share one key: Coval records the same
     id as the simulation's `call_sid`, and one Langfuse session is one call.
+
+    A test passes its own `flow` (a scripted model) and `speech` (no
+    provider), and turns off the warm-up and tracing, as salon-graph's does.
     """
     call_data = getattr(runner_args, 'call_data', None)
     session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''
-    setup(session=session_id, trace_name=NAME)
-    stt, tts = speech_services()
-    flow = faro.FLOW
+    if trace:
+        setup(session=session_id, trace_name=NAME)
+    stt, tts = (speech or speech_services)()
+    flow = flow or faro.FLOW
     call = open_call(flow, os.getenv('CALLER_ID', ''))
     context, node = LLMContext(), PydanticAgentProcessor(call, flow.nodes)
     user_aggregator, assistant_aggregator = aggregators(context)
@@ -232,7 +248,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
     try:
-        async with model_clients(flow.nodes, warm=True):
+        async with model_clients(flow.nodes, warm=warm):
             await runner.run()
     finally:
         call.note_ending('pipeline_end', 'the pipeline stopped', observed=True)

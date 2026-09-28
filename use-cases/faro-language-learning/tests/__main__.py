@@ -27,7 +27,7 @@ pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
 os.environ.setdefault('GOOGLE_API_KEY', 'offline-test-placeholder')
 os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
-MODULES = ('tests.test_faro',)
+MODULES = ('tests.test_faro', 'tests.test_bot')
 
 
 def main() -> int:

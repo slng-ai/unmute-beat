@@ -383,6 +383,38 @@ def test_named_metrics() -> None:
     assert '--order-by=-create_time' in coval.args, 'a bare -create_time is read as a flag (2026-09-26)'
 
 
+def test_explicit_cases() -> None:
+    """`--cases`: the plan holds exactly the frozen cases, and the launch names them, so the set cannot grow under it."""
+    check = checker()
+    job = check.plan(
+        'salon', 'S', 'THREE', 'calm', iterations=1, max_simulations=2, label='l', cases=['c3', 'c1']
+    )
+    assert job.case_ids == ('c3', 'c1') and job.simulations == 2, job.describe()
+    for cases, problem in (
+        (['c1', 'c9'], 'case c9 is not in test set THREE'),
+        (['c1', 'c1'], '--cases must name at least one case, each once'),
+        ([], '--cases must name at least one case, each once'),
+    ):
+        try:
+            check.plan('salon', 'S', 'THREE', 'calm', iterations=1, max_simulations=3, label='l', cases=cases)
+        except PlanError as error:
+            assert problem in error.problems, error.problems
+        else:
+            raise AssertionError(f'accepted --cases {cases}')
+
+    class Launches(CovalClient):
+        def _call(self, *args: str):
+            self.args = args
+            return {'run_id': 'R'}
+
+    coval = Launches(api_key='test', binary='/nonexistent/coval')
+    coval.launch(job.agent, job.persona, 'THREE', iterations=1, name='n', case_ids=job.case_ids)
+    assert coval.args[coval.args.index('--test-cases') + 1] == 'c3,c1', coval.args
+    parsed = _parser().parse_args(['plan', '--agency', 'salon', '--agent', 'S', '--test-set', 'THREE', '--persona', 'calm',
+                                   '--max-simulations', '2', '--label', 'l', '--cases', 'c3,c1', '--profile', 'p.env'])  # fmt: skip
+    assert parsed.cases == ['c3', 'c1'], 'the command line reaches plan'
+
+
 PROFILE = Repository.find(Path.cwd()).root / 'docs/research/reusable-core/session-3/speech-profile.v1.env'
 
 
@@ -633,6 +665,7 @@ if __name__ == '__main__':
     test_fallbacks()
     test_concurrency()
     test_named_metrics()
+    test_explicit_cases()
     test_shared_host()
     test_phone_line()
     test_campaign()

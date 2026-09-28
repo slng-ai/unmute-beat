@@ -457,6 +457,7 @@ class ReleaseCheck:
         metrics: list[str] | None = None,
         profile: Path | None = None,
         call_seconds: int = MAX_CALL_SECONDS,
+        cases: list[str] | None = None,
     ) -> Job:
         """The one job these arguments name, checked against what Coval holds. Reads only.
 
@@ -503,6 +504,13 @@ class ReleaseCheck:
         case_ids = tuple(self.coval.test_case_ids(test_set_id))
         if not case_ids:
             problems.append(f'test set {test_set_id} has no test cases')
+        if cases is not None:
+            problems += [
+                f'case {case} is not in test set {test_set_id}' for case in cases if case not in case_ids
+            ]
+            if len(set(cases)) != len(cases) or not cases:
+                problems.append('--cases must name at least one case, each once')
+            case_ids = tuple(cases)
         people = [p for p in self.coval.personas() if persona in (p.id, p.name)]
         if len(people) != 1:
             problems.append(f'{len(people)} personas match {persona!r}; name exactly one, by ID')
@@ -620,6 +628,7 @@ class ReleaseCheck:
                         iterations=job.iterations,
                         concurrency=job.concurrency,
                         name=name,
+                        case_ids=job.case_ids,
                     )
                 except CovalError as error:
                     return self._uncertain(job, name, error, log, record, launched_at)
@@ -898,6 +907,11 @@ def _parser() -> argparse.ArgumentParser:
         job.add_argument(
             '--fixtures', type=Path, help='JSON: test case id to the caller phone it gives, to bind calls'
         )
+        job.add_argument(
+            '--cases',
+            type=lambda text: [c for c in text.split(',') if c],
+            help='comma-separated test case IDs: exactly these run, and each must be in the set',
+        )
     serve = commands.add_parser('serve', help='one bot and tunnel for several jobs, until stopped')
     serve.add_argument('--agency', required=True, help='the use case to serve: salon for salon-graph')
     serve.add_argument('--port', type=int, default=PORT, help='the local port for the bot and tunnel')
@@ -982,6 +996,7 @@ def main(argv: list[str] | None = None) -> int:
             metrics=args.metrics,
             profile=args.profile,
             call_seconds=args.call_seconds,
+            cases=args.cases,
         )
         print(job.describe(), flush=True)
         if args.command == 'plan':

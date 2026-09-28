@@ -120,6 +120,7 @@ class CovalClient:
         iterations: int,
         concurrency: int = 1,
         name: str,
+        case_ids: tuple[str, ...] = (),
     ) -> str:
         """Start a run of one test set against one agent, `concurrency` calls at once, with the agent's metrics named.
 
@@ -130,7 +131,8 @@ class CovalClient:
 
         The metrics are passed rather than left to Coval's default, so the
         ones `plan` printed are the ones that score. No mutation is passed,
-        so every call is the base agent.
+        so every call is the base agent. The cases `plan` froze are named
+        too (`case_ids`), so a case added to the set after the plan never runs.
 
         Returns:
             The new run's ID.
@@ -140,6 +142,7 @@ class CovalClient:
             '--agent-id', agent.id,
             '--persona-id', persona.id,
             '--test-set-id', test_set_id,
+            *(('--test-cases', ','.join(case_ids)) if case_ids else ()),
             '--metric-ids', ','.join(agent.metric_ids),
             '--iterations', str(iterations),
             '--concurrency', str(concurrency),

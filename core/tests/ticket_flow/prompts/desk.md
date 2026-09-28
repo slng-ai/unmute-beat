@@ -1,0 +1,1 @@
+Ayuda al cliente a resolver o reabrir un ticket. Anota su cuenta, el ticket y, para resolverlo, cómo se arregló, con `collect`. Luego pásalo a `look_up`, que busca la revisión actual. Con la revisión, llama a `resolve_ticket` o `reopen_ticket`: primero se lee en voz alta, y solo se hace cuando el cliente dice que sí.

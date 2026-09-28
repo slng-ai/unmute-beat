@@ -17,7 +17,6 @@ Then open http://localhost:7860 and talk.
 from __future__ import annotations
 
 # ruff: noqa: E402
-import asyncio
 import os
 
 from dotenv import load_dotenv
@@ -50,7 +49,7 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 
 from core.graph import model_clients
 from core.observability import setup
-from core.processor import PydanticAgentProcessor
+from core.processor import Ceiling, PydanticAgentProcessor, playout, record_ending
 from salon.app import FLOW, GREETING, open_call
 from salon.diary import Diary
 
@@ -93,6 +92,13 @@ At 8 s it talked over Coval's simulated callers, who often answer 9 to 13 s
 after a read-back: the reminder said the read-back again, their yes cut into
 that copy, so it was asked again, up to five times (gate 1, BWqBhyLj). The
 calls that really stalled were silent for 70 to 150 s.
+"""
+TWILIO_MARKS = os.getenv('TWILIO_MARKS', 'echoed')
+"""`absent` for a far end that speaks Twilio Media Streams but returns no marks (Coval's simulator).
+
+Then a read-back is settled from the audio actually sent, at real time, and
+recorded as `local` rather than a mark (`core.processor.TwilioMarks`). A real
+Twilio call returns marks: leave it `echoed`. `coval_sim` sets `absent`.
 """
 STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE', 'en')
 TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE', 'en')
@@ -232,7 +238,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         await node.remind()
 
     pipeline = Pipeline(
-        [transport.input(), stt, user_aggregator, node, tts, transport.output(), assistant_aggregator]
+        [
+            transport.input(),
+            stt,
+            user_aggregator,
+            node,
+            tts,
+            transport.output(),
+            *playout(transport, call, echoes_marks=TWILIO_MARKS != 'absent'),
+            assistant_aggregator,
+        ]
     )
     worker = pipeline_worker(pipeline, session_id)
     playback(node, assistant_aggregator)
@@ -245,37 +260,41 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     async def on_client_ready(rtvi):
         await greet()
 
+    async def hang_up() -> None:
+        """The call ceiling (`MAX_CALL_SECONDS`) was reached: hang up as the caller would."""
+        logger.warning(f'call ceiling of {MAX_CALL_SECONDS:.0f}s reached: hanging up')
+        call.note_ending('ceiling', f'{MAX_CALL_SECONDS:.0f}s call ceiling', observed=False)
+        await node.finish_turn(FINISH_SECONDS)
+        await worker.cancel()
+
+    ceiling = Ceiling(MAX_CALL_SECONDS, hang_up)
+
     @transport.event_handler('on_client_connected')
     async def on_client_connected(transport, client):
         """A phone websocket has no RTVI client to say it is ready, so the greeting goes out here."""
         logger.info('client connected')
-        if MAX_CALL_SECONDS:
-            deadline.append(asyncio.create_task(hang_up_after(MAX_CALL_SECONDS)))
+        ceiling.start()
         if isinstance(runner_args, WebSocketRunnerArguments):
             await greet()
-
-    deadline: list[asyncio.Task] = []
-
-    async def hang_up_after(seconds: float) -> None:
-        """The call ceiling (`MAX_CALL_SECONDS`): hang up as the caller would."""
-        await asyncio.sleep(seconds)
-        logger.warning(f'call ceiling of {seconds:.0f}s reached: hanging up')
-        await node.finish_turn(FINISH_SECONDS)
-        await worker.cancel()
 
     @transport.event_handler('on_client_disconnected')
     async def on_client_disconnected(transport, client):
         """Let a turn already running finish its write, for a few seconds, before the line is torn down."""
         logger.info('client disconnected')
-        for task in deadline:
-            task.cancel()
+        call.note_ending('media_disconnect', 'the media websocket closed', observed=True)
+        await ceiling.stop()
         await node.finish_turn(FINISH_SECONDS)
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
-    async with model_clients(FLOW.nodes, warm=True):
-        await runner.run()
+    try:
+        async with model_clients(FLOW.nodes, warm=True):
+            await runner.run()
+    finally:
+        await ceiling.stop()
+        call.note_ending('pipeline_end', 'the pipeline stopped', observed=True)
+        record_ending(call)
 
 
 async def bot(runner_args: RunnerArguments) -> None:

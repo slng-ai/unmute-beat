@@ -7,46 +7,63 @@ reorder or skip them:
 1. validate the arguments at the boundary, whoever built them;
 2. settle anything outstanding that must be resolved first (`_before`);
 3. check the caller authorised *these* arguments (`_authorise`);
-4. execute, once (`_execute`), noted on the call first, so an answer that
+4. find the intent these arguments are (`CallContext.intent_for`), refuse
+   one that may already have landed, and mark it dispatched, synchronously,
+   before anything is awaited;
+5. execute, once (`_execute`), noted on the call first, so an answer that
    authorised an attempt is never restored and spent a second time;
-5. validate the service's answer into the receipt model before a field is read;
-6. record the result: commit state, retain the receipt, speak (`_record`).
+6. validate the service's answer into the receipt model before a field is read;
+7. record the result: commit state, retain the receipt, speak (`_record`).
 
 The default `_authorise` is the common case: the pending proposal must be
 this operation's, for this exact value, and the caller must have agreed to
 it. A business with richer rules (more than one way to authorise) overrides
 it. Claiming the one action allowed per model reply stays with the
 model-facing tool, which has the reply in front of it.
+
+What can go wrong after step 4 is kept apart, because each means something
+different for the next attempt (the retry rule of
+https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/):
+
+* a validated receipt that says it worked: `succeeded`;
+* a validated receipt that says it did not, or the operation's own
+  `ModelRetry`: `rejected`, an authoritative no;
+* anything else once dispatched (a cancellation, a timeout, a lost
+  connection, an answer that does not validate): `unknown`. The same intent
+  is never sent again until it is reconciled, unless the backend has declared
+  it dedups by the intent id (`idempotent`).
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any, ClassVar, final
 
+from loguru import logger
 from opentelemetry import trace
 from pydantic import BaseModel
 from pydantic_ai import ModelRetry
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.proposals import Proposal
-from core.state import CallContext
+from core.state import CallContext, Intent
 
 _tracer = trace.get_tracer('voice.operations')
 
+NOTE_INTENT_SECONDS = 2.0
+"""How long a service's `note_intent` may take before the intent is taken as never dispatched."""
+
 
 def operation_token(*parts: object) -> str:
-    """One stable name for a business action, across every attempt at it.
+    """A stable name derived from its parts. Faro's legacy operations key their own records with it.
 
-    Derived rather than generated, so a retry of the same action derives the
-    same token without anything having to remember it between attempts. What
-    it identifies is the action, this caller moving this booking to this slot,
-    and not the request that carried it.
-
-    ponytail: derived rather than handed out by the service. A real one would
-    issue it, and then this goes.
+    Not an intent: arguments alone cannot tell a retry of one action from a
+    second action with the same arguments. Core's operations are named by
+    their `Intent`, which it issues.
     """
     return hashlib.sha256('|'.join(str(part) for part in parts).encode()).hexdigest()[:16]
 
@@ -68,6 +85,14 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     receipt_type: ClassVar[type[BaseModel]]
     needs_approval: ClassVar[bool] = True
     """Whether the caller must agree to a readback of these exact arguments first."""
+    changes: ClassVar[bool] = True
+    """Whether it changes a business resource. Separate from `needs_approval`: a lookup may need neither."""
+    idempotent: ClassVar[bool] = False
+    """The backend dedups by the intent id, so an intent whose outcome is unknown may be sent again, as itself."""
+    subject: ClassVar[str] = ''
+    """The receipt field naming the resource it acts on (a booking id, a ticket id). See `CallContext.effective`."""
+    recap: ClassVar[str] = ''
+    """What a goodbye may say about a receipt of it that still stands, formatted from the receipt. Empty: nothing."""
     proposal_about: ClassVar[str] = ''
     """Which kind of question authorises this, for the default `_authorise`. Defaults to `name`."""
 
@@ -84,17 +109,22 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
 
         Every authorised attempt leaves one `write` span, whichever path ran it
         (a model's tool or `advance` with no model), carrying `write.audit`:
-        the action, its arguments, the question the caller was answering (its
-        serial and the segments that carried it to them) and what they said,
-        and whether it landed (ok, failed, or unknown when the service's
-        outcome is). `evals.ledger` reads it. A refusal leaves none: nothing
-        was attempted.
+        the action and its intent, its arguments and the arguments the
+        question read back when it was asked (`proposal_args`), the question
+        the caller was answering (its serial and the segments that carried it
+        to them) and what they said, and how it ended (ok, failed, or unknown
+        when the service's outcome is). `evals.ledger` and `load_report` read
+        it. A refusal before dispatch leaves none: nothing was attempted.
 
         A validated receipt is filed on the call (`CallContext.evidence`)
         before anything else can wait: a caller cutting in during the
         confirmation cancels the speech, never the record of what the service
         did. Evidence is append-only; a later turn, a new topic or a stale
         generation never erases it.
+
+        A cancellation after dispatch leaves the intent unknown and is
+        re-raised: the cleanup is a few synchronous assignments, and nothing
+        here shields the service call itself.
         """
         checked: ArgsT = self.args_type.model_validate(args.model_dump())  # ty: ignore[invalid-assignment]
         if (early := await self._before(call, checked)) is not None:
@@ -103,40 +133,190 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         answering = call.answering()
         heard = call.heard
         grant = await self._authorise(call, checked, usage=usage, usage_limits=usage_limits)
+        intent = call.intent_for(self.name, checked.model_dump_json())
+        self._may_dispatch(call, intent)
         with _tracer.start_as_current_span('write') as span:
             audit: dict[str, Any] = {
                 'action': self.name,
+                'intent': intent.id,
+                'operation': intent.id,
                 'args': checked.model_dump(mode='json'),
+                'proposal_args': _proposal_args(asked),
+                'needs_approval': self.needs_approval,
+                'changes': self.changes,
                 'question': asked.spoken if asked is not None else '',
                 'about': asked.about if asked is not None else '',
                 'asked_turn': asked.turn if asked is not None else None,
                 'proposal': answering[0] if asked is not None else 0,
                 'segments': list(answering[1]) if asked is not None else [],
+                'call': call.id,
                 'turn': call.turn,
+                'generation': call._generation,
+                'sequence': call.next_audit(),
                 'heard': heard,
+                'playback': call.playback_for(answering[0]) if asked is not None else None,
+                'simulated_delivery': call.simulated_for(answering[0]) if asked is not None else [],
                 'status': 'unknown',
             }
             try:
+                try:
+                    await self._note_intent(call, intent)
+                except Exception as error:
+                    audit.update(
+                        status='failed', outcome='prepared', error=f'{type(error).__name__}: {error}'
+                    )
+                    raise ModelRetry(
+                        f'Nothing was done: the {self.name} could not be started just now. Tell the caller, '
+                        'and do not say it was done.'
+                    ) from None
+                call.set_intent(intent.id, status='dispatched')
                 call.note_business_attempt()
-                raw = await self._execute(call, checked, grant)
-                receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
-                call.note_evidence(
-                    self.name,
-                    audit['args'],
-                    receipt.model_dump(mode='json'),
-                    proposal=audit['proposal'],
-                    segments=tuple(audit['segments']),
-                )
-                output = await self._record(call, checked, receipt)
-                audit.update(status='ok', receipt=receipt.model_dump(mode='json'))
-                return output
-            except OutcomeUnknownError:
-                raise
-            except BaseException:
-                audit['status'] = 'failed'
-                raise
+                try:
+                    raw = await self._execute(call, checked, grant)
+                    receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
+                except ModelRetry:
+                    call.set_intent(intent.id, status='rejected')
+                    audit.update(status='failed', outcome='rejected')
+                    raise
+                except asyncio.CancelledError:
+                    self._lost(call, intent, checked, audit, 'cancelled after dispatch')
+                    raise
+                except OutcomeUnknownError as error:
+                    self._lost(call, intent, checked, audit, str(error))
+                    raise
+                except Exception as error:
+                    self._lost(call, intent, checked, audit, f'{type(error).__name__}: {error}')
+                    raise OutcomeUnknownError(
+                        f'{self.name}: {type(error).__name__} after dispatch'
+                    ) from error
+                return await self._settled(call, checked, intent, receipt, audit)
             finally:
                 span.set_attribute('write.audit', json.dumps(audit, default=str))
+
+    async def _settled(
+        self, call: C, args: ArgsT, intent: Intent, receipt: ReceiptT, audit: dict[str, Any]
+    ) -> OutputT:
+        """A validated receipt for this intent: settle the intent, file the evidence, then record it.
+
+        Shared by a first answer and a reconciliation, so both reach the same
+        state. The evidence is filed before `_record` can fail or be
+        cancelled: a success whose speech or state projection then fails is
+        still a success, kept for repair (`CallContext._unpresented`) and
+        never sent again.
+        """
+        data = receipt.model_dump(mode='json')
+        succeeded = self.succeeded(receipt.model_dump())
+        call.set_intent(intent.id, status='succeeded' if succeeded else 'rejected')
+        call._unknown.pop(intent.id, None)
+        call.note_evidence(
+            self.name,
+            args.model_dump(mode='json'),
+            data,
+            proposal=audit.get('proposal', 0),
+            segments=tuple(audit.get('segments', ())),
+            intent=intent.id,
+            succeeded=succeeded,
+            changes=self.changes,
+            resource=str(data.get(self.subject, '')) if self.subject else '',
+            identity=intent.subject,
+        )
+        audit.update(
+            status='ok' if succeeded else 'failed',
+            outcome='succeeded' if succeeded else 'rejected',
+            receipt=data,
+        )
+        if intent.subject and call.identity() and intent.subject != call.identity():
+            audit['presented'] = False
+            logger.info('{} settled for another caller than the one on the line: filed, not said', self.name)
+            return None  # ty: ignore[invalid-return-type]
+        if succeeded:
+            call._unpresented[intent.id] = (self, args, receipt.model_dump())
+        try:
+            output = await self._record(call, args, receipt)
+        except ModelRetry:
+            call._unpresented.pop(intent.id, None)
+            raise
+        except BaseException as error:
+            audit['presented'] = False
+            logger.warning('{} succeeded, and recording it failed: {}', self.name, type(error).__name__)
+            raise
+        call._unpresented.pop(intent.id, None)
+        audit['presented'] = True
+        return output
+
+    async def present_again(self, call: C, args: ArgsT, receipt: Mapping[str, Any]) -> OutputT:
+        """Record a success whose recording failed, from its filed receipt: state and speech only, nothing sent."""
+        owed = next(
+            (i for i, (op, held, _) in call._unpresented.items() if op is self and held == args), None
+        )
+        output = await self._record(call, args, self.receipt_type.model_validate(receipt))  # ty: ignore[invalid-argument-type]
+        if owed is not None:
+            call._unpresented.pop(owed, None)
+        return output
+
+    def _lost(self, call: C, intent: Intent, args: ArgsT, audit: dict[str, Any], why: str) -> None:
+        """The intent was dispatched and nothing settled it: unknown, held for reconciliation before any retry."""
+        call.set_intent(intent.id, status='unknown')
+        call._unknown[intent.id] = (self, args)
+        audit.update(status='unknown', outcome='unknown', error=why)
+
+    def _may_dispatch(self, call: C, intent: Intent) -> None:
+        """Refuse an intent that may already have landed, and any new one after the caller said goodbye.
+
+        An unknown intent is sent again only as itself, and only to a backend
+        that dedups by its id (`idempotent`). While any earlier intent of this
+        operation for this caller is unknown, a different one is refused too:
+        two bookings in flight for one caller is the duplicate this exists to
+        prevent, and which of them landed is for reconciliation to say.
+        """
+        if intent.status == 'dispatched':
+            raise OutcomeUnknownError(f'{self.name}: this request is still waiting for an answer')
+        if intent.status == 'unknown' and not self.resendable:
+            raise OutcomeUnknownError(
+                f'{self.name}: an earlier attempt may have landed, so it is not sent again'
+            )
+        if self.changes and any(
+            other.operation == self.name
+            and other.subject == intent.subject
+            and other.status in ('dispatched', 'unknown')
+            and other.id != intent.id
+            for other in call.intents
+        ):
+            raise OutcomeUnknownError(
+                f'{self.name}: an earlier request may have landed; it is checked before anything new is sent'
+            )
+        if call.departed and intent.status == 'prepared' and self.changes:
+            raise ModelRetry(
+                f'Nothing was done: the caller has said goodbye, so no new {self.name} starts. Do not say it was done.'
+            )
+
+    @property
+    def resendable(self) -> bool:
+        """Whether an intent whose outcome is unknown may be sent again, as itself: a deduping backend, or a pure read."""
+        return self.idempotent or not self.changes
+
+    async def _note_intent(self, call: C, intent: Intent) -> None:
+        """Hand the intent to the service's own durable record, if it keeps one (`note_intent`), before dispatch.
+
+        Optional: a service without it keeps intents only as long as this
+        process does. Bounded, so a slow store cannot hold the turn; a failure
+        means the intent was never dispatched. A read (`changes: false`) has
+        no effect to reconcile, so it is not recorded.
+        """
+        if not self.changes:
+            return
+        services = getattr(call, 'services', None)
+        note = getattr(services, 'note_intent', None)
+        if note is None:
+            return
+        async with asyncio.timeout(NOTE_INTENT_SECONDS):
+            result = note(intent)
+            if asyncio.iscoroutine(result):
+                await result
+
+    def succeeded(self, receipt: Mapping[str, Any]) -> bool:
+        """Whether a validated receipt says the action worked. Base: any validated receipt."""
+        return True
 
     async def _before(self, call: C, args: ArgsT) -> OutputT | None:
         """Settle anything that must be resolved before a new action. Return an output to stop here."""
@@ -186,3 +366,18 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     @abstractmethod
     async def _record(self, call: C, args: ArgsT, receipt: ReceiptT) -> OutputT:
         """Commit what the receipt proves, retain it, and say it. Only runs after a validated receipt."""
+
+
+def _proposal_args(asked: Any) -> Any:
+    """The arguments the pending question read back, as they were when it was asked. None when nothing was asked.
+
+    Taken from the question's own `value`, recorded when it was put to the
+    caller (`ProposalLedger.ask` copies it), never from the arguments about to
+    run: a mismatch between the two is what an evaluator checks for.
+    """
+    if asked is None:
+        return None
+    try:
+        return json.loads(asked.value)
+    except TypeError, ValueError:
+        return asked.value

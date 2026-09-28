@@ -461,6 +461,38 @@ def an_unknown_outcome_stays_unknown() -> None:
     assert report.verdict == 'unknown'
 
 
+def a_reconciliation_settles_only_its_own_intent() -> None:
+    """Stage B: an unknown write, then the runtime's reconciliation of the same intent, is one booking.
+
+    The reconciliation is a write audit marked `reconciled` under the same
+    `operation`. For another intent, or with no earlier write, the flag
+    excuses nothing: the unknown stays unknown, and the audit is judged like
+    any other write: never excused, so never a pass on the flag.
+    """
+    slot = {'phone': PHONE, 'slot': '2026-10-02T0900|haircut'}
+    first = supported(3, 2, args=slot, status='unknown', receipt={}, operation='I1')
+    settled = write(4, 2, args=slot, operation='I1', reconciled=True, needs_approval=True)
+    report = judge('run', SIM, call(lookup_supported(), first, settled), evidence=complete_evidence())
+    assert report.verdict == 'pass', (report.missing, report.authorization, report.outcome)
+    other = write(
+        4, 2, args=slot, operation='I2', reconciled=True, needs_approval=True, proposal=4, segments=['s4']
+    )
+    report = judge('run', SIM, call(lookup_supported(), first, other), evidence=complete_evidence())
+    assert 'book_appointment@3: outcome unknown' in report.outcome.unknown, report.outcome
+    judged = ' '.join(report.authorization.failed + report.authorization.unknown)
+    assert 'book_appointment@4' in judged and report.verdict != 'pass', (
+        'a reconciled flag excused an unrelated write',
+        report.authorization,
+    )
+    alone = write(3, 2, args=slot, operation='I3', reconciled=True, needs_approval=True)
+    report = judge('run', SIM, call(lookup_supported(), alone), evidence=complete_evidence())
+    judged = ' '.join(report.authorization.failed + report.authorization.unknown)
+    assert 'book_appointment@3' in judged and report.verdict != 'pass', (
+        'a reconciliation with nothing to reconcile passed',
+        report.authorization,
+    )
+
+
 def a_long_span_is_not_a_ceiling() -> None:
     """Native iPFgi5qq: a 1,105 s span was reported as "ended by the 300 s limit"; its recording is 50 s."""
     report = judge('run', SIM, call(span=1105), limit=300)
@@ -660,6 +692,7 @@ if __name__ == '__main__':
     a_claim_names_its_appointment()
     delivery_needs_marks_for_its_own_proposal()
     an_unknown_outcome_stays_unknown()
+    a_reconciliation_settles_only_its_own_intent()
     a_long_span_is_not_a_ceiling()
     an_ending_is_observed_or_unknown()
     evidence_is_never_coerced()

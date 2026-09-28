@@ -317,7 +317,7 @@ def schema_tool(
         if overridden := set(arguments) & set(injected):
             raise ModelRetry(
                 f'{name} was not called: {", ".join(sorted(overridden))} '
-                'is supplied by the salon and cannot be set from here.'
+                'is supplied by the application and cannot be set from here.'
             )
         return from_model.validate_python(arguments).model_dump()
 

@@ -44,7 +44,16 @@ from dotenv import dotenv_values
 
 from coval_sim.coval import CovalClient, CovalError
 from coval_sim.models import FOLDERS, Agent, Persona, SpeechProfile
-from coval_sim.runtime import NotReadyError, Process, Tunnel, answers_http, ceiling
+from coval_sim.runtime import (
+    NotReadyError,
+    Process,
+    Tunnel,
+    answers_http,
+    call_sids,
+    ceiling,
+    shown,
+    twilio_voice_url,
+)
 
 PORT = 7860
 RUN_TIMEOUT_S = 45 * 60
@@ -70,7 +79,11 @@ No caller ID, so the agent has to ask for the number. A fresh diary per call,
 so calls running side by side cannot see each other's bookings. A ceiling on
 the call's length. Placeholder Twilio credentials, because Pipecat's Twilio
 serializer refuses to start without them; its hang-up request then fails with
-a logged 401, which is harmless.
+a logged 401, which is harmless. No Twilio marks come back from Coval's
+simulated caller (session 4b call SdkVkoJj), so on that route the bot is
+told so (`TWILIO_MARKS=absent`, `Repository.bot`) and settles a read-back
+from the audio it sent. On a phone line (`Agent.phone_line`) real Twilio
+carries the call and returns marks (`echoed`).
 
 `bot.py` loads `.env` with `override=True`, so do not put any of these names in `.env`.
 """
@@ -162,6 +175,12 @@ class Job:
         return '\n'.join([
             f'agency       {self.agency} (use-cases/{FOLDERS.get(self.agency, self.agency)})',
             f'agent        {self.agent.id} {self.agent.display_name}',
+            'line         '
+            + (
+                f'real Twilio: Coval dials {self.agent.phone_number}, pointed at the bot for this job; marks echoed'
+                if self.agent.phone_line
+                else "Coval's simulated Twilio websocket: no marks returned (TWILIO_MARKS=absent)"
+            ),
             f'test set     {self.test_set_id}: {len(self.case_ids)} case(s) {", ".join(self.case_ids)}',
             f'persona      {self.persona.id} {self.persona.name}',
             f'metrics      {", ".join(self.agent.metric_ids) or "none"}',
@@ -285,6 +304,7 @@ class Repository:
         port: int = PORT,
         profile: SpeechProfile | None = None,
         call_seconds: int = MAX_CALL_SECONDS,
+        marks: str = 'absent',
     ) -> Process:
         """Start the agency's `bot.py`, from its own folder, on the runner's Twilio route; return once it answers HTTP.
 
@@ -299,6 +319,7 @@ class Repository:
             {
                 **env,
                 **BOT_ENV,
+                'TWILIO_MARKS': marks,
                 'MAX_CALL_SECONDS': str(call_seconds),
                 **(profile.model_dump() if profile else {}),
                 **(GRAPH_ENV if agency == GRAPH else {}),
@@ -469,11 +490,24 @@ class ReleaseCheck:
                     tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
                     stack.enter_context(
                         self.repo.bot(
-                            job.agency, env, tunnel.host, log, self.port, job.profile, job.call_seconds
+                            job.agency,
+                            env,
+                            tunnel.host,
+                            log,
+                            self.port,
+                            job.profile,
+                            job.call_seconds,
+                            marks='echoed' if job.agent.phone_line else 'absent',
                         )
                     )
                     host = tunnel.host
-                self.coval.update_connection(job.agent, connection(host))
+                if job.agent.phone_line:
+                    previous = stack.enter_context(
+                        twilio_voice_url(job.agent.phone_number, f'https://{host}/')
+                    )
+                    print(f'{job.agent.phone_number} voice URL was {shown(previous)}; put back after the job')
+                else:
+                    self.coval.update_connection(job.agent, connection(host))
                 self.runs.write(job.key, name=name, status='intent')
                 try:
                     run_id = self.coval.launch(
@@ -520,7 +554,10 @@ class ReleaseCheck:
                 log,
                 still_running=True,
             )
-        self.runs.write(job.key, name=name, status='finished', run_id=run_id, remote=run.status)
+        calls = call_sids(log) if job.agent.phone_line else []
+        self.runs.write(job.key, name=name, status='finished', run_id=run_id, remote=run.status, calls=calls)
+        if calls:
+            print(f'bot calls {" ".join(calls)} (for load_report --call SIMULATION=CALL_SID)', flush=True)
         problems = run.problems(
             self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
         )

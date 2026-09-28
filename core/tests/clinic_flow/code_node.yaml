@@ -12,6 +12,7 @@ agents:
 operations:
   look_up:
     function: clinic.py:look_up
+    changes: false
     args: {patient: patient}
     approval: none
     succeeds: {status: found}

@@ -29,6 +29,7 @@ Scripted models prove runtime properties, not language understanding.
 """
 
 import asyncio
+import contextlib
 import json
 import subprocess
 import sys
@@ -193,6 +194,35 @@ async def hostile_calls_are_refused():
     assert call.state.facts.reference == '', 'a model wrote a field only a receipt may set'
 
 
+async def a_confirm_steps_answer_claims_nothing():
+    """B2: a confirm step's `answer` is model words on a step that is about to write; the application's claim words hold there too."""
+    text = (HERE / 'agent.yaml').read_text()
+    claimed = HERE / '_claims_agent.yaml'
+    claimed.write_text(
+        text.replace('locale: english\n', "locale:\n  base: english\n  claims: ['\\bbooked\\b']\n", 1)
+    )
+    try:
+        script = Script()
+        flow, call = opened('_claims_agent.yaml', script)
+        await turn(flow, call, script, 'P-1234.', ('call', 'collect', {'values': {'patient': 'P-1234'}}))
+        await turn(flow, call, script, 'Ten.', ('call', 'collect', {'values': {'slot': '1000'}}))
+        said = await turn(
+            flow,
+            call,
+            script,
+            'Is it booked?',
+            ('call', 'answer', {'words': 'Yes, you are booked.'}),
+            ('call', 'answer', {'words': 'Not yet: I need your yes first.'}),
+        )
+        assert not any('you are booked' in s for s in said), (
+            'a confirm step claimed a booking nothing made',
+            said,
+        )
+        assert call.services.calls == 0 and said[0] == 'Not yet: I need your yes first.', said
+    finally:
+        claimed.unlink()
+
+
 async def a_change_in_the_same_reply_spends_no_yes():
     """P5: "yes, but at nine" as `collect` + `book` in one response, in both orders: nothing is booked.
 
@@ -232,7 +262,7 @@ async def holding_covers_work_not_thinking():
 
     for slow, moves, expected in (
         ('tool', (('call', 'options', {}), ('say', 'I have Tuesday at nine.')), 1),
-        ('model', (('call', 'goodbye', {'words': 'Goodbye.'}),), 0),
+        ('model', (('call', 'goodbye', {}),), 0),
     ):
         script = Script()
         step = ConversationStep(
@@ -252,6 +282,36 @@ async def holding_covers_work_not_thinking():
         assert len(fillers) == expected, (slow, [(s.origin, s.text) for s in call.spoken])
         if expected:
             assert call.spoken[0] is fillers[0], 'the holding line comes before the answer'
+
+
+async def a_cut_off_tool_leaves_no_timer():
+    """B4: a caller who cuts in while a slow tool runs ends the turn, and its holding-line timer with it, awaited."""
+    started = asyncio.Event()
+
+    async def hanging_times(clinic: Any, state: Any) -> dict[str, str]:
+        started.set()
+        await asyncio.Event().wait()
+        return {}
+
+    script = Script()
+    step = ConversationStep(
+        id='desk', instructions='Help.', fields=('patient', 'slot'), choices={'slot': hanging_times}
+    )
+    flow = StepFlow([step], model=script.model, state_type=ClinicState)
+    call = flow.open(ClinicState(), services=Backend())
+    script.call, script.moves = call, [('call', 'options', {})]
+    barge = core.turn.Barge()
+    running = asyncio.create_task(
+        take_turn(call, flow.nodes, 'Which times?', TurnBudget(hold_after=5.0), barge)
+    )
+    await asyncio.wait_for(started.wait(), 3)
+    barge.fire()
+    running.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await asyncio.wait_for(running, 3)
+    await asyncio.sleep(0)
+    left = [t for t in asyncio.all_tasks() if '_hold_after' in repr(t.get_coro())]
+    assert not left, ('a holding-line timer outlived the turn that armed it', left)
 
 
 async def a_code_node_returns_with_no_model():
@@ -495,8 +555,10 @@ async def main() -> None:
     await no_reader_runs_in_any_pattern()
     public_path_loads_no_reader()
     await hostile_calls_are_refused()
+    await a_confirm_steps_answer_claims_nothing()
     await a_change_in_the_same_reply_spends_no_yes()
     await holding_covers_work_not_thinking()
+    await a_cut_off_tool_leaves_no_timer()
     await a_code_node_returns_with_no_model()
     await late_options_offer_nothing()
     await an_unheard_receipt_is_said_again()

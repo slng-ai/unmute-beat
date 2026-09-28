@@ -1,0 +1,3 @@
+KNOWN DEFECT (session 4b stage B1): a write cancelled after its commit is sent again
+KNOWN DEFECT (session 4b stage B1): an invalid reconciliation answer clears the retry guard
+KNOWN DEFECT (session 4b stage B2): a lookup receipt backs a goodbye that claims a booking

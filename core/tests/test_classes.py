@@ -8,6 +8,7 @@ check proves no subclass loaded here overrides a `@final` method; salon-graph's
 """
 
 import asyncio
+import contextlib
 import inspect
 
 from pydantic import BaseModel, ValidationError
@@ -15,7 +16,7 @@ from pydantic_ai import ModelRetry
 
 from core.decisions import Accept, Decision, NoDecision
 from core.interpreters import Interpreter, RuleInterpreter
-from core.operations import Operation
+from core.operations import Operation, OutcomeUnknownError
 from core.proposals import BaseProposal, Proposal
 from core.state import CallContext, VoiceState
 
@@ -162,18 +163,28 @@ async def the_default_operation():
     else:
         raise AssertionError('one answer authorised two actions')
 
-    broken = RenewLoan(lambda book: {'book': book})
+    sent: list[str] = []
+    broken = RenewLoan(lambda book: sent.append(book) or {'book': book})
     call = LibraryCall()
     call.turn_started('renew Dune')
     asked(call, broken.proposal(Renewal(book='Dune')))
     call.turn_started('yes')
     try:
         await broken.run(call, Renewal(book='Dune'))
-    except ValidationError:
-        pass
+    except OutcomeUnknownError as error:
+        assert isinstance(error.__cause__, ValidationError), error.__cause__
     else:
         raise AssertionError('an unreadable receipt reached _record')
     assert call.state.renewals == 0
+    assert [i.status for i in call.intents] == ['unknown'], (
+        'an unreadable answer after dispatch is not a refusal'
+    )
+    call.turn_started('renew Dune')
+    asked(call, broken.proposal(Renewal(book='Dune')))
+    call.turn_started('yes')
+    with contextlib.suppress(OutcomeUnknownError):
+        await broken.run(call, Renewal(book='Dune'))
+    assert sent == ['Dune'], 'an intent whose outcome is unknown was sent again'
 
 
 def subclasses(cls):

@@ -13,6 +13,7 @@ agents:
 operations:
   book:
     function: clinic.py:book
+    subject: reference
     args: {patient: patient, slot: slot}
     readback: clinic.py:booking_words
     reconcile: clinic.py:find_booking
@@ -21,6 +22,7 @@ operations:
     say: 'Booked for {when}, reference {reference}.'
   cancel:
     function: clinic.py:cancel
+    subject: reference
     args: {reference: reference}
     readback: clinic.py:cancel_words
     succeeds: {status: cancelled}

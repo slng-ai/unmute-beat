@@ -1,0 +1,44 @@
+HEAD b2b1de09fd53631af1db16f40e735d765306b9f3
+[ok 0] .: ruff format --check . (0s)
+    233 files already formatted
+[ok 0] .: ruff check . (0s)
+    All checks passed!
+[ok 0] .: git diff --check c07891a (0s)
+[ok 0] core: ty check . (0s)
+    All checks passed!
+[ok 0] use-cases/salon-graph: ty check . (0s)
+    All checks passed!
+[ok 0] use-cases/concierge-tools: ty check . (0s)
+    All checks passed!
+[ok 0] use-cases/faro-language-learning: ty check . (0s)
+    All checks passed!
+[ok 0] use-cases/salon-pipecat-flows: ty check . (0s)
+    All checks passed!
+[ok 0] use-cases/salon-prompt: ty check . (0s)
+    All checks passed!
+[ok 0] use-cases/faro-tools: ty check . (0s)
+    All checks passed!
+[ok 0] core: python -m tests (11s)
+    2026-09-26 15:16:56.864 | INFO     | core.turn:_hop:711 - handoff look_up -> desk (-)
+    2026-09-26 15:16:56.869 | DEBUG    | core.turn:take_turn:1251 - turn answered in 0.02s
+    2026-09-26 15:16:56.875 | DEBUG    | core.turn:take_turn:1251 - turn answered in 0.01s
+[ok 0] use-cases/salon-graph: python -m tests (17s)
+    2026-09-26 15:17:13.757 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#10 is finishing...
+    2026-09-26 15:17:13.757 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#10 has finished
+    2026-09-26 15:17:13.757 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-bbe67e22': finished running
+[ok 0] use-cases/concierge-tools: python -m tests (3s)
+    matrix ok: rows, missing results, native gaps, pin, tolerance
+    
+    all 5 modules ok
+[ok 0] use-cases/faro-language-learning: python -m tests (1s)
+    2026-09-26 15:17:18.887 | DEBUG    | core.turn:take_turn:1251 - turn answered in 0.00s
+    2026-09-26 15:17:18.890 | DEBUG    | core.turn:take_turn:1251 - turn answered in 0.00s
+    2026-09-26 15:17:18.892 | DEBUG    | core.turn:take_turn:1251 - turn answered in 0.00s
+[ok 0] use-cases/salon-pipecat-flows: python -m tests (1s)
+    2026-09-26 15:17:19.542 | DEBUG    | pipecat.flows.manager:_update_llm_context:919 - Updated LLM context using LLMMessagesAppendFrame with strategy ContextStrategy.APPEND
+    2026-09-26 15:17:19.542 | DEBUG    | pipecat.flows.manager:_set_node:776 - Updated LLM context
+    2026-09-26 15:17:19.542 | DEBUG    | pipecat.flows.manager:_set_node:795 - Successfully set node: end
+[ok 0] use-cases/salon-prompt: python -m tests (0s)
+    
+    all 1 modules ok
+    2026-09-26 15:17:19.889 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.14.5 (main, May 10 2026, 19:20:57) [Clang 22.1.3 ]) ᓚᘏᗢ

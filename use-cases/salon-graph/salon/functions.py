@@ -11,7 +11,9 @@ What is salon, and stays here: which day "Saturday" is next to the date the
 caller is discussing (`find_times`), how a slot, a move and a cancellation
 are read back in the diary's own words, what a complaint's next step is
 under the refunds policy, and how a write whose answer was lost is found
-again by its operation token (`find_write`).
+again (`find_booking` and the others). A write's diary token is the id of the
+`Intent` core issued for it: the same intent sent twice writes once, and a
+new intent with the same arguments is a new write.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints, ValidationError
 
-from core import OutcomeUnknownError
+from core import Intent, OutcomeUnknownError
 from salon.diary import WEEKDAYS, AlreadyHoldsError, Diary, RefusedError, day_phrases, resolve_day, spoken_day
 from salon.models.receipts import CustomerLookup, Held, Saved, Slots
 from salon.models.shapes import Spoken, SubmittedPhone
@@ -32,22 +34,19 @@ from salon.models.state import SalonState
 
 @dataclass
 class Salon:
-    """One call's services: the salon's diary, the key the diary files this call's offers under, and its writes.
+    """One call's services: the salon's diary, and the key the diary files this call's offers under.
 
-    `writes` is part of every write's operation token, so booking a slot,
-    cancelling it and booking the same slot again are three writes, while a
-    retry of one write whose answer was lost asks about the same token.
+    No write counter: each write is named by its `Intent`, so booking a slot,
+    cancelling it and booking the same slot again are three intents and three
+    writes, while a retry of one write whose answer was lost is the same
+    intent and asks about the same token, in this process or a fresh one.
     """
 
     diary: Diary
     call: str
-    writes: int = 0
 
     def now(self) -> datetime:
         return self.diary.now()
-
-    def token(self, action: str, *parts: str) -> str:
-        return '|'.join((self.call, str(self.writes), action, *parts))
 
 
 class PhoneArgs(BaseModel):
@@ -300,14 +299,13 @@ def _write(salon: Salon, token: str, phone: str, attempt, expected: dict[str, st
         raise OutcomeUnknownError('the diary answered in a shape this cannot read') from error
     if why := _disagrees(raw, expected):
         raise OutcomeUnknownError(why)
-    salon.writes += 1
     salon.diary.withdraw_offers(salon.call)
     return written
 
 
-def book(salon: Salon, args: Booking) -> Written:
+def book(salon: Salon, args: Booking, intent: Intent) -> Written:
     """Book the offered slot. A caller who already holds a booking was read back a second appointment, and said yes to that."""
-    token = salon.token('book', args.phone, args.slot)
+    token = intent.id
     additional = bool(_held(salon, args.phone))
     return _write(
         salon,
@@ -327,9 +325,9 @@ def book(salon: Salon, args: Booking) -> Written:
     )
 
 
-def move(salon: Salon, args: Move) -> Written:
+def move(salon: Salon, args: Move, intent: Intent) -> Written:
     """Move the caller's own booking to the offered slot."""
-    token = salon.token('move', args.phone, args.booking_id, args.slot)
+    token = intent.id
     return _write(
         salon,
         token,
@@ -348,9 +346,9 @@ def move(salon: Salon, args: Move) -> Written:
     )
 
 
-def cancel(salon: Salon, args: Cancel) -> Written:
+def cancel(salon: Salon, args: Cancel, intent: Intent) -> Written:
     """Cancel the caller's own booking: a real write with its own receipt, never an in-memory undo."""
-    token = salon.token('cancel', args.phone, args.booking_id)
+    token = intent.id
     return _write(
         salon,
         token,
@@ -377,34 +375,33 @@ def _found(salon: Salon, token: str, phone: str, expected: dict[str, str]) -> Wr
     written = _written(raw, phone)
     if why := _disagrees(raw, expected):
         raise OutcomeUnknownError(why)
-    salon.writes += 1
     salon.diary.withdraw_offers(salon.call)
     return written
 
 
-def find_booking(salon: Salon, args: Booking) -> Written | None:
-    """What an unanswered booking did, asked by its own token: the reconciliation before any retry."""
+def find_booking(salon: Salon, args: Booking, intent: Intent) -> Written | None:
+    """What an unanswered booking did, asked by its own intent: the reconciliation before any retry."""
     return _found(
         salon,
-        salon.token('book', args.phone, args.slot),
+        intent.id,
         args.phone,
         _expected(salon, args.phone, 'booked', args.slot),
     )
 
 
-def find_move(salon: Salon, args: Move) -> Written | None:
+def find_move(salon: Salon, args: Move, intent: Intent) -> Written | None:
     return _found(
         salon,
-        salon.token('move', args.phone, args.booking_id, args.slot),
+        intent.id,
         args.phone,
         _expected(salon, args.phone, 'moved', args.slot, args.booking_id),
     )
 
 
-def find_cancel(salon: Salon, args: Cancel) -> Written | None:
+def find_cancel(salon: Salon, args: Cancel, intent: Intent) -> Written | None:
     return _found(
         salon,
-        salon.token('cancel', args.phone, args.booking_id),
+        intent.id,
         args.phone,
         _expected(salon, args.phone, 'cancelled', booking_id=args.booking_id),
     )
@@ -462,12 +459,6 @@ def acknowledgement(reference: str, requested_resolution: str) -> str:
     return NOTED.format(reference=reference, next_step=step) + pending + ' Anything else I can help with?'
 
 
-def _complaint_token(salon: Salon, args: ComplaintArgs) -> str:
-    return salon.token(
-        'complaint', args.phone, ' '.join(args.summary.casefold().split()), args.requested_resolution
-    )
-
-
 def _noted(raw: dict, args: ComplaintArgs) -> Noted:
     recorded = bool(raw.get('recorded'))
     reference = str(raw.get('reference', ''))
@@ -479,9 +470,9 @@ def _noted(raw: dict, args: ComplaintArgs) -> Noted:
     )
 
 
-def record_complaint(salon: Salon, args: ComplaintArgs) -> Noted:
-    """Write the complaint down, in the caller's words, once. Twice with one token writes it once."""
-    token = _complaint_token(salon, args)
+def record_complaint(salon: Salon, args: ComplaintArgs, intent: Intent) -> Noted:
+    """Write the complaint down, in the caller's words, once. Twice with one intent writes it once."""
+    token = intent.id
     try:
         raw = salon.diary.record_complaint(
             args.phone, args.summary, args.requested_resolution, operation_token=token
@@ -491,15 +482,13 @@ def record_complaint(salon: Salon, args: ComplaintArgs) -> Noted:
         if found is None:
             raise OutcomeUnknownError(f'the complaint book did not answer: {error}') from error
         raw = found
-    salon.writes += 1
     return _noted(raw, args)
 
 
-def find_complaint(salon: Salon, args: ComplaintArgs) -> Noted | None:
-    raw = salon.diary.outcome_of(_complaint_token(salon, args))
+def find_complaint(salon: Salon, args: ComplaintArgs, intent: Intent) -> Noted | None:
+    raw = salon.diary.outcome_of(intent.id)
     if raw is None:
         return None
-    salon.writes += 1
     return _noted(raw, args)
 
 

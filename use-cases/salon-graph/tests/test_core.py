@@ -38,7 +38,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from core import FlowCall as SalonCall
 from core import turn as core
-from core.processor import PydanticAgentProcessor
+from core.processor import PydanticAgentProcessor, SegmentMark
 from core.state import turn_generation
 from core.turn import EXHAUSTED, UNBACKED, TurnBudget, take_turn
 from salon.app import FLOW
@@ -244,7 +244,8 @@ async def the_processor_still_speaks_pipecat():
 
     Start, text, end, in that order, with the fixed lines as `TTSSpeakFrame`
     -- which is what TTS, the aggregators and the interruption machinery all
-    read.
+    read. Stage B3 adds one data frame after the end: the segment's mark,
+    which the transport sends once the audio before it has gone out.
     """
     call = _fresh(True)
     probe = Probe(call)
@@ -253,9 +254,11 @@ async def the_processor_still_speaks_pipecat():
 
     kinds = probe.kinds()
     assert kinds[0] == 'LLMFullResponseStartFrame', kinds
-    assert kinds[-1] == 'LLMFullResponseEndFrame', kinds
+    assert kinds[-2:] == ['LLMFullResponseEndFrame', 'SegmentMark'], kinds
     assert 'LLMTextFrame' in kinds, kinds
     assert probe.heard() == 'We are open until six.'
+    [mark] = [f for f in probe.frames if isinstance(f, SegmentMark)]
+    assert mark.mark == f'{call.spoken[-1].id}~0', (mark.mark, call.spoken[-1].id)
 
 
 async def a_fixed_line_is_still_a_tts_frame():

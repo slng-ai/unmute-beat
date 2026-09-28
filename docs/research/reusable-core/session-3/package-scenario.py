@@ -21,9 +21,9 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
 
 from clinic_flow.clinic import ClinicState  # noqa: E402
+from tests.slice.slice import Caller  # noqa: E402
 
 import core  # noqa: E402
-from tests.slice.slice import Caller  # noqa: E402
 
 assert 'site-packages' in core.__file__ and '.claude' not in core.__file__, core.__file__
 assert os.getcwd() == '/', os.getcwd()

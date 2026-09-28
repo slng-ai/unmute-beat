@@ -10,6 +10,7 @@ lives now, is in `docs/research/reusable-core/session-4.md`.
 
 import asyncio
 
+from core.flowspec import LocaleSpec
 from core.locale import SPANISH
 from salon.diary import Diary
 from tests.script import CLOCK, PHONE, opened, slot, turn
@@ -494,6 +495,16 @@ async def model_speech_never_claims_a_completed_action():
         'a claim about other arguments passed'
     )
     call._locale = SPANISH
+    assert not call.claims_completion('Te he reservado el sábado a las nueve.'), (
+        "core's own Spanish carries no domain verbs: which words claim a change is the application's"
+    )
+    call._locale = LocaleSpec(
+        base='spanish',
+        claims=[
+            r'\b(?:te\s+|le\s+)?(?:he|hemos)\s+(?:ya\s+)?(?:reservado|cancelado|movido|registrado)\b',
+            r'\b(?:ya\s+)?(?:est[aá]|queda)\s+(?:ya\s+)?(?:reservad[oa]|registrad[oa]|confirmad[oa])\b',
+        ],
+    ).build()
     assert call.claims_completion('Te he reservado el sábado a las nueve.') and call.claims_completion(
         'Ya está registrada.'
     )
@@ -516,26 +527,47 @@ async def a_goodbye_never_claims_a_booking_nothing_made():
     """Coval gate 1, call cYMMixAc: the caller said yes to the read-back; the model said goodbye instead.
 
     Its words were "Great, your haircut is booked for Friday the 2nd at
-    9:00 AM. See you then!" and nothing was booked: a goodbye's words were
-    spoken with no claim check. Now such a goodbye is refused back to the
-    model, which then carries the booking out; after a real booking, the same
-    recap is said.
+    9:00 AM. See you then!" and nothing was booked. A goodbye now has no
+    words of the model's at all: core says the salon's closing line, and a
+    recap only of a receipt that still stands, in the salon's `recap` words.
+    A goodbye beside a read-back waiting for its answer is sent back once, so
+    the yes is carried out first. A reference to nothing, or to a booking
+    since cancelled, is refused.
     """
     script, flow, call, diary = await at_booking()
     await read_back(flow, call, script)
-    false_goodbye = (
-        'call',
-        'goodbye',
-        {'words': 'Great, your haircut is booked for Friday at two. See you then!'},
-    )
     said = await turn(
-        flow, call, script, 'Yes please, that is perfect.', false_goodbye, ('call', 'book_appointment')
+        flow, call, script, 'Yes please, that is perfect.', ('call', 'goodbye'), ('call', 'book_appointment')
     )
     assert booked(diary) == [('haircut', FRIDAY, '14:00')], booked(diary)
-    assert not call.ended and 'See you then' not in ' '.join(said), said
-    recap = ('call', 'goodbye', {'words': "You're booked for Friday at two. Goodbye!"})
-    said = await turn(flow, call, script, "That's all, thanks.", recap)
-    assert call.ended and said[-1] == "You're booked for Friday at two. Goodbye!", said
+    assert not call.ended and not any('Thanks for calling' in s for s in said), said
+    [standing] = call.effective()
+    ref = standing.intent[:8]
+    invented = ('call', 'goodbye', {'recap': ['deadbeef']})
+    recap = ('call', 'goodbye', {'recap': [ref]})
+    said = await turn(flow, call, script, "That's all, thanks.", invented, recap)
+    assert call.ended and said[-1] == (
+        f"You're booked for {standing.receipt['spoken']}. Thanks for calling Sage and Stone. Have a lovely day!"
+    ), said
+
+    script, flow, call, diary = await at_booking()
+    await read_back(flow, call, script)
+    await turn(flow, call, script, 'Yes please.', ('call', 'book_appointment'))
+    [standing] = call.effective()
+    call.note_evidence(
+        'cancel_appointment',
+        {'phone': call.state.facts.verified_phone, 'booking_id': standing.resource},
+        {'status': 'cancelled', 'booking_id': standing.resource},
+        intent='c' * 32,
+        resource=standing.resource,
+    )
+    said = await turn(
+        flow, call, script, 'Bye.', ('call', 'goodbye', {'recap': [standing.intent[:8]]}), ('call', 'goodbye')
+    )
+    assert said[-1] == 'Thanks for calling Sage and Stone. Have a lovely day!', (
+        'a goodbye recapped a booking that was cancelled after it',
+        said,
+    )
 
 
 async def one_action_per_reply_and_one_budget_per_turn():

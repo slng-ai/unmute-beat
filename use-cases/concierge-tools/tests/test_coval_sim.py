@@ -8,6 +8,7 @@ and nothing here starts the coval binary: every method that would is replaced.
 Asserts, no pytest, no fixtures, same as the rest.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -38,7 +39,7 @@ from coval_sim.models import (
     RunResults,
     Simulation,
 )
-from coval_sim.runtime import CONNECTED, Process, ceiling
+from coval_sim.runtime import CONNECTED, Process, call_sids, ceiling, shown, twilio_voice_url
 
 
 class FakeCoval(CovalClient):
@@ -436,6 +437,77 @@ def test_shared_host() -> None:
         raise AssertionError('served a bot the outside ceiling would stop after one call')
 
 
+FAKE_TWILIO = """#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+state = Path(__file__).with_suffix('.json')
+numbers = json.loads(state.read_text())
+args = sys.argv[1:]
+value = lambda flag: args[args.index(flag) + 1]
+if args[0] == 'api:core:incoming-phone-numbers:list':
+    print(json.dumps([n for n in numbers if n['phoneNumber'] == value('--phone-number')]))
+elif args[0] == 'api:core:incoming-phone-numbers:update':
+    for n in numbers:
+        if n['sid'] == value('--sid'):
+            n['voiceUrl'], n['voiceMethod'] = value('--voice-url'), value('--voice-method')
+            n.setdefault('history', []).append(n['voiceUrl'])
+    state.write_text(json.dumps(numbers))
+    print('[]')
+"""
+
+
+def test_phone_line() -> None:
+    """A `-twilio` voice agent is a real Twilio line: its number points at the bot for the job, then back."""
+    line = Agent(id='T', display_name='voice-harness-salon-pipecat-twilio', model_type='MODEL_TYPE_VOICE',
+                 phone_number='+447427919928')  # fmt: skip
+    assert line.agency == 'salon' and line.phone_line
+    assert not Agent(id='W', display_name='voice-harness-salon-pipecat').phone_line
+    assert not Agent(id='X', display_name='voice-harness-salon-pipecat-twilio').phone_line, (
+        'no number, no line'
+    )
+    assert (
+        Agent(id='F', display_name='voice-harness-salon-pipecat-flows-pipecat').agency
+        == 'salon-pipecat-flows'
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        binary = Path(tmp) / 'twilio'
+        binary.write_text(FAKE_TWILIO)
+        binary.chmod(0o755)
+        state = binary.with_suffix('.json')
+        other = {
+            'sid': 'PN2',
+            'phoneNumber': '+441111111111',
+            'voiceUrl': 'https://keep.example/x',
+            'voiceMethod': 'POST',
+        }
+        state.write_text(json.dumps([
+            {'sid': 'PN1', 'phoneNumber': '+447427919928', 'voiceUrl': 'https://old.example/voice', 'voiceMethod': 'GET'},
+            other,
+        ]))  # fmt: skip
+        with twilio_voice_url('+447427919928', 'https://bot.example/', binary=str(binary)) as previous:
+            during = json.loads(state.read_text())
+            assert previous == 'https://old.example/voice'
+            assert during[0]['voiceUrl'] == 'https://bot.example/' and during[0]['voiceMethod'] == 'POST'
+        after = json.loads(state.read_text())
+        assert after[0]['voiceUrl'] == 'https://old.example/voice' and after[0]['voiceMethod'] == 'GET', after
+        assert after[1] == other, 'another number was touched'
+        log = Path(tmp) / 'bot.log'
+        log.write_text(
+            'start CA' + 'a' * 32 + ' ok\nagain CA' + 'a' * 32 + '\nnext CA' + 'b' * 32 + '\nCAX\n'
+        )
+        assert call_sids(log) == ['CA' + 'a' * 32, 'CA' + 'b' * 32]
+        assert call_sids(Path(tmp) / 'none.log') == []
+        assert (
+            shown('https://x.example/voice?token=secret') == 'https://x.example/voice'
+            and shown('') == '(none)'
+        )
+        try:
+            with twilio_voice_url('+449999999999', 'https://bot.example/', binary=str(binary)):
+                raise AssertionError('a number the account does not hold was pointed')
+        except RuntimeError as error:
+            assert 'not one' in str(error), error
+
+
 if __name__ == '__main__':
     test_call_ceiling()
     test_plan()
@@ -448,5 +520,6 @@ if __name__ == '__main__':
     test_concurrency()
     test_named_metrics()
     test_shared_host()
+    test_phone_line()
     test_speech_profile()
     print('ok')

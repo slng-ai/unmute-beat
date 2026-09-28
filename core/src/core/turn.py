@@ -250,6 +250,10 @@ class _Outcome:
     succeeded: set[str]
 
 
+HOLD_CANCEL_SECONDS = 1.0
+"""How long a cancelled holding-line timer may take to finish: a line mid-`say` completes, nothing more."""
+
+
 class Turn:
     """One accepted caller turn: agents run until one answers, within one budget.
 
@@ -341,11 +345,18 @@ class Turn:
         if self._holding is None or self._holding.done():
             self._holding = asyncio.ensure_future(self._hold_after())
 
-    def _disarm_hold(self) -> None:
-        """The work finished, or the turn did: a holding line not yet said is never said."""
-        if self._holding is not None:
-            self._holding.cancel()
-            self._holding = None
+    async def _disarm_hold(self) -> None:
+        """The work finished, or the turn did: a holding line not yet said is never said.
+
+        Cancelled and awaited, so no timer from this turn is still pending when
+        the next one starts, the call ends, or the task running the turn is
+        torn down. The wait is bounded: a holding line already being said
+        finishes its one `say`, nothing longer.
+        """
+        task, self._holding = self._holding, None
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.wait({task}, timeout=HOLD_CANCEL_SECONDS)
 
     async def events(self, prompt: str | None) -> AsyncIterator[TurnEvent]:
         """Run the turn, yielding what a runtime needs to voice it, and finish with how it ended.
@@ -363,6 +374,9 @@ class Turn:
         turn_generation.set((call.id, self.generation))
         call._covered = False
         call.turn_started(prompt or '')
+        if call.continuing and call._turn_usage is not None and call._turn_usage[0] == call.turn:
+            self.usage = call._turn_usage[1]
+        call._turn_usage = (call.turn, self.usage)
         if prompt is not None:
             prompt = call.fresh or None
 
@@ -382,7 +396,7 @@ class Turn:
         except UsageLimitExceeded as over:
             spent = str(over)
         finally:
-            self._disarm_hold()
+            await self._disarm_hold()
 
         if failure:
             call.note_said('fixed', call.locale.stumble, origin='error')
@@ -394,8 +408,9 @@ class Turn:
 
         if not barge.hit and (claim := call.unbacked_claim()):
             logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
-            call.note_said('fixed', call.locale.unbacked, origin='error')
-            yield FixedSpeech(call.locale.unbacked, reason='unbacked')
+            line = call.correction(call.locale.unbacked)
+            call.note_said('fixed', line, origin='error')
+            yield FixedSpeech(line, reason='unbacked')
 
         call.turn_ended(interrupted=barge.hit)
         status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
@@ -613,7 +628,7 @@ class Turn:
                 yield _Failed(f'{type(error).__name__}: {error}')
                 return
             finally:
-                self._disarm_hold()
+                await self._disarm_hold()
             yield RunEnded(node.agent.name or call.state.agent)
         if action is None or output is None:
             failed: _Failed | None = None
@@ -957,7 +972,7 @@ class Turn:
                             yield TextDelta(text, step)
                         self._arm_hold()
                     elif isinstance(event, ToolResultEvent):
-                        self._disarm_hold()
+                        await self._disarm_hold()
                         if isinstance(event, FunctionToolResultEvent) and not isinstance(
                             event.part, RetryPromptPart
                         ):
@@ -990,7 +1005,7 @@ class Turn:
             return
         finally:
             disarm()
-            self._disarm_hold()
+            await self._disarm_hold()
             if events is not None and not retained_run:
                 try:
                     new_messages = events.new_messages()
@@ -1009,9 +1024,11 @@ class Turn:
             call.close_model_text()
 
         if gate == 'blocked':
-            note_spoken(call, _delivered(call), interrupted=True)
-            call.note_said('fixed', call.locale.withheld, origin='error')
-            yield FixedSpeech(call.locale.withheld, reason='withheld')
+            if model := [s for s in call.spoken if s.kind == 'model']:
+                note_spoken(call, model[-1].text, interrupted=True, segment_ids=(model[-1].id,))
+            line = call.correction(call.locale.withheld)
+            call.note_said('fixed', line, origin='error')
+            yield FixedSpeech(line, reason='withheld')
         yield RunEnded(step)
         yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
 

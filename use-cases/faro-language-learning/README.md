@@ -168,6 +168,7 @@ put again in a new language.
 ## How Faro is checked
 
 - `tests/test_faro.py`: the acceptance cases L01 to L16 and the public-path checks F1 to F9, offline, on a real SQLite file, with scripted step agents. One case kills a process right after an acknowledged save and checks the next process. One checks, in a fresh process, that no retired reader module is imported.
+- `tests/test_bot.py`: `bot.py` offline over Pipecat's SmallWebRTC transport: core's page is served, a page that reports playback is greeted with the caller ID read back, and one that reports nothing hears the refusal first and the call ends.
 - `../faro-tools/bench.py`: the same cases as live scripted text calls on the real model. Each call runs in its own process and is one Langfuse session. Billable.
 
 ```bash

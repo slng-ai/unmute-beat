@@ -102,7 +102,7 @@ For example, the `request` prompt could instruct its agent to collect the caller
 
 Both conversation steps name `assistant`, but compilation creates a separate agent for each step. They share persona configuration while retaining different prompts and available actions. They do not create separate calls or private copies of the application's facts.
 
-The `done` step satisfies the completion-endpoint requirement for a flow containing an action step. The successful lookup normally returns to `request`, and a conversation node can end through `goodbye`; the presence of `done` does not force a visit after every operation.
+The `done` step satisfies the completion-endpoint requirement: `lookup` is an action step with no `then`, so the flow needs an `End` it could finish on. The successful lookup normally returns to `request`, and a conversation node can end through `goodbye`; the presence of `done` does not force a visit after every operation.
 
 ## 4. Follow compilation from files to graph
 
@@ -201,6 +201,15 @@ Routing checks the required facts and inserts the prerequisite when they are mis
 
 The current return mechanism has one pending destination, not a stack of nested detours. A second interposition replaces the waiting destination. Keep that limit in mind when designing prerequisites that themselves need prerequisites.
 
+Two more rules let code act where the application already knows the next step:
+
+| Declaration | What code does |
+|---|---|
+| `route: next` on an operation | After a success, the caller moves to the step the receipt's `next` field names. Its type must be a `Literal` of step ids; the loader checks each one, and the graph knows every move before a call runs. The move wins over a prerequisite's return, and it ends the turn unless the new step opens with something of its own. |
+| `carries_out: {save_answer: [grade]}` on a step | A reply that only records `grade` makes core run `save_answer` at once, with no second request. The agent is never offered that operation, so it runs only on values this reply recorded. A refusal goes back to the agent in the same turn. The operation must declare `approval: none`. |
+
+Faro, the language-learning example, uses both: the store's checkpoint decides where a returning learner resumes, and an exercise answer is recorded by the examiner and saved by code in the same reply.
+
 ## 8. Choose who writes the spoken answer
 
 `front` uses the default `prose` mode, so its agent can compose answers to general questions. `request` uses `speech: rendered`, so the agent chooses actions while code supplies the words.
@@ -210,6 +219,10 @@ For example, `asks` speaks the first missing-field question automatically on han
 Rendered speech gives control over wording, while intent interpretation and field extraction still depend on the agent. A prose node's optional `guarded` mode can filter unsupported completion claims using application-supplied rules, but that is a best-effort check. A rendered node has no model prose to guard and cannot also declare `guarded`.
 
 Additional declarations such as `opens_with` and `reads_back` can make code select a predictable read-back on arrival or after collection. They are useful when the application already knows that next action; the simpler sequence above does not need them.
+
+A flow can also follow the caller's language. The manifest names a state field (`language: explanation`) and a locale for each of its values (`locales: {EN: ..., ES: ...}`). Core's own lines then follow that field during the call. If a read-back is waiting and the application now words it differently for the same value, core puts it again in the new words, so the next yes answers words the caller heard.
+
+`flow.greeting(call, words)` returns the application's greeting followed by what the entry step opens with: its `opens_with` read-back when the state already gives the arguments, such as a caller ID, or its first `asks` line. Passed to `core.greet`, a read-back becomes the question the first reply answers.
 
 ## Inspect a compiled graph offline
 
@@ -243,5 +256,6 @@ PY
 - [Executable graph](../../core/src/core/flow.py): `legal_moves`, `Flow._build`, `Moved` and `Answered`.
 - [Routing](../../core/src/core/graph.py): `route`, `holds` and the pending return destination.
 - [Authoring tests](../../core/tests/test_authoring.py) and [node tests](../../core/tests/test_nodes.py): different flow shapes, generated capabilities and rejected actions.
+- [Flow rule tests](../../core/tests/test_flow_rules.py) on the [routed support desk](../../core/tests/ticket_flow/routed.yaml): a language per call, routed and code-carried operations, the greeting, and validators reading `heard`.
 
 [← Typed state and history](03-typed-state-and-history.md) · [Reading guide](README.md) · [Next: tools, approval and recovery →](05-tools-approval-and-recovery.md)

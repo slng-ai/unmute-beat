@@ -1,12 +1,16 @@
 # 03 — Typed state and history
 
-State answers **“What does this call know now?”** History answers **“What happened in the conversation?”** A correction changes the current facts while leaving enough history to explain why they changed.
+When the assistant asks for a record number and the caller says “R-17,” where does that answer go? Into **state**: named values kept for this call. **History** is the record of the exchange, including the original words and any later correction.
+
+For example, after “Sorry, I meant R-18,” state should say `record_id = R-18`. History should still show that the caller first said R-17 and corrected it. The next node receives the same call, so it does not have to ask for everything again.
+
+**Typed state** means each value has a declared form and rules. An identifier might be text; a revision must be a nonnegative integer. Pydantic checks those rules when core records a proposed update. It does not decide whether the caller or model is telling the truth.
 
 Continue the example from [chapter 02](02-a-conversation-from-start-to-finish.md): caller A-42 wants record R-17 marked complete. The call moves from `front` to `request`, visits `lookup`, and returns to `request` for approval. This chapter follows the data through that path, then through a correction to the record identifier.
 
 ## 1. Define the facts the application needs
 
-The application supplies a plain Pydantic model. For the example, save this as `models.py` in the application folder:
+A model here is a data definition, not the language model. Each line below names a field, gives its type and sets its initial value. For example, `record_id: str` means the identifier is text; `revision: int` means the version is a whole number. Save this as `models.py` in the application folder:
 
 ```python
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,6 +28,8 @@ class ApplicationState(BaseModel):
 
 Every field has a default because a call can start before any identifiers are known. Here, an empty string means “not established,” and revision `0` means no backend version has been retrieved. These are choices made by this example, not reserved values that core requires every application to use.
 
+`BaseModel` supplies Pydantic's validation. `extra='forbid'` rejects names that the model did not declare. `Field(0, ge=0)` starts at zero and refuses negative values. These checks help catch bad inputs before an operation uses them.
+
 The model defines the shape of valid state. An application's identifier formats, allowed changes and cross-field rules belong here too. This small model only checks the field types and that revision is nonnegative; it does not establish record ownership or whether a particular change is permitted.
 
 The manifest names the model and the caller-identity field:
@@ -37,7 +43,7 @@ identity: caller_id
 
 ## 2. Separate facts, session records and services
 
-Opening a call wraps that model in a runtime session:
+Core keeps the application facts together with the position in the conversation and its pending work. That whole per-call container is the **session**. Opening a call creates it:
 
 ```python
 call = flow.open(ApplicationState(), services=backend)
@@ -60,7 +66,7 @@ flowchart TD
 | Session records | Caller words, read-back, delivery evidence, pending intent | What happened and what remains unresolved |
 | Services | Database or API client | How application functions reach the backend |
 
-`FlowState` holds the position and application facts. `FlowCall` adds the other session records and services. The manifest path creates these wrappers; the application does not need to subclass them.
+In code, the facts are at `call.state.facts` and the current node is at `call.state.agent`. The names of the containers are `FlowState` and `FlowCall`: the first holds position and facts; the second adds history, pending work and services. Core creates them. The author only needs to supply the application's facts model and services.
 
 There is one shared set of facts per call. A handoff changes the active node, its prompt and its available actions. It does not copy the conversation into another independent session.
 
@@ -180,7 +186,7 @@ For the correction above, the next request needs both perspectives:
 | Its revision is not yet known | A previous lookup described R-17 |
 | The desired change is still `complete` | The caller has not withdrawn the requested change |
 
-Core prepares the history through a **projection**: a copy adapted for the outgoing model request. It preserves the source records while keeping the provider-facing exchange coherent.
+Each time the model is asked to respond, it needs a coherent account of the conversation. Core builds that outgoing view from the stored records. The code calls this a **projection**: a prepared copy, rather than rewriting the original history.
 
 - Tool calls and their results stay paired. Incomplete exchanges left by cancellation are removed from the outgoing view.
 - Fixed speech, such as a read-back rendered by code, appears where it was said. An old line is not repeatedly inserted as the latest assistant answer.

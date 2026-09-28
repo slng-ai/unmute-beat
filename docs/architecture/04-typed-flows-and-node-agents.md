@@ -1,6 +1,8 @@
 # 04 — Typed flows and node agents
 
-A flow turns an application's declared steps into executable nodes and permitted routes. The graph controls where execution can go; the active node's agent interprets what the caller means within those limits.
+Chapter 02 showed the conversation; this chapter shows how to configure it. The **flow** is the set of jobs and allowed moves. A **node** is one job. An **edge** is permission to move from one job to another.
+
+The agent decides what the caller seems to need. The graph checks whether the requested move is allowed. For example, `front` may move to `request`, while `lookup` returns to the node waiting for its result. The graph does not write the assistant's sentences.
 
 Continue the example from [chapter 02](02-a-conversation-from-start-to-finish.md): `front` understands the request, `request` collects and confirms a change, and `lookup` fetches the current record. This chapter follows those declarations into the compiled graph, then shows how the engine walks it during a turn.
 
@@ -48,7 +50,7 @@ application/
 | `prompts/request.md` | Instructions for collecting values, requesting a lookup and interpreting approval |
 | `agent.yaml` | References connecting those pieces and declaring the routes |
 
-The top of the manifest names the state, caller identity, entry step and persona:
+The manifest is a YAML file: indentation groups settings, `name: value` gives a setting, and a line starting with `-` adds a list item. Here its top section names the state model, the identity field, the starting node (`entry`) and shared agent instructions. Those shared instructions are called a **persona**:
 
 ```yaml
 version: 1
@@ -65,7 +67,7 @@ This is a header excerpt. The complete application also needs `operations:` and 
 
 ## 3. Declare each node's capabilities
 
-These are the same step declarations used in chapter 02:
+This configures the conversation from chapter 02. It is an excerpt: it needs the header above, operation definitions and the referenced Python and prompt files. Read one node at a time; the table below explains its keys.
 
 ```yaml
 steps:
@@ -98,7 +100,21 @@ steps:
   - {id: done, kind: end, outcome: completed, say: Goodbye.}
 ```
 
-`id` supplies the node name. `kind` chooses the runtime behavior. On a conversation step, `fields`, `operations` and `exits` define capabilities; the prompt explains how to use them.
+Read the `request` node as a list of permissions and response choices:
+
+| Setting | Plain meaning |
+|---|---|
+| `id: request` | The name of this job, chosen by the application |
+| `kind: conversation` | Run an agent to interpret caller replies |
+| `agent: assistant` / `prompt:` | Use these shared instructions and this node's own instructions |
+| `fields` | These are the facts this agent may record with `collect` |
+| `operations` | These application actions may be selected by this agent; their execution rules still apply |
+| `speech: rendered` | Do not send the agent's free-form text to the caller; code produces the reply |
+| `asks` | If a listed field is missing, these are the words available to ask for it |
+| `exits` | These are the destinations the agent may request with `hand_over` |
+| `purpose` | Explain to the agent when an exit is useful; this is prompt guidance, not a condition evaluated by code |
+
+The `lookup` node is different: `kind: action` runs the known `fetch_record` operation. `returns: true` returns to the node that requested it after success. `on_error` and `on_unknown` say where to go after a refusal or an uncertain outcome. An unknown outcome does not mean that a write failed; chapter 05 explains why.
 
 For example, the `request` prompt could instruct its agent to collect the caller's identifiers, hand over to `lookup` when a current revision is needed, and select `apply_change` to propose the requested change. That instruction does not grant any additional tool or route. Giving the same instruction to `front` would not let it execute `apply_change`.
 
@@ -108,7 +124,7 @@ The `done` step satisfies the completion-endpoint requirement: `lookup` is an ac
 
 ## 4. Follow compilation from files to graph
 
-With the referenced application code and prompts supplied, startup is:
+**Compile** means check the definition and build the objects that will run it. It happens before serving calls. It is not asking the language model to invent a graph. With the referenced application code and prompts supplied, startup is:
 
 ```python
 import core
@@ -154,7 +170,7 @@ For `request`, the declaration above produces these choices:
 
 `decline` is available because this operation requires approval. `say_again` is available because it is a change with receipt wording. These are generated capabilities, not functions the application must implement itself.
 
-The distinction between an ordinary function tool and an **output tool** explains the control flow. `collect` can return information to the agent so it can choose another action in the same run. Model-visible operations and handoffs are output tools: their selection returns control to the engine, which can speak fixed words or enter another node. With a `carries_out` declaration, a collection-only response can also return control directly to code for its declared operation, without another model request.
+The model can ask core to remember something and keep thinking, or return a decision for core to act on. Those two possibilities are called an ordinary function tool and an **output tool**. `collect` can return information to the agent so it can choose another action in the same run. Model-visible operations and handoffs are output tools: their selection returns control to the engine, which can speak fixed words or enter another node. With a `carries_out` declaration, a collection-only response can also return control directly to code for its declared operation, without another model request.
 
 A handoff's destination schema lists only that node's declared exits. Core also enforces routes during execution. The turn policy permits only one action that moves the caller or changes the business per model reply; requesting several does not make them all execute.
 
@@ -232,7 +248,15 @@ Faro uses these same mechanisms. It has eight conversation nodes and one determi
 
 `front` uses the default `prose` mode, so its agent can compose answers to general questions. `request` uses `speech: rendered`, so the agent chooses actions while code supplies the words.
 
-For example, `asks` speaks the first missing-field question automatically on handoff. On a later reply, if the record identifier is still missing and the agent chooses `wait`, code can say that field's `asks` line. Selecting `apply_change` produces the application's read-back or receipt wording. Selecting `say_again` speaks a recorded result. `wait` means “choose the appropriate rendered response,” not “sleep.”
+For example, after arriving at `request`, code can ask “What is your account identifier?” without running that node's agent. When the caller answers, the agent runs and records the answer with `collect`. If it selects `wait` and the record identifier is still missing, code can ask “Which record should I change?” The node stays active throughout.
+
+`asks` supplies missing-field wording, not a script that forces every question to be asked. An already-known field is skipped. `wait` means “choose the appropriate rendered response,” not “sleep.” Other responses take priority when appropriate, such as a read-back or a refusal.
+
+If you want the agent to phrase its own follow-up, use `speech: prose` (or omit `speech`, since prose is the default). A prompt can ask it to acknowledge the answer briefly and ask only for the missing detail. That still requires the model to choose good words; it is not a naturalness guarantee.
+
+**Prose does not turn approval into a prompt-only rule.** In either mode, selecting `apply_change` uses its exact application read-back and execution checks. A prose node can therefore mix natural explanations with code-written approval and receipt lines, without a new node for each kind of sentence. Keeping `asks` on a prose node still supplies fixed arrival questions; it does not ask the model to rewrite them.
+
+A rendered node cannot improvise an answer to “Why do you need that?” It needs an application response or a declared handoff to a prose node such as `front`. A move is useful when another node has the right responsibility, not merely because the caller asked another question. Selecting `say_again` repeats a recorded result without executing the tool again.
 
 Rendered speech prevents free-form agent output from going directly to TTS. It does not make every receipt field model-independent: Faro includes agent-written feedback in the receipt text its application returns. Templates and application validation control that path, but the feedback and grade still need semantic evaluation. Intent interpretation and field extraction also still depend on the agent. A prose node's optional `guarded` mode can filter unsupported completion claims using application-supplied rules, but that is a best-effort check. A rendered node has no model prose to guard and cannot also declare `guarded`.
 

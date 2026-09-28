@@ -404,6 +404,9 @@ class _Resolver:
             'changes': decl.changes,
             'recap': decl.recap,
             'subject': decl.subject,
+            'resource': decl.resource,
+            'version': decl.version,
+            'rejects': dict(decl.rejects),
             'idempotent': decl.idempotent,
         }
         function = self.domain_function(where, decl.function)
@@ -442,11 +445,20 @@ class _Resolver:
                     self.fail(where, f'matches {field_name!r}, which {receipt_type.__name__} does not have')
                 elif _model(args_type) and arg not in args_type.model_fields:
                     self.fail(where, f'matches {field_name!r} to {arg!r}, which is not an argument')
-            for field_name in decl.succeeds:
-                if field_name not in receipt_type.model_fields:
-                    self.fail(
-                        where, f'succeeds on {field_name!r}, which {receipt_type.__name__} does not have'
-                    )
+            for key, declared in (('succeeds', decl.succeeds), ('rejects', decl.rejects)):
+                for field_name in declared:
+                    if field_name not in receipt_type.model_fields:
+                        self.fail(
+                            where, f'{key} on {field_name!r}, which {receipt_type.__name__} does not have'
+                        )
+            for field_name, value in decl.succeeds.items():
+                refused = decl.rejects.get(field_name, [])
+                if value == refused or (isinstance(refused, list) and value in refused):
+                    self.fail(where, f'{field_name}: {value!r} cannot both succeed and reject')
+            if decl.version and decl.version not in receipt_type.model_fields:
+                self.fail(
+                    where, f'names version {decl.version!r}, which {receipt_type.__name__} does not have'
+                )
         self.assigned[name] = set(decl.assign)
         if decl.approval == 'readback' and not decl.readback:
             self.fail(where, 'needs approval, so it needs a readback function (readback: file.py:words)')
@@ -465,6 +477,12 @@ class _Resolver:
             self.fail(where, 'changes nothing, so a goodbye has nothing of it to recap (recap:)')
         if decl.subject and _model(receipt_type) and decl.subject not in receipt_type.model_fields:
             self.fail(where, f'names subject {decl.subject!r}, which {receipt_type.__name__} does not have')
+        if decl.subject and decl.changes and not decl.version:
+            self.fail(
+                where, 'names a subject it changes, so it needs the receipt field of its version (version:)'
+            )
+        if (decl.resource or decl.version) and not decl.subject:
+            self.fail(where, 'a resource kind or version needs the subject they are about (subject:)')
         if decl.idempotent and function is not None and not _takes_intent(function):
             self.fail(
                 where,
@@ -673,6 +691,21 @@ class ConversationSpec(StepSpec):
     satisfied_by: str = ''
     guarded: bool = False
     """Whether model speech here is held a clause at a time and checked against what was done (`Node.guarded`)."""
+    speech: Literal['prose', 'rendered'] = 'prose'
+    """Who words what the caller hears here.
+
+    `prose`: the step's agent speaks in its own words. On a `guarded` step
+    its clauses are checked against the application's claim words, which is
+    best effort: a paraphrase in any language can still claim a change that
+    never happened.
+
+    `rendered`: the agent says nothing itself. It still reads the caller and
+    chooses: record, read back, carry out, hand over, say goodbye, or wait.
+    Every word is the application's or core's: `asks:` lines, read-backs,
+    receipts (`say:`), recaps and fixed lines. So nothing here can claim a
+    change no valid receipt made. It cannot offer `choices`, which a model
+    would word.
+    """
     quoted: list[str] = []
     """Fields among `fields` that must be the caller's own words, found in what they said (a complaint)."""
     opens_with: str = ''
@@ -706,6 +739,8 @@ class ConversationSpec(StepSpec):
             )
         for name in sorted(set(self.quoted) - set(self.fields)):
             resolve.fail(self.id, f'quotes {name!r}, which is not one of its fields')
+        if self.speech == 'rendered' and self.choices:
+            resolve.fail(self.id, "is rendered, so it cannot offer choices: their words would be the model's")
         if self.opens_with and self.opens_with not in self.operations:
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         for name in sorted(set(self.asks) - set(self.fields)):
@@ -746,6 +781,7 @@ class ConversationSpec(StepSpec):
             requires=tuple(self.requires),
             satisfied_by=self.satisfied_by,
             guarded=self.guarded,
+            rendered=self.speech == 'rendered',
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             asks=dict(self.asks),
@@ -853,6 +889,14 @@ class OperationSpec(BaseModel):
     """State fields set from the receipt, once it validates and succeeds: `{reference: reference}`."""
     succeeds: dict[str, str | int | bool] = {}
     """Receipt fields and the values meaning it worked: `{status: booked}`. Anything else is not success."""
+    rejects: dict[str, str | int | bool | list[str | int | bool]] = {}
+    """Receipt fields and the values meaning a terminal no: `{status: [full, stale]}` (a list: any of them).
+
+    A change whose receipt says neither `succeeds` nor `rejects` (a `pending`,
+    a status nobody declared) settles nothing: its intent stays unknown until
+    reconciliation says which. A read (`changes: false`) cannot have changed
+    anything, so for it anything but `succeeds` is simply a no.
+    """
     matches: dict[str, str] = {}
     """Receipt fields that must equal an argument: `{customer_phone: phone}`. A receipt about someone else counts for nothing."""
     approval: Literal['readback', 'none'] = 'readback'
@@ -873,6 +917,13 @@ class OperationSpec(BaseModel):
     """Whether it changes a business resource. `false` for a lookup: its receipt never backs a claim that something changed."""
     subject: str = ''
     """The receipt field naming the resource it acts on (`booking_id`): a later change to it supersedes this one."""
+    resource: str = ''
+    """The kind of resource `subject` names (`ticket`, `address`). Ids are unique only within a kind, so ticket 1
+    and address 1 are two resources, and every operation on one kind (resolve and reopen) shares it. Default: the
+    `subject` field's name."""
+    version: str = ''
+    """The receipt field holding the resource's version after the change (`now_revision`). Required with `subject`
+    on a change: it, not the order answers arrive in, says which of two changes stands."""
     idempotent: bool = False
     """The backend dedups by the intent id (the function's `Intent` parameter), so an unknown intent may be sent again."""
 

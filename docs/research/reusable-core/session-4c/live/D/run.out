@@ -1,0 +1,31 @@
+agency       salon (use-cases/salon-graph)
+agent        PEivYdEtwEa65QSraG5fMQ voice-harness-salon-pipecat-twilio
+line         real Twilio: Coval dials +447427919928, owned by one campaign (serve, or this run); marks echoed
+test set     CHPwoXJf: 5 case(s) UGLSKE85AD5kAZQWvTtVeU, 5dpxUoTn9Fid63RjaYU9a3, eupHbRBQR2x78kUx9MMUeg, gotzsnz4ZTQaLESRnReCB7, M7c7XjELWSXQKDRYdP5omH
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  5 = 5 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by bot.py (MAX_CALL_SECONDS)
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  5 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        s4c-bench-D
++447427919928 is owned by campaign 's4c-D': left as it is
+launched run UMuV6YLmiX4Bx87GACWzCZ (s4c-bench-D salon CHPwoXJf 9afb3a42)
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.4 1.4 1.2
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.0 1.3 1.2
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.1 1.3 1.2
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.5 1.3 1.2
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.5 1.4 1.2
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.6 1.4 1.3
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.3 1.4 1.3
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.3 1.4 1.3
+run UMuV6YLmiX4Bx87GACWzCZ IN PROGRESS, load average 1.5 1.4 1.3
+simulation oJFVME6pxMnQ6ZiC5dZzvs = call CA919ed2d012d79d4bb376ee3688453b6e (for load_report --call)
+simulation HTt7eSPj9npGXucYkBY8Cs = call CAb645d6b2fe3010261609da4f9a632c44 (for load_report --call)
+simulation 8EiDGNHq7qpzwVHmoKyLWS = call CA840b88a50eb8ddd32d8e4eaa9090de0c (for load_report --call)
+simulation f5wvLtzB6cA9DdMVEujhco = call CA58d31a8013e460a7f450d90c01aeaf7b (for load_report --call)
+simulation bTwjazHqaG5TTTHynfQd5G = call CA1d28f23eef67ab5964f51a2193bc78a5 (for load_report --call)
+ok    salon  test set CHPwoXJf  run UMuV6YLmiX4Bx87GACWzCZ
+exit=0

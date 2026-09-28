@@ -57,6 +57,29 @@ class LocalAction:
 
 
 @dataclass(frozen=True)
+class Restated:
+    """The caller answered a read-back by saying its value again, unchanged: code carries the operation out.
+
+    "Is your number +34 671 51 01 05?" answered "No, it's six seven one,
+    five one zero, one zero five" is the same number, grouped the caller's
+    own way. The step's agent only records what it heard (`collect`); code
+    finds the recorded value equal to the read-back the caller heard in full
+    before they began (`CallContext.pending`), and that is the yes
+    (`core.steps.ConversationStep._reads_back`). `run` binds the approval to
+    that exact question, says `Locale.restated` and carries it out, as the
+    agent's own call would have; it returns None if nothing is pending.
+    A different value is a change, read back again as before.
+
+    Benchmark calls amAP5b4A and Tiv9sDHH (session 4c): the agent had read
+    such a reply as a yes by itself, silently; the user asked for it to be
+    code's decision and said aloud.
+    """
+
+    about: str
+    run: Callable[[RunUsage | None, UsageLimits | None], Awaitable[Any]]
+
+
+@dataclass(frozen=True)
 class Opening[C: CallContext]:
     """What a step does first on arrival when the application already knows it.
 
@@ -179,9 +202,13 @@ async def model_clients(nodes: dict[str, Node[Any]], warm: bool = False):
     real request of a call pays TCP, TLS and HTTP/2 setup inside its time to
     first token: measured at 1.05s cold against 0.78s warm on 2026-09-23. The
     greeting is playing while it runs, so nobody waits on it. It is not traced
-    and not counted: it is not a turn's request.
+    and not a turn's request, but it is a paid request: the list this yields
+    gets one record per warm-up sent (model, tokens, whether it answered), so
+    a launcher can count every one. A worker that owns its clients for its
+    whole life (salon-graph's `server.py`) warms once; `bot.py` warms per call.
     """
     seen = set()
+    warmed: list[dict[str, Any]] = []
     async with AsyncExitStack() as stack:
         warming: list[asyncio.Task[None]] = []
         for node in nodes.values():
@@ -192,25 +219,40 @@ async def model_clients(nodes: dict[str, Node[Any]], warm: bool = False):
                 if warm:
                     settings = node.agent.model_settings
                     fixed = None if callable(settings) else settings
-                    warming.append(asyncio.create_task(_warm(model, fixed)))
+                    warming.append(asyncio.create_task(_warm(model, fixed, warmed)))
         try:
-            yield
+            yield warmed
         finally:
             for task in warming:
                 task.cancel()
 
 
-async def _warm(model: Model, settings: ModelSettings | None) -> None:
+async def _warm(model: Model, settings: ModelSettings | None, warmed: list[dict[str, Any]]) -> None:
     """Open the client's connection with the cheapest request it accepts. A failure only means a cold first turn."""
+    record: dict[str, Any] = {
+        'model': model.model_name,
+        'answered': False,
+        'input_tokens': None,
+        'output_tokens': None,
+    }
+    warmed.append(record)
     try:
-        await model_request(
+        response = await model_request(
             model,
             [ModelRequest.user_text_prompt('ok')],
             model_settings={**(settings or {}), 'max_tokens': 1},
             instrument=False,
         )
     except Exception as error:
+        record['error'] = type(error).__name__
         logger.info('model warm-up failed, the first turn will be cold: {}', type(error).__name__)
+    else:
+        record.update(
+            answered=True,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
+        logger.info('model warm-up: {}', record)
 
 
 def route[S: VoiceState](state: S, nodes: dict[str, Node[S]], to: str) -> tuple[str, str | None]:

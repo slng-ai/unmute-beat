@@ -6,7 +6,8 @@
     "`native_expect` is what the native build is expected to show against the harness's acceptance condition. A native fail is a recorded difference, never a relaxed rule.",
     "native.files_sha256 is one digest over every runtime file of the reference (all but evals/ and tests/): `python -m matrix pin` prints it, and the driver refuses to run when it differs.",
     "timing (N12) was frozen before the first measurement: warm-up and paired repetitions, alternating which arm goes first, each run in a process of its own.",
-    "Version 2 (session 4): the native checks, the native pin, the scenario names and every acceptance condition are version 1's. Only the harness checks moved: session 4 replaced salon-graph's classifier-first assembly with agent nodes on the public manifest, and the old harness test functions went with it. Each row names the new tests of the same behaviour; version 1 stays as the record of what session 3 ran."
+    "Version 2 (session 4): the native checks, the native pin, the scenario names and every acceptance condition are version 1's. Only the harness checks moved: session 4 replaced salon-graph's classifier-first assembly with agent nodes on the public manifest, and the old harness test functions went with it. Each row names the new tests of the same behaviour; version 1 stays as the record of what session 3 ran.",
+    "Session 4c stage C appended harness checks to N1, N4, N6, N8, N9 and N11 (pending receipts, declared refusals, resource kinds, rendered speech, one sender per intent, estimated playback, shared capacity, admission). No check or row was removed, and the native lists and verdicts are unchanged."
   ],
   "version": 2,
   "native": {
@@ -33,7 +34,9 @@
         "tests.test_business:a_result_about_another_slot_is_not_this_booking",
         "core/tests.test_session:invalid_updates_change_nothing",
         "core/tests.test_sdk:the_collect_schema_is_the_states_own",
-        "scenario:bad_slot"
+        "scenario:bad_slot",
+        "core/tests.test_outcomes:a_pending_answer_settles_nothing",
+        "core/tests.test_outcomes:a_declared_no_is_final"
       ]
     },
     "N2": {
@@ -83,7 +86,8 @@
         "tests.test_business:a_move_moves_the_callers_own_booking_once",
         "tests.test_business:a_complaint_is_filed_in_the_callers_words_once",
         "tests.test_business:a_cancellation_is_a_real_write_and_the_slot_books_again",
-        "scenario:booking"
+        "scenario:booking",
+        "core/tests.test_outcomes:kinds_keep_ids_apart"
       ]
     },
     "N5": {
@@ -114,7 +118,8 @@
         "tests.test_budget:repair_retries_are_bounded",
         "tests.test_budget:a_request_that_sends_nothing_is_tried_again",
         "tests.test_business:model_speech_never_claims_a_completed_action",
-        "scenario:empty_output"
+        "scenario:empty_output",
+        "core/tests.test_speech:rendered_claims"
       ]
     },
     "N7": {
@@ -144,7 +149,10 @@
         "tests.test_overlap:barge_after_the_receipt",
         "tests.test_business:an_unknown_write_is_settled_before_any_model",
         "core/tests.test_session:a_cut_confirmation_keeps_the_booking_once",
-        "scenario:cut_receipt"
+        "scenario:cut_receipt",
+        "core/tests.test_outcomes:one_intent_is_sent_once",
+        "core/tests.test_outcomes:a_retry_signal_after_dispatch_is_unknown",
+        "core/tests.test_outcomes:a_failed_record_sends_nothing"
       ]
     },
     "N9": {
@@ -165,7 +173,9 @@
         "tests.test_overlap:pauses_around_the_thresholds",
         "tests.test_budget:a_superseded_turn_cannot_move_the_caller",
         "scenario:unplayed_read_back",
-        "scenario:partial_read_back"
+        "scenario:partial_read_back",
+        "core/tests.test_delivery:an_estimate_is_heard_only_in_a_simulation",
+        "tests.test_marks:a_transport_with_no_marks_approves_nothing"
       ]
     },
     "N10": {
@@ -190,7 +200,9 @@
       "harness": [
         "core/tests.test_session:two_calls_on_one_flow_share_nothing",
         "tests.test_state:two_calls_share_nothing_but_the_diary",
-        "scenario:two_calls"
+        "scenario:two_calls",
+        "tests.test_store:shared_capacity",
+        "tests.test_runner:admission"
       ]
     },
     "N13": {

@@ -21,6 +21,10 @@ the exact question, runs the operation and checks every move. What is checked:
   operation says its own, once;
 * F4: `reads_back`: a reply that only records an operation's field is read
   back by code, with no second request, and only a heard yes still books;
+* F5: a reply that records the same value the caller was just read back, and
+  heard in full, is their yes: code says so and carries it out, with no
+  second request. A different value is read back again; the same value after
+  a read-back nobody heard carries out nothing;
 * silence: a caller quiet after a read-back is asked if they are still there
   and hears the read-back again, a yes to that copy books, and silence that
   goes on ends the call with a goodbye.
@@ -496,6 +500,55 @@ async def a_recorded_pick_is_read_back_by_code():
     )
 
 
+async def the_same_value_said_again_is_a_yes():
+    """F5: benchmark calls amAP5b4A and Tiv9sDHH (session 4c): "no, it's <the same digits>" to a heard read-back.
+
+    The caller's words decide nothing here: the scripted agent only records
+    what it heard, and code compares the value with the read-back.
+    """
+    ten = {'values': {'slot': '1000'}}
+    script = Script()
+    flow, call = opened('reads_back.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+    before = len(script.steps)
+    said = await turn(flow, call, script, 'No, it is ten o clock.', ('call', 'collect', ten))
+    assert call.services.bookings == {'CL001': ('P-1234', '1000')}, said
+    assert said[:2] == [call.locale.restated, 'Booked for Tuesday at 10:00 AM, reference CL001.'], said
+    assert len(script.steps) - before == 1, ('the restated value asked no second request', script.steps)
+
+    script = Script()
+    flow, call = opened('reads_back.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+    said = await turn(flow, call, script, 'No, nine.', ('call', 'collect', {'values': {'slot': '0900'}}))
+    assert call.services.calls == 0 and said == ['Shall I book Tuesday at 9:00 AM for P-1234?'], said
+
+    script = Script()
+    flow, call = opened('reads_back.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL, heard=False)
+    said = await turn(flow, call, script, 'No, it is ten o clock.', ('call', 'collect', ten))
+    assert call.services.calls == 0 and call.locale.restated not in said, (
+        'the same value after an unheard read-back carried it out',
+        said,
+    )
+    assert said == ['Shall I book Tuesday at 10:00 AM for P-1234?'], said
+
+    script = Script()
+    flow, call = opened('reads_back.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+    said = await turn(
+        flow,
+        call,
+        script,
+        'No, half nine. Well, ten then.',
+        ('call', 'collect', {'values': {'slot': '0930'}}),
+        ('call', 'collect', ten),
+    )
+    assert call.services.calls == 0 and call.locale.restated not in said, (
+        'a refused change, then the old value, was taken as a yes to it',
+        said,
+    )
+
+
 def reads_back_is_checked_at_load():
     """F4: `reads_back` naming an operation the step does not carry out, or a field it does not record, fails at load."""
     text = (HERE / 'reads_back.yaml').read_text()
@@ -564,6 +617,7 @@ async def main() -> None:
     await an_unheard_receipt_is_said_again()
     await model_words_beside_an_operation_are_not_said()
     await a_recorded_pick_is_read_back_by_code()
+    await the_same_value_said_again_is_a_yes()
     reads_back_is_checked_at_load()
     await silence_gets_a_reminder_then_a_goodbye()
     print(

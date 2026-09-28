@@ -85,7 +85,7 @@ class Changed(BaseModel):
     ticket_id: str
     revision: int
     now_revision: int
-    status: Literal['resolved', 'open', 'stale']
+    status: Literal['resolved', 'open', 'stale', 'pending']
 
 
 class Desk:
@@ -100,6 +100,8 @@ class Desk:
         self.die_before_commit = False
         self.wrong_ticket = False
         """Answer about a different ticket than the one asked about."""
+        self.pending = False
+        """Accept the change and answer `pending`, filing no effect yet: an answer that settles nothing."""
         db = sqlite3.connect(self.path, timeout=5)
         try:
             db.executescript(
@@ -187,6 +189,11 @@ class Desk:
             for i, op, args, subject in rows
         ]
 
+    def current_version(self, kind: str, resource: str) -> int | None:
+        """The ticket's revision now: core asks it before saying a receipt it learnt by reconciliation."""
+        found = self.ticket(resource) if kind == 'ticket' else None
+        return found[0] if found else None
+
     def effect(self, intent: str) -> dict | None:
         with self._tx() as db:
             row = db.execute('SELECT result FROM effects WHERE intent = ?', (intent,)).fetchone()
@@ -194,6 +201,12 @@ class Desk:
 
     def write(self, intent: Intent, to: Literal['resolved', 'open'], args: Resolve | Reopen) -> dict:
         """Change the ticket, once per intent: the change and its effect record commit together, or neither does."""
+        if self.pending:
+            return {
+                **args.model_dump(include={'account_id', 'ticket_id', 'revision'}),
+                'now_revision': 0,
+                'status': 'pending',
+            }
         with self._tx() as db:
             db.execute('INSERT INTO sent VALUES (?, 0)', (intent.id,))
             if (

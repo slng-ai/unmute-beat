@@ -52,7 +52,7 @@ from pydantic_ai.messages import InstructionPart, ModelRequest, ModelResponse, U
 from pydantic_ai.usage import UsageLimitExceeded
 
 from core.flow import Answered, Flow, Moved
-from core.graph import LocalAction, Node, moved_by, route
+from core.graph import LocalAction, Node, Restated, moved_by, route
 from core.history import paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
@@ -376,6 +376,7 @@ class Turn:
         call.turn_started(prompt or '')
         if call.continuing and call._turn_usage is not None and call._turn_usage[0] == call.turn:
             self.usage = call._turn_usage[1]
+            _, self.limits = self.budget.account(len(call._pieces))
         call._turn_usage = (call.turn, self.usage)
         if prompt is not None:
             prompt = call.fresh or None
@@ -592,8 +593,11 @@ class Turn:
         if action is not None:
             if self._stale():
                 return
-            if self.usage.tool_calls >= self.budget.tool_calls:
-                yield _Exhausted(f'the {self.budget.tool_calls}-tool budget')
+            if (
+                self.limits.tool_calls_limit is not None
+                and self.usage.tool_calls >= self.limits.tool_calls_limit
+            ):
+                yield _Exhausted(f'the {self.limits.tool_calls_limit}-tool budget')
                 return
             call.retain_input()
             prompt = None
@@ -660,6 +664,11 @@ class Turn:
                 run = self._speak(node, None if call.input_retained else prompt)
 
         call._return_status, call._entered = '', ''
+        if isinstance(output, Restated):
+            if barge.hit:
+                return
+            about, output = output.about, await output.run(self.usage, self.limits)
+            succeeded = {*succeeded, about}
         if isinstance(output, Question) and not barge.hit:
             await call.speak_now(output.put(call), origin='ask')
         if not isinstance(output, Handoff):
@@ -773,7 +782,10 @@ class Turn:
 
         A reply that only records fields, and records one a `reads_back` rule
         names, ends the run there: code reads the operation back (`Node.reads_back`)
-        instead of a second request that would only have asked for it.
+        instead of a second request that would only have asked for it. When
+        the value recorded is the one the caller was read back and heard in
+        full, they said it again as their answer (`Restated`): code says
+        `Locale.restated` and carries the operation out, no second request.
 
         Which tools *succeeded* is how a free edge is taken: the result, never
         the call, because the call event fires before the tool runs.
@@ -986,7 +998,12 @@ class Turn:
                                 and recorded == len(reply_tools)
                                 and (asked := node.reads_back(call)) is not None
                             ):
-                                logger.info('read back {} by code after collect', asked.about)
+                                if isinstance(asked, Restated):
+                                    logger.info(
+                                        '{} restated unchanged after its read-back: carried out', asked.about
+                                    )
+                                else:
+                                    logger.info('read back {} by code after collect', asked.about)
                                 output = asked
                                 events.cancel()
                     elif isinstance(event, AgentRunResultEvent):

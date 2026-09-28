@@ -12,8 +12,11 @@ asked for.
    again.
 2. Call `lookup_customer`. The first call reads the number back and waits.
 3. When their reply to that read-back is a clear yes to those digits, call
-   `lookup_customer` again: that looks them up. Different digits are a
-   correction: record the new number, and the next call reads it back.
+   `lookup_customer` again: that looks them up. When they say a number
+   instead, even after "no", record the digits they said with `collect` and
+   call nothing else: the runtime compares them with the read-back. The same
+   digits, grouped their own way, are their yes; different digits are a
+   correction, and the runtime reads them back.
 
 If the caller also changes what they want (another day, time or service),
 record that too with `collect`, and still finish the number. If they decline,

@@ -10,6 +10,7 @@ write and what is said about it are core's, the same for every application.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -27,15 +28,27 @@ FLOW = SPEC.compile()
 
 
 def open_call(
-    flow: core.StepFlow, from_number: str = '', diary: Diary | None = None, **facts: Any
+    flow: core.StepFlow,
+    from_number: str = '',
+    diary: Diary | None = None,
+    *,
+    key: str = '',
+    settle: Callable[[str], bool] | None = None,
+    **facts: Any,
 ) -> core.FlowCall:
     """A new session on the salon's flow: the carrier's number if it is a real one, the diary, this call's key.
 
     It does **not** empty the diary. The diary is the business, shared by
     everyone who rings; only the conversation is per call. Without a diary the
     call gets its own empty one, which is what a test wants and a bot must
-    never rely on.
+    never rely on. `key` names the call in the diary (its offers, the intents
+    it records); a runner passes the carrier's call id, so the diary's records
+    and the call's trace share one name.
+
+    `settle` says which earlier calls are over (`server.py` knows from its
+    call record): what those calls still owe this caller is settled first,
+    once the caller is known (`Salon.owed`, `core.FlowCall.take_owed`).
     """
     state = SalonState(customer_phone=prefetch_number(from_number), **facts)
-    salon = Salon(diary if diary is not None else Diary(), uuid4().hex[:12])
+    salon = Salon(diary if diary is not None else Diary(), key or uuid4().hex[:12], settle)
     return flow.open(state, services=salon, clock=salon.now)

@@ -1,0 +1,458 @@
+{
+ "A": {
+  "callers": "normal",
+  "calls": {
+   "EAE4k85AdLt7XFye546dxb": {
+    "response_latency_s": [
+     1.84,
+     4.38,
+     1.66,
+     2.28,
+     0.06,
+     2.42,
+     3.66,
+     2.48
+    ],
+    "seconds": 96.6
+   },
+   "9YiSNJCKhnza8chmmpCtXG": {
+    "response_latency_s": [
+     1.94,
+     3.72,
+     1.94,
+     2.16,
+     2.58,
+     4.32
+    ],
+    "seconds": 95.3
+   },
+   "VhiVPLRo2uyrfXgvvkjPeK": {
+    "response_latency_s": [
+     1.66,
+     4.62,
+     1.96,
+     3.44,
+     3.3,
+     2.84,
+     4.62
+    ],
+    "seconds": 101.5
+   },
+   "PdxnRie2CSxwTpGB6QZq8Z": {
+    "response_latency_s": [
+     2.22,
+     3.52,
+     1.74,
+     0.0,
+     2.38,
+     2.4,
+     2.34,
+     3.54
+    ],
+    "seconds": 103.7
+   },
+   "amAP5b4ArdEJR8CwFS8zyN": {
+    "response_latency_s": [
+     2.62,
+     3.06,
+     2.5,
+     3.96,
+     3.0,
+     3.58,
+     4.32
+    ],
+    "seconds": 107.7
+   }
+  },
+  "n": 36,
+  "p50_s": 2.58,
+  "p90_s": 4.32,
+  "mean_s": 2.75,
+  "max_s": 4.62,
+  "bot_started_before_caller_stopped": 0
+ },
+ "B": {
+  "callers": "interruptive",
+  "calls": {
+   "8ggjwDXYYjMAuSQu7My532": {
+    "response_latency_s": [
+     1.82,
+     1.84,
+     1.72,
+     2.78,
+     1.52,
+     0.3,
+     2.82,
+     2.38,
+     3.04,
+     -2.48,
+     2.86,
+     2.12,
+     2.48,
+     3.26
+    ],
+    "seconds": 176.1
+   },
+   "J9bFqmkhgJRN972JNfgB9x": {
+    "response_latency_s": [
+     2.0,
+     1.66,
+     3.34,
+     3.3,
+     2.18,
+     -0.72,
+     2.58,
+     1.52,
+     3.52,
+     3.04,
+     2.8,
+     2.2,
+     2.36,
+     3.48
+    ],
+    "seconds": 173.0
+   },
+   "n4pRSiBp4DFuKNhgBuc8Nd": {
+    "response_latency_s": [
+     1.96,
+     1.68,
+     3.72,
+     1.86,
+     2.94,
+     1.68,
+     -0.16,
+     3.34,
+     4.4,
+     3.48,
+     2.96,
+     -2.08,
+     3.26,
+     2.64,
+     -0.44,
+     -1.2
+    ],
+    "seconds": 163.3
+   },
+   "SqB3qpaHswFgUKr8jTwUJ4": {
+    "response_latency_s": [
+     1.94,
+     2.46,
+     2.76,
+     3.64,
+     1.74,
+     4.04,
+     -0.5,
+     1.6,
+     2.26,
+     2.44,
+     2.76,
+     2.88
+    ],
+    "seconds": 137.9
+   },
+   "9ut6yboSHC3JGoVmRFy2MC": {
+    "response_latency_s": [
+     2.8,
+     1.82,
+     2.28,
+     5.08,
+     -2.14,
+     3.42,
+     3.28,
+     3.24,
+     3.42,
+     1.4,
+     -0.7,
+     3.02,
+     1.94,
+     3.66,
+     3.14,
+     3.04,
+     2.2,
+     2.22,
+     2.74
+    ],
+    "seconds": 209.1
+   }
+  },
+  "n": 66,
+  "p50_s": 2.76,
+  "p90_s": 3.52,
+  "mean_s": 2.64,
+  "max_s": 5.08,
+  "bot_started_before_caller_stopped": 9
+ },
+ "C": {
+  "callers": "normal",
+  "calls": {
+   "Tiv9sDHH7CuCDuj72YQMHL": {
+    "response_latency_s": [
+     2.3,
+     3.58,
+     2.26,
+     -0.54,
+     0.36,
+     2.72,
+     2.46,
+     3.3,
+     4.72
+    ],
+    "seconds": 115.3
+   },
+   "P7PVUcuWEcqjcobWXFjnPn": {
+    "response_latency_s": [
+     1.68,
+     3.86,
+     1.5,
+     3.04,
+     3.52,
+     4.5,
+     3.14
+    ],
+    "seconds": 105.0
+   },
+   "MUAJTpYKogt3H7ykiSzcrR": {
+    "response_latency_s": [
+     1.98,
+     4.94,
+     1.86,
+     -0.18,
+     -0.6,
+     3.18,
+     3.4,
+     2.56,
+     4.44
+    ],
+    "seconds": 108.8
+   },
+   "cxjjBJ8euA6cW9sKaubDuj": {
+    "response_latency_s": [
+     1.86,
+     2.86,
+     2.62,
+     -1.18,
+     -0.24,
+     1.78,
+     2.58,
+     0.6,
+     4.48
+    ],
+    "seconds": 107.1
+   },
+   "6sLz5TRas6ZCSLVxxWr4qx": {
+    "response_latency_s": [
+     2.34,
+     2.88,
+     2.14,
+     3.1,
+     1.82,
+     1.56,
+     3.82
+    ],
+    "seconds": 88.6
+   }
+  },
+  "n": 36,
+  "p50_s": 2.72,
+  "p90_s": 4.48,
+  "mean_s": 2.77,
+  "max_s": 4.94,
+  "bot_started_before_caller_stopped": 5
+ },
+ "D": {
+  "callers": "interruptive",
+  "calls": {
+   "oJFVME6pxMnQ6ZiC5dZzvs": {
+    "response_latency_s": [
+     1.8,
+     2.58,
+     2.96,
+     1.92,
+     2.78,
+     1.62,
+     -0.02,
+     3.38,
+     1.8,
+     2.5,
+     2.74,
+     2.6,
+     0.34,
+     -0.82,
+     -0.26
+    ],
+    "seconds": 147.5
+   },
+   "HTt7eSPj9npGXucYkBY8Cs": {
+    "response_latency_s": [
+     1.88,
+     2.32,
+     2.8,
+     3.68,
+     2.16,
+     -0.22,
+     1.74,
+     2.16,
+     2.72,
+     2.26
+    ],
+    "seconds": 260.1
+   },
+   "8EiDGNHq7qpzwVHmoKyLWS": {
+    "response_latency_s": [
+     2.24,
+     2.48,
+     3.74,
+     3.68,
+     3.96,
+     1.8,
+     2.38,
+     3.26,
+     2.42,
+     2.42,
+     -1.94,
+     3.02,
+     1.9,
+     1.74,
+     1.4,
+     3.72
+    ],
+    "seconds": 171.4
+   },
+   "f5wvLtzB6cA9DdMVEujhco": {
+    "response_latency_s": [
+     1.68,
+     2.16,
+     3.28,
+     2.84,
+     2.9,
+     0.58,
+     2.62,
+     1.74,
+     2.62,
+     2.9,
+     2.78,
+     2.3,
+     3.26
+    ],
+    "seconds": 159.2
+   },
+   "bTwjazHqaG5TTTHynfQd5G": {
+    "response_latency_s": [
+     2.0,
+     1.86,
+     3.82,
+     3.64,
+     2.4,
+     3.28,
+     1.58,
+     1.76,
+     0.72,
+     3.68,
+     3.22,
+     2.6,
+     1.88,
+     -2.0,
+     3.34,
+     -0.54,
+     1.74,
+     1.58,
+     0.02,
+     2.94
+    ],
+    "seconds": 223.6
+   }
+  },
+  "n": 67,
+  "p50_s": 2.42,
+  "p90_s": 3.68,
+  "mean_s": 2.43,
+  "max_s": 3.96,
+  "bot_started_before_caller_stopped": 7
+ },
+ "R": {
+  "callers": "normal",
+  "calls": {
+   "m5HJ2vFhswLycEQaW78a7S": {
+    "response_latency_s": [
+     1.88,
+     3.54,
+     3.28,
+     4.46,
+     2.28,
+     3.24,
+     2.34,
+     1.62,
+     4.2
+    ],
+    "seconds": 152.3
+   },
+   "EMXpSVYaeBoEHdBSTNKkgg": {
+    "response_latency_s": [
+     1.9,
+     4.1,
+     3.5,
+     2.78,
+     2.72,
+     3.28
+    ],
+    "seconds": 101.5
+   },
+   "FjUeifmxSNvJ3pF3bzj9ty": {
+    "response_latency_s": [
+     1.52,
+     2.68,
+     2.58,
+     2.12,
+     -1.04,
+     3.82,
+     2.72,
+     1.96,
+     1.48,
+     4.02
+    ],
+    "seconds": 132.8
+   },
+   "QPwennqoXTDsyYfM9CUVmU": {
+    "response_latency_s": [
+     2.14,
+     3.58,
+     2.7,
+     2.58,
+     1.5,
+     4.6
+    ],
+    "seconds": 101.2
+   },
+   "DASdb96wbFL6AtsPVtsFNK": {
+    "response_latency_s": [
+     3.52,
+     3.18,
+     3.96,
+     -0.08,
+     2.22,
+     3.96,
+     4.8
+    ],
+    "seconds": 111.9
+   }
+  },
+  "n": 36,
+  "p50_s": 2.78,
+  "p90_s": 4.2,
+  "mean_s": 2.97,
+  "max_s": 4.8,
+  "bot_started_before_caller_stopped": 2
+ },
+ "all": {
+  "normal": {
+   "n": 108,
+   "p50_s": 2.72,
+   "p90_s": 4.38
+  },
+  "interruptive": {
+   "n": 133,
+   "p50_s": 2.58,
+   "p90_s": 3.64
+  }
+ }
+}

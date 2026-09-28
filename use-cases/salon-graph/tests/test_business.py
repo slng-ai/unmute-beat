@@ -431,6 +431,43 @@ async def an_identity_is_the_lookup_of_the_number_agreed_to():
     assert call.state.facts.customer_phone == '', 'a number with no country code was completed for the caller'
 
 
+async def the_same_number_said_back_is_a_yes():
+    """Benchmark calls amAP5b4A and Tiv9sDHH (session 4c): "no, it's" and the same digits, grouped the caller's way.
+
+    The verify agent only records what it heard; code finds the number
+    unchanged from the read-back the caller heard in full, says so, and looks
+    them up. A different number is read back instead, and verifies nobody.
+    """
+    script, flow, call, _ = opened(phone='')
+    call.commit(agent='verify')
+    first = await turn(
+        flow, call, script, 'It is plus 34 600 111 222.', ('collect', {'customer_phone': PHONE})
+    )
+    assert first == ['Is your number +34 600 11 12 22?'], first
+    said = await turn(
+        flow,
+        call,
+        script,
+        "No, it's plus three four, six hundred, one one one, two two two.",
+        ('collect', {'customer_phone': PHONE}),
+    )
+    assert said[:2] == [call.locale.restated, 'Thanks, I have you.'], said
+    assert call.state.facts.verified_phone == PHONE, said
+
+    script, flow, call, _ = opened(phone='')
+    call.commit(agent='verify')
+    await turn(flow, call, script, 'It is plus 34 600 111 222.', ('collect', {'customer_phone': PHONE}))
+    said = await turn(
+        flow,
+        call,
+        script,
+        "No, it's plus three four, six hundred, one one one, three three three.",
+        ('collect', {'customer_phone': '+34600111333'}),
+    )
+    assert call.locale.restated not in said and call.state.facts.verified_phone == '', said
+    assert said == ['Is your number +34 600 11 13 33?'], said
+
+
 async def a_bare_weekday_beside_another_week_is_asked_about():
     """P6: "Saturday" while Friday next week is on the table could be the 3rd or the 10th: ask, offer nothing, then the date decides."""
     script, flow, call, _ = await at_booking()
@@ -557,9 +594,11 @@ async def a_goodbye_never_claims_a_booking_nothing_made():
     call.note_evidence(
         'cancel_appointment',
         {'phone': call.state.facts.verified_phone, 'booking_id': standing.resource},
-        {'status': 'cancelled', 'booking_id': standing.resource},
+        {'status': 'cancelled', 'booking_id': standing.resource, 'revision': (standing.version or 0) + 1},
         intent='c' * 32,
         resource=standing.resource,
+        kind=standing.kind,
+        version=(standing.version or 0) + 1,
     )
     said = await turn(
         flow, call, script, 'Bye.', ('call', 'goodbye', {'recap': [standing.intent[:8]]}), ('call', 'goodbye')
@@ -609,6 +648,7 @@ async def main() -> None:
     await a_result_about_another_slot_is_not_this_booking()
     await a_receipt_cut_before_it_played_is_said_again_not_moved()
     await an_identity_is_the_lookup_of_the_number_agreed_to()
+    await the_same_number_said_back_is_a_yes()
     await a_bare_weekday_beside_another_week_is_asked_about()
     await model_speech_never_claims_a_completed_action()
     await a_goodbye_never_claims_a_booking_nothing_made()

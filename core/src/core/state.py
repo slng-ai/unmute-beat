@@ -12,6 +12,7 @@ import contextvars
 import json
 import re
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -190,11 +191,16 @@ class Spoken:
 
     `mark`: the transport returned this segment's own mark after its last
     audio (Twilio's `mark` event), with no clear sent while it was pending.
-    `local`: a local transport wrote its last audio chunk (development WebRTC).
+    `local`: its last audio was written out, or had time to play, with no
+    mark from the far end (a development transport, a carrier that returns
+    none). It is an estimate: it delivers only in a call the launcher
+    explicitly opened for simulated playout (`simulated`).
     `ack`: a text consumer acknowledged it: simulated delivery, for text runs.
     `signal` (the runtime's aggregate stop) and `estimate` (elapsed time) only
     ever decide turn-taking, never delivery (`delivered`).
     """
+    simulated: bool = False
+    """Its `local` record came in a call opened for simulated playout (`CallContext.simulate_playout`)."""
     proposal: int = 0
     """The serial of the question this segment carried (`ProposalLedger.bind`), 0 for none."""
     mark: str = ''
@@ -208,23 +214,22 @@ class Spoken:
     def delivered(self) -> Literal['delivered', 'interrupted', 'unknown']:
         """Whether the caller got all of it, as far as evidence goes.
 
-        Only this segment's own mark, a local transport's write of its last
-        audio, or a text consumer's acknowledgement makes it delivered. Handing
-        text to TTS, a run finishing, the runtime's aggregate stop signal or
-        enough time passing proves nothing about what reached the caller, so a
-        segment with no such evidence is unknown, and unknown never authorises
-        anything. Transport playout is still not comprehension: the caller may
-        not have been listening.
+        Only this segment's own mark, or a text consumer's acknowledgement,
+        makes it delivered. Handing text to TTS, a run finishing, the
+        runtime's aggregate stop signal, bytes written to a socket or enough
+        time passing prove nothing about what reached the caller, so a segment
+        with no such evidence is unknown, and unknown never authorises
+        anything. The one exception is chosen, never defaulted: in a call the
+        launcher opened for simulated playout, a `local` write counts too.
+        Transport playout is still not comprehension: the caller may not have
+        been listening.
         """
         if self.interrupted:
             return 'interrupted'
         if self.cleared:
             return 'unknown'
-        if (
-            self.playback == 'played'
-            and self.heard_by in ('mark', 'local', 'ack')
-            and self.played_at is not None
-        ):
+        evidence = self.heard_by in ('mark', 'ack') or (self.heard_by == 'local' and self.simulated)
+        if self.playback == 'played' and evidence and self.played_at is not None:
             return 'delivered'
         return 'unknown'
 
@@ -325,7 +330,9 @@ class Intent(BaseModel):
     """Who the call took the caller to be when the intent was made (`CallContext.identity`)."""
     status: IntentStatus = 'prepared'
     readbacks: int = Field(0, ge=0)
-    """Read-backs of this intent that did not get an answer that could count. See `CallContext.note_readback`."""
+    """Read-backs of this intent not heard in full on a line that had proven no delivery yet (`note_unheard_readbacks`)."""
+    cut_readbacks: int = Field(0, ge=0)
+    """Read-backs of this intent the caller did not hear in full on a line that had proven delivery: they talked over them."""
 
 
 @dataclass(frozen=True)
@@ -358,6 +365,10 @@ class Evidence:
     """Whether the operation changes a business resource. A lookup does not, so it can never back a claim of one."""
     resource: str = ''
     """The resource the receipt is about (its declared `subject` field), '' when the operation names none."""
+    kind: str = ''
+    """The kind of that resource (the operation's `resource`, else its `subject` field): ids are unique within it."""
+    version: int | None = None
+    """The resource's version after this change (the operation's `version` field), None when it declares none."""
 
 
 @dataclass(frozen=True)
@@ -521,6 +532,18 @@ class CallContext(BaseModel):
     """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
     _unapplied: set[str] = PrivateAttr(default_factory=set)
     """Fields the current model response changes after its action: not yet run when the action does."""
+    _tries: Counter[str] = PrivateAttr(default_factory=Counter)
+    """How many times a model response in this caller turn tried to record each field (`one_action_per_reply`)."""
+    _kept: Counter[str] = PrivateAttr(default_factory=Counter)
+    """How many of those tries recorded the field with the value it already had (`collect`).
+
+    `_changing` also holds a field recorded again unchanged: the caller saying
+    the read-back's value back. A read-back is confirmed by that
+    (`core.graph.Restated`) only while every try at its fields kept the value.
+    A try the tool's schema refused never reaches `collect`, so it counts as
+    a try and not as kept: "half nine, well, ten then" is a change, and
+    "ten, no, nine, no, ten" too, never a yes to ten.
+    """
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
     """The one question this call is waiting on an answer to. See `core.proposals`."""
     _told: tuple[int, str, str] = PrivateAttr(default=(0, '', ''))
@@ -585,6 +608,12 @@ class CallContext(BaseModel):
     """
     _unpresented: dict[str, tuple[Any, BaseModel, dict[str, Any]]] = PrivateAttr(default_factory=dict)
     """Succeeded intents whose local recording (state, speech) failed after the receipt: repaired, never re-sent."""
+    _simulated_playout: bool = PrivateAttr(default=False)
+    """Whether an estimated playback may count as heard. Off unless a launcher chose it (`simulate_playout`)."""
+    _claimed: set[str] = PrivateAttr(default_factory=set)
+    """Intents a run of `Operation.run` is sending right now. A second run of one of them is refused."""
+    _versions: dict[tuple[str, str], int] = PrivateAttr(default_factory=dict)
+    """The newest version known for each resource (kind, id): a receipt below it is history. See `is_latest`."""
     _last_asked_intent: str = PrivateAttr(default='')
     """The intent of the last read-back put to the caller, whatever happened to the question since."""
     _judged: set[str] = PrivateAttr(default_factory=set)
@@ -855,8 +884,23 @@ class CallContext(BaseModel):
             self._log_playback('ignored', name, at)
             return False
         segment.playback, segment.heard_by, segment.played_at = 'played', 'local' if local else 'mark', at
+        segment.simulated = local and self._simulated_playout
         self._log_playback('written' if local else 'played', name, at, segment.proposal)
         return True
+
+    def simulate_playout(self) -> None:
+        """Let an estimated playback (`local`) count as heard on this call. For a test or development launcher only.
+
+        Only `core.processor.playout(..., simulate=True)` calls it, and only a
+        launcher that names the mode passes that: no transport turns it on by
+        itself. Every `write` audit says whether it was on.
+        """
+        self._simulated_playout = True
+
+    @property
+    def simulated_playout(self) -> bool:
+        """Whether estimated playback counts as heard on this call (`simulate_playout`)."""
+        return self._simulated_playout
 
     def note_cleared(self, at: float) -> None:
         """The transport is about to clear the audio it holds: every mark still pending may now come back for nothing.
@@ -1277,6 +1321,8 @@ class CallContext(BaseModel):
         changes: bool = True,
         resource: str = '',
         identity: str | None = None,
+        kind: str = '',
+        version: int | None = None,
     ) -> None:
         """File a validated receipt. Called by `Operation.run` before anything can be cancelled.
 
@@ -1286,6 +1332,8 @@ class CallContext(BaseModel):
         """
         running = turn_generation.get()
         generation = running[1] if running is not None and running[0] == self._id else self._generation
+        if succeeded and changes and resource and version is not None:
+            self.note_version(kind, resource, version)
         self._evidence.append(
             Evidence(
                 operation,
@@ -1300,8 +1348,19 @@ class CallContext(BaseModel):
                 succeeded,
                 changes,
                 resource,
+                kind,
+                version,
             )
         )
+
+    def note_version(self, kind: str, resource: str, version: int) -> None:
+        """The application says this resource is at `version` (or later): anything filed below it is history."""
+        key = (kind, resource)
+        self._versions[key] = max(version, self._versions.get(key, version))
+
+    def is_latest(self, kind: str, resource: str, version: int | None) -> bool:
+        """Whether a change at `version` is the newest this call knows of for the resource. Unversioned: yes."""
+        return version is None or version >= self._versions.get((kind, resource), version)
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:
@@ -1319,17 +1378,34 @@ class CallContext(BaseModel):
         validated refusal never stand, so neither can back a claim that
         something changed. Nothing here reads a receipt's meaning: which field
         names the resource is the application's declaration.
+
+        A resource is its kind and its id: ticket 1 and address 1 are two.
+        "Latest" is the application's version when the operation declares one,
+        never the order receipts reached this call, so an old receipt found
+        late by reconciliation cannot stand over a newer change. A resource
+        the application says has moved past every receipt here has none
+        standing: its current state is not one this call can recap.
         """
         latest: dict[tuple[str, ...], Evidence] = {}
         for filed in self._evidence:
             if not (filed.changes and filed.succeeded) or filed.identity != self.identity():
                 continue
             key = (
-                ('resource', filed.resource) if filed.resource else (filed.operation, json.dumps(filed.args))
+                ('resource', filed.kind, filed.resource)
+                if filed.resource
+                else (filed.operation, json.dumps(filed.args))
             )
+            held = latest.get(key)
+            if (
+                held is not None
+                and held.version is not None
+                and filed.version is not None
+                and filed.version < held.version
+            ):
+                continue
             latest.pop(key, None)
             latest[key] = filed
-        return tuple(latest.values())
+        return tuple(f for f in latest.values() if self.is_latest(f.kind, f.resource, f.version))
 
     def open_intent(self, operation: str, args: str) -> Intent | None:
         """The open intent for this operation and these arguments under the caller now on the line, if there is one."""
@@ -1349,9 +1425,20 @@ class CallContext(BaseModel):
     def note_unheard_readbacks(self) -> None:
         """The caller spoke: every copy of the question they are answering that they did not hear in full counts once.
 
-        Counted against the question's intent (`Intent.readbacks`), each copy
-        once, so a caller who goes on in pieces over one read-back spends one,
-        and a question asked again gets no fresh allowance.
+        Counted against the question's intent, each copy once, so a caller who
+        goes on in pieces over one read-back spends one, and a question asked
+        again gets no fresh allowance.
+
+        Two counts, because two different things lose a copy. On a line that
+        has never proven one segment heard (a carrier or simulator that
+        returns no marks), no copy can ever be heard, so asking again only
+        loops: `Intent.readbacks`, bounded by `core.steps.READBACKS`. On a line
+        that has proven delivery, an unheard copy is one the caller talked
+        over, and saying it again is how they get to hear it:
+        `Intent.cut_readbacks`, bounded by the larger `CUT_READBACKS`. Live
+        call hzSdfMNn (session 4c) spent the first limit on two copies an
+        interruptive caller cut, while every other mark came back, and gave
+        up on a caller who was still trying.
         """
         asked = self._proposals.asked
         intent = self._intents.get(getattr(asked, 'intent', '')) if asked is not None else None
@@ -1364,7 +1451,11 @@ class CallContext(BaseModel):
             self._judged.add(copy.id)
             if not (copy.delivered == 'delivered' and self.answered_in_time(copy)):
                 unheard += 1
-        if unheard:
+        if not unheard:
+            return
+        if any(s.delivered == 'delivered' for s in self.all_spoken):
+            self.set_intent(intent.id, cut_readbacks=intent.cut_readbacks + unheard)
+        else:
             self.set_intent(intent.id, readbacks=intent.readbacks + unheard)
 
     def intent_for(self, operation: str, args: str) -> Intent:
@@ -1424,7 +1515,9 @@ class CallContext(BaseModel):
                 intent.subject,
             ):
                 raise ValueError(f'intent {intent.id} is already held for different arguments')
-            if intent.status not in ('dispatched', 'unknown'):
+            if intent.status not in ('dispatched', 'unknown') or (
+                held is not None and held.status not in OPEN_INTENT
+            ):
                 continue
             if intent.operation not in reconcile_with:
                 raise ValueError(
@@ -1856,6 +1949,8 @@ class CallContext(BaseModel):
         self._reached = False
         self._leaving = False
         self._changing = set()
+        self._tries = Counter()
+        self._kept = Counter()
         self._request_kept = False
         self._response = ''
         self._entered = ''

@@ -1,0 +1,141 @@
+{
+ "batch": "R",
+ "set": "restate",
+ "calls": [
+  {
+   "call_sid": "CA6c88714109c0d5f907b101d0e92b0f65",
+   "worker": 61514,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790456390.3647628,
+   "ended_at": 1790456540.941199
+  },
+  {
+   "call_sid": "CA6a5374a68eb9559edcbdcfd429708fef",
+   "worker": 61514,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790456391.065587,
+   "ended_at": 1790456501.374948
+  },
+  {
+   "call_sid": "CA666dd414c21c5353c582590cf39e4725",
+   "worker": 61514,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790456391.274018,
+   "ended_at": 1790456491.094962
+  },
+  {
+   "call_sid": "CAaced8a8b2f7aaf0684eb4ceee408b455",
+   "worker": 61514,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790456391.662472,
+   "ended_at": 1790456494.621305
+  },
+  {
+   "call_sid": "CAe4704f576ddc6e742e91318708bac7c5",
+   "worker": 61514,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790456403.0598788,
+   "ended_at": 1790456537.222899
+  }
+ ],
+ "passed": 5,
+ "of": 5,
+ "bookings_for_other_phones": [],
+ "verdicts": [
+  {
+   "case": "restate-1",
+   "coval_test_case": "UysFwYC6eCZY4XjhWmyqt4",
+   "phone": "+34671530301",
+   "bookings": [
+    {
+     "booking_id": "BK0003",
+     "day": "2026-09-28",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "restate-2",
+   "coval_test_case": "jHJdQvi5cLatL3s7D4GBoo",
+   "phone": "+34671530302",
+   "bookings": [
+    {
+     "booking_id": "BK0005",
+     "day": "2026-09-29",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "restate-3",
+   "coval_test_case": "QYL3i8sk8ZiXtZvL5Rf2L5",
+   "phone": "+34671530303",
+   "bookings": [
+    {
+     "booking_id": "BK0002",
+     "day": "2026-09-30",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "restate-4",
+   "coval_test_case": "PxncamaDJP4xxK5NXKSkst",
+   "phone": "+34671530304",
+   "bookings": [
+    {
+     "booking_id": "BK0001",
+     "day": "2026-10-01",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "correct-5",
+   "coval_test_case": "CrouaBCnH22Kka5gEitnG9",
+   "phone": "+34671530305",
+   "bookings": [
+    {
+     "booking_id": "BK0004",
+     "day": "2026-10-02",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  }
+ ]
+}

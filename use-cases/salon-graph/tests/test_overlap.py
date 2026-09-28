@@ -275,7 +275,7 @@ async def barge_while_the_outcome_is_unknown():
     call_of[0] = call
     probe = Probe(call)
     await read_back_a_haircut(call, probe)
-    real_save, real_outcome = books.save_booking, books.outcome_of
+    real_save, real_outcome, real_void = books.save_booking, books.outcome_of, books.outcome_or_void
     saves, asked = [], []
 
     def save_booking(
@@ -289,7 +289,12 @@ async def barge_while_the_outcome_is_unknown():
         asked.append(token)
         return None if len(asked) == 1 else real_outcome(token)
 
+    def outcome_or_void(token):
+        asked.append(token)
+        return real_void(token)
+
     books.save_booking, books.outcome_of = save_booking, outcome_of  # ty: ignore[invalid-assignment]
+    books.outcome_or_void = outcome_or_void  # ty: ignore[invalid-assignment]
     asked_model: list[str] = []
 
     async def booking(call):
@@ -312,7 +317,7 @@ async def barge_while_the_outcome_is_unknown():
         assert [e.operation for e in call.evidence] == ['book_appointment']
         assert asked_model == ['Yes.'], 'settling the next turn costs no model request'
     finally:
-        del books.save_booking, books.outcome_of
+        del books.save_booking, books.outcome_of, books.outcome_or_void
 
 
 async def barge_after_the_receipt():

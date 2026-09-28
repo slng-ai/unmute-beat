@@ -1,0 +1,141 @@
+{
+ "batch": "B",
+ "set": "interruptive",
+ "calls": [
+  {
+   "call_sid": "CA2d066cee0dcabf9215f93486b60c1adc",
+   "worker": 50760,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790447665.576382,
+   "ended_at": 1790447808.318169
+  },
+  {
+   "call_sid": "CA8b041777edb318a8fe60a7f22d1040a2",
+   "worker": 50760,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790447665.903573,
+   "ended_at": 1790447875.331842
+  },
+  {
+   "call_sid": "CA82dcb4d34751580ff9d5ea112828150a",
+   "worker": 50760,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790447666.058591,
+   "ended_at": 1790447835.2235148
+  },
+  {
+   "call_sid": "CA637b7620b77012708f80a0e2eed8f1bc",
+   "worker": 50760,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790447666.262586,
+   "ended_at": 1790447844.495036
+  },
+  {
+   "call_sid": "CAe67c8fccda71c4225e52321469b4cbbd",
+   "worker": 50760,
+   "state": "ended",
+   "ended": "pipeline_end",
+   "admitted_at": 1790447666.828755,
+   "ended_at": 1790447841.7775161
+  }
+ ],
+ "passed": 5,
+ "of": 5,
+ "bookings_for_other_phones": [],
+ "verdicts": [
+  {
+   "case": "interruptive-1",
+   "coval_test_case": "M7c7XjELWSXQKDRYdP5omH",
+   "phone": "+34671520201",
+   "bookings": [
+    {
+     "booking_id": "BK0005",
+     "day": "2026-09-29",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "interruptive-2",
+   "coval_test_case": "gotzsnz4ZTQaLESRnReCB7",
+   "phone": "+34671520202",
+   "bookings": [
+    {
+     "booking_id": "BK0001",
+     "day": "2026-09-30",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "interruptive-3",
+   "coval_test_case": "eupHbRBQR2x78kUx9MMUeg",
+   "phone": "+34671520203",
+   "bookings": [
+    {
+     "booking_id": "BK0002",
+     "day": "2026-10-01",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "interruptive-4",
+   "coval_test_case": "5dpxUoTn9Fid63RjaYU9a3",
+   "phone": "+34671520204",
+   "bookings": [
+    {
+     "booking_id": "BK0003",
+     "day": "2026-10-02",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  },
+  {
+   "case": "interruptive-5",
+   "coval_test_case": "UGLSKE85AD5kAZQWvTtVeU",
+   "phone": "+34671520205",
+   "bookings": [
+    {
+     "booking_id": "BK0004",
+     "day": "2026-10-03",
+     "at": "09:00",
+     "service": "haircut",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "intents": 1,
+   "pass": true,
+   "problems": []
+  }
+ ]
+}

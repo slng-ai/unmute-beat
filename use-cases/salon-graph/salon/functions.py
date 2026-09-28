@@ -18,7 +18,9 @@ new intent with the same arguments is a new write.
 
 from __future__ import annotations
 
+import asyncio
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
@@ -44,9 +46,44 @@ class Salon:
 
     diary: Diary
     call: str
+    settle: Callable[[str], bool] | None = None
+    """Which earlier calls are over, by call key: only their intents are owed to a new call (`owed`)."""
 
     def now(self) -> datetime:
         return self.diary.now()
+
+    def owed(self, identity: str) -> list[Intent]:
+        """This caller's intents that calls now over left with no answer: core settles them before anything new.
+
+        Settled by the diary: found, they are said as done; not found, they
+        are voided, so a worker still holding one can never land it. An
+        intent of a call still running anywhere is left alone.
+        """
+        if self.settle is None:
+            return []
+        return [
+            Intent(
+                id=i['id'],
+                operation=i['operation'],
+                args=i['args'],
+                subject=i['subject'],
+                status='dispatched',
+            )
+            for i in self.diary.unresolved(identity)
+            if i['session'] != self.call and self.settle(i['session'])
+        ]
+
+    async def note_intent(self, intent: Intent) -> None:
+        """Core's durable record of an intent, before it is dispatched: what a new call settles if this one dies."""
+        await asyncio.to_thread(
+            self.diary.note_intent, intent.id, self.call, intent.operation, intent.args, intent.subject
+        )
+
+    def current_version(self, kind: str, resource: str) -> int | None:
+        """A resource's version now, for a receipt core learnt by reconciliation. A complaint never changes."""
+        if kind == 'booking':
+            return self.diary.current_revision(resource)
+        return 1 if kind == 'complaint' else None
 
 
 class PhoneArgs(BaseModel):
@@ -76,9 +113,12 @@ class Cancel(BaseModel):
 class Written(BaseModel):
     """What a booking, move or cancellation did, as the diary reported it; `refused` carries the diary's reason."""
 
-    status: Literal['booked', 'moved', 'cancelled', 'refused']
+    status: Literal['booked', 'moved', 'cancelled', 'refused', 'void']
+    """`void`: nothing was done, and the diary will never do it: the write was fenced (`Diary.outcome_or_void`)."""
     phone: str
     booking_id: str = ''
+    revision: int = 0
+    """The booking's revision after this write: what orders a move after the booking it moved."""
     service: str = ''
     spoken: str = ''
     service_spoken: str = ''
@@ -98,6 +138,8 @@ class Noted(BaseModel):
     reference: str
     phone: str
     said: str
+    revision: int = 1
+    """A complaint is written once and never changed, so its version is always 1."""
 
 
 class Times(BaseModel):
@@ -235,7 +277,7 @@ def held_bookings(salon: Salon, state: SalonState) -> dict[str, str]:
     today = salon.now().date()
     return {
         h['booking_id']: f'{spoken_service(h["service"])} {h["spoken"]}'
-        for h in salon.diary.bookings_for(state.verified_phone, today)
+        for h in salon.diary.show_holdings(salon.call, state.verified_phone, today)
     }
 
 
@@ -252,6 +294,7 @@ def _written(raw: dict, phone: str) -> Written:
         service=saved.service,
         spoken=saved.spoken,
         service_spoken=spoken_service(saved.service),
+        revision=saved.revision,
     )
 
 
@@ -341,6 +384,7 @@ def move(salon: Salon, args: Move, intent: Intent) -> Written:
             salon.now(),
             operation_token=token,
             offered_to=salon.call,
+            expected_revision=salon.diary.shown_revision(salon.call, args.booking_id),
         ),
         _expected(salon, args.phone, 'moved', args.slot, args.booking_id),
     )
@@ -362,16 +406,22 @@ def cancel(salon: Salon, args: Cancel, intent: Intent) -> Written:
             salon.now(),
             operation_token=token,
             offered_to=salon.call,
+            expected_revision=salon.diary.shown_revision(salon.call, args.booking_id),
         ),
         _expected(salon, args.phone, 'cancelled', booking_id=args.booking_id),
     )
 
 
-def _found(salon: Salon, token: str, phone: str, expected: dict[str, str]) -> Written | None:
-    """What an unanswered write did, by its token, checked against the request by the same rule as a first answer."""
-    raw = salon.diary.outcome_of(token)
-    if raw is None:
-        return None
+def _found(salon: Salon, token: str, phone: str, expected: dict[str, str]) -> Written:
+    """What an unanswered write did, by its token, checked against the request by the same rule as a first answer.
+
+    Never "not yet": a write nobody has an answer for is fenced (`void`), so
+    a worker still holding it can never land it later, and the caller hears
+    that nothing was done, which is then true for good.
+    """
+    raw = salon.diary.outcome_or_void(token)
+    if raw.get('status') == 'void':
+        return Written(status='void', phone=phone)
     written = _written(raw, phone)
     if why := _disagrees(raw, expected):
         raise OutcomeUnknownError(why)
@@ -485,11 +535,9 @@ def record_complaint(salon: Salon, args: ComplaintArgs, intent: Intent) -> Noted
     return _noted(raw, args)
 
 
-def find_complaint(salon: Salon, args: ComplaintArgs, intent: Intent) -> Noted | None:
-    raw = salon.diary.outcome_of(intent.id)
-    if raw is None:
-        return None
-    return _noted(raw, args)
+def find_complaint(salon: Salon, args: ComplaintArgs, intent: Intent) -> Noted:
+    """What an unanswered complaint did, by its intent; fenced (`void`, not recorded) when the book never saw it."""
+    return _noted(salon.diary.outcome_or_void(intent.id), args)
 
 
 def complaint_words(args: ComplaintArgs) -> str:

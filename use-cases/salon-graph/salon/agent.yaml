@@ -54,47 +54,59 @@ operations:
     recap: You're booked for {spoken}.
     function: functions.py:book
     subject: booking_id
+    resource: booking
+    version: revision
     idempotent: true
     args: {phone: verified_phone, slot: slot}
     readback: functions.py:booking_words
     reconcile: functions.py:find_booking
     matches: {phone: phone}
     succeeds: {status: booked}
+    rejects: {status: [refused, void]}
     assign: {booked: booking_id, booked_spoken: spoken}
     say: "You're all set for {spoken}. Anything else I can help with?"
   move_appointment:
     recap: Your appointment is now {spoken}.
     function: functions.py:move
     subject: booking_id
+    resource: booking
+    version: revision
     idempotent: true
     args: {phone: verified_phone, slot: slot, booking_id: appointment}
     readback: functions.py:move_words
     reconcile: functions.py:find_move
     matches: {phone: phone, booking_id: booking_id}
     succeeds: {status: moved}
+    rejects: {status: [refused, void]}
     assign: {booked: booking_id, booked_spoken: spoken}
     say: "That's moved to {spoken}. Anything else I can help with?"
   cancel_appointment:
     recap: Your appointment is cancelled.
     function: functions.py:cancel
     subject: booking_id
+    resource: booking
+    version: revision
     idempotent: true
     args: {phone: verified_phone, booking_id: appointment}
     readback: functions.py:cancel_words
     reconcile: functions.py:find_cancel
     matches: {phone: phone, booking_id: booking_id}
     succeeds: {status: cancelled}
+    rejects: {status: [refused, void]}
     say: "That's cancelled for you. Anything else I can help with?"
   record_complaint:
     recap: Your complaint is on record, reference {reference}.
     function: functions.py:record_complaint
     subject: reference
+    resource: complaint
+    version: revision
     idempotent: true
     args: {phone: verified_phone, summary: complaint, requested_resolution: wanted_outcome}
     readback: functions.py:complaint_words
     reconcile: functions.py:find_complaint
     matches: {phone: phone}
     succeeds: {recorded: true}
+    rejects: {recorded: false}
     assign: {complaint_reference: reference}
     say: '{said}'
 

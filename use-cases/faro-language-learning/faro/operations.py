@@ -15,8 +15,8 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, Field
-from pydantic_ai import ModelRetry
 
+from core import Refused
 from core.operations import Operation, operation_token
 from core.proposals import BaseProposal
 from core.steps import Prompted
@@ -49,7 +49,7 @@ def agreed(call: FaroCall) -> bool:
 
 def _refuse_unless(condition: bool, why: str) -> None:
     if not condition:
-        raise ModelRetry(f'Nothing was saved: {why}')
+        raise Refused(f'Nothing was saved: {why}')
 
 
 def _saved(call: FaroCall) -> int:
@@ -88,7 +88,7 @@ class ConfirmPhone(Operation[FaroCall, PhoneArgs, Found, Prompted]):
             return {'phone': args.phone}
         learner, plan, last = found
         if learner.id in ACTIVE:
-            raise ModelRetry(
+            raise Refused(
                 'This learner is already on another call. Tell the caller, and do not share any profile.'
             )
         draft_id = last.checkpoint.draft_id if last is not None else 0

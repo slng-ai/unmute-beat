@@ -18,6 +18,7 @@ and on the repair: the before-and-after evidence of session 4b stage B.
 
 import asyncio
 import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -160,7 +161,214 @@ def lookup_receipt_backs_a_booking_goodbye() -> bool:
         manifest.unlink()
 
 
+def _desk(folder: Path, **open_with):
+    """The support desk on a fresh SQLite file: its scripted model, compiled flow and one open call."""
+    from tests.test_tickets import desk_in, opened
+
+    desk = desk_in(folder)
+    return (desk, *opened(desk, **open_with))
+
+
+def pending_receipt_becomes_a_refusal() -> bool:
+    """Stage B review finding 1: a schema-valid `pending` receipt is not an authoritative no.
+
+    The parent filed it as `rejected`, which ended the intent and let a new
+    intent with the same arguments be dispatched: a second effect while the
+    first may still land.
+    """
+    sent: list[str] = []
+
+    def pending(services, args):
+        sent.append(args.value)
+        return {'value': args.value, 'status': 'pending'}
+
+    async def check() -> bool:
+        operation, call = _probe(pending)
+        type(operation).succeeds = {'status': 'done'}
+        await _runs(operation, call)
+        await _runs(operation, call)
+        return len(sent) > 1
+
+    return asyncio.run(check())
+
+
+def concurrent_runs_dispatch_twice() -> bool:
+    """Stage B review finding 2: two runs of one intent on one call both reach the backend.
+
+    The parent checked eligibility, awaited the durable intent record, and
+    only then marked the intent dispatched, so a second run passed the check
+    during the first one's await.
+    """
+    sent: list[str] = []
+
+    class Services:
+        async def note_intent(self, intent):
+            await asyncio.sleep(0.01)
+
+    def once(services, args):
+        sent.append(args.value)
+        time.sleep(0.05)
+        return {'value': args.value, 'status': 'done'}
+
+    async def check() -> bool:
+        operation, call = _probe(once)
+        call._services = Services()
+        await asyncio.gather(_runs(operation, call), _runs(operation, call))
+        return len(sent) > 1
+
+    return asyncio.run(check())
+
+
+def restore_resurrects_a_superseded_effect() -> bool:
+    """Stage B review finding 3: resolve, reopen, then a fresh session restores the old resolve intent.
+
+    The ticket is open at revision 3. The parent reconciled the resolve last,
+    so it stood as the current effect and was said to the caller.
+    """
+    import tempfile
+
+    from tests.test_tickets import turn
+    from tests.ticket_flow.worker import to_read_back
+
+    async def check(folder: Path) -> bool:
+        desk, script, flow, call = _desk(folder)
+        await to_read_back(flow, call, script)
+        await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+        await turn(flow, call, script, 'Reábrelo.', ('call', 'reopen_ticket', {}))
+        await turn(flow, call, script, 'Sí.', ('call', 'reopen_ticket', {}))
+        [resolve] = [i for i in call.intents if i.operation == 'resolve_ticket']
+        assert desk.ticket('T-101') == (3, 'open')
+        from tests.test_tickets import opened
+
+        script, flow, fresh = opened(desk, intents=[resolve.model_copy(update={'status': 'dispatched'})])
+        said = await turn(flow, fresh, script, 'Hola.', ('say', 'Dime.'))
+        stands = [e.receipt.get('status') for e in fresh.effective()]
+        return 'resolved' in stands or any('resuelto' in s for s in said)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return asyncio.run(check(Path(tmp)))
+
+
+def resources_of_two_kinds_collide() -> bool:
+    """Stage B review finding 4: ticket 1 and address 1 are one resource to the parent.
+
+    Effective receipts were keyed by the subject's value alone, so a change
+    to address 1 superseded the change to ticket 1.
+    """
+    from core.steps import FlowCall, FlowState, FunctionOperation
+
+    class Thing(BaseModel):
+        id: str = '1'
+
+    class Changed(BaseModel):
+        id: str
+        status: str
+
+    def change(services, args):
+        return {'id': args.id, 'status': 'done'}
+
+    def kind(name: str):
+        class Change(FunctionOperation):
+            args_type = Thing
+            receipt_type = Changed
+            needs_approval = False
+
+        Change.name, Change.subject = name, 'id'
+        Change.resource = name.removeprefix('update_')
+        Change.function = staticmethod(change)
+        return Change()
+
+    async def check() -> bool:
+        call = FlowCall(state=FlowState(agent='desk', facts=Thing()))
+        await kind('update_ticket').run(call, Thing())
+        await kind('update_address').run(call, Thing())
+        return len(call.effective()) < 2
+
+    return asyncio.run(check())
+
+
+def estimated_playback_authorises() -> bool:
+    """Stage B review finding 5: audio written out locally counted as a heard read-back.
+
+    `LocalPlayout` and a far end with no marks record `local`. The parent
+    counted it as delivered, so a voice call with no playback evidence could
+    approve a write.
+    """
+    from tests.test_delivery import READBACK, Call, asked
+
+    call = Call()
+    call.turn_started('I want a haircut')
+    copy = asked(call)
+    name = call.mark_for(copy)
+    call.note_mark_sent(name, 100.0)
+    call.spoken[-1].at = 99.0
+    call.note_mark_returned(name, 101.0, local=True)
+    call.note_onset(101.5)
+    call.turn_started('yes')
+    return call.pending(READBACK.about, value=READBACK.value) is not None
+
+
+def a_paraphrased_claim_after_a_lookup_is_said() -> bool:
+    """Stage B review finding 6: after a lookup alone, the desk step says the ticket is solved.
+
+    The desk's claim words miss the paraphrase, so the parent said it with
+    zero writes and the ticket still open.
+    """
+    import tempfile
+
+    from tests.test_tickets import turn
+    from tests.ticket_flow.worker import TO_READ_BACK
+
+    claim = 'El ticket T-101 ha quedado solucionado definitivamente.'
+
+    async def check(folder: Path) -> bool:
+        desk, script, flow, call = _desk(folder)
+        said = await turn(
+            flow, call, script, 'Ticket T-101, cuenta ACC-1234.', *TO_READ_BACK[:3], ('say', claim)
+        )
+        assert desk.ticket('T-101') == (1, 'open') and not call.effective()
+        return claim in ' '.join(said)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return asyncio.run(check(Path(tmp)))
+
+
+def a_prose_step_can_still_claim() -> bool:
+    """A known limit, kept visible: a `prose` step speaks the model's own words, and a paraphrase can claim anything.
+
+    Stage C closes the route on `rendered` steps and on every code route. The
+    desk's informational `faq` step stays prose, so its model can still say
+    the ticket is solved when nothing was done. Truthful completion is not
+    claimed for prose steps; the salon's booking step is one. Whether the
+    salon's write steps become rendered is a Stage D decision, because it
+    changes their prompts and needs live checks.
+    """
+    import tempfile
+
+    from tests.test_tickets import turn
+
+    claim = 'El ticket T-101 ha quedado solucionado definitivamente.'
+
+    async def check(folder: Path) -> bool:
+        desk, script, flow, call = _desk(folder)
+        said = await turn(flow, call, script, '¿Cómo va el T-101?', ('say', claim))
+        return claim in ' '.join(said) and desk.ticket('T-101') == (1, 'open')
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return asyncio.run(check(Path(tmp)))
+
+
 DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
+    'a prose step can still say an unbacked claim (known limit)': (
+        a_prose_step_can_still_claim,
+        'Stage D decision',
+    ),
+    'a pending receipt becomes an authoritative refusal': (pending_receipt_becomes_a_refusal, '4c C0.1'),
+    'two concurrent runs of one intent both dispatch': (concurrent_runs_dispatch_twice, '4c C0.2'),
+    'a restored intent resurrects a superseded effect': (restore_resurrects_a_superseded_effect, '4c C0.3'),
+    'resources of two kinds with one id collide': (resources_of_two_kinds_collide, '4c C0.4'),
+    'estimated local playback authorises a write': (estimated_playback_authorises, '4c C0.5'),
+    'a paraphrased claim after a lookup is said': (a_paraphrased_claim_after_a_lookup_is_said, '4c C0.6'),
     'a write cancelled after its commit is sent again': (cancelled_after_commit_is_sent_again, '4b stage B1'),
     'an invalid reconciliation answer clears the retry guard': (
         invalid_reconciliation_clears_the_guard,

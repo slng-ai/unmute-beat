@@ -178,6 +178,7 @@ def times_and_days_are_the_salons():
         'service': 'haircut',
         'date': '2026-09-25',
         'spoken': 'x',
+        'revision': 1,
     }
     assert Saved.model_validate(saved | {'time': '09:30'}).time == time(9, 30)
     for wrong in ('09:30:15', '09:30+02:00', '9:30', 1700000000):

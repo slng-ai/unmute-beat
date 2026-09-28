@@ -50,7 +50,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.completion import FieldsPresent, ReceiptMatched
-from core.graph import Exit, LocalAction, Node, Opening, holds
+from core.graph import Exit, LocalAction, Node, Opening, Restated, holds
 from core.locale import Locale
 from core.operations import Operation, OutcomeUnknownError, _tracer
 from core.policies import claim_or_refuse, one_action_per_reply, request_clock, speak_by
@@ -102,6 +102,10 @@ class FlowCall[S: BaseModel](CallContext):
     """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
     _goodbye_checked: int = PrivateAttr(default=0)
     """The turn on which a goodbye beside a waiting read-back was sent back once, to carry out a yes first."""
+    _reconcile_with: dict[str, tuple[Any, type[BaseModel]]] = PrivateAttr(default_factory=dict)
+    """Each declared operation and its argument model, by name: what a restored intent is reconciled with."""
+    _asked_owed: set[str] = PrivateAttr(default_factory=set)
+    """The identities whose owed intents the services were already asked for (`take_owed`)."""
 
     @property
     def locale(self) -> Locale:
@@ -135,6 +139,29 @@ class FlowCall[S: BaseModel](CallContext):
         self.commit(facts=candidate)
         if self.state.facts is not facts:
             self._version += 1
+            self.take_owed()
+
+    def take_owed(self) -> None:
+        """Once the caller is known, take back what earlier calls still owe them, to settle before anything new.
+
+        The services may say (`owed(identity) -> intents`): intents of calls
+        that are over, made for this caller, with no answer that settles
+        them. Restored here, they are unknown on this call, so the next
+        turn reconciles them by their own operation before any model runs,
+        and nothing of the same operation for this caller is sent until then
+        (`Operation._may_dispatch`). Asked once per identity. A caller known
+        at open is asked at open; one who says who they are later is asked
+        then, which on a phone line is the usual case.
+        """
+        identity = self.identity()
+        owed = getattr(self._services, 'owed', None)
+        if not identity or identity in self._asked_owed or owed is None:
+            return
+        self._asked_owed.add(identity)
+        intents = [i for i in owed(identity) if i.id not in self._intents]
+        if intents:
+            logger.info('{} intent(s) owed to this caller by earlier calls: settled first', len(intents))
+            self.restore(intents, self._reconcile_with)
 
     def wrote_this_turn(self) -> bool:
         """Whether a business action filed a validated receipt in this caller turn. Evidence, never a flag."""
@@ -168,7 +195,9 @@ class FlowCall[S: BaseModel](CallContext):
         caller. Found and valid: the receipt is filed and said, exactly as if
         the first answer had arrived. Not found, or an answer that does not
         validate or is about something else: it stays unknown, and nothing is
-        sent again (`Operation._may_dispatch`). A success whose recording
+        sent again (`Operation._may_dispatch`). An authoritative no (a
+        backend that fenced the intent as void) settles it, silently: nothing
+        was done, and no model is waiting to be told. A success whose recording
         failed is recorded again from its receipt, with nothing sent. No
         model is asked what happened.
 
@@ -192,6 +221,8 @@ class FlowCall[S: BaseModel](CallContext):
                     found = await operation.reconcile_intent(self, args, intent) or found
                 except OutcomeUnknownError as error:
                     logger.info('still unknown after reconciliation: {}', error)
+                except ModelRetry:
+                    logger.info('settled by reconciliation as not done: {}', intent.id)
             for operation, args, receipt in repairs:
                 found = await operation.present_again(self, args, receipt) or found
             return found
@@ -250,11 +281,22 @@ class Prompted:
         against that intent (`CallContext.note_unheard_readbacks`), across the
         caller's joined pieces and reissued questions alike. Past the limit it
         is not asked again on this call: the caller hears `Locale.gave_up`,
-        which is true, because nothing was dispatched.
+        which is true, because nothing was dispatched. Copies lost on a line
+        that proves nothing count against `READBACKS`; copies the caller
+        talked over on a line that works count against `CUT_READBACKS`.
         """
         intent = call.open_intent(self.about, self.value)
-        if intent is not None and intent.status == 'prepared' and intent.readbacks >= READBACKS:
-            logger.info('{} read back {} times unheard: fallback', self.about, intent.readbacks)
+        if (
+            intent is not None
+            and intent.status == 'prepared'
+            and (intent.readbacks >= READBACKS or intent.cut_readbacks >= CUT_READBACKS)
+        ):
+            logger.info(
+                '{} read back unheard {} times, cut {} times: fallback',
+                self.about,
+                intent.readbacks,
+                intent.cut_readbacks,
+            )
             return call.locale.gave_up
         call.ask(
             BaseProposal(
@@ -269,7 +311,14 @@ class Prompted:
 
 
 READBACKS = 2
-"""Read-backs of one intent the caller never heard in full before answering, after which it is not asked again."""
+"""Read-backs of one intent lost on a line that has proven no delivery, after which it is not asked again."""
+CUT_READBACKS = 5
+"""Read-backs of one intent the caller talked over on a line that works, after which it is not asked again.
+
+ponytail: a fixed count, picked so an interruptive caller gets several
+tries while a caller who never lets it finish still ends; per-step limits
+if one application needs another number.
+"""
 
 
 class ConfirmedOperation[ArgsT: BaseModel, ReceiptT: BaseModel](
@@ -360,6 +409,22 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
 
     def succeeded(self, receipt: Mapping[str, Any]) -> bool:
         return all(receipt.get(name) == value for name, value in self.succeeds.items())
+
+    rejects: ClassVar[Mapping[str, Any]] = {}
+    """Receipt fields and the values that mean a terminal no, like `{status: [full, stale]}` (a list: any of them)."""
+
+    def outcome(self, receipt: Mapping[str, Any]) -> Literal['succeeded', 'rejected', 'unknown']:
+        """`succeeds` is a success; a declared `rejects` is an authoritative no; any other answer to a change settles nothing.
+
+        A read changes nothing, so any validated answer to it is final.
+        """
+        if self.succeeded(receipt):
+            return 'succeeded'
+        refused = self.rejects and all(
+            receipt.get(name) in (value if isinstance(value, list) else [value])
+            for name, value in self.rejects.items()
+        )
+        return 'rejected' if refused or not self.changes else 'unknown'
 
     function_takes_intent: ClassVar[bool] = False
     """The function declares a third parameter, the `Intent`: its idempotency key for the backend."""
@@ -1114,7 +1179,9 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     """Ask each choice function for this caller's options, and record them as offered, unless the call moved on.
 
     A choice function may be sync or async, and may take long: the caller can
-    change what they asked for, or be handed elsewhere, before it answers. An
+    change what they asked for, or be handed elsewhere, before it answers. A
+    plain one runs in a worker thread, like a domain function (`_call`), so a
+    database or HTTP read never holds the event loop that carries audio. An
     answer computed for a state that is no longer the call's, or in a turn the
     caller has left, is returned as stale and offers nothing, so it can never
     replace the current offer or make an old slot pickable.
@@ -1123,7 +1190,10 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     found: dict[str, Options] = {}
     for name, choose in choices.items():
         try:
-            answer = await _result(choose(call.services, call.state.facts))
+            if inspect.iscoroutinefunction(choose):
+                answer = await choose(call.services, call.state.facts)
+            else:
+                answer = await _result(await asyncio.to_thread(choose, call.services, call.state.facts))
         except Exception as error:
             logger.exception('choice function for {} failed', name)
             return {
@@ -1143,15 +1213,38 @@ async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any],
     return result
 
 
+def _resting_on(operation: Operation) -> set[str]:
+    """The state fields an operation's arguments are built from: a change to one of them makes its read-back stale."""
+    return set(getattr(operation, 'binds', {}).values()) or set(operation.args_type.model_fields)
+
+
 async def _carry_out(
-    call: FlowCall[Any], operation: Operation, usage: RunUsage | None, limits: UsageLimits | None
+    call: FlowCall[Any],
+    operation: Operation,
+    usage: RunUsage | None,
+    limits: UsageLimits | None,
+    *,
+    rendered: bool = False,
 ) -> str | None:
-    """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown."""
+    """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown.
+
+    On a rendered step an authoritative no is said by code too
+    (`Locale.withheld`, or `unsettled` while anything is unknown), instead
+    of being handed back to a model to put in its own words.
+    """
+    before = {i.id for i in call.intents if i.status == 'rejected'}
     try:
         receipt = await operation.run(call, _args(operation, call), usage=usage, usage_limits=limits)
     except OutcomeUnknownError:
         await call.speak_now(call.locale.unsettled, origin='confirmation')
         return call.locale.unsettled
+    except ModelRetry:
+        refused = {i.id for i in call.intents if i.status == 'rejected' and i.operation == operation.name}
+        if not rendered or not refused - before:
+            raise
+        words = call.correction(call.locale.withheld)
+        await call.speak_now(words, origin='error')
+        return words
     say = getattr(operation, 'say', '')
     return say.format_map(_Facts(receipt.model_dump())) if say and isinstance(receipt, BaseModel) else None
 
@@ -1194,6 +1287,14 @@ class ConversationStep(Step):
     requires: tuple[str, ...] = ()
     satisfied_by: str = ''
     guarded: bool = False
+    rendered: bool = False
+    """`speech: rendered`: the agent chooses and code words everything. No text output, so no model prose to TTS.
+
+    Its outputs are the step's operations (read back, then carried out),
+    `hand_over`, `goodbye`, and `wait`, after which code asks for the first
+    missing `asks:` field, or says `Locale.pardon`. An authoritative no is
+    said in core's fixed words (`_carry_out`).
+    """
     quoted: tuple[str, ...] = ()
     """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
     opens_with: Operation | None = None
@@ -1257,14 +1358,16 @@ class ConversationStep(Step):
 
         return (Opening(operation.name, 'handoff', ready, read_back),)
 
-    def _reads_back(self) -> Callable[[FlowCall[Any]], Prompted | None] | None:
+    def _reads_back(self, flow: StepFlow) -> Callable[[FlowCall[Any]], Prompted | Restated | None] | None:
         """The `reads_back` rule: the operation whose field was just recorded, when it is the only one that could run.
 
         An operation could run when its arguments are complete, or when the
         ones missing are choices on offer (a held booking the caller could
         name). So where a new booking and a move of a held one are both
         possible, which one the caller means is the model's to read, as
-        before. None as well when that exact question is already waiting.
+        before. When that exact question is already waiting, heard in full,
+        the caller has said its value again: `Restated`, carried out by code.
+        None when something it rests on is still changing.
         """
         if not self.reads_back:
             return None
@@ -1278,7 +1381,7 @@ class ConversationStep(Step):
                 return all(call._offered.get(name) for name in missing)
             return True
 
-        def read(call: FlowCall[Any]) -> Prompted | None:
+        def read(call: FlowCall[Any]) -> Prompted | Restated | None:
             if [op for op in self.operations if possible(call, op)] != [
                 op for op in self.operations if op.name in self.reads_back and possible(call, op)
             ]:
@@ -1291,11 +1394,50 @@ class ConversationStep(Step):
                 except ValidationError:
                     return None
                 if call.pending(operation.name, value=proposal.value) is not None:
-                    return None
+                    if not operation.needs_approval or any(
+                        call._tries[name] != call._kept[name]
+                        for name in call._changing & _resting_on(operation)
+                    ):
+                        return None
+                    return Restated(
+                        about=proposal.about,
+                        run=lambda usage, limits, operation=operation: self._confirmed(
+                            flow, operation, call, usage, limits
+                        ),
+                    )
                 return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
             return None
 
         return read
+
+    async def _confirmed(
+        self,
+        flow: StepFlow,
+        operation: Operation,
+        call: FlowCall[Any],
+        usage: RunUsage | None,
+        limits: UsageLimits | None,
+    ) -> Any:
+        """Carry out a read-back the caller confirmed by saying its value again (`Restated`). None if nothing is pending."""
+        proposal = operation.proposal_for(call, _args(operation, call))
+        if not call.approve(proposal.about, value=proposal.value):
+            return None
+        await call.speak_now(call.locale.restated, origin='confirmation')
+        return await self._approved(flow, operation, call, usage, limits)
+
+    async def _approved(
+        self,
+        flow: StepFlow,
+        operation: Operation,
+        call: FlowCall[Any],
+        usage: RunUsage | None,
+        limits: UsageLimits | None,
+    ) -> Prompted | Handoff | str | None:
+        """Run an operation whose approval is bound, then hand back to a waiting step, if this was its prerequisite."""
+        said = await _carry_out(call, operation, usage, limits, rendered=self.rendered)
+        if (back := flow.return_after(self, call)) is not None:
+            return back
+        return said
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def goodbye(ctx: RunContext[FlowCall[Any]], recap: list[str] | None = None) -> str:
@@ -1318,10 +1460,22 @@ class ConversationStep(Step):
             await call.end_call()
             return words
 
+        async def wait(ctx: RunContext[FlowCall[Any]]) -> str:
+            """Nothing to read back, carry out or hand over yet. The application asks the caller for what it still needs."""
+            call = ctx.deps
+            missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
+            words = self.asks[missing] if missing else call.locale.pardon
+            await call.speak_now(words, origin='ask')
+            return words
+
         actions = frozenset(op.name for op in self.operations) | (
             {'hand_over'} if self.exits else frozenset()
         )
-        outputs: list[Any] = [str, ToolOutput(goodbye, name='goodbye')]
+        outputs: list[Any] = [
+            *([] if self.rendered else [str]),
+            ToolOutput(goodbye, name='goodbye'),
+            *([ToolOutput(wait, name='wait')] if self.rendered else []),
+        ]
         tools: list[Any] = []
         if self.fields:
             values_type = _values(flow, f'{self.id.title()}Values', self.fields)
@@ -1329,19 +1483,24 @@ class ConversationStep(Step):
             async def collect(ctx: RunContext[FlowCall[Any]], values: BaseModel) -> str:
                 """Record exactly what the caller has just said for any of these fields. Never guess a value."""
                 proposed = values.model_dump(exclude_none=True)
-                _refuse_unoffered(ctx.deps, self.choices, proposed)
+                call = ctx.deps
+                before = {name: getattr(call.state.facts, name, None) for name in proposed}
+                _refuse_unoffered(call, self.choices, proposed)
                 for name in self.quoted:
-                    if proposed.get(name) and not said_by_caller(ctx.deps, str(proposed[name])):
+                    if proposed.get(name) and not said_by_caller(call, str(proposed[name])):
                         raise ModelRetry(
                             f"Nothing was recorded: {name} must be the caller's own words, copied from what "
                             'they said. Punctuation and case may differ; nothing else may.'
                         )
                 try:
-                    flow.record(ctx.deps, proposed)
+                    flow.record(call, proposed)
                 except ValidationError as error:
                     problems = '; '.join(e['msg'] for e in error.errors())
                     raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
-                ctx.deps._recorded = frozenset(proposed)
+                call._kept.update(
+                    name for name in proposed if getattr(call.state.facts, name, None) == before[name]
+                )
+                call._recorded = frozenset(proposed)
                 return f'Recorded: {", ".join(sorted(proposed)) or "nothing"}.'
 
             collect.__annotations__ = {'ctx': RunContext[FlowCall], 'values': values_type, 'return': str}
@@ -1405,7 +1564,8 @@ class ConversationStep(Step):
             guarded=self.guarded,
             openings=self.opening(),
             speaks_for=frozenset(op.name for op in self.operations),
-            reads_back=self._reads_back(),
+            reads_back=self._reads_back(flow),
+            model_speech=not self.rendered,
         )
 
     def _operate(self, flow: StepFlow, operation: Operation, actions: frozenset[str]):
@@ -1420,9 +1580,7 @@ class ConversationStep(Step):
             if operation.needs_approval:
                 proposal = operation.proposal_for(call, args)
                 read_back = Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
-                resting_on = set(getattr(operation, 'binds', {}).values()) or set(
-                    operation.args_type.model_fields
-                )
+                resting_on = _resting_on(operation)
                 if call._unapplied & resting_on:
                     raise ModelRetry(
                         f'Nothing was done: this reply also changes {", ".join(sorted(call._unapplied & resting_on))}. '
@@ -1430,10 +1588,7 @@ class ConversationStep(Step):
                     )
                 if call._changing & resting_on or not call.approve(proposal.about, value=proposal.value):
                     return read_back
-            said = await _carry_out(call, operation, ctx.usage, ctx.usage_limits)
-            if (back := flow.return_after(self, call)) is not None:
-                return back
-            return said
+            return await self._approved(flow, operation, call, ctx.usage, ctx.usage_limits)
 
         return operate
 
@@ -1635,8 +1790,10 @@ class StepFlow:
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale
+        call._reconcile_with = {op.name: (op, op.args_type) for op in self.operations()}
         if intents:
-            call.restore(list(intents), {op.name: (op, op.args_type) for op in self.operations()})
+            call.restore(list(intents), call._reconcile_with)
+        call.take_owed()
         return call
 
     def operations(self) -> list[Operation]:

@@ -1,0 +1,203 @@
+{
+  "cases": {
+    "UGLSKE85AD5kAZQWvTtVeU": {
+      "bookings": 1,
+      "service": "haircut"
+    },
+    "5dpxUoTn9Fid63RjaYU9a3": {
+      "bookings": 1,
+      "service": "haircut"
+    },
+    "eupHbRBQR2x78kUx9MMUeg": {
+      "bookings": 1,
+      "service": "haircut"
+    },
+    "gotzsnz4ZTQaLESRnReCB7": {
+      "bookings": 1,
+      "service": "haircut"
+    },
+    "M7c7XjELWSXQKDRYdP5omH": {
+      "bookings": 1,
+      "service": "haircut"
+    }
+  },
+  "reviews": {
+    "8ggjwDXYYjMAuSQu7My532": {
+      "reviewer": "agent",
+      "source": "Coval transcript (simulation 8ggjwDXYYjMAuSQu7My532, call CA637b7620b77012708f80a0e2eed8f1bc) in .load/live/B/report/export.json; report.json write turns/questions/heard.",
+      "final": {
+        "service": "haircut",
+        "date": "2026-10-03",
+        "time": "09:00:00",
+        "phone": "+34671520205"
+      },
+      "writes": {
+        "lookup_customer@5": {
+          "accepted": true,
+          "note": "\"yes that's right\" to \"Is your number +34 671 52 02 05?\""
+        },
+        "book_appointment@11": {
+          "accepted": true,
+          "note": "Friday read-back (\"Friday the second at 9AM?\") was NOT accepted -- caller asked for Saturday morning instead. Saturday 9AM read-back was asked twice (caller talked over the first copy) and the second copy was clearly accepted (\"yes please ... nine am on saturday the third\")."
+        }
+      },
+      "claims": [
+        {
+          "action": "booked",
+          "appointment": {
+            "date": "2026-10-03",
+            "time": "09:00:00"
+          }
+        }
+      ],
+      "note": "Standard interruptive pattern (day changed after the first read-back). Call ended via the caller's Twilio 'stop'/CancelFrame, not the bot's own EndFrame, though the bot had already spoken its closing lines."
+    },
+    "J9bFqmkhgJRN972JNfgB9x": {
+      "reviewer": "agent",
+      "source": "Coval transcript (simulation J9bFqmkhgJRN972JNfgB9x, call CAe67c8fccda71c4225e52321469b4cbbd) in .load/live/B/report/export.json; report.json write turns/questions/heard.",
+      "final": {
+        "service": "haircut",
+        "date": "2026-10-02",
+        "time": "09:00:00",
+        "phone": "+34671520204"
+      },
+      "writes": {
+        "lookup_customer@4": {
+          "accepted": true,
+          "note": "\"yes right\" to \"Is your number 34671520204?\" (after an earlier truncated read-back \"346-7150\" that was never actually answered yes/no)."
+        },
+        "book_appointment@9": {
+          "accepted": true,
+          "note": "Thursday read-back was NOT accepted -- caller asked for Friday instead. The accepted Friday 9AM read-back was asked twice (a cancelled silence_tool call intervened); the second \"yes, please. that's exactly what I want\" is the one bound to this write."
+        }
+      },
+      "claims": [
+        {
+          "action": "booked",
+          "appointment": {
+            "date": "2026-10-02",
+            "time": "09:00:00"
+          }
+        }
+      ],
+      "note": "Standard interruptive pattern. Final claim text is \"You're all set for Friday the second at 9AM.\"; the very last line (\"You're booked for Friday,\") was cut off when the call ended via the caller's Twilio stop/CancelFrame."
+    },
+    "n4pRSiBp4DFuKNhgBuc8Nd": {
+      "reviewer": "agent",
+      "source": "Coval transcript (simulation n4pRSiBp4DFuKNhgBuc8Nd, call CA82dcb4d34751580ff9d5ea112828150a) in .load/live/B/report/export.json; report.json write turns/questions/heard.",
+      "final": {
+        "service": "haircut",
+        "date": "2026-10-01",
+        "time": "09:00:00",
+        "phone": "+34671520203"
+      },
+      "writes": {
+        "lookup_customer@5": {
+          "accepted": true,
+          "note": "\"yes that's correct\" to \"Is your number 34671520203\""
+        },
+        "book_appointment@10": {
+          "accepted": true,
+          "note": "Wednesday read-back was NOT accepted -- caller asked for Thursday instead. Thursday 9AM read-back accepted: \"yes please that's perfect\"."
+        }
+      },
+      "claims": [
+        {
+          "action": "booked",
+          "appointment": {
+            "date": "2026-10-01",
+            "time": "09:00:00"
+          }
+        }
+      ],
+      "note": "Standard interruptive pattern. Model twice dropped the word \"Shall\" (\"I book a haircut Wednesday...\"). Call ended via CancelFrame/stop (caller side); the caller's own goodbye line appears in the transcript after the bot's end_conversation tool call (ordering artifact, not a functional issue)."
+    },
+    "SqB3qpaHswFgUKr8jTwUJ4": {
+      "reviewer": "agent",
+      "source": "Coval transcript (simulation SqB3qpaHswFgUKr8jTwUJ4, call CA2d066cee0dcabf9215f93486b60c1adc) in .load/live/B/report/export.json; report.json write turns/questions/heard.",
+      "final": {
+        "service": "haircut",
+        "date": "2026-09-30",
+        "time": "09:00:00",
+        "phone": "+34671520202"
+      },
+      "writes": {
+        "lookup_customer@4": {
+          "accepted": true,
+          "note": "\"yes that's right\" to \"Is your number (347) 152-0202?\" (US-style grouping, one fewer digit than the correct +34 671 520 202; caller accepted anyway; the correct number was used in the receipt)."
+        },
+        "book_appointment@9": {
+          "accepted": true,
+          "note": "Tuesday read-back was NOT accepted -- caller asked for Wednesday instead. Wednesday 9AM read-back accepted: \"yes please book it for wednesday the thirtieth at nine am\", though the read-back itself was garbled/repeated (\"Shall I book a haircut, Wednesday, the third Shall I book a haircut Wednesday, the thirtieth at 9AM?\"), matching this call's own diagnostic (\"2 reply(s) spoke beside an operation\")."
+        }
+      },
+      "claims": [
+        {
+          "action": "booked",
+          "appointment": {
+            "date": "2026-09-30",
+            "time": "09:00:00"
+          }
+        }
+      ],
+      "note": "Standard interruptive pattern with a garbled, twice-spoken booking read-back around the operation; phone read-back again shows the US-style/short-by-one-digit format seen elsewhere, accepted without objection this time. Agent-ended (EndFrame)."
+    },
+    "9ut6yboSHC3JGoVmRFy2MC": {
+      "reviewer": "agent",
+      "source": "Coval transcript (simulation 9ut6yboSHC3JGoVmRFy2MC, call CA8b041777edb318a8fe60a7f22d1040a2) in .load/live/B/report/export.json; report.json write turns/questions/heard.",
+      "final": {
+        "service": "haircut",
+        "date": "2026-09-29",
+        "time": "09:00:00",
+        "phone": "+34671520201"
+      },
+      "writes": {
+        "lookup_customer@6": {
+          "accepted": true,
+          "note": "Accepted only on the third read-back attempt (\"yes that's correct\" to \"Is your number plus 34671520201?\"), after two badly garbled read-backs (\"plus 34600 and 1520\", \"3415202015?\") that the caller explicitly rejected (\"No, it's plus three four, six seven one, five two zero, two zero one.\")."
+        },
+        "book_appointment@11": {
+          "accepted": true,
+          "note": "Monday read-back was NOT accepted -- caller asked for Tuesday instead. Tuesday 9AM read-back accepted: \"yes please that's perfect\"."
+        }
+      },
+      "claims": [
+        {
+          "action": "booked",
+          "appointment": {
+            "date": "2026-09-29",
+            "time": "09:00:00"
+          }
+        }
+      ],
+      "note": "The glitchiest call of the batch: the phone number needed three read-back attempts (two badly garbled) before an accurate one was offered and accepted -- unlike the A5/C1 pattern, the system did re-confirm before dispatching. Booking read-back and closing lines were stuttered/repeated (\"You're all set for Tuesday, the you're all set for Tuesday...\"). Agent-ended (EndFrame)."
+    }
+  },
+  "facts": {
+    "8ggjwDXYYjMAuSQu7My532": {
+      "ended_by": "caller",
+      "observed": true,
+      "source": "salon-bot.log: Twilio media stream first 'stop' event at 20:37:23.342, then 'PipelineWorker#3: Closing. Waiting for CancelFrame#2(reason: None)' at 20:37:24.342, then 'Ended tracing for Conversation CA637b7620b77012708f80a0e2eed8f1bc' at 20:37:24.493 (no EndFrame for this call: the caller's side closed the media stream first)."
+    },
+    "J9bFqmkhgJRN972JNfgB9x": {
+      "ended_by": "caller",
+      "observed": true,
+      "source": "salon-bot.log: Twilio media stream first 'stop' event at 20:37:20.622, then 'PipelineWorker#4: Closing. Waiting for CancelFrame#1(reason: None)' at 20:37:21.624, then 'Ended tracing for Conversation CAe67c8fccda71c4225e52321469b4cbbd' at 20:37:21.774."
+    },
+    "n4pRSiBp4DFuKNhgBuc8Nd": {
+      "ended_by": "caller",
+      "observed": true,
+      "source": "salon-bot.log: Twilio media stream first 'stop' event at 20:37:14.125, then 'PipelineWorker#2: Closing. Waiting for CancelFrame#0(reason: None)' at 20:37:15.126, then 'Ended tracing for Conversation CA82dcb4d34751580ff9d5ea112828150a' at 20:37:15.222."
+    },
+    "SqB3qpaHswFgUKr8jTwUJ4": {
+      "ended_by": "agent",
+      "observed": true,
+      "source": "salon-bot.log: 'PipelineWorker#0: Closing. Waiting for EndFrame#0(reason: None)' at 20:36:48.055, then 'Ended tracing for Conversation CA2d066cee0dcabf9215f93486b60c1adc' at 20:36:48.316. No Twilio 'stop' or CancelFrame logged for this call."
+    },
+    "9ut6yboSHC3JGoVmRFy2MC": {
+      "ended_by": "agent",
+      "observed": true,
+      "source": "salon-bot.log: 'PipelineWorker#1: Closing. Waiting for EndFrame#1(reason: None)' at 20:37:54.984, then 'Ended tracing for Conversation CA8b041777edb318a8fe60a7f22d1040a2' at 20:37:55.329. No Twilio 'stop' or CancelFrame logged for this call."
+    }
+  }
+}

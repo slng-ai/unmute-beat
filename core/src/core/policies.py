@@ -88,9 +88,24 @@ class TurnBudget:
     go out, 0.3 s later.
     """
 
-    def account(self) -> tuple[RunUsage, UsageLimits]:
-        """A fresh tally and the limits to read it against, for one turn."""
-        return RunUsage(), UsageLimits(request_limit=self.model_requests, tool_calls_limit=self.tool_calls)
+    per_piece: int = 2
+    """Requests and tool calls each further piece of a joined turn adds to its limits, up to twice the turn's own.
+
+    A joined turn keeps one tally (`CallContext.continues_turn`), so a loop
+    over one input stays bounded. But every piece is new words the model has
+    to be sent: live call hzSdfMNn (session 4c) had an interruptive caller
+    say their number in eight pieces, and the turn ran out of requests while
+    it was still being told the number. Each piece now adds a little; the
+    cap keeps a turn that never ends from spending without end.
+    """
+
+    def account(self, pieces: int = 1) -> tuple[RunUsage, UsageLimits]:
+        """A fresh tally and the limits to read it against, for one turn of this many joined pieces."""
+        more = self.per_piece * max(pieces - 1, 0)
+        return RunUsage(), UsageLimits(
+            request_limit=min(self.model_requests + more, 2 * self.model_requests),
+            tool_calls_limit=min(self.tool_calls + more, 2 * self.tool_calls),
+        )
 
 
 def request_clock() -> Hooks:
@@ -186,6 +201,7 @@ def one_action_per_reply(actions: frozenset[str], updates: frozenset[str] = froz
                     values = {}
                 fields = set(values) if isinstance(values, dict) else set()
                 ctx.deps._changing |= fields
+                ctx.deps._tries.update(fields)
                 if claimed:
                     ctx.deps._unapplied |= fields
         return response

@@ -285,11 +285,12 @@ def two_calls_from_one_phone_are_two_conversations():
 
 
 def calls_with_a_diary_each_share_nothing():
-    """What a load test relies on: `bot.py` with `DIARY_PER_CALL` opens every call on a new `Diary()`.
+    """Two diaries on two files share nothing: a fixture per test is its own salon.
 
-    Coval rings twenty times at once from one number. A booking and a cancel in
-    one call are invisible to the next, and each call's first booking is BK0001:
-    the id `load_report.py` checks to prove, live, that no two calls shared one.
+    The salon itself is one file every worker shares (`DIARY_PATH`), so calls
+    running side by side contend for one chair (`tests.test_store`). Two
+    files are two salons: a booking and a cancel in one are invisible to the
+    other, and each one's first booking is BK0001.
     """
     first_diary, second_diary = Diary(), Diary()
     first, second = open_call(ALICE, diary=first_diary), open_call(ALICE, diary=second_diary)

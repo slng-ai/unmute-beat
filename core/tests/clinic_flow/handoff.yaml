@@ -11,9 +11,11 @@ operations:
   book:
     function: clinic.py:book
     subject: reference
+    version: version
     args: {patient: patient, slot: slot}
     readback: clinic.py:booking_words
     succeeds: {status: booked}
+    rejects: {status: full}
     assign: {reference: reference}
     say: 'Booked for {when}, reference {reference}.'
 steps:

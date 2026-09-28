@@ -29,6 +29,7 @@ import asyncio
 import json
 import time
 from contextlib import suppress
+from types import SimpleNamespace
 from typing import Any
 
 from pipecat.frames.frames import ErrorFrame, InterruptionFrame, TTSAudioRawFrame, VADUserStartedSpeakingFrame
@@ -41,7 +42,7 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPI
 from pipecat.workers.runner import WorkerRunner
 from starlette.websockets import WebSocketState
 
-from core.processor import PydanticAgentProcessor, TwilioMarks
+from core.processor import LocalPlayout, PydanticAgentProcessor, SegmentMark, TwilioMarks, playout
 from core.proposals import BaseProposal
 from salon.app import FLOW, open_call
 from salon.diary import Diary
@@ -139,8 +140,10 @@ class Phone:
 class Wire:
     """One call on the real adapter, transport and serializer. Use as `async with Wire() as wire:`."""
 
-    def __init__(self, *, echoes_marks: bool = True) -> None:
+    def __init__(self, *, echoes_marks: bool = True, simulate: bool = False) -> None:
         self.call = open_call(FLOW, '', Diary())
+        if simulate:
+            self.call.simulate_playout()
         self.call.turn_started('I want a haircut on Friday at two')
         self.node = PydanticAgentProcessor(self.call, FLOW.nodes)
         self.phone = Phone()
@@ -317,8 +320,24 @@ async def the_reply_must_begin_after_the_mark():
 
 
 async def a_far_end_with_no_marks_is_settled_from_its_audio():
-    """M7: `echoes_marks=False` (Coval's simulator): settled at the audio's real-time end, as `local`, never as a mark."""
+    """M7: `echoes_marks=False` (Coval's simulator): settled at the audio's real-time end, as `local`, never as a mark.
+
+    That is an estimate. On a call nobody opened for simulated playout it is
+    recorded and heard by nobody: the read-back cannot be answered. Only a
+    call the launcher opened for it (`simulate_playout`) counts it.
+    """
     async with Wire(echoes_marks=False) as wire:
+        wire.phone.lose.add('*')
+        readback = await wire.say(READBACK, question=True)
+        await wire.until(lambda: wire.marked(readback))
+        await wire.until(lambda: readback.heard_by == 'local')
+        wire.call.note_onset(time.perf_counter() + 1.0)
+        wire.call.turn_started('yes')
+        assert readback.delivered == 'unknown' and wire.call.pending_question() is None, (
+            'an estimate approved a read-back on a call nobody opened for simulation',
+            readback,
+        )
+    async with Wire(echoes_marks=False, simulate=True) as wire:
         wire.phone.lose.add('*')
         readback = await wire.say(READBACK, question=True)
         await wire.until(lambda: wire.marked(readback))
@@ -334,7 +353,7 @@ async def a_far_end_with_no_marks_is_settled_from_its_audio():
             'a settled estimate was written as transport playback'
         )
         assert [d['kind'] for d in wire.call.simulated_for(readback.proposal)] == ['written']
-    async with Wire(echoes_marks=False) as wire:
+    async with Wire(echoes_marks=False, simulate=True) as wire:
         wire.phone.lose.add('*')
         readback = await wire.say('[long] ' + READBACK, question=True)
         await wire.until(lambda: wire.marked(readback))
@@ -343,7 +362,50 @@ async def a_far_end_with_no_marks_is_settled_from_its_audio():
         assert readback.delivered != 'delivered', 'a clear before the audio ended was settled as heard'
 
 
+async def a_transport_with_no_marks_approves_nothing():
+    """M8: `playout` on a transport that is not Twilio adds `LocalPlayout`; its writes are heard only in a simulation.
+
+    The browser transport the bot runs in development returns no marks. A
+    segment whose audio it wrote is recorded (`local`), and, unless the
+    launcher named the simulation (`simulate=True`), its read-back cannot be
+    answered.
+    """
+    for simulate in (False, True):
+        call = open_call(FLOW, '', Diary())
+        after = playout(SimpleNamespace(_params=SimpleNamespace(serializer=None)), call, simulate=simulate)
+        assert [type(p) for p in after] == [LocalPlayout], after
+        call.turn_started('I want a haircut on Friday at two')
+        call.ask(BaseProposal(about='book_appointment', spoken=READBACK, value='slot-1'))
+        call.note_said('fixed', READBACK, origin='ask')
+        copy = call.spoken[-1]
+        name = call.mark_for(copy.id)
+        call.note_mark_sent(name, time.perf_counter(), media=3)
+        worker = PipelineWorker(Pipeline(after), cancel_on_idle_timeout=False)
+        runner = WorkerRunner(handle_sigint=False)
+        started = asyncio.Event()
+
+        @worker.event_handler('on_pipeline_started')
+        async def _started(worker, frame, started: asyncio.Event = started) -> None:
+            started.set()
+
+        await runner.add_workers(worker)
+        task = asyncio.create_task(runner.run())
+        await asyncio.wait_for(started.wait(), 5)
+        await worker.queue_frame(SegmentMark(message={}, mark=name))
+        deadline = time.perf_counter() + 5
+        while copy.heard_by != 'local' and time.perf_counter() < deadline:
+            await asyncio.sleep(0.005)
+        await worker.cancel()
+        with suppress(BaseException):
+            await asyncio.wait_for(task, 5)
+        call.note_onset(time.perf_counter() + 0.5)
+        call.turn_started('yes')
+        assert copy.heard_by == 'local' and call.simulated_playout is simulate, (copy, simulate)
+        assert (call.pending_question() is not None) is simulate, ('written audio approved', simulate)
+
+
 async def main() -> None:
+    await a_transport_with_no_marks_approves_nothing()
     await final_media_then_mark()
     await a_holding_line_does_not_deliver_the_read_back()
     await no_audio_or_failed_audio_never_delivers()
@@ -351,7 +413,7 @@ async def main() -> None:
     await a_clear_voids_pending_marks_only()
     await the_reply_must_begin_after_the_mark()
     await a_far_end_with_no_marks_is_settled_from_its_audio()
-    print('marks ok: M1-M7 on the real adapter, transport and Twilio serializer')
+    print('marks ok: M1-M8 on the real adapter, transport and Twilio serializer')
 
 
 if __name__ == '__main__':

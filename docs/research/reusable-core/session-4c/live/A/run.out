@@ -1,0 +1,28 @@
+agency       salon (use-cases/salon-graph)
+agent        PEivYdEtwEa65QSraG5fMQ voice-harness-salon-pipecat-twilio
+line         real Twilio: Coval dials +447427919928, owned by one campaign (serve, or this run); marks echoed
+test set     2P6J33TP: 5 case(s) kwdUj6BhGKrMueW8kiebH9, 2BiM4eZiW39tDur2ZStRYB, TRiAN8pYTfqC8fobkYxp8P, SvPLsHLnAeewDyDa3SeUbk, 6LyGpLmoRwX4ehkv6fzQHT
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  5 = 5 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by bot.py (MAX_CALL_SECONDS)
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  5 at once: the calls share this machine and the speech providers, so their latency is not comparable to a run of one call at a time
+label        s4c-bench-A
++447427919928 is owned by campaign 's4c-A': left as it is
+launched run c77fpUwGHjNYHBoFntSpNW (s4c-bench-A salon 2P6J33TP 9b3644d5)
+run c77fpUwGHjNYHBoFntSpNW IN PROGRESS, load average 1.3 1.2 1.1
+run c77fpUwGHjNYHBoFntSpNW IN PROGRESS, load average 1.1 1.2 1.1
+run c77fpUwGHjNYHBoFntSpNW IN PROGRESS, load average 1.2 1.2 1.1
+run c77fpUwGHjNYHBoFntSpNW IN PROGRESS, load average 1.3 1.2 1.1
+run c77fpUwGHjNYHBoFntSpNW IN PROGRESS, load average 1.1 1.2 1.1
+run c77fpUwGHjNYHBoFntSpNW IN PROGRESS, load average 1.2 1.2 1.1
+simulation EAE4k85AdLt7XFye546dxb = call CA2389c9a39b78bda07eae37cdfcb63132 (for load_report --call)
+simulation 9YiSNJCKhnza8chmmpCtXG = call CAfed4b2d4e991536e3df7b2a82f0a6306 (for load_report --call)
+simulation VhiVPLRo2uyrfXgvvkjPeK = call CAfff3d5b328def5208cfab70e5945a99d (for load_report --call)
+simulation PdxnRie2CSxwTpGB6QZq8Z = call CAc247daba07d8639fa6f4b5e1b65cf325 (for load_report --call)
+simulation amAP5b4ArdEJR8CwFS8zyN = call CA5ed3d469cb6cf72e47d25a46d33e429f (for load_report --call)
+ok    salon  test set 2P6J33TP  run c77fpUwGHjNYHBoFntSpNW
+exit=0

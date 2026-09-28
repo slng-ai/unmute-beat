@@ -55,6 +55,8 @@ class Booked(BaseModel):
     slot: Slot
     when: str
     status: Literal['booked', 'full']
+    version: int = 0
+    """The booking's version after this change: 1 when it is made, 2 once cancelled."""
 
 
 class Cancellation(BaseModel):
@@ -64,6 +66,7 @@ class Cancellation(BaseModel):
 class Cancelled(BaseModel):
     reference: str
     status: Literal['cancelled', 'unknown']
+    version: int = 0
 
 
 class Backend:
@@ -79,7 +82,7 @@ class Backend:
         self.failing = False
         self.full = False
 
-    def book(self, patient: str, slot: str) -> dict[str, str]:
+    def book(self, patient: str, slot: str) -> dict[str, str | int]:
         self.calls += 1
         if self.full:
             return {'reference': '', 'patient': patient, 'slot': slot, 'when': TIMES[slot], 'status': 'full'}
@@ -94,12 +97,17 @@ class Backend:
             'slot': slot,
             'when': TIMES[slot],
             'status': 'booked',
+            'version': 1,
         }
 
-    def cancel(self, reference: str) -> dict[str, str]:
+    def cancel(self, reference: str) -> dict[str, str | int]:
         self.calls += 1
         found = self.bookings.pop(reference, None)
-        return {'reference': reference, 'status': 'cancelled' if found else 'unknown'}
+        return {
+            'reference': reference,
+            'status': 'cancelled' if found else 'unknown',
+            'version': 2 if found else 0,
+        }
 
 
 def book(clinic: Backend, appointment: Appointment) -> Booked:
@@ -121,6 +129,7 @@ def find_booking(clinic: Backend, appointment: Appointment) -> Booked | None:
                     'slot': held[1],
                     'when': TIMES[held[1]],
                     'status': 'booked',
+                    'version': 1,
                 }
             )
     return None

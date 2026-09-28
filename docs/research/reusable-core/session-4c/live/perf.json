@@ -1,0 +1,134 @@
+{
+ "A": {
+  "set": "normal",
+  "correct": "5/5",
+  "call_s": [
+   94,
+   106
+  ],
+  "turn_p50_p90_n": [
+   "2.46",
+   "4.15",
+   "33"
+  ],
+  "model_p50_p90": [
+   "0.82",
+   "1.01"
+  ],
+  "requests_per_turn": "1.26",
+  "cancelled_of_started": [
+   "11",
+   "64"
+  ],
+  "continuations_cut_turns": [
+   "16",
+   "12"
+  ],
+  "loop_lag_p99_ms_max_sample": 2.8,
+  "loop_lag_max_ms": 65.0,
+  "workers_rss_mb_min_max": [
+   704,
+   859
+  ],
+  "max_active_on_one_worker": 4
+ },
+ "B": {
+  "set": "interruptive",
+  "correct": "5/5",
+  "call_s": [
+   143,
+   209
+  ],
+  "turn_p50_p90_n": [
+   "2.34",
+   "3.33",
+   "69"
+  ],
+  "model_p50_p90": [
+   "0.78",
+   "0.92"
+  ],
+  "requests_per_turn": "1.45",
+  "cancelled_of_started": [
+   "30",
+   "146"
+  ],
+  "continuations_cut_turns": [
+   "43",
+   "31"
+  ],
+  "loop_lag_p99_ms_max_sample": 2.9,
+  "loop_lag_max_ms": 38.3,
+  "workers_rss_mb_min_max": [
+   383,
+   848
+  ],
+  "max_active_on_one_worker": 5
+ },
+ "C": {
+  "set": "normal",
+  "correct": "5/5",
+  "call_s": [
+   91,
+   113
+  ],
+  "turn_p50_p90_n": [
+   "2.31",
+   "4.23",
+   "38"
+  ],
+  "model_p50_p90": [
+   "0.79",
+   "0.97"
+  ],
+  "requests_per_turn": "1.41",
+  "cancelled_of_started": [
+   "13",
+   "78"
+  ],
+  "continuations_cut_turns": [
+   "18",
+   "15"
+  ],
+  "loop_lag_p99_ms_max_sample": 2.9,
+  "loop_lag_max_ms": 57.2,
+  "workers_rss_mb_min_max": [
+   383,
+   886
+  ],
+  "max_active_on_one_worker": 4
+ },
+ "D": {
+  "set": "interruptive",
+  "correct": "5/5",
+  "call_s": [
+   139,
+   225
+  ],
+  "turn_p50_p90_n": [
+   "2.08",
+   "3.32",
+   "68"
+  ],
+  "model_p50_p90": [
+   "0.84",
+   "1.05"
+  ],
+  "requests_per_turn": "1.46",
+  "cancelled_of_started": [
+   "38",
+   "153"
+  ],
+  "continuations_cut_turns": [
+   "50",
+   "29"
+  ],
+  "loop_lag_p99_ms_max_sample": 2.8,
+  "loop_lag_max_ms": 62.8,
+  "workers_rss_mb_min_max": [
+   383,
+   914
+  ],
+  "max_active_on_one_worker": 3
+ }
+}

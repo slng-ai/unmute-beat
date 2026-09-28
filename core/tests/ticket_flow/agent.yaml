@@ -31,9 +31,12 @@ operations:
     readback: tickets.py:resolve_words
     reconcile: tickets.py:find_effect
     subject: ticket_id
+    resource: ticket
+    version: now_revision
     idempotent: true
     matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
     succeeds: {status: resolved}
+    rejects: {status: stale}
     assign: {revision: now_revision, ticket_status: status}
     say: 'Ticket {ticket_id} resuelto. ¿Algo más?'
     recap: 'El ticket {ticket_id} queda resuelto.'
@@ -43,9 +46,12 @@ operations:
     readback: tickets.py:reopen_words
     reconcile: tickets.py:find_effect
     subject: ticket_id
+    resource: ticket
+    version: now_revision
     idempotent: true
     matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
     succeeds: {status: open}
+    rejects: {status: stale}
     assign: {revision: now_revision, ticket_status: status}
     say: 'Ticket {ticket_id} reabierto. ¿Algo más?'
     recap: 'El ticket {ticket_id} vuelve a estar abierto.'
@@ -62,7 +68,7 @@ steps:
     prompt: prompts/desk.md
     fields: [account_id, ticket_id, resolution]
     operations: [resolve_ticket, reopen_ticket]
-    guarded: true
+    speech: rendered
     exits:
       - {to: look_up, purpose: find the ticket's current revision once the account and ticket are recorded}
       - {to: faq, purpose: a general question}

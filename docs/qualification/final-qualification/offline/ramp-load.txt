@@ -1,0 +1,6 @@
+before: 16:41  up 10 days, 8 hrs, 10 users, load averages: 1.54 1.86 1.93
+ %CPU COMM
+ 12.5 claude
+ 10.2 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  6.0 /Applications/Arc.app/Contents/Frameworks/ArcCore.framework/Helpers/Browser Helper.app/Contents/MacOS/Browser Helper
+after: 16:44  up 10 days,  8:03, 10 users, load averages: 2.95 2.31 2.09

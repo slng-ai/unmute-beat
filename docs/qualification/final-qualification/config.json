@@ -1,0 +1,116 @@
+{
+ "frozen_at": "2026-09-28T14:44:39.699628+00:00",
+ "revision": {
+  "head": "76bf4eda69b0730905707e567705c23cee9873a8",
+  "branch": "qual/final-qualification",
+  "pr36_head": "ff13f1444c68de2de25093c8ddb1d8f778f7367c",
+  "runtime_diff_from_pr36_head": "none",
+  "runtime_status": "clean",
+  "trees": {
+   "core/src": "1fd2a94c84558e9d4596bc8efa1166b46d86ff11",
+   "use-cases/salon-graph": "fd2701364e0497c062ec9eef6f5b5b79bc73a80a"
+  }
+ },
+ "dependencies": {
+  "uv.lock_sha256": "ff362a07b142fca7c305b4f7607475ae9d6979e65264fce0809694e42a063f49",
+  "python": "3.14.5",
+  "aiortc": "1.15.0",
+  "langfuse": "4.15.4",
+  "pipecat-ai": "1.11.0",
+  "pydantic": "2.13.5",
+  "pydantic-ai-slim": "2.46.0",
+  "pydantic-graph": "2.46.0",
+  "uvicorn": "0.53.0"
+ },
+ "application": {
+  "manifest": "use-cases/salon-graph/salon/agent.yaml",
+  "manifest_sha256": "afc254d60e328c755f5ac520a098cd0c852c45f02d6b33e8c238eafc8f44f688",
+  "app_version": "2026.09.25-s4",
+  "prompts_sha256": {
+   "salon/prompts/_diary.md": "cb4ddeba6331e1eaeeba2d59e3dd97a8c6d56b979f71cb25965116778c3add12",
+   "salon/prompts/_voice.md": "2d433f4d392b4dfd77ffacd07eeac8dbb5eae5e4918707669d57c90c32a1a9c1",
+   "salon/prompts/booking.md": "adda91404e45e7617bbe08b83be6801ffa57b6606b48da30597a18865a9ff8b6",
+   "salon/prompts/complaints.md": "758adb05f2466b3bf85376c40572677826c3893153be2a3b82b1539c6dbfc5d0",
+   "salon/prompts/concierge.md": "0bd066a9f930d8d719e266b7a003a370f758e364617ac85dc73024fc56945a6b",
+   "salon/prompts/knowledge/complaint-guidance.json": "104e4cdb2f946114fd9848588dd90c1029390813847dc93dc79a8dcc89c19b89",
+   "salon/prompts/knowledge/complaint-guidance.md": "4d51427954045f71ac4ebe3e6dd04fb726e3cfc5b371ffe39606f93090aeb194",
+   "salon/prompts/knowledge/refunds.md": "3fc2476597e2fd680d7b6a115f89216cac66a3c797d6501bee3bb7e668cca6b8",
+   "salon/prompts/knowledge/services.md": "f105535d8dd2b31ea94fcf674e70099f41c2079e23db488311844890a387589b",
+   "salon/prompts/verify.md": "8664ecc704856b210120ffa5f1cb6155417aa32cb69c9e94260447b89e02e0fb"
+  },
+  "llm": "google-cloud:gemini-3.5-flash-lite",
+  "model_settings": {
+   "service_tier": "priority",
+   "google_thinking_config": {
+    "thinking_level": "MINIMAL"
+   }
+  },
+  "warm_up": "each runner worker warms its model clients once, at start (server.py, core.graph.model_clients warm=True): one single-token request per distinct client, not traced as a turn"
+ },
+ "speech": {
+  "profile_file": "docs/qualification/final-qualification/speech-profile.env",
+  "profile": {
+   "SLNG_BASE_URL": "eu-north.api.slng.ai",
+   "SLNG_STT_MODEL": "soniox/speech-ai:rt-v5",
+   "SLNG_STT_LANGUAGE": "en",
+   "SLNG_TTS_MODEL": "cartesia/sonic:3.5",
+   "SLNG_TTS_VOICE": "62ae83ad-4f6a-430b-af41-a9bede9286ca",
+   "SLNG_TTS_LANGUAGE": "en"
+  },
+  "source_defaults": {
+   "SLNG_BASE_URL": "eu-north.api.slng.ai",
+   "SLNG_STT_MODEL": "soniox/speech-ai:rt-v5",
+   "SLNG_TTS_MODEL": "cartesia/sonic:3.5",
+   "SLNG_TTS_VOICE": "62ae83ad-4f6a-430b-af41-a9bede9286ca"
+  },
+  "tts_aggregation": "TOKEN"
+ },
+ "turn_taking": {
+  "vad": "Silero",
+  "vad_stop_seconds": 0.3,
+  "turn_stop": "LocalSmartTurnAnalyzerV3",
+  "smart_turn_stop_seconds": 1.6,
+  "user_idle_seconds": 20.0
+ },
+ "overrides_present": {
+  "process_env": [],
+  "dot_env_file": "/Users/nicoferdi/Documents/GitHub/slng_voice_harness/.env",
+  "dot_env": [],
+  "dot_env_names": [
+   "COVAL_API_KEY",
+   "GOOGLE_API_KEY",
+   "LANGFUSE_BASE_URL",
+   "LANGFUSE_PUBLIC_KEY",
+   "LANGFUSE_SECRET_KEY",
+   "LOGFIRE_TOKEN",
+   "OPENAI_API_KEY",
+   "SLNG_API_KEY"
+  ]
+ },
+ "runner": {
+  "transport": "real Twilio Media Streams (Coval dials +447427919928), marks echoed",
+  "delivery": "marks: only a returned Twilio mark delivers a read-back",
+  "server": "use-cases/salon-graph/server.py under uvicorn, started by coval_sim run (a lone run: one campaign)",
+  "workers": 2,
+  "max_calls": 5,
+  "concurrency": 1,
+  "call_seconds": 300,
+  "drain_seconds": 320,
+  "host": "arm64 27.0"
+ },
+ "coval": {
+  "agent": "PEivYdEtwEa65QSraG5fMQ",
+  "number": "+447427919928",
+  "sets": {
+   "normal": "PwTL6aVh",
+   "interruptive": "R5wP3gsV"
+  },
+  "personas": {
+   "normal": "MUFJdYAHdBHU6UbRRu4ykM",
+   "interruptive": "VSruLZYYyz3w7fkdUaheDR"
+  },
+  "cases_sha256": "bcacf9115207309e44d8fc1559c3d99a43e20d8c09c4bd4606f479b6e8e0fb0f",
+  "iterations": 1,
+  "mutations": "none"
+ }
+}

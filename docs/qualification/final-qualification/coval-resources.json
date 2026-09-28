@@ -1,0 +1,74 @@
+{
+ "note": "Read from Coval on 2026-09-28 before any launch. The agent's connection metadata is left out.",
+ "organization": "slng-ltd-1787040174713992753",
+ "workspace": "01M09YA4S1SC1Q8AHKHP2R9A0E",
+ "agent": {
+  "id": "PEivYdEtwEa65QSraG5fMQ",
+  "display_name": "voice-harness-salon-pipecat-twilio",
+  "model_type": "MODEL_TYPE_VOICE",
+  "phone_number": "+447427919928",
+  "metric_ids": [
+   "7VHk6dTjvBcuV6XYPmaeGq"
+  ],
+  "update_time": "2026-09-27T18:30:36.748014Z"
+ },
+ "agent_test_sets_before": [
+  "K3Xwqi7g",
+  "kQ8b6nMZ",
+  "2P6J33TP",
+  "CHPwoXJf",
+  "DmJJChjD",
+  "JCZGihHR",
+  "TrUGva6q",
+  "MmqxRgZW",
+  "ghsCWtAD",
+  "mJQUNQ2D",
+  "358XiSye"
+ ],
+ "personas": {
+  "MUFJdYAHdBHU6UbRRu4ykM": {
+   "id": "MUFJdYAHdBHU6UbRRu4ykM",
+   "name": "Standard Customer",
+   "persona_prompt": "You are a typical customer calling for assistance. You speak clearly at a normal pace and are generally cooperative. You wait for the agent to finish speaking before responding. You ask relevant follow-up questions when needed and provide requested information when asked. You are neither overly patient nor impatient - you expect reasonable service.",
+   "voice_name": "aria",
+   "language_code": "en-US",
+   "interruption_rate": "NONE",
+   "wait_seconds": 0.5,
+   "conversation_initiation": "wait_for_user",
+   "background_sound": "off",
+   "update_time": "2025-12-17T00:07:31.311440Z"
+  },
+  "VSruLZYYyz3w7fkdUaheDR": {
+   "id": "VSruLZYYyz3w7fkdUaheDR",
+   "name": "Interruptive Speaker",
+   "persona_prompt": "You speak over the agent when you think you understand the next step. Interrupt naturally, then continue the conversation when corrected.",
+   "voice_name": "john",
+   "language_code": "en-US",
+   "interruption_rate": "HIGH",
+   "conversation_initiation": "wait_for_user",
+   "update_time": "2026-05-22T18:52:30.840208Z"
+  }
+ },
+ "metrics": {
+  "7VHk6dTjvBcuV6XYPmaeGq": {
+   "id": "7VHk6dTjvBcuV6XYPmaeGq",
+   "metric_name": "Turn Count",
+   "description": "This metric will count how many turns were taken in a conversation. A turn is counted as a change between speakers.",
+   "metric_type": "METRIC_LLM_BINARY",
+   "created_by": "Coval",
+   "current_version": {
+    "change_type": "save",
+    "ulid": "01KTQH51FB2G9DSNM654PMQWG4",
+    "version_number": 1
+   },
+   "evaluation": {
+    "evaluator": "deterministic",
+    "output_type": "float",
+    "output_type_source": "static",
+    "semantic_type": "numerical",
+    "semantic_type_source": "static"
+   },
+   "judge_mode": "STANDARD"
+  }
+ }
+}

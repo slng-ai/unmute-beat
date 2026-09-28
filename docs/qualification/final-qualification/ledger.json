@@ -1,0 +1,14 @@
+{
+ "note": "One ledger for both runs and every expense of the final qualification. Written before each launch and after it.",
+ "authorised": {
+  "coval_calls_total": 20,
+  "normal": 10,
+  "interruptive": 10,
+  "other": "none: no native baseline, connection check, repair, mutation, paid rescoring or paid text evaluation"
+ },
+ "monitoring": {
+  "per_run_wait_seconds": 7200,
+  "rule": "coval_sim run --wait 7200: past it the run is reported still running, its ID kept, and nothing is launched to replace it"
+ },
+ "runs": []
+}

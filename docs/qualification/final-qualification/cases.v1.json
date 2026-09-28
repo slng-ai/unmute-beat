@@ -1,0 +1,412 @@
+{
+ "version": 1,
+ "note": "    python3 docs/qualification/final-qualification/cases.py",
+ "agent": "PEivYdEtwEa65QSraG5fMQ",
+ "number": "+447427919928",
+ "call_seconds": 300,
+ "iterations": 1,
+ "cohorts": {
+  "normal": {
+   "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+   "coval_test_set": "PwTL6aVh",
+   "cases": [
+    {
+     "task": "book",
+     "phone": "+34671561101",
+     "input": "You want a haircut at Sage and Stone on Tuesday at ten in the morning. Your phone number is +34 671 561 101. Say it as \"plus three four, six seven one, five six one, one zero one\", and say yes when it is read back correctly. If ten in the morning is offered, choose it. Say yes clearly when the booking is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a booking on a yes to its heard read-back",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-09-29",
+       "at": "10:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "n01-book",
+     "coval_test_case": "aFrbxDwuHAPzLET2XmSNEn"
+    },
+    {
+     "task": "fragments-natural-yes",
+     "phone": "+34671561102",
+     "input": "You want a haircut at Sage and Stone on Tuesday at two in the afternoon. Your phone number is +34 671 561 102. When the receptionist asks for your phone number, say only \"plus three four, six seven one\" and stop. When they ask for the rest, say \"five six one, one zero two\". When the full number is read back correctly, answer only \"That sounds right.\" If two in the afternoon is offered, choose it. When the booking is read back, answer only \"That sounds right.\" You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "the number in two pieces joined into one; \"That sounds right.\" taken as a yes, twice",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-09-29",
+       "at": "14:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "n02-fragments-natural-yes",
+     "coval_test_case": "cxjtgFQDcM9Vs3NWPtejoV"
+    },
+    {
+     "task": "correct-identity",
+     "phone": "+34671561103",
+     "input": "You want a blowout at Sage and Stone on Wednesday at eleven in the morning. Your phone number is +34 671 561 103. When the receptionist asks for it, you misspeak it: say \"plus three four, six seven one, five six one, one one three\". When they read that number back, say \"No, sorry, the last part is wrong. It's plus three four, six seven one, five six one, one zero three.\" Say yes when the right number is read back. If eleven in the morning is offered, choose it, and say yes clearly when the booking is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a corrected number before approval: nothing is looked up or booked for the misspoken one",
+     "wrong_phone": "+34671561113",
+     "final": [
+      {
+       "service": "blowout",
+       "day": "2026-09-30",
+       "at": "11:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "n03-correct-identity",
+     "coval_test_case": "fDNdCwwoKwW45Sy9w9XUeZ"
+    },
+    {
+     "task": "move-existing",
+     "phone": "+34671561104",
+     "seed": {
+      "service": "haircut",
+      "day": "2026-09-30",
+      "at": "10:00"
+     },
+     "input": "You already have a haircut at Sage and Stone on Wednesday at ten in the morning. You want to move it to Thursday at the same time. Your phone number is +34 671 561 104. Say it as \"plus three four, six seven one, five six one, one zero four\", and say yes when it is read back correctly. Say yes clearly when the move to Thursday at ten is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "the caller's existing booking found and moved",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-01",
+       "at": "10:00",
+       "revision": 2,
+       "seeded": true
+      }
+     ],
+     "writes": {
+      "move": 1
+     },
+     "key": "n04-move-existing",
+     "coval_test_case": "nC2WkVnxGi8Dmbqm4KZHwy"
+    },
+    {
+     "task": "cancel-existing",
+     "phone": "+34671561105",
+     "seed": {
+      "service": "blowout",
+      "day": "2026-10-01",
+      "at": "15:00"
+     },
+     "input": "You have a blowout at Sage and Stone on Thursday at three in the afternoon, and you want to cancel it. Your phone number is +34 671 561 105. Say it as \"plus three four, six seven one, five six one, one zero five\", and say yes when it is read back correctly. Say yes clearly when the cancellation is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "the caller's existing booking found and cancelled once",
+     "final": [],
+     "cancelled": [
+      {
+       "service": "blowout",
+       "day": "2026-10-01",
+       "at": "15:00",
+       "revision": 2
+      }
+     ],
+     "writes": {
+      "cancel": 1
+     },
+     "key": "n05-cancel-existing",
+     "coval_test_case": "NLDprKhfciWP8cF6KadDpa"
+    },
+    {
+     "task": "decline",
+     "phone": "+34671561106",
+     "input": "You are thinking about a haircut at Sage and Stone on Friday at eleven in the morning, but you are not sure yet. Your phone number is +34 671 561 106. Say it as \"plus three four, six seven one, five six one, one zero six\", and say yes when it is read back correctly. If eleven in the morning is offered, choose it. When the receptionist reads the Friday booking back and asks you to confirm, say exactly \"No, don't book that. I'll call back another time.\" If they ask again, say no again. Never agree to a booking. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "an explicit no to a read-back: nothing written",
+     "final": [],
+     "writes": {},
+     "key": "n06-decline",
+     "coval_test_case": "mSkkbUzFR7SzDmoNXUCZbK"
+    },
+    {
+     "task": "changed-request",
+     "phone": "+34671561107",
+     "input": "You want a haircut at Sage and Stone on Friday at three in the afternoon. Your phone number is +34 671 561 107. Say it as \"plus three four, six seven one, five six one, one zero seven\", and say yes when it is read back correctly. If three in the afternoon is offered, choose it. When the receptionist reads the Friday booking back, do not say yes: say \"Actually, can we make it Saturday at ten in the morning instead?\" If ten on Saturday is offered, choose it, and say yes clearly when that booking is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a changed request at the read-back: the new booking needs its own read-back and yes",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-03",
+       "at": "10:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "n07-changed-request",
+     "coval_test_case": "8o3R4D8ABCkigeoD3YVmrV"
+    },
+    {
+     "task": "receipt-recovery",
+     "phone": "+34671561108",
+     "input": "You want a haircut at Sage and Stone on Wednesday at three in the afternoon. Your phone number is +34 671 561 108. Say it as \"plus three four, six seven one, five six one, one zero eight\", and say yes when it is read back correctly. If three in the afternoon is offered, choose it, and say yes clearly when the booking is read back. When the receptionist tells you that it is booked, say \"Sorry, could you repeat that?\" When they have told you again, say \"No, that's all, thanks\" and say goodbye. Do not ask for anything else. Do not complain. Do not ask for a manager. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it.",
+     "trigger": "the booking receipt asked for again, with no second write",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-09-30",
+       "at": "15:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "n08-receipt-recovery",
+     "coval_test_case": "QnFp48MJsJCxsiJnMc5eyd"
+    },
+    {
+     "task": "detour-question",
+     "phone": "+34671561109",
+     "input": "You want a haircut at Sage and Stone on Thursday at four in the afternoon. Your phone number is +34 671 561 109. Say it as \"plus three four, six seven one, five six one, one zero nine\", and say yes when it is read back correctly. If four in the afternoon is offered, choose it. When the receptionist reads the booking back, do not say yes or no: ask \"Before I answer, how much is a haircut?\" After they answer, say \"OK, yes, please book it.\" Say yes when the booking is read back to you again. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a question during a read-back answered (28 euros), then the task continued and booked",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-01",
+       "at": "16:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "n09-detour-question",
+     "coval_test_case": "QA94PYvfjcdKQshqwLu3tM"
+    },
+    {
+     "task": "yes-and-more",
+     "phone": "+34671561110",
+     "input": "You want a haircut at Sage and Stone on Saturday at eleven in the morning. Your phone number is +34 671 561 110. Say it as \"plus three four, six seven one, five six one, one one zero\", and say yes when it is read back correctly. If eleven in the morning is offered, choose it, and say yes clearly when the booking is read back. When the receptionist tells you it is booked and asks if there is anything else, say exactly \"Yes, that's perfect. Can you move it to one in the afternoon instead?\" Say yes clearly when the move is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "\"Yes, that's perfect. Can you...\" is a new request, not a goodbye: the booking just made is moved",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-03",
+       "at": "13:00",
+       "revision": 2
+      }
+     ],
+     "writes": {
+      "book": 1,
+      "move": 1
+     },
+     "key": "n10-yes-and-more",
+     "coval_test_case": "S5S2mpVtDVSpzUccVVa68F"
+    }
+   ]
+  },
+  "interruptive": {
+   "persona": "VSruLZYYyz3w7fkdUaheDR",
+   "coval_test_set": "R5wP3gsV",
+   "cases": [
+    {
+     "task": "book",
+     "phone": "+34671562201",
+     "input": "You want a haircut at Sage and Stone on Tuesday at ten in the morning. Your phone number is +34 671 562 201. Say it as \"plus three four, six seven one, five six two, two zero one\", and say yes when it is read back correctly. If ten in the morning is offered, choose it. When the receptionist starts reading the booking back, interrupt before they finish and say \"Yes, book it.\" If they read it back again, let them finish, then say yes. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a booking on a yes to its heard read-back (a yes said over the read-back cannot approve it)",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-09-29",
+       "at": "10:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "i01-book",
+     "coval_test_case": "EnsM66S9KaDMVDqbX3XXv9"
+    },
+    {
+     "task": "fragments-natural-yes",
+     "phone": "+34671562202",
+     "input": "You want a haircut at Sage and Stone on Tuesday at two in the afternoon. Your phone number is +34 671 562 202. When the receptionist asks for your phone number, say only \"plus three four, six seven one\" and stop. When they ask for the rest, say \"five six two, two zero two\". When the full number is read back correctly, answer only \"That sounds right.\" If two in the afternoon is offered, choose it. When the booking is read back, answer only \"That sounds right.\" You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "the number in two pieces joined into one; \"That sounds right.\" taken as a yes, twice",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-09-29",
+       "at": "14:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "i02-fragments-natural-yes",
+     "coval_test_case": "EKcyphBAdq8ZGEZostNfrH"
+    },
+    {
+     "task": "correct-identity",
+     "phone": "+34671562203",
+     "input": "You want a blowout at Sage and Stone on Wednesday at eleven in the morning. Your phone number is +34 671 562 203. When the receptionist asks for it, you misspeak it: say \"plus three four, six seven one, five six two, two one three\". When they start reading that number back, interrupt before they finish and say \"No, sorry, that's wrong. It's plus three four, six seven one, five six two, two zero three.\" Say yes when the right number is read back. If eleven in the morning is offered, choose it, and say yes clearly when the booking is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a corrected number before approval: nothing is looked up or booked for the misspoken one",
+     "wrong_phone": "+34671562213",
+     "final": [
+      {
+       "service": "blowout",
+       "day": "2026-09-30",
+       "at": "11:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "i03-correct-identity",
+     "coval_test_case": "WKiKcn7fyBMzJfD4smaU5Z"
+    },
+    {
+     "task": "move-existing",
+     "phone": "+34671562204",
+     "seed": {
+      "service": "haircut",
+      "day": "2026-09-30",
+      "at": "10:00"
+     },
+     "input": "You already have a haircut at Sage and Stone on Wednesday at ten in the morning. You want to move it to Thursday at the same time. Your phone number is +34 671 562 204. Say it as \"plus three four, six seven one, five six two, two zero four\", and say yes when it is read back correctly. When the receptionist starts reading the move back, interrupt before they finish and say \"Sorry, no, I mean Friday, the same time.\" Say yes clearly only when a move to Friday at ten in the morning is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "the caller's existing booking found and moved, with the target corrected over the move read-back",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-02",
+       "at": "10:00",
+       "revision": 2,
+       "seeded": true
+      }
+     ],
+     "writes": {
+      "move": 1
+     },
+     "key": "i04-move-existing",
+     "coval_test_case": "2pEYzyDmob8AkAbKEzRibn"
+    },
+    {
+     "task": "cancel-existing",
+     "phone": "+34671562205",
+     "seed": {
+      "service": "blowout",
+      "day": "2026-10-01",
+      "at": "15:00"
+     },
+     "input": "You have a blowout at Sage and Stone on Thursday at three in the afternoon, and you want to cancel it. Your phone number is +34 671 562 205. Say it as \"plus three four, six seven one, five six two, two zero five\", and say yes when it is read back correctly. When the receptionist starts reading the cancellation back, interrupt before they finish and say \"Yes, cancel it.\" If they read it back again, let them finish, then say yes. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "the caller's existing booking found and cancelled once (a yes said over the read-back cannot approve it)",
+     "final": [],
+     "cancelled": [
+      {
+       "service": "blowout",
+       "day": "2026-10-01",
+       "at": "15:00",
+       "revision": 2
+      }
+     ],
+     "writes": {
+      "cancel": 1
+     },
+     "key": "i05-cancel-existing",
+     "coval_test_case": "Duqja6SqG7LPHYkBt9YUpE"
+    },
+    {
+     "task": "decline",
+     "phone": "+34671562206",
+     "input": "You are thinking about a haircut at Sage and Stone on Friday at eleven in the morning, but you are not sure yet. Your phone number is +34 671 562 206. Say it as \"plus three four, six seven one, five six two, two zero six\", and say yes when it is read back correctly. If eleven in the morning is offered, choose it. When the receptionist starts reading the Friday booking back, interrupt before they finish and say \"No, no, don't book that. I'll call back another time.\" If they ask again, say no again. Never agree to a booking. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "an explicit no to a read-back: nothing written",
+     "final": [],
+     "writes": {},
+     "key": "i06-decline",
+     "coval_test_case": "PfpsEkuvQ27tTyaWUtgQu5"
+    },
+    {
+     "task": "changed-request",
+     "phone": "+34671562207",
+     "input": "You want a haircut at Sage and Stone on Friday at three in the afternoon. Your phone number is +34 671 562 207. Say it as \"plus three four, six seven one, five six two, two zero seven\", and say yes when it is read back correctly. If three in the afternoon is offered, choose it. When the receptionist starts reading the Friday booking back, interrupt before they finish and say \"Actually, can we make it Saturday at ten in the morning instead?\" If ten on Saturday is offered, choose it, and say yes clearly when that booking is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a changed request at the read-back: the new booking needs its own read-back and yes",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-03",
+       "at": "10:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "i07-changed-request",
+     "coval_test_case": "a5BnSinz2PyMzs8mWvV947"
+    },
+    {
+     "task": "receipt-recovery",
+     "phone": "+34671562208",
+     "input": "You want a haircut at Sage and Stone on Wednesday at three in the afternoon. Your phone number is +34 671 562 208. Say it as \"plus three four, six seven one, five six two, two zero eight\", and say yes when it is read back correctly. If three in the afternoon is offered, choose it, and say yes clearly when the booking is read back. When the receptionist starts telling you that it is booked, interrupt before they finish and ask \"Sorry, what time was that?\" When they have told you again, say \"No, that's all, thanks\" and say goodbye. Do not ask for anything else. Do not complain. Do not ask for a manager. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it.",
+     "trigger": "the booking receipt interrupted, then said again, with no second write",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-09-30",
+       "at": "15:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "i08-receipt-recovery",
+     "coval_test_case": "UTy3zHyVTFx5eGHNW6PjFU"
+    },
+    {
+     "task": "detour-question",
+     "phone": "+34671562209",
+     "input": "You want a haircut at Sage and Stone on Thursday at four in the afternoon. Your phone number is +34 671 562 209. Say it as \"plus three four, six seven one, five six two, two zero nine\", and say yes when it is read back correctly. If four in the afternoon is offered, choose it. When the receptionist starts reading the booking back, interrupt before they finish and ask \"Sorry, how much is a haircut?\" After they answer, say \"OK, yes, please book it.\" Say yes when the booking is read back to you again. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "a question during a read-back answered (28 euros), then the task continued and booked",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-01",
+       "at": "16:00",
+       "revision": 1
+      }
+     ],
+     "writes": {
+      "book": 1
+     },
+     "key": "i09-detour-question",
+     "coval_test_case": "m4tc5caYWG6bBKNjYHmEsa"
+    },
+    {
+     "task": "yes-and-more",
+     "phone": "+34671562210",
+     "input": "You want a haircut at Sage and Stone on Saturday at eleven in the morning. Your phone number is +34 671 562 210. Say it as \"plus three four, six seven one, five six two, two one zero\", and say yes when it is read back correctly. If eleven in the morning is offered, choose it, and say yes clearly when the booking is read back. When the receptionist tells you it is booked and starts to ask if there is anything else, interrupt and say exactly \"Yes, that's perfect. Can you move it to one in the afternoon instead?\" Say yes clearly when the move is read back. You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+     "trigger": "\"Yes, that's perfect. Can you...\" is a new request, not a goodbye: the booking just made is moved",
+     "final": [
+      {
+       "service": "haircut",
+       "day": "2026-10-03",
+       "at": "13:00",
+       "revision": 2
+      }
+     ],
+     "writes": {
+      "book": 1,
+      "move": 1
+     },
+     "key": "i10-yes-and-more",
+     "coval_test_case": "SuxKtoFeXvTD4S6uAtWxSQ"
+    }
+   ]
+  }
+ }
+}

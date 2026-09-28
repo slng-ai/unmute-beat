@@ -848,7 +848,9 @@ class Step(ABC):
         """This step as a node the turn engine runs."""
 
 
-def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list, **agent: Any) -> Agent[Any, object]:
+def _agent(
+    flow: StepFlow, step: Step, instructions: Any, outputs: list, hooks: Hooks | None = None, **agent: Any
+) -> Agent[Any, object]:
     """A step's agent, from its persona's native `AgentSpec`: its model unless the flow's was given explicitly.
 
     `FlowSpec.compile(model=...)` strips each persona's model, so an explicit
@@ -858,9 +860,14 @@ def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list, **agent
     Every step's agent times each provider request (`request_clock`), which is
     where a turn's time to first token comes from; the hand-built steps had it
     from `AgentBuilder`, and session 4 found the public steps without it.
+
+    All of core's hooks for the step go on one `Hooks` (`hooks`, with the
+    clock added), each on its own event, so the handlers and their order are
+    those of separate capabilities: one capability is dispatched once, where
+    four cost the SDK four dispatches per hook point on every request.
     """
     spec = step.spec or AgentSpec()
-    capabilities = [*(agent.pop('capabilities', None) or []), request_clock()]
+    capabilities = [request_clock(into=hooks)]
     built = Agent.from_spec(
         spec,
         deps_type=flow.call_type,
@@ -2052,18 +2059,11 @@ class ConversationStep(Step):
         text = self.instructions
         if self.knowledge and isinstance(text, str):
             text += f'\n\nKnowledge:\n{self.knowledge}'
-        agent = _agent(
-            flow,
-            self,
-            text,
-            outputs,
-            tools=tools,
-            capabilities=[
-                *([one_action_per_reply(actions, frozenset({'collect'}))] if actions else []),
-                Hooks(prepare_output_tools=narrow),
-                speak_by(SPEAK_BY),
-            ],
-        )
+        hooks = Hooks(prepare_output_tools=narrow)
+        if actions:
+            one_action_per_reply(actions, frozenset({'collect'}), into=hooks)
+        speak_by(SPEAK_BY, into=hooks)
+        agent = _agent(flow, self, text, outputs, hooks=hooks, tools=tools)
         return _node(
             flow,
             self,

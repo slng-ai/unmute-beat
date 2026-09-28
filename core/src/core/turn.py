@@ -730,15 +730,14 @@ class Turn:
             prompt = None
         if barge.hit:
             return
-        if (
-            output.ends_turn
-            and output.reply
-            and nodes[going_to].opening(call) is None
-            and not call.claims_completion(output.reply)
-        ):
-            call._return_status, call._entered = '', ''
-            await call.speak_now(output.reply, origin='switch')
-            return
+        if output.ends_turn and nodes[going_to].opening(call) is None:
+            if not output.reply:
+                call._return_status, call._entered = '', ''
+                return
+            if not call.claims_completion(output.reply):
+                call._return_status, call._entered = '', ''
+                await call.speak_now(output.reply, origin='switch')
+                return
         if lines := nodes[going_to].enter:
             await call.say(pick(f'enter:{output.to}', lines), origin='entry')
         yield _Continue(prompt)
@@ -1002,9 +1001,7 @@ class Turn:
                                 and (asked := node.reads_back(call)) is not None
                             ):
                                 if isinstance(asked, Restated):
-                                    logger.info(
-                                        '{} restated unchanged after its read-back: carried out', asked.about
-                                    )
+                                    logger.info('{} carried out by code after collect', asked.about)
                                 else:
                                     logger.info('read back {} by code after collect', asked.about)
                                 output = asked

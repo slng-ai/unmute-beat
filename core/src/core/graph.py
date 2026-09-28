@@ -80,6 +80,10 @@ class Restated:
     Benchmark calls amAP5b4A and Tiv9sDHH (session 4c): the agent had read
     such a reply as a yes by itself, silently; the user asked for it to be
     code's decision and said aloud.
+
+    The same shape carries out an operation with no read-back whose fields
+    the reply just recorded (`carries_out`): code runs it, and the model is
+    never offered it.
     """
 
     about: str

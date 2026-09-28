@@ -25,8 +25,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
@@ -63,6 +64,30 @@ class DeskState(BaseModel):
     ticket_status: str = ''
     follow_up: Annotated[str, AfterValidator(_on_the_calls_clock)] = ''
     """When to call the customer back: "hoy" or "mañana" is kept as the date it means on the call's clock."""
+
+
+def _said_by_caller(value: str | None, info: ValidationInfo) -> str | None:
+    """A new account number the caller did not say this turn is refused: a model does not make one up.
+
+    Compared as digits, so "ACC-1234" is said by "cuenta uno dos tres cuatro"
+    only once speech-to-text wrote the digits. A value already recorded is
+    left alone: the whole state is validated on every change.
+    """
+    context = info.context or {}
+    if not value or 'heard' not in context or value == getattr(context.get('before'), 'account_id', None):
+        return value
+    if re.sub(r'\D', '', value) not in re.sub(r'\D', '', context['heard']):
+        raise ValueError(f'the caller did not say {value}: ask them for their account number')
+    return value
+
+
+class RoutedState(DeskState):
+    """The desk of `routed.yaml`: the language the caller is answered in, and account numbers only as said."""
+
+    account_id: Annotated[AccountId | None, AfterValidator(_said_by_caller)] = Field(
+        None, description='The account number, like ACC-1234.'
+    )
+    idioma: Literal['es', 'en'] = Field('es', description='The language the caller wants: es or en.')
 
 
 class TicketRef(BaseModel):
@@ -106,6 +131,8 @@ class Desk:
 
     def __init__(self, path: str | Path, session: str = 'S1') -> None:
         self.path, self.session = str(path), session
+        self.language: Callable[[], str] = lambda: 'es'
+        """The language the call is in now, for the desk's own words (`routed.yaml`): set by whoever opens the call."""
         self.lose_answer = False
         """Commit the change, then fail to answer, as a timeout would."""
         self.die_after_commit = False
@@ -345,6 +372,40 @@ def reopen(desk: Desk, args: Reopen, intent: Intent) -> Changed:
 def find_effect(desk: Desk, args: BaseModel, intent: Intent) -> dict | None:
     """What an intent did, by its id: None when the desk has no record of it, which is not a refusal."""
     return desk.effect(intent.id)
+
+
+class Routed(BaseModel):
+    """What `find` says about a ticket, and where the desk takes the caller for it (`route: next`)."""
+
+    account_id: str
+    ticket_id: str
+    revision: int
+    status: str
+    found: bool
+    next: Literal['desk', 'resolve', 'reopen']
+    said: str
+
+
+def find(desk: Desk, ref: TicketRef) -> Routed:
+    """The ticket, and the step for it: an open ticket is resolved, a resolved one reopened. The desk decides."""
+    found = look_up(desk, ref)
+    to = {'open': 'resolve', 'resolved': 'reopen'}.get(found.status, 'desk')
+    said = (
+        ''
+        if to == 'reopen'
+        else f'Tengo el ticket {found.ticket_id}.'
+        if desk.language() == 'es'
+        else f'I have ticket {found.ticket_id}.'
+    )
+    return Routed.model_validate({**found.model_dump(), 'next': to, 'said': said})
+
+
+def resolve_words_in(desk: Desk, args: Resolve) -> str:
+    """The resolve read-back in the language the call is in now: the same question, worded for the caller."""
+    how = args.resolution.strip().rstrip('.')
+    if desk.language() == 'en':
+        return f'Shall I mark ticket {args.ticket_id} as resolved: {how}?'
+    return f'¿Marco el ticket {args.ticket_id} como resuelto: {how}?'
 
 
 def resolve_words(args: Resolve) -> str:

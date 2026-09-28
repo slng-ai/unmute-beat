@@ -422,8 +422,9 @@ class Handoff(BaseModel):
 
     Routing, prerequisites and the checkpoint are exactly those of any
     handoff. The destination's opening still wins when it has one, because
-    those words are the application's and cost nothing; with no opening and
-    no `reply`, the destination runs as usual.
+    those words are the application's and cost nothing. With no opening,
+    `reply` is said, or, with none, the turn simply ends: a receipt that
+    moved the caller (`route:`) has said its own words already.
     """
     reply: str = ''
     """What to say when the move ends the turn. Held back if it claims a change nothing made."""

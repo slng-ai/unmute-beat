@@ -156,6 +156,9 @@ class FlowCall[S: BaseModel](CallContext):
     _refused_on: int = PrivateAttr(default=0)
     """The turn on which a rendered step's operation met an authoritative no: `wait` says so if nothing else."""
     _locale: Locale | None = PrivateAttr(default=None)
+    _locales: Mapping[str, Locale] = PrivateAttr(default_factory=dict)
+    """The manifest's `locales`, by the value of the state attribute it names (`_language`)."""
+    _language: str = PrivateAttr(default='')
     _version: int = PrivateAttr(default=0)
     """Bumped by every accepted change to the application state: work begun on an older version is stale."""
     _derived: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
@@ -196,7 +199,15 @@ class FlowCall[S: BaseModel](CallContext):
 
     @property
     def locale(self) -> Locale:
-        """The flow file's `locale:`, else the class default."""
+        """The locale for the language the call is in now (`language:`), else the flow file's `locale:`, else the class default.
+
+        Read on every line, so a caller who switches language hears the
+        engine's next fixed line in the new one.
+        """
+        if self._language and (
+            found := self._locales.get(str(getattr(self.state.facts, self._language, '')))
+        ):
+            return found
         return self._locale or self.default_locale
 
     @property
@@ -228,13 +239,19 @@ class FlowCall[S: BaseModel](CallContext):
             self.take_owed()
 
     def validation_context(self) -> dict[str, Any]:
-        """The call's clock, and the application state as it stands before this change (`before`).
+        """The call's clock, the application state as it stands before this change (`before`), and `heard`.
 
         `before` is the committed state, which is replaced whole and never
         changed in place: a validator can read what the caller was talking
         about (a day under discussion) without any service.
+
+        `heard` is what the caller said this turn, every piece of it: a
+        validator can refuse a new value the caller never said (a country
+        code a model added). The whole state is validated on every change,
+        so such a check compares with `before` and leaves an unchanged value
+        alone.
         """
-        return super().validation_context() | {'before': self.state.facts}
+        return super().validation_context() | {'before': self.state.facts, 'heard': self.heard}
 
     def validated(self, values: Mapping[str, Any]) -> Any:
         """The application's model built from these values, validated with this call's context, or `ValidationError`."""
@@ -787,8 +804,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         call._offers.take(*self.binds.values())
         if self.changes and (named := call._resource_choices.get(self.resource or self.subject)):
             await _offer(call, named)
-        if self.say:
-            words = self.say.format_map(_Facts(data))
+        if words := self.say.format_map(_Facts(data)).strip():
             given = args.model_dump(mode='json')
             filed = next(
                 (e for e in reversed(call.evidence) if e.operation == self.name and e.args == given), None
@@ -1501,8 +1517,8 @@ async def _carry_out(
     limits: UsageLimits | None,
     *,
     rendered: bool = False,
-) -> str | None:
-    """Run an approved operation and return what the caller heard; an unknown outcome is said as unknown.
+) -> tuple[str | None, BaseModel | None]:
+    """Run an approved operation; return what the caller heard and its receipt. An unknown outcome is said as unknown.
 
     An authoritative no goes back to the step's agent with the refusal, to
     choose what comes next (look again, ask). On a rendered step the agent
@@ -1514,14 +1530,16 @@ async def _carry_out(
         receipt = await operation.run(call, _args(operation, call), usage=usage, usage_limits=limits)
     except OutcomeUnknownError:
         await call.speak_now(call.locale.unsettled, origin='confirmation')
-        return call.locale.unsettled
+        return call.locale.unsettled, None
     except ModelRetry:
         refused = {i.id for i in call.intents if i.status == 'rejected' and i.operation == operation.name}
         if rendered and refused - before:
             call._refused_on = call.turn
         raise
+    if not isinstance(receipt, BaseModel):
+        return None, None
     say = getattr(operation, 'say', '')
-    return say.format_map(_Facts(receipt.model_dump())) if say and isinstance(receipt, BaseModel) else None
+    return (say.format_map(_Facts(receipt.model_dump())) if say else None), receipt
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1609,6 +1627,10 @@ class ConversationStep(Step):
     """
     refusals: Mapping[str, Callable[[str], str]] = field(default_factory=dict)
     """Field -> the application's words for a value `collect` refused, said by `wait` on a rendered step."""
+    routes: tuple[str, ...] = ()
+    """Steps a receipt of one of its operations can move the caller to (`route:`): code's moves, never `hand_over`'s."""
+    carries: tuple[tuple[Operation, tuple[str, ...]], ...] = ()
+    """Operations code carries out after a reply that only records one of their fields (`carries_out`), never the model."""
     reads_back: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     """Operation -> fields: a reply that only records one of these fields gets that operation read back by code.
 
@@ -1623,11 +1645,31 @@ class ConversationStep(Step):
 
     @property
     def elsewhere(self) -> tuple[str, ...]:
-        return tuple(dict.fromkeys([*self.exits, *([self.satisfied_by] if self.satisfied_by else [])]))
+        return tuple(
+            dict.fromkeys([*self.exits, *self.routes, *([self.satisfied_by] if self.satisfied_by else [])])
+        )
 
     def opening(self) -> tuple[Opening[Any], ...]:
         """On arrival by a hand-over: read back `opens_with` if the state gives its arguments, else ask (`asks`). No model."""
         return (*self._read_back_first(), *self._ask_first())
+
+    def first_line(self, call: FlowCall[Any]) -> Prompted | str:
+        """What this step would open with on arrival, as words to put after a greeting: the same two rules as `opening`.
+
+        The call's first arrival is its entry step, with no hand-over, so
+        this is how a caller ID read back in the greeting is the question the
+        first reply answers (`StepFlow.greeting`). '' when neither applies.
+        """
+        if (operation := self.opens_with) is not None:
+            try:
+                args = _args(operation, call)
+            except ValidationError:
+                args = None
+            if args is not None:
+                proposal = operation.proposal_for(call, args)
+                return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
+        missing = next((name for name in self.asks if not getattr(call.state.facts, name)), '')
+        return self.asks[missing] if missing else ''
 
     def _ask_first(self) -> tuple[Opening[Any], ...]:
         if not self.asks:
@@ -1674,8 +1716,20 @@ class ConversationStep(Step):
         a lookup). For any other, recording the same value is only a record:
         None, and the step's own agent reads the reply (session 4d, defect 1).
         None too when something it rests on is still changing.
+
+        `carries_out` comes first: an operation with no read-back whose
+        fields this reply recorded, with every argument there, is carried
+        out by code (`Restated`, run as the agent's own call would be). The
+        model never calls it, so it runs only on what this reply recorded.
+
+        A waiting question whose words the application now renders
+        differently for the same value (the caller asked for another
+        language, and the read-back follows it) is put again in the new
+        words: the same question, a new copy, so the next reply answers
+        words they heard. A model paraphrase in its place would be a
+        different sentence from the one a yes is bound to.
         """
-        if not self.reads_back:
+        if not self.reads_back and not self.carries:
             return None
 
         def possible(call: FlowCall[Any], operation: Operation) -> bool:
@@ -1688,6 +1742,21 @@ class ConversationStep(Step):
             return True
 
         def read(call: FlowCall[Any]) -> Prompted | Restated | None:
+            for operation, fields in self.carries:
+                if not call._recorded & set(fields):
+                    continue
+                try:
+                    _args(operation, call)
+                except ValidationError:
+                    continue
+                return Restated(
+                    about=operation.name,
+                    run=lambda usage, limits, operation=operation: self._approved(
+                        flow, operation, call, usage, limits
+                    ),
+                )
+            if not self.reads_back:
+                return None
             if [op for op in self.operations if possible(call, op)] != [
                 op for op in self.operations if op.name in self.reads_back and possible(call, op)
             ]:
@@ -1699,7 +1768,9 @@ class ConversationStep(Step):
                     proposal = operation.proposal_for(call, _args(operation, call))
                 except ValidationError:
                     return None
-                if call.pending(operation.name, value=proposal.value) is not None:
+                if (pending := call.pending(operation.name, value=proposal.value)) is not None:
+                    if not str(pending.spoken).endswith(proposal.spoken):
+                        return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
                     if not operation.confirms_by_restating or any(
                         call._tries[name] != call._kept[name]
                         for name in call._changing & _resting_on(operation)
@@ -1794,8 +1865,23 @@ class ConversationStep(Step):
         usage: RunUsage | None,
         limits: UsageLimits | None,
     ) -> Prompted | Handoff | str | None:
-        """Run an operation whose approval is bound, then hand back to a waiting step, if this was its prerequisite."""
-        said = await _carry_out(call, operation, usage, limits, rendered=self.rendered)
+        """Run an operation whose approval is bound, then move the caller if its receipt or a waiting step says so.
+
+        A receipt that names another step (`route:`) moves the caller there,
+        by code: its words were just said, so the turn ends there unless
+        that step opens with something of its own. The receipt is the
+        application's record of where the caller stands, so it wins over a
+        prerequisite's return. Otherwise a prerequisite hands back to the
+        step waiting on it (`return_after`).
+        """
+        said, receipt = await _carry_out(call, operation, usage, limits, rendered=self.rendered)
+        to = str(getattr(receipt, operation.route, '')) if receipt is not None and operation.route else ''
+        if to and to != self.id:
+            if to not in self.routes:
+                raise ValueError(
+                    f'{operation.name} routed the caller to {to!r}, which {self.id} does not route to'
+                )
+            return Handoff(to=to, because=f'{operation.name} says so', ends_turn=True)
         if (back := flow.return_after(self, call)) is not None:
             return back
         return said
@@ -2141,6 +2227,8 @@ class StepFlow:
         entry: str = '',
         services: Callable[[], Any] | None = None,
         locale: Locale | None = None,
+        locales: Mapping[str, Locale] | None = None,
+        language: str = '',
         version: str = '',
     ) -> None:
         self.state_type = state_type
@@ -2168,7 +2256,11 @@ class StepFlow:
         self.derived: dict[str, frozenset[str]] = {}
         """Each state field a receipt sets, with the state fields its operation's arguments were bound to."""
         for step in self.steps:
-            for operation in (getattr(step, 'operation', None), *getattr(step, 'operations', ())):
+            for operation in (
+                getattr(step, 'operation', None),
+                *getattr(step, 'operations', ()),
+                *(carried for carried, _ in getattr(step, 'carries', ())),
+            ):
                 for assigned in getattr(operation, 'assign', {}):
                     sources = frozenset(getattr(operation, 'binds', {}).values())
                     self.derived[assigned] = self.derived.get(assigned, frozenset()) | sources
@@ -2192,6 +2284,9 @@ class StepFlow:
         self.services = services
         """Makes one call's services when `open` is given none: the manifest's `services:` factory."""
         self.locale = locale
+        self.locales = dict(locales or {})
+        """The fixed lines for each value of the state attribute `language` names: a call's language, per call."""
+        self.language = language
         self.version = version
         """The application's own version, from the manifest (`app_version`): what a trace or a report names."""
         self.model = model
@@ -2201,6 +2296,20 @@ class StepFlow:
     @property
     def start(self) -> str:
         return self.entry
+
+    def greeting(self, call: FlowCall[Any], words: str = '') -> str | Prompted:
+        """The call's opening line: these words, then what the entry step opens with (`ConversationStep.first_line`).
+
+        With a read-back it is a question (`core.greet` puts it on the call),
+        so the caller's first reply answers exactly what they heard. The
+        words are the application's, and so is the read-back; nothing here
+        is a model's.
+        """
+        entry = self.by_id[self.entry]
+        line = entry.first_line(call) if isinstance(entry, ConversationStep) else ''
+        if isinstance(line, Prompted):
+            return replace(line, spoken=f'{words} {line.spoken}'.strip())
+        return f'{words} {line}'.strip()
 
     @property
     def confirms(self) -> bool:
@@ -2241,6 +2350,7 @@ class StepFlow:
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale
+        call._locales, call._language = self.locales, self.language
         call.state = call.state.model_copy(update={'facts': call.validated(facts.model_dump())})
         call._reconcile_with = {op.name: (op, op.args_type) for op in self.operations()}
         if intents:
@@ -2256,6 +2366,7 @@ class StepFlow:
                 getattr(step, 'operation', None),
                 getattr(step, 'opens_with', None),
                 *getattr(step, 'operations', ()),
+                *(carried for carried, _ in getattr(step, 'carries', ())),
             ):
                 if operation is not None:
                     found.setdefault(operation.name, operation)

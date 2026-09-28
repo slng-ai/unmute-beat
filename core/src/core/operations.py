@@ -113,6 +113,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     """The backend dedups by the intent id, so an intent whose outcome is unknown may be sent again, as itself."""
     confirms_by_restating: ClassVar[bool] = False
     """The caller saying the read-back's value again confirms it (`restated: confirms`). Only ever a lookup."""
+    route: ClassVar[str] = ''
+    """The receipt field naming the step a success moves the caller to (`route:`), or '' for none."""
     subject: ClassVar[str] = ''
     """The receipt field naming the resource it acts on (a booking id, a ticket id). See `CallContext.effective`."""
     resource: ClassVar[str] = ''

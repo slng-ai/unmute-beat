@@ -37,7 +37,9 @@ from pipecat.utils.tracing.service_attributes import (  # noqa: E402
 )
 from pipecat.utils.tracing.tracing_context import TracingContext  # noqa: E402
 from pydantic_ai import Agent  # noqa: E402
+from pydantic_ai.messages import ModelResponse, TextPart  # noqa: E402
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel  # noqa: E402
+from pydantic_ai.usage import RequestUsage  # noqa: E402
 
 Agent.instrument_all()
 
@@ -296,6 +298,104 @@ def speech_reaches_langfuse():
     assert said['langfuse.observation.metadata.voice_id'].startswith('62ae83ad'), said
 
 
+async def request_usage(usage: RequestUsage) -> tuple[dict, dict]:
+    """One real agent run on a model that reports `usage`: its request span and its run span, as exported."""
+
+    def answer(messages, info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart('Which day?')], usage=usage)
+
+    await Agent(FunctionModel(answer)).run('a haircut')
+    finished = [dict(s.attributes or {}) for s in reversed(spans.get_finished_spans())]
+    request = next(a for a in finished if a.get('gen_ai.operation.name') == 'chat')
+    run = next(a for a in finished if a.get('gen_ai.operation.name') == 'invoke_agent')
+    return request, run
+
+
+def langfuse_total(attributes: dict) -> int | None:
+    """The total Langfuse stores for a generation: the sum of its usage types, or None when it has none.
+
+    `usage_details` when the span says it. Otherwise Langfuse's generic
+    `gen_ai.usage.*` mapping, which keeps every `details.X` as a usage type of
+    its own; for a request with no cache that total is the sum of every
+    `gen_ai.usage.*` value, which is all this fallback models.
+    """
+    if (usage := attributes.get('langfuse.observation.usage_details')) is not None:
+        return sum(json.loads(usage).values())
+    raw = [value for key, value in attributes.items() if key.startswith('gen_ai.usage.')]
+    return sum(raw) if raw else None
+
+
+async def usage_is_counted_once():
+    """Each request's tokens reach Langfuse once, whatever breakdown the provider adds.
+
+    The first case is the harness trace of 24 September, reproduced: Gemini's
+    `text_prompt_tokens` and `text_candidates_tokens` repeat the input and
+    output, and Langfuse summed them into a total of 2,956.
+    """
+    doubled = RequestUsage(
+        input_tokens=1449,
+        output_tokens=29,
+        details={'text_prompt_tokens': 1449, 'text_candidates_tokens': 29},
+    )
+    request, run = await request_usage(doubled)
+    raw = sum(v for k, v in request.items() if k.startswith('gen_ai.usage.'))
+    assert raw == 2956, 'the SDK still writes the breakdown beside the counts; this test is about that'
+    assert langfuse_total(request) == 1478, langfuse_total(request)
+    assert json.loads(request['langfuse.observation.usage_details']) == {'input': 1449, 'output': 29}, request
+    assert json.loads(request['langfuse.observation.metadata.usage_breakdown']) == {
+        'text_prompt_tokens': 1449,
+        'text_candidates_tokens': 29,
+    }, 'the breakdown stays readable as metadata'
+    assert request['gen_ai.usage.details.text_prompt_tokens'] == 1449, (
+        'the raw attributes are left as written'
+    )
+    assert request['langfuse.observation.output'] == 'Which day?', 'the rest of the translation is unchanged'
+    assert 'langfuse.observation.cost_details' not in request, 'cost stays whatever Langfuse prices it as'
+    assert langfuse_total(run) is None, "the run's aggregate is not a second request"
+    assert not any(k.startswith('gen_ai.usage.') for k in run), run
+
+    plain, _ = await request_usage(RequestUsage(input_tokens=1000, output_tokens=20))
+    assert json.loads(plain['langfuse.observation.usage_details']) == {'input': 1000, 'output': 20}, plain
+    assert 'langfuse.observation.metadata.usage_breakdown' not in plain, plain
+
+    cached, _ = await request_usage(
+        RequestUsage(
+            input_tokens=4215,
+            cache_read_tokens=3687,
+            output_tokens=16,
+            details={'cached_content_tokens': 3687, 'text_cache_tokens': 3687, 'text_prompt_tokens': 4215},
+        )
+    )
+    assert json.loads(cached['langfuse.observation.usage_details']) == {
+        'input': 528,
+        'output': 16,
+        'input_cached_tokens': 3687,
+    }, 'the raw input includes the cached tokens; Langfuse stores them apart, once'
+    assert langfuse_total(cached) == 4231, cached
+
+    thinking, _ = await request_usage(
+        RequestUsage(
+            input_tokens=150,
+            output_tokens=56,
+            details={'tool_use_prompt_tokens': 50, 'thoughts_tokens': 40, 'text_candidates_tokens': 16},
+        )
+    )
+    assert json.loads(thinking['langfuse.observation.usage_details']) == {'input': 150, 'output': 56}, (
+        'thoughts are part of the output and tool-use prompts part of the input: kept there, not added again'
+    )
+
+    unknown = trace.get_tracer('pydantic-ai').start_span(
+        'chat gemini', attributes={'gen_ai.operation.name': 'chat'}
+    )
+    unknown.end()
+    assert langfuse_total(dict(named('chat gemini')[-1].attributes)) is None, (
+        'a cancelled request is not zero'
+    )
+
+    for name in ('stt', 'tts'):
+        assert all(langfuse_total(dict(s.attributes)) is None for s in named(name)), 'speech is not LLM usage'
+
+
 def a_call_reads_as_a_call():
     """The root observation says what the call was, and every span shares its session.
 
@@ -463,6 +563,7 @@ async def main():
     await every_write_names_the_question_it_answered()
     agent_output_is_readable()
     speech_reaches_langfuse()
+    await usage_is_counted_once()
     a_call_reads_as_a_call()
     two_calls_at_once_stay_apart()
     print('ok')

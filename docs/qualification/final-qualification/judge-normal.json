@@ -1,0 +1,612 @@
+{
+ "cohort": "normal",
+ "state": "/Users/nicoferdi/Documents/slng-voice-harness-private/final-qualification-2026-09-28/state-normal",
+ "cases": {
+  "n01-book": {
+   "coval_test_case": "aFrbxDwuHAPzLET2XmSNEn",
+   "phone": "+34671561101",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0010",
+     "phone": "+34671561101",
+     "service": "haircut",
+     "day": "2026-09-29",
+     "at": "10:00",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CA220a99ce4c132c80658dfd2ef481d3f6",
+     "args": {
+      "phone": "+34671561101",
+      "slot": "2026-09-29T1000|haircut"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0010",
+      "service": "haircut",
+      "date": "2026-09-29",
+      "time": "10:00",
+      "spoken": "tomorrow at 10:00 AM",
+      "revision": 1
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CA220a99ce4c132c80658dfd2ef481d3f6"
+   ]
+  },
+  "n02-fragments-natural-yes": {
+   "coval_test_case": "cxjtgFQDcM9Vs3NWPtejoV",
+   "phone": "+34671561102",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0009",
+     "phone": "+34671561102",
+     "service": "haircut",
+     "day": "2026-09-29",
+     "at": "14:00",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CA90b999379b47f4568005351b49c5275e",
+     "args": {
+      "phone": "+34671561102",
+      "slot": "2026-09-29T1400|haircut"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0009",
+      "service": "haircut",
+      "date": "2026-09-29",
+      "time": "14:00",
+      "spoken": "tomorrow at 2:00 PM",
+      "revision": 1
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CA90b999379b47f4568005351b49c5275e"
+   ]
+  },
+  "n03-correct-identity": {
+   "coval_test_case": "fDNdCwwoKwW45Sy9w9XUeZ",
+   "phone": "+34671561103",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0008",
+     "phone": "+34671561103",
+     "service": "blowout",
+     "day": "2026-09-30",
+     "at": "11:00",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CA2085869fc869b5bae08e0fb28ca140db",
+     "args": {
+      "phone": "+34671561103",
+      "slot": "2026-09-30T1100|blowout"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0008",
+      "service": "blowout",
+      "date": "2026-09-30",
+      "time": "11:00",
+      "spoken": "Wednesday the 30th at 11:00 AM",
+      "revision": 1
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CA2085869fc869b5bae08e0fb28ca140db"
+   ]
+  },
+  "n04-move-existing": {
+   "coval_test_case": "nC2WkVnxGi8Dmbqm4KZHwy",
+   "phone": "+34671561104",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0001",
+     "phone": "+34671561104",
+     "service": "haircut",
+     "day": "2026-10-01",
+     "at": "10:00",
+     "revision": 2,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "move_appointment",
+     "session": "CAe2bba2947763c577a8389be5b30f62db",
+     "args": {
+      "phone": "+34671561104",
+      "slot": "2026-10-01T1000|haircut",
+      "booking_id": "BK0001"
+     },
+     "result": {
+      "status": "moved",
+      "booking_id": "BK0001",
+      "service": "haircut",
+      "date": "2026-10-01",
+      "time": "10:00",
+      "spoken": "Thursday the 1st at 10:00 AM",
+      "revision": 2
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CAe2bba2947763c577a8389be5b30f62db"
+   ]
+  },
+  "n05-cancel-existing": {
+   "coval_test_case": "NLDprKhfciWP8cF6KadDpa",
+   "phone": "+34671561105",
+   "outcome": "pass",
+   "problems": [],
+   "active": [],
+   "cancelled": [
+    {
+     "booking_id": "BK0002",
+     "phone": "+34671561105",
+     "service": "blowout",
+     "day": "2026-10-01",
+     "at": "15:00",
+     "revision": 2,
+     "active": 0
+    }
+   ],
+   "writes": [
+    {
+     "operation": "cancel_appointment",
+     "session": "CA01f628ff40cf0afa0cf9574fc0a7ab17",
+     "args": {
+      "phone": "+34671561105",
+      "booking_id": "BK0002"
+     },
+     "result": {
+      "status": "cancelled",
+      "booking_id": "BK0002",
+      "service": "blowout",
+      "date": "2026-10-01",
+      "time": "15:00",
+      "spoken": "Thursday the 1st at 3:00 PM",
+      "revision": 2
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CA01f628ff40cf0afa0cf9574fc0a7ab17"
+   ]
+  },
+  "n06-decline": {
+   "coval_test_case": "mSkkbUzFR7SzDmoNXUCZbK",
+   "phone": "+34671561106",
+   "outcome": "fail",
+   "problems": [
+    "active [('haircut', '2026-10-02', '11:00', 1)], want []",
+    "successful writes {'book': 1}, want {}"
+   ],
+   "active": [
+    {
+     "booking_id": "BK0007",
+     "phone": "+34671561106",
+     "service": "haircut",
+     "day": "2026-10-02",
+     "at": "11:00",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CA5e4cbbfe0a64f7c96f83a7ab64f7de31",
+     "args": {
+      "phone": "+34671561106",
+      "slot": "2026-10-02T1100|haircut"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0007",
+      "service": "haircut",
+      "date": "2026-10-02",
+      "time": "11:00",
+      "spoken": "Friday the 2nd at 11:00 AM",
+      "revision": 1
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CA5e4cbbfe0a64f7c96f83a7ab64f7de31"
+   ]
+  },
+  "n07-changed-request": {
+   "coval_test_case": "8o3R4D8ABCkigeoD3YVmrV",
+   "phone": "+34671561107",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0006",
+     "phone": "+34671561107",
+     "service": "haircut",
+     "day": "2026-10-03",
+     "at": "10:00",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CAb2fc81b90cf2af065933038d16176b5e",
+     "args": {
+      "phone": "+34671561107",
+      "slot": "2026-10-03T1000|haircut"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0006",
+      "service": "haircut",
+      "date": "2026-10-03",
+      "time": "10:00",
+      "spoken": "Saturday the 3rd at 10:00 AM",
+      "revision": 1
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CAb2fc81b90cf2af065933038d16176b5e"
+   ]
+  },
+  "n08-receipt-recovery": {
+   "coval_test_case": "QnFp48MJsJCxsiJnMc5eyd",
+   "phone": "+34671561108",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0005",
+     "phone": "+34671561108",
+     "service": "haircut",
+     "day": "2026-09-30",
+     "at": "15:00",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CA5afc43fc4379e546c4f6c963649d5b66",
+     "args": {
+      "phone": "+34671561108",
+      "slot": "2026-09-30T1500|haircut"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0005",
+      "service": "haircut",
+      "date": "2026-09-30",
+      "time": "15:00",
+      "spoken": "Wednesday the 30th at 3:00 PM",
+      "revision": 1
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CA5afc43fc4379e546c4f6c963649d5b66"
+   ]
+  },
+  "n09-detour-question": {
+   "coval_test_case": "QA94PYvfjcdKQshqwLu3tM",
+   "phone": "+34671561109",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0004",
+     "phone": "+34671561109",
+     "service": "haircut",
+     "day": "2026-10-01",
+     "at": "16:00",
+     "revision": 1,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CA65a4f5450137a2d517d01289bb5b3062",
+     "args": {
+      "phone": "+34671561109",
+      "slot": "2026-10-01T1600|haircut"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0004",
+      "service": "haircut",
+      "date": "2026-10-01",
+      "time": "16:00",
+      "spoken": "Thursday the 1st at 4:00 PM",
+      "revision": 1
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CA65a4f5450137a2d517d01289bb5b3062"
+   ]
+  },
+  "n10-yes-and-more": {
+   "coval_test_case": "S5S2mpVtDVSpzUccVVa68F",
+   "phone": "+34671561110",
+   "outcome": "pass",
+   "problems": [],
+   "active": [
+    {
+     "booking_id": "BK0003",
+     "phone": "+34671561110",
+     "service": "haircut",
+     "day": "2026-10-03",
+     "at": "13:00",
+     "revision": 2,
+     "active": 1
+    }
+   ],
+   "cancelled": [],
+   "writes": [
+    {
+     "operation": "book_appointment",
+     "session": "CAa680f44b44485a51c423ce6d2619df61",
+     "args": {
+      "phone": "+34671561110",
+      "slot": "2026-10-03T1100|haircut"
+     },
+     "result": {
+      "status": "booked",
+      "booking_id": "BK0003",
+      "service": "haircut",
+      "date": "2026-10-03",
+      "time": "11:00",
+      "spoken": "Saturday the 3rd at 11:00 AM",
+      "revision": 1
+     }
+    },
+    {
+     "operation": "move_appointment",
+     "session": "CAa680f44b44485a51c423ce6d2619df61",
+     "args": {
+      "phone": "+34671561110",
+      "slot": "2026-10-03T1300|haircut",
+      "booking_id": "BK0003"
+     },
+     "result": {
+      "status": "moved",
+      "booking_id": "BK0003",
+      "service": "haircut",
+      "date": "2026-10-03",
+      "time": "13:00",
+      "spoken": "Saturday the 3rd at 1:00 PM",
+      "revision": 2
+     }
+    }
+   ],
+   "lookups": [],
+   "sessions": [
+    "CAa680f44b44485a51c423ce6d2619df61"
+   ]
+  }
+ },
+ "cohort_checks": {
+  "writes_for_numbers_no_case_gives": [],
+  "writes_for_misspoken_numbers": [],
+  "bookings_for_numbers_no_case_gives": [],
+  "write_args_for_another_caller": [],
+  "complaints": [],
+  "runner_calls": [
+   {
+    "call_sid": "CAa680f44b44485a51c423ce6d2619df61",
+    "campaign": "final-qual-normal",
+    "from_number": "+19805981623",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23758,
+    "stream_sid": "MZ5ac9b33814226fc4f85d2dee70765b00",
+    "admitted_at": 1790606825.631474,
+    "started_at": 1790606826.3160489,
+    "ended_at": 1790606982.29903,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CA65a4f5450137a2d517d01289bb5b3062",
+    "campaign": "final-qual-normal",
+    "from_number": "+19803906382",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23757,
+    "stream_sid": "MZe3bf943e966196f04c824d2938a91845",
+    "admitted_at": 1790607012.900866,
+    "started_at": 1790607013.680528,
+    "ended_at": 1790607145.3565178,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CA5afc43fc4379e546c4f6c963649d5b66",
+    "campaign": "final-qual-normal",
+    "from_number": "+14015984616",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23757,
+    "worker": 23758,
+    "stream_sid": "MZ2269ac15e1bac2284f44877807689aa9",
+    "admitted_at": 1790607175.55383,
+    "started_at": 1790607176.29685,
+    "ended_at": 1790607279.120193,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CAb2fc81b90cf2af065933038d16176b5e",
+    "campaign": "final-qual-normal",
+    "from_number": "+19803906354",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23758,
+    "stream_sid": "MZ059a573c3e6339b9a42639a9ecaff3e3",
+    "admitted_at": 1790607305.7320268,
+    "started_at": 1790607306.50151,
+    "ended_at": 1790607398.909618,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CA5e4cbbfe0a64f7c96f83a7ab64f7de31",
+    "campaign": "final-qual-normal",
+    "from_number": "+14092355450",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23758,
+    "stream_sid": "MZc30c98b09057870874460b1143cd2688",
+    "admitted_at": 1790607426.462553,
+    "started_at": 1790607427.1717918,
+    "ended_at": 1790607516.514412,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CA01f628ff40cf0afa0cf9574fc0a7ab17",
+    "campaign": "final-qual-normal",
+    "from_number": "+19803906341",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23757,
+    "worker": 23758,
+    "stream_sid": "MZ2a97c7f71134e84dc8998a9ce6f7477f",
+    "admitted_at": 1790607690.28799,
+    "started_at": 1790607690.9396439,
+    "ended_at": 1790607782.6907341,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CAe2bba2947763c577a8389be5b30f62db",
+    "campaign": "final-qual-normal",
+    "from_number": "+19803906380",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23758,
+    "stream_sid": "MZ1b5203f7ebfc6e40548fc11dcb077f2e",
+    "admitted_at": 1790607819.639114,
+    "started_at": 1790607820.3008819,
+    "ended_at": 1790607922.074555,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CA2085869fc869b5bae08e0fb28ca140db",
+    "campaign": "final-qual-normal",
+    "from_number": "+15412194880",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23758,
+    "stream_sid": "MZ183c74b2b0f526d528d8f6df2358abd8",
+    "admitted_at": 1790607947.878926,
+    "started_at": 1790607948.62764,
+    "ended_at": 1790608065.8938398,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CA90b999379b47f4568005351b49c5275e",
+    "campaign": "final-qual-normal",
+    "from_number": "+19803906358",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23758,
+    "stream_sid": "MZ642a8dd3f4854411a20e43179db6405c",
+    "admitted_at": 1790608097.1594539,
+    "started_at": 1790608097.9508648,
+    "ended_at": 1790608219.968071,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   },
+   {
+    "call_sid": "CA220a99ce4c132c80658dfd2ef481d3f6",
+    "campaign": "final-qual-normal",
+    "from_number": "+14475258943",
+    "to_number": "+447427919928",
+    "state": "ended",
+    "admitted_by": 23758,
+    "worker": 23758,
+    "stream_sid": "MZ1fb8d9e04b408f3a298a3886ea075243",
+    "admitted_at": 1790608248.278336,
+    "started_at": 1790608249.029278,
+    "ended_at": 1790608327.8812008,
+    "ended": "pipeline_end",
+    "media_host": null,
+    "served_port": 7860
+   }
+  ]
+ },
+ "summary": {
+  "outcome_pass": 9,
+  "outcome_fail": 1,
+  "cross_customer": 0
+ }
+}

@@ -1,0 +1,988 @@
+{
+ "summary": {
+  "cohort": "normal",
+  "run_id": "GKAmHKajJGTn3wSG9ztSZb",
+  "calls": 10,
+  "eligible_turns": 65,
+  "any_audio_s": {
+   "median": 1.923,
+   "p90": 3.381
+  },
+  "useful_audio_s": {
+   "n": 65,
+   "median": 1.923,
+   "p90": 3.381
+  },
+  "filler_turns": 0,
+  "turns_with_no_useful_audio": 0,
+  "requests_completed": 99,
+  "requests_cancelled_or_unreported": 34,
+  "tokens": {
+   "input_uncached": 234127,
+   "input_cached": 0,
+   "output": 2347
+  },
+  "cost_usd": 0.076105,
+  "model_s_per_turn_median": 1.15,
+  "tts_ttfb_s_median": 0.143,
+  "per_call_input_tokens_median": 21398.0
+ },
+ "calls": [
+  {
+   "call_sid": "CAa680f44b44485a51c423ce6d2619df61",
+   "observations": 115,
+   "caller_turns": 10,
+   "requests_completed": 15,
+   "requests_cancelled_or_unreported": 6,
+   "tokens": {
+    "input_uncached": 41356,
+    "input_cached": 0,
+    "output": 351
+   },
+   "cost_usd": 0.013284,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    },
+    {
+     "name": "move_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 2.2641379833221436,
+     "filler_first": false,
+     "useful_audio_s": 2.264,
+     "tts_ttfb_s": 0.06879806518554688,
+     "requests": 2,
+     "model_s": 1.771
+    },
+    {
+     "number": "3",
+     "any_audio_s": 1.6003937721252441,
+     "filler_first": false,
+     "useful_audio_s": 1.6,
+     "tts_ttfb_s": 0.1530921459197998,
+     "requests": 1,
+     "model_s": 1.033
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.6715786457061768,
+     "filler_first": false,
+     "useful_audio_s": 1.672,
+     "tts_ttfb_s": 0.13928985595703125,
+     "requests": 2,
+     "model_s": 1.112
+    },
+    {
+     "number": "5",
+     "any_audio_s": 2.0824639797210693,
+     "filler_first": false,
+     "useful_audio_s": 2.082,
+     "tts_ttfb_s": 0.13791894912719727,
+     "requests": 1,
+     "model_s": 0.916
+    },
+    {
+     "number": "6",
+     "any_audio_s": 1.4912781715393066,
+     "filler_first": false,
+     "useful_audio_s": 1.491,
+     "tts_ttfb_s": 0.06276607513427734,
+     "requests": 3,
+     "model_s": 2.617
+    },
+    {
+     "number": "7",
+     "any_audio_s": 1.5117979049682617,
+     "filler_first": false,
+     "useful_audio_s": 1.512,
+     "tts_ttfb_s": 0.1441199779510498,
+     "requests": 1,
+     "model_s": 0.9
+    },
+    {
+     "number": "8",
+     "any_audio_s": 3.265911817550659,
+     "filler_first": false,
+     "useful_audio_s": 3.266,
+     "tts_ttfb_s": 0.18354582786560059,
+     "requests": 3,
+     "model_s": 2.588
+    },
+    {
+     "number": "9",
+     "any_audio_s": 1.594377040863037,
+     "filler_first": false,
+     "useful_audio_s": 1.594,
+     "tts_ttfb_s": 0.19075608253479004,
+     "requests": 1,
+     "model_s": 0.935
+    },
+    {
+     "number": "10",
+     "any_audio_s": 3.376929998397827,
+     "filler_first": false,
+     "useful_audio_s": 3.377,
+     "tts_ttfb_s": 0.14955496788024902,
+     "requests": 1,
+     "model_s": 1.324
+    }
+   ]
+  },
+  {
+   "call_sid": "CA65a4f5450137a2d517d01289bb5b3062",
+   "observations": 87,
+   "caller_turns": 9,
+   "requests_completed": 13,
+   "requests_cancelled_or_unreported": 1,
+   "tokens": {
+    "input_uncached": 31485,
+    "input_cached": 0,
+    "output": 358
+   },
+   "cost_usd": 0.010341,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 2.6690049171447754,
+     "filler_first": false,
+     "useful_audio_s": 2.669,
+     "tts_ttfb_s": 0.06345319747924805,
+     "requests": 2,
+     "model_s": 1.546
+    },
+    {
+     "number": "3",
+     "any_audio_s": 1.68650221824646,
+     "filler_first": false,
+     "useful_audio_s": 1.687,
+     "tts_ttfb_s": 0.13364195823669434,
+     "requests": 1,
+     "model_s": 1.158
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.2757611274719238,
+     "filler_first": false,
+     "useful_audio_s": 1.276,
+     "tts_ttfb_s": 0.058381080627441406,
+     "requests": 2,
+     "model_s": 2.011
+    },
+    {
+     "number": "5",
+     "any_audio_s": 1.6305179595947266,
+     "filler_first": false,
+     "useful_audio_s": 1.631,
+     "tts_ttfb_s": 0.14299297332763672,
+     "requests": 1,
+     "model_s": 1.09
+    },
+    {
+     "number": "6",
+     "any_audio_s": 2.83750581741333,
+     "filler_first": false,
+     "useful_audio_s": 2.838,
+     "tts_ttfb_s": 0.14976000785827637,
+     "requests": 2,
+     "model_s": 2.462
+    },
+    {
+     "number": "7",
+     "any_audio_s": 3.3811228275299072,
+     "filler_first": false,
+     "useful_audio_s": 3.381,
+     "tts_ttfb_s": 0.1376478672027588,
+     "requests": 3,
+     "model_s": 2.759
+    },
+    {
+     "number": "8",
+     "any_audio_s": 3.336869955062866,
+     "filler_first": false,
+     "useful_audio_s": 3.337,
+     "tts_ttfb_s": 0.19252419471740723,
+     "requests": 1,
+     "model_s": 1.224
+    },
+    {
+     "number": "9",
+     "any_audio_s": 3.1211390495300293,
+     "filler_first": false,
+     "useful_audio_s": 3.121,
+     "tts_ttfb_s": 0.1498711109161377,
+     "requests": 1,
+     "model_s": 1.041
+    }
+   ]
+  },
+  {
+   "call_sid": "CA5afc43fc4379e546c4f6c963649d5b66",
+   "observations": 66,
+   "caller_turns": 8,
+   "requests_completed": 8,
+   "requests_cancelled_or_unreported": 2,
+   "tokens": {
+    "input_uncached": 17613,
+    "input_cached": 0,
+    "output": 170
+   },
+   "cost_usd": 0.005709,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 2.9141671657562256,
+     "filler_first": false,
+     "useful_audio_s": 2.914,
+     "tts_ttfb_s": 0.06066179275512695,
+     "requests": 2,
+     "model_s": 2.402
+    },
+    {
+     "number": "3",
+     "any_audio_s": 1.2983660697937012,
+     "filler_first": false,
+     "useful_audio_s": 1.298,
+     "tts_ttfb_s": 0.2015821933746338,
+     "requests": 1,
+     "model_s": 0.644
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.236379861831665,
+     "filler_first": false,
+     "useful_audio_s": 1.236,
+     "tts_ttfb_s": 0.06056022644042969,
+     "requests": 2,
+     "model_s": 1.523
+    },
+    {
+     "number": "5",
+     "any_audio_s": 2.1979918479919434,
+     "filler_first": false,
+     "useful_audio_s": 2.198,
+     "tts_ttfb_s": 0.1359570026397705,
+     "requests": 1,
+     "model_s": 1.04
+    },
+    {
+     "number": "6",
+     "any_audio_s": 3.2516050338745117,
+     "filler_first": false,
+     "useful_audio_s": 3.252,
+     "tts_ttfb_s": 0.16383719444274902,
+     "requests": 1,
+     "model_s": 1.15
+    },
+    {
+     "number": "7",
+     "any_audio_s": 1.6803209781646729,
+     "filler_first": false,
+     "useful_audio_s": 1.68,
+     "tts_ttfb_s": 0.16190671920776367,
+     "requests": 1,
+     "model_s": 1.126
+    },
+    {
+     "number": "8",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": null,
+     "requests": 0,
+     "model_s": 0
+    }
+   ]
+  },
+  {
+   "call_sid": "CAb2fc81b90cf2af065933038d16176b5e",
+   "observations": 81,
+   "caller_turns": 8,
+   "requests_completed": 10,
+   "requests_cancelled_or_unreported": 4,
+   "tokens": {
+    "input_uncached": 25017,
+    "input_cached": 0,
+    "output": 216
+   },
+   "cost_usd": 0.008045,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 1.7899668216705322,
+     "filler_first": false,
+     "useful_audio_s": 1.79,
+     "tts_ttfb_s": 0.09711623191833496,
+     "requests": 2,
+     "model_s": 1.28
+    },
+    {
+     "number": "3",
+     "any_audio_s": 1.6748757362365723,
+     "filler_first": false,
+     "useful_audio_s": 1.675,
+     "tts_ttfb_s": 0.18758106231689453,
+     "requests": 1,
+     "model_s": 1.033
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.2909789085388184,
+     "filler_first": false,
+     "useful_audio_s": 1.291,
+     "tts_ttfb_s": 0.06577277183532715,
+     "requests": 2,
+     "model_s": 1.474
+    },
+    {
+     "number": "5",
+     "any_audio_s": 3.8025598526000977,
+     "filler_first": false,
+     "useful_audio_s": 3.803,
+     "tts_ttfb_s": 0.14337801933288574,
+     "requests": 2,
+     "model_s": 1.732
+    },
+    {
+     "number": "6",
+     "any_audio_s": 1.7015008926391602,
+     "filler_first": false,
+     "useful_audio_s": 1.702,
+     "tts_ttfb_s": 0.1453847885131836,
+     "requests": 1,
+     "model_s": 1.089
+    },
+    {
+     "number": "7",
+     "any_audio_s": 0.5942058563232422,
+     "filler_first": false,
+     "useful_audio_s": 0.594,
+     "tts_ttfb_s": 0.18032431602478027,
+     "requests": 1,
+     "model_s": 0.588
+    },
+    {
+     "number": "8",
+     "any_audio_s": 3.2003891468048096,
+     "filler_first": false,
+     "useful_audio_s": 3.2,
+     "tts_ttfb_s": 0.14820003509521484,
+     "requests": 1,
+     "model_s": 1.144
+    }
+   ]
+  },
+  {
+   "call_sid": "CA5e4cbbfe0a64f7c96f83a7ab64f7de31",
+   "observations": 65,
+   "caller_turns": 6,
+   "requests_completed": 8,
+   "requests_cancelled_or_unreported": 1,
+   "tokens": {
+    "input_uncached": 17939,
+    "input_cached": 0,
+    "output": 195
+   },
+   "cost_usd": 0.005869,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 4.321165084838867,
+     "filler_first": false,
+     "useful_audio_s": 4.321,
+     "tts_ttfb_s": 0.0681312084197998,
+     "requests": 2,
+     "model_s": 2.329
+    },
+    {
+     "number": "3",
+     "any_audio_s": 2.1859357357025146,
+     "filler_first": false,
+     "useful_audio_s": 2.186,
+     "tts_ttfb_s": 0.13588309288024902,
+     "requests": 1,
+     "model_s": 1.029
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.3907270431518555,
+     "filler_first": false,
+     "useful_audio_s": 1.391,
+     "tts_ttfb_s": 0.07988095283508301,
+     "requests": 2,
+     "model_s": 1.885
+    },
+    {
+     "number": "5",
+     "any_audio_s": 1.8104407787322998,
+     "filler_first": false,
+     "useful_audio_s": 1.81,
+     "tts_ttfb_s": 0.13965106010437012,
+     "requests": 1,
+     "model_s": 1.26
+    },
+    {
+     "number": "6",
+     "any_audio_s": 4.305217742919922,
+     "filler_first": false,
+     "useful_audio_s": 4.305,
+     "tts_ttfb_s": 0.15708017349243164,
+     "requests": 2,
+     "model_s": 1.87
+    }
+   ]
+  },
+  {
+   "call_sid": "CA01f628ff40cf0afa0cf9574fc0a7ab17",
+   "observations": 80,
+   "caller_turns": 7,
+   "requests_completed": 8,
+   "requests_cancelled_or_unreported": 5,
+   "tokens": {
+    "input_uncached": 17701,
+    "input_cached": 0,
+    "output": 171
+   },
+   "cost_usd": 0.005738,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "cancel_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.3877711296081543,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 4.083737134933472,
+     "filler_first": false,
+     "useful_audio_s": 4.084,
+     "tts_ttfb_s": 0.20185112953186035,
+     "requests": 2,
+     "model_s": 1.489
+    },
+    {
+     "number": "3",
+     "any_audio_s": 3.641983985900879,
+     "filler_first": false,
+     "useful_audio_s": 3.642,
+     "tts_ttfb_s": 0.14243388175964355,
+     "requests": 1,
+     "model_s": 1.377
+    },
+    {
+     "number": "4",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.20276308059692383,
+     "requests": 2,
+     "model_s": 1.413
+    },
+    {
+     "number": "5",
+     "any_audio_s": 1.6862998008728027,
+     "filler_first": false,
+     "useful_audio_s": 1.686,
+     "tts_ttfb_s": 0.14333677291870117,
+     "requests": 1,
+     "model_s": 0.988
+    },
+    {
+     "number": "6",
+     "any_audio_s": 2.529660940170288,
+     "filler_first": false,
+     "useful_audio_s": 2.53,
+     "tts_ttfb_s": 0.13680005073547363,
+     "requests": 1,
+     "model_s": 1.212
+    },
+    {
+     "number": "7",
+     "any_audio_s": 2.7190630435943604,
+     "filler_first": false,
+     "useful_audio_s": 2.719,
+     "tts_ttfb_s": 0.13855195045471191,
+     "requests": 1,
+     "model_s": 0.832
+    }
+   ]
+  },
+  {
+   "call_sid": "CAe2bba2947763c577a8389be5b30f62db",
+   "observations": 72,
+   "caller_turns": 7,
+   "requests_completed": 9,
+   "requests_cancelled_or_unreported": 3,
+   "tokens": {
+    "input_uncached": 21112,
+    "input_cached": 0,
+    "output": 193
+   },
+   "cost_usd": 0.006816,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "move_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 2.6707096099853516,
+     "filler_first": false,
+     "useful_audio_s": 2.671,
+     "tts_ttfb_s": 0.06931686401367188,
+     "requests": 2,
+     "model_s": 2.143
+    },
+    {
+     "number": "3",
+     "any_audio_s": 2.1605679988861084,
+     "filler_first": false,
+     "useful_audio_s": 2.161,
+     "tts_ttfb_s": 0.1396009922027588,
+     "requests": 1,
+     "model_s": 0.996
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.348681926727295,
+     "filler_first": false,
+     "useful_audio_s": 1.349,
+     "tts_ttfb_s": 0.06501579284667969,
+     "requests": 2,
+     "model_s": 1.662
+    },
+    {
+     "number": "5",
+     "any_audio_s": 2.118978977203369,
+     "filler_first": false,
+     "useful_audio_s": 2.119,
+     "tts_ttfb_s": 0.15121817588806152,
+     "requests": 2,
+     "model_s": 1.56
+    },
+    {
+     "number": "6",
+     "any_audio_s": 1.5693659782409668,
+     "filler_first": false,
+     "useful_audio_s": 1.569,
+     "tts_ttfb_s": 0.14217495918273926,
+     "requests": 1,
+     "model_s": 1.021
+    },
+    {
+     "number": "7",
+     "any_audio_s": 3.0511910915374756,
+     "filler_first": false,
+     "useful_audio_s": 3.051,
+     "tts_ttfb_s": 0.14956021308898926,
+     "requests": 1,
+     "model_s": 0.963
+    }
+   ]
+  },
+  {
+   "call_sid": "CA2085869fc869b5bae08e0fb28ca140db",
+   "observations": 88,
+   "caller_turns": 8,
+   "requests_completed": 10,
+   "requests_cancelled_or_unreported": 6,
+   "tokens": {
+    "input_uncached": 21858,
+    "input_cached": 0,
+    "output": 222
+   },
+   "cost_usd": 0.007112,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 3.8431899547576904,
+     "filler_first": false,
+     "useful_audio_s": 3.843,
+     "tts_ttfb_s": 0.06340479850769043,
+     "requests": 2,
+     "model_s": 1.859
+    },
+    {
+     "number": "3",
+     "any_audio_s": 1.332205057144165,
+     "filler_first": false,
+     "useful_audio_s": 1.332,
+     "tts_ttfb_s": 0.15280795097351074,
+     "requests": 2,
+     "model_s": 1.586
+    },
+    {
+     "number": "4",
+     "any_audio_s": 3.380610942840576,
+     "filler_first": false,
+     "useful_audio_s": 3.381,
+     "tts_ttfb_s": 0.20635986328125,
+     "requests": 1,
+     "model_s": 0.64
+    },
+    {
+     "number": "5",
+     "any_audio_s": 1.9322600364685059,
+     "filler_first": false,
+     "useful_audio_s": 1.932,
+     "tts_ttfb_s": 0.08090996742248535,
+     "requests": 2,
+     "model_s": 1.755
+    },
+    {
+     "number": "6",
+     "any_audio_s": 2.2557380199432373,
+     "filler_first": false,
+     "useful_audio_s": 2.256,
+     "tts_ttfb_s": 0.19407892227172852,
+     "requests": 1,
+     "model_s": 1.027
+    },
+    {
+     "number": "7",
+     "any_audio_s": 1.7801787853240967,
+     "filler_first": false,
+     "useful_audio_s": 1.78,
+     "tts_ttfb_s": 0.151170015335083,
+     "requests": 1,
+     "model_s": 1.092
+    },
+    {
+     "number": "8",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.18203377723693848,
+     "requests": 1,
+     "model_s": 1.062
+    }
+   ]
+  },
+  {
+   "call_sid": "CA90b999379b47f4568005351b49c5275e",
+   "observations": 92,
+   "caller_turns": 9,
+   "requests_completed": 10,
+   "requests_cancelled_or_unreported": 6,
+   "tokens": {
+    "input_uncached": 21684,
+    "input_cached": 0,
+    "output": 250
+   },
+   "cost_usd": 0.00713,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 2.5670738220214844,
+     "filler_first": false,
+     "useful_audio_s": 2.567,
+     "tts_ttfb_s": 0.13566017150878906,
+     "requests": 2,
+     "model_s": 1.976
+    },
+    {
+     "number": "3",
+     "any_audio_s": 1.9229202270507812,
+     "filler_first": false,
+     "useful_audio_s": 1.923,
+     "tts_ttfb_s": 0.18159055709838867,
+     "requests": 1,
+     "model_s": 0.727
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.314850091934204,
+     "filler_first": false,
+     "useful_audio_s": 1.315,
+     "tts_ttfb_s": 0.20223474502563477,
+     "requests": 1,
+     "model_s": 0.724
+    },
+    {
+     "number": "5",
+     "any_audio_s": 1.196725845336914,
+     "filler_first": false,
+     "useful_audio_s": 1.197,
+     "tts_ttfb_s": 0.1413869857788086,
+     "requests": 1,
+     "model_s": 0.649
+    },
+    {
+     "number": "6",
+     "any_audio_s": 1.2236089706420898,
+     "filler_first": false,
+     "useful_audio_s": 1.224,
+     "tts_ttfb_s": 0.05946493148803711,
+     "requests": 2,
+     "model_s": 2.074
+    },
+    {
+     "number": "7",
+     "any_audio_s": 1.6447598934173584,
+     "filler_first": false,
+     "useful_audio_s": 1.645,
+     "tts_ttfb_s": 0.14440679550170898,
+     "requests": 1,
+     "model_s": 1.089
+    },
+    {
+     "number": "8",
+     "any_audio_s": 1.6581649780273438,
+     "filler_first": false,
+     "useful_audio_s": 1.658,
+     "tts_ttfb_s": 0.20008277893066406,
+     "requests": 1,
+     "model_s": 1.002
+    },
+    {
+     "number": "9",
+     "any_audio_s": 1.6143131256103516,
+     "filler_first": false,
+     "useful_audio_s": 1.614,
+     "tts_ttfb_s": 0.18541789054870605,
+     "requests": 1,
+     "model_s": 1.017
+    }
+   ]
+  },
+  {
+   "call_sid": "CA220a99ce4c132c80658dfd2ef481d3f6",
+   "observations": 51,
+   "caller_turns": 6,
+   "requests_completed": 8,
+   "requests_cancelled_or_unreported": 0,
+   "tokens": {
+    "input_uncached": 18362,
+    "input_cached": 0,
+    "output": 221
+   },
+   "cost_usd": 0.006061,
+   "writes": [
+    {
+     "name": "lookup_customer",
+     "status": "ok"
+    },
+    {
+     "name": "book_appointment",
+     "status": "ok"
+    }
+   ],
+   "turns": [
+    {
+     "number": "1",
+     "any_audio_s": null,
+     "filler_first": false,
+     "useful_audio_s": null,
+     "tts_ttfb_s": 0.0,
+     "requests": 0,
+     "model_s": 0
+    },
+    {
+     "number": "2",
+     "any_audio_s": 2.369959831237793,
+     "filler_first": false,
+     "useful_audio_s": 2.37,
+     "tts_ttfb_s": 0.0708150863647461,
+     "requests": 2,
+     "model_s": 1.842
+    },
+    {
+     "number": "3",
+     "any_audio_s": 1.3478188514709473,
+     "filler_first": false,
+     "useful_audio_s": 1.348,
+     "tts_ttfb_s": 0.27641797065734863,
+     "requests": 1,
+     "model_s": 0.669
+    },
+    {
+     "number": "4",
+     "any_audio_s": 1.3656768798828125,
+     "filler_first": false,
+     "useful_audio_s": 1.366,
+     "tts_ttfb_s": 0.07670092582702637,
+     "requests": 3,
+     "model_s": 2.583
+    },
+    {
+     "number": "5",
+     "any_audio_s": 1.3439908027648926,
+     "filler_first": false,
+     "useful_audio_s": 1.344,
+     "tts_ttfb_s": 0.13495707511901855,
+     "requests": 1,
+     "model_s": 0.774
+    },
+    {
+     "number": "6",
+     "any_audio_s": 2.9442129135131836,
+     "filler_first": false,
+     "useful_audio_s": 2.944,
+     "tts_ttfb_s": 0.1572880744934082,
+     "requests": 1,
+     "model_s": 0.895
+    }
+   ]
+  }
+ ]
+}

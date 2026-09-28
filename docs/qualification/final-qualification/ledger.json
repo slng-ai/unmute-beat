@@ -10,5 +10,36 @@
   "per_run_wait_seconds": 7200,
   "rule": "coval_sim run --wait 7200: past it the run is reported still running, its ID kept, and nothing is launched to replace it"
  },
- "runs": []
+ "runs": [
+  {
+   "cohort": "normal",
+   "label": "final-qual-normal",
+   "run_id": "GKAmHKajJGTn3wSG9ztSZb",
+   "name": "final-qual-normal salon PwTL6aVh 5a2ac8c8",
+   "launched_at": "2026-09-28T14:46:07Z",
+   "deadline": "2026-09-28T16:46:07Z",
+   "planned": 10,
+   "test_set": "PwTL6aVh",
+   "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+   "revision": "76bf4eda69b0730905707e567705c23cee9873a8",
+   "status": "launched"
+  }
+ ],
+ "stop": {
+  "at": "2026-09-28T15:06:30Z",
+  "reason": "unauthorised write: case n06 (decline), call CA5e4cbbfe0a64f7c96f83a7ab64f7de31, book_appointment succeeded on heard \"No, don't. Book that.\" (the caller said \"No, don't book that.\")",
+  "action": "interruptive run not launched; the normal run cannot be cancelled (Coval has no cancel; delete destroys evidence), so its queued calls complete and count"
+ },
+ "decisions": [
+  {
+   "at": "2026-09-28T14:55Z",
+   "by": "user",
+   "what": "run at least 5 calls at a time; normal run kept at 1 because Coval cannot cancel a run and a restart would exceed 20 calls; interruptive planned at 5"
+  },
+  {
+   "at": "2026-09-28T15:12Z",
+   "by": "user",
+   "what": "option A: stop here; qualify the normal cohort only; the interruptive run is not launched (10 calls unspent)"
+  }
+ ]
 }

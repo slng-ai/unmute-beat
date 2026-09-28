@@ -1,0 +1,447 @@
+{
+ "cases": {
+  "aFrbxDwuHAPzLET2XmSNEn": {
+   "bookings": 1,
+   "service": "haircut"
+  },
+  "cxjtgFQDcM9Vs3NWPtejoV": {
+   "bookings": 1,
+   "service": "haircut"
+  },
+  "fDNdCwwoKwW45Sy9w9XUeZ": {
+   "bookings": 1,
+   "service": "blowout"
+  },
+  "nC2WkVnxGi8Dmbqm4KZHwy": {
+   "bookings": 1,
+   "service": "haircut"
+  },
+  "NLDprKhfciWP8cF6KadDpa": {
+   "bookings": 0,
+   "service": null
+  },
+  "mSkkbUzFR7SzDmoNXUCZbK": {
+   "bookings": 0,
+   "service": null
+  },
+  "8o3R4D8ABCkigeoD3YVmrV": {
+   "bookings": 1,
+   "service": "haircut"
+  },
+  "QnFp48MJsJCxsiJnMc5eyd": {
+   "bookings": 1,
+   "service": "haircut"
+  },
+  "QA94PYvfjcdKQshqwLu3tM": {
+   "bookings": 1,
+   "service": "haircut"
+  },
+  "S5S2mpVtDVSpzUccVVa68F": {
+   "bookings": 1,
+   "service": "haircut"
+  }
+ },
+ "reviews": {
+  "DKDwjz2oVxN92mJzeqJRgL": {
+   "reviewer": "agent",
+   "source": "Langfuse session CAa680f44b44485a51c423ce6d2619df61 (write audits, STT and TTS generations), Coval transcript of simulation DKDwjz2oVxN92mJzeqJRgL, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@5": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's correct.\": a plain yes"
+    },
+    "book_appointment@6": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's perfect. 11 in the morning on Saturday, please.\": a plain yes"
+    },
+    "move_appointment@8": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard 'Yes, please. 1 in the afternoon on Saturday.': a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "moved",
+     "booking_id": "BK0003",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-10-03",
+      "time": "13:00",
+      "phone": "+34671561110"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "haircut",
+    "date": "2026-10-03",
+    "time": "13:00",
+    "phone": "+34671561110"
+   }
+  },
+  "DyBcsvVGDuSrDNhAHFpKQU": {
+   "reviewer": "agent",
+   "source": "Langfuse session CA65a4f5450137a2d517d01289bb5b3062 (write audits, STT and TTS generations), Coval transcript of simulation DyBcsvVGDuSrDNhAHFpKQU, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@3": {
+     "accepted": true,
+     "delivered": true,
+     "note": "The same digits said back after \"Almost\": a yes under the user's rule (session 4c, finding 12)."
+    },
+    "book_appointment@7": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard 'Yes, please.': a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "booked",
+     "booking_id": "BK0004",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-10-01",
+      "time": "16:00",
+      "phone": "+34671561109"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "haircut",
+    "date": "2026-10-01",
+    "time": "16:00",
+    "phone": "+34671561109"
+   }
+  },
+  "2WToptRMhYRPjJVeTpXbLs": {
+   "reviewer": "agent",
+   "source": "Langfuse session CA5afc43fc4379e546c4f6c963649d5b66 (write audits, STT and TTS generations), Coval transcript of simulation 2WToptRMhYRPjJVeTpXbLs, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@3": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's correct.\": a plain yes"
+    },
+    "book_appointment@5": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, please. That's exactly what I'd like.\": a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "booked",
+     "booking_id": "BK0005",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-09-30",
+      "time": "15:00",
+      "phone": "+34671561108"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "haircut",
+    "date": "2026-09-30",
+    "time": "15:00",
+    "phone": "+34671561108"
+   }
+  },
+  "JT2aoh3h77jHWYZJExLn7M": {
+   "reviewer": "agent",
+   "source": "Langfuse session CAb2fc81b90cf2af065933038d16176b5e (write audits, STT and TTS generations), Coval transcript of simulation JT2aoh3h77jHWYZJExLn7M, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@3": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes. That's correct.\": a plain yes"
+    },
+    "book_appointment@5": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's perfect.\": a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "booked",
+     "booking_id": "BK0006",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-10-03",
+      "time": "10:00",
+      "phone": "+34671561107"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "haircut",
+    "date": "2026-10-03",
+    "time": "10:00",
+    "phone": "+34671561107"
+   }
+  },
+  "U8gg4PGjS7cWvCASu7wCnU": {
+   "reviewer": "agent",
+   "source": "Langfuse session CA5e4cbbfe0a64f7c96f83a7ab64f7de31 (write audits, STT and TTS generations), Coval transcript of simulation U8gg4PGjS7cWvCASu7wCnU, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@3": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's correct.\": a plain yes"
+    },
+    "book_appointment@5": {
+     "accepted": false,
+     "delivered": true,
+     "note": "The caller said \"No, don't book that. I'll call back another time.\" (Coval transcript). The turn ended mid-sentence on the smart-turn ceiling; STT gave \"No, don't. Book that.\"; the model called book_appointment again."
+    }
+   },
+   "claims": [
+    {
+     "action": "booked",
+     "booking_id": "BK0007",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-10-02",
+      "time": "11:00",
+      "phone": "+34671561106"
+     }
+    }
+   ],
+   "note": "The caller said \"No, don't book that. I'll call back another time.\" (Coval transcript). The turn ended mid-sentence on the smart-turn ceiling; STT gave \"No, don't. Book that.\"; the model called book_appointment again.",
+   "no_request": true
+  },
+  "MZNx5hQom284zLZx8Yw4n9": {
+   "reviewer": "agent",
+   "source": "Langfuse session CA01f628ff40cf0afa0cf9574fc0a7ab17 (write audits, STT and TTS generations), Coval transcript of simulation MZNx5hQom284zLZx8Yw4n9, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@3": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"That's correct.\": a plain yes"
+    },
+    "cancel_appointment@5": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard 'Yes, please cancel it.': a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "cancelled",
+     "booking_id": "BK0002"
+    }
+   ],
+   "note": "",
+   "no_request": true
+  },
+  "cCB5GjSEyeWq5HQRVuukgM": {
+   "reviewer": "agent",
+   "source": "Langfuse session CAe2bba2947763c577a8389be5b30f62db (write audits, STT and TTS generations), Coval transcript of simulation cCB5GjSEyeWq5HQRVuukgM, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@3": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's correct.\": a plain yes"
+    },
+    "move_appointment@5": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, please. That's exactly what I'd like.\": a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "moved",
+     "booking_id": "BK0001",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-10-01",
+      "time": "10:00",
+      "phone": "+34671561104"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "haircut",
+    "date": "2026-10-01",
+    "time": "10:00",
+    "phone": "+34671561104"
+   }
+  },
+  "3USUpUk2zv5ECsg7Ufyp5y": {
+   "reviewer": "agent",
+   "source": "Langfuse session CA2085869fc869b5bae08e0fb28ca140db (write audits, STT and TTS generations), Coval transcript of simulation 3USUpUk2zv5ECsg7Ufyp5y, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@4": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's right.\": a plain yes"
+    },
+    "book_appointment@6": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, please. Exactly what I'd like.\": a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "booked",
+     "booking_id": "BK0008",
+     "appointment": {
+      "service": "blowout",
+      "date": "2026-09-30",
+      "time": "11:00",
+      "phone": "+34671561103"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "blowout",
+    "date": "2026-09-30",
+    "time": "11:00",
+    "phone": "+34671561103"
+   }
+  },
+  "LERNmDpsZpjwdMeBKddhzj": {
+   "reviewer": "agent",
+   "source": "Langfuse session CA90b999379b47f4568005351b49c5275e (write audits, STT and TTS generations), Coval transcript of simulation LERNmDpsZpjwdMeBKddhzj, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@5": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard 'That sounds right.': a plain yes"
+    },
+    "book_appointment@7": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard 'Yes, 2 in the. Afternoon tomorrow works for me. Please book that.': a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "booked",
+     "booking_id": "BK0009",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-09-29",
+      "time": "14:00",
+      "phone": "+34671561102"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "haircut",
+    "date": "2026-09-29",
+    "time": "14:00",
+    "phone": "+34671561102"
+   }
+  },
+  "j67whc8USbbYYRStkqf57t": {
+   "reviewer": "agent",
+   "source": "Langfuse session CA220a99ce4c132c80658dfd2ef481d3f6 (write audits, STT and TTS generations), Coval transcript of simulation j67whc8USbbYYRStkqf57t, bot log; recording timed by energy only, not listened to",
+   "writes": {
+    "lookup_customer@3": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard \"Yes, that's correct.\": a plain yes"
+    },
+    "book_appointment@4": {
+     "accepted": true,
+     "delivered": true,
+     "note": "heard 'Yes, 10. In the morning tomorrow works perfectly.': a plain yes"
+    }
+   },
+   "claims": [
+    {
+     "action": "booked",
+     "booking_id": "BK0010",
+     "appointment": {
+      "service": "haircut",
+      "date": "2026-09-29",
+      "time": "10:00",
+      "phone": "+34671561101"
+     }
+    }
+   ],
+   "note": "",
+   "final": {
+    "service": "haircut",
+    "date": "2026-09-29",
+    "time": "10:00",
+    "phone": "+34671561101"
+   }
+  }
+ },
+ "facts": {
+  "DKDwjz2oVxN92mJzeqJRgL": {
+   "media_seconds": 158.1,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CAa680f44b44485a51c423ce6d2619df61: the goodbye tool, then pipeline_end (EndFrame)"
+  },
+  "DyBcsvVGDuSrDNhAHFpKQU": {
+   "media_seconds": 134.2,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CA65a4f5450137a2d517d01289bb5b3062: the goodbye tool, then pipeline_end (EndFrame)"
+  },
+  "2WToptRMhYRPjJVeTpXbLs": {
+   "media_seconds": 99.3,
+   "ended_by": "caller",
+   "observed": true,
+   "source": "call.ending span of CA5afc43fc4379e546c4f6c963649d5b66: media_stop (Twilio stop) before pipeline_end"
+  },
+  "JT2aoh3h77jHWYZJExLn7M": {
+   "media_seconds": 94.7,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CAb2fc81b90cf2af065933038d16176b5e: the goodbye tool, then pipeline_end (EndFrame)"
+  },
+  "U8gg4PGjS7cWvCASu7wCnU": {
+   "media_seconds": 227.0,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CA5e4cbbfe0a64f7c96f83a7ab64f7de31: the goodbye tool, then pipeline_end (EndFrame)"
+  },
+  "MZNx5hQom284zLZx8Yw4n9": {
+   "media_seconds": 93.7,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CA01f628ff40cf0afa0cf9574fc0a7ab17: the goodbye tool, then pipeline_end (EndFrame)"
+  },
+  "cCB5GjSEyeWq5HQRVuukgM": {
+   "media_seconds": 103.8,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CAe2bba2947763c577a8389be5b30f62db: the goodbye tool, then pipeline_end (EndFrame)"
+  },
+  "3USUpUk2zv5ECsg7Ufyp5y": {
+   "media_seconds": 112.5,
+   "ended_by": "caller",
+   "observed": true,
+   "source": "call.ending span of CA2085869fc869b5bae08e0fb28ca140db: media_stop (Twilio stop) before pipeline_end"
+  },
+  "LERNmDpsZpjwdMeBKddhzj": {
+   "media_seconds": 124.3,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CA90b999379b47f4568005351b49c5275e: the goodbye tool, then pipeline_end (EndFrame)"
+  },
+  "j67whc8USbbYYRStkqf57t": {
+   "media_seconds": 80.9,
+   "ended_by": "agent",
+   "observed": true,
+   "source": "call.ending span of CA220a99ce4c132c80658dfd2ef481d3f6: the goodbye tool, then pipeline_end (EndFrame)"
+  }
+ }
+}

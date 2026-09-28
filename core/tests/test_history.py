@@ -357,6 +357,65 @@ def interrupted_protocol():
     assert segment.text == 'Partial' and call.spoken[0].text == 'New answer.'
 
 
+def drifted_history():
+    """The history of live call CAd33c3c's last request, in miniature: three turns, two lines with no response of their own.
+
+    Turn 1's question was cut while playing, and turn 2's confirmation was
+    said by code after its tool ran. Neither run's response was kept, so
+    neither line has a response to sit in. Returns the projection.
+    """
+
+    class Booking(State):
+        agent: str = 'booking'
+
+    call = Call(state=Booking())
+    call.turn_started('I want a haircut.')
+    call.note_model_text('Which phone number should I use?')
+    call.close_model_text()
+    call.turn_started('Book it.')
+    call.note_model_text("You're all set.")
+    call.close_model_text()
+    call.turn_started('Can you move it?')
+    messages = [
+        ModelRequest(parts=[UserPromptPart('I want a haircut.')], metadata={'caller_turn': 1}),
+        ModelRequest(parts=[UserPromptPart('Book it.')], metadata={'caller_turn': 2}),
+        ModelResponse(parts=[ToolCallPart('book', {}, 'b1')], metadata={'voice_response': '2:1:1'}),
+        ModelRequest(
+            parts=[ToolReturnPart('book', 'done', 'b1'), UserPromptPart('Can you move it?')],
+            metadata={'caller_turn': 3},
+        ),
+        ModelResponse(parts=[TextPart('For Wednesday I have nine.')]),
+        ModelRequest(parts=[UserPromptPart('Sorry, no.')], metadata={'caller_turn': 3}),
+    ]
+    view = paired(project(call, messages))
+    assert project(call, view) == view, 'a second projection moved speech again'
+    return view
+
+
+def old_speech_stays_where_it_was_said():
+    """Live call CAd33c3c (session 4d, call 3): a line with no response of its own stays in its turn.
+
+    Before the fix every such line went just before the latest request, so
+    the model read "sorry no" as the answer to an "Anything else?" one turn
+    old, and said goodbye. A line said after a tool ran joins the response
+    that called it: a text response between a tool call and its result
+    breaks the pair.
+    """
+    view = drifted_history()
+    assert text(view).split('\n') == [
+        'I want a haircut.',
+        'Which phone number should I use?',
+        'Book it.',
+        "You're all set.",
+        'Can you move it?',
+        'For Wednesday I have nine.',
+        'Sorry, no.',
+    ], text(view)
+    for at, message in enumerate(view):
+        if any(isinstance(p, ToolReturnPart) for p in message.parts):
+            assert any(isinstance(p, ToolCallPart) for p in view[at - 1].parts), 'a tool result lost its call'
+
+
 async def main():
     await snapshots()
     await snapshots(adapter=True)
@@ -371,6 +430,7 @@ async def main():
     await cancelled_fragments(fragments=('yes', 'yes', 'Please continue.'))
     await cancellation_before_sdk_start()
     interrupted_protocol()
+    old_speech_stays_where_it_was_said()
     print('ok')
 
 

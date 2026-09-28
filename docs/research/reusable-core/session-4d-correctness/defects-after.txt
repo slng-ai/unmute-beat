@@ -1,0 +1,26 @@
+# 96ddb1f 13 changed paths; after the live-call fixes
+## core/tests/defects.py
+fixed: old speech is sent as the agent's last words
+fixed: a restated value books without a yes
+fixed: a cancel during the version check sends the write again
+fixed: a lookup receipt lets a prose claim through uncorrected
+KNOWN DEFECT (session Stage D decision): a prose step can still say an unbacked claim (known limit)
+fixed: a pending receipt becomes an authoritative refusal
+fixed: two concurrent runs of one intent both dispatch
+fixed: a restored intent resurrects a superseded effect
+fixed: resources of two kinds with one id collide
+fixed: estimated local playback authorises a write
+fixed: a paraphrased claim after a lookup is said
+fixed: a write cancelled after its commit is sent again
+fixed: an invalid reconciliation answer clears the retry guard
+fixed: a lookup receipt backs a goodbye that claims a booking
+exit=1
+## use-cases/salon-graph/tests/defects.py
+fixed: a refused pick loses the new day recorded beside it
+fixed: verify waits with a whole number to read back
+fixed: a restated booking value books without a yes
+fixed: a move refused by the diary is left unknown
+fixed: a day change forgets the appointment being moved
+fixed: "day after tomorrow" names no day
+fixed: verify says a digit read-back in model words
+exit=0

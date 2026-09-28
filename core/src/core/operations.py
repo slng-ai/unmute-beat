@@ -111,6 +111,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     """Whether it changes a business resource. Separate from `needs_approval`: a lookup may need neither."""
     idempotent: ClassVar[bool] = False
     """The backend dedups by the intent id, so an intent whose outcome is unknown may be sent again, as itself."""
+    confirms_by_restating: ClassVar[bool] = False
+    """The caller saying the read-back's value again confirms it (`restated: confirms`). Only ever a lookup."""
     subject: ClassVar[str] = ''
     """The receipt field naming the resource it acts on (a booking id, a ticket id). See `CallContext.effective`."""
     resource: ClassVar[str] = ''
@@ -259,6 +261,15 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         unknown and nothing is filed. A reconciled success whose resource has
         moved on since (`version` below the application's current one) is
         history: filed and audited, never said, assigned or recapped.
+
+        The service is asked for the current version before anything here
+        changes, and nothing after that awaits until the evidence is filed
+        (session 4d, defect 2): a cancellation during the question leaves the
+        intent unknown, to be reconciled again, never a success with no
+        evidence that a new intent could then send again. A question that
+        gets no answer leaves it unknown too, with the receipt on the audit:
+        what the service did is known, whether it still stands is not, and
+        nothing is said about it until that is known.
         """
         data = receipt.model_dump(mode='json')
         outcome = self.outcome(receipt.model_dump())
@@ -267,13 +278,20 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
             audit['receipt'] = data
             raise OutcomeUnknownError(f'{self.name}: the answer settles nothing yet ({data})')
         succeeded = outcome == 'succeeded'
-        call.set_intent(intent.id, status=outcome)
-        call._unknown.pop(intent.id, None)
         resource = str(data.get(self.subject, '')) if self.subject else ''
         version = data.get(self.version) if self.version else None
         kind = self.resource or self.subject
+        current = None
         if succeeded and resource and audit.get('reconciled') and isinstance(version, int):
-            call.note_version(kind, resource, await self._current_version(call, kind, resource, version))
+            current = await self._current_version(call, kind, resource)
+            if current is None:
+                self._lost(call, intent, args, audit, 'done, and whether it still stands is unknown')
+                audit.update(receipt=data, currentness='unknown')
+                raise OutcomeUnknownError(f'{self.name}: done, but its current version is unknown')
+        call.set_intent(intent.id, status=outcome)
+        call._unknown.pop(intent.id, None)
+        if current is not None:
+            call.note_version(kind, resource, current)
         call.note_evidence(
             self.name,
             args.model_dump(mode='json'),
@@ -390,20 +408,20 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         """What a validated receipt about these arguments says. Base: a success, or else an authoritative no."""
         return 'succeeded' if self.succeeded(receipt) else 'rejected'
 
-    async def _current_version(self, call: C, kind: str, resource: str, version: int) -> int:
+    async def _current_version(self, call: C, kind: str, resource: str) -> int | None:
         """The resource's version now, as the service says (`current_version`), for a success learnt by reconciliation.
 
         A receipt found by reconciliation says what the intent did then, not
         what stands now: the ticket may have been reopened since. Optional
-        on the service, like `note_intent`, and bounded. Without it, or when
-        it fails, the receipt's own version is taken as current only if
-        nothing in this call knows better; a failure counts as "something may
-        be newer", so the old receipt is not said.
+        on the service, like `note_intent`, and bounded. Without it, nothing
+        in this call's evidence is overruled (0). A failure, a timeout or an
+        answer that is not a version is None: unknown, never a version made
+        up to stand for "something may be newer".
         """
         services = getattr(call, 'services', None)
         ask = getattr(services, 'current_version', None)
         if ask is None:
-            return version
+            return 0
         try:
             async with asyncio.timeout(NOTE_INTENT_SECONDS):
                 if inspect.iscoroutinefunction(ask):
@@ -411,9 +429,9 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 else:
                     found = await asyncio.to_thread(ask, kind, resource)
         except Exception as error:
-            logger.warning('current_version failed ({}): {} taken as history', type(error).__name__, resource)
-            return version + 1
-        return found if isinstance(found, int) and not isinstance(found, bool) else version + 1
+            logger.warning('current_version failed ({}): {} left unknown', type(error).__name__, resource)
+            return None
+        return found if isinstance(found, int) and not isinstance(found, bool) else None
 
     async def _before(self, call: C, args: ArgsT) -> OutputT | None:
         """Settle anything that must be resolved before a new action. Return an output to stop here."""

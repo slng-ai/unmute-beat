@@ -47,6 +47,8 @@ class DeskState(BaseModel):
     account_id: AccountId | None = Field(None, description='The account number, like ACC-1234.')
     ticket_id: TicketId | None = Field(None, description='The ticket number, like T-101.')
     resolution: str = Field('', description='How the caller says the problem was fixed, in their own words.')
+    category: str = Field('', description='What the problem is about: billing or access.')
+    """Only `choices.yaml` records it: what the resolutions on offer rest on."""
     revision: int = 0
     """The ticket's revision as the backend last said it. Only a receipt sets it."""
     ticket_status: str = ''
@@ -245,6 +247,27 @@ class Desk:
         if self.wrong_ticket:
             return {**result, 'ticket_id': 'T-999'}
         return result
+
+
+def open_tickets(desk: Desk, state: DeskState) -> dict[str, str]:
+    """The caller's tickets, by id (`choices.yaml`). They rest on whose account it is, not on what the problem is about."""
+    if not state.account_id:
+        return {}
+    with desk._tx() as db:
+        rows = db.execute('SELECT id, status FROM tickets WHERE account = ?', (state.account_id,)).fetchall()
+    return {ticket: f'el ticket {ticket}, {status}' for ticket, status in rows}
+
+
+RESOLUTIONS = {
+    'billing': {'refund': 'un reembolso', 'credit': 'un abono en la cuenta'},
+    'access': {'reset': 'un cambio de contraseña', 'unlock': 'la cuenta desbloqueada'},
+}
+"""How a problem of each category can be closed: what `choices.yaml` offers, by the category the caller gave."""
+
+
+def resolutions(desk: Desk, state: DeskState) -> dict[str, str]:
+    """The resolutions on offer for the category recorded: a new category is a new offer."""
+    return RESOLUTIONS.get(state.category, {})
 
 
 def look_up(desk: Desk, ref: TicketRef) -> Found:

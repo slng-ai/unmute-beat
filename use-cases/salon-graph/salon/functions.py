@@ -30,7 +30,7 @@ from pydantic import BaseModel, StringConstraints, ValidationError
 from core import Intent, OutcomeUnknownError
 from salon.diary import WEEKDAYS, AlreadyHoldsError, Diary, RefusedError, day_phrases, resolve_day, spoken_day
 from salon.models.receipts import CustomerLookup, Held, Saved, Slots
-from salon.models.shapes import Spoken, SubmittedPhone
+from salon.models.shapes import Spoken, SubmittedPhone, grouped, phone_length
 from salon.models.state import SalonState
 
 
@@ -163,6 +163,26 @@ def number_words(args: PhoneArgs) -> str:
     return f'Is your number {Spoken.validate_python(args.phone)}?'
 
 
+def phone_refusal(raw: str) -> str:
+    """What the caller hears when the number recorded cannot be looked up: verify's `refusals:`, said by code.
+
+    The same four questions the verify prompt used to give the model to say,
+    now said by code, with a too-long number's digits grouped the way the
+    read-back groups them. '' for a number with nothing wrong in its length:
+    core then asks with the step's `asks:` line.
+    """
+    if not raw.startswith('+'):
+        return 'Which country is that phone number from?'
+    match phone_length(raw):
+        case 'too long':
+            return f'I have {grouped(raw)}. Which part is wrong?'
+        case 'too short':
+            return 'Please give me the rest of the digits.'
+        case 'unknown country code':
+            return 'Which phone number should I use? Please say it with the country code.'
+    return ''
+
+
 OFFER_AT_MOST = 6
 """How many times the agent is shown, nearest the caller's time first. It offers up to three of them."""
 
@@ -250,7 +270,8 @@ def find_times(salon: Salon, state: SalonState) -> Times:
     if found.status != 'ok':
         notes.append(
             {
-                'need_day': f'The diary cannot place "{state.booking_day}" as a day. Ask for a weekday or a date.',
+                'need_day': f'Nothing was looked up: "{state.booking_day}" is not a day the diary can place, so '
+                'this says nothing about what is free. Ask which day they mean: a weekday or a date.',
                 'past': f'{found.day} has already gone past. Ask for a day that has not.',
                 'closed': f'The salon is closed on {found.day}. Ask for another day.',
             }.get(found.status, f'Nothing is free on {found.day}. Ask about another day.')
@@ -324,13 +345,19 @@ def _write(salon: Salon, token: str, phone: str, attempt, expected: dict[str, st
     about something else: nobody knows what happened, so it is an unknown
     outcome, never "nothing happened", and core will not let it be tried again
     until its `find_*` reconciliation has been asked.
+
+    A refusal names the booking the request was about (session 4d, defect 3):
+    core binds every receipt to its request by `matches`, and a move or cancel
+    refusal with no booking id was about nothing, so it stayed unknown. That
+    id is the request's own, not an effect: no revision, nothing moved.
     """
+    asked = expected.get('booking_id', '')
     try:
         raw = attempt()
     except AlreadyHoldsError as refused:
-        return Written(status='refused', phone=phone, reason=str(refused))
+        return Written(status='refused', phone=phone, booking_id=asked, reason=str(refused))
     except RefusedError as refused:
-        return Written(status='refused', phone=phone, reason=str(refused))
+        return Written(status='refused', phone=phone, booking_id=asked, reason=str(refused))
     except Exception as error:
         found = salon.diary.outcome_of(token)
         if found is None:
@@ -417,11 +444,12 @@ def _found(salon: Salon, token: str, phone: str, expected: dict[str, str]) -> Wr
 
     Never "not yet": a write nobody has an answer for is fenced (`void`), so
     a worker still holding it can never land it later, and the caller hears
-    that nothing was done, which is then true for good.
+    that nothing was done, which is then true for good. The fence names the
+    booking the request was about, as a refusal does.
     """
     raw = salon.diary.outcome_or_void(token)
     if raw.get('status') == 'void':
-        return Written(status='void', phone=phone)
+        return Written(status='void', phone=phone, booking_id=expected.get('booking_id', ''))
     written = _written(raw, phone)
     if why := _disagrees(raw, expected):
         raise OutcomeUnknownError(why)

@@ -209,6 +209,8 @@ class _Resolver:
         """`compile(model=...)` was given: every persona's own model is set aside for it."""
         self.assigned: dict[str, set[str]] = {}
         """Declared operation to the state fields its receipt sets, checked against what the model collects."""
+        self.choice_after: dict[str, frozenset[str] | None] = {}
+        """Choice to the fields its offer rests on, as the first step that offers it declared (None: every field)."""
 
     def fail(self, where: str, problem: str) -> None:
         """Keep a problem once: one missing file named by three references is one thing to fix."""
@@ -408,7 +410,14 @@ class _Resolver:
             'version': decl.version,
             'rejects': dict(decl.rejects),
             'idempotent': decl.idempotent,
+            'confirms_by_restating': decl.restated == 'confirms',
         }
+        if decl.restated == 'confirms' and (decl.changes or decl.approval != 'readback'):
+            self.fail(
+                where,
+                'restated: confirms is only for a read-back of a lookup (changes: false, approval: readback): '
+                'a value said again is never a yes to a change',
+            )
         function = self.domain_function(where, decl.function)
         hints = _hints(function) if function is not None else {}
         params = list(inspect.signature(function).parameters) if function is not None else []
@@ -496,14 +505,30 @@ class _Resolver:
         self._cache['declared', name] = found
         return found
 
-    def choices(self, step: str, fields: list[str], refs: Mapping[str, str]) -> dict[str, Callable[..., Any]]:
+    def choices(
+        self, step: str, fields: list[str], refs: Mapping[str, str | ChoiceSpec]
+    ) -> dict[str, Callable[..., Any]]:
         found = {}
         for name, ref in refs.items():
             if name not in fields:
                 self.fail(step, f'offers choices for {name!r}, which the step does not ask for')
-            if (choose := self.function(step, ref, 2)) is not None:
+            after = frozenset(ref.after) if isinstance(ref, ChoiceSpec) else None
+            for field_name in sorted(after or ()):
+                if field_name == name or field_name not in fields:
+                    self.fail(
+                        step, f'offers {name!r} after {field_name!r}, which is not another of its fields'
+                    )
+            if self.choice_after.setdefault(name, after) != after:
+                self.fail(step, f'offers {name!r} after other fields than another step that offers it')
+            if (
+                choose := self.function(step, ref.function if isinstance(ref, ChoiceSpec) else ref, 2)
+            ) is not None:
                 found[name] = choose
         return found
+
+    def after(self, refs: Mapping[str, str | ChoiceSpec]) -> dict[str, frozenset[str]]:
+        """The declared `after:` of each choice that has one."""
+        return {name: frozenset(ref.after) for name, ref in refs.items() if isinstance(ref, ChoiceSpec)}
 
     def persona(self, step: str, name: str) -> Any:
         """A persona's native spec, its model set aside when `compile` was given one explicitly."""
@@ -659,6 +684,21 @@ class ActionSpec(_Operated):
         )
 
 
+class ChoiceSpec(BaseModel):
+    """A choice whose offer rests on some fields only: `{function: functions.py:find_times, after: [day, time]}`.
+
+    A plain reference (`slot: clinic.py:free_times`) rests on every other
+    field: any change to the request takes its offer and its pick away. With
+    `after:`, only a change to one of those fields does; `after: []` rests on
+    none (the bookings a caller holds do not change with the day they ask
+    for). A change of the caller's identity takes every choice away.
+    """
+
+    model_config = SPEC
+    function: str
+    after: list[str]
+
+
 class HandoverSpec(BaseModel):
     """One step a conversation step may hand the caller to, and what for: the agent is shown the purpose."""
 
@@ -681,7 +721,8 @@ class ConversationSpec(StepSpec):
     """Added to the end of the prompt: a file in the flow folder, or a registry name."""
     fields: list[str] = []
     """State fields this step's agent may record from the caller (`collect`)."""
-    choices: dict[str, str] = {}
+    choices: dict[str, str | ChoiceSpec] = {}
+    """A field picked from options, and the function offering them, with the fields its offer rests on (`ChoiceSpec`)."""
     operations: list[str] = []
     """Declared operations this step's agent may carry out: each read back, and run only on its yes to a heard read-back."""
     exits: list[HandoverSpec] = []
@@ -712,6 +753,13 @@ class ConversationSpec(StepSpec):
     """One of `operations`, read back by code on arrival when the state already gives its arguments."""
     asks: dict[str, str] = {}
     """Field -> words: on arrival by a hand-over, code asks for the first of these fields still empty, no model."""
+    refusals: dict[str, str] = {}
+    """Field -> `file.py:words`, `(value) -> str`: on a rendered step, what the caller hears when `collect` refused that value.
+
+    A validator's reason is written for the model; with no model words on a
+    rendered step, the application says what to ask instead ("Please give me
+    the rest of the digits."), in its own words. '' falls back to `asks:`.
+    """
     reads_back: dict[str, list[str]] = {}
     """Operation -> fields: a reply that only records one of them gets the operation read back by code, no request.
 
@@ -745,6 +793,14 @@ class ConversationSpec(StepSpec):
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         for name in sorted(set(self.asks) - set(self.fields)):
             resolve.fail(self.id, f'asks for {name!r}, which is not one of its fields')
+        for name, ref in self.refusals.items():
+            if name not in self.fields:
+                resolve.fail(self.id, f'words a refusal of {name!r}, which is not one of its fields')
+            resolve.function(self.id, ref, 1)
+        if self.refusals and self.speech != 'rendered':
+            resolve.fail(
+                self.id, 'words refusals, which only a rendered step says: on a prose step the model does'
+            )
         for name, fields in self.reads_back.items():
             if name not in self.operations:
                 resolve.fail(self.id, f'reads back {name!r}, which is not one of its operations')
@@ -775,6 +831,7 @@ class ConversationSpec(StepSpec):
             instructions=prompt,
             fields=tuple(self.fields),
             choices=resolve.choices(self.id, self.fields, self.choices),
+            choice_after=resolve.after(self.choices),
             operations=tuple(resolve.operation(name) for name in self.operations),
             exits=tuple(exit.to for exit in self.exits),
             purposes={exit.to: exit.purpose for exit in self.exits if exit.purpose},
@@ -785,6 +842,11 @@ class ConversationSpec(StepSpec):
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             asks=dict(self.asks),
+            refusals={
+                name: found
+                for name, ref in self.refusals.items()
+                if (found := resolve.function(self.id, ref, 1)) is not None
+            },
             reads_back={name: tuple(fields) for name, fields in self.reads_back.items()},
             spec=resolve.persona(self.id, self.agent),
         )
@@ -901,6 +963,16 @@ class OperationSpec(BaseModel):
     """Receipt fields that must equal an argument: `{customer_phone: phone}`. A receipt about someone else counts for nothing."""
     approval: Literal['readback', 'none'] = 'readback'
     """`readback`: only after a heard read-back of these exact arguments and a yes. `none`: a read or a lookup."""
+    restated: Literal['confirms'] | None = None
+    """`confirms`: a caller who answers the heard read-back by saying its value again has confirmed it.
+
+    The application's policy, for a lookup only (`changes: false`): the
+    salon's rule that the same phone number said back is a yes. Without it,
+    recording the unchanged value is only a record, and the step's own agent
+    reads the reply. The loader refuses it on anything that changes a
+    resource: a value said again ("No, do not book Friday at two, I'm only
+    checking") is never consent to a booking, move, cancel or complaint.
+    """
     readback: str = ''
     """`file.py:words`, taking the arguments, returning the sentence the caller agrees to."""
     reconcile: str = ''

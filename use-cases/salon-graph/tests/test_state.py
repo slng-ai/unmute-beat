@@ -97,12 +97,23 @@ def correcting_the_number_withdraws_the_identity():
 
 
 def a_changed_request_drops_the_pick():
-    """A pick belongs to the request it was offered for: a new day takes the old slot with it."""
+    """A pick belongs to the request it was offered for: a new day takes the old slot with it.
+
+    And only what rested on the day (session 4d, defect 4): the appointment
+    being moved rests on no field, so it stays. A different caller takes
+    both; the same number said again takes nothing.
+    """
+    offers = {'slot': {'2026-10-02T1400|haircut': 'Friday at 2'}, 'appointment': {'BK0001': 'Friday at 9'}}
     _, _, call, _ = opened(verified_phone=PHONE)
-    call._offered = {'slot': {'2026-10-02T1400|haircut': 'Friday at 2'}}
-    call.collect(slot='2026-10-02T1400|haircut')
+    call._offered = {name: dict(ids) for name, ids in offers.items()}
+    call.collect(slot='2026-10-02T1400|haircut', appointment='BK0001')
     call.collect(booking_day='Saturday')
-    assert call.state.facts.slot == '' and call._offered == {}
+    assert call.state.facts.slot == '' and call.state.facts.appointment == 'BK0001', call.state.facts
+    assert call._offered == {'appointment': offers['appointment']}, call._offered
+    call.collect(customer_phone=PHONE)
+    assert call.state.facts.appointment == 'BK0001', 'the same number said again took the pick'
+    call.collect(customer_phone=OTHER)
+    assert call.state.facts.appointment == '' and call._offered == {}, 'a pick outlived its caller'
 
 
 def the_historical_short_number_is_refused():
@@ -146,7 +157,7 @@ def a_wrong_number_says_what_to_ask():
     for bad, says in (
         ('600111222', 'Ask which country'),
         ('+3467127345', 'Ask for the rest of the digits'),
-        ('+346712734544', 'I heard +34 671 273 454 4'),
+        ('+346712734544', 'I heard +34 671 27 34 54 4'),
         ('+346712734544', 'ask which part is wrong'),
         ('+999123456789', 'Ask for the whole number again'),
     ):

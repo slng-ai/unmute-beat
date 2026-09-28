@@ -1,0 +1,110 @@
+{
+  "note": "Session 4d targeted live checks, version 1. One new Coval test set with four cases, one per repaired failure family. Every caller has its own synthetic number, never dialled: it only names the customer in the salon's diary. Expected outcomes are judged from the campaign's own diary file and the write audits, never from a Coval metric. Dates assume calls on Sunday 27 September 2026 (Europe/Madrid): tomorrow is Monday the 28th, the day after tomorrow Tuesday the 29th.",
+  "common": "You are calling from a different phone, so the salon cannot see your number. Give your number only when the receptionist asks for it, and say yes when it is read back correctly. When asked if you need anything else at the end, say \"No, that's all, thanks\" and say goodbye. Do not complain. Do not ask for a manager.",
+  "set": {
+    "name": "reusable-core session 4d correctness v1",
+    "description": "Four targeted calls: book, move, cancel; a move with a relative-day correction; a refused read-back that repeats its time; a move whose time is taken before the yes.",
+    "coval_test_set": "Deo6J6b3",
+    "deleted": "Deo6J6b3: created with all four cases, never launched, deleted so each call runs alone"
+  },
+  "cases": [
+    {
+      "key": "4d-1-book-move-cancel",
+      "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+      "phone": "+34671540101",
+      "spoken": "plus three four, six seven one, five four zero, one zero one",
+      "trace": "ce40c1249ff679ff0fe453fe9dd8b138",
+      "input": "You want a haircut at Sage and Stone tomorrow at ten in the morning. Your phone number is +34 671 540 101. Say it as \"plus three four, six seven one, five four zero, one zero one\". Say yes when the booking is read back. When the receptionist says it is booked and asks if there is anything else, say \"Actually, can you move it to Wednesday, same time?\". Say yes when the move is read back. When they confirm the move and ask if there is anything else, say \"Sorry, I can't make it after all. Please cancel it.\" Say yes when the cancellation is read back.",
+      "expected_behaviors": [
+        "The agent read back a haircut tomorrow (Monday) at 10:00 AM, and the caller said yes before the agent said it was booked.",
+        "After the caller asked to move it to Wednesday at the same time, the agent read back a move of that appointment to Wednesday at 10:00 AM, and the caller said yes before the agent said it was moved.",
+        "After the caller asked to cancel, the agent read back the cancellation of the Wednesday appointment, and the caller said yes before the agent said it was cancelled.",
+        "The agent did not say it could not find the caller's appointment, and did not ask the caller to repeat themselves because of an error."
+      ],
+      "expected_diary": "No active booking for +34671540101 at the end. Write audits, in order: book_appointment ok (2026-09-28 10:00), move_appointment ok (same booking id, 2026-09-30 10:00, revision 2), cancel_appointment ok (revision 3). No refused, unknown or repeated write.",
+      "deleted_case": "GGgfvMZWoFUXpnP5W8HhNV",
+      "coval_test_set": "JCZGihHR",
+      "coval_test_case": "9GH9opPTqPbRJFT2pNnJst"
+    },
+    {
+      "key": "4d-2-interruptive-relative-day",
+      "persona": "VSruLZYYyz3w7fkdUaheDR",
+      "phone": "+34671540102",
+      "spoken": "plus three four, six seven one, five four zero, one zero two",
+      "trace": "5edecd4cde459ff998b57dbae9014b23",
+      "input": "You want a haircut at Sage and Stone tomorrow morning. Your phone number is +34 671 540 102. Say it as \"plus three four, six seven one, five four zero, one zero two\". Accept the first morning time offered and say yes when the booking is read back. When it is booked and they ask if there is anything else, say \"Can you move it to Wednesday?\". When the receptionist starts reading that move back to you, interrupt them before they finish and say \"Sorry, no, I mean day after tomorrow, the same time.\" Say yes clearly only when a move to Tuesday at the same time is read back.",
+      "expected_behaviors": [
+        "The agent booked one haircut tomorrow morning on a yes to its read-back.",
+        "After the caller corrected the move to the day after tomorrow, the agent read back a move to Tuesday the 29th at the same time as the booking, and the caller said yes before the agent said it was moved.",
+        "The agent did not move the appointment to Wednesday.",
+        "The agent did not say that the day after tomorrow was full or unavailable."
+      ],
+      "expected_diary": "One active booking for +34671540102 at the end: a haircut on 2026-09-29 at the time first booked on 2026-09-28. Write audits: book_appointment ok, move_appointment ok to 2026-09-29. No write for 2026-09-30.",
+      "deleted_case": "NoihhC4myqWGWthcmJCZ5t",
+      "coval_test_set": "TrUGva6q",
+      "coval_test_case": "A3eP8AKJGdtE22CFXv6Z8S"
+    },
+    {
+      "key": "4d-3-refused-repetition",
+      "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+      "phone": "+34671540103",
+      "spoken": "plus three four, six seven one, five four zero, one zero three",
+      "trace": "review reproducer, defect 1",
+      "input": "You want to know if Friday at two in the afternoon is free for a haircut at Sage and Stone, but you do not want to book it yet. Your phone number is +34 671 540 103. Say it as \"plus three four, six seven one, five four zero, one zero three\". When the receptionist reads a booking back to you and asks if they should book it, say exactly \"No, don't book Friday at two. I'm only checking if it is free.\" If they ask again, say no again.",
+      "expected_behaviors": [
+        "The agent did not book an appointment.",
+        "The agent did not say that the caller's repetition of the time was a yes, or that it was the same as it read back.",
+        "The agent did not tell the caller that anything was booked."
+      ],
+      "expected_diary": "No booking for +34671540103. No book_appointment write audit at all (no intent past prepared).",
+      "deleted_case": "XFvWyibdc4eNAtq68qP6fs",
+      "coval_test_set": "MmqxRgZW",
+      "coval_test_case": "XGAeqKFdquEjwVha8pUDBF"
+    },
+    {
+      "key": "4d-4-taken-then-alternative",
+      "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+      "phone": "+34671540104",
+      "spoken": "plus three four, six seven one, five four zero, one zero four",
+      "contender": {
+        "script": "use-cases/salon-graph/evals/contend.py",
+        "heard": [
+          "Shall I move your haircut",
+          "Thursday the 1st at 3:00 PM"
+        ],
+        "day": "2026-10-01",
+        "at": "15:00",
+        "phone": "+34671540199"
+      },
+      "input": "You want a haircut at Sage and Stone on Tuesday at eleven in the morning. Your phone number is +34 671 540 104. Say it as \"plus three four, six seven one, five four zero, one zero four\". Say yes when the booking is read back. When it is booked and they ask if there is anything else, say \"Can you move it to Thursday at three in the afternoon?\". Say yes when that move is read back. If the receptionist then says that time is no longer free, accept the first other Thursday afternoon time they offer, and say yes when that move is read back.",
+      "expected_behaviors": [
+        "The agent booked a haircut on Tuesday at 11:00 AM on a yes to its read-back.",
+        "After the caller agreed to the move to Thursday at 3:00 PM, the agent said that time was no longer available, and did not say the appointment was moved to 3:00 PM.",
+        "The agent then offered another Thursday afternoon time, read the move to it back, and moved the appointment only after the caller said yes.",
+        "The agent did not say it could not confirm whether something went through."
+      ],
+      "expected_diary": "One active booking for +34671540104: a haircut on 2026-10-01 in the afternoon, not at 15:00, revision 2. One active booking for the contender +34671540199 on 2026-10-01 at 15:00. Write audits: book_appointment ok, move_appointment failed/rejected (refused, booking id bound), move_appointment ok. No unknown write.",
+      "deleted_case": "YkfazabU494VGbeWasFBHT",
+      "coval_test_set": "ghsCWtAD",
+      "coval_test_case": "PpRSPVAipjQMeKAFynSssw"
+    },
+    {
+      "key": "4d-3-refused-repetition-v2",
+      "retry_of": "4d-3-refused-repetition",
+      "why": "v1 (call CAb54c54) never reached a read-back: its caller only asked whether the time was free.",
+      "persona": "MUFJdYAHdBHU6UbRRu4ykM",
+      "phone": "+34671540103",
+      "spoken": "plus three four, six seven one, five four zero, one zero three",
+      "trace": "review reproducer, defect 1",
+      "input": "You want a haircut at Sage and Stone on Friday at two in the afternoon. Your phone number is +34 671 540 103. Say it as \"plus three four, six seven one, five four zero, one zero three\". Ask to book Friday at two. When the receptionist reads the booking back and asks if they should book it, you change your mind: say exactly \"No, don't book Friday at two. I'm only checking if it is free.\" If they ask again, say no again. Never agree to a booking.",
+      "expected_behaviors": [
+        "The agent did not book an appointment.",
+        "The agent did not say that the caller's repetition of the time was a yes, or that it was the same as it read back.",
+        "The agent did not tell the caller that anything was booked."
+      ],
+      "expected_diary": "No booking for +34671540103. No book_appointment write audit at all (no intent past prepared).",
+      "coval_test_set": "mJQUNQ2D",
+      "coval_test_case": "JCv6vGsXkxpEt4w3MRBXXW"
+    }
+  ]
+}

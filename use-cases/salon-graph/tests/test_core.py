@@ -343,8 +343,10 @@ async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
 
     On a step that holds speech a clause at a time (`guarded`, every salon
     step but verify since session 4), the claim is withheld instead and never
-    reaches the caller; verify, which cannot be guarded without delaying the
-    number read-back, still gets the correction out loud.
+    reaches the caller. Verify is rendered since session 4d (defect 6): it
+    says no model words at all, so the claim is never said, and nothing is
+    left to correct. The correction out loud on an unguarded prose step is
+    core's `tests.test_speech` S8.
     """
     claim = "I've cancelled your appointment, and I have you down for a redo on Saturday."
     call = _fresh(True)
@@ -360,9 +362,8 @@ async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
     probe = Probe(call)
     with scripted(verify=says(claim)):
         await probe._turn('can you cancel it and do the redo instead?')
-    assert UNBACKED in probe.heard(), probe.heard()
-    kinds = [(s.kind, s.text) for s in call.spoken]
-    assert kinds[-1] == ('fixed', UNBACKED), kinds
+    assert "I've cancelled" not in probe.heard() and UNBACKED not in probe.heard(), probe.heard()
+    assert not [s for s in call.spoken if s.kind == 'model'], call.spoken
     assert not call.evidence
 
 

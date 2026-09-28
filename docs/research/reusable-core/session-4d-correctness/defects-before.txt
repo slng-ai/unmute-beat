@@ -1,0 +1,23 @@
+# 8b127b2 3 changed paths; reproducers only, no fix
+## core/tests/defects.py
+KNOWN DEFECT (session 4d defect 1): a restated value books without a yes
+KNOWN DEFECT (session 4d defect 2): a cancel during the version check sends the write again
+KNOWN DEFECT (session 4d defect 6): a lookup receipt lets a prose claim through uncorrected
+KNOWN DEFECT (session Stage D decision): a prose step can still say an unbacked claim (known limit)
+fixed: a pending receipt becomes an authoritative refusal
+fixed: two concurrent runs of one intent both dispatch
+fixed: a restored intent resurrects a superseded effect
+fixed: resources of two kinds with one id collide
+fixed: estimated local playback authorises a write
+fixed: a paraphrased claim after a lookup is said
+fixed: a write cancelled after its commit is sent again
+fixed: an invalid reconciliation answer clears the retry guard
+fixed: a lookup receipt backs a goodbye that claims a booking
+exit=4
+## use-cases/salon-graph/tests/defects.py
+KNOWN DEFECT (session 4d defect 1): a restated booking value books without a yes
+KNOWN DEFECT (session 4d defect 3): a move refused by the diary is left unknown
+KNOWN DEFECT (session 4d defect 4): a day change forgets the appointment being moved
+KNOWN DEFECT (session 4d defect 5): "day after tomorrow" names no day
+KNOWN DEFECT (session 4d defect 6): verify says a digit read-back in model words
+exit=5

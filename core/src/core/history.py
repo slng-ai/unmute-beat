@@ -56,8 +56,14 @@ def project(
 
     Fixed speech shares its producing response so the following tool result
     stays last. Google rejects requests ending with an assistant message.
-    Speech left by cancellation without a protocol response is inserted before
-    the next caller input. Speech filed under the request now going out (a
+    Speech left by cancellation without a protocol response goes where it was
+    said: before the caller's words of the next turn, or before the latest
+    request when it is this turn's. When that request holds tool results, the
+    line joins the response that called the tools, so the pair stays whole.
+    Put before the latest request whatever its turn, a line five turns old
+    was sent as the agent's last words on every request after it (live call
+    CAd33c3c, session 4d: "sorry no" read as the answer to "Anything else?").
+    Speech filed under the request now going out (a
     holding line said as it starts) is left out of it: it joins that
     request's response when there is one. Inserted as a stray response, it
     went in front of the caller's words.
@@ -112,10 +118,38 @@ def project(
             or (segment.response and segment.response == call._response)
         ):
             continue
-        message = ModelResponse(parts=[TextPart(segment.text)], metadata={'speech_ids': [segment.id]})
-        at = len(result)
-        if at and isinstance(result[-1], ModelRequest):
-            at -= 1
-        result.insert(at, message)
+        at = next((i for i, m in enumerate(result) if _caller_turn(call, m) > segment.turn), None)
+        if at is None:
+            at = len(result) - 1 if result and isinstance(result[-1], ModelRequest) else len(result)
+        before = result[at - 1] if at else None
+        if isinstance(before, ModelResponse) and at < len(result) and _answers_tools(result[at]):
+            said = ''.join(p.content for p in before.parts if isinstance(p, TextPart))
+            parts = [TextPart(said + segment.text), *(p for p in before.parts if not isinstance(p, TextPart))]
+            ids = [*(before.metadata or {}).get('speech_ids', []), segment.id]
+            result[at - 1] = replace(
+                before, parts=parts, metadata=(before.metadata or {}) | {'speech_ids': ids}
+            )
+        else:
+            message = ModelResponse(parts=[TextPart(segment.text)], metadata={'speech_ids': [segment.id]})
+            result.insert(at, message)
         present.add(segment.id)
     return result
+
+
+def _caller_turn(call, message: ModelMessage) -> int:
+    """The caller turn a request carries words from; 0 for anything else.
+
+    A request of the run now going out has no `caller_turn` yet (a run's
+    messages are tagged when it is kept), so its caller words are this turn's.
+    """
+    if not isinstance(message, ModelRequest):
+        return 0
+    turn = (message.metadata or {}).get('caller_turn')
+    if turn is None and any(isinstance(p, UserPromptPart) for p in message.parts):
+        return call.turn
+    return turn or 0
+
+
+def _answers_tools(message: ModelMessage) -> bool:
+    """Whether a request holds tool results, which must follow the response that called them."""
+    return any(isinstance(p, (ToolReturnPart, RetryPromptPart)) for p in message.parts)

@@ -149,6 +149,11 @@ class Found(BaseModel):
     status: Literal['found', 'none']
 
 
+def patient_words(ref: PatientRef) -> str:
+    """The read-back of a patient number before it is looked up (`restated.yaml`)."""
+    return f'Is your patient number {ref.patient}?'
+
+
 def look_up(clinic: Backend, ref: PatientRef) -> Found:
     """The patient's booking, if the diary has one: a read, so it needs no read-back (`code_node.yaml`)."""
     if clinic.failing:

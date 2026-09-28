@@ -1,0 +1,38 @@
+# agent.yaml's desk with the ticket and its resolution picked from offers, as a prose step (a rendered one offers nothing).
+# No booking, day or slot: two choices that rest on different fields (session 4d, defect 4).
+# The ticket rests on no field (only on whose account it is); the resolution rests on the problem's category.
+version: 1
+id: support-desk-choices
+state: tickets.py:DeskState
+identity: account_id
+entry: desk
+locale:
+  base: spanish
+agents:
+  agent:
+    prompt: prompts/agent.md
+operations:
+  resolve_ticket:
+    function: tickets.py:resolve
+    args: {account_id: account_id, ticket_id: ticket_id, revision: revision, resolution: resolution}
+    readback: tickets.py:resolve_words
+    reconcile: tickets.py:find_effect
+    subject: ticket_id
+    resource: ticket
+    version: now_revision
+    idempotent: true
+    matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    succeeds: {status: resolved}
+    rejects: {status: stale}
+    assign: {revision: now_revision, ticket_status: status}
+    say: 'Ticket {ticket_id} resuelto. ¿Algo más?'
+steps:
+  - id: desk
+    kind: conversation
+    agent: agent
+    prompt: prompts/desk.md
+    fields: [account_id, ticket_id, category, resolution]
+    choices:
+      ticket_id: {function: tickets.py:open_tickets, after: []}
+      resolution: {function: tickets.py:resolutions, after: [category]}
+    operations: [resolve_ticket]

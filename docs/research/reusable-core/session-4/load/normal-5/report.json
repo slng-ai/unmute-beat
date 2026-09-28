@@ -1,0 +1,543 @@
+[
+ {
+  "run": "jCBGSipW7FuUKu4VVtgnin",
+  "simulation": "GbULHRHPbL4taaEzHryhbt",
+  "call": "CAf657289f35ca4577a54343e1eb29d240",
+  "status": "COMPLETED",
+  "seconds": 109.392,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "yes",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "yes that's perfect",
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 12,
+  "completed": 17,
+  "cancelled": 7,
+  "input_tokens": 32805,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "5": 1,
+   "6": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "hand_over > text",
+   "text",
+   "collect > lookup_customer",
+   "",
+   "options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   0.9634120464324951,
+   1.1662909984588623,
+   1.866940975189209,
+   2.706252098083496,
+   1.0366289615631104,
+   1.2117760181427002,
+   1.3629770278930664,
+   1.0669469833374023,
+   1.1573810577392578
+  ],
+  "requests": [
+   0.712,
+   0.852,
+   0.592,
+   0.584,
+   0.931,
+   0.5,
+   0.603,
+   0.782,
+   0.83,
+   0.491,
+   0.668,
+   0.63,
+   0.775,
+   0.763,
+   0.631,
+   0.726,
+   0.574
+  ],
+  "tails": [
+   0.08999999999999997,
+   0.08600000000000002,
+   0.05999999999999994,
+   0.19600000000000006
+  ],
+  "statuses": {
+   "answered": 9
+  },
+  "pieces": 5,
+  "interrupted": 3,
+  "booked_after": 95.96,
+  "problems": []
+ },
+ {
+  "run": "jCBGSipW7FuUKu4VVtgnin",
+  "simulation": "BsdTQTsZ23otiZg2wHLYnu",
+  "call": "CAeeeb8603fe80483b89f0d3d54fe23ee3",
+  "status": "COMPLETED",
+  "seconds": 106.623,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "asked_turn": 5,
+    "turn": 6,
+    "heard": "yes that's right",
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 9,
+  "completed": 16,
+  "cancelled": 3,
+  "input_tokens": 33079,
+  "echo": [],
+  "filler_copies": 1,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "5": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.6606829166412354,
+   1.118089199066162,
+   2.618741035461426,
+   0.929063081741333,
+   2.1971569061279297,
+   1.0349760055541992,
+   1.0256781578063965,
+   1.0336189270019531
+  ],
+  "requests": [
+   0.627,
+   0.595,
+   0.864,
+   0.533,
+   0.679,
+   0.514,
+   0.718,
+   0.607,
+   0.776,
+   0.516,
+   0.643,
+   0.68,
+   0.471,
+   0.792,
+   0.562
+  ],
+  "tails": [
+   0.17799999999999994,
+   0.03600000000000003,
+   0.09500000000000003
+  ],
+  "statuses": {
+   "answered": 7
+  },
+  "pieces": 3,
+  "interrupted": 2,
+  "booked_after": 94.381,
+  "problems": []
+ },
+ {
+  "run": "jCBGSipW7FuUKu4VVtgnin",
+  "simulation": "jEisR2g6VdBaGZ9tjcX3b7",
+  "call": "CA0903cc449122486fab523af321037ac4",
+  "status": "COMPLETED",
+  "seconds": 114.491,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "asked_turn": 5,
+    "turn": 6,
+    "heard": "yes that's right friday the second at nine in the morning",
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 9,
+  "completed": 15,
+  "cancelled": 5,
+  "input_tokens": 31008,
+  "echo": [
+   "lookup_customer: Let me have a look."
+  ],
+  "filler_copies": 2,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "5": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   0.8697900772094727,
+   0.4882051944732666,
+   0.8256902694702148,
+   1.0069689750671387,
+   1.7199370861053467,
+   1.2364799976348877,
+   1.0617740154266357,
+   2.5893521308898926
+  ],
+  "requests": [
+   0.846,
+   0.611,
+   0.639,
+   0.443,
+   0.605,
+   0.642,
+   0.66,
+   0.504,
+   0.476,
+   0.539,
+   0.792,
+   0.567,
+   0.7,
+   0.596,
+   0.678
+  ],
+  "tails": [
+   0.12,
+   0.10799999999999998,
+   0.10599999999999998,
+   0.15700000000000003
+  ],
+  "statuses": {
+   "answered": 8
+  },
+  "pieces": 5,
+  "interrupted": 2,
+  "booked_after": 101.054,
+  "problems": [
+   "1 reply(s) spoke beside an operation"
+  ]
+ },
+ {
+  "run": "jCBGSipW7FuUKu4VVtgnin",
+  "simulation": "nnGmXURQxCYeELXcW46YBx",
+  "call": "CAd896941758bf41fa8ef8629d507fdbe5",
+  "status": "COMPLETED",
+  "seconds": 107.826,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "yes that's right",
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 11,
+  "completed": 19,
+  "cancelled": 5,
+  "input_tokens": 38590,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "6": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "hand_over > text",
+   "text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   0.9372341632843018,
+   1.2504730224609375,
+   2.42386531829834,
+   1.042262077331543,
+   0.9728074073791504,
+   0.992225170135498,
+   1.0425119400024414,
+   2.1037731170654297,
+   1.2388391494750977
+  ],
+  "requests": [
+   0.553,
+   0.608,
+   0.819,
+   0.674,
+   0.855,
+   0.673,
+   0.768,
+   0.649,
+   0.819,
+   0.625,
+   0.554,
+   0.543,
+   0.576,
+   0.64,
+   0.643,
+   0.779,
+   0.716,
+   0.614
+  ],
+  "tails": [
+   0.17799999999999994,
+   0.08700000000000008,
+   0.132,
+   0.12100000000000005,
+   0.21500000000000002
+  ],
+  "statuses": {
+   "answered": 9
+  },
+  "pieces": 4,
+  "interrupted": 3,
+  "booked_after": 90.867,
+  "problems": []
+ },
+ {
+  "run": "jCBGSipW7FuUKu4VVtgnin",
+  "simulation": "cyYESUGZwB8PjmxpGwmXXh",
+  "call": "CA8a6154a37b7b4a4cb2fd2b5b06187029",
+  "status": "COMPLETED",
+  "seconds": 109.377,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes please",
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 7,
+  "completed": 14,
+  "cancelled": 4,
+  "input_tokens": 28028,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   1.043910026550293,
+   1.226531744003296,
+   3.322153091430664,
+   3.067646026611328,
+   1.137484073638916,
+   1.150512933731079
+  ],
+  "requests": [
+   0.754,
+   0.782,
+   0.529,
+   0.556,
+   0.825,
+   0.679,
+   0.638,
+   0.82,
+   0.807,
+   0.746,
+   0.656,
+   0.525,
+   0.886
+  ],
+  "tails": [
+   0.019000000000000017,
+   0.07200000000000001,
+   0.19400000000000006
+  ],
+  "statuses": {
+   "answered": 7
+  },
+  "pieces": 4,
+  "interrupted": 1,
+  "booked_after": 88.384,
+  "problems": []
+ }
+]

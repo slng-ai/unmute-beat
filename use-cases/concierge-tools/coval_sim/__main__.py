@@ -6,6 +6,8 @@
     uv run python -m coval_sim run  ...the same arguments...   # launches it, billable
     uv run python -m coval_sim add salon-prompt      # create the baseline's Coval agent
     uv run python -m coval_sim add graph             # the other baseline: the unmute graph build of the salon
+    uv run python -m coval_sim serve --agency salon  # one bot and tunnel for several jobs, until stopped
+    uv run python -m coval_sim run ... --host <the host serve printed>
 
 One job per invocation: one agent, one test set, one persona. `plan` reads
 Coval and prints what `run` would launch, and how many calls that is; it
@@ -25,10 +27,13 @@ launched again by this tool until the line is removed from the log by hand.
 """
 
 import argparse
+import contextlib
 import json
 import os
+import signal
 import sys
 import tempfile
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -38,7 +43,7 @@ from typing import Any
 from dotenv import dotenv_values
 
 from coval_sim.coval import CovalClient, CovalError
-from coval_sim.models import FOLDERS, Agent, Persona
+from coval_sim.models import FOLDERS, Agent, Persona, SpeechProfile
 from coval_sim.runtime import NotReadyError, Process, Tunnel, answers_http, ceiling
 
 PORT = 7860
@@ -137,6 +142,10 @@ class Job:
     """Who ends a call at the limit: the bot itself, or this runner stopping a bot that has no limit."""
     concurrency: int = 1
     """How many of the job's calls Coval places at once. Not part of the job's key: the same calls, sooner."""
+    profile: SpeechProfile | None = None
+    """The speech settings the bot gets (`--profile`)."""
+    call_seconds: int = MAX_CALL_SECONDS
+    """The longest a call may run before the bot hangs up (`--call-seconds`)."""
 
     @property
     def simulations(self) -> int:
@@ -159,13 +168,26 @@ class Job:
             f'iterations   {self.iterations}',
             'mutations    none',
             f'simulations  {self.simulations} = {len(self.case_ids)} case(s) x {self.iterations} iteration(s) x 1',
-            f'call limit   {MAX_CALL_SECONDS}s each, enforced by {self.limit}',
+            f'call limit   {self.call_seconds}s each, enforced by {self.limit}',
+            f'speech       {self.profile.describe() if self.profile else "none named"}',
             f'concurrency  {self.concurrency}' + (
                 ' at once: the calls share this machine and the speech providers, '
                 'so their latency is not comparable to a run of one call at a time' if self.concurrency > 1 else ''
             ),
             f'label        {self.label}',
         ])  # fmt: skip
+
+
+def load_profile(path: Path) -> SpeechProfile:
+    """A speech profile env file, validated whole: every name present, no other name.
+
+    Raises:
+        OSError: If the file cannot be read.
+        ValueError: A `ValidationError` listing what is missing or extra.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f'no such file: {path}')
+    return SpeechProfile.model_validate(dotenv_values(path))
 
 
 class RunLog:
@@ -254,7 +276,16 @@ class Repository:
         """Whether the agency's `bot.py` ends its own calls at `MAX_CALL_SECONDS`."""
         return 'MAX_CALL_SECONDS' in (self.use_case(agency) / 'bot.py').read_text()
 
-    def bot(self, agency: str, env: dict[str, str], host: str, log: Path, port: int = PORT) -> Process:
+    def bot(
+        self,
+        agency: str,
+        env: dict[str, str],
+        host: str,
+        log: Path,
+        port: int = PORT,
+        profile: SpeechProfile | None = None,
+        call_seconds: int = MAX_CALL_SECONDS,
+    ) -> Process:
         """Start the agency's `bot.py`, from its own folder, on the runner's Twilio route; return once it answers HTTP.
 
         A bot with no call limit of its own is stopped from outside once a
@@ -265,12 +296,18 @@ class Repository:
             'Pipecat bot',
             ['uv', 'run', 'python', 'bot.py', '-t', 'twilio', '-x', host, '--port', str(port)],
             self.use_case(agency),
-            {**env, **BOT_ENV, **(GRAPH_ENV if agency == GRAPH else {})},
+            {
+                **env,
+                **BOT_ENV,
+                'MAX_CALL_SECONDS': str(call_seconds),
+                **(profile.model_dump() if profile else {}),
+                **(GRAPH_ENV if agency == GRAPH else {}),
+            },
             log,
         )
         bot.wait_until(lambda: answers_http(f'http://127.0.0.1:{port}/'), 600)
         if not self.limits_itself(agency):
-            ceiling(bot, MAX_CALL_SECONDS + FINISH_SECONDS)
+            ceiling(bot, call_seconds + FINISH_SECONDS)
         return bot
 
 
@@ -289,6 +326,13 @@ class ReleaseCheck:
     ) -> None:
         self.port = port
         """The local port of this job's bot and tunnel. Jobs run side by side need one each."""
+        self.wait_s: float = RUN_TIMEOUT_S
+        """How long `run` waits for Coval to finish before reporting the run as still running (`--wait`).
+
+        A queue of one-call jobs sets it short: a simulation Coval leaves in
+        progress after the call ended (session 3's `UAeZiGa`, session 4's
+        `Khs7tVuS`) would otherwise hold the next job for 45 minutes.
+        """
         self.repo = repo
         self.coval = coval
         self.workdir = workdir
@@ -305,6 +349,9 @@ class ReleaseCheck:
         max_simulations: int,
         label: str,
         concurrency: int = 1,
+        metrics: list[str] | None = None,
+        profile: Path | None = None,
+        call_seconds: int = MAX_CALL_SECONDS,
     ) -> Job:
         """The one job these arguments name, checked against what Coval holds. Reads only.
 
@@ -318,6 +365,10 @@ class ReleaseCheck:
             label: What this launch belongs to (a session); the same job twice under one label is refused.
             concurrency: How many calls Coval places at once. A run of N calls one at a time
                 waits N times for Coval's dial and its scoring after each call; at once, about once.
+            metrics: The metric IDs to score instead of the agent's own. Coval refuses an
+                empty list and scores the agent's own when none is named, so session 4's load
+                test names Turn Count alone and judges the calls from Langfuse and the write
+                records instead (`load_report.py`): no judge's noise, and no wait for scoring.
 
         Raises:
             PlanError: Listing every reason the job is refused.
@@ -331,7 +382,7 @@ class ReleaseCheck:
         matches = [a for a in agents if a.id == agent_id]
         if len(matches) != 1:
             raise PlanError([f'no Coval agent has the ID {agent_id}'])
-        agent = matches[0]
+        agent = matches[0] if metrics is None else matches[0].model_copy(update={'metric_ids': metrics})
         if agent.agency != agency:
             problems.append(
                 f'agent {agent_id} is {agent.display_name!r}, which calls '
@@ -352,14 +403,22 @@ class ReleaseCheck:
             problems.append(f'{len(people)} personas match {persona!r}; name exactly one, by ID')
         if iterations < 1:
             problems.append('iterations must be at least 1')
+        speech = None
+        if profile is not None:
+            try:
+                speech = load_profile(profile)
+            except (OSError, ValueError) as error:
+                problems.append(f'speech profile {profile}: {error}')
         if problems:
             raise PlanError(problems)
         limit = (
             'bot.py (MAX_CALL_SECONDS)'
             if self.repo.limits_itself(agency)
-            else f'this runner: the bot has none, and is stopped {MAX_CALL_SECONDS + FINISH_SECONDS:.0f}s after the call connects'
+            else f'this runner: the bot has none, and is stopped {call_seconds + FINISH_SECONDS:.0f}s after the call connects'
         )
-        job = Job(agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency)
+        job = Job(
+            agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency, speech, call_seconds
+        )  # fmt: skip
         if job.simulations > max_simulations:
             problems.append(f'{job.simulations} simulations planned, allowance is {max_simulations}')
         if not 1 <= concurrency <= job.simulations:
@@ -393,17 +452,28 @@ class ReleaseCheck:
             )
         return f'this job already ran under label {job.label!r} as run {previous.get("run_id", "?")}; use a new label'
 
-    def run(self, job: Job) -> Row:
-        """Open a tunnel, start the bot, launch the job, wait for it, stop both. Every step is logged first."""
+    def run(self, job: Job, host: str | None = None) -> Row:
+        """Open a tunnel, start the bot, launch the job, wait for it, stop both. Every step is logged first.
+
+        With `host`, a bot is already answering there (`serve`), and this only
+        points the agent at it, launches and waits. Two jobs on one Coval agent
+        must share one host: each points the agent's connection at its own
+        host, so a second tunnel would take the first job's later calls.
+        """
         env = self.repo.env()
         log = self.workdir / f'{job.agency}-bot.log'
         name = f'{job.label} {job.agency} {job.test_set_id} {uuid.uuid4().hex[:8]}'
         try:
-            with (
-                Tunnel(self.port, self.workdir) as tunnel,
-                self.repo.bot(job.agency, env, tunnel.host, log, self.port),
-            ):
-                self.coval.update_connection(job.agent, connection(tunnel.host))
+            with contextlib.ExitStack() as stack:
+                if host is None:
+                    tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
+                    stack.enter_context(
+                        self.repo.bot(
+                            job.agency, env, tunnel.host, log, self.port, job.profile, job.call_seconds
+                        )
+                    )
+                    host = tunnel.host
+                self.coval.update_connection(job.agent, connection(host))
                 self.runs.write(job.key, name=name, status='intent')
                 try:
                     run_id = self.coval.launch(
@@ -439,14 +509,14 @@ class ReleaseCheck:
 
     def _result(self, job: Job, run_id: str, name: str, log: Path) -> Row:
         """Wait for the run and judge it. A run still going at the timeout is reported, not failed and not cancelled."""
-        run = self.coval.wait(run_id, timeout_s=RUN_TIMEOUT_S)
+        run = self.coval.wait(run_id, timeout_s=self.wait_s)
         if not run.finished:
             self.runs.write(job.key, name=name, status='launched', run_id=run_id, remote=run.status)
             return Row(
                 job.agency,
                 job.test_set_id,
                 run_id,
-                [f'run still {run.status} after {RUN_TIMEOUT_S}s: not failed, and still running at Coval'],
+                [f'run still {run.status} after {self.wait_s:.0f}s: not failed, and still running at Coval'],
                 log,
                 still_running=True,
             )
@@ -455,6 +525,29 @@ class ReleaseCheck:
             self.coval.simulations(run_id), self.coval.composite_ids(job.agent.metric_ids)
         )
         return Row(job.agency, job.test_set_id, run_id, problems, log)
+
+    def serve(self, agency: str, profile: Path, call_seconds: int = MAX_CALL_SECONDS) -> None:
+        """Start the agency's bot behind a tunnel, print the host, and keep both up until stopped.
+
+        One bot for several jobs at once (`run --host`), so every call of a
+        load test lands on one process. Only a bot that ends its own calls:
+        the runner's outside ceiling stops a whole bot after its first call.
+        """
+        if not self.repo.limits_itself(agency):
+            raise ValueError(f'{agency} has no call limit of its own; serve only a bot with MAX_CALL_SECONDS')
+        speech = load_profile(profile)
+        log = self.workdir / f'{agency}-bot.log'
+        env = self.repo.env()
+        with (
+            Tunnel(self.port, self.workdir) as tunnel,
+            self.repo.bot(agency, env, tunnel.host, log, self.port, speech, call_seconds),
+        ):
+            print(
+                f'serving {agency} at {tunnel.host} ({speech.describe()}, calls up to {call_seconds}s; bot log '
+                f'{log}); stop with SIGTERM or Ctrl-C',
+                flush=True,
+            )
+            threading.Event().wait()
 
     def add(self, agency: str) -> str:
         """Create the Coval agent for a flow, with a placeholder connection.
@@ -498,6 +591,11 @@ def _parser() -> argparse.ArgumentParser:
             default=1,
             help='calls Coval places at once; a bot with its own limit only',
         )
+        job.add_argument(
+            '--metrics',
+            type=lambda text: [m for m in text.split(',') if m],
+            help="comma-separated metric IDs to score instead of the agent's own; Coval needs at least one",
+        )
         job.add_argument('--log', type=Path, default=Path('runs.jsonl'), help='the run log')
         job.add_argument(
             '--port',
@@ -505,6 +603,28 @@ def _parser() -> argparse.ArgumentParser:
             default=PORT,
             help='the local port for this bot and tunnel; one per job run at once',
         )
+        job.add_argument('--host', help='a host `serve` printed: use its bot, start no bot or tunnel')
+        job.add_argument(
+            '--wait',
+            type=float,
+            default=RUN_TIMEOUT_S,
+            help='seconds to wait for Coval before reporting a run still running',
+        )
+        job.add_argument(
+            '--profile', type=Path, required=True, help='the speech profile env file the bot runs on'
+        )
+        job.add_argument(
+            '--call-seconds', type=int, default=MAX_CALL_SECONDS, help='the longest a call may run'
+        )
+    serve = commands.add_parser('serve', help='one bot and tunnel for several jobs, until stopped')
+    serve.add_argument('--agency', required=True, help='the use case to serve: salon for salon-graph')
+    serve.add_argument('--port', type=int, default=PORT, help='the local port for the bot and tunnel')
+    serve.add_argument(
+        '--profile', type=Path, required=True, help='the speech profile env file the bot runs on'
+    )
+    serve.add_argument(
+        '--call-seconds', type=int, default=MAX_CALL_SECONDS, help='the longest a call may run'
+    )
     add = commands.add_parser('add', help="create a flow's Coval agent")
     add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
     return parser
@@ -530,7 +650,13 @@ def main(argv: list[str] | None = None) -> int:
         RunLog(getattr(args, 'log', Path())),
         getattr(args, 'port', PORT),
     )
+    check.wait_s = getattr(args, 'wait', RUN_TIMEOUT_S)
     try:
+        if args.command == 'serve':
+            signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+            with contextlib.suppress(KeyboardInterrupt):
+                check.serve(args.agency, args.profile, args.call_seconds)
+            return 0
         if args.command == 'add':
             line = check.add(args.agency)
             print(line)
@@ -546,11 +672,14 @@ def main(argv: list[str] | None = None) -> int:
             max_simulations=args.max_simulations,
             label=args.label,
             concurrency=args.concurrency,
+            metrics=args.metrics,
+            profile=args.profile,
+            call_seconds=args.call_seconds,
         )
         print(job.describe(), flush=True)
         if args.command == 'plan':
             return 0
-        row = check.run(job)
+        row = check.run(job, args.host)
     except (CovalError, ValueError, RuntimeError) as error:
         print(f'error: {error}', file=sys.stderr)
         return 1

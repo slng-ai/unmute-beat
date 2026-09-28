@@ -518,22 +518,22 @@ def every_node_offers_at_most_one_write():
 
 
 def the_words_are_the_harness_words():
-    """Read from salon-graph's source as text. Its package is also called `salon`, so it cannot be imported here."""
+    """Read from salon-graph's source as text. Its package is also called `salon`, so it cannot be imported here.
+
+    Since session 4 the harness declares each receipt in its manifest
+    (`say:`), in the one wording this build uses. The claim patterns are no
+    longer compared: the harness withholds every first-person completion
+    claim on a writing step (`core.locale.Locale.claims`), a wider rule than
+    this build's filter.
+    """
     harness = HERE.parent / 'salon-graph' / 'salon'
-    assert f'greeting: "{speech.GREETING}"' in (harness / 'flow.yaml').read_text()
-    writes = (harness / 'tools' / 'writes.py').read_text()
-    for line in (*speech.SAVED.values(), speech.NOTED, speech.REPLY_SOON, speech.MANAGER_CALLS):
-        assert line in writes, f'salon-graph no longer says {line!r}'
-
-    def pattern(name: str) -> str:
-        tree = ast.parse((harness / 'models' / 'state.py').read_text())
-        found = next(
-            n for n in ast.walk(tree) if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == name
-        )
-        assert isinstance(found.value, ast.Call)
-        return ast.literal_eval(found.value.args[0])
-
-    assert pattern('_CLAIMED') in speech.CLAIMED.pattern and pattern('_RECORDED') in speech.CLAIMED.pattern
+    manifest = (harness / 'agent.yaml').read_text()
+    assert f'greeting: "{speech.GREETING}"' in manifest
+    for line in speech.SAVED.values():
+        assert line in manifest, f'salon-graph no longer says {line!r}'
+    functions = (harness / 'functions.py').read_text()
+    for line in (speech.NOTED, speech.REPLY_SOON, speech.MANAGER_CALLS):
+        assert line in functions, f'salon-graph no longer says {line!r}'
 
 
 def it_stands_on_pipecat_not_on_the_harness():

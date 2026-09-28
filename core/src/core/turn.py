@@ -42,7 +42,9 @@ from pydantic_ai import (
     RunCancelled,
     TextPart,
     TextPartDelta,
+    ToolCallEvent,
     ToolCallPart,
+    ToolResultEvent,
     UserError,
 )
 from pydantic_ai.capabilities.hooks import Hooks
@@ -50,7 +52,7 @@ from pydantic_ai.messages import InstructionPart, ModelRequest, ModelResponse, U
 from pydantic_ai.usage import UsageLimitExceeded
 
 from core.flow import Answered, Flow, Moved
-from core.graph import Node, moved_by, route
+from core.graph import LocalAction, Node, moved_by, route
 from core.history import paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
@@ -284,6 +286,8 @@ class Turn:
         """Step requests this turn that sent nothing in time (`TurnBudget.first_part`). The first is tried again."""
         self._step_requests = 0
         """Step requests sent this turn, over every run: the second one is when a holding line goes out."""
+        self._holding: asyncio.Task[None] | None = None
+        """The holding-line timer, armed only while a tool or an application action is running."""
         self._channel: asyncio.Queue[tuple[object, asyncio.Future[None] | None]] = asyncio.Queue()
 
     def _stale(self) -> bool:
@@ -305,20 +309,43 @@ class Turn:
         usually ready when they finish; and a tool that speaks its own line
         would get the holding line right in front of it.
 
-        Once per turn, and never after the answer started: the check is on
-        the turn's own speech ledger, which records model text before it is
-        passed on. Origin `tool_filler`, so a caller who cuts in over it is
-        still in the same turn (`CallContext.continues_turn`).
+        Once per caller turn, and never after the answer started: the check is
+        on the turn's own speech ledger, which records model text before it
+        is passed on, and on every piece of the caller turn. A turn continued
+        over pieces gets a new `Turn` and an empty ledger per piece, and said
+        the line again on each (4 caller turns of 20 in Coval run StET3kNN).
+        A line never played, blanked when the caller went on, does not count.
+        Origin `tool_filler`, so a caller who cuts in over it is still in the
+        same turn (`CallContext.continues_turn`). Never once the call is
+        ending: a goodbye is the last thing the caller hears.
         """
         call = self.call
-        if self._stale() or any(s.text for s in call.spoken) or not call.locale.holding:
+        piece = f':{call.turn}:'
+        held = any(s.origin == 'tool_filler' and s.text and piece in s.id for s in call.all_spoken)
+        if self._stale() or call.ended or held or any(s.text for s in call.spoken) or not call.locale.holding:
             return
         await call.say(pick('holding', call.locale.holding), origin='tool_filler')
 
     async def _hold_after(self) -> None:
-        """The holding line for a turn still silent after `TurnBudget.hold_after` seconds."""
+        """The holding line for work still running after `TurnBudget.hold_after` seconds."""
         await asyncio.sleep(self.budget.hold_after)
         await self._hold()
+
+    def _arm_hold(self) -> None:
+        """Work has started that the caller will wait for: a tool, or an application action.
+
+        The timer is tied to that work, never to the turn: a model that is
+        merely slow to say goodbye is not work the caller is waiting on, and a
+        turn-long timer put "One moment" in front of a goodbye (session 3).
+        """
+        if self._holding is None or self._holding.done():
+            self._holding = asyncio.ensure_future(self._hold_after())
+
+    def _disarm_hold(self) -> None:
+        """The work finished, or the turn did: a holding line not yet said is never said."""
+        if self._holding is not None:
+            self._holding.cancel()
+            self._holding = None
 
     async def events(self, prompt: str | None) -> AsyncIterator[TurnEvent]:
         """Run the turn, yielding what a runtime needs to voice it, and finish with how it ended.
@@ -341,7 +368,6 @@ class Turn:
 
         spent = ''
         failure = ''
-        holding = asyncio.ensure_future(self._hold_after())
         try:
             async with asyncio.timeout(self.budget.seconds):
                 async for event in self._hops(prompt):
@@ -356,7 +382,7 @@ class Turn:
         except UsageLimitExceeded as over:
             spent = str(over)
         finally:
-            holding.cancel()
+            self._disarm_hold()
 
         if failure:
             call.note_said('fixed', call.locale.stumble, origin='error')
@@ -496,7 +522,11 @@ class Turn:
         action = None
         early: _Early | None = None
         retained_early = retained_before
-        if node.advance:
+        if self._hops_run == 1 and (settle := call.settlement()) is not None:
+            action = LocalAction('reconcile', settle)
+        elif self._hops_run == 1 and (told := call.unheard_receipt()):
+            action = LocalAction('receipt', lambda: _say_again(call, told))
+        if node.advance and action is None:
             state_before, held_before = call.state, dict(call._held)
             task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
             barge.attach(task)
@@ -561,6 +591,7 @@ class Turn:
                 return
             decided = classified if classified is not None and not classified.outcome else None
             answers_before = call._answers
+            self._arm_hold()
             try:
                 output = await action.run()
                 if decided is not None:
@@ -581,6 +612,8 @@ class Turn:
                 logger.exception('application action failed: {}', action.name)
                 yield _Failed(f'{type(error).__name__}: {error}')
                 return
+            finally:
+                self._disarm_hold()
             yield RunEnded(node.agent.name or call.state.agent)
         if action is None or output is None:
             failed: _Failed | None = None
@@ -632,12 +665,6 @@ class Turn:
             checkpoint = call._checkpoint
             if checkpoint is not None:
                 call._entered = output.status
-                call._hidden_speech.update(
-                    s.id
-                    for s in call.all_spoken
-                    if s.id not in checkpoint.speech_ids and not _covering(call, s)
-                )
-                call.messages = checkpoint.messages
                 call._return_status = (
                     f'Application return: {call.state.agent} {output.status}. '
                     f'Original caller request: {checkpoint.heard}'
@@ -650,10 +677,6 @@ class Turn:
                 prompt = (
                     call.heard if output.status == 'unserved' and call.heard != checkpoint.heard else None
                 )
-                if node.shares_detour and (
-                    note := call.keep_detour_words(checkpoint, call.state.agent, sent=prompt or '')
-                ):
-                    call._return_status += f' {note}'
         else:
             going_to, waiting = route(call.state, nodes, output.to)
             if waiting is not None and going_to != waiting and call._checkpoint is None:
@@ -726,6 +749,17 @@ class Turn:
         layer, and folding them together would let a flaky network buy extra
         attempts at getting a tool call right.
 
+        On a step whose operations speak for themselves (`Node.speaks_for`),
+        a reply's text is held until the reply shows what it calls. Beside one
+        of those operations it is dropped: the operation's read-back or
+        receipt is what the caller hears, once. Beside anything else, or
+        alone, it goes out when the reply is complete: 0.13 s after its first
+        token at the median, 0.21 s at p90, over 121 replies of the baseline.
+
+        A reply that only records fields, and records one a `reads_back` rule
+        names, ends the run there: code reads the operation back (`Node.reads_back`)
+        instead of a second request that would only have asked for it.
+
         Which tools *succeeded* is how a free edge is taken: the result, never
         the call, because the call event fires before the tool runs.
 
@@ -750,9 +784,10 @@ class Turn:
         step = call.state.agent
         succeeded: set[str] = set()
         output = None
-        spoke = False
-        gate: str | None = 'clause' if node.guarded and not call.wrote_this_turn() else None
+        gate: str | None = 'clause' if node.guarded else None
         held = ''
+        reply: list[str] = []
+        reply_text, reply_tools, recorded = False, [], 0
 
         call.attempt_started()
         caller_turn = call.turn
@@ -875,18 +910,31 @@ class Turn:
                         disarm()
                         if event.index == 0:
                             streamed += 1
+                            reply_text, reply_tools, recorded = False, [], 0
                         call._response = f'{run_id}:{streamed}'
                         match event.part:
                             case TextPart():
                                 call.note_first_output('text')
-                            case ToolCallPart():
+                            case ToolCallPart(tool_name=name):
                                 call.note_first_output('tool')
+                                reply_tools.append(name)
+                                if name in node.speaks_for:
+                                    if reply or held:
+                                        logger.info(
+                                            'echo dropped beside {}: {!r}', name, ''.join(reply) + held
+                                        )
+                                    reply.clear()
+                                    held = ''
+                                else:
+                                    for text in _release(call, reply):
+                                        yield TextDelta(text, step)
                     if hold is not None and not hold.opened.is_set():
                         await hold.opened.wait()
                         barge.attach(events)
                     if chunk := _speech(event):
                         if not node.model_speech:
                             continue
+                        reply_text = True
                         if gate is not None:
                             held += chunk
                             if not (_CLAUSE.search(held) or len(held) >= _CLAUSE_MAX):
@@ -895,19 +943,40 @@ class Turn:
                             if call.claims_completion(text):
                                 logger.error('withheld an unbacked claim: {!r}', text.strip())
                                 gate = 'blocked'
+                                reply.clear()
                                 break
                         else:
                             text = chunk
-                        call.note_model_text(text)
-                        if not spoke:
-                            spoke = True
-                            call._spoke = True
-                            call._covered = False
-                        yield TextDelta(text, step)
-                    elif isinstance(event, FunctionToolResultEvent):
-                        if not isinstance(event.part, RetryPromptPart):
+                        if node.speaks_for:
+                            reply.append(text)
+                            continue
+                        for said in _release(call, [text]):
+                            yield TextDelta(said, step)
+                    elif isinstance(event, ToolCallEvent):
+                        for text in _release(call, reply):
+                            yield TextDelta(text, step)
+                        self._arm_hold()
+                    elif isinstance(event, ToolResultEvent):
+                        self._disarm_hold()
+                        if isinstance(event, FunctionToolResultEvent) and not isinstance(
+                            event.part, RetryPromptPart
+                        ):
                             succeeded.add(event.part.tool_name)
+                            recorded += event.part.tool_name == 'collect'
+                            if (
+                                node.reads_back is not None
+                                and event.part.tool_name == 'collect'
+                                and not reply_text
+                                and set(reply_tools) == {'collect'}
+                                and recorded == len(reply_tools)
+                                and (asked := node.reads_back(call)) is not None
+                            ):
+                                logger.info('read back {} by code after collect', asked.about)
+                                output = asked
+                                events.cancel()
                     elif isinstance(event, AgentRunResultEvent):
+                        for text in _release(call, reply):
+                            yield TextDelta(text, step)
                         retain(event.result.new_messages())
                         output = event.result.output
         except UsageLimitExceeded, TimeoutError:
@@ -921,6 +990,7 @@ class Turn:
             return
         finally:
             disarm()
+            self._disarm_hold()
             if events is not None and not retained_run:
                 try:
                     new_messages = events.new_messages()
@@ -929,6 +999,9 @@ class Turn:
                 else:
                     retain(new_messages)
             barge.detach()
+            if reply and not barge.hit and not (hold is not None and hold.dropped):
+                for text in _release(call, reply):
+                    yield TextDelta(text, step)
             if held and gate != 'blocked' and not (hold is not None and hold.dropped):
                 call.note_model_text(held)
                 call._spoke = True
@@ -941,6 +1014,45 @@ class Turn:
             yield FixedSpeech(call.locale.withheld, reason='withheld')
         yield RunEnded(step)
         yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
+
+
+REMINDERS = 2
+"""Reminders before the line is closed. With Pipecat's 8 s idle timer, 24 s of silence ends a call."""
+
+
+async def remind(call: CallContext) -> None:
+    """The caller has said nothing for a while after the last answer played: prompt them, by code.
+
+    "Are you still there?", then the question they were asked, word for word
+    and put again: a yes after the reminder answers a copy they heard in full.
+    After `REMINDERS` unanswered, a goodbye and the line closes. No model
+    request: nothing about silence needs reading. The count starts again
+    whenever the caller speaks (`CallContext.turn_started`).
+    """
+    if call.ended or not call.locale.still_there:
+        return
+    call._reminders += 1
+    if call._reminders > REMINDERS:
+        call.end_requested('abandoned')
+        if call.locale.idle_goodbye:
+            await call.speak_now(call.locale.idle_goodbye, origin='goodbye')
+        await call.end_call()
+        return
+    await call.speak_now(call.locale.still_there, origin='clarify')
+    if (asked := call.open_question()) is not None and asked.spoken:
+        call.ask(asked)
+        await call.speak_now(asked.spoken, origin='ask')
+
+
+def _release(call: CallContext, reply: list[str]) -> list[str]:
+    """Record held model text as said and hand it out, emptying `reply`: the text a reply keeps (`Node.speaks_for`)."""
+    out = [text for text in reply if text]
+    reply.clear()
+    for text in out:
+        call.note_model_text(text)
+        call._spoke = True
+        call._covered = False
+    return out
 
 
 def run_turn(
@@ -966,6 +1078,21 @@ def _speech(event) -> str:
         case PartDeltaEvent(delta=TextPartDelta(content_delta=text)):
             return text
     return ''
+
+
+async def _say_again(call: CallContext, words: str) -> str:
+    """Say an unheard receipt again, word for word: no model, no write.
+
+    Whatever the caller said over it is kept for the next turn's model.
+    Coval run BVqdGEunV3avnHrHVwq4oE: the receipt for Saturday at 9 was cut
+    before any audio played, the caller went on "Yes, tomorrow at nine AM.
+    That's great.", and the front desk read it as a new request and moved
+    their own booking to 10. Hearing what was done comes first; a reading of
+    the reply is not needed to decide that.
+    """
+    call.note_receipt(words)
+    await call.speak_now(words, origin='confirmation')
+    return words
 
 
 def _silent(call: CallContext, output: object, answers_before: int) -> bool:

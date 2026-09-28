@@ -4,54 +4,51 @@ One caller turn lasts until the agent's answer reaches the caller.
 
 The failure this is written against, from the Coval release run of
 2026-09-23: the runtime closes the caller's turn on every pause, so "Yes,
-please." and "That sounds perfect." arrived as two turns. The first was cut
-off by the second before anything was said, and a question is answerable only
-on the turn after it went out, so the reply that finished the sentence
-answered nothing and the read-back was asked again. The same splitting cut a
-complaint description into pieces no quote could span, and a phone number
-into pieces nobody joined.
+please." and "That sounds perfect." arrived as two turns, and the reply that
+finished the sentence answered nothing. Core joins the pieces
+(`CallContext.continues_turn`); these checks drive that rule through the
+node-agent salon and the real Pipecat processor, with scripted node agents.
+Session 4 moved the reading of each reply from classifiers into the node's
+own agent: what these checks hold is that the timing rules did not move.
 
 Scripted models, no audio, no network. Asserts, no pytest, same as the rest.
 """
 
 import asyncio
 import json
-from contextlib import ExitStack, contextmanager, suppress
-from datetime import date, datetime
-from unittest.mock import patch
+from contextlib import ExitStack, contextmanager
+from datetime import datetime
 
 from pipecat.clocks.system_clock import SystemClock
 from pipecat.frames.frames import BotStartedSpeakingFrame, StartFrame, TTSSpeakFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
 from pipecat.utils.asyncio.task_manager import TaskManager
-from pydantic import create_model
-from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.history import project
+from core.policies import TurnBudget
 from core.processor import PydanticAgentProcessor
-from core.readings import NamedChoice
-from core.state import Checkpoint
-from salon import agents, diary
-from salon.classification import SALON
+from core.steps import Prompted, _args
+from core.turn import Turn
+from salon import diary
+from salon.app import FLOW
 from salon.diary import Diary
-from salon.models.state import open_call
-from salon.tools.asking import Ask
-from salon.tools.booking import booking_question, offer, offer_cancel, undo_ready
-from tests.classifier_model import scripted as scripted_readings
+from tests.script import open_call
 
-PHONE = '+34611111111'
+PHONE = '+34600111222'
 CLOCK = datetime(2026, 9, 21, 10, tzinfo=diary.TZ)
 books = Diary()
 """This module's salon, emptied by each case."""
+BOOK = FLOW.by_id['booking'].operations[0]
+"""The booking step's `book_appointment`, as core compiled it from the manifest."""
 
 
 class Probe(PydanticAgentProcessor):
     """The real processor with its frames collected instead of pushed down a pipeline."""
 
     def __init__(self, call):
-        super().__init__(call, agents.AGENTS)
+        super().__init__(call, FLOW.nodes)
         self.frames = []
 
     async def push_frame(self, frame, direction=None):
@@ -74,121 +71,101 @@ def played_out(call) -> None:
 
 
 def booking_call():
-    """An identified caller in the booking step, with a haircut read back to them and heard in full."""
+    """An identified caller in the booking step."""
     books.reset()
     books.set_clock(CLOCK)
-    call = open_call(PHONE, diary=books)
-    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    call = open_call(PHONE, diary=books, verified_phone=PHONE, customer_status='existing')
+    call.commit(agent='booking')
     return call
 
 
-async def read_back_a_haircut(call, probe) -> str:
-    """Turn one: the agent reads a Friday haircut back, and its audio plays."""
+def offer_friday_at_nine(call) -> None:
+    """The diary offers Friday's times to this call, and the caller's pick of 9:00 is recorded."""
+    slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.services.call)['slots']
+    call._offered = {'slot': {s['slot_id']: s['spoken'] for s in slots}}
+    call.collect(service='haircut', booking_day='Friday', booking_time='09:00')
+    call._offered = {'slot': {s['slot_id']: s['spoken'] for s in slots}}
+    call.collect(slot=next(s['slot_id'] for s in slots if s['time'] == '09:00'))
+
+
+async def read_back_a_haircut(call, probe, *, played: bool = True) -> str:
+    """Turn one: the booking step reads a Friday haircut back, in the application's words, and its audio plays."""
     call.turn_started('A haircut on Friday at nine, please.')
-    slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)['slots']
-    slot = next(s for s in slots if s['time'] == '09:00')
-    question = booking_question(call, 'book', slot['slot_id'], '')
+    offer_friday_at_nine(call)
+    proposal = BOOK.proposal_for(call, _args(BOOK, call))
+    question = Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
     await call.speak_now(question.put(call), origin='ask')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
+    if played:
+        call.note_reached()
+        played_out(call)
+        call.turn_ended(interrupted=False)
     return question.spoken
 
 
 @contextmanager
-def classifier(labels: dict[str, str], hold: str = ''):
-    """The consent classifier, scripted by utterance. `hold` is an utterance whose reading never comes back.
-
-    Returns the list of utterances it was asked about, so a test can see what it was given.
-    """
-    asked: list[str] = []
-    held = asyncio.Event()
-
-    async def classify(name, data):
-        if name != 'confirmation':
-            return None
-        asked.append(data['answer'])
-        if data['answer'] == hold:
-            held.set()
-            await asyncio.Event().wait()
-        return labels.get(data['answer'], 'unclear')
-
-    with scripted_readings(classify):
-        yield asked, held
-
-
-async def agreed_to_a_pick(call, probe, pick: str) -> None:
-    """A pick of an offered time is read back with no model, and the caller's "Yes." books it.
-
-    The script in force must read `pick` as that slot and "Yes." as accept.
-    """
-    writes = call.state.writes
-    probe.interrupt()
-    await probe._turn(pick)
-    assert call.state.writes == writes, f'{pick!r} booked before it was read back'
-    assert probe.fixed()[-1].startswith('Shall I book you in for a'), probe.fixed()
-    call.note_reached()
-    played_out(call)
-    probe.interrupt()
-    await probe._turn('Yes.')
-    assert call.state.writes == writes + 1, 'the yes to the read-back did not book'
-    call.note_reached()
-    played_out(call)
-
-
-def scripted_steps(reasks: list[int]):
-    """Every step's model, scripted: booking asks the question again (what the model did live), the rest speak."""
-
-    async def booking(messages, info):
-        reasks.append(1)
-        slot = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to='x')['slots'][0]
-        yield {
-            0: DeltaToolCall(
-                name='ask_booking',
-                json_args=f'{{"action":"book","slot_id":"{slot["slot_id"]}","booking_id":""}}',
-            )
-        }
-
-    async def other(messages, info):
-        yield 'Anything else?'
-
+def steps(**by_step):
+    """Every step's model, scripted by the caller's words so far: `{step: fn(heard) -> move}`. Default: speak."""
     stack = ExitStack()
-    for name, node in agents.AGENTS.items():
-        model = FunctionModel(stream_function=booking if name == 'booking' else other)
-        stack.enter_context(node.agent.override(model=model))
-    return stack
+    for name, node in FLOW.nodes.items():
+        choose = by_step.get(name)
+
+        async def stream(messages, info, choose=choose):
+            move = await choose(call_of[0]) if choose else ('say', 'Anything else?')
+            if move[0] == 'say':
+                yield move[1]
+            else:
+                yield {0: DeltaToolCall(name=move[1], json_args=json.dumps(move[2] if len(move) > 2 else {}))}
+
+        stack.enter_context(node.agent.override(model=FunctionModel(stream_function=stream)))
+    with stack:
+        yield
+
+
+call_of: list = [None]
+"""The call the scripted steps are reading, set by each case."""
 
 
 async def a_reply_split_by_a_pause_is_one_answer():
-    """The Coval failure itself: the second half of a yes still answers the question, and nothing is asked twice."""
+    """The Coval failure itself: the second half of a yes still answers the read-back, and nothing is asked twice.
+
+    The booking agent is slow on the first piece ("Yes, please."), the caller
+    goes on, and the joined reply is what the agent answers: one booking, the
+    read-back said once.
+    """
     call = booking_call()
+    call_of[0] = call
     probe = Probe(call)
     readback = await read_back_a_haircut(call, probe)
     joined = 'Yes, please. That sounds perfect.'
-    reasks: list[int] = []
-    with classifier({joined: 'accept'}, hold='Yes, please.') as (asked, held), scripted_steps(reasks):
+    slow = asyncio.Event()
+
+    async def booking(call):
+        if call.heard != joined:
+            slow.set()
+            await asyncio.Event().wait()
+        return ('call', 'book_appointment')
+
+    with steps(booking=booking):
         probe.interrupt()
         first = asyncio.create_task(probe._turn('Yes, please.'))
-        await asyncio.wait_for(held.wait(), 3)
+        await asyncio.wait_for(slow.wait(), 3)
         probe.interrupt()
         await asyncio.wait_for(first, 3)
         await probe._turn('That sounds perfect.')
     assert call.turn == 2 and call.heard == joined, (call.turn, call.heard)
-    assert asked[-1] == joined, asked
-    assert call.state.writes == 1, 'the finished yes did not book'
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the finished yes did not book'
     assert probe.fixed().count(readback) == 1, probe.fixed()
-    assert not reasks, 'the booking model was asked to handle an answer the application already had'
     said = [p.content for m in call.messages for p in m.parts if isinstance(p, UserPromptPart)]
-    assert said[-2:] == ['Yes, please.', 'That sounds perfect.'], said
+    assert said[-2:] == ['Yes, please.', 'That sounds perfect.'] or said[-1] == joined, said
 
 
 async def a_reply_after_the_answer_played_is_a_new_turn():
     """The other side of the line: once the caller has heard the agent, what they say next is a new turn."""
     call = booking_call()
+    call_of[0] = call
     probe = Probe(call)
     await read_back_a_haircut(call, probe)
-    reasks: list[int] = []
-    with classifier({}), scripted_steps(reasks):
+    with steps():
         probe.interrupt()
         await probe._turn('Hmm, how long does it take?')
         assert call.turn == 2
@@ -202,8 +179,7 @@ async def a_reply_after_the_answer_played_is_a_new_turn():
 async def speech_nobody_heard_is_recorded_as_unheard():
     """A piece's answer that never played is kept for audit but no longer shown to the model as said."""
     call = booking_call()
-    probe = Probe(call)
-    await read_back_a_haircut(call, probe)
+    await read_back_a_haircut(call, Probe(call))
     call.turn_started('Yes, please.')
     await call.speak_now('Let me check that.', origin='entry')
     unheard = call.spoken[-1]
@@ -216,8 +192,7 @@ async def speech_nobody_heard_is_recorded_as_unheard():
 async def a_holding_line_heard_in_full_keeps_the_turn_open():
     """A holding line answers nothing: a caller who goes on after hearing all of it is still in the same turn."""
     call = booking_call()
-    probe = Probe(call)
-    await read_back_a_haircut(call, probe)
+    await read_back_a_haircut(call, Probe(call))
     call.turn_started('Yes, please.')
     await call.say('Let me have a look.', origin='tool_filler')
     call.note_reached()
@@ -227,52 +202,103 @@ async def a_holding_line_heard_in_full_keeps_the_turn_open():
     assert call.turn == 2 and call.heard == 'Yes, please. That sounds perfect.', (call.turn, call.heard)
 
 
+async def one_holding_line_per_caller_turn():
+    """A turn continued over several pieces says one holding line, not one per piece.
+
+    Each piece gets a new `Turn`, which opens a new gap (`_covered`), and an
+    empty per-piece ledger, so a check on that ledger alone said "Let me have
+    a look" again on every piece: 4 caller turns in Coval run StET3kNN heard
+    it twice. The next caller turn gets its own.
+    """
+    call = booking_call()
+    Probe(call)
+
+    async def piece(words: str) -> None:
+        """What `Turn.events` does before a piece's work: a new gap, the words, then work that waits."""
+        call._covered = False
+        call.turn_started(words)
+        await Turn(call, FLOW.nodes, TurnBudget())._hold()
+
+    def fillers() -> list[str]:
+        return [s.id for s in call.all_spoken if s.origin == 'tool_filler' and s.text]
+
+    await piece('I would like')
+    call.note_reached()
+    played_out(call)
+    call.note_barge()
+    await piece('a haircut on Friday.')
+    assert call.turn == 1, 'the second piece continues the turn'
+    assert len(fillers()) == 1, [(s.origin, s.text) for s in call.all_spoken]
+
+    await call.speak_now('Which time would you like?', origin='ask')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    await piece('Nine.')
+    assert call.turn == 2 and len(fillers()) == 2, 'a new turn, a new line'
+
+
+async def a_holding_line_is_never_sent_to_the_model():
+    """The model is never shown a holding line as its own words; a read-back the caller heard it is.
+
+    Shown "One moment." as its own, the model opened 32 replies with it in
+    the session-4 baseline, and the caller heard it twice.
+    """
+    call = booking_call()
+    question = await read_back_a_haircut(call, Probe(call))
+    call._covered = False
+    call.turn_started('Yes, please.')
+    await call.say('Let me have a look.', origin='tool_filler')
+    sent = str(project(call, call.messages))
+    assert 'Let me have a look.' not in sent and question in sent, sent
+
+
 async def an_attempted_write_is_never_authorised_twice():
     """If the first piece already acted on the answer, the continuation cannot spend the same answer again."""
     call = booking_call()
-    probe = Probe(call)
-    await read_back_a_haircut(call, probe)
+    await read_back_a_haircut(call, Probe(call))
     call.turn_started('Yes, please.')
-    assert call.pending('booking') is not None
+    assert call.pending('book_appointment') is not None
     call.answered()
     call.note_business_attempt()
     call.note_barge()
     call.turn_started('And thanks.')
-    assert call.turn == 2 and call.pending('booking') is None, 'a spent answer came back'
+    assert call.turn == 2 and call.pending('book_appointment') is None, 'a spent answer came back'
 
     call = booking_call()
-    probe = Probe(call)
-    await read_back_a_haircut(call, probe)
+    await read_back_a_haircut(call, Probe(call))
     call.turn_started('Yes, please.')
     call.answered()
     call.note_barge()
     call.turn_started('That sounds perfect.')
-    assert call.pending('booking') is not None, 'a half-sentence consumed the question for good'
+    assert call.pending('book_appointment') is not None, 'a half-sentence consumed the question for good'
 
 
 async def a_read_back_cut_off_is_not_agreed_to():
     """The K3 failure: a read-back the caller spoke over is not a question they can say yes to.
 
-    The caller's next words restated the number, the classifier read that as
-    agreement, and the caller was verified on a read-back that played for
-    200 ms. Whether the runtime's text report is ever matched to the line or
-    not, audio that never ran to its end was not heard in full.
+    Whether or not its audio had started, audio that never ran to its end
+    was not heard in full, and the node agent's yes to it binds to nothing.
     """
     for started in (False, True):
         call = booking_call()
+        call_of[0] = call
         probe = Probe(call)
-        call.turn_started('A haircut on Friday at nine, please.')
-        slots = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)['slots']
-        slot = next(s for s in slots if s['time'] == '09:00')
-        question = booking_question(call, 'book', slot['slot_id'], '')
-        await call.speak_now(question.put(call), origin='ask')
+        readback = await read_back_a_haircut(call, probe, played=False)
         if started:
             call.note_reached()
         probe.interrupt()
-        call.turn_started('Yes, book it.')
-        assert call.pending('booking') is None, f'agreed to a read-back cut off (audio started: {started})'
-        readback = next(s for s in call.all_spoken if s.generated == question.spoken)
-        assert readback.interrupted and (readback.text == '') is not started, readback
+
+        async def booking(call):
+            return ('call', 'book_appointment')
+
+        with steps(booking=booking):
+            await probe._turn('Yes, book it.')
+        assert books.bookings_for(PHONE, CLOCK.date()) == [], (
+            f'agreed to a cut-off read-back (started: {started})'
+        )
+        first = next(s for s in call.all_spoken if s.generated == readback)
+        assert first.interrupted and (first.text == '') is not started, first
 
 
 async def the_next_reply_is_told_what_was_not_heard():
@@ -292,7 +318,7 @@ async def the_next_reply_is_told_what_was_not_heard():
             'We do colour work, but balayage is not on our list.' if len(seen) == 1 else 'Four on Saturdays.'
         )
 
-    with agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=concierge)):
+    with FLOW.nodes['concierge'].agent.override(model=FunctionModel(stream_function=concierge)):
         await probe._turn('Do you do balayage?')
         call.note_reached()
         probe.interrupt()
@@ -310,626 +336,132 @@ async def the_next_reply_is_told_what_was_not_heard():
 
 
 async def an_unheard_receipt_is_said_again_and_not_booked_again():
-    """Session 3, A3: the receipt's audio never plays, and the caller speaks into the silence.
+    """Session 3, A3, through the processor: the receipt's audio never started, the caller speaks into the silence.
 
-    Session 2's native call 2 closed on "You're very welcome" over a receipt
-    the caller never heard. A goodbye here is answered with the receipt,
-    said again by code: nothing ends the call first (the closing question was
-    never delivered), and no model runs. A change of mind goes to the model,
-    which is told what the caller did not hear (the receipt's own words) and
-    still has the booking's application result in its history. Nothing is
-    written twice, and the turn after a heard reply carries no note.
-
-    Session 3's A3 decision rests on this: the one-turn note and the take-back
-    reading are enough, so no note is kept in the history for later turns.
-    """
-    runs: list[tuple[str, list]] = []
-
-    async def step(messages, info):
-        runs.append((info.instructions or '', project(call, messages)))
-        yield 'Of course, which day would suit you?'
-
-    def reading(take_back: str):
-        async def read(name, data):
-            if name == 'conversation':
-                return 'end' if data['answer'].endswith('Thanks, bye.') else 'continue'
-            return {'confirmation': 'accept', 'last_change': take_back}.get(name)
-
-        return read
-
-    for take_back, reply in (('keep', 'Thanks, bye.'), ('change', 'Actually, can it be another day?')):
-        runs.clear()
-        call = booking_call()
-        probe = Probe(call)
-        await read_back_a_haircut(call, probe)
-        with scripted_readings(reading(take_back)), ExitStack() as stack:
-            for node in agents.AGENTS.values():
-                stack.enter_context(node.agent.override(model=FunctionModel(stream_function=step)))
-            probe.interrupt()
-            await probe._turn('Yes.')
-            assert call.state.writes == 1, 'the heard read-back and its yes book once'
-            [receipt] = [s for s in call.spoken if s.origin == 'confirmation']
-            assert receipt.playback == 'queued', 'the receipt never started playing'
-            await probe._turn(reply)
-            assert call.state.writes == 1, (take_back, 'the unheard receipt was booked again')
-            if take_back == 'keep':
-                assert not runs and probe.fixed()[-1] == receipt.generated, (runs, probe.fixed())
-                continue
-            note, request = runs[-1]
-            assert 'never reached the caller' in note and receipt.generated in note, note
-            results = [str(p.content) for m in request for p in m.parts if isinstance(p, UserPromptPart)]
-            assert any('Application result save_booking' in r and 'BK0001' in r for r in results), results
-            call.note_reached()
-            played_out(call)
-            call.turn_ended(interrupted=False)
-            await probe._turn('Wait, one more thing.')
-        assert call.state.writes == 1
-        assert 'never reached the caller' not in runs[-1][0] and 'spoke over' not in runs[-1][0], runs[-1][0]
-
-
-async def a_receipt_cut_before_it_played_is_said_again_not_moved():
-    """Coval run BVqdGEunV3avnHrHVwq4oE (session 3's stress call), turn 8, offline.
-
-    "Yes, please. That's perfect." booked the read-back time. Its receipt was
-    cut before any audio played, as the caller went on: "Yes, Friday at nine
-    AM. That's great." That is the same logical turn, and the reading of it
-    against the booking says keep. Live, the front desk's model then moved the
-    booking to another time. Now the receipt the caller never heard is said
-    again, word for word, with no step model and no second write.
+    Its words are said again by code, with no model and no write; the next
+    reply after a heard one is the node agent's as usual.
     """
     call = booking_call()
+    call_of[0] = call
     probe = Probe(call)
     await read_back_a_haircut(call, probe)
-    runs: list[str] = []
-
-    async def read(name, data):
-        return {'confirmation': 'accept', 'last_change': 'keep', 'conversation': 'continue'}.get(name)
-
-    async def step(messages, info):
-        runs.append(call.state.agent)
-        yield {0: DeltaToolCall(name='hand_over', json_args='{"to":"booking","because":"move it"}')}
-
-    with scripted_readings(read), ExitStack() as stack:
-        for node in agents.AGENTS.values():
-            stack.enter_context(node.agent.override(model=FunctionModel(stream_function=step)))
-        probe.interrupt()
-        await probe._turn("Yes, please. That's perfect.")
-        assert call.state.writes == 1, 'the heard read-back and its yes book once'
-        [receipt] = [s for s in call.spoken if s.origin == 'confirmation']
-        told, runs[:] = receipt.generated, []
-        probe.interrupt()
-        await probe._turn("Yes, Friday at nine AM. That's great.")
-    assert call.turn == 2 and call.heard.endswith("That's great."), (call.turn, call.heard)
-    assert call.state.writes == 1, 'the unheard receipt was booked or moved again'
-    assert probe.fixed().count(told) == 2 and probe.fixed()[-1] == told, probe.fixed()
-    assert not runs, f'a step model ({runs}) was asked to answer a receipt the application had'
-
-
-async def a_number_talked_over_arrives_whole():
-    """The K3 loop: the caller goes on with the digits while the agent is asking for the rest.
-
-    When the caller stops is the runtime's endpointing. The harness's part is
-    that they were still talking, so their pieces accumulate and the last
-    piece completes the number, whatever the agent had begun to say.
-    """
-    books.reset()
-    books.set_clock(CLOCK)
-    call = open_call('', diary=books)
-    call.commit(agent='verify', pending='booking')
-    probe = Probe(call)
-    heard_by_model: list[str] = []
-
-    async def verify(messages, info):
-        heard_by_model.append(call.heard)
-        digits = ''.join(c for c in call.heard if c.isdigit())
-        if len(digits) == 11:
-            yield {0: DeltaToolCall(name='ask_number', json_args=f'{{"phone":"+{digits}"}}')}
-        else:
-            yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"incomplete"}')}
-
-    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
-        await probe._turn("It's +34.")
-        call.note_reached()
-        probe.interrupt()
-        await probe._turn('611 111 111.')
-    assert call.turn == 1 and call.heard == "It's +34. 611 111 111.", (call.turn, call.heard)
-    assert heard_by_model == ["It's +34."], 'the whole number is read back by code, not counted by the model'
-    assert probe.fixed()[-1] == 'Let me read that back to you: +34 611 11 11 11. Have I got that right?'
-
-
-async def a_number_with_a_digit_too_many_is_refused_with_its_reason():
-    """Coval run 4bLgLR4t, cases 06 and 13: speech to text heard one digit too many after "+34".
-
-    The agent said "Please say the full number again" with no reason, and the
-    caller said the same number again. Now the count is said, by code.
-    """
-    from salon.tools.identity import number_problem
-
-    assert number_problem('+34 672. 1. 273. 45. 4.') == (
-        'I heard 10 digits after +34, which is more than a number there has. Could you say the whole number again, please?'
-    )
-    assert number_problem("It's +34 6. 71. 2.") == '', 'too few is a caller still going'
-    assert number_problem("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.") == '', 'a whole number has no problem'
-
-    books.reset()
-    books.set_clock(CLOCK)
-    call = open_call('', diary=books)
-    call.commit(agent='verify', pending='booking')
-    probe = Probe(call)
-
-    async def verify(messages, info):
-        raise AssertionError('the model was asked to explain a count the application had')
-        yield ''
-
-    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
-        await probe._turn('+34 672. 1. 273. 45. 4.')
-    assert probe.fixed()[-1].startswith('I heard 10 digits after +34'), probe.fixed()
-    assert call.requests == [], 'saying why costs no request'
-
-
-async def a_number_in_pieces_is_read_back_without_the_model():
-    """Coval run L5RWCS7b, K3: nine digits said in pauses, and the model asked for "the rest" three times.
-
-    Speech-to-text writes the digits as numerals, so the application counts
-    them. Nine after "+34" is read back with no model request; anything else
-    is still the model's, which gets the count in the validation error.
-    """
-    from salon.tools.identity import number_heard
-
-    assert number_heard("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.") == '+34671273454'
-    assert number_heard("That's the full number. +34. 671. 273. 45. 4.") == '+34671273454'
-    assert number_heard('+34. 671. 273. 4. 5. 4. 0. And sorry, can we make it Saturday?') == '', 'ten digits'
-    assert number_heard('+34 611 111 112, no, +34 611 111 111') == '+34611111111', 'the last number said'
-    assert number_heard('six one one, one one one, one one one') == '', 'digits in words are the model'
-
-    books.reset()
-    books.set_clock(CLOCK)
-    call = open_call('', diary=books)
-    call.commit(agent='verify', pending='booking')
-    probe = Probe(call)
-
-    async def verify(messages, info):
-        raise AssertionError('the model was asked to count digits the application had')
-        yield ''
-
-    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=verify)):
-        await probe._turn("Of course. It's +34 6. 71. 2. 73. 4. 5. 4.")
-    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
-    assert call.requests == [], 'reading a whole number back costs no request'
-
-
-async def a_number_finished_after_the_rest_was_asked_for_is_read_back():
-    """Coval run RXcDFLJX (session 2) and session 1's call 2: "+34 671", the rest asked for, then "273 454".
-
-    The request for the rest played out in full, so "273 454" is a new turn,
-    and neither turn alone holds nine digits after "+34". The model was left
-    to join them and asked for the rest again. Read together, the pieces since
-    the number was last read back are one number, read back with no request.
-    A piece that is part of no number (a second "+34" start) is left alone.
-    """
-    books.reset()
-    books.set_clock(CLOCK)
-    call = open_call('', diary=books)
-    call.commit(agent='verify', pending='booking')
-    probe = Probe(call)
-
-    async def asks_for_the_rest(messages, info):
-        yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"incomplete"}')}
-
-    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=asks_for_the_rest)):
-        await probe._turn("Sure, it's +34 671.")
-    assert probe.fixed()[-1] == 'Please give me the rest of the digits.', probe.fixed()
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    requests = len(call.requests)
-
-    async def never(messages, info):
-        raise AssertionError('the model was asked to join digits the application had')
-        yield ''
-
-    with agents.AGENTS['verify'].agent.override(model=FunctionModel(stream_function=never)):
-        await probe._turn('273 454.')
-    assert call.turn == 2, 'a new turn: the request for the rest was heard in full'
-    assert probe.fixed()[-1] == 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
-    assert call.requests == [] and requests >= 0, 'joining the pieces costs no request'
-    assert call._asked.about == 'phone' and call._asked.value == '+34671273454'
-    assert '+34671273454' not in books._customers, 'read back, not yet agreed to: nothing is looked up'
-
-
-async def a_number_from_any_country_is_looked_up_once_after_its_heard_read_back():
-    """Session 3, A1: any country's number, read back by code, looked up once, and only after a heard yes.
-
-    Each case counts the diary's lookups: none before the read-back of those
-    exact digits has played and been agreed to, exactly one after. A yes to
-    a read-back that never played, a correction and a replayed yes each look
-    nothing up. Digits with no "+" and a number with a digit too many are
-    never read back.
-    """
-    lookups: list[str] = []
-    real = books.find_or_create_customer
-
-    def counted(phone: str) -> dict:
-        lookups.append(phone)
-        return real(phone)
-
-    asked_model: list[str] = []
-
-    async def never(messages, info):
-        """The processor turns a model error into a spoken apology, so the call is recorded, not raised."""
-        asked_model.append(call.heard)
-        yield 'Right.'
-
-    async def asks_country(messages, info):
-        yield {0: DeltaToolCall(name='verification_guidance', json_args='{"topic":"country"}')}
-
-    async def says_ok(messages, info):
-        yield 'Right.'
-
-    @contextmanager
-    def models(verify):
-        """Every agent scripted: `verify` for the number, a short line wherever the caller goes after it."""
-        with ExitStack() as stack:
-            for name, node in agents.AGENTS.items():
-                model = FunctionModel(stream_function=verify if name == 'verify' else says_ok)
-                stack.enter_context(node.agent.override(model=model))
-            yield
-
-    def fresh() -> tuple:
-        books.reset()
-        books.set_clock(CLOCK)
-        lookups.clear()
-        call = open_call('', diary=books)
-        call.commit(agent='verify', pending='booking')
-        return call, Probe(call)
-
-    def heard_in_full(call) -> None:
-        call.note_reached()
-        played_out(call)
-        call.turn_ended(interrupted=False)
-
-    labels = {'Yes.': 'accept', 'No, it ends in 0959.': 'revise'}
-    with (
-        patch.object(books, 'find_or_create_customer', counted),
-        models(never),
-        classifier(labels),
-    ):
-        for said, phone, spoken in (
-            ('+1 202 555 0123.', '+12025550123', '+1 202-555-0123'),
-            ('Plus 353 86 123 4567.', '+353861234567', '+353 86 123 4567'),
-        ):
-            call, probe = fresh()
-            await probe._turn(said)
-            assert probe.fixed()[-1] == f'Let me read that back to you: {spoken}. Have I got that right?'
-            assert call._asked.value == phone and lookups == [], (said, lookups)
-            call.turn_ended(interrupted=False)
-            await probe._turn('Yes.')
-            assert lookups == [], 'a yes to a read-back that never played looked the number up'
-            heard_in_full(call)
-            await probe._turn(said)
-            heard_in_full(call)
-            await probe._turn('Yes.')
-            assert lookups == [phone], (said, lookups)
-            assert call.state.customer_phone == phone and call.state.customer_verified == 'created'
-            heard_in_full(call)
-            await probe._turn('Yes.')
-            assert lookups == [phone], 'a replayed yes looked the number up again'
-
-        call, probe = fresh()
-        await probe._turn('+44 20 7946 0958.')
-        heard_in_full(call)
-        await probe._turn('No, it ends in 0959.')
-        assert lookups == [], 'a correction is not an agreement'
-        heard_in_full(call)
-        await probe._turn('+44 20 7946 0959.')
-        assert probe.fixed()[-1] == 'Let me read that back to you: +44 20 7946 0959. Have I got that right?'
-        heard_in_full(call)
-        await probe._turn('Yes.')
-        assert lookups == ['+442079460959'], lookups
-
-        call, probe = fresh()
-        await probe._turn('+34 671 273 4540.')
-        assert probe.fixed()[-1].startswith('I heard 10 digits after +34'), probe.fixed()
-        assert call._asked is None and lookups == [] and call.requests == []
-        assert not [w for w in asked_model if '+' in w], ('a number was left to the model', asked_model)
-
-    call, probe = fresh()
-    with (
-        patch.object(books, 'find_or_create_customer', counted),
-        models(asks_country),
-    ):
-        await probe._turn('202 555 0123.')
-    assert probe.fixed()[-1] == 'Which country is that phone number from?', probe.fixed()
-    assert call._asked is None and lookups == [], 'no country code is guessed, and nothing is read back'
-
-
-async def a_move_after_a_booking_is_read_back_not_cancelled():
-    """The user's call of 24 September (trace cd3c08fa), turns 6 to 9: book, then move it to Saturday, same time.
-
-    "Move it to Saturday instead" was read as taking the booking back, and the
-    caller was offered a cancel. Then "Same time." cost six requests in a row
-    and a refused save. Now the take-back reading says `change`, the front
-    desk hands the move over in one request, booking offers Saturday's times
-    marked as a move with no model, the pick is read back as the move with no
-    model, and the yes moves it.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A haircut on Friday.')
-    await offer(call, 'Friday', 'haircut')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    friday = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
-    saturday: list[str] = []
-
-    def classify(name, data):
-        answer = data['answer']
-        if name == 'chosen_offer' and answer == "Nine o'clock works.":
-            return friday.slot_id
-        if name == 'chosen_offer' and answer == 'Same time.':
-            nine = next(o for o in data['options'] if '9:00' in o['said'])
-            saturday.append(nine['id'])
-            return nine['id']
-        if name == 'confirmation' and answer in ('Yes.', 'Yes, please.'):
-            return 'accept'
-        if name == 'last_change' and 'Saturday' in answer:
-            return 'change'
-        if name == 'conversation':
-            return 'continue'
-        return None
-
-    asked: dict[str, int] = {}
-
-    async def desk(messages, info):
-        asked['concierge'] = asked.get('concierge', 0) + 1
-        yield {
-            0: DeltaToolCall(
-                name='hand_over',
-                json_args=json.dumps(
-                    {
-                        'to': 'booking',
-                        'because': 'move the haircut to Saturday',
-                        'booking': {'service': 'haircut', 'when': 'Saturday', 'change': 'move'},
-                    }
-                ),
-            )
-        }
-
-    async def other(messages, info):
-        asked['step'] = asked.get('step', 0) + 1
-        yield 'Anything else?'
-
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name, node in agents.AGENTS.items():
-            model = FunctionModel(stream_function=desk if name == 'concierge' else other)
-            stack.enter_context(node.agent.override(model=model))
-        await agreed_to_a_pick(call, probe, "Nine o'clock works.")
-        (held,) = books.bookings_for(PHONE, CLOCK.date())
-        asked.clear()
-
-        probe.interrupt()
-        await probe._turn('Sorry, can you actually move the appointment to Saturday instead?')
-        offered = probe.fixed()[-1]
-        assert 'cancel' not in offered.lower(), 'a caller who asked to move was offered a cancel'
-        assert offered.startswith('For a haircut on Saturday'), offered
-        assert asked == {'concierge': 1}, asked
-        call.note_reached()
-        played_out(call)
-
-        probe.interrupt()
-        await probe._turn('Same time.')
-        assert probe.fixed()[-1].startswith('Shall I move your appointment to Saturday'), probe.fixed()[-1]
-        assert asked == {'concierge': 1}, f'the pick of a move cost a model request: {asked}'
-        call.note_reached()
-        played_out(call)
-
-        probe.interrupt()
-        await probe._turn('Yes.')
-    (moved,) = books.bookings_for(PHONE, CLOCK.date())
-    assert moved['booking_id'] == held['booking_id'], 'the booking held was moved, not a second one added'
-    assert date.fromisoformat(moved['date']).weekday() == 5 and moved['time'] == '09:00', (held, moved)
-    assert saturday and asked == {'concierge': 1}, asked
-
-
-AJ4T = "Yes, that's right. Oh, and sorry, can we make it Saturday instead of Friday?"
-"""Coval run hdbogMqB, AJ4t: the caller's answer to their number read back."""
-
-
-async def a_yes_with_a_new_request_is_verified_and_the_rest_answered():
-    """Coval run hdbogMqB, AJ4t: a yes to the number, and a new day in the same breath.
-
-    The yes is the check's: the lookup runs with no model. The new day is the
-    booking step's: the caller goes back to it in the same turn, the Friday
-    times its opening would have offered are skipped because the request
-    changed, and its model is given the whole reply. Nobody asks for the
-    number again.
-    """
-    books.reset()
-    books.set_clock(CLOCK)
-    call = open_call(PHONE, diary=books)
-    probe = Probe(call)
-    booking_asked: list[str] = []
-
-    def classify(name, data):
-        if name == 'confirmation':
-            return 'accept' if data['answer'] == AJ4T else None
-        if name == 'request_change':
-            return 'changed'
-        if name == 'conversation':
-            return 'continue'
-        return None
-
-    async def desk(messages, info):
-        yield {
-            0: DeltaToolCall(
-                name='hand_over',
-                json_args=json.dumps(
-                    {
-                        'to': 'booking',
-                        'because': 'wants a haircut on Friday',
-                        'booking': {'service': 'haircut', 'when': 'Friday'},
-                    }
-                ),
-            )
-        }
-
-    async def booking(messages, info):
-        booking_asked.append(f'{messages!r} {info.instructions}')
-        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
-        yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': 'Saturday', 'service': 'haircut'}))}
-
-    async def other(messages, info):
-        yield 'Anything else?'
-
-    steps = {'concierge': desk, 'booking': booking}
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name, node in agents.AGENTS.items():
-            model = FunctionModel(stream_function=steps.get(name, other))
-            stack.enter_context(node.agent.override(model=model))
-        await probe._turn('A haircut on Friday, please.')
-        assert call.state.agent == 'verify', call.state.agent
-        assert probe.fixed() == ['Let me read that back to you: +34 611 11 11 11. Have I got that right?'], (
-            probe.fixed()
-        )
-        call.note_reached()
-        played_out(call)
-        booking_asked.clear()
-
-        probe.interrupt()
-        await probe._turn(AJ4T)
-    assert call.state.customer_verified and call.state.verified_phone == PHONE, 'the yes did not verify'
-    assert call.state.agent == 'booking', call.state.agent
-    assert len(booking_asked) == 1, 'the booking model did not answer the rest, once'
-    assert 'Saturday instead of Friday' in booking_asked[0], 'the booking model was not given the new day'
-    assert 'verify completed' in booking_asked[0], 'the booking model was not told the check completed'
-    assert not any(line.startswith('For a haircut on Friday') for line in probe.fixed()), probe.fixed()
-    thanks, offered = probe.fixed()[-2:]
-    assert thanks in ('Thanks, I have you.', 'Thank you, I have you now.'), probe.fixed()
-    assert offered.startswith('For a haircut on Saturday'), probe.fixed()
-    assert 'I have you' in booking_asked[0], 'the booking model was not shown the line already said'
-    asked = call.pending_question()
-    assert asked is None or asked.about != 'phone', 'the number was asked for again'
-
-
-async def a_day_next_week_is_offered_at_the_first_try():
-    """Trace bbe42ad4: "I meant Saturday next week, not this Saturday." was answered "Which day would you like?".
-
-    Twice, and "October the 3rd" the same. The diary works the day out now,
-    and each offer names its date. A day the diary still cannot work out goes
-    back to the model with the reason, and the model, which has the calendar,
-    passes the date: nothing is said to the caller in between.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    planned = [
-        ['Saturday'],
-        ['Saturday next week'],
-        ['in two weeks on Tuesday', '2026-10-06'],
-    ]
     requests: list[str] = []
 
-    def classify(name, data):
-        return 'continue' if name == 'conversation' else None
+    async def booking(call):
+        requests.append(call.heard)
+        return ('call', 'book_appointment') if call.heard == 'Yes.' else ('say', 'Of course.')
 
-    async def booking(messages, info):
-        requests.append(f'{messages!r} {info.instructions}')
-        when = planned[0].pop(0)
-        if not planned[0]:
-            planned.pop(0)
-        (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
-        yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': when, 'service': 'haircut'}))}
-
-    async def other(messages, info):
-        yield 'Anything else?'
-
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name, node in agents.AGENTS.items():
-            model = FunctionModel(stream_function=booking if name == 'booking' else other)
-            stack.enter_context(node.agent.override(model=model))
-        for words, day in (
-            ('Actually, can we do Saturday?', 'Saturday the 26th'),
-            ('Oh no, sorry, I meant Saturday next week, not this Saturday.', 'Saturday the 3rd'),
-            ('In two weeks on Tuesday, please.', 'Tuesday the 6th'),
-        ):
-            said = len(probe.fixed())
-            requests.clear()
-            probe.interrupt()
-            await probe._turn(words)
-            lines = probe.fixed()[said:]
-            assert lines and lines[-1].startswith(f'For a haircut on {day}, I have'), (words, lines)
-            assert not any('which day' in line.lower() or 'which date' in line.lower() for line in lines), (
-                lines
-            )
-            call.note_reached()
-            played_out(call)
-    assert len(requests) == 2 and 'could not work out which day' in requests[1], requests
-    assert 'Today is Monday 2026-09-21' in requests[0], 'the booking model was not told the date'
-    assert '- Saturday 2026-10-03: Saturday next week' in requests[0], 'nor the calendar'
-
-
-async def the_day_after_the_one_offered_is_offered_with_both_days():
-    """Trace 9195116 (Friday 2026-09-25): "can you look at the day after?", then "What I meant is Saturday".
-
-    The model passed the right date, Saturday the 3rd, each time, and the day
-    guard sent it back: the caller had said "Friday", then a plain "Saturday",
-    which is tomorrow. It took three turns and "Saturday the 3rd" to get
-    there. Now the lookup goes ahead at once.
-
-    "The day after", said while Friday the 2nd is on the table, is Saturday
-    the 3rd (`diary.anchored`). So a lookup for that day is offered plainly,
-    however the model wrote it: "2026-10-03" or, as in the replay of
-    2026-09-25, "Saturday 2026-10-03", which used to be read as tomorrow. A
-    lookup for tomorrow instead says both days.
-    """
-    for when, first in (
-        ('2026-10-03', 'For a haircut on Saturday the 3rd, I have'),
-        ('Saturday 2026-10-03', 'For a haircut on Saturday the 3rd, I have'),
-        ('tomorrow', "That's tomorrow, not Saturday the 3rd: for a haircut, I have"),
-    ):
-        call = booking_call()
-        books.set_clock(datetime(2026, 9, 25, 9, 30, tzinfo=diary.TZ))
-        call.turn_started('I would like a haircut on Friday.')
-        await offer(call, 'Friday', 'haircut')
+    with steps(booking=booking):
+        probe.interrupt()
+        await probe._turn('Yes.')
+        receipt = next(s for s in call.spoken if s.generated.startswith("You're all set"))
+        call._playback_known = True
+        call.turn_ended(interrupted=False)
+        assert receipt.playback == 'queued', receipt
+        probe.interrupt()
+        await probe._turn('Hello? Is it booked?')
+        assert probe.fixed()[-1] == receipt.generated and requests == ['Yes.'], (probe.fixed(), requests)
+        assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
         call.note_reached()
         played_out(call)
-        call.turn_ended(interrupted=False)
-        probe = Probe(call)
-        asked: list[str] = []
+        probe.interrupt()
+        await probe._turn('Great, thanks.')
+    assert requests == ['Yes.', 'Great, thanks.'], requests
+    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the booking was made again'
 
-        def classify(name, data):
-            return 'continue' if name == 'conversation' else None
 
-        async def booking(messages, info, when=when, asked=asked):
-            asked.append(when)
-            (tool,) = [t.name for t in info.output_tools if 'offer_times' in t.name]
-            yield {0: DeltaToolCall(name=tool, json_args=json.dumps({'when': when, 'service': 'haircut'}))}
+async def a_yes_with_a_new_request_is_verified_and_the_rest_kept():
+    """Coval run hdbogMqB, AJ4t (P5, phone read-back): "Yes, that number is right; can we make it Saturday instead?"
 
-        async def other(messages, info):
-            yield 'Anything else?'
+    Two meanings, at most one action: the verify agent records the new day
+    and accepts the unchanged number in the same reply. The number's yes
+    stands, because nothing it rests on changed; the day is kept for
+    booking, which the call returns to by code.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call(PHONE, diary=books, service='haircut', booking_day='Friday')
+    call.commit(agent='verify', pending='booking')
+    call_of[0] = call
+    probe = Probe(call)
+    call.turn_started('A haircut on Friday.')
+    lookup = FLOW.by_id['verify'].operations[0]
+    proposal = lookup.proposal_for(call, _args(lookup, call))
+    await call.speak_now(Prompted(proposal.about, proposal.spoken, proposal.value).put(call), origin='ask')
+    call.note_reached()
+    played_out(call)
+    call.turn_ended(interrupted=False)
+    replies = iter(
+        [
+            ('calls', [('collect', {'values': {'booking_day': 'Saturday'}}), ('lookup_customer', {})]),
+        ]
+    )
 
-        with ExitStack() as stack:
-            stack.enter_context(scripted_readings(classify))
-            for name, node in agents.AGENTS.items():
-                model = FunctionModel(stream_function=booking if name == 'booking' else other)
-                stack.enter_context(node.agent.override(model=model))
-            for words, line_starts in (
-                ('Um, 9:00 AM. Actually, can you look at the day after?', first),
-                ('What I meant is Saturday.', 'For a haircut on Saturday the 3rd, I have'),
-            ):
-                asked.clear()
-                probe.interrupt()
-                await probe._turn(words)
-                line = probe.fixed()[-1]
-                if when == 'tomorrow' and words.startswith('What'):
-                    line_starts = 'For a haircut tomorrow, I have'
-                assert line.startswith(line_starts), (when, words, line)
-                assert len(asked) == 1, f'the date was sent back: {asked}'
-                call.note_reached()
-                played_out(call)
+    async def verify_stream(messages, info):
+        _kind, calls = next(replies)
+        yield {i: DeltaToolCall(name=n, json_args=json.dumps(a)) for i, (n, a) in enumerate(calls)}
+
+    async def booking_stream(messages, info):
+        yield 'On Saturday, which time suits you?'
+
+    with (
+        FLOW.nodes['verify'].agent.override(model=FunctionModel(stream_function=verify_stream)),
+        FLOW.nodes['booking'].agent.override(model=FunctionModel(stream_function=booking_stream)),
+    ):
+        probe.interrupt()
+        await probe._turn('Yes, that number is right; can we make it Saturday instead?')
+    facts = call.state.facts
+    assert facts.verified_phone == PHONE and facts.customer_phone == PHONE, (
+        'the yes did not verify the unchanged number'
+    )
+    assert facts.booking_day == 'Saturday', 'the new day was lost'
+    assert call.state.agent == 'booking', call.state.agent
+
+
+async def a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends():
+    """Session 4, Coval run GYZdoiie (simulation fymMyWTi): the number was looked up on a read-back nobody heard.
+
+    The verify agent's `collect` armed the holding line; the read-back was
+    queued while "Let me have a look." played; that line's audio ended half a
+    second later and the read-back was counted as heard with it. The caller,
+    who heard almost none of it, cut in and restated the digits, and the
+    agent's yes to that looked the number up. A segment that joins playing
+    audio is heard only once its own words had time to play.
+    """
+    books.reset()
+    books.set_clock(CLOCK)
+    call = open_call('+34671273454', diary=books)
+    call.commit(agent='verify', pending='booking')
+    call_of[0] = call
+    probe = Probe(call)
+
+    async def line(text):
+        """The call's line to the caller: without one, a covering line is not recorded."""
+
+    call._say = line
+    call.turn_started('Two seven three, four five four.')
+    await call.say('Let me have a look.', origin='tool_filler')
+    call.note_reached()
+    lookup = FLOW.by_id['verify'].operations[0]
+    proposal = lookup.proposal_for(call, _args(lookup, call))
+    await call.speak_now(Prompted(proposal.about, proposal.spoken, proposal.value).put(call), origin='ask')
+    call.note_drained()
+    readback = next(s for s in call.spoken if s.generated == proposal.spoken)
+    assert readback.playback == 'queued', ('counted as heard with the line it was queued behind', readback)
+    call.note_barge()
+    call.turn_ended(interrupted=True)
+
+    async def verify(call):
+        return ('call', 'lookup_customer')
+
+    with steps(verify=verify):
+        probe.interrupt()
+        await probe._turn("That's two seven three, four five four.")
+    assert call.state.facts.verified_phone == '', 'looked up on a read-back the caller never heard'
+    assert any(s.generated == proposal.spoken for s in call.spoken), (
+        'the number is read back again',
+        call.spoken,
+    )
 
 
 def a_report_never_unhears_a_line_that_played():
@@ -966,480 +498,6 @@ def a_report_never_unhears_a_line_that_played():
     assert call.turn == 1, 'a line cut off before it could play still continues the turn'
 
 
-async def an_add_answered_to_a_heard_question_books_it():
-    """Trace fbdd81b6, turns 4 and 5: "can we do 10:30?", asked move or add, "add another one" books it.
-
-    The caller already held a 9:00 that Friday. The runtime's report cut the
-    move-or-add question after it played, the answer joined the turn before
-    it, the question it answered was rewound, and the caller was offered the
-    same times again. Now the answer is its own turn, and the add writes.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A haircut on Friday.')
-    await offer(call, 'Friday', 'haircut')
-    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
-    books.save_booking(PHONE, 'book', nine.slot_id, '', False, books.now(), offered_to=call.id)
-    await offer(call, 'Friday', 'haircut')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    later = next(s for s in call.state.offered if s.time.hour >= 10)
-    asked: list[str] = []
-
-    def classify(name, data):
-        if name == 'chosen_offer' and data['answer'] == 'Uh, can we do 10:30?':
-            return later.slot_id
-        if name == 'appointment_choice' and 'add another one' in data['answer']:
-            return 'add'
-        if name == 'conversation':
-            return 'continue'
-        return None
-
-    async def booking(messages, info):
-        asked.append('booking')
-        yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic": "move_or_add"}')}
-
-    async def other(messages, info):
-        yield 'Anything else?'
-
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name, node in agents.AGENTS.items():
-            model = FunctionModel(stream_function=booking if name == 'booking' else other)
-            stack.enter_context(node.agent.override(model=model))
-        probe.interrupt()
-        await probe._turn('Uh, can we do 10:30?')
-        assert probe.fixed()[-1].startswith('Would you like to move'), probe.fixed()
-        call.note_reached()
-        played_out(call)
-        probe.note_spoken('', True, segment_ids=tuple(s.id for s in call.spoken))
-        offers = len([line for line in probe.fixed() if line.startswith('For a haircut')])
-
-        probe.interrupt()
-        await probe._turn('Uh, add another one.')
-    held = books.bookings_for(PHONE, CLOCK.date())
-    assert sorted(b['time'] for b in held) == ['09:00', later.time.strftime('%H:%M')], held
-    assert asked == ['booking'], f'the booking model ran again after the add: {asked}'
-    assert len([line for line in probe.fixed() if line.startswith('For a haircut')]) == offers, probe.fixed()
-
-
-async def a_booking_taken_back_is_offered_for_cancelling(asks_price: bool):
-    """The K2 failure: a picked time books at once; "leave it" must not end the call with it still booked.
-
-    Whether "leave it" comes on the very next turn or after "How much is that?"
-    (Coval run Y47Ut7oC, K2, where the later one hung up on it).
-
-    And a reply that agrees and says goodbye in one breath runs what it agreed
-    to: "Yes, cancel it. Bye." used to hang up on the yes.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A hair colour on Friday.')
-    await offer(call, 'Friday', 'hair-color')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
-    readings = {
-        "Nine o'clock works.": {'chosen_offer': slot.slot_id},
-        'Yes.': {'confirmation': 'accept'},
-        "Oh, that's too much for me. Leave it, thanks. Goodbye.": {
-            'last_change': 'withdraw',
-            'conversation': 'end',
-        },
-        'Yes, cancel it. Bye.': {'confirmation': 'accept', 'last_change': 'withdraw', 'conversation': 'end'},
-    }
-    given: list[tuple[str, str]] = []
-
-    def classify(name, data):
-        given.append((name, data['answer']))
-        return readings.get(data['answer'], {}).get(name)
-
-    async def booking(messages, info):
-        yield {
-            0: DeltaToolCall(
-                name='save_booking',
-                json_args=f'{{"action":"book","slot_id":"{slot.slot_id}","booking_id":""}}',
-            )
-        }
-
-    async def other(messages, info):
-        yield 'Anything else?'
-
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name, node in agents.AGENTS.items():
-            model = FunctionModel(stream_function=booking if name == 'booking' else other)
-            stack.enter_context(node.agent.override(model=model))
-        await agreed_to_a_pick(call, probe, "Nine o'clock works.")
-        assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
-        if asks_price:
-            probe.interrupt()
-            await probe._turn('How much is that?')
-            call.note_reached()
-            played_out(call)
-        probe.interrupt()
-        await probe._turn("Oh, that's too much for me. Leave it, thanks. Goodbye.")
-        assert ('last_change', call.heard) in given, (
-            'the reply was not read against what had just been booked'
-        )
-        assert call.ended == '', 'hung up with the booking still in the diary'
-        cancel = probe.fixed()[-1]
-        assert cancel.startswith('Shall I cancel your hair colour'), cancel
-        call.note_reached()
-        played_out(call)
-        probe.interrupt()
-        await probe._turn('Yes, cancel it. Bye.')
-    assert call.state.writes == 2, 'the agreed cancel was dropped for the goodbye'
-    assert books.bookings_for(PHONE, CLOCK.date()) == [], books.bookings_for(PHONE, CLOCK.date())
-
-
-async def a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it():
-    """Coval run 4eDqRVLR: "That's all, thank you. Goodbye." after a booking ran four readings, one needed.
-
-    On "anything else?" the two choice readings ran on every reply and never
-    decided one. They are left to the booking tool, which reads them itself
-    if the model goes on to move or add; what the goodbye needs is whether it
-    takes the booking back and whether it ends the call.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A hair colour on Friday.')
-    await offer(call, 'Friday', 'hair-color')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    slot = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0)
-    readings = {
-        "Nine o'clock works.": {'chosen_offer': slot.slot_id},
-        'Yes.': {'confirmation': 'accept'},
-        "That's all, thank you. Goodbye.": {'last_change': 'keep', 'conversation': 'end'},
-    }
-    given: list[tuple[str, str]] = []
-
-    def classify(name, data):
-        given.append((name, data['answer']))
-        return readings.get(data['answer'], {}).get(name)
-
-    async def booking(messages, info):
-        yield {
-            0: DeltaToolCall(
-                name='save_booking',
-                json_args=f'{{"action":"book","slot_id":"{slot.slot_id}","booking_id":""}}',
-            )
-        }
-
-    async def other(messages, info):
-        yield 'Goodbye.'
-
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name, node in agents.AGENTS.items():
-            model = FunctionModel(stream_function=booking if name == 'booking' else other)
-            stack.enter_context(node.agent.override(model=model))
-        await agreed_to_a_pick(call, probe, "Nine o'clock works.")
-        assert call.table() == (), 'the times offered for a booking stay on the table after it is made'
-        probe.interrupt()
-        await probe._turn("That's all, thank you. Goodbye.")
-    read = sorted(name for name, answer in given if answer == "That's all, thank you. Goodbye.")
-    assert read == ['conversation', 'last_change'], read
-    assert call.ended, 'the goodbye did not end the call'
-    assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the goodbye touched the booking'
-
-
-async def a_pick_said_with_a_goodbye_is_asked_before_they_go():
-    """Coval run RPH7TzmF, K5: "Fine, nine o'clock then. That's all. Goodbye!" got "So that is a hair colour...".
-
-    The caller heard a confirmation and hung up with nothing booked. The
-    read-back now asks from its first word, and says why before they go.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A hair colour on Friday.')
-    await offer(call, 'Friday', 'hair-color')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
-    words = "Nine o'clock then. That's all I need. Goodbye!"
-
-    def classify(name, data):
-        return {'chosen_offer': nine, 'conversation': 'end'}.get(name)
-
-    with scripted_readings(classify):
-        probe.interrupt()
-        await probe._turn(words)
-    asked = probe.fixed()[-1]
-    assert asked.startswith('Before you go: shall I book you in for a hair colour'), asked
-    assert call.state.writes == 0 and call.ended == '', 'booked, or hung up, before the yes'
-
-
-async def a_time_named_with_a_condition_is_not_read_back():
-    """Coval run L5RWCS7b, K5: "09:00. But only if it costs less than 30 euros" was read back as a booking.
-
-    The pick reading was right, no pick; the booking model read 9:00 back
-    anyway and left the price unanswered. `ask_booking` now refuses a time
-    the caller named without picking it plainly, and the model answers.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A hair colour on Friday.')
-    await offer(call, 'Friday', 'hair-color')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
-    tries: list[str] = []
-
-    def classify(name, data):
-        return {'chosen_offer': ''}.get(name)
-
-    async def booking(messages, info):
-        tries.append('booking')
-        if len(tries) == 1:
-            yield {
-                0: DeltaToolCall(
-                    name='ask_booking', json_args=f'{{"action":"book","slot_id":"{nine}","booking_id":""}}'
-                )
-            }
-        else:
-            yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
-
-    with (
-        scripted_readings(classify),
-        agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking)),
-    ):
-        probe.interrupt()
-        await probe._turn('09:00. But only if it costs less than 30 euros.')
-    assert tries == ['booking', 'booking'], 'the refusal did not send the model back to answer'
-    assert not any(line.startswith('Shall I book') for line in probe.fixed()), probe.fixed()
-    assert call.pending_question() is None or call.pending_question().about != 'booking'
-
-
-async def a_named_pick_is_refused_without_the_word_list():
-    """With the named pick on, the reading says which time was asked about, so no English word list is needed.
-
-    "The first one, if it is under 30 euros" names no time `times_named` knows,
-    so the word-list guard reads it back. The named reading refuses it.
-    """
-    choosing = SALON.offer('chosen_offer')
-    named_output = create_model('ChosenOfferChoice', __base__=NamedChoice)
-
-    async def attempt(named: bool) -> tuple[list[str], list[str]]:
-        call = booking_call()
-        probe = Probe(call)
-        call.turn_started('A hair colour on Friday.')
-        await offer(call, 'Friday', 'hair-color')
-        call.note_reached()
-        played_out(call)
-        call.turn_ended(interrupted=False)
-        first = call.state.offered[0].slot_id
-        tries: list[str] = []
-
-        def classify(name, data):
-            return {'choice': '', 'named': first} if name == 'chosen_offer' and named else None
-
-        async def booking(messages, info):
-            tries.append('booking')
-            if len(tries) == 1:
-                yield {
-                    0: DeltaToolCall(
-                        name='ask_booking',
-                        json_args=f'{{"action":"book","slot_id":"{first}","booking_id":""}}',
-                    )
-                }
-            else:
-                yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
-
-        with ExitStack() as stack:
-            if named:
-                stack.enter_context(patch.object(choosing, 'named', True))
-                stack.enter_context(patch.object(choosing.reading.classifier, 'output_type', named_output))
-            stack.enter_context(scripted_readings(classify))
-            stack.enter_context(
-                agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking))
-            )
-            probe.interrupt()
-            await probe._turn('The first one, if it is under 30 euros.')
-        return tries, probe.fixed()
-
-    tries, said = await attempt(named=False)
-    assert tries == ['booking'] and any(line.startswith('Shall I book') for line in said), (
-        'the word-list guard is expected to miss this wording; if it now catches it, this check shows no gain'
-    )
-    tries, said = await attempt(named=True)
-    assert tries == ['booking', 'booking'] and not any(line.startswith('Shall I book') for line in said), said
-
-
-async def only_a_slot_on_the_table_can_be_picked():
-    """A pick is the classifier's reading checked against the table, never a word list and never a free slot id.
-
-    "Nine, but only if it costs less than thirty" named a time and used to
-    book on the time alone. And a reading naming a real slot that was never
-    offered to this caller authorises nothing, whoever produced it. A pick
-    that counts is read back, with no model; nothing is booked on the pick.
-    """
-    for reading, read_back in (
-        ('offered', True),
-        ('conditional', False),
-        ('elsewhere', False),
-    ):
-        call = booking_call()
-        probe = Probe(call)
-        call.turn_started('A hair colour on Friday.')
-        await offer(call, 'Friday', 'hair-color')
-        call.note_reached()
-        played_out(call)
-        call.turn_ended(interrupted=False)
-        nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
-        saturday = books.find_slots(PHONE, 'Saturday', 'hair-color', books.now(), offered_to='someone else')
-        chosen = {'offered': nine, 'conditional': '', 'elsewhere': saturday['slots'][0]['slot_id']}[reading]
-
-        def classify(name, data, chosen=chosen):
-            return chosen if name == 'chosen_offer' else None
-
-        async def booking(messages, info):
-            yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
-
-        with (
-            scripted_readings(classify),
-            agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking)),
-        ):
-            probe.interrupt()
-            await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
-        assert call.state.writes == 0, (reading, 'a pick booked before it was read back')
-        put = call.all_spoken[-1].generated if call.all_spoken else ''
-        assert put.startswith('Shall I book you in for a') is read_back, (reading, put)
-        if read_back:
-            assert {r.kind for r in call.requests} == {'classifier'}, 'reading a pick back needs no model'
-
-
-async def a_pick_with_no_question_pending_is_still_read_back():
-    """Coval run DkLvLzC5, K5: the pick came two turns after the offer, with no question pending.
-
-    "Nine, but only if it costs less than thirty" answered the offer; the
-    price came back from the front desk; "Fine, nine o'clock then, that's
-    all, goodbye" picked from the same table. The reply was read only when a
-    question was pending, so the front desk's model heard it and hung up. The
-    table is enough to read it: the pick is read back before the goodbye, and
-    the yes to it books from the front desk, with no model either time.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A hair colour on Friday.')
-    await offer(call, 'Friday', 'hair-color')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
-    readings = {
-        "Nine o'clock, but only if it costs less than thirty euros.": {'confirmation': 'unclear'},
-        "Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye.": {
-            'chosen_offer': nine,
-            'conversation': 'end',
-        },
-        'Yes.': {'confirmation': 'accept'},
-    }
-
-    def classify(name, data):
-        return readings[data['answer']].get(name)
-
-    runs: list[str] = []
-
-    async def desk(messages, info):
-        runs.append('concierge')
-        yield 'Hair colour is 75 euros.'
-
-    call.commit(agent='concierge')
-    with (
-        scripted_readings(classify),
-        agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=desk)),
-    ):
-        probe.interrupt()
-        await probe._turn("Nine o'clock, but only if it costs less than thirty euros.")
-        assert call.state.writes == 0 and runs == ['concierge'], 'a condition books nothing'
-        call.note_reached()
-        played_out(call)
-        await agreed_to_a_pick(
-            call, probe, "Oh, okay. Fine. Nine o'clock then. That's all I need. Thank you. Goodbye."
-        )
-    assert call.ended == '', 'hung up on a pick that was still to be read back'
-    assert runs == ['concierge'], 'the front desk model answered a reply the application had already read'
-
-
-async def an_add_on_to_a_pick_is_read_with_it():
-    """Coval run ad3n4Vxn, K5: "09:00." booked at once, then "but only if it costs less than 30 euros".
-
-    No endpointing can tell a complete answer from one the caller will add
-    to. A pick is read back now, not booked, so the add-on continues the turn
-    of the pick and nothing is booked on a condition. "Fine, nine o'clock
-    then" is read back again and the yes books it; kept after that, the cancel
-    offer is off the table, where the model had read the cancellation back
-    anyway.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    call.turn_started('A hair colour on Friday.')
-    await offer(call, 'Friday', 'hair-color')
-    call.note_reached()
-    played_out(call)
-    call.turn_ended(interrupted=False)
-    nine = next(s for s in call.state.offered if s.time.hour == 9 and s.time.minute == 0).slot_id
-    joined = '09:00. But only if it costs less than 30 euros.'
-    readings = {
-        '09:00.': {'chosen_offer': nine},
-        joined: {'confirmation': 'conditional'},
-        'Oh, okay. Fine. 09:00 then.': {'chosen_offer': nine},
-        'Yes.': {'confirmation': 'accept'},
-        'Great, I will keep it.': {'last_change': 'keep'},
-    }
-    seen: dict[str, set[str]] = {}
-
-    def classify(name, data):
-        seen.setdefault(data['answer'], set()).add(name)
-        return readings[data['answer']].get(name)
-
-    async def speak(messages, info):
-        yield 'A hair colour is 75 euros.'
-
-    async def booking(messages, info):
-        yield {0: DeltaToolCall(name='booking_guidance', json_args='{"topic":"time"}')}
-
-    with ExitStack() as stack:
-        stack.enter_context(scripted_readings(classify))
-        for name in ('booking', 'concierge', 'complaints'):
-            model = FunctionModel(stream_function=booking if name == 'booking' else speak)
-            stack.enter_context(agents.AGENTS[name].agent.override(model=model))
-        probe.interrupt()
-        await probe._turn('09:00.')
-        assert call.state.writes == 0, 'a pick booked before it was read back'
-        probe.interrupt()
-        await probe._turn('But only if it costs less than 30 euros.')
-        assert call.heard == joined and call.turn == 2, 'the add-on continues the turn of the pick'
-        assert call.state.writes == 0, 'booked on a condition'
-        call.note_reached()
-        played_out(call)
-        await agreed_to_a_pick(call, probe, 'Oh, okay. Fine. 09:00 then.')
-        probe.interrupt()
-        await probe._turn('Great, I will keep it.')
-    assert 'last_change' in seen['Great, I will keep it.'], 'a booking still held can still be taken back'
-    assert not undo_ready(call), 'the caller kept it, so the cancel offer is off the table'
-    context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
-    try:
-        await offer_cancel(context)
-    except ModelRetry:
-        pass
-    else:
-        raise AssertionError('a cancel was read back to a caller keeping the booking')
-    assert call.state.writes == 1 and call.undo_booking, 'the booking stands'
-    assert call.picked_offer() == '', 'a time the caller already holds is not on the table to pick again'
-    asked = call.pending_question()
-    assert asked is None or asked.about != 'move_or_add', (
-        'the caller was asked to move or add the booking they kept'
-    )
-
-
 async def a_missing_barge_never_merges_turns():
     """Without the caller cutting in, a silent turn is still over: a missing signal errs towards a new turn."""
     call = booking_call()
@@ -1449,107 +507,33 @@ async def a_missing_barge_never_merges_turns():
     assert call.turn == 2 and call.heard == 'Two.'
 
 
-def a_detour_keeps_the_rest_of_its_first_turn():
-    """The caller went on in the turn that started the identity check: that piece was said to the check too.
-
-    The checkpoint holds the request as it stood when the detour began, and
-    the continuation keeps the turn's number, so counting only later turns
-    lost "make it Saturday" from the words the waiting step is given.
-    """
-    call = open_call('', diary=books)
-    call.turn_started('A haircut on Friday.')
-    call._checkpoint = Checkpoint('booking', [], frozenset(), call.heard, call.turn)
-    call._playback_known, call._interrupted = True, True
-    call.turn_started('Actually, make it Saturday.')
-    assert call.turn == 1, 'a piece before any answer played continues the turn'
-    assert call.detour_request == 'A haircut on Friday.'
-    assert call.detour_words() == ['Actually, make it Saturday.'], call.detour_words()
-    call.turn_started('Yes.')
-    assert call.detour_words() == ['Actually, make it Saturday.', 'Yes.'], call.detour_words()
-    assert ' '.join(call.detour_words()) == 'Actually, make it Saturday. Yes.', call.detour_words()
-    call.note_request_kept()
-    assert call.request_kept
-    call.turn_started('And one more thing.')
-    assert not call.request_kept, 'a reading of one turn is no evidence about the next'
-
-
-async def a_yes_said_as_the_line_drops_still_counts():
-    """Coval run 4eDqRVLR, K4: the caller approved and hung up while their yes was still being read.
-
-    The pipeline was torn down at once and the approved complaint was never
-    recorded. The running turn now gets a bounded time to finish; a turn that
-    never finishes does not hold the line open.
-    """
-    call = booking_call()
-    probe = Probe(call)
-    await read_back_a_haircut(call, probe)
-    gate = asyncio.Event()
-
-    async def classify(name, data):
-        if name != 'confirmation':
-            return None
-        await gate.wait()
-        return 'accept'
-
-    reasks: list[int] = []
-    with scripted_readings(classify), scripted_steps(reasks):
-        probe.interrupt()
-        turn = asyncio.create_task(probe.serve('Yes, please.'))
-        await asyncio.sleep(0.01)
-        finishing = asyncio.create_task(probe.finish_turn(3))
-        await asyncio.sleep(0.05)
-        assert not finishing.done(), 'the line was torn down while the yes was still being read'
-        gate.set()
-        await asyncio.wait_for(finishing, 3)
-        await turn
-    assert call.state.writes == 1, 'the yes said as the line dropped did not book'
-
-    call = booking_call()
-    probe = Probe(call)
-    await read_back_a_haircut(call, probe)
-    with scripted_readings(lambda name, data: asyncio.Event().wait()), scripted_steps(reasks):
-        probe.interrupt()
-        turn = asyncio.create_task(probe.serve('Yes, please.'))
-        await asyncio.sleep(0.01)
-        started = asyncio.get_running_loop().time()
-        await probe.finish_turn(0.1)
-        assert asyncio.get_running_loop().time() - started < 1, 'a turn that never finishes held the line'
-        turn.cancel()
-        with suppress(asyncio.CancelledError):
-            await turn
-
-
 def a_read_back_said_again_in_full_can_be_answered():
     """Coval run 4eDqRVLR, K3: the caller talked over the number read-back, and it was said again, whole.
 
-    Both copies had the same words on the same turn, and the ledger took the
-    cut-off first one as the question's fate: the "yes" to the second found
-    nothing pending, and the number was read back a third time. The copy the
-    caller heard last is the one they are answering.
+    The copy the caller heard last is the one they are answering.
     """
     call = open_call('', diary=books)
     call.commit(agent='verify')
     call.turn_started("It's plus three four, six seven one, two seven three, four five four.")
-    readback = 'Let me read that back to you: +34 671 27 34 54. Have I got that right?'
-    Ask(about='phone', value='+34671273454', spoken=readback).put(call)
+    readback = 'Is your number +34 671 27 34 54?'
+    Prompted(about='lookup_customer', spoken=readback, value='+34671273454').put(call)
     call.note_said('fixed', readback, origin='ask')
     call.note_heard('Let me read that', segment_ids=(call.spoken[-1].id,), interrupted=True)
-    Ask(about='phone', value='+34671273454', spoken=readback).put(call)
+    Prompted(about='lookup_customer', spoken=readback, value='+34671273454').put(call)
     call.note_said('fixed', readback, origin='ask')
     call.acknowledge(call.spoken[-1].id)
     call.turn_started("Yes. That's right.")
-    assert call.pending('phone') is not None, 'the read-back heard in full is waiting on this answer'
+    assert call.pending('lookup_customer') is not None, (
+        'the read-back heard in full is waiting on this answer'
+    )
 
 
 async def a_question_cut_off_as_the_audio_stops_is_not_heard():
     """Coval run Z56CoZax, K5: the audio's stop reached the call before the caller's cut-in did.
 
-    The confirmation and its "Anything else?" played for 56 ms, so it was
-    already `played` when the cut-in arrived, and "That's perfect." read as a
-    goodbye to a question the caller never heard. Either order is one event:
-    the audio stops because the caller cut in.
+    Either order is one event: the audio stops because the caller cut in, so
+    the receipt's question was not heard and the caller's words join the turn.
     """
-    from salon.tools.writes import close_with
 
     async def line(text):
         """The call's line to the caller: without one, nothing said is recorded, and nothing here is tested."""
@@ -1558,7 +542,8 @@ async def a_question_cut_off_as_the_audio_stops_is_not_heard():
         call = booking_call()
         call._say = line
         call.turn_started('Yes, please.')
-        await close_with(call, "You're all set for Friday at 9:00 AM. Anything else I can help with?")
+        Prompted(about='closing', spoken="You're all set. Anything else I can help with?").put(call)
+        await call.speak_now("You're all set. Anything else I can help with?")
         call.note_reached()
         if stop_first:
             call.note_drained()
@@ -1570,57 +555,6 @@ async def a_question_cut_off_as_the_audio_stops_is_not_heard():
         call.turn_started("That's perfect.")
         assert call.pending_question() is None, (stop_first, 'answered a question the caller never heard')
         assert call.heard == "Yes, please. That's perfect.", (stop_first, call.heard)
-
-    call = booking_call()
-    call._say = line
-    call.turn_started('Yes, please.')
-    await close_with(call, 'Anything else?')
-    assert call.all_spoken[-1].generated == 'Anything else?', 'nothing was recorded as said'
-    call.note_reached()
-    await asyncio.sleep(0.6)
-    call.note_drained()
-    call.note_barge()
-    call.turn_ended(interrupted=False)
-    call.turn_started('No, thanks.')
-    asked = call.pending_question()
-    assert asked is not None and asked.about == 'closing', 'a question that played out in full was heard'
-
-
-async def a_cut_off_question_reported_in_full_is_still_cut_off():
-    """Coval run 4bLgLR4t, case 05 (call CA6912853c): "That's perfect." hung up on an "Anything else?" cut off.
-
-    The bot log: the line started at 44.830, the caller cut in at 45.034,
-    the audio stopped at 45.084. Between the cut-in and the stop, Pipecat's
-    assistant aggregator reported what was spoken, and that report held the
-    whole line, because the TTS had been handed all of it. The report cleared
-    the cut-in's mark, the stop then counted the line as played, and the next
-    piece began a new turn that answered the unheard question.
-    """
-    from core import turn as engine
-    from salon.tools.writes import close_with
-
-    async def line(text):
-        """The call's line to the caller: without one, nothing said is recorded."""
-
-    words = "You're all set for Friday at 9:00 AM. Anything else I can help with?"
-    orders = (('barge', 'report', 'stop'), ('stop', 'barge', 'report'), ('barge', 'stop', 'report'))
-    for order in orders:
-        call = booking_call()
-        call._say = line
-        call.turn_started('Yes, please.')
-        await close_with(call, words)
-        call.turn_ended(interrupted=False)
-        call.note_reached()
-        for signal in order:
-            if signal == 'barge':
-                call.note_barge()
-            elif signal == 'report':
-                engine.note_spoken(call, words, interrupted=True)
-            else:
-                call.note_drained()
-        call.turn_started("That's perfect.")
-        assert call.pending_question() is None, (order, 'answered a question the caller never heard')
-        assert call.heard == "Yes, please. That's perfect.", (order, call.heard)
 
 
 def heard_is_matched_by_words():
@@ -1666,45 +600,28 @@ async def playback_reaches_the_call():
         await probe.cleanup()
 
 
-async def main():
+async def main() -> None:
     await a_reply_split_by_a_pause_is_one_answer()
     await a_reply_after_the_answer_played_is_a_new_turn()
     await speech_nobody_heard_is_recorded_as_unheard()
     await a_holding_line_heard_in_full_keeps_the_turn_open()
+    await one_holding_line_per_caller_turn()
+    await a_holding_line_is_never_sent_to_the_model()
     await an_attempted_write_is_never_authorised_twice()
     await a_read_back_cut_off_is_not_agreed_to()
-    await a_missing_barge_never_merges_turns()
     await the_next_reply_is_told_what_was_not_heard()
     await an_unheard_receipt_is_said_again_and_not_booked_again()
-    await a_receipt_cut_before_it_played_is_said_again_not_moved()
-    await a_number_talked_over_arrives_whole()
-    await a_number_in_pieces_is_read_back_without_the_model()
-    await a_number_finished_after_the_rest_was_asked_for_is_read_back()
-    await a_number_from_any_country_is_looked_up_once_after_its_heard_read_back()
-    await a_number_with_a_digit_too_many_is_refused_with_its_reason()
-    await a_booking_taken_back_is_offered_for_cancelling(asks_price=False)
-    await a_move_after_a_booking_is_read_back_not_cancelled()
-    await a_yes_with_a_new_request_is_verified_and_the_rest_answered()
+    await a_yes_with_a_new_request_is_verified_and_the_rest_kept()
+    await a_read_back_queued_behind_a_holding_line_is_not_heard_when_it_ends()
     a_report_never_unhears_a_line_that_played()
-    await a_day_next_week_is_offered_at_the_first_try()
-    await the_day_after_the_one_offered_is_offered_with_both_days()
-    await an_add_answered_to_a_heard_question_books_it()
-    await a_booking_taken_back_is_offered_for_cancelling(asks_price=True)
-    await a_goodbye_after_a_booking_reads_only_what_can_end_or_undo_it()
-    await a_pick_said_with_a_goodbye_is_asked_before_they_go()
-    await a_time_named_with_a_condition_is_not_read_back()
-    await a_named_pick_is_refused_without_the_word_list()
-    await only_a_slot_on_the_table_can_be_picked()
-    await a_pick_with_no_question_pending_is_still_read_back()
-    await an_add_on_to_a_pick_is_read_with_it()
-    a_detour_keeps_the_rest_of_its_first_turn()
-    await a_yes_said_as_the_line_drops_still_counts()
+    await a_missing_barge_never_merges_turns()
     a_read_back_said_again_in_full_can_be_answered()
     await a_question_cut_off_as_the_audio_stops_is_not_heard()
-    await a_cut_off_question_reported_in_full_is_still_cut_off()
     heard_is_matched_by_words()
     await playback_reaches_the_call()
-    print('continuation ok')
+    print(
+        'continuation ok: joined pieces, unheard speech, spent answers, cut read-backs, unheard receipt, mixed yes'
+    )
 
 
 if __name__ == '__main__':

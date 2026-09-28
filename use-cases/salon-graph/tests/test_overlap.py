@@ -27,17 +27,16 @@ from dataclasses import dataclass, field
 
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from salon import agents
-from tests.classifier_model import classifier_model
+from salon.app import FLOW
 from tests.test_continuation import (
     PHONE,
     Probe,
     booking_call,
     books,
-    classifier,
+    call_of,
     played_out,
     read_back_a_haircut,
-    scripted_steps,
+    steps,
 )
 
 VAD_STOP = 0.2
@@ -133,10 +132,7 @@ async def replay_pause(case: Pause) -> tuple[Timeline, object, object]:
     else:
         plan[1] = (plan[1][0], 'whole')
     answer, playing, flushed = None, False, False
-    with (
-        classifier_model(),
-        agents.AGENTS['concierge'].agent.override(model=FunctionModel(stream_function=answering)),
-    ):
+    with FLOW.nodes['concierge'].agent.override(model=FunctionModel(stream_function=answering)):
         for at, event in sorted(plan):
             if event == 'first':
                 line.add(at, 'transcript', FIRST)
@@ -215,26 +211,42 @@ async def pauses_around_the_thresholds():
 
 
 async def barge_before_the_write():
-    """The caller goes on while their yes is still being read: nothing is dispatched, the reply is joined."""
+    """The caller goes on while their yes is still being read: nothing is dispatched, the reply is joined.
+
+    The booking agent is still working on "Yes." when the caller adds
+    "Actually, make it ten."; the joined reply is what it answers, and it
+    changes the request instead of booking the old one.
+    """
     call = booking_call()
+    call_of[0] = call
     probe = Probe(call)
     readback = await read_back_a_haircut(call, probe)
     assert heard(call) == [readback]
     saves = watch_saves()
-    reasks: list[int] = []
     joined = 'Yes. Actually, make it ten.'
-    with classifier({joined: 'revise'}, hold='Yes.') as (asked, held), scripted_steps(reasks):
-        probe.interrupt()
-        first = asyncio.create_task(probe._turn('Yes.'))
-        await asyncio.wait_for(held.wait(), 3)
-        assert not first.done(), 'the barge lands while the turn is running'
-        probe.interrupt()
-        await asyncio.wait_for(first, 3)
-        await probe._turn('Actually, make it ten.')
+    held, asked = asyncio.Event(), []
+
+    async def booking(call):
+        asked.append(call.heard)
+        if call.heard == 'Yes.':
+            held.set()
+            await asyncio.Event().wait()
+        return ('say', 'Ten instead, let me check that for you.')
+
+    try:
+        with steps(booking=booking):
+            probe.interrupt()
+            first = asyncio.create_task(probe._turn('Yes.'))
+            await asyncio.wait_for(held.wait(), 3)
+            assert not first.done(), 'the barge lands while the turn is running'
+            probe.interrupt()
+            await asyncio.wait_for(first, 3)
+            await probe._turn('Actually, make it ten.')
+    finally:
+        del books.save_booking
     assert asked == ['Yes.', joined], asked
     assert saves == [], 'no write was dispatched'
-    assert call.turn == 2 and call.heard == joined and call.state.writes == 0, (call.turn, call.heard)
-    del books.save_booking
+    assert call.turn == 2 and call.heard == joined and not call.evidence, (call.turn, call.heard)
 
 
 def watch_saves() -> list[str]:
@@ -254,13 +266,13 @@ def watch_saves() -> list[str]:
 async def barge_while_the_outcome_is_unknown():
     """The write lands, its answer is lost, and the caller barges over what they are told.
 
-    The outcome is recorded as unknown and said in core's fixed words
-    (`Locale.unsettled`), with no step model; nothing is claimed, the barge
-    does not repeat the write, and the caller's next words settle it from the
-    diary before anything else, by code (`nodes.advance`). Session 3 moved both
-    to code: live text T4.v2 left the wording, and so the settling, to a model.
+    The yes is one request of the booking agent; the unknown outcome is said
+    in core's fixed words (`Locale.unsettled`), with no further model; the
+    barge does not repeat the write; and the caller's next words settle it
+    from the diary before anything else, by code (`FlowCall.settlement`).
     """
     call = booking_call()
+    call_of[0] = call
     probe = Probe(call)
     await read_back_a_haircut(call, probe)
     real_save, real_outcome = books.save_booking, books.outcome_of
@@ -280,30 +292,25 @@ async def barge_while_the_outcome_is_unknown():
     books.save_booking, books.outcome_of = save_booking, outcome_of  # ty: ignore[invalid-assignment]
     asked_model: list[str] = []
 
-    async def booking(messages, info):
+    async def booking(call):
         asked_model.append(call.heard)
-        yield 'Let me see.'
+        return ('call', 'book_appointment') if call.heard == 'Yes.' else ('say', 'Let me see.')
 
     try:
-        with (
-            classifier({'Yes.': 'accept'}),
-            agents.AGENTS['booking'].agent.override(model=FunctionModel(stream_function=booking)),
-        ):
+        with steps(booking=booking):
             probe.interrupt()
             await asyncio.wait_for(probe._turn('Yes.'), 3)
             assert probe.fixed()[-1] == call.locale.unsettled, probe.fixed()
-            assert not asked_model, 'an unknown outcome is said by code, not worded by a model'
+            assert asked_model == ['Yes.'], 'the unknown outcome is said by code, not worded by a model'
             probe.interrupt()
             assert len(saves) == 1, 'the barge did not repeat the write'
-            assert call.state.unresolved is not None and call.state.appointment is None, (
-                'unknown, and nothing claimed'
-            )
+            assert not call.evidence, 'unknown, and nothing claimed'
             assert len(books.bookings_for(PHONE, books.now().date())) == 1, 'it did land'
             await asyncio.wait_for(probe._turn('Okay, can you check?'), 3)
         assert 'Friday the 25th at 9:00 AM' in probe.fixed()[-1], probe.fixed()
         assert len(saves) == 1 and len(asked) == 2, 'settled by asking, not by writing again'
-        assert call.state.appointment is not None and call.state.unresolved is None
-        assert not asked_model, 'settling the next turn costs no model request'
+        assert [e.operation for e in call.evidence] == ['book_appointment']
+        assert asked_model == ['Yes.'], 'settling the next turn costs no model request'
     finally:
         del books.save_booking, books.outcome_of
 
@@ -311,21 +318,25 @@ async def barge_while_the_outcome_is_unknown():
 async def barge_after_the_receipt():
     """The booking lands and its confirmation is cut off by the caller. The booking stays, and is not made twice."""
     call = booking_call()
+    call_of[0] = call
     probe = Probe(call)
     line = Timeline()
     readback = await read_back_a_haircut(call, probe)
     line.add(0.0, 'audio starts', 'readback')
     line.add(4.0, 'audio ends', 'readback')
     saves = watch_saves()
-    reasks: list[int] = []
+
+    async def booking(call):
+        return ('call', 'book_appointment') if call.heard == 'Yes.' else ('say', 'Nine on Friday.')
+
     try:
-        with classifier({'Yes.': 'accept'}), scripted_steps(reasks):
+        with steps(booking=booking):
             probe.interrupt()
             line.add(5.0, 'caller starts', 'Yes.')
             line.add(5.4, 'caller stops', 'Yes.')
             await probe._turn('Yes.')
             confirmation = call.spoken[-1]
-            assert call.state.writes == 1 and len(saves) == 1, 'booked on the yes'
+            assert len(saves) == 1 and len(call.evidence) == 1, 'booked on the yes'
             call.note_reached()
             line.add(6.0, 'audio starts', confirmation.id)
             line.add(6.5, 'caller starts', 'Sorry, what time?')
@@ -339,8 +350,8 @@ async def barge_after_the_receipt():
     assert heard(call) == [readback], 'the read-back was heard in full before the yes'
     assert confirmation.interrupted, 'the confirmation was cut off'
     assert call.turn == 2 and call.heard == 'Yes. Sorry, what time?', (call.turn, call.heard)
-    assert len(saves) == 1 and call.state.writes == 1, 'the continuation did not book again'
-    assert len(books.bookings_for(PHONE, books.now().date())) == 1 and call.state.appointment is not None
+    assert len(saves) == 1 and len(call.evidence) == 1, 'the continuation did not book again'
+    assert len(books.bookings_for(PHONE, books.now().date())) == 1
     ((caller, audio),) = line.overlaps()
     assert caller[2] == 'Sorry, what time?' and audio[2] == confirmation.id
 

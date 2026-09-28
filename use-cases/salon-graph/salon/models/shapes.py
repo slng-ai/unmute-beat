@@ -88,9 +88,25 @@ def digits_after_code(value: str) -> str:
     return f'{len(phonenumbers.national_significant_number(number))} digits after +{number.country_code}'
 
 
+def heard(value: str) -> str:
+    """The digits as heard, the country code apart and the rest in threes: "+34 671 273 454 4"."""
+    digits = ''.join(c for c in value if c.isdigit())
+    try:
+        code = str(phonenumbers.parse(value, None).country_code)
+    except phonenumbers.NumberParseException:
+        code = ''
+    code = code if code and digits.startswith(code) else ''
+    rest = digits[len(code) :]
+    return '+' + ' '.join(filter(None, [code, *(rest[i : i + 3] for i in range(0, len(rest), 3))]))
+
+
 def _real_or_absent(value: str) -> str:
-    """A real number from any country, or '' for no number yet, which is the field's only absence."""
-    return value if value == '' else _international.validate_python(value)
+    """A real number from any country, or '' for no number yet, which is the field's only absence.
+
+    A wrong one is refused with the reason `_real_and_present` gives, so the
+    verify step's agent, whose `collect` this refuses, knows what to ask next.
+    """
+    return value if value == '' else _real_and_present(value)
 
 
 def _real_and_present(value: str) -> str:
@@ -111,23 +127,22 @@ def _real_and_present(value: str) -> str:
         raise ValueError('no number was given. Ask the caller for one; never look up an empty number')
     if not value.startswith('+'):
         raise ValueError(
-            "that number has no country code. Use verification_guidance 'country'; never guess a country code"
+            'that number has no country code. Ask which country the number is from; never guess a country code'
         )
     match phone_length(value):
         case 'too long':
             raise ValueError(
-                f'that is {digits_after_code(value)}, too many for its country: a digit was misheard or '
-                "repeated. Nothing is missing, so do not ask for the rest; use verification_guidance 'correction' "
-                'to ask for the whole number again.'
+                f'I heard {heard(value)}: that is {digits_after_code(value)}, too many for its country, so a '
+                'digit was misheard or repeated. Say those digits back to the caller and ask which part is '
+                'wrong. Nothing is missing, so do not ask for the rest.'
             )
         case 'too short':
             raise ValueError(
-                f'that is only {digits_after_code(value)}, too few for its country. Use verification_guidance '
-                "'incomplete' to ask for the rest."
+                f'that is only {digits_after_code(value)}, too few for its country. Ask for the rest of the digits.'
             )
         case 'unknown country code':
             raise ValueError(
-                "no country has that code. Use verification_guidance 'correction' to ask for the whole number."
+                'no country has that code. Ask for the whole number again, with the country code.'
             )
     return _international.validate_python(value)
 

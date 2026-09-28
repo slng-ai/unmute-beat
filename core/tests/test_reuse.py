@@ -370,13 +370,16 @@ async def a_retried_request_ends_on_the_callers_words():
 
 
 async def a_slow_turn_says_one_holding_line():
-    """A turn silent for `hold_after` seconds says one holding line, before the answer; a quick one says none.
+    """A model that is only slow to answer gets no holding line: nothing is being done that the caller waits on.
 
-    Nor after the answer started: a model that spoke at once and then went
-    quiet is not covered, because the caller is already hearing it.
+    Session 3 heard "One moment" in front of a goodbye, from a timer that ran
+    for the whole turn. The line now covers running work only (a tool, an
+    application action; `core/tests/test_nodes.py` has the slow tool). Nor
+    after the answer started: a model that spoke at once and then went quiet
+    is not covered, because the caller is already hearing it.
     """
     budget = TurnBudget(hold_after=0.1)
-    for delay, expected in ((0.4, 1), (0.0, 0)):
+    for delay, expected in ((0.4, 0), (0.0, 0)):
         call, _, agent = opened()
         agent.delay = delay
         with scripted(chosen_time=''):

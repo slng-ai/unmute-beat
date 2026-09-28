@@ -424,6 +424,8 @@ class CallContext(BaseModel):
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
     _covered: bool = PrivateAttr(default=False)
+    _reminders: int = PrivateAttr(default=0)
+    """Silence reminders since the caller last spoke (`core.turn.remind`)."""
     _continued_from: list[str] = PrivateAttr(default_factory=list)
     """For a turn joined to the one before: each of that piece's segments as origin, playback, cut, blank. For the trace."""
     _answers: int = PrivateAttr(default=0)
@@ -443,8 +445,16 @@ class CallContext(BaseModel):
     read by every action that could be the second one. `None` means this
     response proposed no such action.
     """
+    _changing: set[str] = PrivateAttr(default_factory=set)
+    """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
+    _unapplied: set[str] = PrivateAttr(default_factory=set)
+    """Fields the current model response changes after its action: not yet run when the action does."""
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
     """The one question this call is waiting on an answer to. See `core.proposals`."""
+    _told: tuple[int, str] = PrivateAttr(default=(0, ''))
+    """The turn and words of the latest receipt speech (`note_receipt`)."""
+    _approved: tuple[int, int] = PrivateAttr(default=(0, -1))
+    """The question serial the active step's agent approved, and the turn generation that did. See `approve`."""
     _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
     """Each interpreter's answer for this turn, by interpreter name. See `core.interpreters`."""
     _requests: list[Request] = PrivateAttr(default_factory=list)
@@ -619,29 +629,39 @@ class CallContext(BaseModel):
 
         Speech handed to TTS while audio was already going out never gets a
         start signal of its own, because the sound never stopped; it counts
-        as part of the stretch it joined.
+        as part of the stretch it joined, but only once its own words have had
+        time to play since it was handed on. Session 4's Coval run GYZdoiie
+        queued a number read-back behind a holding line; the holding line's
+        audio ended half a second later, and the read-back, of which the
+        caller heard almost nothing before cutting in, was counted as heard.
+        Their next words then agreed to it. Now it stays queued: its own start
+        signal, or a later end once its words could have played, decides.
 
-        ponytail: a segment submitted in the moment between the audio running
-        out and the runtime saying so is counted as played. The ceiling is the
-        runtime's stop delay; the upgrade path is per-segment playout events.
+        ponytail: time is estimated from the text (`SPEECH_CHARS_PER_SECOND`),
+        not measured per segment; the upgrade path is per-segment playout events.
 
         A segment the caller already cut off stays cut off: the audio stopping
         after a cut-in is the cut-in, not the end of the words. Audio that
         stopped in under half the time its words take is remembered, so a
         cut-in arriving just after the stop still cuts it (`_stopped_early`).
         """
+        now = time.perf_counter()
         ended = [
             segment
             for segment in self.all_spoken
             if not segment.interrupted
             and (
                 segment.playback == 'playing'
-                or (segment.playback == 'queued' and segment.text and segment.at >= self._burst)
+                or (
+                    segment.playback == 'queued'
+                    and segment.text
+                    and segment.at >= self._burst
+                    and now - segment.at >= len(segment.text) / SPEECH_CHARS_PER_SECOND
+                )
             )
         ]
         for segment in ended:
             segment.playback, segment.heard_by = 'played', 'signal'
-        now = time.perf_counter()
         spoken_for = sum(len(s.text) for s in ended) / SPEECH_CHARS_PER_SECOND
         if ended and now - self._burst < spoken_for / 2:
             self._stopped_early = (now, ended)
@@ -890,6 +910,11 @@ class CallContext(BaseModel):
         """The question the caller is answering right now, if it is this one."""
         return self._proposals.pending_about(self, about, **fields)
 
+    def open_question(self) -> Any:
+        """The question put to the caller on this turn, if any: what a reminder says again."""
+        asked = self._proposals.asked
+        return asked if asked is not None and asked.turn == self._turn else None
+
     def last_proposal(self) -> tuple[Any, bool] | None:
         """Last turn's question and whether it was heard in full. For interpretation only, never authorisation."""
         return self._proposals.last(self)
@@ -897,6 +922,60 @@ class CallContext(BaseModel):
     def answered(self) -> None:
         """Consume the pending question. One answer authorises one action."""
         self._proposals.consume()
+        self._approved = (0, -1)
+
+    def approve(self, about: str, **fields: str) -> bool:
+        """The active step's agent read the caller's reply as a yes to the pending question: bind it to that question.
+
+        Only the question this turn can answer counts (`pending`: last turn's,
+        same identity, heard in full), with these exact field values. What is
+        kept is the question's serial and the turn generation that approved
+        it, both the runtime's: nothing the model sends can name either. An
+        operation's `_agreed` reads it back (`approved`), so a yes from a turn
+        the caller has moved on from, to a question since replaced, or to
+        different arguments authorises nothing. False when there is nothing
+        this reply can approve.
+        """
+        if self._proposals.pending_about(self, about, **fields) is None:
+            return False
+        running = turn_generation.get()
+        generation = running[1] if running is not None and running[0] == self._id else self._generation
+        self._approved = (self._proposals.serial, generation)
+        return True
+
+    def note_receipt(self, words: str) -> None:
+        """These words just told the caller what the business did. Kept so they can be said again if unheard."""
+        self._told = (self.turn, words)
+
+    def unheard_receipt(self) -> str:
+        """The latest receipt speech, if it is known not to have reached the caller: cut, or never started.
+
+        Last turn's, or this turn's when the caller spoke before any of it
+        played: then their words continue the turn it was said in
+        (`continues_turn`), and it is still the thing they have not heard.
+
+        Known means evidence, as for the missed-speech note: a copy the caller
+        cut in on, or one whose audio never started on a runtime that reports
+        playback. No record of the words is not evidence, and gives ''.
+        """
+        turn, words = self._told
+        if not words or turn not in (self.turn - 1, self.turn) or (turn == self.turn and not self.continuing):
+            return ''
+        copies = [s for s in self.all_spoken if s.turn == turn and s.generated == words]
+        if not copies:
+            return ''
+        last = copies[-1]
+        return words if last.interrupted or (self._playback_known and last.playback == 'queued') else ''
+
+    def approved(self) -> bool:
+        """Whether the pending question was approved by the active step, in the current turn generation."""
+        serial, generation = self._approved
+        return (
+            bool(serial)
+            and serial == self._proposals.serial
+            and generation == self._generation
+            and self.pending_question() is not None
+        )
 
     @property
     def conversation(self) -> Conversation[Any]:
@@ -1140,6 +1219,10 @@ class CallContext(BaseModel):
         """Whether this turn has already changed the business. Base: it has no business."""
         return False
 
+    def settlement(self) -> Callable[[], Awaitable[object]] | None:
+        """What settles an earlier write whose outcome is unknown, run before any model this turn. Base: none."""
+        return None
+
     def delivered(self, heard: str, excluding: frozenset[int] = frozenset()) -> bool:
         """Whether this utterance reached a model and is in the history it keeps.
 
@@ -1339,6 +1422,7 @@ class CallContext(BaseModel):
         self._interrupted = False
         self._reached = False
         self._leaving = False
+        self._changing = set()
         self._request_kept = False
         self._response = ''
         self._entered = ''
@@ -1347,6 +1431,7 @@ class CallContext(BaseModel):
         self._spoken.clear()
         self._open = None
         self._spoke = False
+        self._reminders = 0
         self._held = {
             name: held for name, held in self._held.items() if held.lasts is None or held.lasts(self)
         }

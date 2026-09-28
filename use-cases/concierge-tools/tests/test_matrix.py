@@ -16,7 +16,7 @@ def results(refs, passed=True, **extra):
 
 def every_row_is_read_from_the_versioned_file():
     spec = load()
-    assert spec.version == 1 and set(spec.rows) == {f'N{i}' for i in range(1, 14)} - {'N12'}, set(spec.rows)
+    assert spec.version == 2 and set(spec.rows) == {f'N{i}' for i in range(1, 14)} - {'N12'}, set(spec.rows)
     assert spec.rows['N9'].native_expect == 'fail', (
         'the native gap on unheard read-backs is expected, not hidden'
     )

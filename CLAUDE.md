@@ -27,41 +27,37 @@ that member's folder.
 | `flow.py` | `Flow`: the steps table as a `pydantic_graph` graph with each step's legal moves; it walks every turn and refuses an undeclared move; `render()` draws it |
 | `policies.py` | `TurnBudget`, the hooks (`one_action_per_reply`, `speak_by`, `request_clock`), `pick`, `schema_tool` |
 | `history.py` | `paired` and `project`: what each provider request is actually sent |
-| `turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines. Imports no Pipecat |
-| `locale.py` | `Locale`: the lines the turn engine says itself, in one language, holding lines included; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`), per call (override the `locale` property), or by manifest (`locale:`) |
+| `locale.py` | `Locale`: the lines the turn engine says itself, in one language, holding lines and `claims` (patterns for a model claiming a change nothing made, checked on a `guarded` step) included; `ENGLISH`, `SPANISH`. A call picks one by class (`CallContext.default_locale`), per call (override the `locale` property), or by manifest (`locale:`) |
 | `clock.py` | `Today`: the call's date, weekday, time and the labelled days ahead, read once per call from `CallContext.now` in its `timezone` (`calendar_days`), and sent to every step's model |
 | `processor.py` | the Pipecat adapter: events in, `LLMTextFrame`s out, the turn span. The only `core` module that imports Pipecat (the `voice` extra) |
-| `classifiers.py` | `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
-| `decisions.py` | typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
 | `proposals.py` | `Proposal` (structural), `BaseProposal`, `ProposalLedger`: the one question a call waits on, and when it can be answered |
 | `operations.py` | `Operation`: one business action, `@final run` = validate, settle, authorise, execute, validate receipt, record; `needs_approval` says whether a read-back yes is required; `operation_token` |
 | `completion.py` | `Completion`, `FieldsPresent`, `ReceiptMatched`: a step is done only on evidence in the facts |
-| `steps.py` | `CollectStep`, `ConfirmStep`, `ActionStep`, `ConversationStep`, `AgentStep` (a hand-built step) and `AgentBuilder` (builds its agent the same way for every use case), `End`, compiled by `StepFlow` into a nodes table; `FlowState[S]` and `FlowCall[S]`, the session around an application's own state model (`update`, `collect`, `services`), `receipt_for`, `ConfirmedOperation`, `FunctionOperation` (a declared typed function: bindings, assignments, `succeeds`, `matches`, readback, reconcile, receipt speech). Collect steps offer `choices` by id; conversation steps record `fields`, carry out `operations` and hand over through `exits`; an `End` can be taken back (`take_back`). Every step's agent is built by `Agent.from_spec` from its persona's native `AgentSpec` |
+| `steps.py` | the manifest's step kinds, compiled by `StepFlow` into a nodes table. `CollectStep` and `ConfirmStep` are the plain form-flow (fields, an exact read-back). `ActionStep` runs one operation with no model, `returns: true` sending it back to the step that handed the caller in instead of onward. `ConversationStep` is the one-agent-per-node kind the salon builds on: `fields` it may record, `choices` it may offer, `operations` it may carry out (each read back, then carried out on a later yes to that exact question), `exits` with a `purposes` map shown to the model, `requires`/`satisfied_by` for a prerequisite the graph interposes, `guarded` (clause-at-a-time speech), `quoted` (a field that must be the caller's own words), `opens_with` (an operation read back on arrival with no model), `asks` (on arrival, code asks for the first missing field in fixed words) and `reads_back` (an operation read back by code when a reply only recorded one of its fields, only when that is the one operation that could run). A `goodbye` that claims a write this step never made on the call is refused back to the model (`_unbacked_goodbye`). `AgentStep` is a hand-built step (legacy: Faro), whose module's `node(step)` function still uses `core.desk.AgentBuilder`. `End` can be taken back (`take_back`). `FlowState[S]` and `FlowCall[S]` are the session around an application's own state model (`update`, `collect`, `services`); `receipt_for`, `ConfirmedOperation`, `FunctionOperation` (a declared typed function: bindings, assignments, `succeeds`, `matches`, readback, reconcile, receipt speech) bind a manifest operation to the code that runs it. Every step's agent is built by `Agent.from_spec` from its persona's native `AgentSpec` |
 | `flowspec.py` | flow folders: `FlowSpec` (YAML or JSON via `yaml.safe_load`, one spec class per step kind), `state:` naming the application's model and `identity:` its caller field, each step naming its prompt file and `code:` module inside the folder. The manifest (`agent.yaml`) also declares `operations:` (typed functions, checked against their signatures), `agents:` (personas holding Pydantic AI's native `AgentSpec`), `entry`, `services`, `model`, `locale` and `app_version`; `FlowSpecError` listing every problem, before any model |
-| `readings.py` | narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
-| `conversation.py` | a conversation's acts as classes a use case fills in: `ReadBack` (with its `done` line), `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
-| `desk.py` | `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry` |
-| `interpreters.py` | `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
+| `turn.py` | one caller turn as an event stream: `Turn`, `run_turn`, `take_turn`, `Barge`, the fixed lines, one holding line per caller turn, `remind` (the silence reminder, on Pipecat's `on_user_turn_idle`), the `speaks_for` and `reads_back` handling that keeps a node's own operation from being echoed or asked for twice. Imports no Pipecat |
 | `observability.py` | Langfuse over OTel (the `tracing` extra); call `setup()` once, before any agent is built. Reads no `.env`: the launcher does |
-| `tests/` | `test_classes`, `test_history`, `test_reuse`, `test_clock`, `clinic.py` (a clinic built on core's classes), and the public boundary: `clinic_flow/` (a clinic written as models and functions, three manifests: `agent.yaml` controlled, `one_agent.yaml`, `handoff.yaml`), `test_public`, `test_authoring` (the authoring contract on all three), `test_session` (atomic state, owned fields, isolation, stale work, evidence), `test_delivery`, `test_sdk`, `test_package`. No use case code. `defects.py` is outside the suite: known defects that fail on purpose, each with its repair session (`python -m tests.defects`, exit code = defects left) |
+| `classifiers.py` | legacy, Faro only until session 5. `Classifier`: one direct model request over an `Exchange` (question, answer, facts), the author's context and classes; `ClassSet` and `output_model` build classes from data |
+| `decisions.py` | legacy, Faro only until session 5. Typed meanings of a reply (`Accept`, `SwitchTask`, ...); a business subclasses for its own |
+| `readings.py` | legacy, Faro only until session 5. Narrow readings: `Reading` (one classifier, when it applies, its label), `classify`/`choose`, `ChoiceReading` (`picked`: only an id among its own options counts), the generic class sets (`CONFIRM`, `TAKE_BACK`, `STILL_AGREED`, `CLOSING`, `REQUEST`), `read` (run the ones that apply, side by side), `Acts` (answer, take back, pick, goodbye: the fixed order) |
+| `conversation.py` | legacy, Faro only until session 5. A conversation's acts as classes a use case fills in: `ReadBack` (with its `done` line), `FixedChoice`, `Offer`, `HeardValue`, `TakeBack`, `HeldApproval`, `Detour`, `Closing`; `Conversation` builds their readings, runs them, and decides in core's order |
+| `desk.py` | legacy, Faro only until session 5. `Desk`: what every step can do, for any use case (`hand_over_for`, `hang_up`, `end_conversation`, `clarify`, `switch_task`), built from a call type, a `Handoff`, the action names and an optional `Carry`; `AgentBuilder`, the hand-built step assembly the salon used until session 4, lives here with it |
+| `interpreters.py` | legacy, Faro only until session 5. `Interpreter`: at most once per turn, cached on the call, budgeted, never published stale; `ClassifierInterpreter` |
+| `tests/` | `test_classes`, `test_history`, `test_clock`, `clinic.py` (a clinic built on core's legacy classes, for a Faro-style use case) and `test_reuse` (that clinic through the real engine, scripted, with no salon code), and the public boundary: `clinic_flow/` (a clinic written as models and functions, five manifests: `agent.yaml` controlled, `one_agent.yaml`, `handoff.yaml`, `code_node.yaml`, `reads_back.yaml`), `test_public`, `test_authoring` (the authoring contract on the three main patterns), `test_session` (atomic state, owned fields, isolation, stale work, evidence), `test_nodes` (P1-P18: no reader runs on the public path, hostile calls are refused, `reads_back`, the silence reminder; `public_path_loads_no_reader` checks the legacy modules never import), `test_delivery`, `test_sdk`, `test_package`. No use case code. `defects.py` is outside the suite: known defects that fail on purpose, each with its repair session (`python -m tests.defects`, exit code = defects left) |
 
 **`use-cases/salon-graph/`**, the salon on core.
 
 | Path | Owns |
 |---|---|
-| `bot.py` | the Pipecat pipeline around the salon: STT, VAD and smart-turn, TTS, transport, tracing worker, greeting |
-| `salon/models/` | `shapes` (Phone, Date, Time, Id), `consent` (`Asked`, `ConsentInput`, `ReplyClassification`), `receipts` (what the diary may say), `state` (`SalonState`, `SalonCall`, `open_call`) |
-| `salon/tools/` | one module per step (`identity`, `booking`, `complaints`, `desk`), the write boundary (`writes`), `Ask`, and `policy` (`ACTIONS`, `SPEAK_BY`). Each write is an `Operation`: `LOOKUP`, `WRITE_BOOKING`, `WRITE_COMPLAINT` |
+| `bot.py` | the Pipecat pipeline around the salon: STT, VAD and smart-turn, TTS, transport, tracing worker, the greeting, the silence reminder (`on_user_turn_idle` after `IDLE_SECONDS`, 20 s, calls `node.remind()`), `VAD_STOP_SECONDS` (0.3 s default), `MAX_CALL_SECONDS` for a simulated call |
+| `salon/agent.yaml` | the manifest: `state:`, `identity:`, `entry`, `locale`, `model`, the `robin` persona; five declared operations (`lookup_customer`, `book_appointment`, `move_appointment`, `cancel_appointment`, `record_complaint`, each with `args`, `readback`, `reconcile`, `matches`, `succeeds`, `assign`, `say`); four `conversation` steps (`concierge`, `verify`, `booking`, `complaints`), each with its `fields`, `choices`, `operations`, `exits`; `concierge`, `booking` and `complaints` `guarded`; `verify` with `opens_with`, `asks` and `reads_back`; `booking` with `reads_back` |
+| `salon/app.py` | `FLOW` (`SPEC.compile()`, at import) and `open_call`: one session per call, the carrier's number prefetched (`prefetch_number`), the diary and clock passed in as services |
+| `salon/functions.py` | the typed domain functions `agent.yaml` connects to: `Salon` (the call's services: the diary, its key, its write counter), each operation's function (`lookup_customer`, `book`, `move`, `cancel`, `record_complaint`), its readback and reconciliation (`find_booking`, `find_move`, `find_cancel`, `find_complaint`), `find_times`, `held_bookings` |
+| `salon/models/` | `shapes` (`Phone`/`SubmittedPhone`, `Service`, `Verification`, ...), `receipts` (`CustomerLookup`, `Saved`, `Held`, `Slots`, what the diary may say), `state` (`SalonState`, the complaint-request word list `_ASKING_TO_COMPLAIN`, `prefetch_number`) |
 | `salon/diary.py` | `Diary`: customers, slots, offers, bookings, complaints, in memory, and the oracle that says no |
-| `salon/flow.yaml` | the salon as four `agent` steps: each one's prompt, module, exits and requirements |
-| `salon/steps/` | one module per step, each giving `node(step)`: its tools, outputs and openings |
-| `salon/nodes.py` | `BUILDER` (core's `AgentBuilder`, given the salon's information) and `build()`, `advance()`, `decided()`, `solve()`, the guards |
-| `salon/instructions.py` | loads `flow.yaml` as `SPEC`; `instructions(name)` is a step's compiled prompt; `GREETING`; `COMPLAINT_GUIDANCE` |
-| `salon/classification.py` | `SALON`, the salon's conversation: core's acts given the salon's information, which builds its narrow readings (`CONFIRMATION`, `APPOINTMENT_CHOICE`, `CHOSEN_OFFER`, `LAST_CHANGE`, `RETAINED_APPROVAL`, `CONVERSATION`, `DETOUR`) and decides on them; `reading_of`, the merged view the guards read; `SOLVER` (`SALON_INTERPRETER=solver`); `classify_reply`. Tools reach it through the call (`SalonCall.read_reply`), never by import |
-| `salon/agents.py` | the `AGENTS` table, compiled from `flow.yaml`; re-exports what tests import |
-| `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules, and `knowledge/` with the salon's own documents |
-| `evals/` | the classifier evaluations (`cases`, `compare`, `consent`, `focused`, `readings`, `report`, `rules`, `solver`), and `calls`: the live text checkpoint, four scripted calls (T1-T4) on the real engine, checked on the diary. Live, billable, except the rule floor and `calls --recheck`. `line` and `matrix`: the harness arm of the N1-N13 native comparison, offline, on the real pipeline |
-| `tests/` | the assert-script modules, `classifier_model.py`, `golden/` (every request the salon sends, pinned), and `slice/` with `test_slice`: the identity -> read-back -> lookup path on core's public manifest, with the salon's real types and diary |
+| `salon/prompts/` | one Handlebars prompt per step, the shared voice and diary rules (`_voice.md`, `_diary.md`), and `knowledge/` with the salon's own documents |
+| `evals/` | `calls`: the live text checkpoint, four scripted calls (T1-T4) on the real engine, checked on the diary. Live, billable, except `calls --recheck`. `cases`: reviewed reply cases shared by the live and offline checks. `line` and `matrix`: the harness arm of the N1-N13 native comparison, offline, on the real pipeline. `paired`: session 4's classifier-vs-node-agent semantic check, the same file run once per arm in its own checkout |
+| `tests/` | `test_graph` (legal moves, prerequisite interposition, every node's first request pinned in `golden/agents.json`), `test_business` (the acceptance matrix A-L), `test_walkthrough` (one booking call through every boundary), `test_continuation` (a turn joined over several caller pieces), `test_overlap` (timed barge-in and delivery replay), `test_state`, `test_diary`, `test_budget`, `test_traces`, `test_core` (direct engine and Pipecat adapter agree), `test_calls` (the live text checkpoint's own machinery, scripted), `script.py` (the scripted provider every test drives the real flow with) |
 
 **`use-cases/salon-prompt/`**, the same salon as one prompt on Pipecat's own Gemini service: the baseline. No core, no Pydantic AI.
 
@@ -97,8 +93,9 @@ that member's folder.
 | Path | Owns |
 |---|---|
 | `concierge-tools/ledger.py` | reads any build's Langfuse traces (harness, one-prompt baseline, graph build, LiveKit) into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered (`write` spans from `core/operations.py`) |
-| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. One job per invocation (agent ID, test set, persona, `--max-simulations`), `plan` first; a run log refuses duplicates and uncertain relaunches. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph, and `graph` the unmute graph build (`GRAPH_BUILD_DIR`). A bot with no `MAX_CALL_SECONDS` of its own (salon-pipecat-flows) is stopped by the runner 188 s after its call connects. `--port` gives a job its own bot and tunnel port, so jobs can run side by side. `--concurrency N` places a job's calls N at once in one run (a bot with its own limit only): most of a run is Coval dialling and scoring, which one call at a time pays per call |
-| `concierge-tools/matrix/` | the N1-N13 native comparison: `scenarios.v1.json` (the rows, the checks each arm runs, the pinned native digest, the frozen N12 protocol), `run_checks.py` (one check in one member's own environment) and the driver, which writes `matrix.json`, `matrix.md` and `timing.json` |
+| `concierge-tools/load_report.py` | judges a batch of Coval load-test calls from Langfuse and the write records, with no Coval metric: outcome (writes and their questions, bookings), consent (writes with no matching earlier question, must be 0), speech (model text beside an operation call, a holding line opening a reply, holding lines per turn), request chains, latency, endpointing, isolation (`BK0001` per call's own diary). `uv run --env-file ../../.env python load_report.py RUN_ID [RUN_ID ...] --out DIR` |
+| `concierge-tools/coval_sim/` | the Coval release check: starts `bot.py -t twilio` behind a cloudflared tunnel and lets Coval call it. Needs network and keys, never runs in CI. One job per invocation (agent ID, test set, persona, `--max-simulations`), `plan` first; a run log refuses duplicates and uncertain relaunches. A Coval agent `voice-harness-<agency>-pipecat` calls `use-cases/<agency>`; `salon` calls salon-graph, and `graph` the unmute graph build (`GRAPH_BUILD_DIR`). A bot with no `MAX_CALL_SECONDS` of its own (salon-pipecat-flows) is stopped by the runner 188 s after its call connects. `--port` gives a job its own bot and tunnel port, so jobs can run side by side. `--concurrency N` places a job's calls N at once in one run (a bot with its own limit only): most of a run is Coval dialling and scoring, which one call at a time pays per call. `--metrics` scores a run on named metric IDs instead of the agent's own (Coval refuses a launch with none). `--profile` names a speech profile env file (a validated `SpeechProfile`, every name required) the bot must run on, so load runs stay comparable; `--call-seconds` sets the call ceiling. `serve` starts one bot and tunnel that several jobs can share; `run --host <serve's host>` sends a job at it instead of starting its own bot, so jobs run side by side against one process. `--wait` bounds how long `run` waits for Coval before reporting a run still in progress, for a queue of one-call jobs |
+| `concierge-tools/matrix/` | the N1-N13 native comparison: `scenarios.v2.json` (the rows run today; `scenarios.v1.json` kept as the pinned native reference), the checks each arm runs, the frozen N12 protocol, `run_checks.py` (one check in one member's own environment) and the driver, which writes `matrix.json`, `matrix.md` and `timing.json` |
 | `concierge-tools/audio_timing.py` | who spoke when in a two-channel Coval recording: response latency, overlaps, barge-in stop latency |
 | `faro-tools/bench.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
 
@@ -109,15 +106,24 @@ Anything about *running* a turn goes in `turn`, anything about frames goes in
 no `core` module but the processor imports Pipecat.
 
 `core` imports no use case. A use case imports `core` and nothing from another
-use case; salon-prompt and salon-pipecat-flows import neither. In salon-graph: `salon.models` imports
-`core.state`; `salon.tools` imports models, the diary and `core.policies`, and
-reads a reply through the call; `salon.classification` imports the tools its
-acts run; `salon.agents` imports everything; `bot.py` wires it to Pipecat.
+use case; salon-prompt and salon-pipecat-flows import neither. In salon-graph:
+`salon.models` imports nothing from `core` at all, plain Pydantic only;
+`salon.functions` imports `core` for `OutcomeUnknownError` and reads the
+diary and the models; `salon.app` imports `core` to load and compile
+`agent.yaml` (`core.load(...).compile()`) and to open a call
+(`flow.open(state, services=..., clock=...)`); `bot.py` wires the compiled
+flow to Pipecat (`core.graph.model_clients`, `core.processor.PydanticAgentProcessor`,
+`core.observability.setup`).
 
-State is replaced wholesale via `call.commit(**updates)`: one validated
-candidate or nothing, never field-by-field assignment. Tools live with the step
-they belong to and bind to `RunContext[SalonCall]`. The model-facing tool has a
-`ctx` first parameter; the executor it shares with `advance()` takes `call`.
+Application state is replaced wholesale, never field by field. `FlowCall.update(**fields)`
+builds and validates one complete candidate from the current facts and these
+changes, and commits it or changes nothing; `FlowCall.collect(**fields)` is
+the model's own path into it, from a `ConversationStep`'s `collect` tool, and
+also resets whatever rested on a field that changed. A typed function
+declared under `operations:` takes the call's services as its first
+parameter and a validated Pydantic argument model as its second
+(`def book(services, args: Booking) -> Written`); core builds its arguments
+from state fields by name (`binds`) and never from a model's words.
 
 ## Commands
 
@@ -131,9 +137,12 @@ cd use-cases/salon-graph && uv run bot.py                # voice, http://localho
 uv run python -m tests                                   # this folder's modules, offline, no .env
 uv run ruff format . && uv run ruff check .              # from the root: every member
 for d in core use-cases/*; do uv run --directory $d ty check .; done
-cd use-cases/concierge-tools && uv run python -m coval_sim plan --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session>   # then `run`, billable
+cd use-cases/concierge-tools && uv run python -m coval_sim plan --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session> --profile <speech-profile.env>   # then `run`, billable
+cd use-cases/concierge-tools && uv run python -m coval_sim serve --agency salon --profile <speech-profile.env>   # one bot and tunnel for several jobs
+cd use-cases/concierge-tools && uv run python -m coval_sim run --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session> --host <serve's host> --profile <same file>   # a job against that bot, billable
 cd use-cases/salon-graph && uv run --env-file ../../.env python -m evals.calls   # live text checkpoint, billable
 cd use-cases/concierge-tools && uv run ledger.py harness CA... -- graph trace:...   # cost of calls
+cd use-cases/concierge-tools && uv run --env-file ../../.env python load_report.py <RUN_ID> [<RUN_ID> ...] --out /tmp/load   # judges load-test calls from Langfuse and write records, no Coval metric
 cd use-cases/concierge-tools && uv run python -m matrix run      # N1-N13, both arms, offline; `time` for N12
 docs/research/reusable-core/session-2/package-proof.sh         # the wheel, installed outside the checkout
 ```
@@ -141,7 +150,7 @@ docs/research/reusable-core/session-2/package-proof.sh         # the wheel, inst
 `uv run python -m tests` turns `ALLOW_MODEL_REQUESTS` off *before* any module
 is imported, so a test that forgot to override an agent raises instead of
 billing. One module alone needs a key in the environment:
-`GOOGLE_API_KEY=x uv run python -m tests.test_salon`, from salon-graph.
+`GOOGLE_API_KEY=x uv run python -m tests.test_graph`, from salon-graph.
 
 ty runs per member: each member's `pyproject.toml` has a `[tool.ty]` table, so
 ty takes that folder as its root. Without one, ty walks up to the next
@@ -168,28 +177,40 @@ all clean, in every member you touched. Paste the real output; don't round up.
 
 ## Seven things that bite
 
-1. **Prompts are compiled against state.** `salon/prompts/*.md` are Handlebars
-   templates typed against `SalonCall`, so a `{{state.x}}` naming no field
-   raises `TemplateSchemaError` **at import**, never mid-call. Add the field or
-   fix the prompt.
-2. **A new step is four edits in lockstep**: a prompt in `salon/prompts/`, a
-   module in `salon/steps/` (with its tools in `salon/tools/`), an entry in
-   `salon/flow.yaml`, and a name in `AgentName`. Miss one and it fails at
-   import: the flow file checks its prompt and module exist and fit.
+1. **Prompts are compiled against the call type.** Every step's prompt is a
+   Handlebars template, checked when `agent.yaml` is compiled (`salon.app`
+   does this at import): a placeholder naming no field on `FlowCall[SalonState]`
+   (`{{state.facts.x}}`, not `{{state.x}}`) raises `TemplateSchemaError`
+   **before any call runs**, never mid-call. The salon's own prompts use no
+   such placeholder today; what a step's agent is told about the application
+   is written by code before every request (`core.steps.context`), not
+   templated into the prompt file. `quote_caller: true` still appends
+   `{{heard}}`, the caller's latest words, to every prompt.
+2. **A new conversational step is two things kept in lockstep**: a prompt file
+   in `salon/prompts/`, and its entry in `salon/agent.yaml` (`fields`,
+   `choices`, `operations`, `exits`). A new operation it carries out also
+   needs its typed function in `salon/functions.py`, declared under
+   `operations:`. Miss one and it fails at compile, before any call runs:
+   `FlowSpec` checks that every prompt file, operation, field and exit a step
+   names is real.
 3. **Anything a service returns is validated at the boundary.** Every `Diary`
    response is parsed into a `salon.models.receipts` model before a field is
    read. A return annotation is not validation.
 4. **One action per model reply.** `one_action_per_reply` picks the single
    tool call in a response allowed to move the caller or write to the
    business; `claim_or_refuse` is how an action checks it holds that claim.
-   `tests/test_flow.py` scans the tools package for anything that commits
-   state and is not an action.
-5. **Consent is application-owned.** A model interprets replies; application guards authorize
-   the exact action, identity and fresh proposal. `CallContext.heard` is what they said;
-   `SalonCall._asked` is the one question they are answering, put to them by an
-   `Ask` output whose words this code chose. Every consequential action checks
-   the two against each other, and on a step that can write, model speech goes
-   out a clause at a time so a claim about a change nothing made is never said.
+   The salon has no tool outside a declared operation that can write state at
+   all, so there is nothing to scan for; `core/tests/test_nodes.py` and
+   `use-cases/salon-graph/tests/test_business.py` drive a hostile scripted
+   model to prove the gate holds at execution.
+5. **Consent is application-owned.** A step's own agent reads the caller's
+   reply; code decides whether that reading may authorise a write.
+   `CallContext.heard` is what they said; `ProposalLedger` is the one
+   question a call is waiting on and whether they heard it in full. Calling
+   an operation again is not itself approval: `CallContext.approve` binds a
+   yes to that exact, delivered question before `ConfirmedOperation` will run
+   it, and on a step that can write, model speech goes out a clause at a time
+   so a claim about a change nothing made is never said.
 6. **A cancelled turn still heard something.** The engine retains accepted
    input and completed tool results from the SDK's `new_messages()` boundary
    after stream teardown, even when Pipecat cancels the task. Never slice by
@@ -213,20 +234,26 @@ all clean, in every member you touched. Paste the real output; don't round up.
 
 ## Known debt
 
-No word list authorises a write any more: consent, move/add, closing, the
-pick of a time on the table (`chosen_offer`) and taking back a booking
-(`last_change`) are all read by the typed classifier and checked by
-application guards. `times_named` in `salon/diary.py` still only steers which
-times a diary read prefers. The complaint word list in
-`salon/tools/complaints.py` and the unbacked-claim patterns in
-`salon/models/state.py` remain language-specific heuristics. Structured output
-validates shape, not semantic accuracy; run the explicit live evaluation
-before making accuracy or latency claims.
+No classifier or solver runs on the public manifest path any more: the active
+step's own agent reads the caller's reply, and code decides whether that
+reading may authorise a write (`ProposalLedger`, `CallContext.approve`,
+`ConfirmedOperation`). `core/tests/test_nodes.py:public_path_loads_no_reader`
+checks that compiling a manifest never imports the legacy classifier,
+reading, conversation, interpreter, desk or decision modules. Faro alone
+still runs on that legacy path, kept only until session 5.
 
-The shared confirm reading (`CONFIRM`, Langfuse `harness-reading/confirm`
-v3) reads "Yes, that's right. Oh, and can we make it Saturday instead?" to a
-phone read-back as `revise` (Coval run hdbogMqB, AJ4t). Three rewordings
-(v5, v6, v7, the last with the proposal's parts as input) fixed it and made
-a yes followed by a price question read as accept, so none shipped. The path
-after an accept is built and tested (`ReadBack.done`, a silent action
-followed by the step's model).
+`Locale.claims` (`core/src/core/locale.py`) is the one place a word list
+still guards speech: one pattern list per language (English and Spanish
+today), checked against model text on a `guarded` step before it is said, so
+a claimed change nothing made is never spoken. `times_named` in
+`salon/diary.py` still only steers which times a diary read prefers, and the
+complaint-request word list in `salon/models/state.py`
+(`_ASKING_TO_COMPLAIN`) is English only. Structured output validates shape,
+not semantic accuracy; run the explicit live evaluation before making
+accuracy or latency claims.
+
+In one of two live text runs of the session-4 wording, the `verify` step's
+first request answered "I'm sorry, I cannot do that right now" to an
+ordinary request, with nothing unusual about it; the second run of the same
+case passed (`docs/research/reusable-core/session-4/ledger.md`, live text
+check `text-v2`). Seen once in two, not yet reproduced or explained.

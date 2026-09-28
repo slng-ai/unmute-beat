@@ -1,312 +1,105 @@
 # SLNG Voice Harness
 
-> **Work in progress.** This README describes the architecture we are working
-> toward, not the implementation currently available on `main`. The migration
-> is ongoing; APIs, examples and behaviour may change.
+**A reusable conversation runtime for voice applications.** An application defines its own typed state, conversational nodes, prompts and backend functions. The harness runs that definition and manages the conversation across turns, corrections, interruptions and tool calls.
 
-A reusable Python conversation engine for voice applications. Our goal is to
-define a conversation once—its state, prompts, tools, prerequisites and allowed
-routes—and run that same contract inside Pipecat and LiveKit applications.
-The voice framework handles real-time media; the shared core owns the
-conversation under the application's declared rules.
+The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the implemented node-agent architecture in the migration stack. Integrating that stack and completing qualification are still in progress.
 
-**The architecture we are implementing is one agent per conversational node,
-with deterministic code nodes where no language interpretation is needed.**
-The active agent understands the caller, uses its tools and chooses among declared
-exits. Core checks state updates, routes, approvals, receipts and delivery evidence.
+## One runtime, different applications
 
-Examples labelled “migration branch” refer to the work in progress and may not
-run on `main`. For the currently merged implementation, see the
-[earlier architecture guide](https://github.com/slng-ai/slng-voice-harness/blob/176ff9fbab96e8cf795d9b40768d09051c37b8a4/README.md).
+Core has no built-in booking, customer verification, support-ticket or teaching node. Those are application definitions. A node called `booking` in an example has no special meaning to the runtime: it is an application-owned instance of the same `conversation` step another application uses for troubleshooting or onboarding.
 
-## Why we are building a shared conversation core
-
-As voice applications grow, their rules extend beyond a prompt: which information
-is trusted, when an action is permitted, what completes a step, how to resume after
-a detour, and what survives an interruption. Implementing those relationships
-separately in every application and runtime makes changes harder to review and
-behaviour harder to keep consistent.
-
-We are moving ownership of that logic into one reusable package. Pipecat and
-LiveKit remain the voice runtimes. The core's Pydantic AI agents sit at the
-conversation/model boundary inside those applications, with adapters translating
-between runtime events and the core's turn execution. This direction targets
-cascaded speech recognition → model/tools → speech synthesis pipelines.
-
-Both frameworks already offer useful orchestration. Pipecat Flows has focused
-nodes, tools and state; LiveKit has agents, tasks and programmatic handoffs. Native
-application code can implement the same policies. The reason to own a shared core
-is to declare and enforce those policies once, across applications and adapters.
-See [Pipecat Flows](https://docs.pipecat.ai/pipecat/flows/introduction) and
-[LiveKit agents and handoffs](https://docs.livekit.io/agents/logic/agents-handoffs/).
-
-The intended benefits are:
-
-- **One authoring contract.** Application authors define domain data and functions
-  without rebuilding routing, approval, recovery and history handling.
-- **Consistent execution.** A tool invoked by an agent and an action selected by
-  code pass through the same validation and authorization boundary.
-- **Inspectable conversations.** The graph exposes the permitted paths, their
-  prerequisites and the evidence needed to finish work.
-- **Fewer avoidable model decisions.** Code can resume a known destination or
-  render an established result without asking a model to decide it again.
-- **A reusable test boundary.** The same conversation rules can be exercised
-  independently of audio, then checked through each voice adapter.
-
-Owning this layer also means owning its integration and failure handling. These
-benefits must justify that cost. The Pipecat migration implementation demonstrates
-the integration boundary; LiveKit support is a planned adapter, and equivalent
-behaviour across both runtimes remains to be demonstrated.
-
-## What typed flows mean
-
-A typed conversation connects the shape of data to the conditions under which
-work can proceed. A well-formed value is one fact; permission to act on it and
-evidence that the action succeeded are separate facts.
-
-| Contract | What it makes explicit |
+| The application supplies | The harness provides |
 |---|---|
-| State | What the application knows, which values are valid and which updates belong together. |
-| Tools and results | What an operation accepts and what its service must return before the result can be used. |
-| Nodes and prompts | The responsibility, context, collectible fields and available operations of each conversational step. |
-| Transitions | Which destinations exist, which prerequisites apply and where execution resumes afterwards. |
-| Approval | The exact proposed action and delivered question to which an interpreted answer applies. |
-| Completion | The validated evidence required before work is considered complete or success is spoken. |
+| A plain Pydantic model for its facts | Validated state updates and separate state for each call |
+| Node names, prompts, available tools and allowed destinations | Agent execution and a graph that enforces declared routes |
+| Typed functions for its backend | Argument and result validation, operation tracking and recovery hooks |
+| Choices and the fields those choices depend on | Invalidation and refresh when the underlying facts change |
+| Approval requirements and the exact words for a read-back or result | A pending proposal tied to its arguments, reply and playback evidence |
+| Services, persistence and deployment configuration | Per-call history, turn budgets, cancellation handling and lifecycle hooks |
 
-The manifest is checked before a call starts. Runtime guards check incoming data
-and current state when an action or transition is attempted. Conversation tests
-then establish whether those legal actions actually serve the caller's request.
-Types and a legal graph path cannot prove that the model understood a person.
+Adding a use case means supplying these definitions, rather than copying the turn engine or adding domain branches to core. Business rules, such as interpreting a date, checking capacity or deciding which actions require approval, remain in the application.
 
-## Architecture inside a voice application
+Reuse is exercised through the same public API by the [clinic flows](core/tests/clinic_flow/) and the [support-desk flow](core/tests/ticket_flow/). The [support-desk checks](core/tests/test_tickets.py) include changing every domain field and operation name without changing core. The [salon application](use-cases/salon-graph/) is a more demanding integration example, not the package's data model.
+
+## Where it fits in the voice stack
+
+The implemented adapter replaces the LLM service position in a **Pipecat** pipeline. Pipecat still owns transport, VAD, endpointing, STT, TTS and audio output. The harness owns the conversation between recognized input and the words sent to speech synthesis.
 
 ```mermaid
-flowchart TB
-    Caller["Caller"] <--> Pipecat["Pipecat voice application"]
-    Caller <--> LiveKit["LiveKit voice application — planned integration"]
-    Pipecat <--> PA["Pipecat adapter"]
-    LiveKit <-.-> LA["LiveKit adapter — planned"]
-    PA <--> Core["Shared core: state, flow, operations and delivery"]
-    LA <-.-> Core
-    Core --> Graph["Pydantic Graph: declared execution paths"]
-    Graph --> Agent["Agent node: Pydantic AI model/tool loop"]
-    Graph --> Code["Code node: deterministic operation"]
-    Agent --> Boundary["Validated application functions"]
-    Code --> Boundary
-    Boundary <--> Services["Application services"]
+flowchart LR
+    Input["Pipecat transport, STT and turn taking"] --> Adapter["Pipecat adapter"]
+    Adapter --> Core["Core: typed state, graph and node agents"]
+    Core <--> Functions["Application functions and backend"]
+    Core --> Adapter
+    Adapter --> Output["Pipecat TTS and transport output"]
+    Output --> Playback["Playback evidence"]
+    Playback --> Core
 ```
 
-In the Pipecat migration implementation, the adapter occupies the pipeline's LLM processor
-position: caller context enters, and response frames carry speech back toward
-TTS. The model/tool loop belongs to core. A LiveKit adapter would connect the same
-engine to its model-node interface and session lifecycle. LiveKit documents an
-overridable [LLM node](https://docs.livekit.io/agents/logic/nodes/#llm-node), which
-supports this direction; it does not establish our adapter's correctness.
+This preserves the media framework's components while making conversation rules reusable and testable independently of audio. The [turn engine](core/src/core/turn.py) also has a text entry point. Importing the [public package](core/src/core/__init__.py) does not import Pipecat or Langfuse, load environment files or create provider clients.
 
-Adapters must carry interruption, cancellation, history and playback evidence as
-well as text. Those semantics are part of portability. A native speech-to-speech
-integration would need a separate assessment because its lifecycle differs from
-this cascaded pipeline.
+**LiveKit integration is planned, not implemented.** The intended boundary is the same: an adapter between LiveKit's native media/session components and the conversation engine. Its interruption and playback behavior still needs its own implementation and verification.
 
-An agent node has one composed instruction context: shared persona, node prompt,
-application knowledge and the current call facts. It can make several model/tool
-requests during a turn. “One agent per node” does not mean one model request per
-caller turn, or a separate provider connection per node.
+## Typed state, typed flow
 
-There is **no classifier, solver or supervisor before the active node's agent**
-on this public path. The legacy classifier modules remain for Faro until it is
-migrated; new applications should use the manifest contract below.
+Three libraries have distinct roles in the implementation:
 
-### How Pydantic, Pydantic AI and Pydantic Graph enable this
-
-| Component | Responsibility in this repository |
+| Library | Role |
 |---|---|
-| [Pydantic](https://pydantic.dev/docs/validation/latest/concepts/models/) | Application state, tool arguments, manifest schemas and backend receipt validation. |
-| [Pydantic AI](https://pydantic.dev/docs/ai/core-concepts/dependencies/) | Native agent execution, `RunContext`, typed tools, streaming, messages and the model/tool loop. Personas use the SDK's `AgentSpec`. |
-| [Pydantic Graph](https://pydantic.dev/docs/ai/graph/builder/) | Typed graph execution, decision branches and a diagram generated from the executable structure. The YAML manifest is our package's format. |
-| Core (`slng-voice-core`, imported as `core`) | Assemble nodes; maintain per-call state, history, proposals, operations, delivery evidence and bounded turn execution. |
-| [Pipecat](https://docs.pipecat.ai/pipecat/learn/pipeline) | Transport, audio frames, VAD, endpointing, interruptions, STT and TTS integration. |
-| [LiveKit](https://docs.livekit.io/agents/logic/nodes/) | Planned second voice integration, retaining its session, media and turn lifecycle. |
-| SLNG | Speech-provider access used by the application pipelines. |
-| [Langfuse](https://langfuse.com/docs/observability/overview) | Traces of model requests, tool results, timings and runtime audit events. |
-| Coval | External voice callers, recordings and normal/interruptive evaluation scenarios. |
+| **Pydantic** | Validates application state, operation arguments, results and configuration. |
+| **Pydantic AI** | Runs each conversational node's agent, tools and model requests. Agent definitions use its native `AgentSpec`. |
+| **Pydantic Graph** | Executes the declared nodes and routes. The graph is built from the application definition, rather than maintained separately. |
 
-Pydantic gives the application one schema for its state, arguments and receipts.
-Core explicitly validates service responses and complete candidate state updates
-at their boundaries. A Python return annotation alone does not validate external
-data, and validation of one object does not make every later mutation safe.
+An application brings an `agent.yaml` manifest, its state model, prompt files and typed Python functions. `core.load(...)` reads the definition; `compile(...)` checks its references and builds a reusable flow; `flow.open(...)` creates an independent call with its own state and services. See the [manifest compiler](core/src/core/flowspec.py) and [graph implementation](core/src/core/flow.py).
 
-Pydantic AI supplies the agent loop rather than requiring us to build a model SDK.
-Its [tool preparation](https://pydantic.dev/docs/ai/capabilities/prepare-tools/) and
-[typed outputs and streaming](https://pydantic.dev/docs/ai/core-concepts/output/)
-let core expose the current node's operations, inspect results and stream speech.
-Execution guards still check a requested action against the current call state.
+A `conversation` node has its own prompt, writable fields, choices, operations and exits. Its agent interprets the caller's words and selects an action or a permitted destination. There is no classifier pre-pass on this public path. A node can stay active for several turns, and a turn can involve several model requests or nodes.
 
-Pydantic Graph makes the flow executable. In the migration implementation, core
-builds graph steps and decision branches from the node table; an undeclared
-transition has no matching branch. The same graph can render a Mermaid diagram,
-so the executable routes and their visual representation share a definition.
-Application guards still decide whether a declared route is allowed *now*.
-See the [graph implementation](https://github.com/slng-ai/slng-voice-harness/blob/8b127b2ebb444260d199903e3c91df1fa878eeb6/core/src/core/flow.py).
+An `action` node runs deterministic code and follows a declared result path without a model request. Prerequisites can route through another node and return to the unfinished request. The application decides the shape of its graph: a small single-agent flow and a structured multi-node flow use the same runtime.
 
-The graph schedules execution; core retains the call's position and conversation
-state between turns. Backend persistence and recovery remain explicit contracts.
-Using a graph library does not automatically make a call durable across crashes.
+State is shared across nodes **within a call**, not across callers. Updates validate a complete candidate state before committing it. Application validators can use the call's clock and previous state. Declared dependencies invalidate choices and derived facts when their inputs change; moving to another node preserves the call's state and conversation history.
 
-### What a node owns
+These types make contracts executable. They do not guarantee that a model interpreted a caller correctly.
 
-A conversational node declares its prompt, collectible fields, available choices,
-operations, prerequisites and exits. The agent can stay in that node for several
-turns. A tool result returns to that agent's ongoing run unless a declared action
-or handoff ends it. A code node runs a known operation and follows declared
-success, error or unknown-outcome branches without asking a model to choose.
+## Reusable reliability mechanisms
 
-A node remains responsible while a tool fetches information and the caller
-discusses the returned options. If another step must establish a prerequisite,
-core remembers where to return after it succeeds. The graph can express
-corrections, detours and returns while each node handles natural conversation.
-A changed request still needs to be interpreted and validated.
+For an operation requiring approval, the application supplies the read-back. Core tracks the exact proposal and checks whether its speech had playback evidence before accepting a subsequent confirmation. The node agent interprets the reply; code enforces the operation's declared requirements.
 
-| Definition | Use |
-|---|---|
-| `kind: conversation` | An agent node with declared fields, choices, operations and exits. |
-| `kind: action` | A deterministic operation. `returns: true` returns to the node that handed work to it. |
-| `kind: collect`, `confirm`, `end` | Structured collection, explicit confirmation and completion for controlled flows. |
-| Legacy `kind: agent` | Hand-built Python nodes; retained for existing applications such as Faro. |
+An operation has a tracked intent. If execution is interrupted after dispatch and the outcome is uncertain, it stays unknown until reconciliation establishes what happened. Applications provide reconciliation and backend idempotency where required. A typed receipt establishes the result; generated prose alone does not.
 
-### Shared state without shared callers
+Nodes can use `speech: rendered` when the application needs code to produce every spoken line. In ordinary prose nodes, the model supplies conversational language, with weaker guarantees about its wording. These are generic choices available to any application.
 
-Each call gets a fresh `FlowCall` wrapping the application's plain Pydantic state
-model. Nodes in that call share its facts, history, pending proposal, offered
-choices, receipt evidence and speech ledger. The engine supplies current context
-before each model request. The compiled agent definitions can be reused across calls.
+For voice delivery, the Pipecat adapter supports Twilio marks and a browser integration built on the official Pipecat client SDK plus a small playback-reporting module. Browser reports require continuous playback of the segment, rather than merely sending its audio. They cannot prove that a person heard a physical speaker. The browser implementation has offline Chrome coverage; support across other browsers is not yet qualified.
 
-Applications do not need to subclass core's session or implement their own
-conversation loop. They decide whether service clients are shared or created per
-call. Business resources may be shared across callers; those resources need
-backend transactions, ownership checks and concurrency control. Per-call state
-alone cannot prevent two callers from taking the same resource.
+The corresponding mechanisms live in [steps](core/src/core/steps.py), [operations](core/src/core/operations.py), [state](core/src/core/state.py), [history](core/src/core/history.py) and the [Pipecat adapter](core/src/core/processor.py).
 
-## Authoring an application
+## Reuse and deployment are separate questions
 
-Domain models, business operations and wording belong to the application. Core
-imports no use case and applies the contracts the application declares.
+A compiled flow is shared while each call gets its own state, history, pending proposals and budgets. Application services may be shared deliberately. Their databases must enforce ownership, concurrency and idempotency; isolated conversation state does not make a shared backend safe by itself.
 
-On the migration branch, the ordinary application consists of:
+The harness does not supply a universal database, distributed scheduler or automatic durable graph execution. Applications choose those deployment components. The current concurrency evidence comes from a bounded MacBook setup and does not establish production server capacity.
 
-```text
-my-agent/
-  agent.yaml       nodes, fields, operations, prerequisites and exits
-  models.py        plain Pydantic state, arguments and receipts
-  functions.py     typed functions, read-back wording and backend access
-  prompts/         shared persona, node prompts and application knowledge
-  bot.py           voice pipeline and application setup
+The latency goal is small measured runtime overhead, while avoiding unnecessary model requests for work code already knows how to perform. Typed flows can narrow prompts and tool sets, but do not automatically lower token usage. Speed, token cost and accuracy need comparable measurements on the chosen model, transport and workload.
+
+Current qualification remains open: the N12 absolute overhead ceiling passes, its relative rule still fails, and native latency parity is not established. The [latest implementation report](docs/research/reusable-core/session-4g.md) separates offline proofs from remaining live checks. These limits concern the evidence available today, not application-specific requirements imposed by core.
+
+## Try an existing integration
+
+The workspace uses Python 3.14+ and uv. From the repository root:
+
+```bash
+uv sync --all-packages
+cd use-cases/salon-graph
+uv run bot.py
 ```
 
-`core.load(...)` validates the manifest and references. `compile(...)` constructs
-the agents and graph. `flow.open(...)` creates one call. The public boundary is
-documented in the implementation's
-[core exports](https://github.com/slng-ai/slng-voice-harness/blob/8b127b2ebb444260d199903e3c91df1fa878eeb6/core/src/core/__init__.py).
-Importing `core` loads no environment file, provider client, Pipecat or Langfuse.
-Voice and tracing are separate package extras; the application supplies its model
-provider dependency and credentials.
+Configure the application's provider credentials in the root `.env` before starting. Open `http://localhost:7860`, which serves the SDK-based client at `/voice/`. The stock `/client/` page does not provide the playback evidence required by this integration.
 
-### Agent nodes and code nodes share one flow
+For an offline core check, from the repository root:
 
-An agent node interprets the caller and chooses from its declared operations and
-exits. A code node runs a known function and follows its declared result branches.
-The application can use a conversational agent, a controlled sequence or agents
-handing work to one another without replacing the turn engine.
+```bash
+uv run --directory core python -m tests
+```
 
-Both kinds of node use the same call state and operation checks. A tool's results
-remain available to the node responsible for the conversation; invoking a tool
-does not require losing that context or delegating to another reasoning agent.
+The suite disables model requests. It verifies runtime behavior with scripted models; live evaluations are needed to assess language understanding and audio behavior.
 
-### Typed operations and backend responsibilities
-
-An operation points to a plain function taking services and a Pydantic argument
-model, returning a Pydantic receipt. A write can additionally accept core's `Intent`
-so the backend can deduplicate and reconcile it by a stable identifier.
-The function signature supplies the types; YAML binds them to application state.
-
-| Manifest field | Meaning |
-|---|---|
-| `function`, `args` | Implementation and argument-to-state bindings. |
-| `readback`, `approval` | Exact proposal wording and whether approval is required. |
-| `matches` | Receipt fields that must match the operation's arguments. |
-| `succeeds`, `rejects` | Explicit success and terminal refusal conditions. An unsettled write stays unknown. |
-| `assign` | State fields populated from a successful receipt. |
-| `say`, `recap` | Application wording rendered from receipt evidence. |
-| `subject`, `resource`, `version` | Identity and revision of the changed resource. |
-| `reconcile`, `idempotent` | How to find an earlier outcome and whether the backend deduplicates by intent ID. |
-| `changes: false` | A read; its receipt cannot establish that a resource was changed. |
-
-Declaring `idempotent: true` does not make a backend idempotent. The backend must
-persist the intent and atomically record the effect with its result. A lost reply
-must be reconciled before another attempt; “no result found” alone does not prove
-the old request cannot still commit. The backend must settle the old attempt or prevent it from committing
-before another can safely proceed. Each application provides
-the service-specific persistence and concurrency guarantees.
-
-The [support-desk example](https://github.com/slng-ai/slng-voice-harness/tree/8b127b2ebb444260d199903e3c91df1fa878eeb6/core/tests/ticket_flow)
-uses accounts, tickets, revisions and Spanish receipt wording. It exercises the
-same runtime through a different domain and language. The
-[clinic examples](https://github.com/slng-ai/slng-voice-harness/tree/8b127b2ebb444260d199903e3c91df1fa878eeb6/core/tests/clinic_flow)
-show controlled flow, one conversational agent, handoff and code-node patterns
-using the same domain functions.
-
-## Approval, effects and speech
-
-The intended operation boundary separates four facts: what the caller requested,
-what they approved, what the backend did and what they heard. A valid tool call
-does not by itself establish all four.
-
-1. Collect and validate the proposed values. Selecting an option is not approval
-   to carry out a consequential action.
-2. Render the exact read-back from application code and track its delivery.
-3. The active agent interprets the subsequent reply. Core checks its relationship
-   to the same delivered proposal, identity and arguments before dispatch.
-4. Persist and execute the intent, validate and bind the receipt, then record its
-   outcome. Cancellation after dispatch can mean an unknown outcome.
-5. Say the result using application wording backed by the receipt. Interruption
-   of that speech does not undo the backend effect.
-
-The model's interpretation remains fallible. These are the invariants the
-implementation must satisfy and test. Repeating a value, selecting an option
-and authorizing an action must remain distinct unless the application
-explicitly defines a policy connecting them.
-
-`speech: rendered` gives application code control of all spoken wording in a
-node; it is exercised by the ticket example and has restrictions, including no
-model-worded choices at this checkpoint. Nodes may also use guarded free prose.
-Application-defined claim patterns are a best-effort check; they cannot prove
-that every possible unsupported claim is blocked.
-
-### Delivery and interruption
-
-The Pipecat adapter translates frames into core events. Core tracks speech by
-segment and retains accepted caller input and completed tool results when a turn
-is interrupted. Twilio marks associate playback acknowledgement with the segment
-that was sent; cleared or interrupted audio must not be mistaken for a fully
-delivered proposal. A receipt can be valid while its spoken confirmation is still
-undelivered.
-
-For browser development, `DELIVERY=simulated` uses estimated playback. That mode
-cannot prove audible delivery, interruption timing or real telephone latency.
-Text checks also cannot establish endpointing quality. Those require the real
-voice route and recordings, alongside the runtime evidence.
-
-## What we need to demonstrate
-
-The library documentation supports the building blocks, and the Pipecat adapter,
-executable graph and application examples show how they fit together. This supports
-the design's feasibility. It does not establish that the package is universally
-faster, more accurate or easier to maintain than a well-built native application.
-
-The next proof is the same application contract behaving consistently across
-different domains and both voice adapters, including interruptions and failed
-operations. Reliability and latency claims need comparable native implementations,
-the same model and voice conditions, and measurements of useful responses rather
-than filler speech. Reuse must also be demonstrated by the amount of application
-and adapter code authors actually need. Those results will determine the claims
-we publish as the work in progress becomes a supported package.
+Other examples are at different migration stages. In particular, Faro still uses the legacy authoring path; it is not evidence that migration of every application is complete. See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.

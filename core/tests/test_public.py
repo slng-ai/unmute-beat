@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
@@ -26,29 +26,21 @@ CLOCK = datetime.fromisoformat('2026-09-28T08:30:00+02:00')
 
 
 class Script:
-    """The scripted model: what each step's agent does next, and what the confirmation reading says.
+    """The scripted model: what each step's agent does next. There is nothing else to script.
 
-    One `FunctionModel` answers both, as one provider would: a request with
-    a structured output object is the reading, and a streamed request is a
-    step's agent.
+    Every request is a step's own agent, streamed. A non-streamed request
+    would be a separate reading of the reply, which the node-agent core never
+    sends, so it fails the test (P1).
     """
 
     def __init__(self) -> None:
         self.values: dict[str, Any] = {}
         self.label = 'unclear'
         self.agent_requests = 0
-        self.readings = 0
         self.model = FunctionModel(self.reading, stream_function=self.agent)
 
     def reading(self, messages: Any, info: AgentInfo) -> ModelResponse:
-        self.readings += 1
-        wanted = info.model_request_parameters.output_object
-        key = (
-            'take_back'
-            if wanted is not None and 'take_back' in json.dumps(wanted.json_schema)
-            else 'confirmation'
-        )
-        return ModelResponse(parts=[TextPart(json.dumps({key: self.label}))])
+        raise AssertionError('a separate reading was requested; only step agents may run')
 
     async def agent(self, messages: Any, info: AgentInfo):
         self.agent_requests += 1
@@ -56,6 +48,14 @@ class Script:
         if 'collect' in tools and self.values:
             values, self.values = self.values, {}
             yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': values}))}
+            return
+        if 'accept' in tools and self.label == 'accept':
+            yield {0: DeltaToolCall(name='accept', json_args='{}')}
+            return
+        if 'answer' in tools:
+            yield {
+                0: DeltaToolCall(name='answer', json_args=json.dumps({'words': 'Could you say that again?'}))
+            }
             return
         yield 'Sorry, could you say that again?'
 
@@ -106,7 +106,7 @@ async def one_booking_through_the_public_boundary():
         'Booked for Tuesday at 10:00 AM, reference CL001.',
         'Anything else?',
     ]
-    assert script.readings == 1 and script.agent_requests == 2, (script.readings, script.agent_requests)
+    assert script.agent_requests == 3, script.agent_requests
     [filed] = call.evidence
     assert filed.operation == 'book' and filed.receipt['reference'] == 'CL001' and filed.identity == 'P-1234'
     assert filed.proposal and filed.segments, 'the booking names the delivered read-back it answered'
@@ -141,6 +141,8 @@ def what_the_application_wrote():
         'Booked',
         'Cancellation',
         'Cancelled',
+        'PatientRef',
+        'Found',
         'Backend',
     }
     assert 'CallContext' not in source and 'Operation' not in source.replace('OutcomeUnknownError', '')

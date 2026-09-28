@@ -1,0 +1,29 @@
+# An agent node handing into a code node that returns to it: the smallest node-agent flow.
+# `front` is an agent: it records the patient number and chooses, from the conversation, to hand over.
+# `look_up` is code: a typed function, a validated receipt, and declared continuations. No prompt, no model.
+version: 1
+id: clinic-code-node
+state: clinic.py:ClinicState
+identity: patient
+services: clinic.py:Backend
+agents:
+  receptionist:
+    prompt: prompts/receptionist.md
+operations:
+  look_up:
+    function: clinic.py:look_up
+    args: {patient: patient}
+    approval: none
+    succeeds: {status: found}
+    assign: {reference: reference}
+    say: 'I found booking {reference}.'
+steps:
+  - id: front
+    kind: conversation
+    agent: receptionist
+    prompt: prompts/lookup.md
+    fields: [patient]
+    exits:
+      - {to: look_up, purpose: find the caller's booking once their patient number is recorded}
+  - {id: look_up, kind: action, operation: look_up, returns: true, on_error: front, on_unknown: front}
+  - {id: done, kind: end, outcome: completed, say: Goodbye.}

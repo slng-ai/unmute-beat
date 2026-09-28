@@ -4,8 +4,9 @@ The same scenarios, by name and by acceptance condition, as the native arm
 (`use-cases/salon-pipecat-flows/evals/matrix.py`). The caller's words are the
 same; what each build's model is scripted to do differs, because the builds
 ask their models different things: the native model calls `answer` for a yes,
-the harness reads a yes with a classifier. A scripted yes tests
-authorisation, not whether a model understands consent.
+the harness's booking node calls its operation again (session 4: no reading
+runs before the node's agent). A scripted yes tests authorisation, not
+whether a model understands consent.
 
     uv run python -m evals.matrix booking     # one scenario, JSON on stdout
 """
@@ -35,7 +36,10 @@ from salon.diary import TZ, Diary
 
 PHONE = '+34600111222'
 MONDAY = datetime(2026, 9, 21, 8, 0, tzinfo=TZ)
-WANTS = {'to': 'booking', 'because': 'a haircut', 'booking': {'service': 'haircut', 'when': 'Tuesday'}}
+WANTS = {'to': 'booking', 'because': 'a haircut'}
+ASKED = ('collect', {'values': {'service': 'haircut', 'booking_day': 'Tuesday'}})
+"""The front desk records what the caller asked for, then hands over: one response, two calls."""
+NUMBER = ('collect', {'values': {'customer_phone': PHONE}})
 
 TURN_REQUESTS = 8
 """The per-turn request bound both builds share (native `TOOL_CALLS_PER_TURN`, harness `TurnBudget`).
@@ -60,23 +64,43 @@ def bookings(line: Line) -> list[dict[str, Any]]:
 async def to_offer(line: Line) -> list[dict[str, Any]]:
     """The caller asks for a haircut before saying who they are, is verified, and is offered Tuesday's times."""
     return [
-        await line.turn('I want a haircut on Tuesday.', Reply(calls=[('hand_over', WANTS)])),
-        await line.turn('+34 600 111 222', Reply(calls=[('ask_number', {'phone': PHONE})])),
-        await line.turn('Yes.'),
+        await line.turn(
+            'I want a haircut on Tuesday.',
+            Reply(calls=[ASKED, ('hand_over', WANTS)]),
+            Reply(text='Which phone number should I use? Please say it with the country code.'),
+        ),
+        await line.turn('+34 600 111 222', Reply(calls=[NUMBER, ('lookup_customer', {})])),
+        await line.turn(
+            'Yes.',
+            Reply(calls=[('lookup_customer', {})]),
+            Reply(calls=[('options', {})]),
+            Reply(text='On Tuesday I have 9:00 or 9:30 AM. Which time works for you?'),
+        ),
     ]
+
+
+def slot_at(at: str) -> str:
+    return f'2026-09-22T{at.replace(":", "")}|haircut'
+
+
+def pick(at: str) -> Reply:
+    """The booking node recording the caller's pick and asking for its read-back, in one response."""
+    return Reply(calls=[('collect', {'values': {'slot': slot_at(at)}}), ('book_appointment', {})])
+
+
+YES = Reply(calls=[('book_appointment', {})])
+"""The booking node reading a reply as a yes to its read-back."""
 
 
 async def to_read_back(line: Line) -> list[dict[str, Any]]:
     turns = await to_offer(line)
-    turns.append(await line.turn('Nine, please.'))
+    turns.append(await line.turn('Nine, please.', pick('09:00'), Reply(calls=[('book_appointment', {})])))
     return turns
 
 
 def nine_on_tuesday(line: Line) -> Reply:
-    """The booking step's model reading Tuesday at nine back again."""
-    slots = line.diary.find_slots(PHONE, 'Tuesday', 'haircut', MONDAY, offered_to=line.call.id)['slots']
-    slot = next(s['slot_id'] for s in slots if s['time'] == '09:00')
-    return Reply(calls=[('ask_booking', {'action': 'book', 'slot_id': slot, 'booking_id': ''})])
+    """The booking node reading a yes to the Tuesday-at-nine read-back."""
+    return YES
 
 
 def requests(turns: list[dict[str, Any]]) -> dict[str, int]:
@@ -84,13 +108,14 @@ def requests(turns: list[dict[str, Any]]) -> dict[str, int]:
         'agent': sum(t['agent_requests'] for t in turns),
         'classifier': sum(t['classifier_requests'] for t in turns),
     }
+    """`classifier` stays in the shape, and is 0 by construction since session 4."""
 
 
 async def booking(delay: float = 0.05) -> dict[str, Any]:
     """N2/N3/N4/N12: the whole booking, with the request made before identity. One booking, on the read-back."""
     async with Line(delay=delay, diary=diary()) as line:
         turns = await to_read_back(line)
-        turns.append(await line.turn('Yes.'))
+        turns.append(await line.turn('Yes.', YES))
         booked = bookings(line)
         return {
             'passed': len(booked) == 1 and booked[0]['time'] == '09:00',
@@ -104,8 +129,8 @@ async def replay() -> dict[str, Any]:
     """N2: a second yes after the booking is not a second booking."""
     async with Line(diary=diary()) as line:
         await to_read_back(line)
-        await line.turn('Yes.')
-        again = await line.turn('Yes, book it.')
+        await line.turn('Yes.', YES)
+        again = await line.turn('Yes, book it.', YES)
         return {'passed': len(bookings(line)) == 1, 'bookings': len(bookings(line)), 'after': again}
 
 
@@ -114,7 +139,7 @@ async def unplayed_read_back() -> dict[str, Any]:
     async with Line(diary=diary()) as line:
         await to_offer(line)
         line.playout.playback = 'none'
-        await line.turn('Nine, please.')
+        await line.turn('Nine, please.', pick('09:00'), Reply(calls=[('book_appointment', {})]))
         line.playout.playback = 'full'
         again = await line.turn('Yes.', nine_on_tuesday(line))
         return {'passed': not bookings(line), 'bookings': len(bookings(line)), 'after': again}
@@ -125,7 +150,7 @@ async def partial_read_back() -> dict[str, Any]:
     async with Line(diary=diary()) as line:
         await to_offer(line)
         line.playout.playback = 'none'
-        await line.turn('Nine, please.')
+        await line.turn('Nine, please.', pick('09:00'), Reply(calls=[('book_appointment', {})]))
         line.playout.playback = 'full'
         await line.worker.queue_frame(BotStartedSpeakingFrame(), FrameDirection.UPSTREAM)
         await asyncio.sleep(0.05)
@@ -140,7 +165,7 @@ async def cut_receipt() -> dict[str, Any]:
     async with Line(diary=diary()) as line:
         await to_read_back(line)
         line.playout.playback = 'none'
-        await line.turn('Yes.')
+        await line.turn('Yes.', YES)
         line.playout.playback = 'full'
         await line.worker.queue_frame(InterruptionFrame())
         await asyncio.sleep(0.1)
@@ -167,13 +192,10 @@ async def bad_slot() -> dict[str, Any]:
     """N1: the model names a slot that does not exist. Nothing is read back, nothing is booked."""
     async with Line(diary=diary()) as line:
         await to_offer(line)
-        bad = Reply(
-            calls=[
-                ('ask_booking', {'action': 'book', 'slot_id': '2026-09-22T0915|haircut', 'booking_id': ''})
-            ]
-        )
         turn = await line.turn(
-            'Quarter past nine.', bad, Reply(calls=[('booking_guidance', {'topic': 'time'})])
+            'Quarter past nine.',
+            pick('09:15'),
+            Reply(text='Quarter past is not a time I can offer. Which time works?'),
         )
         return {
             'passed': not bookings(line) and 'Shall I book' not in turn['heard'],
@@ -185,11 +207,11 @@ async def bad_slot() -> dict[str, Any]:
 async def two_calls() -> dict[str, Any]:
     """N11: two calls at once on the one set of agents: each books its own, neither sees the other's."""
 
-    async def one(pick: str, time_: str) -> tuple[int, str]:
+    async def one(said: str, time_: str) -> tuple[int, str]:
         async with Line(diary=diary()) as line:
             await to_offer(line)
-            await line.turn(pick)
-            await line.turn('Yes.')
+            await line.turn(said, pick(time_), Reply(calls=[('book_appointment', {})]))
+            await line.turn('Yes.', YES)
             return len(bookings(line)), bookings(line)[0]['time'] if bookings(line) else ''
 
     first, second = await asyncio.gather(one('Nine, please.', '09:00'), one('Ten, please.', '10:00'))
@@ -200,13 +222,17 @@ async def barge_during_entry_line() -> dict[str, Any]:
     """N7: the caller cuts into the line a step speaks on entry; their next words are still taken and routed."""
     async with Line(diary=diary()) as line:
         line.playout.playback = 'none'
-        await line.turn('I want a haircut on Tuesday.', Reply(calls=[('hand_over', WANTS)]))
+        await line.turn(
+            'I want a haircut on Tuesday.',
+            Reply(calls=[ASKED, ('hand_over', WANTS)]),
+            Reply(text='Which phone number should I use? Please say it with the country code.'),
+        )
         line.playout.playback = 'full'
         await line.worker.queue_frame(InterruptionFrame())
         await asyncio.sleep(0.1)
-        turn = await line.turn('+34 600 111 222', Reply(calls=[('ask_number', {'phone': PHONE})]))
+        turn = await line.turn('+34 600 111 222', Reply(calls=[NUMBER, ('lookup_customer', {})]))
         return {
-            'passed': turn['node'] == 'verify' and 'read that back' in turn['heard'],
+            'passed': turn['node'] == 'verify' and turn['heard'].startswith('Is your number +34'),
             'node': turn['node'],
             'heard': turn['heard'],
         }
@@ -232,7 +258,11 @@ async def provider_messages_in_context() -> dict[str, Any]:
         )
         sent = paired(line.call.messages)
         ids = [p.tool_call_id for m in sent for p in m.parts if isinstance(p, ToolCallPart)]
-        turn = await line.turn('I want a haircut on Tuesday.', Reply(calls=[('hand_over', WANTS)]))
+        turn = await line.turn(
+            'I want a haircut on Tuesday.',
+            Reply(calls=[ASKED, ('hand_over', WANTS)]),
+            Reply(text='Which phone number should I use? Please say it with the country code.'),
+        )
         return {
             'passed': ids == ['kept'] and turn['node'] == 'verify',
             'sent_calls': ids,

@@ -62,7 +62,7 @@ def legal_moves(nodes: dict[str, Node[Any]]) -> dict[str, frozenset[str]]:
         reach |= {nodes[to].satisfied_by for to in list(reach) if nodes[to].satisfied_by}
         moves[name] = reach
     for name in nodes:
-        if any(other.satisfied_by == name for other in nodes.values()):
+        if nodes[name].returns or any(other.satisfied_by == name for other in nodes.values()):
             waiting = {n for n, reach in moves.items() if name in reach and n != name}
             waiting |= {n for n, other in nodes.items() if other.satisfied_by == name}
             moves[name] |= waiting | {home}

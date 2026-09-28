@@ -1,0 +1,1177 @@
+[
+ {
+  "run": "jszHHpQY6pyjBAq28RwTRp",
+  "simulation": "LdVa6nrmCzGfrYfo9Qvz53",
+  "call": "CA20d97d845cf34a8daa06f77555cc9e9b",
+  "status": "COMPLETED",
+  "seconds": 76.511,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 7,
+    "turn": 9,
+    "heard": "that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 10,
+    "turn": 11,
+    "heard": "yes please",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 6,
+  "completed": 7,
+  "cancelled": 6,
+  "input_tokens": 20439,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   3.3349640369415283,
+   3.0698471069335938,
+   2.0877702236175537,
+   2.3736331462860107
+  ],
+  "requests": [
+   0.856
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 72.351,
+  "problems": []
+ },
+ {
+  "run": "4LvLqjiFdys9fkWtdRWGmR",
+  "simulation": "a3y8pY2dAeWPREwa8KAUEF",
+  "call": "CAa5d7a30098fd40e9baef0453c07c5d6e",
+  "status": "COMPLETED",
+  "seconds": 97.483,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes that's perfect",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 7,
+  "completed": 7,
+  "cancelled": 0,
+  "input_tokens": 20457,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   3.0938708782196045,
+   2.3150441646575928,
+   1.7895970344543457
+  ],
+  "requests": [
+   0.986
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 77.64,
+  "problems": []
+ },
+ {
+  "run": "T99A9kjoYAxxZZjHnS5zRw",
+  "simulation": "7UEVy92ZfExsnHrSbhFbb9",
+  "call": "CAb6b587c8276d4cfbb7d2e21e8627c7b9",
+  "status": "COMPLETED",
+  "seconds": 95.795,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 5,
+    "turn": 6,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 7,
+    "turn": 9,
+    "heard": "that's perfect",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 7,
+  "completed": 9,
+  "cancelled": 2,
+  "input_tokens": 26383,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.9356679916381836,
+   3.5307369232177734,
+   3.0097501277923584,
+   4.1982550621032715,
+   3.856816291809082
+  ],
+  "requests": [
+   0.96,
+   0.605,
+   1.088
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 82.595,
+  "problems": []
+ },
+ {
+  "run": "8c3YGp486kENs3UN89xdYM",
+  "simulation": "7YU34Ve8pFbr9XVDjbyErf",
+  "call": "CAa430b1debe6342e7927f807859e5ff42",
+  "status": "COMPLETED",
+  "seconds": 79.656,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 5,
+    "turn": 7,
+    "heard": "please",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 6,
+  "completed": 7,
+  "cancelled": 2,
+  "input_tokens": 20433,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   2.203132390975952,
+   2.8757450580596924,
+   2.544689893722534,
+   1.5974490642547607
+  ],
+  "requests": [
+   0.854
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 74.947,
+  "problems": []
+ },
+ {
+  "run": "RcuWnFupPPPNpn47QNLskr",
+  "simulation": "fk5ZrLQmq3Wc8ATdvqoxRe",
+  "call": "CA8174ccdeb2cf417b96c59fa0309576f4",
+  "status": "COMPLETED",
+  "seconds": 118.936,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 6,
+    "turn": 8,
+    "heard": "that's perfect",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 7,
+  "completed": 9,
+  "cancelled": 3,
+  "input_tokens": 24696,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.812391996383667,
+   5.046383857727051,
+   2.1996538639068604,
+   22.77369976043701,
+   3.170318126678467
+  ],
+  "requests": [
+   0.754,
+   0.715,
+   0.73
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 99.86,
+  "problems": []
+ },
+ {
+  "run": "am3AhJfS6i86othDEMKyPa",
+  "simulation": "5dGYa2jXamdRJN8RTR7MEt",
+  "call": "CA3c25ae3cc4da46249357ccde57fec65c",
+  "status": "COMPLETED",
+  "seconds": 82.441,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 6,
+    "turn": 8,
+    "heard": "please",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 6,
+  "completed": 8,
+  "cancelled": 2,
+  "input_tokens": 22820,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.2430720329284668,
+   2.966398000717163,
+   2.2992279529571533,
+   1.607668161392212
+  ],
+  "requests": [
+   0.952,
+   0.846,
+   0.714
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 77.654,
+  "problems": []
+ },
+ {
+  "run": "6xen23d27sUXrwKn7GBB2Z",
+  "simulation": "8HJCRNEgf54SdqDJRGpZEy",
+  "call": "CAddbe27b919e141c5ba8ca9f60547c052",
+  "status": "COMPLETED",
+  "seconds": 82.722,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "yes please",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 6,
+  "completed": 8,
+  "cancelled": 1,
+  "input_tokens": 22625,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.39805006980896,
+   2.463585138320923,
+   1.9768121242523193,
+   1.5426080226898193
+  ],
+  "requests": [
+   0.765,
+   0.766
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 77.811,
+  "problems": []
+ },
+ {
+  "run": "E5waefF7jAy8NseVBUiSov",
+  "simulation": "Xay9L9U4VjpPQLSnEu8anP",
+  "call": "CA69be271d1e5c4b4eae48b38aafcbbfd7",
+  "status": "COMPLETED",
+  "seconds": 76.51,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 9,
+    "turn": 10,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 11,
+    "turn": 13,
+    "heard": "please",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 6,
+  "completed": 8,
+  "cancelled": 7,
+  "input_tokens": 22563,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.4793810844421387,
+   1.3851499557495117,
+   1.4575750827789307,
+   4.116251230239868
+  ],
+  "requests": [
+   0.914,
+   0.822
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 71.614,
+  "problems": []
+ },
+ {
+  "run": "WYg8wacMn4DYtt9aPKE4co",
+  "simulation": "HHqqbKJz5oQUFs8Zu5kVvq",
+  "call": "CAeda711457607426db0258a223440566b",
+  "status": "COMPLETED",
+  "seconds": 87.418,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 4,
+    "turn": 6,
+    "heard": "that's perfect",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 7,
+  "completed": 9,
+  "cancelled": 1,
+  "input_tokens": 28020,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   2.693537950515747,
+   1.5802350044250488,
+   1.683258056640625,
+   1.278520107269287,
+   4.003146171569824,
+   1.127549171447754
+  ],
+  "requests": [
+   0.886,
+   0.714
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 64.784,
+  "problems": []
+ },
+ {
+  "run": "GQwAWwwDqVmLnQbKyDBRVi",
+  "simulation": "B9xrkb4SWYARbsiCqgsiWL",
+  "call": "CA8e9489dbe2444e6291f942c25eef371c",
+  "status": "COMPLETED",
+  "seconds": 71.936,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 7,
+    "turn": 8,
+    "heard": "yes please",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 6,
+  "completed": 8,
+  "cancelled": 2,
+  "input_tokens": 22514,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.343367099761963,
+   3.311765670776367,
+   1.521054983139038,
+   1.5021960735321045
+  ],
+  "requests": [
+   0.549,
+   1.195
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": 68.402,
+  "problems": []
+ },
+ {
+  "run": "mM5ma5y6VBhhUxJJnW2Mob",
+  "simulation": "YzkhPWRpDFUKuEmBWNmfrA",
+  "call": "CAa24472f088d44304815811b516268390",
+  "status": "COMPLETED",
+  "seconds": 204.507,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 3,
+    "turn": 11,
+    "heard": "that's right",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 13,
+    "turn": 14,
+    "heard": "nine works for me thanks",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 17,
+    "turn": 20,
+    "heard": "that's great",
+    "receipt": {
+     "status": "moved",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-03",
+     "time": "09:00:00",
+     "spoken": "Saturday the 3rd at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM",
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 10,
+  "completed": 12,
+  "cancelled": 10,
+  "input_tokens": 40816,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.8360071182250977,
+   1.5629470348358154,
+   1.7367172241210938,
+   1.2255918979644775,
+   3.4343318939208984,
+   4.251543998718262,
+   3.3574469089508057,
+   1.5448870658874512,
+   2.2880401611328125
+  ],
+  "requests": [
+   0.932,
+   0.925,
+   1.011
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 3,
+  "booked_after": 65.368,
+  "problems": [
+   "2 booking writes, expected 1"
+  ]
+ },
+ {
+  "run": "dK9ZvemKN2hQyRSWqKtgTL",
+  "simulation": "j3aCXXq8CrcmUoQt2mBxAN",
+  "call": "CA751fa5eb83834a9aad93927ccc4165fd",
+  "status": "COMPLETED",
+  "seconds": 172.146,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34712734544"
+    }
+   }
+  ],
+  "bookings": [],
+  "first_booking": null,
+  "unmatched": [],
+  "caller_turns": 13,
+  "completed": 18,
+  "cancelled": 7,
+  "input_tokens": 57126,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   3.783397912979126,
+   1.906543254852295,
+   2.3910322189331055,
+   2.2643110752105713,
+   2.9071829319000244,
+   4.068994045257568,
+   3.4315316677093506,
+   3.8903939723968506,
+   2.763144016265869,
+   1.9080331325531006,
+   1.7722392082214355,
+   3.032557964324951
+  ],
+  "requests": [
+   0.95,
+   1.211,
+   0.904,
+   1.084,
+   1.016,
+   0.972,
+   0.919,
+   1.074,
+   1.007,
+   1.003,
+   1.119
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 5,
+  "booked_after": null,
+  "problems": [
+   "0 booking writes, expected 1"
+  ]
+ },
+ {
+  "run": "5YWfZDoPQihTXbfiY3wJWs",
+  "simulation": "3CyVWZmpnotfM4nfdru2e2",
+  "call": "CA4fb153ba57994918a9ca45d71f732d61",
+  "status": "COMPLETED",
+  "seconds": 169.35,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 8,
+    "turn": 9,
+    "heard": "go ahead",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 14,
+    "turn": 15,
+    "heard": "silence underscore tool",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-02",
+     "time": "09:00:00",
+     "spoken": "Friday at 9:00 AM"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 19,
+    "turn": 20,
+    "heard": "yes nine am on saturday works for me",
+    "receipt": {
+     "status": "moved",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-03",
+     "time": "09:00:00",
+     "spoken": "Saturday the 3rd at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Friday at 9:00 AM",
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 13,
+  "completed": 18,
+  "cancelled": 8,
+  "input_tokens": 66688,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.7978589534759521,
+   1.3657171726226807,
+   2.4258902072906494,
+   3.311783790588379,
+   1.795708179473877,
+   2.931811809539795,
+   2.667086124420166,
+   3.205165147781372,
+   4.377279996871948,
+   1.7849657535552979,
+   3.0631072521209717
+  ],
+  "requests": [
+   0.771,
+   0.998,
+   1.001,
+   0.692,
+   0.981,
+   1.043,
+   1.043
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 5,
+  "booked_after": 108.472,
+  "problems": [
+   "2 booking writes, expected 1"
+  ]
+ },
+ {
+  "run": "TKGEkWhA6Gzn9bbkFisjEn",
+  "simulation": "YJRpB5JELbchFkXm465uRG",
+  "call": "CA49f481ad06264595b5e52f07d9c2b4c7",
+  "status": "COMPLETED",
+  "seconds": 201.251,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 16,
+    "turn": 17,
+    "heard": "yes that's correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   }
+  ],
+  "bookings": [],
+  "first_booking": null,
+  "unmatched": [],
+  "caller_turns": 12,
+  "completed": 21,
+  "cancelled": 16,
+  "input_tokens": 81073,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   3.539391040802002,
+   2.0487568378448486,
+   4.009360074996948,
+   3.9370532035827637,
+   2.7859573364257812,
+   2.384690046310425,
+   1.278318166732788,
+   4.52458381652832,
+   2.9524641036987305,
+   2.2308719158172607,
+   3.9981160163879395
+  ],
+  "requests": [
+   1.066,
+   0.947,
+   1.061,
+   1.225,
+   1.295,
+   0.871
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 4,
+  "booked_after": null,
+  "problems": [
+   "0 booking writes, expected 1"
+  ]
+ },
+ {
+  "run": "AXhNRqczNbVktbX9k5xvZa",
+  "simulation": "8opr2oigPcynN6vEv6nRUd",
+  "call": "CA8ab6402bae99492987ab790a3b2c1417",
+  "status": "COMPLETED",
+  "seconds": 113.525,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "right so it's plus three four six seven one two seven three four five four is that correct",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   }
+  ],
+  "bookings": [],
+  "first_booking": null,
+  "unmatched": [],
+  "caller_turns": 11,
+  "completed": 13,
+  "cancelled": 3,
+  "input_tokens": 40021,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.9831361770629883,
+   2.67655873298645,
+   1.9544482231140137,
+   1.7101161479949951,
+   2.8443307876586914,
+   3.038282871246338,
+   2.309572696685791,
+   2.940837860107422
+  ],
+  "requests": [
+   0.78,
+   1.035,
+   0.787,
+   0.99,
+   0.982,
+   0.986,
+   0.875
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 5,
+  "booked_after": null,
+  "problems": [
+   "0 booking writes, expected 1"
+  ]
+ },
+ {
+  "run": "2NZdaNpZX4Dys5rEZyAtmR",
+  "simulation": "kwUbc4PRZhe4Absq4yxScy",
+  "call": "CA3bf0451600f34218a5c98af34a484aef",
+  "status": "COMPLETED",
+  "seconds": 131.872,
+  "writes": [
+   {
+    "action": "confirm_customer",
+    "status": "ok",
+    "asked_turn": 5,
+    "turn": 6,
+    "heard": "that's",
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "save_booking",
+    "status": "ok",
+    "asked_turn": 11,
+    "turn": 12,
+    "heard": "yes that's perfect",
+    "receipt": {
+     "status": "booked",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "date": "2026-10-03",
+     "time": "09:00:00",
+     "spoken": "Saturday the 3rd at 9:00 AM"
+    }
+   }
+  ],
+  "bookings": [
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "caller_turns": 12,
+  "completed": 14,
+  "cancelled": 4,
+  "input_tokens": 52120,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.6112761497497559,
+   2.076746940612793,
+   2.1672720909118652,
+   2.671009063720703,
+   1.3384590148925781,
+   2.078294038772583,
+   1.449646234512329,
+   4.754020929336548
+  ],
+  "requests": [
+   1.238,
+   0.966,
+   0.883,
+   0.727,
+   0.837
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 5,
+  "booked_after": 107.541,
+  "problems": []
+ },
+ {
+  "run": "f2dSbb3u3AAE442vkoq5yk",
+  "simulation": "F88eigQQnhK76yPU7D3ktU",
+  "call": "CA36f6aed45d7a4e5c90913ff844996dd5",
+  "status": "COMPLETED",
+  "seconds": 175.815,
+  "writes": [],
+  "bookings": [],
+  "first_booking": null,
+  "unmatched": [],
+  "caller_turns": 7,
+  "completed": 8,
+  "cancelled": 8,
+  "input_tokens": 18651,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   1.9248158931732178,
+   3.9532721042633057,
+   1.581808090209961,
+   2.513111114501953,
+   4.097751140594482,
+   1.5295171737670898
+  ],
+  "requests": [
+   0.884,
+   0.833,
+   0.886,
+   0.931,
+   0.831
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 2,
+  "booked_after": null,
+  "problems": [
+   "0 booking writes, expected 1"
+  ]
+ },
+ {
+  "run": "GwX9FkFXZRHqv9D3irjFaA",
+  "simulation": "iPFgi5qqowDhHxEE66H85W",
+  "call": "CAecf6261f1e8f408cb3305e9b31fb21cf",
+  "status": "COMPLETED",
+  "seconds": 1105.081,
+  "writes": [],
+  "bookings": [],
+  "first_booking": null,
+  "unmatched": [],
+  "caller_turns": 4,
+  "completed": 3,
+  "cancelled": 3,
+  "input_tokens": 6043,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {},
+  "chains": {},
+  "patterns": [],
+  "latency": [
+   2.380934238433838,
+   2.1062328815460205
+  ],
+  "requests": [
+   0.946
+  ],
+  "tails": [],
+  "statuses": {},
+  "pieces": 0,
+  "interrupted": 1,
+  "booked_after": null,
+  "problems": [
+   "0 booking writes, expected 1",
+   "ended by the 300 s limit"
+  ]
+ }
+]

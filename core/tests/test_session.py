@@ -139,25 +139,33 @@ async def only_the_delivered_current_proposal_authorises():
     assert backend.calls == 1 and len(call.evidence) == 1, 'a replayed yes booked twice'
 
 
-async def a_late_reading_does_not_act():
-    """A reading still in flight when a newer turn begins is dropped: no yes, no write, no move."""
+async def a_late_approval_does_not_act():
+    """A yes the step's agent gave in a turn the caller has since left authorises nothing: no write, no move.
+
+    The node-agent version of the late reading: the approval is bound to the
+    turn generation that gave it (`CallContext.approve`), so an agent run
+    still finishing after a newer turn began cannot spend it.
+    """
     script = Script()
     flow, call, backend = await at_the_read_back(script)
-    started, release = asyncio.Event(), asyncio.Event()
-
-    async def held(value, *, usage, usage_limits):
-        started.set()
-        await release.wait()
-        return type(flow.interpreter.fallback)(decision=core.steps.Accept())
-
-    call.begin_turn()
+    old = call.begin_turn()
     call.turn_started('Yes.')
-    flow.interpreter._decide = held
-    reading = asyncio.create_task(flow.interpreter.interpret(call))
-    await started.wait()
+    proposal = flow.by_id['confirm'].readback(call)
+    token = turn_generation.set((call.id, old))
+    try:
+        assert call.approve(proposal.about, value=proposal.value)
+    finally:
+        turn_generation.reset(token)
+    assert call.approved(), 'the yes counts in its own turn'
     call.begin_turn()
-    release.set()
-    assert not isinstance((await reading).decision, core.steps.Accept), 'a superseded reading was published'
+    assert not call.approved(), 'a yes from a superseded turn still counted'
+    book = flow.by_id['book']
+    try:
+        await book.operation.run(call, core.steps._args(book.operation, call))
+    except core.steps.ModelRetry:
+        pass
+    else:
+        raise AssertionError('a superseded yes booked')
     assert backend.calls == 0 and call.state.agent == 'confirm'
 
 
@@ -223,7 +231,7 @@ async def main() -> None:
     await what_the_caller_keeps_cannot_reach_the_state()
     await two_calls_on_one_flow_share_nothing()
     await only_the_delivered_current_proposal_authorises()
-    await a_late_reading_does_not_act()
+    await a_late_approval_does_not_act()
     await a_cut_confirmation_keeps_the_booking_once()
     await a_correction_invalidates_completion_not_the_record()
     await late_work_for_somebody_else_writes_nothing_visible()

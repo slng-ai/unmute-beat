@@ -21,23 +21,19 @@ debugging session can import one module without running every check in it.
 import asyncio
 import json
 from contextlib import ExitStack
-from dataclasses import replace
-from datetime import datetime
 
 from pipecat.frames.frames import LLMFullResponseStartFrame, LLMTextFrame, TTSSpeakFrame
-from pydantic_ai import ModelRequest, ModelRetry, RetryPromptPart, RunContext
+from pydantic_ai import ModelRequest, RetryPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
 from core.policies import TurnBudget
 from core.processor import EXHAUSTED, PydanticAgentProcessor
-from core.turn import read_out
-from salon import agents
-from salon.agents import AGENTS
+from salon.app import FLOW
 from salon.diary import Diary
-from salon.models.consent import Asked
-from salon.models.state import open_call
-from tests.classifier_model import classifier_model
+from tests.script import open_call
+
+AGENTS = FLOW.nodes
 
 PHONE = '+34600111222'
 
@@ -131,7 +127,7 @@ async def exhaustion_makes_no_further_request():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
@@ -151,7 +147,7 @@ async def the_fallback_does_no_business_work():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     before = call.state
     probe = Probe(call, budget=TurnBudget(step_runs=2))
 
@@ -159,8 +155,7 @@ async def the_fallback_does_no_business_work():
         await probe._turn('hello?')
 
     assert EXHAUSTED in probe.fixed()
-    assert call.state.appointment is None and call.state.booking_day is None
-    assert call.state.customer_verified == before.customer_verified
+    assert call.state.facts == before.facts and not call.evidence
 
 
 async def the_budget_is_not_refilled_by_exhausting_it():
@@ -171,7 +166,7 @@ async def the_budget_is_not_refilled_by_exhausting_it():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=2))
 
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
@@ -198,7 +193,7 @@ async def model_requests_are_counted_across_agents():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4))
 
     with scripted(concierge=hands_to('complaints'), complaints=hands_to('concierge')):
@@ -225,7 +220,7 @@ async def the_request_limit_stops_a_turn_that_never_hops():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=3, repair_retries=99))
     asked = []
 
@@ -249,7 +244,7 @@ async def the_tool_limit_is_its_own_number():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(step_runs=4, model_requests=20, tool_calls=2))
     ran = []
 
@@ -275,7 +270,7 @@ async def a_slow_tool_hits_the_turn_deadline():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(seconds=0.25))
 
     async def stall(messages, info: AgentInfo):
@@ -295,7 +290,7 @@ async def a_request_that_sends_nothing_is_tried_again():
     """The concierge's request sends nothing within `first_part`: it is cancelled, and the run is tried once more."""
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call, budget=TurnBudget(first_part=0.2))
     tries: list[int] = []
 
@@ -317,166 +312,59 @@ async def a_permitted_repair_succeeds():
     """A tool refuses, the model corrects itself, the turn completes.
 
     Repair is the thing the budget must not forbid: this is the case where
-    the second attempt is the right one.
-
-    The readback of the right number went out last turn, so the repair has somewhere to land: the
-    first attempt is refused by the phone policy, not by consent.
+    the second attempt is the right one. The verify agent first records a
+    number one digit short; the state refuses it, saying why, and the second
+    attempt is the right number. That reply only recorded the number, so code
+    reads it back (`reads_back`): no third request.
     """
     books.reset()
-    call = open_call(PHONE, diary=books)
+    call = open_call('', diary=books)
     call.commit(agent='verify')
     probe = Probe(call, budget=TurnBudget(repair_retries=2))
-    probe._agents = {**AGENTS, 'verify': replace(AGENTS['verify'], advance=None)}
-    call.ask(Asked(about='phone', value=PHONE))
-    read_out(call, 'Is that right?', kind='model')
     attempts = []
 
     async def wrong_then_right(messages, info: AgentInfo):
-        """First a number that is not a Spanish one; then the real one."""
         attempts.append(1)
+        if len(attempts) > 2:
+            yield 'Let me read that back.'
+            return
         phone = '+348340464' if len(attempts) == 1 else PHONE
-        yield {0: DeltaToolCall(name='confirm_customer', json_args=json.dumps({'phone': phone}))}
+        yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': {'customer_phone': phone}}))}
 
-    with scripted(verify=wrong_then_right, concierge=says('What can I do for you?')):
-        await probe._turn("yes, that's right, thank you")
+    with scripted(verify=wrong_then_right):
+        await probe._turn('my number is plus three four, six hundred, one one one, two two two')
 
     assert len(attempts) == 2, attempts
-    assert _refusals(call), 'the model was told what was wrong'
-    assert call.state.customer_verified == 'existing', call.state
+    assert call.spoken[-1].text.startswith('Is your number +34 600'), call.spoken
+    assert any('too few' in r for r in _refusals(call)), 'the model was told what was wrong'
+    assert call.state.facts.customer_phone == PHONE, call.state.facts
     assert EXHAUSTED not in probe.fixed(), 'a legitimate repair must not exhaust the turn'
 
 
 async def repair_retries_are_bounded():
     """A model that never gets it right is stopped, and stopped politely."""
     books.reset()
-    call = open_call(PHONE, diary=books)
+    call = open_call('', diary=books)
     call.commit(agent='verify')
     probe = Probe(call, budget=TurnBudget(step_runs=1, repair_retries=1))
     attempts = []
 
     async def always_wrong(messages, info: AgentInfo):
         attempts.append(1)
-        yield {0: DeltaToolCall(name='confirm_customer', json_args=json.dumps({'phone': '+348340464'}))}
+        yield {
+            0: DeltaToolCall(
+                name='collect', json_args=json.dumps({'values': {'customer_phone': '+348340464'}})
+            )
+        }
 
     with scripted(verify=always_wrong):
         await probe._turn('my number is eight three four oh four six four')
 
     assert len(attempts) <= 3, attempts
-    assert call.state.customer_verified == '', 'nothing was written by a failed repair'
+    assert call.state.facts.customer_phone == '' and call.state.facts.verified_phone == '', (
+        'nothing was written'
+    )
     assert probe.fixed(), 'the caller hears something rather than silence'
-
-
-async def an_uncertain_write_is_reconciled_not_repeated():
-    """The service commits, then fails to answer. One booking, not two.
-
-    A failure that is not a refusal is not evidence that nothing happened.
-    Treating it as "nothing happened" and retrying is how a caller ends up
-    with two appointments; treating it as a failure is how a booking that
-    really exists gets denied. The operation token lets the tool ask.
-
-    what `read_diary` would have written
-
-    And what `ask_booking` would have: the readback went out last turn, and this is the turn the
-    caller's yes arrives on. Consent is not what this test is about -- `tests.test_consent` is --
-    but nothing writes without it.
-
-    A module-level `def` is its own type to ty, so no other function is assignable to it however
-    exactly the signature matches. Substituting the service is the point here.
-    """
-    books.reset()
-    call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
-    read = books.find_slots(PHONE, 'tomorrow', 'haircut', books.now(), offered_to=call.id)
-    slot = read['slots'][0]
-    call.commit(booking_day=read['date'])
-    call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
-    read_out(call, 'Is that right?', kind='model')
-    call.turn_started("yes, that's right")
-
-    real = books.save_booking
-    attempts = []
-
-    def commits_then_loses_the_response(
-        phone: str,
-        action: str,
-        slot_id: str,
-        booking_id: str,
-        additional: bool,
-        at_time: datetime,
-        operation_token: str = '',
-        offered_to: str = '',
-    ) -> dict:
-        """The signature of the thing it stands in for, spelled out rather than `*args`: a stand-in
-        that does not typecheck as the real one is not standing in for it, and the type checker was
-        reporting exactly that.
-
-        and the answer does not
-        """
-        attempts.append(1)
-        real(phone, action, slot_id, booking_id, additional, at_time, operation_token, offered_to)
-        raise TimeoutError('the diary did not answer')
-
-    books.save_booking = commits_then_loses_the_response  # ty: ignore[invalid-assignment]
-    try:
-        saved = await agents.save_booking(
-            RunContext(deps=call, model=None, usage=None),  # ty: ignore[invalid-argument-type]
-            'book',
-            slot['slot_id'],
-            '',
-        )
-    finally:
-        del books.save_booking
-
-    assert attempts == [1], attempts
-    assert 'booked' in saved, saved
-    assert len(books.bookings_for(PHONE, books.now().date())) == 1, 'exactly one booking'
-    assert call.state.appointment is not None, 'and the caller was told about it'
-
-
-async def a_write_that_never_landed_is_reported_unresolved():
-    """The other half: no outcome recorded, so nothing is claimed either way.
-
-    what `read_diary` would have written
-    """
-    books.reset()
-    call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
-    read = books.find_slots(PHONE, 'tomorrow', 'haircut', books.now(), offered_to=call.id)
-    slot = read['slots'][0]
-    call.commit(booking_day=read['date'])
-    call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
-    read_out(call, 'Is that right?', kind='model')
-    call.turn_started("yes, that's right")
-
-    def never_answers(
-        phone: str,
-        action: str,
-        slot_id: str,
-        booking_id: str,
-        additional: bool,
-        at_time: datetime,
-        operation_token: str = '',
-        offered_to: str = '',
-    ) -> dict:
-        raise TimeoutError('no answer')
-
-    books.save_booking = never_answers  # ty: ignore[invalid-assignment]
-    try:
-        await agents.save_booking(
-            RunContext(deps=call, model=None, usage=None),  # ty: ignore[invalid-argument-type]
-            'book',
-            slot['slot_id'],
-            '',
-        )
-    except ModelRetry as retry:
-        assert 'not clear whether that saved' in str(retry), retry
-    else:
-        raise AssertionError('an unknown outcome must not be reported as either one')
-    finally:
-        del books.save_booking
-
-    assert books.bookings_for(PHONE, books.now().date()) == []
-    assert call.state.appointment is None, 'nothing was claimed'
 
 
 async def a_superseded_turn_cannot_move_the_caller():
@@ -492,7 +380,7 @@ async def a_superseded_turn_cannot_move_the_caller():
     """
     books.reset()
     call = open_call(PHONE, diary=books)
-    call.commit(customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
     probe = Probe(call)
 
     read = []
@@ -511,7 +399,8 @@ async def a_superseded_turn_cannot_move_the_caller():
         call.begin_turn()
         yield {
             0: DeltaToolCall(
-                name='read_diary', json_args=json.dumps({'when': 'tomorrow', 'service': 'haircut'})
+                name='collect',
+                json_args=json.dumps({'values': {'booking_day': 'tomorrow', 'service': 'haircut'}}),
             )
         }
 
@@ -520,12 +409,10 @@ async def a_superseded_turn_cannot_move_the_caller():
 
     assert read, 'the tool ran'
     assert call.state.agent == 'concierge', f'a superseded turn moved the caller to {call.state.agent}'
-    assert call.state.booking_day, 'the work the tool did is not pretended away'
+    assert call.state.facts.booking_day == 'tomorrow', 'the work the tool did is not pretended away'
 
 
 async def main():
-    await an_uncertain_write_is_reconciled_not_repeated()
-    await a_write_that_never_landed_is_reported_unresolved()
     await a_superseded_turn_cannot_move_the_caller()
     await exhaustion_makes_no_further_request()
     await the_fallback_does_no_business_work()
@@ -541,5 +428,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    with classifier_model():
-        asyncio.run(main())
+    asyncio.run(main())

@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-SCENARIOS = HERE / 'scenarios.v1.json'
+SCENARIOS = HERE / 'scenarios.v2.json'
 OUT = ROOT / 'docs' / 'research' / 'reusable-core' / 'session-2'
 
 

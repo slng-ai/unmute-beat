@@ -18,8 +18,15 @@ import asyncio
 from datetime import date, datetime, timedelta
 
 from salon import diary
+from salon.app import FLOW
+from salon.app import open_call as open_on
 from salon.diary import Diary
-from salon.models.state import open_call
+
+
+def open_call(phone: str, diary: Diary):
+    """A call on the salon's compiled flow, sharing this diary."""
+    return open_on(FLOW, phone, diary)
+
 
 AT = datetime(2026, 9, 21, 10, 0, tzinfo=diary.TZ)
 TODAY = AT.date()
@@ -237,8 +244,8 @@ def one_call_does_not_wipe_another():
     second = open_call(BOB, diary=books)
     assert len(books.bookings_for(ALICE, TODAY)) == 1, "A's booking survived B arriving"
     assert books.bookings_for(BOB, TODAY) == []
-    assert second.state.customer_phone == BOB
-    assert second.state.customer_verified == '', 'a new call knows nothing about the last one'
+    assert second.state.facts.customer_phone == BOB
+    assert second.state.facts.verified_phone == '', 'a new call knows nothing about the last one'
 
 
 def two_calls_from_one_phone_are_two_conversations():
@@ -262,19 +269,53 @@ def two_calls_from_one_phone_are_two_conversations():
     """
     books.reset()
     first = open_call(ALICE, diary=books)
-    offered = books.find_slots(ALICE, 'tomorrow', 'haircut', AT, offered_to=first.id)['slots'][0]
-    books.save_booking(ALICE, 'book', offered['slot_id'], '', False, AT, offered_to=first.id)
+    offered = books.find_slots(ALICE, 'tomorrow', 'haircut', AT, offered_to=first.services.call)['slots'][0]
+    books.save_booking(ALICE, 'book', offered['slot_id'], '', False, AT, offered_to=first.services.call)
 
     second = open_call(ALICE, diary=books)
     assert len(books.bookings_for(ALICE, TODAY)) == 1, "the first call's booking is still there"
-    assert second.id != first.id
-    assert books.offer_of(second.id, offered['slot_id'], ALICE) == {}
-    assert books.offer_of(first.id, offered['slot_id'], ALICE) != {}
-    assert second._asked is None and second.state.customer_verified == ''
+    assert second.services.call != first.services.call
+    assert books.offer_of(second.services.call, offered['slot_id'], ALICE) == {}
+    assert books.offer_of(first.services.call, offered['slot_id'], ALICE) != {}
+    assert second._asked is None and second.state.facts.verified_phone == ''
 
     books.set_clock(AT)
     assert len(books.bookings_for(ALICE, TODAY)) == 1, 'a clock is not a reset'
     books.set_clock(None)
+
+
+def calls_with_a_diary_each_share_nothing():
+    """What a load test relies on: `bot.py` with `DIARY_PER_CALL` opens every call on a new `Diary()`.
+
+    Coval rings twenty times at once from one number. A booking and a cancel in
+    one call are invisible to the next, and each call's first booking is BK0001:
+    the id `load_report.py` checks to prove, live, that no two calls shared one.
+    """
+    first_diary, second_diary = Diary(), Diary()
+    first, second = open_call(ALICE, diary=first_diary), open_call(ALICE, diary=second_diary)
+    offered = first_diary.find_slots(ALICE, 'tomorrow', 'haircut', AT, offered_to=first.services.call)[
+        'slots'
+    ][0]
+    booked = first_diary.save_booking(
+        ALICE, 'book', offered['slot_id'], '', False, AT, offered_to=first.services.call
+    )
+    assert booked['booking_id'] == 'BK0001', booked
+    assert (
+        second_diary.bookings_for(ALICE, TODAY) == [] and second_diary.offered_to(second.services.call) == []
+    )
+    first_diary.save_booking(
+        ALICE, 'cancel', '', booked['booking_id'], False, AT, offered_to=first.services.call
+    )
+    again = second_diary.find_slots(ALICE, 'tomorrow', 'haircut', AT, offered_to=second.services.call)[
+        'slots'
+    ][0]
+    theirs = second_diary.save_booking(
+        ALICE, 'book', again['slot_id'], '', False, AT, offered_to=second.services.call
+    )
+    assert theirs['booking_id'] == 'BK0001', 'a diary of its own numbers from the start'
+    assert first_diary.bookings_for(ALICE, TODAY) == [], (
+        "the second call's booking is not in the first's diary"
+    )
 
 
 def the_supported_phrases_resolve():
@@ -649,6 +690,7 @@ async def main():
     an_unknown_outcome_stays_unknown()
     a_refused_write_records_no_outcome()
     one_call_does_not_wipe_another()
+    calls_with_a_diary_each_share_nothing()
     two_calls_from_one_phone_are_two_conversations()
     the_supported_phrases_resolve()
     the_phrases_of_trace_bbe42ad4_resolve()

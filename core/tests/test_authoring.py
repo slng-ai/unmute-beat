@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
@@ -43,32 +43,29 @@ PATTERNS = ('agent.yaml', 'one_agent.yaml', 'handoff.yaml')
 
 
 class Script:
-    """The scripted provider: each agent request takes the next move; each reading returns its label.
+    """The scripted provider: each step agent's request takes the next move. Nothing else may be asked.
 
     A move is `('collect', values)`, `('call', tool, args)` or `('say', words)`.
-    A request with no move left says it did not catch that, as a model would.
+    A request with no move left says it did not catch that, as a model would;
+    at a read-back it answers through `answer`, as the step requires. A
+    non-streamed request would be a separate reading of the reply, which the
+    node-agent core never sends, so it fails the test (P1).
     """
 
     def __init__(self) -> None:
-        self.labels = {'confirmation': 'unclear', 'take_back': 'keep'}
         self.moves: list[tuple[Any, ...]] = []
-        self.readings: list[str] = []
         self.agent_requests = 0
         self.model = FunctionModel(self.reading, stream_function=self.agent)
 
     def reading(self, messages: Any, info: AgentInfo) -> ModelResponse:
-        wanted = info.model_request_parameters.output_object
-        key = (
-            'take_back'
-            if wanted is not None and 'take_back' in json.dumps(wanted.json_schema)
-            else 'confirmation'
-        )
-        self.readings.append(key)
-        return ModelResponse(parts=[TextPart(json.dumps({key: self.labels[key]}))])
+        raise AssertionError('a separate reading was requested; only step agents may run')
 
     async def agent(self, messages: Any, info: AgentInfo):
         self.agent_requests += 1
         if not self.moves:
+            if any(tool.name == 'answer' for tool in info.output_tools):
+                yield {0: DeltaToolCall(name='answer', json_args=json.dumps({'words': 'Sorry?'}))}
+                return
             yield 'Sorry, could you say that again?'
             return
         kind, *rest = self.moves.pop(0)
@@ -202,20 +199,16 @@ async def the_controlled_clinic_books_and_takes_back():
     assert call._offered == {'slot': clinic.TIMES}, call._offered
     reply = await turn(flow, call, script, 'Ten, please.', ('collect', {'slot': '1000'}))
     assert said(reply) == ['Shall I book Tuesday at 10:00 AM for P-1234?'] and backend.calls == 0
-    script.labels['confirmation'] = 'accept'
-    reply = await turn(flow, call, script, 'Yes.')
+    reply = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
     assert said(reply) == ['Booked for Tuesday at 10:00 AM, reference CL001.', 'Anything else?'], said(reply)
     assert backend.bookings == {'CL001': ('P-1234', '1000')} and call.state.facts.reference == 'CL001'
     assert call.state.outcome == 'completed' and [e.operation for e in call.evidence] == ['book']
 
-    readings = len(script.readings)
-    script.labels['take_back'] = 'withdraw'
-    reply = await turn(flow, call, script, 'Actually, cancel it.')
-    assert script.readings[readings:] == ['take_back'], script.readings
+    reply = await turn(flow, call, script, 'Actually, cancel it.', ('call', 'take_back', {}))
     assert said(reply) == ['Shall I cancel booking CL001?'] and backend.bookings, (
         'nothing is undone before a yes'
     )
-    reply = await turn(flow, call, script, 'Yes, cancel it.')
+    reply = await turn(flow, call, script, 'Yes, cancel it.', ('call', 'accept', {}))
     assert said(reply) == ['Booking CL001 is cancelled.', 'Nothing is booked now. Goodbye.'], said(reply)
     assert backend.bookings == {} and call.state.outcome == 'cancelled'
     assert [e.operation for e in call.evidence] == ['book', 'cancel'], 'the booking stays on record'
@@ -234,16 +227,15 @@ async def only_an_offered_time_can_be_picked():
 
 
 async def a_no_or_a_change_books_nothing():
-    for label, question in (('reject', 'I have Tuesday'), ('revise', 'I have Tuesday')):
+    for label, question in (('decline', 'I have Tuesday'), ('change', 'I have Tuesday')):
         script = Script()
         flow, call = opened('agent.yaml', script)
         await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
         await turn(flow, call, script, 'Ten.', ('collect', {'slot': '1000'}))
-        script.labels['confirmation'] = label
-        reply = await turn(flow, call, script, 'No, not that.')
+        reply = await turn(flow, call, script, 'No, not that.', ('call', label, {}))
         assert call.services.calls == 0 and call.state.agent == 'slot', (label, call.state)
         assert said(reply)[-1].startswith(question), (label, said(reply))
-        if label == 'revise':
+        if label == 'change':
             assert call.state.facts.slot is None, 'a revision forgets the answer it revises'
 
 
@@ -255,8 +247,7 @@ async def a_receipt_that_says_no_completes_nothing():
     flow, call = opened('agent.yaml', script, backend)
     await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
     await turn(flow, call, script, 'Ten.', ('collect', {'slot': '1000'}))
-    script.labels['confirmation'] = 'accept'
-    reply = await turn(flow, call, script, 'Yes.')
+    reply = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
     assert said(reply) == ['Nothing was booked. Please call again.'], said(reply)
     assert call.state.facts.reference == '' and call.state.outcome == 'failed'
     [filed] = call.evidence
@@ -271,8 +262,7 @@ async def an_unknown_outcome_is_settled_not_repeated():
     flow, call = opened('agent.yaml', script, backend)
     await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
     await turn(flow, call, script, 'Ten.', ('collect', {'slot': '1000'}))
-    script.labels['confirmation'] = 'accept'
-    reply = await turn(flow, call, script, 'Yes.')
+    reply = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
     assert said(reply) == ['We will check the diary and call you back.'] and call.state.outcome == 'pending'
     assert backend.calls == 1 and not call.evidence and call.state.facts.reference == ''
     book = book_of(flow)
@@ -299,9 +289,9 @@ async def every_pattern_books_once_on_a_heard_yes():
                 handed = ('call', 'hand_over', {'to': 'booking', 'because': 'an appointment'})
                 reply = await turn(flow, call, script, 'P-1234, Tuesday at ten.', handed, *fill, heard=heard)
             assert said(reply)[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', (manifest, said(reply))
-            script.labels['confirmation'] = 'accept'
             requests = script.agent_requests
-            reply = await turn(flow, call, script, 'Yes.')
+            yes = ('call', 'accept' if manifest == 'agent.yaml' else 'book', {})
+            reply = await turn(flow, call, script, 'Yes.', yes)
             booked = call.services.bookings
             if not heard:
                 assert booked == {}, (manifest, 'a yes to a read-back nobody heard booked')
@@ -311,7 +301,10 @@ async def every_pattern_books_once_on_a_heard_yes():
                 manifest,
                 said(reply),
             )
-            assert script.agent_requests == requests, (manifest, 'the heard yes is carried out by code')
+            assert script.agent_requests == requests + 1, (
+                manifest,
+                'the yes is the step agent reading it, once',
+            )
 
 
 async def the_model_path_refuses_what_the_direct_path_refuses():
@@ -329,8 +322,9 @@ async def the_model_path_refuses_what_the_direct_path_refuses():
         setattr(backend, trouble, True)
         flow, call = opened('one_agent.yaml', script, backend)
         await turn(flow, call, script, 'P-1234, ten.', *fill)
-        script.labels['confirmation'] = 'accept'
-        reply = await turn(flow, call, script, 'Yes.', ('say', 'Let me see what happened there.'))
+        reply = await turn(
+            flow, call, script, 'Yes.', ('call', 'book', {}), ('say', 'Let me see what happened there.')
+        )
         words = ' '.join(said(reply))
         assert 'Booked for' not in words and call.state.facts.reference == '', (trouble, words)
         if trouble == 'failing':
@@ -340,10 +334,11 @@ async def the_model_path_refuses_what_the_direct_path_refuses():
 
 
 async def ordinary_conversation_reads_nothing():
+    """One question, one request: the step's own agent. (`Script.reading` fails any other kind.)"""
     script = Script()
     flow, call = opened('one_agent.yaml', script)
     reply = await turn(flow, call, script, 'When are you open?', ('say', 'Weekdays, nine to five.'))
-    assert said(reply) == ['Weekdays, nine to five.'] and script.readings == [], script.readings
+    assert said(reply) == ['Weekdays, nine to five.'] and script.agent_requests == 1, script.agent_requests
 
 
 def the_manifest_reaches_the_session():

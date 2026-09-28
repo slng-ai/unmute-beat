@@ -10,7 +10,6 @@ from pydantic_ai import Agent, RunContext, TemplateStr, Tool, ToolOutput
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
-    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -150,13 +149,15 @@ async def resets():
     assert len(call.transcript()) == 6
 
 
-async def returns(unserved=False, shares=False):
-    """A prerequisite returns an application status and saved owner context, not its conversation.
+async def returns(unserved=False):
+    """A prerequisite hands back into one shared conversation, with an application status.
 
-    Unless it declares `shares_detour` and completes: then the caller's own words from the
-    detour reach the owner, and still nothing the prerequisite itself said. A given-up detour's
-    last words go on as the caller's prompt; `given_up_detours_keep_the_callers_words` covers
-    the words before them.
+    Session 4: the step that waited is no longer given back its history from
+    before the detour. It sees what everyone said since, the prerequisite's
+    question and the caller's answer included, so a correction made during
+    the detour is not lost (T3.v2 lost the requested time this way). The
+    original request is in it once, and the status says how the detour ended.
+    A given-up detour's last words go on as the caller's prompt.
     """
     seen = []
 
@@ -176,7 +177,7 @@ async def returns(unserved=False, shares=False):
             yield 'Owner answer.'
 
     async def child(messages, info):
-        if 'child-secret' not in text(messages):
+        if 'child-secret' not in text(messages) and 'Forget' not in text(messages):
             yield 'Confirm child-secret?'
         else:
             yield {0: DeltaToolCall(name='finish', json_args='{}')}
@@ -197,88 +198,22 @@ async def returns(unserved=False, shares=False):
                 deps_type=Call,
                 output_type=[str, ToolOutput(finish, name='finish')],
             ),
-            shares_detour=shares,
         ),
     }
     call = Call(state=State())
     await take_turn(call, nodes, 'Original errand.')
     assert call._checkpoint is not None and call.state.agent == 'child', (call.state, call.messages)
-    await take_turn(call, nodes, 'Forget the errand.' if unserved else 'Yes child-secret.')
+    await take_turn(call, nodes, 'Forget the errand.' if unserved else 'Yes child-secret, and make it ten.')
     messages, instructions = seen[1]
     assert text(messages).count('Original errand.') == 1
-    assert 'Confirm child-secret?' not in text(messages), "the prerequisite's own words leaked"
-    shared = shares and not unserved
-    assert ('"Yes child-secret."' in instructions) == shared, instructions
-    notes = [p.content for m in call.messages for p in m.parts if isinstance(p, SystemPromptPart)]
-    assert any('Yes child-secret.' in n for n in notes) == shared, notes
-    if not shared:
-        assert 'child-secret' not in text(messages)
+    assert 'Confirm child-secret?' in text(messages), 'the detour is part of the one conversation'
+    if not unserved:
+        assert 'make it ten' in text(messages), 'a correction made during the detour reached the owner'
     assert ('unserved' if unserved else 'completed') in instructions
     assert ('Forget the errand.' in text(messages)) == unserved
     assert call._checkpoint is None and call.state.pending is None
-    assert 'child-secret' in str(call.transcript()) and 'child-secret' in str(call._protocol)
     await take_turn(call, nodes, 'Unrelated question.')
     assert not call._return_status and call._checkpoint is None
-
-
-async def given_up_detours_keep_the_callers_words(shares: bool):
-    """Coval run ad3n4Vxn, K3: the caller gave a number to a check that was then given up.
-
-    The history from before the detour came back, and with it the number was
-    gone: when the check began again it asked for the number from scratch. A
-    step that shares its detour now keeps the caller's words however it ends;
-    the prerequisite's own speech still stays out.
-    """
-    seen = []
-
-    async def delegate() -> Handoff:
-        return Handoff(to='owner')
-
-    async def give_up(ctx: RunContext[Call]) -> Handoff:
-        return Handoff(to='owner', status='unserved')
-
-    async def owner(messages, info):
-        seen.append((deepcopy(messages), info.instructions))
-        if len(seen) == 1:
-            yield {0: DeltaToolCall(name='delegate', json_args='{}')}
-        else:
-            yield 'Owner answer.'
-
-    async def child(messages, info):
-        if 'forget it' not in text(messages):
-            yield 'Confirm child-secret?'
-        else:
-            yield {0: DeltaToolCall(name='give_up', json_args='{}')}
-
-    nodes = {
-        'owner': Node(
-            Agent[Call, object](
-                FunctionModel(stream_function=owner),
-                deps_type=Call,
-                output_type=[str, ToolOutput(delegate, name='delegate')],
-            ),
-            requires=('verified',),
-            satisfied_by='child',
-        ),
-        'child': Node(
-            Agent[Call, object](
-                FunctionModel(stream_function=child),
-                deps_type=Call,
-                output_type=[str, ToolOutput(give_up, name='give_up')],
-            ),
-            shares_detour=shares,
-        ),
-    }
-    call = Call(state=State())
-    await take_turn(call, nodes, 'Original errand.')
-    await take_turn(call, nodes, 'My code is child-secret.')
-    await take_turn(call, nodes, 'Actually, forget it.')
-    messages, instructions = seen[1]
-    assert 'unserved' in instructions and 'Actually, forget it.' in text(messages)
-    assert ('"My code is child-secret."' in instructions) == shares, instructions
-    notes = [p.content for m in call.messages for p in m.parts if isinstance(p, SystemPromptPart)]
-    assert any('My code is child-secret.' in n for n in notes) == shares, notes
-    assert 'Confirm child-secret?' not in text(messages), "the prerequisite's own words leaked"
 
 
 async def cancellation_keeps_receipts():
@@ -428,10 +363,6 @@ async def main():
     await resets()
     await returns()
     await returns(unserved=True)
-    await returns(shares=True)
-    await returns(unserved=True, shares=True)
-    await given_up_detours_keep_the_callers_words(shares=True)
-    await given_up_detours_keep_the_callers_words(shares=False)
     await cancellation_keeps_receipts()
     for native in (True, False):
         for streaming in (False, True):

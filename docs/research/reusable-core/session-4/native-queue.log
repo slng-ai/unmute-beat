@@ -1,0 +1,416 @@
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n01
+launched run jszHHpQY6pyjBAq28RwTRp (session-4-native-n01 salon-pipecat-flows kQ8b6nMZ 7bf45775)
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.0 2.1 1.8
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.1 2.1 1.8
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.7 2.3 1.8
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.4 2.3 1.9
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.0 2.2 1.8
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 1.8 2.1 1.8
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.6 2.3 1.9
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.2 2.2 1.9
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.2 2.2 1.9
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.4 2.2 1.9
+run jszHHpQY6pyjBAq28RwTRp IN PROGRESS, load average 2.2 2.2 1.9
+run jszHHpQY6pyjBAq28RwTRp COMPLETED, load average 1.9 2.1 1.9
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run jszHHpQY6pyjBAq28RwTRp
+== session-4-native-n01 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n02
+launched run 4LvLqjiFdys9fkWtdRWGmR (session-4-native-n02 salon-pipecat-flows kQ8b6nMZ dcb23535)
+run 4LvLqjiFdys9fkWtdRWGmR IN PROGRESS, load average 2.1 2.2 1.9
+run 4LvLqjiFdys9fkWtdRWGmR IN PROGRESS, load average 1.9 2.1 1.9
+run 4LvLqjiFdys9fkWtdRWGmR IN PROGRESS, load average 1.9 2.1 1.9
+run 4LvLqjiFdys9fkWtdRWGmR IN PROGRESS, load average 1.7 2.0 1.9
+run 4LvLqjiFdys9fkWtdRWGmR IN PROGRESS, load average 1.9 2.0 1.9
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run 4LvLqjiFdys9fkWtdRWGmR
+== session-4-native-n02 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n03
+launched run T99A9kjoYAxxZZjHnS5zRw (session-4-native-n03 salon-pipecat-flows kQ8b6nMZ 35428b9c)
+run T99A9kjoYAxxZZjHnS5zRw IN PROGRESS, load average 1.9 2.0 1.9
+run T99A9kjoYAxxZZjHnS5zRw IN PROGRESS, load average 2.2 2.1 1.9
+run T99A9kjoYAxxZZjHnS5zRw IN PROGRESS, load average 2.3 2.1 2.0
+run T99A9kjoYAxxZZjHnS5zRw IN PROGRESS, load average 1.9 2.0 1.9
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run T99A9kjoYAxxZZjHnS5zRw
+== session-4-native-n03 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n04
+launched run 8c3YGp486kENs3UN89xdYM (session-4-native-n04 salon-pipecat-flows kQ8b6nMZ 8afbd4f1)
+run 8c3YGp486kENs3UN89xdYM IN PROGRESS, load average 1.8 2.0 1.9
+run 8c3YGp486kENs3UN89xdYM IN PROGRESS, load average 1.9 2.0 1.9
+run 8c3YGp486kENs3UN89xdYM IN PROGRESS, load average 1.7 1.9 1.9
+run 8c3YGp486kENs3UN89xdYM COMPLETED, load average 2.1 2.0 1.9
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run 8c3YGp486kENs3UN89xdYM
+== session-4-native-n04 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n05
+launched run RcuWnFupPPPNpn47QNLskr (session-4-native-n05 salon-pipecat-flows kQ8b6nMZ 3282f080)
+run RcuWnFupPPPNpn47QNLskr IN PROGRESS, load average 2.0 2.0 1.9
+run RcuWnFupPPPNpn47QNLskr IN PROGRESS, load average 2.2 2.0 1.9
+run RcuWnFupPPPNpn47QNLskr IN PROGRESS, load average 2.5 2.1 2.0
+run RcuWnFupPPPNpn47QNLskr IN PROGRESS, load average 2.5 2.2 2.0
+run RcuWnFupPPPNpn47QNLskr IN PROGRESS, load average 2.6 2.2 2.0
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run RcuWnFupPPPNpn47QNLskr
+== session-4-native-n05 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n06
+launched run am3AhJfS6i86othDEMKyPa (session-4-native-n06 salon-pipecat-flows kQ8b6nMZ abacf474)
+run am3AhJfS6i86othDEMKyPa IN PROGRESS, load average 2.0 2.1 2.0
+run am3AhJfS6i86othDEMKyPa IN PROGRESS, load average 1.9 2.1 2.0
+run am3AhJfS6i86othDEMKyPa IN PROGRESS, load average 1.9 2.1 2.0
+run am3AhJfS6i86othDEMKyPa IN PROGRESS, load average 1.7 2.0 2.0
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run am3AhJfS6i86othDEMKyPa
+== session-4-native-n06 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n07
+launched run 6xen23d27sUXrwKn7GBB2Z (session-4-native-n07 salon-pipecat-flows kQ8b6nMZ affcc588)
+run 6xen23d27sUXrwKn7GBB2Z IN PROGRESS, load average 1.9 2.0 2.0
+run 6xen23d27sUXrwKn7GBB2Z IN PROGRESS, load average 2.1 2.0 2.0
+run 6xen23d27sUXrwKn7GBB2Z IN PROGRESS, load average 2.3 2.1 2.0
+run 6xen23d27sUXrwKn7GBB2Z COMPLETED, load average 2.4 2.1 2.0
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run 6xen23d27sUXrwKn7GBB2Z
+== session-4-native-n07 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n08
+launched run E5waefF7jAy8NseVBUiSov (session-4-native-n08 salon-pipecat-flows kQ8b6nMZ 8fec14dd)
+run E5waefF7jAy8NseVBUiSov IN PROGRESS, load average 2.4 2.2 2.0
+run E5waefF7jAy8NseVBUiSov IN PROGRESS, load average 2.9 2.3 2.1
+run E5waefF7jAy8NseVBUiSov IN PROGRESS, load average 2.5 2.3 2.1
+run E5waefF7jAy8NseVBUiSov COMPLETED, load average 3.5 2.5 2.2
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run E5waefF7jAy8NseVBUiSov
+== session-4-native-n08 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n09
+launched run WYg8wacMn4DYtt9aPKE4co (session-4-native-n09 salon-pipecat-flows kQ8b6nMZ 9354b3c3)
+run WYg8wacMn4DYtt9aPKE4co IN PROGRESS, load average 4.6 3.0 2.4
+run WYg8wacMn4DYtt9aPKE4co IN PROGRESS, load average 3.5 2.9 2.4
+run WYg8wacMn4DYtt9aPKE4co IN PROGRESS, load average 2.9 2.8 2.4
+run WYg8wacMn4DYtt9aPKE4co IN PROGRESS, load average 2.6 2.8 2.4
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run WYg8wacMn4DYtt9aPKE4co
+== session-4-native-n09 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     kQ8b6nMZ: 1 case(s) M5Z8LjVyQZPuhSubmt26w7
+persona      MUFJdYAHdBHU6UbRRu4ykM Standard Customer
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-n10
+launched run GQwAWwwDqVmLnQbKyDBRVi (session-4-native-n10 salon-pipecat-flows kQ8b6nMZ 6c8cc108)
+run GQwAWwwDqVmLnQbKyDBRVi IN PROGRESS, load average 2.3 2.6 2.3
+run GQwAWwwDqVmLnQbKyDBRVi IN PROGRESS, load average 2.3 2.6 2.3
+run GQwAWwwDqVmLnQbKyDBRVi IN PROGRESS, load average 2.1 2.5 2.3
+run GQwAWwwDqVmLnQbKyDBRVi COMPLETED, load average 2.3 2.5 2.3
+ok    salon-pipecat-flows  test set kQ8b6nMZ  run GQwAWwwDqVmLnQbKyDBRVi
+== session-4-native-n10 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s01
+launched run mM5ma5y6VBhhUxJJnW2Mob (session-4-native-s01 salon-pipecat-flows K3Xwqi7g 25881d8a)
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.1 2.5 2.3
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.6 2.5 2.3
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.7 2.6 2.4
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.5 2.5 2.3
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.6 2.5 2.4
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.3 2.5 2.3
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.9 2.6 2.4
+run mM5ma5y6VBhhUxJJnW2Mob IN PROGRESS, load average 2.9 2.6 2.4
+ok    salon-pipecat-flows  test set K3Xwqi7g  run mM5ma5y6VBhhUxJJnW2Mob
+== session-4-native-s01 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s02
+launched run dK9ZvemKN2hQyRSWqKtgTL (session-4-native-s02 salon-pipecat-flows K3Xwqi7g 79a7926c)
+run dK9ZvemKN2hQyRSWqKtgTL IN QUEUE, load average 1.7 2.3 2.3
+run dK9ZvemKN2hQyRSWqKtgTL IN PROGRESS, load average 1.5 2.2 2.3
+run dK9ZvemKN2hQyRSWqKtgTL IN PROGRESS, load average 1.7 2.2 2.3
+run dK9ZvemKN2hQyRSWqKtgTL IN PROGRESS, load average 2.7 2.4 2.3
+run dK9ZvemKN2hQyRSWqKtgTL IN PROGRESS, load average 3.8 2.6 2.4
+run dK9ZvemKN2hQyRSWqKtgTL IN PROGRESS, load average 3.2 2.6 2.4
+run dK9ZvemKN2hQyRSWqKtgTL IN PROGRESS, load average 2.2 2.4 2.3
+run dK9ZvemKN2hQyRSWqKtgTL IN PROGRESS, load average 1.6 2.2 2.3
+ok    salon-pipecat-flows  test set K3Xwqi7g  run dK9ZvemKN2hQyRSWqKtgTL
+== session-4-native-s02 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s03
+launched run 5YWfZDoPQihTXbfiY3wJWs (session-4-native-s03 salon-pipecat-flows K3Xwqi7g 98b10ffe)
+run 5YWfZDoPQihTXbfiY3wJWs IN QUEUE, load average 1.3 2.0 2.2
+run 5YWfZDoPQihTXbfiY3wJWs IN QUEUE, load average 1.5 2.0 2.2
+run 5YWfZDoPQihTXbfiY3wJWs IN QUEUE, load average 1.2 1.9 2.1
+run 5YWfZDoPQihTXbfiY3wJWs IN PROGRESS, load average 1.1 1.8 2.1
+run 5YWfZDoPQihTXbfiY3wJWs IN PROGRESS, load average 1.9 1.9 2.1
+run 5YWfZDoPQihTXbfiY3wJWs IN PROGRESS, load average 1.6 1.8 2.1
+run 5YWfZDoPQihTXbfiY3wJWs IN PROGRESS, load average 3.3 2.2 2.2
+run 5YWfZDoPQihTXbfiY3wJWs IN PROGRESS, load average 2.6 2.1 2.2
+run 5YWfZDoPQihTXbfiY3wJWs IN PROGRESS, load average 2.5 2.1 2.2
+run 5YWfZDoPQihTXbfiY3wJWs IN PROGRESS, load average 2.0 2.1 2.1
+ok    salon-pipecat-flows  test set K3Xwqi7g  run 5YWfZDoPQihTXbfiY3wJWs
+== session-4-native-s03 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s04
+launched run TKGEkWhA6Gzn9bbkFisjEn (session-4-native-s04 salon-pipecat-flows K3Xwqi7g 215c3b43)
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 1.2 1.8 2.0
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 1.6 1.8 2.0
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 2.1 1.9 2.0
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 1.5 1.8 2.0
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 1.3 1.7 2.0
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 2.3 1.9 2.0
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 1.6 1.8 2.0
+run TKGEkWhA6Gzn9bbkFisjEn IN PROGRESS, load average 1.5 1.8 2.0
+ok    salon-pipecat-flows  test set K3Xwqi7g  run TKGEkWhA6Gzn9bbkFisjEn
+== session-4-native-s04 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s05
+launched run AXhNRqczNbVktbX9k5xvZa (session-4-native-s05 salon-pipecat-flows K3Xwqi7g 01283605)
+run AXhNRqczNbVktbX9k5xvZa IN PROGRESS, load average 1.2 1.6 1.9
+run AXhNRqczNbVktbX9k5xvZa IN PROGRESS, load average 1.6 1.7 1.9
+run AXhNRqczNbVktbX9k5xvZa IN PROGRESS, load average 1.5 1.6 1.9
+run AXhNRqczNbVktbX9k5xvZa IN PROGRESS, load average 1.3 1.6 1.8
+run AXhNRqczNbVktbX9k5xvZa IN PROGRESS, load average 1.3 1.5 1.8
+ok    salon-pipecat-flows  test set K3Xwqi7g  run AXhNRqczNbVktbX9k5xvZa
+== session-4-native-s05 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s06
+launched run 2NZdaNpZX4Dys5rEZyAtmR (session-4-native-s06 salon-pipecat-flows K3Xwqi7g a76e8b8e)
+run 2NZdaNpZX4Dys5rEZyAtmR IN PROGRESS, load average 1.3 1.5 1.8
+run 2NZdaNpZX4Dys5rEZyAtmR IN PROGRESS, load average 1.1 1.4 1.7
+run 2NZdaNpZX4Dys5rEZyAtmR IN PROGRESS, load average 1.1 1.4 1.7
+run 2NZdaNpZX4Dys5rEZyAtmR IN PROGRESS, load average 1.3 1.4 1.7
+run 2NZdaNpZX4Dys5rEZyAtmR IN PROGRESS, load average 1.1 1.3 1.7
+run 2NZdaNpZX4Dys5rEZyAtmR IN PROGRESS, load average 1.2 1.3 1.7
+ok    salon-pipecat-flows  test set K3Xwqi7g  run 2NZdaNpZX4Dys5rEZyAtmR
+== session-4-native-s06 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s07
+launched run f2dSbb3u3AAE442vkoq5yk (session-4-native-s07 salon-pipecat-flows K3Xwqi7g 94aafd29)
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.4 1.3 1.6
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.2 1.3 1.6
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.5 1.3 1.6
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.4 1.3 1.6
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.1 1.3 1.5
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.0 1.2 1.5
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.7 1.4 1.6
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.6 1.4 1.6
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.3 1.4 1.5
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.5 1.4 1.6
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.3 1.4 1.5
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.1 1.3 1.5
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 0.9 1.2 1.5
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.0 1.2 1.5
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.0 1.2 1.4
+run f2dSbb3u3AAE442vkoq5yk IN PROGRESS, load average 1.0 1.2 1.4
+run f2dSbb3u3AAE442vkoq5yk COMPLETED, load average 0.9 1.1 1.4
+ok    salon-pipecat-flows  test set K3Xwqi7g  run f2dSbb3u3AAE442vkoq5yk
+== session-4-native-s07 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s08
+launched run GwX9FkFXZRHqv9D3irjFaA (session-4-native-s08 salon-pipecat-flows K3Xwqi7g 9750c3bf)
+run GwX9FkFXZRHqv9D3irjFaA IN PROGRESS, load average 0.9 1.1 1.4
+ok    salon-pipecat-flows  test set K3Xwqi7g  run GwX9FkFXZRHqv9D3irjFaA
+== session-4-native-s08 exit 0
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s09
+FAIL  salon-pipecat-flows  test set K3Xwqi7g  run -
+      cloudflared on port 7870 exited; see /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-x0o7wx9g/tunnel-7870.log
+      log: /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-x0o7wx9g/salon-pipecat-flows-bot.log
+== session-4-native-s09 exit 1
+agency       salon-pipecat-flows (use-cases/salon-pipecat-flows)
+agent        cCQwmuCdjz6twETL6Vj933 voice-harness-salon-pipecat-flows-pipecat
+test set     K3Xwqi7g: 1 case(s) GRdmreeb7SP4G8yegtMntC
+persona      VSruLZYYyz3w7fkdUaheDR Interruptive Speaker
+metrics      7VHk6dTjvBcuV6XYPmaeGq
+iterations   1
+mutations    none
+simulations  1 = 1 case(s) x 1 iteration(s) x 1
+call limit   300s each, enforced by this runner: the bot has none, and is stopped 308s after the call connects
+speech       stt deepgram/nova:3, tts slng/fish/tts:s2.1-pro, host eu-west.api.slng.ai
+concurrency  1
+label        session-4-native-s10
+FAIL  salon-pipecat-flows  test set K3Xwqi7g  run -
+      cloudflared on port 7870 exited; see /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-5v8yh8k2/tunnel-7870.log
+      log: /var/folders/8x/r4wk8v4x1z90dvwlxfs_7s300000gn/T/coval-sim-5v8yh8k2/salon-pipecat-flows-bot.log
+== session-4-native-s10 exit 1
+== queue done

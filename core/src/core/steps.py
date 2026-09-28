@@ -27,6 +27,8 @@ the eligibility check are asked for and run again.
 from __future__ import annotations
 
 import inspect
+import json
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import deepcopy
@@ -34,28 +36,24 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Annotated, Any, ClassVar, Literal
 
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, create_model
 from pydantic.fields import FieldInfo
 from pydantic_ai import Agent, ModelRetry, RunContext, Tool, ToolOutput
 from pydantic_ai.agent.spec import AgentSpec
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.messages import ModelMessage, ModelRequest, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.classifiers import Classifier, output_model
 from core.completion import FieldsPresent, ReceiptMatched
-from core.decisions import Accept, Clarify, Conditional, NoDecision, Reject, Revise
-from core.desk import Desk
-from core.graph import Exit, LocalAction, Node, Opening, lent
-from core.interpreters import Interpreter
+from core.graph import Exit, LocalAction, Node, Opening, holds
 from core.locale import Locale
 from core.operations import Operation, OutcomeUnknownError, operation_token
 from core.policies import claim_or_refuse, one_action_per_reply, request_clock, speak_by
 from core.proposals import BaseProposal, Proposal
-from core.readings import CONFIRM, TAKE_BACK, ReadBackInput, TakeBackInput
 from core.state import CallContext, Handoff, VoiceState, present
 
 
@@ -90,11 +88,23 @@ class FlowCall[S: BaseModel](CallContext):
     _identity_field: str = PrivateAttr(default='')
     _collectible: frozenset[str] = PrivateAttr(default=frozenset())
     _services: Any = PrivateAttr(default=None)
-    _unknown: set[str] = PrivateAttr(default_factory=set)
-    """Operation tokens whose outcome the service left unknown: settled before any retry (`FunctionOperation`)."""
+    _unknown: dict[str, tuple[Any, BaseModel]] = PrivateAttr(default_factory=dict)
+    """Attempts whose outcome the service left unknown, by operation token, with their operation and arguments.
+
+    Settled before anything else: at the start of the next turn, by code
+    (`settlement`), and again before any retry (`FunctionOperation._before`).
+    """
     _offered: dict[str, dict[str, str]] = PrivateAttr(default_factory=dict)
     """For each choice field, the ids offered to this caller and how each was said. Only these can be picked."""
     _locale: Locale | None = PrivateAttr(default=None)
+    _version: int = PrivateAttr(default=0)
+    """Bumped by every accepted change to the application state: work begun on an older version is stale."""
+    _derived: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
+    """State fields a receipt sets (`assign`), each with the state fields its operation's arguments came from."""
+    _choices: frozenset[str] = PrivateAttr(default=frozenset())
+    """State fields picked from offered ids (`choices`): valid only while the request they were offered for stands."""
+    _recorded: frozenset[str] = PrivateAttr(default=frozenset())
+    """The fields the latest `collect` recorded: what a step's `reads_back` rule is keyed on."""
 
     @property
     def locale(self) -> Locale:
@@ -126,6 +136,53 @@ class FlowCall[S: BaseModel](CallContext):
             raise ValueError(f'no such field on {type(facts).__name__}: {", ".join(sorted(unknown))}')
         candidate = type(facts).model_validate(facts.model_dump() | deepcopy(fields), extra='forbid')
         self.commit(facts=candidate)
+        if self.state.facts is not facts:
+            self._version += 1
+
+    def wrote_this_turn(self) -> bool:
+        """Whether a business action filed a validated receipt in this caller turn. Evidence, never a flag."""
+        return any(filed.turn == self.turn for filed in self.evidence)
+
+    def claims_completion(self, clause: str) -> bool:
+        """Whether this clause tells the caller a business action is done (`Locale.claims`).
+
+        Asked of model speech on a step that can write, before it is said.
+        Always yes for such a clause, receipt or no receipt: what was done is
+        said by the receipt, in words code rendered from it.
+        """
+        return any(re.search(pattern, clause, re.IGNORECASE) for pattern in self.locale.claims)
+
+    def unbacked_claim(self) -> str:
+        """Model speech this turn claiming a completed action when this turn completed none. '' when clean."""
+        if self.wrote_this_turn():
+            return ''
+        for segment in self.spoken:
+            if segment.kind == 'model':
+                for pattern in self.locale.claims:
+                    if hit := re.search(pattern, segment.text, re.IGNORECASE):
+                        return hit.group(0)
+        return ''
+
+    def settlement(self) -> Callable[[], Awaitable[object]] | None:
+        """What settles an attempt whose outcome was left unknown, before any model runs this turn, or None.
+
+        Each such attempt is looked up by its own operation's `reconcile`,
+        with the same arguments and caller, so the same token is asked about.
+        Found: the receipt is filed and said, exactly as if the first answer
+        had arrived. Not found: the attempt is forgotten, so a fresh read-back
+        and yes may try again. No model is asked what happened.
+        """
+        pending = [(operation, args) for operation, args in self._unknown.values() if operation.reconcile]
+        if not pending:
+            return None
+
+        async def settle() -> object:
+            found = None
+            for operation, args in pending:
+                found = await operation._before(self, args) or found
+            return found
+
+        return settle
 
     def collect(self, **fields: Any) -> None:
         """What the caller said, as a model heard it: only fields a collect step asks for.
@@ -133,10 +190,35 @@ class FlowCall[S: BaseModel](CallContext):
         Anything else (verification, approval, a receipt) is refused before it
         is looked at, whatever shape it has: a well-formed "verified" value
         from a model is still the model's word.
+
+        A change takes what rested on the old value with it, in the same
+        candidate: a fact a receipt set from these arguments (a corrected phone
+        number is no longer the verified one), and every offer together with
+        every pick made from one, unless the change is only a pick among the
+        offered ids or the caller's identity. "Actually, make it Saturday"
+        leaves no Friday slot behind for an old yes to book.
+
+        ponytail: offers and picks are taken to rest on every other field,
+        which is right for a request (day, time, service) and too eager for a
+        field no offer reads. A per-choice `after:` list is the upgrade if a
+        flow needs it.
         """
         if refused := set(fields) - self._collectible:
             raise ValueError(f'not collected from the caller: {", ".join(sorted(refused))}')
-        self.update(**fields)
+        facts = self.state.facts
+        default = lambda name: type(facts).model_fields[name].get_default(call_default_factory=True)  # noqa: E731
+        changed = {name for name, value in fields.items() if getattr(facts, name) != value}
+        request_changed = bool(changed - self._choices - {self._identity_field})
+        picks = {name: default(name) for name in self._choices - set(fields)} if request_changed else {}
+        changed |= {name for name, value in picks.items() if getattr(facts, name) != value}
+        resets = {
+            name: default(name)
+            for name, sources in self._derived.items()
+            if sources & changed and name not in fields
+        }
+        self.update(**fields, **picks, **resets)
+        if request_changed:
+            self._offered = {}
 
 
 @dataclass(frozen=True)
@@ -152,81 +234,17 @@ class Prompted:
         return self.spoken
 
 
-class ConfirmReading(BaseModel):
-    """The reply to a readback, as one decision."""
-
-    model_config = ConfigDict(extra='forbid', frozen=True)
-    decision: Accept | Reject | Revise | Conditional | Clarify | NoDecision = Field(discriminator='kind')
-
-
-CONFIRMATION = output_model('ConfirmationReading', {'confirmation': CONFIRM})
-"""What the model is asked for: core's `CONFIRM` classes, the same request a business's `confirmation` reading sends.
-
-One shape and one set of descriptions for every read-back in every flow, so
-the `harness-reading/confirm` dataset measures this step as well as the
-salon's (`evals.readings`), and tuning one tunes both.
-"""
-
-DECISIONS: dict[str, type[Accept | Reject | Revise | Conditional | NoDecision]] = {
-    'accept': Accept,
-    'reject': Reject,
-    'revise': Revise,
-    'conditional': Conditional,
-    'unclear': NoDecision,
-}
-"""Each class as the decision the step acts on. `unclear` lets the step's model answer, as a question needs."""
-
-
-class ConfirmInterpreter(Interpreter[FlowCall[Any], ReadBackInput, ConfirmReading]):
-    """Reads a reply to the last readback with the `CONFIRM` classes. A readback spoken over is never accepted."""
-
-    def __init__(self, name: str, classifier: Classifier[ReadBackInput, Any]) -> None:
-        super().__init__(name, ConfirmReading(decision=NoDecision()))
-        self.classifier = classifier
-
-    def _input(self, call: FlowCall[Any]) -> ReadBackInput:
-        last = call.last_proposal()
-        return ReadBackInput(
-            question=call.said_last_turn(), answer=call.heard, proposal=last[0].spoken if last else ''
-        )
-
-    def _still_valid(self, call: FlowCall[Any], value: ReadBackInput) -> bool:
-        last = call.last_proposal()
-        return value.answer == call.heard and value.proposal == (last[0].spoken if last else '')
-
-    async def _decide(
-        self, value: ReadBackInput, *, usage: RunUsage | None, usage_limits: UsageLimits | None
-    ) -> ConfirmReading:
-        result = await self.classifier.classify(value, usage=usage, usage_limits=usage_limits)
-        return ConfirmReading(decision=DECISIONS[result.confirmation]())
-
-    def _settle(self, call: FlowCall[Any], value: ReadBackInput, result: ConfirmReading) -> ConfirmReading:
-        last = call.last_proposal()
-        if not (last and last[1]) and isinstance(result.decision, Accept):
-            return ConfirmReading(decision=NoDecision())
-        return result
-
-
-def confirm_interpreter(
-    model: Model | str,
-    settings: ModelSettings | None = None,
-    context: str = 'The person was read back a proposal and is waiting to confirm it.',
-) -> ConfirmInterpreter:
-    """The default reader of confirmations: one structured request, no tools, no history."""
-    classifier = Classifier(model, ReadBackInput, CONFIRMATION, context=context, model_settings=settings)
-    return ConfirmInterpreter('confirm', classifier)
-
-
 class ConfirmedOperation[ArgsT: BaseModel, ReceiptT: BaseModel](
     Operation[FlowCall[Any], ArgsT, ReceiptT, ReceiptT]
 ):
-    """An operation authorised by the flow's confirmation: the default readback check, and the interpreter's yes.
+    """An operation authorised by a heard read-back and the active step's yes to it.
 
-    `_record` returns the receipt, which the `ActionStep` files.
+    The yes is the step's own agent's: it reads the caller's reply in the
+    whole conversation and, for a yes, calls the step's accept output, which
+    binds it to the pending question (`CallContext.approve`). Nothing here
+    asks a second model what the reply meant. `_record` returns the receipt,
+    which the `ActionStep` files.
     """
-
-    def __init__(self, interpreter: Interpreter[FlowCall[Any], Any, ConfirmReading]) -> None:
-        self.interpreter = interpreter
 
     async def _agreed(
         self,
@@ -236,8 +254,7 @@ class ConfirmedOperation[ArgsT: BaseModel, ReceiptT: BaseModel](
         usage: RunUsage | None,
         usage_limits: UsageLimits | None,
     ) -> bool:
-        reading = await self.interpreter.interpret(call, usage=usage, usage_limits=usage_limits)
-        return isinstance(reading.decision, Accept)
+        return call.approved()
 
     async def _record(self, call: FlowCall[Any], args: ArgsT, receipt: ReceiptT) -> ReceiptT:
         return receipt
@@ -264,7 +281,9 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
     nothing, says nothing and completes nothing. An outcome the function
     reports unknown (`OutcomeUnknownError`) is settled by `reconcile`, with the
     same arguments and caller, before anything runs again; without a
-    `reconcile` it is never retried in this call.
+    `reconcile` it is never retried in this call. An offer an action used is
+    spent once it succeeds: after the booking, the times it was picked from
+    are no longer on offer.
     """
 
     function: ClassVar[Callable[..., Any]]
@@ -281,10 +300,23 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
     """`(services, args) -> receipt | None`: what the service did with an attempt whose outcome was unknown."""
     say: ClassVar[str] = ''
 
+    readback_uses_services: ClassVar[bool] = False
+    """The readback is `(services, args) -> str`: the words need a lookup, like a slot's spoken time."""
+
     def proposal(self, args: BaseModel) -> Proposal:
+        """What authorises these arguments: its value is theirs whatever the words, so a check needs no services."""
         if self.readback is None:
             raise NotImplementedError(f'{self.name} is declared without a readback')
-        return BaseProposal(about=self.name, spoken=self.readback(args), value=args.model_dump_json())
+        spoken = '' if self.readback_uses_services else self.readback(args)
+        return BaseProposal(about=self.name, spoken=spoken, value=args.model_dump_json())
+
+    def proposal_for(self, call: FlowCall[Any], args: BaseModel) -> Proposal:
+        if self.readback is None or not self.readback_uses_services:
+            return self.proposal(args)
+        readback: Callable[[Any, Any], str] = self.readback  # ty: ignore[invalid-assignment]
+        return BaseProposal(
+            about=self.name, spoken=readback(call.services, args), value=args.model_dump_json()
+        )
 
     def succeeded(self, receipt: Mapping[str, Any]) -> bool:
         return all(receipt.get(name) == value for name, value in self.succeeds.items())
@@ -301,7 +333,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
                 f'{self.name}: an earlier attempt may have landed, so it is not retried'
             )
         found = await _result(self.reconcile(call.services, args))
-        call._unknown.discard(token)
+        call._unknown.pop(token, None)
         if found is None:
             return None
         receipt = self.receipt_type.model_validate(
@@ -314,7 +346,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         try:
             raw = await _result(self.function(call.services, args))
         except OutcomeUnknownError:
-            call._unknown.add(self._token(call, args))
+            call._unknown[self._token(call, args)] = (self, args)
             raise
         data = raw.model_dump() if isinstance(raw, BaseModel) else raw
         given = args.model_dump()
@@ -335,8 +367,12 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             )
         if self.assign:
             call.update(**{field: data[source] for field, source in self.assign.items()})
+        for source in self.binds.values():
+            call._offered.pop(source, None)
         if self.say:
-            await call.speak_now(self.say.format_map(_Facts(data)), origin='confirmation')
+            words = self.say.format_map(_Facts(data))
+            call.note_receipt(words)
+            await call.speak_now(words, origin='confirmation')
         return receipt
 
 
@@ -380,9 +416,14 @@ def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list, **agent
     `FlowSpec.compile(model=...)` strips each persona's model, so an explicit
     model is used everywhere; otherwise a persona's own model wins over the
     flow's default. Settings and instructions merge, as `Agent.from_spec` does.
+
+    Every step's agent times each provider request (`request_clock`), which is
+    where a turn's time to first token comes from; the hand-built steps had it
+    from `AgentBuilder`, and session 4 found the public steps without it.
     """
     spec = step.spec or AgentSpec()
-    return Agent.from_spec(
+    capabilities = [*(agent.pop('capabilities', None) or []), request_clock()]
+    built = Agent.from_spec(
         spec,
         deps_type=flow.call_type,
         model=None if spec.model else flow.model,
@@ -390,8 +431,71 @@ def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list, **agent
         output_type=outputs,
         instructions=instructions,
         model_settings=flow.settings,
+        capabilities=capabilities,
         **agent,
     )
+    if issubclass(flow.call_type, FlowCall):
+
+        @built.instructions
+        def application_state(ctx: RunContext[Any]) -> str:
+            return context(flow, step, ctx.deps)
+
+    return built
+
+
+def context(flow: StepFlow, step: Step, call: FlowCall[Any]) -> str:
+    """What this step's agent is told the application knows, rendered fresh before every request.
+
+    The facts, what is on offer, the question the caller is answering and
+    whether they heard it, what was done on this call and what the caller
+    missed, and where this step may hand them. Sent as instructions, apart
+    from anything the caller said or a service returned, so a reply cannot
+    pose as the application. Written from the call's own records, and from
+    nothing a caller is not entitled to: never the services, the session's
+    private objects or a secret.
+
+    Seeing a fact is not permission to act on it: every action is still
+    checked by its own guard when it runs.
+    """
+    lines = [
+        '## Application state',
+        'Written by the application, not by the caller. It is true now; the conversation may be older.',
+        f'You are the `{step.id}` step.',
+        f'Facts: {call.state.facts.model_dump_json()}',
+    ]
+    offered = {name: ids for name, ids in call._offered.items() if ids}
+    lines.append(
+        f'On offer to the caller now, by id: {json.dumps(offered)}. Only these ids can be picked.'
+        if offered
+        else 'Nothing is on offer to the caller now.'
+    )
+    last = call.last_proposal()
+    if last is not None:
+        question, heard = last
+        lines.append(
+            f'The caller is answering: "{question.spoken}" ({question.about}). '
+            + (
+                'They heard it in full.'
+                if heard
+                else 'They did not hear all of it, so their reply cannot agree to it: put it to them again.'
+            )
+        )
+    done = [e for e in call.evidence if e.identity == call.identity()]
+    for filed in done[-3:]:
+        lines.append(
+            f'Done on this call: {filed.operation} {json.dumps(filed.args)} -> {json.dumps(filed.receipt)}'
+        )
+    if call.spoken_over:
+        lines.append(call.spoken_over)
+    exits = list(step.exits) if isinstance(step, ConversationStep) else []
+    purposes = step.purposes if isinstance(step, ConversationStep) else {}
+    if exits:
+        lines.append(
+            'You may hand the caller to: '
+            + '; '.join(f'{to} ({purposes[to]})' if purposes.get(to) else to for to in exits)
+            + '.'
+        )
+    return '\n'.join(lines)
 
 
 def _node(flow: StepFlow, step: Step, agent: Agent[Any, object], **node: Any) -> Node[Any]:
@@ -406,6 +510,26 @@ def _optional(info: FieldInfo) -> Any:
     """A state field's type, constraints kept, or None: what a collect tool's schema offers for it."""
     kind = Annotated[info.annotation, *info.metadata] if info.metadata else info.annotation  # ty: ignore[invalid-type-form]
     return kind | None  # ty: ignore[unsupported-operator]
+
+
+def _unbacked_goodbye(call: FlowCall[Any], words: str, operations: frozenset[str]) -> bool:
+    """Whether a goodbye claims a change, or a booking held, when this step's operations made none on the call.
+
+    A goodbye's words are spoken as they are, with no clause check, so this
+    is their only one. A recap after a real write ("you're booked for
+    Friday") is true and goes out.
+
+    ponytail: "made on the call" is any receipt from one of this step's
+    operations; a step whose only operation is a lookup could still recap a
+    booking it never made. Key it on the operations that change the business
+    if a use case ever needs that.
+    """
+    if any(e.operation in operations for e in call.evidence):
+        return False
+    text = ' '.join(words.split())
+    return call.claims_completion(text) or any(
+        re.search(pattern, text, re.IGNORECASE) for pattern in call.locale.recounts
+    )
 
 
 def _args(operation: Operation, call: FlowCall[Any]) -> BaseModel:
@@ -572,11 +696,15 @@ class CollectStep(Step):
 class ConfirmStep(Step):
     """Read back an operation's exact proposal and wait for agreement to *that*.
 
-    Acceptance moves to `then`, the action, in the same turn, and the action
-    consumes the approval for those same arguments. Rejection and revision go
-    where they are told. A conditional or unclear answer, or a yes after the
-    readback has expired, gets the proposal read back again; a question is
-    answered by the step's agent, and the next yes still needs a fresh readback.
+    The step's own agent reads the reply, in the whole conversation, and
+    answers through one of four outputs: `accept`, `decline`, `change`, or
+    `answer` for anything else (a question, a condition, an unclear reply).
+    Acceptance is bound by code to the pending question (`CallContext.approve`)
+    and moves to `then`, the action, in the same turn; the action consumes the
+    approval for those same arguments. Rejection and revision go where they
+    are told. An answer is said, and the proposal read back again after it, so
+    the next yes answers a question the caller has just heard. A yes after
+    the read-back has expired gets it read back again, by code, with no model.
     """
 
     operation: Operation
@@ -596,16 +724,46 @@ class ConfirmStep(Step):
         return bool(self.then) and receipt_for(self.operation, call) is not None
 
     def readback(self, call: FlowCall[Any]) -> Prompted:
-        proposal = self.operation.proposal(_args(self.operation, call))
+        proposal = self.operation.proposal_for(call, _args(self.operation, call))
         return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
 
     def node(self, flow: StepFlow) -> Node[Any]:
+        async def accept(ctx: RunContext[FlowCall[Any]]) -> Handoff | Prompted:
+            """The caller clearly agreed to exactly what was read back to them, with nothing changed or conditional."""
+            proposal = self.readback(ctx.deps)
+            if not ctx.deps.approve(proposal.about, value=proposal.value):
+                return proposal
+            return Handoff(to=self.then)
+
+        async def decline(ctx: RunContext[FlowCall[Any]]) -> Handoff:
+            """The caller said no to what was read back to them."""
+            return await _revised(flow, ctx.deps, self.on_reject)
+
+        async def change(ctx: RunContext[FlowCall[Any]]) -> Handoff:
+            """The caller wants something in the read-back changed."""
+            return await _revised(flow, ctx.deps, self.on_revise)
+
+        async def answer(ctx: RunContext[FlowCall[Any]], words: str) -> Prompted:
+            """Anything else: a question, a condition, or a reply you cannot read as yes or no. Answer it; the read-back is asked again after.
+
+            Args:
+                words: One short sentence to the caller. Never say the request is done.
+            """
+            await ctx.deps.speak_now(words, origin='model')
+            return self.readback(ctx.deps)
+
         agent = _agent(
             flow,
             self,
-            'The caller was just asked to confirm a request. Answer their question in one short sentence. '
+            'The caller was just read back a request and asked to confirm it; the application state shows '
+            'the exact words and whether they heard them. Read their reply and answer with exactly one output. '
             'Never say the request is confirmed or submitted.',
-            [str],
+            [
+                ToolOutput(accept, name='accept'),
+                ToolOutput(decline, name='decline'),
+                ToolOutput(change, name='change'),
+                ToolOutput(answer, name='answer'),
+            ],
         )
 
         async def read_back(call: FlowCall[Any]) -> Prompted:
@@ -613,19 +771,10 @@ class ConfirmStep(Step):
             return self.readback(call)
 
         async def advance(call: FlowCall[Any], usage: RunUsage, limits: UsageLimits) -> LocalAction | None:
+            """A reply with no read-back it could answer (expired, unheard, changed) gets it read back, by code."""
             proposal = self.readback(call)
-            if call.pending(proposal.about, value=proposal.value) is None:
-                return LocalAction('readback', lambda: read_back(call)) if call.heard.strip() else None
-            reading = await flow.interpreter.interpret(call, usage=usage, usage_limits=limits)
-            match reading.decision:
-                case Accept():
-                    return LocalAction('confirm', lambda: _moved(self.then))
-                case Reject():
-                    return LocalAction('reject', lambda: _revised(flow, call, self.on_reject))
-                case Revise():
-                    return LocalAction('revise', lambda: _revised(flow, call, self.on_revise))
-                case Conditional() | Clarify():
-                    return LocalAction('readback', lambda: read_back(call))
+            if call.pending(proposal.about, value=proposal.value) is None and call.heard.strip():
+                return LocalAction('readback', lambda: read_back(call))
             return None
 
         return _node(
@@ -634,7 +783,7 @@ class ConfirmStep(Step):
             agent,
             advance=advance,
             openings=(Opening('readback', 'handoff', _entered, read_back),),
-            model_speech=True,
+            model_speech=False,
         )
 
 
@@ -670,6 +819,13 @@ class ActionStep(Step):
     accepts: Callable[[Mapping[str, Any]], bool] = field(default=lambda _: True)
     on_error: str = ''
     on_unknown: str = ''
+    returns: bool = False
+    """A code node: on success, go back to the step that handed the caller here, not onward.
+
+    The step handing over is recorded on the way in (`core.graph.route`), the
+    way a prerequisite records who is waiting, so a reusable piece of known
+    work can serve several agent nodes. No model decides the return.
+    """
 
     @property
     def depends_on(self) -> frozenset[str]:
@@ -687,7 +843,8 @@ class ActionStep(Step):
         async def act(call: FlowCall[Any]) -> Handoff:
             """Run the operation now; where the caller goes depends only on what came back."""
             if self.done(call):
-                return Handoff(to=flow.next_after(self, call))
+                onward = flow.next_after(self, call)
+                return Handoff(to=call.resume(onward) if self.returns else onward)
             try:
                 await self.operation.run(call, _args(self.operation, call))
             except OutcomeUnknownError:
@@ -696,10 +853,18 @@ class ActionStep(Step):
                 return Handoff(to=self.on_error)
             if not self.done(call):
                 return Handoff(to=self.on_error)
+            if self.returns:
+                return Handoff(to=call.resume(flow.next_after(self, call)))
             return Handoff(to=flow.next_after(self, call))
 
         agent = _agent(flow, self, 'Say one short sentence: you are working on it.', [str])
-        return _node(flow, self, agent, openings=(Opening(self.operation.name, 'handoff', _entered, act),))
+        return _node(
+            flow,
+            self,
+            agent,
+            openings=(Opening(self.operation.name, 'handoff', _entered, act),),
+            returns=self.returns,
+        )
 
 
 def _values(flow: StepFlow, name: str, fields: Sequence[str]) -> type[BaseModel]:
@@ -715,6 +880,27 @@ def _values(flow: StepFlow, name: str, fields: Sequence[str]) -> type[BaseModel]
     )
 
 
+def said_by_caller(call: CallContext, excerpt: str) -> bool:
+    """Whether these words are the caller's: found, as whole words, in what they said, never in model history.
+
+    An extractive read-back trades paraphrase for evidence anyone can check.
+    Case and punctuation may differ, because speech-to-text adds its own.
+    """
+
+    def words(text: str) -> str:
+        return ' '.join(re.findall(r'\w+', text.casefold()))
+
+    sources = [row['text'] for row in call.transcript() if row['said'] == 'caller']
+    sources += [
+        part.content
+        for message in call.messages
+        for part in message.parts
+        if isinstance(part, UserPromptPart) and isinstance(part.content, str)
+    ]
+    wanted = words(excerpt)
+    return bool(wanted) and any(f' {wanted} ' in f' {words(source)} ' for source in sources)
+
+
 def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: Mapping[str, Any]) -> None:
     """Refuse a value for a choice field that was never offered to this caller."""
     for name, value in values.items():
@@ -723,6 +909,58 @@ def _refuse_unoffered(call: FlowCall[Any], choices: Mapping[str, Any], values: M
             raise ModelRetry(
                 f'Nothing was recorded: {value!r} was not offered for {name} (offered: {offered}).'
             )
+
+
+SPEAK_BY = 3
+"""The request by which an agent node's run has no ordinary tools left and answers with what it has (`speak_by`)."""
+
+
+class Options(BaseModel):
+    """What a choice function returns, as core keeps it: the options by id, and a note for the agent.
+
+    A choice function returns a plain `{id: words}`, or any object with
+    `options` and `note` (the application's own model; it need not import
+    this). The note is how the domain says something the ids cannot, such as
+    a day that could mean two dates: the agent reads it and asks the caller,
+    and only the ids are ever offered.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+    options: dict[str, str] = {}
+    note: str = ''
+
+
+async def _offer(call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any], Any]]) -> dict[str, Any]:
+    """Ask each choice function for this caller's options, and record them as offered, unless the call moved on.
+
+    A choice function may be sync or async, and may take long: the caller can
+    change what they asked for, or be handed elsewhere, before it answers. An
+    answer computed for a state that is no longer the call's, or in a turn the
+    caller has left, is returned as stale and offers nothing, so it can never
+    replace the current offer or make an old slot pickable.
+    """
+    version, generation, agent = call._version, call._generation, call.state.agent
+    found: dict[str, Options] = {}
+    for name, choose in choices.items():
+        try:
+            answer = await _result(choose(call.services, call.state.facts))
+        except Exception as error:
+            logger.exception('choice function for {} failed', name)
+            return {
+                'unavailable': f'The options could not be looked up just now ({type(error).__name__}). Nothing is offered.'
+            }
+        found[name] = (
+            Options(options=dict(answer))
+            if isinstance(answer, Mapping)
+            else Options(options=dict(answer.options), note=getattr(answer, 'note', ''))
+        )
+    if call._version != version or call._generation != generation or call.state.agent != agent:
+        return {'stale': 'The request changed while these were looked up. Nothing is offered; look again.'}
+    result: dict[str, Any] = {}
+    for name, options in found.items():
+        call._offered[name] = dict(options.options)
+        result[name] = {'options': options.options, **({'note': options.note} if options.note else {})}
+    return result
 
 
 async def _carry_out(
@@ -740,25 +978,60 @@ async def _carry_out(
 
 @dataclass(frozen=True, kw_only=True)
 class ConversationStep(Step):
-    """Answer from instructions and knowledge; stays active every turn until the caller says goodbye.
+    """An agent node: one agent, its instructions, what it may record, offer, carry out and hand over to.
 
-    The same step can do the business itself, as one agent or as a specialist
-    handed to: `fields` it may record from the caller (`collect`), `choices`
-    it may offer (`options`), declared `operations` it may carry out, and
-    `exits` it may hand the caller to (`hand_over`). An operation is read back
-    in the application's words and runs only on a delivered read-back and a
-    yes, through the same `Operation.run` a controlled flow uses. A reply to
-    that read-back is read by code before any model runs (`advance`), so a
-    yes carries out the operation without a model request.
+    The step stays active across turns until it hands the caller on or they
+    say goodbye. Its agent reads every reply itself, in the shared
+    conversation and the application state (`context`), and answers through
+    its outputs: text, `goodbye`, one of its declared `operations`, or
+    `hand_over` to one of its `exits`. `fields` it may record from the caller
+    (`collect`) and `choices` it may offer (`options`) are ordinary tools, and
+    their results come back to this same agent in the same run.
+
+    An operation is read back in the application's words and runs only when
+    the agent calls it again on the turn after that read-back reached the
+    caller in full: the agent's yes, bound by code to that exact question
+    (`CallContext.approve`), through the same `Operation.run` a controlled
+    flow uses. No second model reads the reply. A reply that also changes the
+    request (`collect` beside the operation) gets a fresh read-back instead.
+
+    `requires` names state facts this step needs before it runs, and
+    `satisfied_by` the step that establishes them; the graph interposes it
+    and comes back (`core.graph.route`). A step that satisfies another returns
+    to the one waiting, by code, as soon as one of its operations has made the
+    waiting step's requirements true.
     """
 
     instructions: Any
     """Text, or a compiled template from a prompt file (which already carries any knowledge)."""
     knowledge: str = ''
     fields: tuple[str, ...] = ()
-    choices: Mapping[str, Callable[[Any, Any], Mapping[str, str]]] = field(default_factory=dict)
+    choices: Mapping[str, Callable[[Any, Any], Any]] = field(default_factory=dict)
     operations: tuple[Operation, ...] = ()
     exits: tuple[str, ...] = ()
+    purposes: Mapping[str, str] = field(default_factory=dict)
+    """What each exit is for, in the words the agent is shown with it."""
+    requires: tuple[str, ...] = ()
+    satisfied_by: str = ''
+    guarded: bool = False
+    quoted: tuple[str, ...] = ()
+    """Fields whose value must be the caller's own words, found in what they said: never a paraphrase or a record."""
+    opens_with: Operation | None = None
+    """An operation read back on arrival, by code, when its arguments are already known (a carrier's number)."""
+    asks: Mapping[str, str] = field(default_factory=dict)
+    """Field -> words: on arrival by a hand-over, code asks for the first of these fields still empty, no model.
+
+    What a step says first when it lacks a field is known; a model asked to
+    open with it said "I'll connect you with someone" instead (Coval gate 1
+    rerun, cBrx4NhR). Tried after `opens_with`.
+    """
+    reads_back: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """Operation -> fields: a reply that only records one of these fields gets that operation read back by code.
+
+    The same read-back the model would have asked for with a second request,
+    and the same approval after it: only a later yes, with the model calling
+    the operation, carries it out.
+    """
 
     @property
     def produces(self) -> frozenset[str]:
@@ -766,7 +1039,83 @@ class ConversationStep(Step):
 
     @property
     def elsewhere(self) -> tuple[str, ...]:
-        return self.exits
+        return tuple(dict.fromkeys([*self.exits, *([self.satisfied_by] if self.satisfied_by else [])]))
+
+    def opening(self) -> tuple[Opening[Any], ...]:
+        """On arrival by a hand-over: read back `opens_with` if the state gives its arguments, else ask (`asks`). No model."""
+        return (*self._read_back_first(), *self._ask_first())
+
+    def _ask_first(self) -> tuple[Opening[Any], ...]:
+        if not self.asks:
+            return ()
+
+        def missing(call: FlowCall[Any]) -> str:
+            return next((name for name in self.asks if not getattr(call.state.facts, name)), '')
+
+        async def ask(call: FlowCall[Any]) -> str:
+            words = self.asks[missing(call)]
+            await call.speak_now(words, origin='ask')
+            return words
+
+        return (Opening('ask', 'handoff', lambda call: bool(missing(call)), ask),)
+
+    def _read_back_first(self) -> tuple[Opening[Any], ...]:
+        operation = self.opens_with
+        if operation is None:
+            return ()
+
+        def ready(call: FlowCall[Any]) -> bool:
+            try:
+                args = _args(operation, call)
+            except ValidationError:
+                return False
+            return call.pending(operation.name, value=operation.proposal(args).value) is None
+
+        async def read_back(call: FlowCall[Any]) -> Prompted:
+            proposal = operation.proposal_for(call, _args(operation, call))
+            return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
+
+        return (Opening(operation.name, 'handoff', ready, read_back),)
+
+    def _reads_back(self) -> Callable[[FlowCall[Any]], Prompted | None] | None:
+        """The `reads_back` rule: the operation whose field was just recorded, when it is the only one that could run.
+
+        An operation could run when its arguments are complete, or when the
+        ones missing are choices on offer (a held booking the caller could
+        name). So where a new booking and a move of a held one are both
+        possible, which one the caller means is the model's to read, as
+        before. None as well when that exact question is already waiting.
+        """
+        if not self.reads_back:
+            return None
+
+        def possible(call: FlowCall[Any], operation: Operation) -> bool:
+            try:
+                _args(operation, call)
+            except ValidationError as error:
+                binds = getattr(operation, 'binds', None) or {}
+                missing = {binds.get(str(e['loc'][0]), str(e['loc'][0])) for e in error.errors() if e['loc']}
+                return all(call._offered.get(name) for name in missing)
+            return True
+
+        def read(call: FlowCall[Any]) -> Prompted | None:
+            if [op for op in self.operations if possible(call, op)] != [
+                op for op in self.operations if op.name in self.reads_back and possible(call, op)
+            ]:
+                return None
+            for operation in self.operations:
+                if not call._recorded & set(self.reads_back.get(operation.name, ())):
+                    continue
+                try:
+                    proposal = operation.proposal_for(call, _args(operation, call))
+                except ValidationError:
+                    return None
+                if call.pending(operation.name, value=proposal.value) is not None:
+                    return None
+                return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
+            return None
+
+        return read
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def goodbye(ctx: RunContext[FlowCall[Any]], words: str) -> str:
@@ -775,11 +1124,18 @@ class ConversationStep(Step):
             Args:
                 words: The goodbye. It is the last thing they hear.
             """
-            ctx.deps.end_requested('caller')
-            await ctx.deps.speak_now(words, origin='goodbye')
-            await ctx.deps.end_call()
+            call = ctx.deps
+            if _unbacked_goodbye(call, words, ours):
+                raise ModelRetry(
+                    'Nothing was said: no booking, change or record was made on this call, so the goodbye '
+                    'cannot say one was. If the caller just said yes to a read-back, carry that action out now.'
+                )
+            call.end_requested('caller')
+            await call.speak_now(words, origin='goodbye')
+            await call.end_call()
             return words
 
+        ours = frozenset(op.name for op in self.operations)
         actions = frozenset(op.name for op in self.operations) | (
             {'hand_over'} if self.exits else frozenset()
         )
@@ -792,58 +1148,56 @@ class ConversationStep(Step):
                 """Record exactly what the caller has just said for any of these fields. Never guess a value."""
                 proposed = values.model_dump(exclude_none=True)
                 _refuse_unoffered(ctx.deps, self.choices, proposed)
+                for name in self.quoted:
+                    if proposed.get(name) and not said_by_caller(ctx.deps, str(proposed[name])):
+                        raise ModelRetry(
+                            f"Nothing was recorded: {name} must be the caller's own words, copied from what "
+                            'they said. Punctuation and case may differ; nothing else may.'
+                        )
                 try:
                     flow.record(ctx.deps, proposed)
                 except ValidationError as error:
                     problems = '; '.join(e['msg'] for e in error.errors())
                     raise ModelRetry(f'Nothing was recorded: {problems}. Ask the caller again.') from None
+                ctx.deps._recorded = frozenset(proposed)
                 return f'Recorded: {", ".join(sorted(proposed)) or "nothing"}.'
 
             collect.__annotations__ = {'ctx': RunContext[FlowCall], 'values': values_type, 'return': str}
             tools.append(Tool(collect))
         if self.choices:
 
-            async def options(ctx: RunContext[FlowCall[Any]]) -> dict[str, dict[str, str]]:
-                """The options you may offer the caller, by id. Only an offered id can be recorded. Say them in your own words."""
-                offered = {}
-                for name, choose in self.choices.items():
-                    offered[name] = dict(choose(ctx.deps.services, ctx.deps.state.facts))
-                    ctx.deps._offered[name] = offered[name]
-                return offered
+            async def options(ctx: RunContext[FlowCall[Any]]) -> dict[str, Any]:
+                """The options you may offer the caller now, by id, for what they asked. Only an offered id can be recorded. Say them in your own words."""
+                return await _offer(ctx.deps, self.choices)
 
             tools.append(Tool(options))
         for operation in self.operations:
             outputs.append(
                 ToolOutput(
-                    self._operate(operation, actions),
+                    self._operate(flow, operation, actions),
                     name=operation.name,
-                    description=f"{operation.name}: read it back to the caller in the application's words. "
-                    'It is carried out only after they agree to that read-back.',
+                    description=f"{operation.name}: the first call reads it back to the caller in the application's "
+                    'words. Call it again only when their reply to that read-back is a clear yes: that yes '
+                    'carries it out.',
                     sequential=True,
                 )
             )
-        if self.exits:
+        exits = self.exits
+        if exits:
             outputs.append(ToolOutput(self._hand_over(actions), name='hand_over', sequential=True))
 
-        async def advance(call: FlowCall[Any], usage: RunUsage, limits: UsageLimits) -> LocalAction | None:
-            """A reply to one of this step's read-backs, decided by code: a yes carries it out, a no drops it."""
-            for operation in (op for op in self.operations if op.needs_approval):
-                try:
-                    proposal = operation.proposal(_args(operation, call))
-                except ValidationError:
-                    continue
-                if call.pending(proposal.about, value=proposal.value) is None:
-                    continue
-                reading = await flow.interpreter.interpret(call, usage=usage, usage_limits=limits)
-                match reading.decision:
-                    case Accept():
-                        return LocalAction(
-                            operation.name, lambda op=operation: _carry_out(call, op, usage, limits)
-                        )
-                    case Reject():
-                        return LocalAction('reject', lambda: _declined(call))
-                return None
-            return None
+        async def narrow(ctx: RunContext[FlowCall[Any]], defs: list[ToolDefinition]) -> list[ToolDefinition]:
+            """Send `hand_over` with only this step's exits as the destinations the model can name."""
+            kept = []
+            for tool_def in defs:
+                if tool_def.name == 'hand_over':
+                    schema = deepcopy(tool_def.parameters_json_schema)
+                    if (to := schema.get('properties', {}).get('to')) is not None:
+                        to.pop('const', None)
+                        to['enum'] = list(exits)
+                    tool_def = replace(tool_def, parameters_json_schema=schema)
+                kept.append(tool_def)
+            return kept
 
         text = self.instructions
         if self.knowledge and isinstance(text, str):
@@ -854,12 +1208,26 @@ class ConversationStep(Step):
             text,
             outputs,
             tools=tools,
-            capabilities=[one_action_per_reply(actions)] if actions else None,
+            capabilities=[
+                *([one_action_per_reply(actions, frozenset({'collect'}))] if actions else []),
+                Hooks(prepare_output_tools=narrow),
+                speak_by(SPEAK_BY),
+            ],
         )
-        return _node(flow, self, agent, advance=advance if self.operations else None)
+        return _node(
+            flow,
+            self,
+            agent,
+            requires=self.requires,
+            satisfied_by=self.satisfied_by,
+            guarded=self.guarded,
+            openings=self.opening(),
+            speaks_for=frozenset(op.name for op in self.operations),
+            reads_back=self._reads_back(),
+        )
 
-    def _operate(self, operation: Operation, actions: frozenset[str]):
-        async def operate(ctx: RunContext[FlowCall[Any]]) -> Prompted | str | None:
+    def _operate(self, flow: StepFlow, operation: Operation, actions: frozenset[str]):
+        async def operate(ctx: RunContext[FlowCall[Any]]) -> Prompted | Handoff | str | None:
             claim_or_refuse(ctx, actions)
             call = ctx.deps
             try:
@@ -868,10 +1236,22 @@ class ConversationStep(Step):
                 missing = ', '.join(str(e['loc'][0]) for e in error.errors() if e['loc'])
                 raise ModelRetry(f'Not yet: {missing} missing. Ask the caller and record it first.') from None
             if operation.needs_approval:
-                proposal = operation.proposal(args)
-                if call.pending(proposal.about, value=proposal.value) is None:
-                    return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
-            return await _carry_out(call, operation, ctx.usage, ctx.usage_limits)
+                proposal = operation.proposal_for(call, args)
+                read_back = Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
+                resting_on = set(getattr(operation, 'binds', {}).values()) or set(
+                    operation.args_type.model_fields
+                )
+                if call._unapplied & resting_on:
+                    raise ModelRetry(
+                        f'Nothing was done: this reply also changes {", ".join(sorted(call._unapplied & resting_on))}. '
+                        f'Record the change first, then call {operation.name} again to read it back.'
+                    )
+                if call._changing & resting_on or not call.approve(proposal.about, value=proposal.value):
+                    return read_back
+            said = await _carry_out(call, operation, ctx.usage, ctx.usage_limits)
+            if (back := flow.return_after(self, call)) is not None:
+                return back
+            return said
 
         return operate
 
@@ -893,26 +1273,15 @@ class ConversationStep(Step):
         return hand_over
 
 
-def _told(call: FlowCall[Any]) -> str:
-    """What the caller was told was done: the receipt speech of the latest turn that had any."""
-    told = [s for s in call.all_spoken if s.origin == 'confirmation' and s.generated]
-    latest = told[-1].turn if told else None
-    return ' '.join(s.generated for s in told if s.turn == latest)
-
-
-async def _declined(call: FlowCall[Any]) -> None:
-    """The caller said no to the read-back: it is answered, and the step's model replies to them."""
-    call.answered()
-
-
 @dataclass(frozen=True, kw_only=True)
 class End(Step):
     """Say one closing line and record how the flow ended. `say` may use the facts: `{field}`.
 
     `take_back` is where a caller who takes the result back is sent, normally
-    a confirm step for the undo operation. Each reply after a completed
-    ending is read against what they were told (`TAKE_BACK`); only a clear
-    withdrawal moves them, and the undo still needs its own read-back and yes.
+    a confirm step for the undo operation. The ending's own agent reads each
+    later reply in the conversation and, only for a clear withdrawal, calls
+    `take_back`; the undo still needs its own read-back and yes. Anything
+    else it answers in words.
     """
 
     outcome: Literal['completed', 'cancelled', 'failed', 'pending']
@@ -934,31 +1303,17 @@ class End(Step):
             await call.speak_now(words, origin='confirmation')
             return words
 
-        async def advance(call: FlowCall[Any], usage: RunUsage, limits: UsageLimits) -> LocalAction | None:
-            """A reply that takes the result back goes to the undo; anything else is the step's model's.
+        async def take_back(ctx: RunContext[FlowCall[Any]]) -> Handoff:
+            """The caller clearly wants what was just done undone. Not for a question about it, or for keeping it."""
+            return Handoff(to=self.take_back)
 
-            Only once this ending has closed (its outcome is recorded): on the
-            turn it is reached, the caller's words were the yes that got here.
-            """
-            if call.state.outcome != self.outcome or not call.heard.strip() or flow.take_back is None:
-                return None
-            reading = await flow.take_back.classify(
-                TakeBackInput(question=call.said_last_turn(), answer=call.heard, agreed=_told(call)),
-                usage=usage,
-                usage_limits=limits,
-            )
-            if reading.take_back != 'withdraw':  # ty: ignore[unresolved-attribute]
-                return None
-            return LocalAction('take_back', lambda: _moved(self.take_back))
-
-        agent = _agent(flow, self, 'The request is finished. Answer briefly; do not start a new one.', [str])
-        return _node(
-            flow,
-            self,
-            agent,
-            advance=advance if self.take_back else None,
-            openings=(Opening('close', 'handoff', _entered, close),),
+        outputs: list[Any] = [str]
+        if self.take_back:
+            outputs.append(ToolOutput(take_back, name='take_back'))
+        agent = _agent(
+            flow, self, 'The request is finished. Answer briefly; do not start a new one.', outputs
         )
+        return _node(flow, self, agent, openings=(Opening('close', 'handoff', _entered, close),))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -992,194 +1347,6 @@ class AgentStep(Step):
         return self.build(self)
 
 
-def _moved_this_run(messages: Sequence[ModelMessage], borrowed: Mapping[str, Any]) -> bool:
-    """Whether a borrowed tool has returned since the caller's words: the move it stands for is made."""
-    for message in reversed(messages):
-        if not isinstance(message, ModelRequest):
-            continue
-        if any(isinstance(p, ToolReturnPart) and p.tool_name in borrowed for p in message.parts):
-            return True
-        if any(isinstance(p, UserPromptPart) for p in message.parts):
-            return False
-    return False
-
-
-class AgentBuilder[C: CallContext]:
-    """Builds a hand-built step's agent the same way for every use case.
-
-    A use case gives it its call type, model and settings, the names of its
-    actions (at most one runs per model reply), its `Desk`, its `advance` (what
-    decides a turn before any model runs) and the request by which a run must
-    answer with what it holds. Each step then passes only what its own code
-    can say (`build`).
-    """
-
-    def __init__(
-        self,
-        *,
-        call_type: type[C],
-        model: Model | str,
-        settings: ModelSettings | None,
-        actions: frozenset[str],
-        desk: Desk[C],
-        advance: Callable[[Any, RunUsage, UsageLimits], Awaitable[LocalAction | None]] | None,
-        speak_by: int,
-    ) -> None:
-        self.call_type = call_type
-        self.model = model
-        self.settings = settings
-        self.actions = actions
-        self.desk = desk
-        self.advance = advance
-        self.speak_by = speak_by
-
-    def build(
-        self,
-        step: AgentStep,
-        tools: Sequence[Any] = (),
-        finishers: Sequence[Any] = (),
-        asks: Sequence[Any] = (),
-        openings: tuple[Opening[Any], ...] = (),
-        structured_speech: bool = False,
-        offered_when: Mapping[str, Callable[[Any], bool]] | None = None,
-        stand_ins: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
-        model: Model | str | None = None,
-        shares_detour: bool = False,
-    ) -> Node[Any]:
-        """One step: its agent, its legal exits, and what has to hold before it runs.
-
-        The step's name, prompt, exits and requirements come from its entry in
-        the flow file; the arguments here are what only its code can say.
-        Everything that differs between steps is an argument, so this names no
-        step and no tool: `structured_speech` for a step that speaks only
-        through its outputs, `offered_when` for an output offered only while a
-        fact holds, and `stand_ins` for an output whose name the model knows but
-        whose implementation is this step's own.
-
-        Every output tool is named explicitly. Pydantic AI calls a lone output
-        function `final_result` and renames a bare `hand_over` to
-        `final_result_hand_over` as soon as there is more than one output, which
-        the per-request narrowing then fails to find by name. Everything that
-        writes is `sequential`, so two of them can never overlap; the conflict
-        policy refusing the second is the brace to that belt.
-
-        A question ends the run the same way finishing the step does, and for the
-        same reason: the words are already decided, so a further model request
-        would only be a chance to word them differently. Questions are not
-        actions, because asking changes nothing and writes nothing.
-
-        `str` in the output list is what keeps speech streaming to TTS. A step
-        that can write or verify speaks only through its output functions, so it
-        does not get it and provider text never reaches TTS from it.
-
-        The whole output set is always declared; what varies per request is which
-        of it is *offered*, decided by the two prepare hooks below.
-        """
-        exits, actions = step.exits, self.actions
-        borrowed = lent(exits)
-        named = [
-            ToolOutput((stand_ins or {}).get(fn, fn), name=fn.__name__, sequential=fn.__name__ in actions)
-            for fn in finishers
-        ]
-        questions = [ToolOutput(fn, name=fn.__name__) for fn in asks]
-        handoff = (
-            [
-                ToolOutput(
-                    self.desk.hand_over_for(exits, tuple(fn.__name__ for fn in asks)),
-                    name='hand_over',
-                    sequential=True,
-                )
-            ]
-            if exits
-            else []
-        )
-        offered = offered_when or {}
-        declared = [*([str] if not structured_speech else []), *handoff, *named, *questions]
-
-        def outputs(state: VoiceState) -> list:
-            """What this step may return: the superset `narrow` picks from at each request."""
-            return declared
-
-        async def only_reachable(ctx: RunContext[Any], defs: list[ToolDefinition]) -> list[ToolDefinition]:
-            """Take a borrowed tool back out while the edge it stands for is shut.
-
-            A caller the step cannot yet serve is not offered the tool the edge
-            lends, so the model cannot call it and be refused, which costs the
-            round trip the lending was there to save. Re-run before every model
-            request, so a tool that ran a moment ago and changed the state is
-            reflected in the very next schema.
-            """
-            return [d for d in defs if d.name not in borrowed or borrowed[d.name].guard(ctx.deps.state)]
-
-        async def narrow(ctx: RunContext[Any], defs: list[ToolDefinition]) -> list[ToolDefinition]:
-            """Offer only the destinations that are open at this request.
-
-            The output-tool half of `only_reachable`, and a separate hook because
-            Pydantic AI prepares ordinary and output tools through different ones.
-            An exit whose guard has stopped holding leaves the enum the model is
-            sent, so it cannot be chosen rather than being refused after it was;
-            with none left, `hand_over` goes entirely. An output with an
-            `offered_when` fact is offered only while it holds.
-
-            Once a borrowed tool has returned in this run, `hand_over` goes too:
-            the tool's success already moves the caller (`moved_by`), so a
-            hand-over after it is a second request for a move already made.
-            The user's call of 24 September read the diary from the front desk,
-            then handed over to booking as well.
-            """
-            legal = list(dict.fromkeys(e.to for e in exits if e.guard(ctx.deps.state)))
-            if _moved_this_run(ctx.messages, borrowed):
-                legal = []
-            kept = []
-            for tool_def in defs:
-                if (when := offered.get(tool_def.name)) is not None and not when(ctx.deps):
-                    continue
-                if tool_def.name != 'hand_over':
-                    kept.append(tool_def)
-                    continue
-                if not legal:
-                    continue
-                schema = deepcopy(tool_def.parameters_json_schema)
-                if (to := schema.get('properties', {}).get('to')) is not None:
-                    to.pop('const', None)
-                    to['enum'] = legal
-                kept.append(replace(tool_def, parameters_json_schema=schema))
-            return kept
-
-        return Node(
-            Agent[Any, object](
-                model if model is not None else self.model,
-                name=step.id,
-                deps_type=self.call_type,
-                output_type=declared,
-                instructions=step.instructions,
-                tools=[
-                    *(
-                        fn if isinstance(fn, Tool) else Tool(fn, sequential=fn.__name__ in actions)
-                        for fn in tools
-                    ),
-                    *(Tool(fn, sequential=fn.__name__ in actions) for exit in exits for fn in exit.via),
-                ],
-                capabilities=[
-                    one_action_per_reply(actions),
-                    Hooks(prepare_tools=only_reachable, prepare_output_tools=narrow),
-                    *([speak_by(self.speak_by)] if not structured_speech else []),
-                    request_clock(),
-                ],
-                model_settings=self.settings,
-            ),
-            exits=exits,
-            requires=step.requires,
-            satisfied_by=step.satisfied_by,
-            outputs=outputs,
-            guarded=step.guarded,
-            shares_detour=shares_detour,
-            model_speech=not structured_speech,
-            advance=self.advance,
-            openings=openings,
-        )
-
-
 class _Facts(dict):
     """Facts for `str.format_map`, with nested receipts reachable as `{step[field]}` and a blank for anything missing."""
 
@@ -1190,8 +1357,9 @@ class _Facts(dict):
 class StepFlow:
     """An ordered list of steps, checked and compiled into the turn engine's nodes table.
 
-    Shared config, per-call state: the flow holds steps, a model and an
-    interpreter; each call holds its own application state (`open`).
+    Shared config, per-call state: the flow holds steps and a model; each
+    call holds its own application state (`open`). No step of it asks a
+    second model what a reply meant: each agent node reads its own replies.
     Construction refuses a flow whose destinations do not exist, whose ids
     repeat, or that has business steps and no `End` with outcome `completed`,
     so a broken flow fails where it is defined rather than on a call.
@@ -1202,7 +1370,6 @@ class StepFlow:
         steps: Sequence[Step],
         *,
         model: Model | str,
-        interpreter: Interpreter[FlowCall[Any], Any, ConfirmReading] | None = None,
         settings: ModelSettings | None = None,
         state_type: type[BaseModel] = NoFacts,
         identity: str = '',
@@ -1234,6 +1401,13 @@ class StepFlow:
             name for s in self.steps if isinstance(s, CollectStep | ConversationStep) for name in s.fields
         )
         """The only state fields a model may write: the ones some collect or conversation step asks the caller for."""
+        self.derived: dict[str, frozenset[str]] = {}
+        """Each state field a receipt sets, with the state fields its operation's arguments were bound to."""
+        for step in self.steps:
+            for operation in (getattr(step, 'operation', None), *getattr(step, 'operations', ())):
+                for assigned in getattr(operation, 'assign', {}):
+                    sources = frozenset(getattr(operation, 'binds', {}).values())
+                    self.derived[assigned] = self.derived.get(assigned, frozenset()) | sources
         self.entry = entry or self.steps[0].id
         if self.entry not in self.by_id:
             raise ValueError(f'the entry step {self.entry} is not a step')
@@ -1244,19 +1418,6 @@ class StepFlow:
         """The application's own version, from the manifest (`app_version`): what a trace or a report names."""
         self.model = model
         self.settings = settings
-        self.interpreter = interpreter if interpreter is not None else confirm_interpreter(model, settings)
-        self.take_back = (
-            Classifier(
-                model,
-                TakeBackInput,
-                output_model('TakeBackReading', {'take_back': TAKE_BACK}),
-                context='The person was told something had been done for them, which they could still take back.',
-                model_settings=settings,
-            )
-            if any(isinstance(s, End) and s.take_back for s in self.steps)
-            else None
-        )
-        """The reading of a reply after a completed ending, built only for a flow whose ending can be taken back."""
         self.nodes: dict[str, Node[Any]] = {step.id: step.node(self) for step in self.steps}
 
     @property
@@ -1277,7 +1438,8 @@ class StepFlow:
             raise TypeError(f'{self.call_type.__name__} is its own call class; open its calls with it')
         facts = self.state_type.model_validate(deepcopy(state.model_dump()), extra='forbid')
         call = self.call_type(state=FlowState[self.state_type](agent=self.start, facts=facts))  # ty: ignore[invalid-type-form]
-        call._identity_field, call._collectible = self.identity, self.collectible
+        call._identity_field, call._collectible, call._derived = self.identity, self.collectible, self.derived
+        call._choices = frozenset(name for step in self.steps for name in getattr(step, 'choices', {}))
         if services is None and self.services is not None:
             services = self.services()
         call._services, call._clock, call._locale = services, clock, self.locale
@@ -1290,6 +1452,20 @@ class StepFlow:
     def collects_after(self, step: Step) -> list[CollectStep]:
         order = self.sequence()
         return [s for s in order[order.index(step) + 1 :] if isinstance(s, CollectStep)]
+
+    def return_after(self, step: Step, call: FlowCall[Any]) -> Handoff | None:
+        """Where a prerequisite hands back once its work made the waiting step's requirements true, or None.
+
+        Code decides it, from the pending slot `route` filled on the way in and
+        the facts the step's operation just established: no model is asked
+        where to go, and a step that is nobody's prerequisite never returns.
+        """
+        waiting = call.state.pending
+        if waiting is None or not any(getattr(s, 'satisfied_by', '') == step.id for s in self.steps):
+            return None
+        if not holds(call.state, getattr(self.by_id[waiting], 'requires', ())):
+            return None
+        return Handoff(to=call.resume(waiting), status='completed')
 
     def destinations(self, step: Step) -> tuple[str, ...]:
         """Every step this one can hand the caller to: onward (skipping done steps), or elsewhere."""

@@ -24,6 +24,7 @@ from coval_sim.__main__ import (
     ReleaseCheck,
     Repository,
     RunLog,
+    _parser,
 )
 from coval_sim.coval import CovalClient, CovalError
 from coval_sim.models import (
@@ -353,6 +354,88 @@ def test_concurrency() -> None:
     assert coval.args[coval.args.index('--concurrency') + 1] == '3', coval.args
 
 
+def test_named_metrics() -> None:
+    """`--metrics`: the launch names these instead of the agent's own; the lookup of a lost launch parses."""
+    scored = Agent(id='S', display_name='voice-harness-salon-pipecat', test_set_ids=['ONE'], metric_ids=['m'])
+    check = checker(FakeCoval([scored]))
+    job = check.plan(
+        'salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='l', metrics=['count']
+    )
+    assert job.agent.metric_ids == ['count'] and 'metrics      count' in job.describe(), job.describe()
+    kept = check.plan('salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='l')
+    assert kept.agent.metric_ids == ['m'], "no flag, the agent's own"
+
+    class Launches(CovalClient):
+        def _call(self, *args: str):
+            self.args = args
+            return [] if args[1] == 'list' else {'run_id': 'R'}
+
+    coval = Launches(api_key='test', binary='/nonexistent/coval')
+    coval.launch(job.agent, job.persona, 'ONE', iterations=1, name='n')
+    assert coval.args[coval.args.index('--metric-ids') + 1] == 'count', coval.args
+    parsed = _parser().parse_args(['run', '--agency', 'salon', '--agent', 'S', '--test-set', 'ONE', '--persona', 'calm',
+                                   '--max-simulations', '1', '--label', 'l', '--metrics', 'a,b', '--profile', 'p.env'])  # fmt: skip
+    assert parsed.metrics == ['a', 'b'], 'the command line reaches plan (a missed parser edit, 2026-09-26)'
+    coval.find_run('S', 'n')
+    assert '--order-by=-create_time' in coval.args, 'a bare -create_time is read as a flag (2026-09-26)'
+
+
+PROFILE = Repository.find(Path.cwd()).root / 'docs/research/reusable-core/session-3/speech-profile.v1.env'
+
+
+def test_speech_profile() -> None:
+    """A job names its speech profile; a file missing a name, or with a stray one, is refused before any bot starts."""
+    check = checker()
+    job = check.plan(
+        'salon',
+        'S',
+        'ONE',
+        'calm',
+        iterations=1,
+        max_simulations=1,
+        label='p',
+        profile=PROFILE,
+        call_seconds=300,
+    )
+    assert job.profile is not None and job.profile.SLNG_STT_MODEL == 'deepgram/nova:3', job.profile
+    assert 'speech       stt deepgram/nova:3' in job.describe() and 'call limit   300s' in job.describe()
+    folder = Path(tempfile.mkdtemp())
+    for name, body, says in (
+        ('short.env', 'SLNG_STT_MODEL=deepgram/nova:3\n', 'SLNG_TTS_MODEL'),
+        ('stray.env', PROFILE.read_text() + 'VAD_STOP_SECS=0.6\n', 'VAD_STOP_SECS'),
+    ):
+        (folder / name).write_text(body)
+        try:
+            check.plan(
+                'salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='p', profile=folder / name
+            )
+        except PlanError as error:
+            assert any(says in problem for problem in error.problems), error.problems
+        else:
+            raise AssertionError(f'{name} was accepted')
+
+
+def test_shared_host() -> None:
+    """`run --host`: no tunnel, no bot, the agent pointed at the host `serve` holds. `serve` needs a self-limiting bot."""
+
+    class Pointed(FakeCoval):
+        def update_connection(self, agent: Agent, metadata: dict[str, Any]) -> Agent:
+            self.voice_url = metadata['voice_url']
+            return agent
+
+    coval = Pointed(AGENTS)
+    check = checker(coval)
+    job = check.plan('salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='shared')
+    row = check.run(job, 'already-up.trycloudflare.com')
+    assert coval.voice_url == 'https://already-up.trycloudflare.com/' and coval.launches == 1, row.render()
+    try:
+        check.serve('salon-pipecat-flows', PROFILE)
+    except ValueError as error:
+        assert 'no call limit of its own' in str(error)
+    else:
+        raise AssertionError('served a bot the outside ceiling would stop after one call')
+
+
 if __name__ == '__main__':
     test_call_ceiling()
     test_plan()
@@ -363,4 +446,7 @@ if __name__ == '__main__':
     test_problems()
     test_fallbacks()
     test_concurrency()
+    test_named_metrics()
+    test_shared_host()
+    test_speech_profile()
     print('ok')

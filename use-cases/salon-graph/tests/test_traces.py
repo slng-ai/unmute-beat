@@ -42,9 +42,10 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel 
 Agent.instrument_all()
 
 from core.processor import PydanticAgentProcessor  # noqa: E402
-from core.turn import read_out  # noqa: E402
-from salon.agents import AGENTS  # noqa: E402
-from salon.models.state import open_call  # noqa: E402
+from salon.app import FLOW  # noqa: E402
+from tests.script import open_call  # noqa: E402
+
+AGENTS = FLOW.nodes
 
 PHONE = '+34600111222'
 
@@ -61,12 +62,12 @@ def says(text):
 
 
 def hands_to(name):
-    """A scripted `hand_over`: the first output tool a step declares is always its handoff."""
+    """A scripted `hand_over`, the output every step with exits declares."""
 
     async def stream(messages, info: AgentInfo):
         yield {
             0: DeltaToolCall(
-                name=info.output_tools[0].name,
+                name='hand_over',
                 json_args=json.dumps({'to': name, 'because': 'test'}),
             )
         }
@@ -102,7 +103,8 @@ async def one_trace_per_call():
     context, conversation, turn = open_turn()
 
     call = open_call(PHONE)
-    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
+    call.update(customer_status='existing', verified_phone=PHONE)
+    call.commit(agent='booking')
     probe = Probe(call, AGENTS)
     probe._tracing = context
 
@@ -396,64 +398,63 @@ def two_calls_at_once_stay_apart():
 
 
 async def every_write_names_the_question_it_answered():
-    """The harness's writes, model or not, each leave a `write` span naming the question the caller answered.
+    """The harness's writes each leave a `write` span naming the question the caller answered.
 
-    Most writes run from `advance` with no model and no tool span, so the
-    traces showed no write at all (24 September). A refused write leaves no
-    span: nothing was attempted.
+    Driven through the salon's real flow with scripted node agents: a
+    booking, its cancellation and a complaint, each on a yes to its own
+    read-back. A refused write leaves no span: nothing was attempted.
     """
-    from datetime import datetime
+    from tests.script import opened, slot
+    from tests.script import turn as said
 
-    from pydantic_ai import ModelRetry, RunContext
-
-    from salon import agents, diary
-    from salon.diary import Diary
-    from salon.tools.booking import write_booking
-    from tests.classifier_model import classifier_model
-
-    books = Diary()
-    books.set_clock(datetime(2026, 9, 21, 10, tzinfo=diary.TZ))
-    call = open_call(PHONE, diary=books)
-    call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
-    context = RunContext(deps=call, model=None, usage=None)  # ty: ignore[invalid-argument-type]
+    script, flow, call, books = opened(verified_phone=PHONE, customer_status='existing')
+    call.commit(agent='booking')
     spans.clear()
-    with classifier_model():
-        call.turn_started('A haircut on Friday at nine.')
-        found = books.find_slots(PHONE, 'Friday', 'haircut', books.now(), offered_to=call.id)
-        slot = next(s['slot_id'] for s in found['slots'] if s['time'] == '09:00')
-        try:
-            await write_booking(call, 'book', slot, '')
-        except ModelRetry:
-            pass
-        else:
-            raise AssertionError('a booking nobody agreed to was written')
-        assert not named('write'), 'a refused write left an audit'
-
-        booked = await agents.ask_booking(context, 'book', slot, '')
-        read_out(call, booked)
-        call.turn_started('Yes.')
-        await write_booking(call, 'book', slot, '')
-        held = books.bookings_for(PHONE, books.now().date())[0]['booking_id']
-        cancel = await agents.ask_booking(context, 'cancel', '', held)
-        read_out(call, cancel)
-        call.turn_started('Yes.')
-        await write_booking(call, 'cancel', '', held)
-
-        call.commit(agent='complaints')
-        call.turn_started('The last cut was uneven. I would like a redo.')
-        complaint = await agents.ask_complaint(context, 'The last cut was uneven', 'a redo')
-        read_out(call, complaint)
-        call.turn_started('Absolutely.')
-        await agents.record_complaint(context)
+    friday = slot('2026-10-02', '09:00')
+    await said(
+        flow,
+        call,
+        script,
+        'A haircut on Friday at nine.',
+        ('collect', {'service': 'haircut', 'booking_day': 'Friday', 'booking_time': '09:00'}),
+        ('call', 'options'),
+        ('say', 'Nine is free on Friday.'),
+    )
+    booked = await said(
+        flow, call, script, 'Nine, please.', ('collect', {'slot': friday}), ('call', 'book_appointment')
+    )
+    assert not named('write'), 'a read-back left an audit: nothing was attempted'
+    await said(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    held = books.bookings_for(PHONE, books.now().date())[0]['booking_id']
+    cancel = await said(
+        flow,
+        call,
+        script,
+        'Cancel it.',
+        ('call', 'options'),
+        ('collect', {'appointment': held}),
+        ('call', 'cancel_appointment'),
+    )
+    await said(flow, call, script, 'Yes.', ('call', 'cancel_appointment'))
+    call.commit(agent='complaints')
+    complaint = await said(
+        flow,
+        call,
+        script,
+        'The last cut was uneven. I would like a redo.',
+        ('collect', {'complaint': 'The last cut was uneven', 'wanted_outcome': 'I would like a redo'}),
+        ('call', 'record_complaint'),
+    )
+    await said(flow, call, script, 'Absolutely.', ('call', 'record_complaint'))
 
     audits = [json.loads(str(span.attributes['write.audit'])) for span in named('write')]
-    assert [(a['action'], a['args'].get('action'), a['status']) for a in audits] == [
-        ('save_booking', 'book', 'ok'),
-        ('save_booking', 'cancel', 'ok'),
-        ('record_complaint', None, 'ok'),
+    assert [(a['action'], a['status']) for a in audits] == [
+        ('book_appointment', 'ok'),
+        ('cancel_appointment', 'ok'),
+        ('record_complaint', 'ok'),
     ], audits
-    for audit, asked in zip(audits, (booked, cancel, complaint), strict=True):
-        assert audit['question'] == asked.spoken and audit['asked_turn'] < audit['turn'], audit
+    for audit, asked in zip(audits, (booked[-1], cancel[-1], complaint[-1]), strict=True):
+        assert audit['question'] == asked and audit['asked_turn'] < audit['turn'], audit
     assert [a['heard'] for a in audits] == ['Yes.', 'Yes.', 'Absolutely.']
 
 

@@ -35,8 +35,11 @@ class CovalClient:
         Only reads: a launch or an update sent twice could start two runs.
         A 25-minute run used to be lost to one dropped poll (the baseline's
         first Coval call, 2026-09-24), though the call itself had finished.
+        Coval's rate limit (HTTP 429) is a read tried again too, with a longer
+        wait: session 4's run GYZdoiie lost its bot mid-call when one poll was
+        refused, because the runner took the refusal as the run failing.
         """
-        for attempt in range(4):
+        for attempt in range(6):
             out = subprocess.run(
                 [self._binary, '--format', 'json', *args],
                 capture_output=True,
@@ -44,12 +47,15 @@ class CovalClient:
                 env=self._env,
                 check=False,
             )
+            limited = '429' in out.stderr or 'Too Many Requests' in out.stderr
             retry = (
-                out.returncode != 0 and 'Network error' in out.stderr and args[1:2] in (('get',), ('list',))
+                out.returncode != 0
+                and ('Network error' in out.stderr or limited)
+                and args[1:2] in (('get',), ('list',))
             )
-            if not retry or attempt == 3:
+            if not retry or attempt == 5:
                 break
-            time.sleep(5 * (attempt + 1))
+            time.sleep((15 if limited else 5) * (attempt + 1))
         if out.returncode != 0:
             raise CovalError(f'coval {" ".join(args[:2])}: {out.stderr.strip()}')
         return json.loads(out.stdout) if out.stdout.strip() else None
@@ -86,7 +92,7 @@ class CovalClient:
     def find_run(self, agent_id: str, name: str) -> str | None:
         """The run with this display name among the agent's latest, or None: how an uncertain launch is settled."""
         runs = self._call(
-            'runs', 'list', '--filter', f'agent_id="{agent_id}"', '--page-size', '50', '--order-by', '-create_time'
+            'runs', 'list', '--filter', f'agent_id="{agent_id}"', '--page-size', '50', '--order-by=-create_time'
         )  # fmt: skip
         return next((run['run_id'] for run in runs or [] if run.get('display_name') == name), None)
 
@@ -140,12 +146,22 @@ class CovalClient:
         return run['run_id']
 
     def wait(self, run_id: str, *, timeout_s: float, poll_s: float = 5) -> Run:
-        """Poll a run until Coval stops working on it or the timeout passes."""
+        """Poll a run until Coval stops working on it or the timeout passes.
+
+        Every 30 s it prints the run's status and this machine's load average:
+        a load test runs every call's bot here, so a saturated machine is part
+        of what its latency measures.
+        """
         deadline = time.monotonic() + timeout_s
         run = Run.model_validate(self._call('runs', 'get', run_id))
+        polls = 0
         while not run.finished and time.monotonic() < deadline:
             time.sleep(poll_s)
             run = Run.model_validate(self._call('runs', 'get', run_id))
+            polls += 1
+            if polls % max(1, round(30 / poll_s)) == 0:
+                load = ' '.join(f'{x:.1f}' for x in os.getloadavg())
+                print(f'run {run_id} {run.status}, load average {load}', flush=True)
         return run
 
     def simulations(self, run_id: str) -> list[Simulation]:

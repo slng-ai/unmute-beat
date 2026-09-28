@@ -18,6 +18,7 @@ import json
 import os
 import sys
 from contextvars import ContextVar
+from dataclasses import dataclass
 
 from opentelemetry import trace
 from pydantic_ai import Agent
@@ -170,6 +171,87 @@ def _prompt(system_json: str, messages_json: str) -> str:
     return json.dumps([line for line in lines if line['content'] or 'tool_calls' in line])
 
 
+_USAGE = 'gen_ai.usage.'
+_BREAKDOWN = 'gen_ai.usage.details.'
+
+
+@dataclass(frozen=True)
+class _Usage:
+    """One model request's tokens, in categories Langfuse can add up without counting any token twice.
+
+    Pydantic AI writes the request's counts as `gen_ai.usage.input_tokens`,
+    `output_tokens`, `cache_read.input_tokens` and `cache_creation.input_tokens`,
+    and the provider's own breakdown of those same tokens as
+    `gen_ai.usage.details.*`: Gemini's `text_prompt_tokens`, `text_candidates_tokens`,
+    `cached_content_tokens`, `thoughts_tokens`, `tool_use_prompt_tokens` and the
+    rest. Each one is a part of the input or output count, never an addition to
+    it (Pydantic AI 2.46.0 folds tool-use prompts into `input_tokens` and
+    thoughts into `output_tokens`). Langfuse's OTel ingestion keeps every
+    `gen_ai.usage.details.X` as a usage type `X` of its own and makes the total
+    the sum of all usage types, so a harness request of 1,449 in and 29 out was
+    stored as 2,956 tokens. `langfuse.observation.usage_details`, when present,
+    replaces that mapping entirely, so the request's usage is said once there.
+
+    The counted categories are the ones Langfuse's own generic mapping derives
+    from the same four attributes: `input` without cached or cache-written
+    tokens (the raw count includes them), `input_cached_tokens`,
+    `input_cache_creation`, and `output`. Output keeps its thinking tokens,
+    which the provider bills as output; Pydantic AI does not write a reasoning
+    count at the level Langfuse would split off. The breakdown goes into the
+    observation's metadata, where it is read and never added up.
+
+    ponytail: only the four count attributes Pydantic AI 2.46.0 writes are
+    read. If it starts writing another first-class count, such as
+    `gen_ai.usage.reasoning.output_tokens`, add it here, or Langfuse will not
+    see it.
+    """
+
+    input: int
+    """Every input token, cached or not: the raw count includes the cached ones."""
+    output: int
+    cache_read: int
+    cache_write: int
+    breakdown: dict[str, int]
+    """The provider's own split of the counts above, by modality or kind."""
+
+    @classmethod
+    def of(cls, attributes) -> _Usage | None:
+        """The usage a request span reports, or None when it reports none: a cancelled request's usage is unknown, not zero.
+
+        A count Pydantic AI left out beside others it wrote is zero: it writes
+        only the counts that are not.
+        """
+        if not any(key.startswith(_USAGE) for key in attributes):
+            return None
+        return cls(
+            input=int(attributes.get('gen_ai.usage.input_tokens', 0)),
+            output=int(attributes.get('gen_ai.usage.output_tokens', 0)),
+            cache_read=int(attributes.get('gen_ai.usage.cache_read.input_tokens', 0)),
+            cache_write=int(attributes.get('gen_ai.usage.cache_creation.input_tokens', 0)),
+            breakdown={
+                key.removeprefix(_BREAKDOWN): int(value)
+                for key, value in attributes.items()
+                if key.startswith(_BREAKDOWN)
+            },
+        )
+
+    @property
+    def counted(self) -> dict[str, int]:
+        """The usage types Langfuse adds into the total: each token in exactly one of them."""
+        counted = {'input': max(self.input - self.cache_read - self.cache_write, 0), 'output': self.output}
+        if self.cache_read:
+            counted['input_cached_tokens'] = self.cache_read
+        if self.cache_write:
+            counted['input_cache_creation'] = self.cache_write
+        return counted
+
+    def words(self) -> dict[str, str]:
+        words = {'langfuse.observation.usage_details': json.dumps(self.counted)}
+        if self.breakdown:
+            words['langfuse.observation.metadata.usage_breakdown'] = json.dumps(self.breakdown)
+        return words
+
+
 def _agent_words(span) -> dict:
     """Pydantic AI's run and request spans, with an input and an output somebody can read.
 
@@ -181,8 +263,9 @@ def _agent_words(span) -> dict:
     first. The run's input stops at the message that started it, since what
     followed is under its own request spans. The run span keeps its type
     explicit and gets `_readable` of its result; the request span gets `_said`
-    of its output messages. The originals stay in the observation's metadata,
-    so nothing is lost by saying it plainly.
+    of its output messages, and its token usage said once (`_Usage`). The
+    originals stay in the observation's metadata, so nothing is lost by saying
+    it plainly.
 
     ponytail: the run's prompt is the history it was given, `all_messages` up
     to `new_message_index`, plus the user message at that index when this run
@@ -205,7 +288,7 @@ def _agent_words(span) -> dict:
             words['langfuse.observation.input'] = _prompt(system, json.dumps(history[:index] + asked))
         return words
     if operation == 'chat':
-        words = {}
+        words = usage.words() if (usage := _Usage.of(attributes)) is not None else {}
         if said := _said(str(attributes.get('gen_ai.output.messages') or '')):
             words['langfuse.observation.output'] = said
         if given := attributes.get('gen_ai.input.messages'):

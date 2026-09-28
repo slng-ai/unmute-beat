@@ -310,8 +310,81 @@ def a_tool_call_is_dropped_only_for_its_own_audit():
     )
 
 
+HARNESS_USAGE = [
+    (3235, 23), (3230, 10), (3118, 31), (3079, 8), (2628, 8), (1493, 31), (1449, 29), (1433, 10), (1340, 27),
+]  # fmt: skip
+"""The nine requests of harness trace 3771f9b3 as Langfuse stored them: each input and output, which Gemini's
+`text_prompt_tokens` and `text_candidates_tokens` repeated."""
+NATIVE_USAGE = [
+    (554, 3681, 57), (528, 3687, 16), (4169, 0, 40), (4011, 0, 32), (3537, 0, 7),
+    (3500, 0, 10), (3464, 0, 23), (3206, 0, 8), (2449, 0, 31), (2414, 0, 28),
+]  # fmt: skip
+"""The ten requests with usage of Pipecat's own trace 7254d563, as stored: input without the cached tokens,
+the cached tokens, output. Its eleventh request was interrupted and reported only zeros."""
+
+
+def usage_is_counted_once():
+    """Tokens counted once from the usage Langfuse stored, before and after `core.observability._Usage`.
+
+    The two traces of 24 and 26 September, by their usage alone: no words,
+    no numbers, no ids beyond the trace's own.
+    """
+    before = [
+        gen(f'h{i}', 't', i, i + 0.5, {'input': i_, 'output': o, 'text_prompt_tokens': i_,
+            'text_candidates_tokens': o, 'total': 2 * (i_ + o)})
+        for i, (i_, o) in enumerate(HARNESS_USAGE)
+    ]  # fmt: skip
+    harness = read_call('harness', [Obs('t', None, 'SPAN', 'turn', at(0), at(60)), *before])
+    assert (harness.input_tokens, harness.output_tokens, harness.cancelled) == (21005, 177, 0), harness
+    assert harness.input_tokens + harness.output_tokens == 21182
+    assert sum(o.usage['total'] for o in before) == 42364, "Langfuse's own total for the same requests"
+
+    stored = [
+        gen(f'n{i}', 't', i, i + 0.5, {'input': fresh, 'input_cached_tokens': cached, 'output': out,
+            'output_reasoning_tokens': 0}, name='llm', model='gemini-3.1-flash-lite')
+        for i, (fresh, cached, out) in enumerate(NATIVE_USAGE)
+    ]  # fmt: skip
+    interrupted = gen(
+        'n10',
+        't',
+        11,
+        11.2,
+        {'input': 0, 'output': 0, 'input_cached_tokens': 0, 'total': 0},
+        name='llm',
+        model='gemini-3.1-flash-lite',
+    )
+    speech = [
+        Obs('tts', 't', 'GENERATION', 'tts', at(12), at(13), 'cartesia/sonic:3.5', usage={'characters': 491}),
+        Obs('stt', 't', 'GENERATION', 'stt', at(13), at(14), 'soniox', usage={'input': 9}),
+    ]
+    native = read_call(
+        'native', [Obs('t', None, 'SPAN', 'turn', at(0), at(60)), *stored, interrupted, *speech]
+    )
+    assert (native.input_tokens, native.output_tokens) == (35200, 252), native
+    assert native.input_tokens + native.output_tokens == 35452
+    assert (sum(native.completed.values()), native.cancelled) == (10, 1), 'an interrupted request is unknown'
+
+    fresh = {'input': 528, 'input_cached_tokens': 3687, 'output': 16}
+    raw = fresh | {'text_prompt_tokens': 4215, 'cached_content_tokens': 3687, 'text_cache_tokens': 3687}
+    for usage in (fresh, raw):
+        call = read_call('cached', [Obs('t', None, 'SPAN', 'turn', at(0), at(5)), gen('c', 't', 1, 2, usage)])
+        assert (call.input_tokens, call.output_tokens) == (4215, 16), (usage, call)
+
+    thinking = {'input': 100, 'input_cache_creation': 50, 'output': 20, 'output_reasoning_tokens': 30,
+                'thoughts_tokens': 30, 'audio.input_tokens': 40}  # fmt: skip
+    run = Obs('run', 't', 'AGENT', 'booking run', at(1), at(3), usage={'input': 999, 'output': 99})
+    call = read_call(
+        'thinking', [Obs('t', None, 'SPAN', 'turn', at(0), at(5)), run, gen('r', 'run', 1, 2, thinking)]
+    )
+    assert (call.input_tokens, call.output_tokens) == (150, 50), (
+        'reasoning and cache writes Langfuse stored apart are real consumption; breakdowns and the run are not'
+    )
+    assert sum(call.completed.values()) == 1, 'an agent run is not a second request'
+
+
 def main():
     counts_every_request_once()
+    usage_is_counted_once()
     reads_the_audit_of_a_write()
     a_tool_call_is_dropped_only_for_its_own_audit()
     an_unmapped_write_is_consent_unknown_not_consent_free()

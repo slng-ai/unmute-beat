@@ -17,9 +17,12 @@ It knows three shapes of trace, and reads them with one set of rules:
 The rules, each one a mistake made once by hand:
 
 * A request is one provider generation. Its input is Langfuse's `input` plus
-  `input_cached_tokens`, counted once: Pydantic AI also reports the same
-  tokens as `text_prompt_tokens`, and adding every key with "input" or
-  "prompt" in it counted every harness token twice (24 September).
+  `input_cached_tokens` and `input_cache_creation`, and its output `output`
+  plus `output_reasoning_tokens`, counted once: Pydantic AI also reports the
+  same tokens as `text_prompt_tokens`, and adding every key with "input" or
+  "prompt" in it counted every harness token twice (24 September). Harness
+  traces before `core.observability._Usage` still carry those keys, and
+  Langfuse's own total for them is doubled; this count is not.
 * A request with no usage at all was cancelled, or its usage never arrived.
   It is counted apart and never as zero tokens.
 * Requests that overlap in time are one step of the caller's wait: the
@@ -113,14 +116,22 @@ def kind(o: Obs) -> str:
     return 'classifier' if CLASSIFIER in str(o.input) else 'step'
 
 
+INPUT = ('input', 'input_cached_tokens', 'input_cache_creation')
+"""The usage types Langfuse splits a request's input into: each input token is in exactly one."""
+OUTPUT = ('output', 'output_reasoning_tokens')
+"""The same for output: Langfuse takes a reported reasoning count out of `output` and stores it apart."""
+
+
 def tokens(o: Obs) -> tuple[int, int] | None:
-    """(input, output) tokens, counted once; None when the request has no usage (cancelled, or never reported)."""
-    fresh, cached, out = (
-        o.usage.get('input', 0),
-        o.usage.get('input_cached_tokens', 0),
-        o.usage.get('output', 0),
-    )
-    return None if not (fresh or cached or out) else (fresh + cached, out)
+    """(input, output) tokens, counted once; None when the request has no usage (cancelled, or never reported).
+
+    Only the usage types Langfuse itself carves out of the input and output are
+    added back. Every other key (`text_prompt_tokens`, `cached_content_tokens`,
+    `thoughts_tokens`, `audio.input_tokens`, a TTS's `characters`) is a
+    breakdown of those counts, or not tokens at all.
+    """
+    fresh, out = sum(o.usage.get(k, 0) for k in INPUT), sum(o.usage.get(k, 0) for k in OUTPUT)
+    return None if not (fresh or out) else (fresh, out)
 
 
 def steps_in_a_row(requests: list[Obs]) -> int:

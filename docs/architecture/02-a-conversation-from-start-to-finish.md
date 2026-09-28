@@ -103,7 +103,7 @@ sequenceDiagram
     participant Core as Core and audio output
     User->>Agent: Mark it complete
     Agent->>Lookup: Fetch the record
-    Lookup-->>Agent: Checked state: open, revision 1; return to request
+    Lookup-->>Agent: Checked state: open, revision 1, return to request
     Agent->>Core: Select apply_change
     Core-->>User: Mark record R-17 complete?
     Note over User,Core: The next caller reply is needed here

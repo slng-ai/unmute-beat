@@ -148,7 +148,7 @@ The stages have different jobs:
 1. **Load the manifest.** `core.load` parses YAML, validates the declaration shape and records the application folder for resolving file references.
 2. **Resolve the definitions.** Compilation finds the state model, functions, argument and receipt types, personas and prompt files. It checks that fields and destinations exist and that operation bindings fit their types. `FlowSpec.problems()` can inspect definition problems without running a model.
 3. **Build runtime steps and nodes.** Each declared kind becomes its corresponding step object. `StepFlow` calls each step's `node` method and stores the resulting `Node` under its id in `flow.nodes`.
-4. **Build legal routes.** `Flow.of(flow.nodes)` derives permitted moves, including receipt destinations, automatic returns and prerequisite routes. Pydantic Graph's `GraphBuilder` turns those into executable steps and decisions. Core caches the graph for that node table.
+4. **Build legal routes.** `Flow.of(flow.nodes)` derives permitted moves, including receipt destinations, automatic returns and prerequisite routes. Pydantic Graph's `GraphBuilder` turns those into executable steps and decisions. The node table (`core.flow.Nodes`) owns the graph: it is built once per compile and collected with the table.
 
 Missing prompts, unknown fields or exits, incompatible function bindings and cyclic choice dependencies fail before a call runs. Compilation checks the wiring; it does not prove that a prompt will produce the right interpretation of every caller reply.
 

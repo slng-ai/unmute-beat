@@ -25,7 +25,8 @@ second, independent caller writes to the same SQLite file through its own
 * V8: the live check's contender (`evals.contend`) takes the time when the
   move's read-back reaches the log, and the move is refused;
 * V9: live call CAc82c12: a day recorded beside an id not on offer is kept,
-  and the times offered next are that day's;
+  and the times offered next are that day's; since session 4g the caller's own
+  booking beside it is judged on the offer code makes for that state, and kept;
 * V10: live call 5: a day said as a weekday and as a date is one day, and
   keeps the times on offer;
 * V11: live call s4e-worker-bystander: the time the caller already holds is

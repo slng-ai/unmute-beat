@@ -11,8 +11,8 @@ out=$2
 quick=${3:-}
 bench=$(cd "$(dirname "$0")" && pwd)/bench.py
 mkdir -p "$out"
-reps=20 warm=3 calls=20 active=5 compiles=50
-if [[ -n "$quick" ]]; then reps=2 warm=1 calls=3 active=2 compiles=3; fi
+reps=20 warm=3 calls=20 active=5 compiles=50 cold=10
+if [[ -n "$quick" ]]; then reps=2 warm=1 calls=3 active=2 compiles=3 cold=2; fi
 
 run() {
   local member=$1 mode=$2 workload=$3; shift 3
@@ -25,6 +25,7 @@ for pair in core:desk use-cases/salon-graph:salon use-cases/salon-graph:salon-lo
   member=${pair%%:*} workload=${pair##*:}
   [[ $workload == salon-long ]] || run "$member" compile "$workload" --reps "$reps"
   run "$member" turns "$workload" --reps "$reps" --warmup "$warm"
+  run "$member" cold "$workload" --reps "$cold"
   run "$member" payload "$workload"
   run "$member" memory "$workload" --calls "$calls" --active "$active" --compiles "$compiles"
   run "$member" profile "$workload" --reps "$reps" --warmup "$warm" --top 40

@@ -54,14 +54,19 @@ def turn_rows(folders: list[Path]) -> str:
             if not r:
                 continue
             warm = r['warm']
-            cold = sum(t['wall_ms'] for t in r['cold_call'])
+            fresh = read(folder, 'cold', w)
+            cold = (
+                ms(fresh['call_wall_ms'])
+                if fresh
+                else f'{sum(t["wall_ms"] for t in r["cold_call"]):.1f} (one)'
+            )
             first = [t['median'] for t in warm['first_output_ms'] if t]
             rows.append(
                 [
                     w,
                     folder.name,
                     str(sum(warm['requests'])),
-                    f'{cold:.1f}',
+                    cold,
                     ms(warm['call_wall_ms']),
                     ms(warm['call_cpu_ms']),
                     f'{max(t["median"] for t in warm["wall_ms"]):.1f}',
@@ -73,7 +78,7 @@ def turn_rows(folders: list[Path]) -> str:
             'workload',
             'run',
             'requests',
-            'cold call ms',
+            'first call in a fresh process ms',
             'warm call wall ms',
             'warm call CPU ms',
             'slowest turn ms',

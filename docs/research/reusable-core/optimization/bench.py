@@ -49,7 +49,13 @@ import pydantic_ai.models
 pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
 
 from loguru import logger  # noqa: E402
-from pydantic_ai.messages import ModelMessagesTypeAdapter  # noqa: E402
+from pydantic_ai.messages import (  # noqa: E402
+    RetryPromptPart,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel  # noqa: E402
 
 import core  # noqa: E402
@@ -83,10 +89,26 @@ class Sent:
     context: int
     """The part of the instructions `core.steps.context` wrote: from `## Application state` on."""
     history: int
+    """The text of every message part a provider is sent: words, tool names, arguments, results. No metadata."""
     tools: int
     """Tools and outputs offered."""
     schemas: int
     """Their names, descriptions and JSON schemas."""
+
+
+def _visible(message) -> list[str]:
+    """What of one message a provider receives as text."""
+    out = []
+    for part in message.parts:
+        if isinstance(part, UserPromptPart | TextPart):
+            out.append(part.content if isinstance(part.content, str) else str(part.content))
+        elif isinstance(part, ToolCallPart):
+            out += [part.tool_name, part.args_as_json_str()]
+        elif isinstance(part, ToolReturnPart):
+            out += [part.tool_name, part.model_response_str()]
+        elif isinstance(part, RetryPromptPart):
+            out.append(part.model_response())
+    return out
 
 
 class Probe:
@@ -122,7 +144,7 @@ class Probe:
             step=step,
             instructions=len(told.encode()),
             context=len(told[at:].encode()) if at >= 0 else 0,
-            history=len(ModelMessagesTypeAdapter.dump_json(messages)),
+            history=sum(len(text.encode()) for message in messages for text in _visible(message)),
             tools=len(tools),
             schemas=len(schemas.encode()),
         )
@@ -525,6 +547,29 @@ async def measure_turns(name: str, warmup: int, reps: int) -> dict[str, Any]:
     }
 
 
+async def cold_once(name: str) -> dict[str, Any]:
+    """In a fresh interpreter: compile, then the first call's turns (`cold`)."""
+    workload = WORKLOADS[name](Probe())
+    _, records = await workload.run()
+    return {'turns': [asdict(r) for r in records]}
+
+
+def measure_cold(name: str, reps: int) -> dict[str, Any]:
+    """The first call of `reps` fresh processes: each turn's wall time, and the whole call's."""
+    calls = []
+    for _ in range(reps):
+        out = subprocess.run(
+            [sys.executable, __file__, 'cold-once', name], capture_output=True, text=True, check=True
+        )
+        calls.append(json.loads(out.stdout.strip().splitlines()[-1])['turns'])
+    turns = len(calls[0])
+    return {
+        'wall_ms': [spread([c[i]['wall_ms'] for c in calls]) for i in range(turns)],
+        'call_wall_ms': spread([sum(t['wall_ms'] for t in c) for c in calls]),
+        'call_cpu_ms': spread([sum(t['cpu_ms'] for t in c) for c in calls]),
+    }
+
+
 async def measure_payload(name: str) -> dict[str, Any]:
     """What every request of one call carried, and the warm-up requests a launcher's `model_clients` sends.
 
@@ -672,7 +717,18 @@ async def measure_apps() -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        'mode', choices=['compile', 'compile-once', 'turns', 'payload', 'memory', 'profile', 'apps']
+        'mode',
+        choices=[
+            'compile',
+            'compile-once',
+            'cold',
+            'cold-once',
+            'turns',
+            'payload',
+            'memory',
+            'profile',
+            'apps',
+        ],
     )
     parser.add_argument('workload', nargs='?', default='salon', choices=sorted(WORKLOADS))
     parser.add_argument('--reps', type=int, default=20)
@@ -687,9 +743,14 @@ def main() -> None:
     if args.mode == 'compile-once':
         print(json.dumps(compile_once(args.workload)))
         return
+    if args.mode == 'cold-once':
+        print(json.dumps(asyncio.run(cold_once(args.workload))))
+        return
     started = time.perf_counter()
     if args.mode == 'compile':
         result = measure_compile(args.workload, args.reps)
+    elif args.mode == 'cold':
+        result = measure_cold(args.workload, args.reps)
     elif args.mode == 'turns':
         result = asyncio.run(measure_turns(args.workload, args.warmup, args.reps))
     elif args.mode == 'payload':

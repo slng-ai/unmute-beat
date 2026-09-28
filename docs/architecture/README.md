@@ -2,8 +2,6 @@
 
 The harness runs the conversation inside a voice application. The application defines what the agent can do; core keeps track of what the caller said, what the agent knows and which actions are allowed. This guide starts with that division of work and gradually explains how it is implemented.
 
-This guide describes the public node-agent architecture merged on `main` at [`03a0964`](https://github.com/slng-ai/slng-voice-harness/tree/03a0964d91d9bbd71c18cd3bc1b5cff6119a044d). It explains the implementation, rather than treating the migration roadmap as completed functionality. Pipecat is the implemented voice integration. LiveKit integration is planned. Qualification and migration of the remaining examples are ongoing.
-
 ## Reading order
 
 | Chapter | The question it answers |

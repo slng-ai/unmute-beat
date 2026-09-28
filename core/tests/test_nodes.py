@@ -37,6 +37,7 @@ Scripted models prove runtime properties, not language understanding.
 
 import asyncio
 import contextlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -119,51 +120,50 @@ async def turn(flow, call, script: Script, words: str, *moves, heard: bool = Tru
 FILL = (('call', 'options', {}), ('call', 'collect', {'values': {'patient': 'P-1234', 'slot': '1000'}}))
 
 
-def raising(*_: Any, **__: Any) -> Any:
-    raise AssertionError('a legacy reading entry point ran')
+RETIRED = (
+    'core.classifiers',
+    'core.readings',
+    'core.conversation',
+    'core.interpreters',
+    'core.desk',
+    'core.decisions',
+)
+"""The legacy reader and orchestration modules, retired in session 5 with their last user, Faro's old step."""
 
 
 async def no_reader_runs_in_any_pattern():
-    """P1: with every classifier, reading and interpreter entry point raising, the three patterns still work."""
-    import core.classifiers
-    import core.interpreters
-    import core.readings
+    """P1: the three patterns work, and the retired reader modules are gone: nothing can run before a step."""
+    assert not any(importlib.util.find_spec(name) for name in RETIRED), 'a retired reader module came back'
+    script = Script()
+    flow, call = opened('agent.yaml', script)
+    await turn(flow, call, script, 'P-1234.', ('call', 'collect', {'values': {'patient': 'P-1234'}}))
+    await turn(flow, call, script, 'Ten.', ('call', 'collect', {'values': {'slot': '1000'}}))
+    said = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
+    assert said[0].startswith('Booked for') and call.services.calls == 1, said
+    said = await turn(flow, call, script, 'Cancel it.', ('call', 'take_back', {}))
+    said = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
+    assert call.services.bookings == {} and call.state.outcome == 'cancelled', said
 
-    with (
-        patch.object(core.classifiers.Classifier, 'classify', raising),
-        patch.object(core.interpreters.Interpreter, 'interpret', raising),
-        patch.object(core.readings, 'read', raising),
+    for manifest, first in (
+        ('one_agent.yaml', ()),
+        ('handoff.yaml', (('call', 'hand_over', {'to': 'booking', 'because': 'a booking'}),)),
     ):
         script = Script()
-        flow, call = opened('agent.yaml', script)
-        await turn(flow, call, script, 'P-1234.', ('call', 'collect', {'values': {'patient': 'P-1234'}}))
-        await turn(flow, call, script, 'Ten.', ('call', 'collect', {'values': {'slot': '1000'}}))
-        said = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
-        assert said[0].startswith('Booked for') and call.services.calls == 1, said
-        said = await turn(flow, call, script, 'Cancel it.', ('call', 'take_back', {}))
-        said = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
-        assert call.services.bookings == {} and call.state.outcome == 'cancelled', said
-
-        for manifest, first in (
-            ('one_agent.yaml', ()),
-            ('handoff.yaml', (('call', 'hand_over', {'to': 'booking', 'because': 'a booking'}),)),
-        ):
-            script = Script()
-            flow, call = opened(manifest, script)
-            said = await turn(flow, call, script, 'P-1234 at ten.', *first, *FILL, ('call', 'book', {}))
-            assert said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', (manifest, said)
-            said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
-            assert call.services.bookings == {'CL001': ('P-1234', '1000')}, (manifest, said)
-            assert set(script.steps) <= {'desk', 'front', 'booking'}, script.steps
+        flow, call = opened(manifest, script)
+        said = await turn(flow, call, script, 'P-1234 at ten.', *first, *FILL, ('call', 'book', {}))
+        assert said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', (manifest, said)
+        said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+        assert call.services.bookings == {'CL001': ('P-1234', '1000')}, (manifest, said)
+        assert set(script.steps) <= {'desk', 'front', 'booking'}, script.steps
 
 
 def public_path_loads_no_reader():
-    """P1: importing core and compiling a manifest never imports the legacy reading modules (Faro's, until session 5)."""
+    """P1: in a fresh process, importing core and compiling manifests imports none of the retired reader modules."""
     code = (
         'import sys, core\n'
         f'core.load({str(HERE / "handoff.yaml")!r}).compile(model="test")\n'
         f'core.load({str(HERE / "agent.yaml")!r}).compile(model="test")\n'
-        "legacy = ['core.classifiers', 'core.readings', 'core.conversation', 'core.interpreters', 'core.desk', 'core.decisions']\n"
+        f'legacy = {list(RETIRED)!r}\n'
         'print([name for name in legacy if name in sys.modules])\n'
     )
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=True)

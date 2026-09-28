@@ -708,7 +708,7 @@ def the_processor_no_longer_runs_the_turn():
     Two turn loops that drift apart is worse than one in the wrong place.
     """
     source = (pathlib.Path(core.__file__).parent / 'processor.py').read_text()
-    for moved in ('run_stream_events', 'RunCancelled', 'moved_by', 'route('):
+    for moved in ('run_stream_events', 'RunCancelled', 'route('):
         assert moved not in source, f'{moved!r} is still in the processor'
 
 

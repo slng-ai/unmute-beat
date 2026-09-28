@@ -2,16 +2,12 @@
 
 Everything else a caller hears is the use case's: its prompts, its
 read-backs, its receipts. These are said by the turn engine: while a turn
-takes a while, or when something went wrong, so no use case wrote them. A call picks its locale by
-class (`CallContext.default_locale`), or per call by overriding `locale`, as a
-bilingual use case does (`use-cases/faro-language-learning`).
+takes a while, or when something went wrong, so no use case wrote them. A
+flow picks its locale in its manifest (`locale:`), or per call from a state
+field (`language:` and `locales:`), as the bilingual Faro does.
 
-The instructions every classifier is sent (`core.classifiers.TASK`) and the
-class descriptions (`core.readings`) stay in English whatever the caller
-speaks: they are read by the model, not said to the caller.
-
-ponytail: English and Spanish. The Spanish readings are checked only by
-Faro's live runs (`use-cases/faro-tools/bench.py`), not on a dataset of their own.
+ponytail: English and Spanish. Add a language as another `Locale` here when
+an application needs one.
 """
 
 from __future__ import annotations

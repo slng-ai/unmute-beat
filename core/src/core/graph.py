@@ -1,10 +1,9 @@
-"""The graph: steps, the legal moves between them, and the two functions that walk it.
+"""The graph: steps, the legal moves between them, and the function that walks it.
 
 `Node` is one step and `Exit` one legal move out of it; an agency's table of
 nodes is the whole graph. `route` decides where a handoff actually puts the
-caller, interposing a prerequisite and remembering where to resume, and
-`moved_by` decides where a successful borrowed tool has put them. Neither runs
-a model.
+caller, interposing a prerequisite and remembering where to resume. It runs
+no model.
 """
 
 from __future__ import annotations
@@ -22,30 +21,19 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from core.state import CallContext, Entry, VoiceState, present
+from core.state import CallContext, VoiceState, present
 
 
-class Exit[S: VoiceState](NamedTuple):
-    """One legal move out of a step, and the state it is legal in.
+class Exit(NamedTuple):
+    """One legal move out of a step: where to.
 
-    The exits whose guard holds are lowered into that step's own `hand_over` as
-    a narrowed `Literal`, so an illegal transition is not caught at runtime: it
-    is unrepresentable in the schema the model is sent.
-
-    `via` is what makes an edge free. A step that names another step's entry
-    tools here lends them into its own schema while the guard holds, and
-    calling one *is* the move: the caller is in the new step, and the request
-    that moved them is the same request that did their work. Without it the
-    move costs a model request of its own that says nothing.
-
-    Only a tool whose call genuinely means the caller has moved belongs in
-    `via`. Reading the diary does; recording a complaint never moves anybody.
+    A conversation step's exits are lowered into its own `hand_over` as the
+    destinations its schema allows, so an illegal hand-over is not merely
+    caught at runtime: it is unrepresentable in the schema the model is sent.
+    The graph (`core.flow`) refuses any other move.
     """
 
     to: str
-    guard: Callable[[S], bool] = lambda _: True
-    via: tuple = ()
-    """The lent tools themselves, not their names: the lender hands them to `Agent(tools=...)`."""
 
 
 @dataclass(frozen=True)
@@ -100,30 +88,24 @@ class Opening[C: CallContext]:
     before being verified. Running a model to choose that output costs a full
     round trip, about 0.8s, and decides nothing.
 
-    An opening names the entry it answers, a guard over the call, and the same
-    executor the model-facing tool uses, so the fast path and the model path
-    share every check. It is tried only after `advance` has declined, so an
-    answer to a pending question always wins; a refusal from the executor is
-    context for the model run that follows, never a second attempt.
-
-    An opening on a prerequisite's return (`after='completed'`) acts on the
-    request the detour interrupted. It runs only when a reading of the
-    return turn found that request unchanged (`CallContext.request_kept`);
-    otherwise the step's model runs, with what the caller said meanwhile.
+    An opening names a guard over the call and the same executor the
+    model-facing tool uses, so the fast path and the model path share every
+    check. It answers an arrival by a hand-over only: a step already running
+    at the start of the turn, or one a prerequisite returned to, runs its
+    agent, which reads what the caller said meanwhile. It is tried only after
+    `advance` has declined, so an answer to a pending question always wins; a
+    refusal from the executor is context for the model run that follows,
+    never a second attempt.
     """
 
     name: str
     """The action's name in traces and budgets: the tool it stands in for."""
-    after: Entry
-    """The entry this answers. A step already running at the start of the turn has entry '' and no opening."""
     applies: Callable[[C], bool]
     run: Callable[[C], Awaitable[object]]
 
     def action(self, call: C) -> LocalAction | None:
         """This opening as the turn's next action, or None when it does not apply to this call now."""
-        if not self.after or call.entered != self.after or not self.applies(call):
-            return None
-        if self.after == 'completed' and not call.request_kept:
+        if call.entered != 'handoff' or not self.applies(call):
             return None
         return LocalAction(self.name, lambda: self.run(call))
 
@@ -134,16 +116,12 @@ class Node[S: VoiceState]:
 
     agent: Agent[Any, Any]
     """`Agent[Any, Any]` rather than `Agent[S, ...]`: the output type varies per step and naming the union here would fix it for every agency."""
-    enter: tuple[str, ...] = ()
-    """Spoken by the turn engine, not the model, to cover the round trip the hop costs. Empty means the agent answers straight away."""
-    exits: tuple[Exit[S], ...] = ()
-    """The legal model-chosen moves out of this step."""
+    exits: tuple[Exit, ...] = ()
+    """The legal moves out of this step."""
     requires: tuple[str, ...] = ()
     """State fields that must be present before this step may run."""
     satisfied_by: str = ''
     """The step that fills `requires`. The graph interposes it and comes back; no prompt states the ordering."""
-    outputs: Callable[[S], list] | None = None
-    """This turn's `output_type`, given the state. A callable because a guard reads live state. `None` leaves the agent's own."""
     guarded: bool = False
     """Whether this step can change the business.
 
@@ -184,19 +162,6 @@ class Node[S: VoiceState]:
 
     Recorded like a prerequisite's waiting step (`route`), so the return is
     code, never a model's choice, and the graph allows it (`legal_moves`).
-    """
-    shares_detour: bool = False
-    """Whether, as a prerequisite, this step hands the caller's words on to the step it was serving.
-
-    Off by default: a prerequisite's conversation is its own, and the step
-    that waited gets back its saved history and a status, nothing the caller
-    told the prerequisite. A step turns it on when nothing it hears is secret
-    from the step it serves. Then everything the caller said during the
-    detour is kept for the step that runs next (`CallContext.keep_detour_words`),
-    however the detour ended: a request changed mid-detour is not lost, and
-    nor is a number the caller gave to a check that was then given up (Coval
-    run ad3n4Vxn, K3, where the number was asked for again from scratch). The
-    prerequisite's own speech stays out either way.
     """
 
     def opening(self, call: CallContext) -> LocalAction | None:
@@ -307,39 +272,3 @@ def holds(state: VoiceState, requires: tuple[str, ...]) -> bool:
         else present(getattr(facts, name, None))
         for name in requires
     )
-
-
-def lent[S: VoiceState](exits: tuple[Exit[S], ...]) -> dict[str, Exit[S]]:
-    """The tools a step borrows from its neighbours, by the name the model sees.
-
-    One map, read twice: the agency's `build` uses it to put the borrowed tools
-    in the schema and to take them back out when their guard stops holding,
-    and `moved_by` uses it to work out which step a call landed the caller in.
-    """
-    return {tool.__name__: exit for exit in exits for tool in exit.via}
-
-
-def moved_by[S: VoiceState](state: S, node: Node[S], nodes: dict[str, Node[S]], succeeded: set[str]) -> str:
-    """The step a *successful* tool call has put the caller in, or where they were.
-
-    Free, like `route`: the move rides the request that called the tool.
-
-    Three things are re-derived here rather than trusted from when the schema
-    was built, because all three can have changed since: the edge is one this
-    step actually owns; its guard still holds; and the destination's own
-    prerequisites are met, because entering a step by the back door would skip
-    the interposition `route` exists to do.
-
-    `succeeded` is tools that ran *and returned*. A tool that raised, retried
-    or was cancelled by barge-in is not a move.
-    """
-    borrowed = lent(node.exits)
-    for name in sorted(succeeded):
-        exit = borrowed.get(name)
-        if exit is None or not exit.guard(state):
-            continue
-        destination = nodes.get(exit.to)
-        if destination is not None and destination.requires and not holds(state, destination.requires):
-            continue
-        return exit.to
-    return state.agent

@@ -2,21 +2,17 @@
 
 Everything here is a plain value or a `Hooks` capability composed onto an
 agent: a budget shared by every run in a turn, one consequential action per
-model reply, a bound on how many requests a run may spend looking things up, a
-per-request clock, and a schema-authored tool that validates what its schema
-says it does.
+model reply, a bound on how many requests a run may spend looking things up,
+and a per-request clock.
 """
 
 from __future__ import annotations
 
 import random
 import time
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
 
-from pydantic import Field, TypeAdapter, create_model
-from pydantic_ai import ModelRetry, Tool
+from pydantic_ai import ModelRetry
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.messages import ToolCallPart
 from pydantic_ai.usage import RunUsage, UsageLimits
@@ -70,22 +66,14 @@ class TurnBudget:
     nothing for 8.49 s; the caller heard nothing until they spoke again.
     """
     hold_after: float = 1.5
-    """Seconds a turn may run with nothing said before a holding line goes out (`Locale.holding`).
+    """Seconds a tool or an application action may run with nothing said before a holding line goes out.
 
-    The fallback. A turn that sends a second step request says the line
-    then, earlier (`core.turn.Turn._hold`); this covers the other silences,
-    a slow reading or a slow first request.
-
-    The graph build covers the same wait with a line as a step starts, and
-    its caller's wait ends there. Above a plain answer's p90 (about 1.0 s)
-    so a quick turn never gets one.
-
-    1.5 s, not 1.2 s: over six calls of 2026-09-25, 4 of 14 holding lines
-    were followed by the answer within 0.2 s ("One moment. Shall I book you
-    in...?"). A reading that answers just after 1.2 s is common, because the
-    classifier sends its second copy then (`core.classifiers.HEDGE_AFTER`).
-    Every other line came 0.57 s or more before the answer, so all ten still
-    go out, 0.3 s later.
+    The timer belongs to that work and is cancelled when it finishes: a slow
+    model request, or a turn's second one, is no reason for the line
+    (`core.turn.Turn._hold`). Above a plain answer's p90 (about 1.0 s) so a
+    quick turn never gets one. 1.5 s, not 1.2 s: over six calls of
+    2026-09-25, 4 of 14 holding lines were followed by the answer within
+    0.2 s ("One moment. Shall I book you in...?").
     """
 
     per_piece: int = 2
@@ -252,101 +240,3 @@ def pick(key: str, lines: tuple[str, ...]) -> str:
     choice = random.choice([line for line in lines if line != _LAST.get(key)] or list(lines))
     _LAST[key] = choice
     return choice
-
-
-class UnsupportedSchemaError(Exception):
-    """A schema this harness will not build a tool from, said at build time.
-
-    Refused rather than approximated. A converter that silently drops a
-    keyword it does not implement produces a tool that validates less than its
-    schema says it does, and nothing downstream can tell.
-    """
-
-
-_SCHEMA_TYPES: dict[str, type] = {'string': str, 'boolean': bool, 'integer': int, 'number': float}
-"""What a schema-authored tool may say about one argument. Anything else is an error rather than a guess."""
-
-
-def schema_tool(
-    name: str,
-    description: str,
-    schema: dict,
-    handler: Callable[..., Awaitable[object]],
-    injected: dict[str, Callable[[Any], object]] | None = None,
-) -> Tool:
-    """A tool whose arguments are described by a JSON schema rather than by annotations.
-
-    `Tool.from_schema` does **no** argument validation unless an
-    `args_validator` is supplied: the handler is called with whatever the
-    model sent. This builds that validator from the schema, so the guarantee
-    an ordinary typed tool gets for free is the same one here.
-
-    Four things happen before the handler is reached, in this order, and the
-    handler is not called if any of them fails:
-
-    1. The model's arguments are validated against the schema's own fields.
-    2. A field the *application* supplies is refused if the model sent one.
-       An injected value is not a default the model may improve on.
-    3. The application's current values are injected. `injected` is keyed by
-       field name; each entry is handed the call and returns the value.
-    4. The whole effective argument set is validated again, because an
-       injected value can be wrong too.
-
-    Unsupported constructs raise at build time, so a schema this cannot honour
-    never becomes a tool the model is offered.
-    """
-    injected = injected or {}
-    if schema.get('type') != 'object':
-        raise UnsupportedSchemaError(f'{name}: only an object schema describes arguments')
-    for keyword in ('oneOf', 'anyOf', 'allOf', 'not', '$ref', 'patternProperties', 'additionalProperties'):
-        if keyword in schema:
-            raise UnsupportedSchemaError(f'{name}: {keyword} is not supported')
-    properties = schema.get('properties') or {}
-    required = set(schema.get('required') or ())
-    fields: dict[str, tuple[Any, Any]] = {}
-    for field_name, described in properties.items():
-        kind = described.get('type')
-        if kind not in _SCHEMA_TYPES:
-            raise UnsupportedSchemaError(f'{name}.{field_name}: {kind!r} is not a supported type')
-        if set(described) - {'type', 'description', 'enum', 'title'}:
-            raise UnsupportedSchemaError(f'{name}.{field_name}: only type, enum and description are read')
-        annotation: object = _SCHEMA_TYPES[kind]
-        if choices := described.get('enum'):
-            annotation = Literal[tuple(choices)]  # ty: ignore[invalid-type-form]
-        fields[field_name] = (
-            annotation if field_name in required else annotation | None,
-            Field(description=described.get('description', '')) if field_name in required else None,
-        )
-    effective = create_model(f'{name}_arguments', **fields)  # ty: ignore[no-matching-overload]
-    offered = {key: value for key, value in properties.items() if key not in injected}
-    model_schema = dict(schema, properties=offered, required=sorted(required - set(injected)))
-
-    from_model = TypeAdapter(
-        create_model(  # ty: ignore[no-matching-overload]
-            f'{name}_from_model',
-            **{key: value for key, value in fields.items() if key not in injected},
-        )
-    )
-
-    def validate(ctx, **arguments) -> dict:
-        """Steps 1 and 2: what the model sent, and what it may not send."""
-        if overridden := set(arguments) & set(injected):
-            raise ModelRetry(
-                f'{name} was not called: {", ".join(sorted(overridden))} '
-                'is supplied by the application and cannot be set from here.'
-            )
-        return from_model.validate_python(arguments).model_dump()
-
-    async def call_it(ctx, **arguments) -> object:
-        """Steps 3 and 4: inject, validate the whole set, then invoke."""
-        arguments |= {key: supply(ctx.deps) for key, supply in injected.items()}
-        return await handler(ctx, **effective(**arguments).model_dump())
-
-    return Tool.from_schema(
-        call_it,
-        name=name,
-        description=description,
-        json_schema=model_schema,
-        takes_ctx=True,
-        args_validator=validate,  # ty: ignore[invalid-argument-type]
-    )

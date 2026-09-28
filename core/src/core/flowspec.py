@@ -10,11 +10,11 @@ module holding its deterministic code, and where it can go next.
       prompts/team.md       one prompt file per step that runs a model
       steps/submit.py       one module per step that runs code
 
-Six step kinds. `collect`, `conversation` and `agent` run a model, so each
-names a `prompt`. `confirm`, `action` and `end` are code only: they have no
-prompt field at all, because the words the caller agrees to are written by
-code, never by a model. An `agent` step is a hand-built step (the salon's):
-its module's `node` function builds its agent, tools and openings.
+Five step kinds. `collect` and `conversation` run a model, so each names a
+`prompt`. `confirm` reads back words code wrote and has an agent read the
+reply; `action` and `end` run no model. None of those three has a prompt
+field, because the words the caller agrees to are written by code, never by
+a model.
 
 What a file may refer to:
 
@@ -68,13 +68,11 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
 from core.flow import Flow
-from core.graph import Exit
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
 from core.state import CallContext, Intent
 from core.steps import (
     ActionStep,
-    AgentStep,
     CollectStep,
     ConfirmStep,
     ConversationStep,
@@ -231,14 +229,7 @@ class _Resolver:
         return self._cache[kind, key]
 
     def call_type(self) -> type[CallContext]:
-        def find() -> type[CallContext]:
-            found = self.folder.attr(self.spec.call)
-            if not (isinstance(found, type) and issubclass(found, CallContext)):
-                raise _ProblemError(f'{self.spec.call!r} is not a CallContext class')
-            return found
-
-        if self.spec.call:
-            return self._once('call', self.spec.call, 'call', find) or FlowCall[NoFacts]
+        """The call every step's agent is given: `FlowCall` over the application's state model."""
         return FlowCall[self.state_type()]  # ty: ignore[invalid-type-form]
 
     def state_type(self) -> type[BaseModel]:
@@ -336,9 +327,6 @@ class _Resolver:
             return self.registry.knowledge[ref]
 
         return self._once('knowledge', ref, step, find)
-
-    def module(self, step: str, ref: str) -> ModuleType | None:
-        return self._once('module', ref, step, lambda: self.folder.module(ref))
 
     def function(self, where: str, ref: str, arity: int) -> Callable[..., Any] | None:
         """A plain function (or class) from the flow folder, callable with exactly `arity` positional arguments."""
@@ -925,69 +913,6 @@ class ConversationSpec(StepSpec):
         )
 
 
-class ExitSpec(BaseModel):
-    """One legal move out of a hand-built step: where, when (a guard in the step's module), and which borrowed tools make it."""
-
-    model_config = SPEC
-    to: str
-    when: str = ''
-    via: list[str] = []
-
-
-class AgentSpec(StepSpec):
-    kind: Literal['agent']
-    prompt: str
-    code: str
-    """The step's module: `steps/verify.py`, which must provide `node(step) -> Node`."""
-    exits: list[ExitSpec] = []
-    requires: list[str] = []
-    satisfied_by: str = ''
-    guarded: bool = False
-
-    @field_validator('exits', mode='before')
-    @classmethod
-    def _plain_names(cls, exits: Any) -> Any:
-        """`exits: [concierge]` is short for `exits: [{to: concierge}]`."""
-        return [{'to': exit} if isinstance(exit, str) else exit for exit in exits or []]
-
-    def destinations(self) -> list[str]:
-        return [*(exit.to for exit in self.exits), *([self.satisfied_by] if self.satisfied_by else [])]
-
-    def check(self, resolve: _Resolver) -> None:
-        resolve.prompt(self.id, self.prompt)
-        module = resolve.module(self.id, self.code)
-        if module is None:
-            return
-        if not callable(getattr(module, 'node', None)):
-            resolve.fail(self.id, f'{self.code!r} has no node(step) function')
-        for exit in self.exits:
-            for name in [*([exit.when] if exit.when else []), *exit.via]:
-                if not hasattr(module, name):
-                    resolve.fail(
-                        self.id, f'exit to {exit.to} names {name!r}, which {self.code!r} does not have'
-                    )
-
-    def to_step(self, resolve: _Resolver) -> Step:
-        module = resolve.module(self.id, self.code)
-        assert module is not None
-        exits = tuple(
-            Exit(exit.to, getattr(module, exit.when), tuple(getattr(module, name) for name in exit.via))
-            if exit.when
-            else Exit(exit.to, via=tuple(getattr(module, name) for name in exit.via))
-            for exit in self.exits
-        )
-        return AgentStep(
-            id=self.id,
-            then=self.then,
-            instructions=resolve.prompt(self.id, self.prompt),
-            build=module.node,
-            exits=exits,
-            requires=tuple(self.requires),
-            satisfied_by=self.satisfied_by,
-            guarded=self.guarded,
-        )
-
-
 class EndSpec(StepSpec):
     kind: Literal['end']
     outcome: Literal['completed', 'cancelled', 'failed', 'pending']
@@ -1003,7 +928,7 @@ class EndSpec(StepSpec):
 
 
 type AnyStep = Annotated[
-    CollectSpec | ConfirmSpec | ActionSpec | ConversationSpec | AgentSpec | EndSpec,
+    CollectSpec | ConfirmSpec | ActionSpec | ConversationSpec | EndSpec,
     Field(discriminator='kind'),
 ]
 
@@ -1154,12 +1079,6 @@ class FlowSpec(BaseModel):
     """The application's state model, like `models.py:ClinicState`: plain data, every field with a default."""
     identity: str = ''
     """The state field that says who the caller is. A question put to one identity is not answered by another."""
-    call: str = ''
-    """A call class of the application's own, like `models/state.py:SalonCall`, instead of `state`.
-
-    ponytail: kept for salon-graph and Faro, which still subclass `CallContext`
-    until their migration sessions (4 and 5); remove it then.
-    """
     voice: str = ''
     """A file added to the top of every step's prompt: the shared tone and persona."""
     includes: dict[str, str] = {}
@@ -1171,9 +1090,6 @@ class FlowSpec(BaseModel):
 
     def _resolver(self, registry: Registry) -> _Resolver:
         resolve = _Resolver(self, registry)
-        if self.call and self.state:
-            resolve.fail('', 'name the state model or a call class, not both')
-        resolve.call_type()
         if self.identity:
             resolve.state_field('identity', self.identity)
         if bool(self.language) != bool(self.locales):
@@ -1229,7 +1145,7 @@ class FlowSpec(BaseModel):
 
     def _unguarded_actions(self, resolve: _Resolver) -> None:
         """An action that needs approval must be unreachable except through a confirm step for that operation."""
-        business = [s for s in self.steps if not isinstance(s, EndSpec | AgentSpec)]
+        business = [s for s in self.steps if not isinstance(s, EndSpec)]
         edges: dict[str, set[str]] = {s.id: set(s.destinations()) for s in self.steps}
         for index, step in enumerate(business):
             if not step.then and index + 1 < len(business):
@@ -1262,11 +1178,7 @@ class FlowSpec(BaseModel):
     def prompt(self, step_id: str, registry: Registry | None = None) -> TemplateStr:
         """One step's compiled prompt, exactly as its agent receives it."""
         step = next(
-            (
-                s
-                for s in self.steps
-                if s.id == step_id and isinstance(s, CollectSpec | ConversationSpec | AgentSpec)
-            ),
+            (s for s in self.steps if s.id == step_id and isinstance(s, CollectSpec | ConversationSpec)),
             None,
         )
         if step is None:
@@ -1304,7 +1216,6 @@ class FlowSpec(BaseModel):
             settings=settings,
             state_type=state,
             identity=self.identity,
-            call_type=resolve.call_type() if self.call else None,
             entry=self.entry,
             services=resolve.function('services', self.services, 0) if self.services else None,
             locale=_built(self.locale) if self.locale else None,

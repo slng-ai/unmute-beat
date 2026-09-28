@@ -29,7 +29,6 @@ from core.clock import Today
 from core.locale import ENGLISH, Locale
 
 if TYPE_CHECKING:
-    from core.conversation import Conversation
     from core.proposals import Proposal, ProposalLedger
 
 SayFn = Callable[[str], Awaitable[None]]
@@ -253,34 +252,12 @@ class Request:
 
     started: float
     first_output: float | None = None
-    kind: Literal['', 'text', 'tool', 'classifier'] = ''
-    duration: float | None = None
-    fallback: bool = False
-    """The interpretation request failed or its answer was invalid, so nothing was understood."""
-    outcome: Literal['', 'action', 'refused', 'none'] = ''
-    """What the interpretation led to, set by the turn engine on the hop that asked for it.
-
-    `action` ran the application action it chose, `refused` chose one the
-    executor refused, `none` chose nothing and the step carried on. Kept apart
-    from `fallback` so a correct answer followed by ordinary conversation is
-    never counted as a failure to understand.
-    """
-    labels: str = ''
-    """The validated interpretation as JSON, for traces. Never the caller's words."""
+    kind: Literal['', 'text', 'tool'] = ''
 
     @property
     def ttft(self) -> float | None:
         """Seconds from the request going out to its first part, or None if none came."""
         return None if self.first_output is None else round(self.first_output - self.started, 3)
-
-
-@dataclass(frozen=True)
-class Interpretation:
-    """One interpreter's answer for one turn, and the snapshot it answered. Held on the call, cleared each turn."""
-
-    turn: int
-    input: BaseModel
-    output: BaseModel
 
 
 @dataclass(frozen=True)
@@ -292,11 +269,8 @@ class Checkpoint:
     """
 
     owner: str
-    messages: list[ModelMessage]
-    speech_ids: frozenset[str]
     heard: str
-    turn: int = 0
-    """The caller turn the detour began on. Everything the caller said after it was said to the prerequisite."""
+    """What the caller asked for when the prerequisite interrupted: told to the owner when it resumes."""
 
 
 type IntentStatus = Literal['prepared', 'dispatched', 'unknown', 'succeeded', 'rejected', 'withdrawn']
@@ -384,30 +358,6 @@ class Evidence:
     """The kind of that resource (the operation's `resource`, else its `subject` field): ids are unique within it."""
     version: int | None = None
     """The resource's version after this change (the operation's `version` field), None when it declares none."""
-
-
-@dataclass(frozen=True)
-class Held:
-    """Something the caller agreed to, or was told was done, that a later reply can still take back.
-
-    A booking just made, which the caller may still undo; an approval kept
-    while a prerequisite runs. The application holds it on the call by kind
-    (`CallContext.hold`), and a reading reads the caller's reply against what
-    they were told (`told`).
-    """
-
-    key: str
-    """What it is, as the application names it: a booking id, the digest of approved wording."""
-    told: str
-    """What the caller heard about it, word for word. A reading of their reply is read against this."""
-    owner: str = ''
-    """The caller identity it belongs to. Empty when it belongs to whoever is on the line."""
-    turn: int = 0
-    """The caller turn it was agreed on."""
-    item: Any = None
-    """The application's own record of it, such as the question that was approved."""
-    lasts: Callable[[Any], bool] | None = None
-    """Checked on every caller turn: once it says no, the call lets go of it. None lasts until released."""
 
 
 class Handoff(BaseModel):
@@ -568,8 +518,6 @@ class CallContext(BaseModel):
     """The turn and piece on which the latest receipt was last said again (`said_again`)."""
     _approved: tuple[int, int] = PrivateAttr(default=(0, -1))
     """The question serial the active step's agent approved, and the turn generation that did. See `approve`."""
-    _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
-    """Each interpreter's answer for this turn, by interpreter name. See `core.interpreters`."""
     _requests: list[Request] = PrivateAttr(default_factory=list)
     """Every provider request of the turn now running, timed at the model boundary by `request_clock`."""
     _spoken: list[Spoken] = PrivateAttr(default_factory=list)
@@ -608,8 +556,6 @@ class CallContext(BaseModel):
     """Every message that executed, retained for audit and never projected away."""
     _hidden_speech: set[str] = PrivateAttr(default_factory=set)
     _checkpoint: Checkpoint | None = PrivateAttr(default=None)
-    _held: dict[str, Held] = PrivateAttr(default_factory=dict)
-    """What the caller could still take back, by kind. See `hold`."""
     _clock: Callable[[], datetime] | None = PrivateAttr(default=None)
     """The clock a session was opened with, a service like any other. None reads the wall clock."""
     _began_as: dict[int, str] = PrivateAttr(default_factory=dict)
@@ -674,8 +620,6 @@ class CallContext(BaseModel):
     """How the call ended, as each part of it was observed or intended, in order (`note_ending`)."""
     _playback_log: list[dict[str, Any]] = PrivateAttr(default_factory=list)
     """Every mark sent, returned, ignored or cleared, in order, for the write audit (`playback_for`)."""
-    _request_kept: bool = PrivateAttr(default=False)
-    """Whether a reading of this turn found the detour's request unchanged. See `note_request_kept`."""
     _return_status: str = PrivateAttr(default='')
     _entered: Entry = PrivateAttr(default='')
     """How the step now running was reached within this turn. Set with `_return_status`, cleared with it."""
@@ -1139,92 +1083,6 @@ class CallContext(BaseModel):
         self._protocol.append(deepcopy(message))
         self.mark_retained()
 
-    @property
-    def detour_request(self) -> str:
-        """What the caller asked for when a prerequisite interrupted it. Empty while no step is waiting."""
-        return self._checkpoint.heard if self._checkpoint is not None else ''
-
-    def heard_since(self, turn: int) -> str:
-        """Everything the caller said from that caller turn to this one, in order, one turn after another."""
-        return ' '.join(
-            words for t in range(max(turn, 1), self._turn + 1) if (words := self._inputs.get(t, '').strip())
-        )
-
-    def detour_words(self, checkpoint: Checkpoint | None = None) -> list[str]:
-        """What the caller has said to a prerequisite since its detour began, a turn per item, oldest first.
-
-        That includes the rest of the turn the detour began on: a caller who
-        went on in that same turn (`continues_turn`) said it to the
-        prerequisite, and it is not in the request the checkpoint holds.
-        """
-        checkpoint = checkpoint or self._checkpoint
-        if checkpoint is None:
-            return []
-        said = []
-        for turn in range(checkpoint.turn, self.turn + 1):
-            words = self._inputs.get(turn, '').strip()
-            if turn == checkpoint.turn:
-                words = words.removeprefix(checkpoint.heard.strip()).strip()
-            if words:
-                said.append(words)
-        return said
-
-    def said_last_turn(self) -> str:
-        """What the agent said on the turn before this one: the question a reply answers."""
-        previous = [segment for segment in self.all_spoken if segment.turn < self.turn]
-        last_turn = max((segment.turn for segment in previous), default=-1)
-        return ' '.join(s.text for s in previous if s.turn == last_turn).strip()
-
-    def detour_speech(self) -> str:
-        """What the agent said to the caller since a prerequisite's detour began, in order, as far as it was heard."""
-        checkpoint = self._checkpoint
-        if checkpoint is None:
-            return ''
-        return ' '.join(s.text for s in self.all_spoken if s.id not in checkpoint.speech_ids and s.text)
-
-    def note_request_kept(self) -> None:
-        """Record that a reading of this turn found the detour's request unchanged.
-
-        A return opening acts on the request the checkpoint holds, with no
-        model to read what the caller said meanwhile. "And make it Saturday
-        instead", said with the number, made that request stale, so a return
-        opening runs only on this evidence (`Opening.action`). Only a reading
-        of the whole detour gives it, and only while the detour is open;
-        every new piece of the caller's turn takes it away again.
-        """
-        if self._checkpoint is not None:
-            self._request_kept = True
-
-    @property
-    def request_kept(self) -> bool:
-        """Whether this turn has evidence that the caller kept the request the detour interrupted."""
-        return self._request_kept
-
-    def keep_detour_words(self, checkpoint: Checkpoint, step: str, *, sent: str = '') -> str:
-        """Keep what the caller said during a prerequisite's detour, when the waiting step's history is restored.
-
-        The restore puts back the history from before the detour, so the
-        prerequisite's own exchanges stay out of the waiting step's view. The
-        caller's words must not go with them: "and make it at ten instead",
-        said while the number was being checked, was gone by the time the
-        booking step ran. They are kept as one application note, in order, in
-        the restored history (so a model-free opening cannot lose them for a
-        later run) and returned for this hop's status. `sent` is left out,
-        because it is about to reach the model as the caller's own prompt.
-        """
-        said = [words for words in self.detour_words(checkpoint) if words != sent]
-        if not said:
-            return ''
-        note = (
-            f'While {step} ran, the caller said, in order: ' + '; '.join(f'"{words}"' for words in said) + '.'
-        )
-        message = ModelRequest(
-            parts=[SystemPromptPart(content=note)], metadata={'application_note': 'detour'}
-        )
-        self.messages.append(message)
-        self._protocol.append(deepcopy(message))
-        return note
-
     def retain_action(self, name: str, receipt: dict) -> None:
         """Retain a validated application result before speech can be cancelled.
 
@@ -1505,15 +1363,6 @@ class CallContext(BaseModel):
             and self.pending_question() is not None
         )
 
-    @property
-    def conversation(self) -> Conversation[Any]:
-        """The conversation whose readings read this call's replies (`core.conversation`).
-
-        An agency with readings overrides this; a call without any has none,
-        and nothing that needs one (a goodbye read by `core.desk`) can run on it.
-        """
-        raise NotImplementedError(f'{type(self).__name__} reads its replies with no conversation')
-
     def answering(self) -> tuple[int, tuple[str, ...]]:
         """The recorded question's serial and the ids of the segments that carried it, for an audit."""
         return self._proposals.serial, tuple(s.id for s in self._proposals.copies(self))
@@ -1754,18 +1603,6 @@ class CallContext(BaseModel):
         """The caller said goodbye. Work already dispatched is still reconciled; nothing new begins."""
         self._departed = True
 
-    def hold(self, kind: str, held: Held) -> None:
-        """Keep this, of this kind, until it is released or its `lasts` says no. One of each kind at a time."""
-        self._held = {**self._held, kind: held}
-
-    def held(self, kind: str) -> Held | None:
-        """What is held of this kind, if anything."""
-        return self._held.get(kind)
-
-    def release(self, kind: str) -> None:
-        """Let go of what is held of this kind: done, withdrawn, or no longer the caller's."""
-        self._held = {name: held for name, held in self._held.items() if name != kind}
-
     @property
     def _asked(self) -> Any:
         """The recorded question, whatever its age. Read-only: record one with `ask`."""
@@ -2000,15 +1837,13 @@ class CallContext(BaseModel):
     def note_first_output(self, kind: Literal['text', 'tool']) -> None:
         """The newest step request has produced its first part.
 
-        A classifier's request is timed by its interpreter, and one can be in
-        flight beside a step's (`core.turn._Early`), so it is passed over. A second part in the same response does not overwrite the first: time
+        A second part in the same response does not overwrite the first: time
         to *first* output is the number, and `kind` says whether that first
         thing was speech the caller can hear or a tool call they cannot.
         """
-        pending = [r for r in self._requests if r.kind != 'classifier']
-        if pending and pending[-1].first_output is None:
-            pending[-1].first_output = time.perf_counter()
-            pending[-1].kind = kind
+        if self._requests and self._requests[-1].first_output is None:
+            self._requests[-1].first_output = time.perf_counter()
+            self._requests[-1].kind = kind
 
     def begin_turn(self) -> int:
         """Open a new accepted caller turn, and say which one it is.
@@ -2173,18 +2008,13 @@ class CallContext(BaseModel):
         self._changing = set()
         self._tries = Counter()
         self._kept = Counter()
-        self._request_kept = False
         self._response = ''
         self._entered = ''
-        self._interpretations.clear()
         self._requests.clear()
         self._spoken.clear()
         self._open = None
         self._spoke = False
         self._reminders = 0
-        self._held = {
-            name: held for name, held in self._held.items() if held.lasts is None or held.lasts(self)
-        }
 
     async def speak_now(self, text: str, origin: str = 'confirmation') -> None:
         """Say this whatever else was said. For a confirmation, a question or a goodbye, never a filler.

@@ -1,9 +1,8 @@
 """Typed steps that compile into the turn engine's nodes: collect, confirm, action, conversation, end.
 
-A business describes a flow as an ordered list of steps and `StepFlow`
-compiles it into the same `Node` table the salon hand-writes, so the same
-turn engine, budget, barge-in handling and Pydantic graph run it. What each
-kind does:
+A business describes a flow as a list of steps and `StepFlow` compiles it
+into a `Node` table, so one turn engine, budget, barge-in handling and
+Pydantic graph run every application. What each kind does:
 
 * `CollectStep` asks for typed fields and records them only once they
   validate. A caller who answers a later step's question early has that
@@ -1078,7 +1077,7 @@ class CollectStep(Step):
             'with only what they said. If they ask something else, answer in one short sentence and ask again.'
         )
         agent = _agent(flow, self, instructions, [str, ToolOutput(collect, name='collect')])
-        return _node(flow, self, agent, openings=(Opening('ask', 'handoff', _entered, self.arrive(flow)),))
+        return _node(flow, self, agent, openings=(Opening('ask', _entered, self.arrive(flow)),))
 
     def arrive(self, flow: StepFlow):
         async def arrive(call: FlowCall[Any]) -> Handoff | Prompted:
@@ -1222,13 +1221,9 @@ class ConfirmStep(Step):
             self,
             agent,
             advance=advance,
-            openings=(Opening('readback', 'handoff', _entered, read_back),),
+            openings=(Opening('readback', _entered, read_back),),
             model_speech=False,
         )
-
-
-async def _moved(to: str) -> Handoff:
-    return Handoff(to=to)
 
 
 async def _revised(flow: StepFlow, call: FlowCall[Any], to: str) -> Handoff:
@@ -1302,7 +1297,7 @@ class ActionStep(Step):
             flow,
             self,
             agent,
-            openings=(Opening(self.operation.name, 'handoff', _entered, act),),
+            openings=(Opening(self.operation.name, _entered, act),),
             returns=self.returns,
         )
 
@@ -1683,7 +1678,7 @@ class ConversationStep(Step):
             await call.speak_now(words, origin='ask')
             return words
 
-        return (Opening('ask', 'handoff', lambda call: bool(missing(call)), ask),)
+        return (Opening('ask', lambda call: bool(missing(call)), ask),)
 
     def _read_back_first(self) -> tuple[Opening[Any], ...]:
         operation = self.opens_with
@@ -1701,7 +1696,7 @@ class ConversationStep(Step):
             proposal = operation.proposal_for(call, _args(operation, call))
             return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
 
-        return (Opening(operation.name, 'handoff', ready, read_back),)
+        return (Opening(operation.name, ready, read_back),)
 
     def _reads_back(self, flow: StepFlow) -> Callable[[FlowCall[Any]], Prompted | Restated | None] | None:
         """The `reads_back` rule: the operation whose field was just recorded, when it is the only one that could run.
@@ -2163,38 +2158,7 @@ class End(Step):
         agent = _agent(
             flow, self, 'The request is finished. Answer briefly; do not start a new one.', outputs
         )
-        return _node(flow, self, agent, openings=(Opening('close', 'handoff', _entered, close),))
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentStep(Step):
-    """A hand-built step: its own prompt, and a module that builds its agent, tools and openings.
-
-    What a flow file says about the step (its prompt, its exits, what it
-    needs first, whether it can write) arrives here; the module's `node`
-    function turns it into a `Node`, with whatever tools the business wrote.
-    This is how the salon's four steps sit in a flow file.
-    """
-
-    instructions: Any
-    """The step's compiled prompt."""
-    build: Callable[[AgentStep], Node[Any]]
-    """The step module's `node` function."""
-    exits: tuple[Exit[Any], ...] = ()
-    requires: tuple[str, ...] = ()
-    satisfied_by: str = ''
-    guarded: bool = False
-
-    @property
-    def elsewhere(self) -> tuple[str, ...]:
-        return tuple(
-            dict.fromkeys(
-                [*(exit.to for exit in self.exits), *([self.satisfied_by] if self.satisfied_by else [])]
-            )
-        )
-
-    def node(self, flow: StepFlow) -> Node[Any]:
-        return self.build(self)
+        return _node(flow, self, agent, openings=(Opening('close', _entered, close),))
 
 
 class _Facts(dict):
@@ -2224,7 +2188,6 @@ class StepFlow:
         settings: ModelSettings | None = None,
         state_type: type[BaseModel] = NoFacts,
         identity: str = '',
-        call_type: type[CallContext] | None = None,
         entry: str = '',
         services: Callable[[], Any] | None = None,
         locale: Locale | None = None,
@@ -2236,7 +2199,7 @@ class StepFlow:
         """The application's state model: every call's `state.facts`."""
         self.identity = identity
         """The state field that says who the caller is. Empty: nobody in particular."""
-        self.call_type = call_type or FlowCall[state_type]  # ty: ignore[invalid-type-form]
+        self.call_type = FlowCall[state_type]  # ty: ignore[invalid-type-form]
         """The call every step's agent is given, and what prompt templates are checked against."""
         self.steps = tuple(steps)
         self.by_id = {step.id: step for step in self.steps}
@@ -2341,8 +2304,6 @@ class StepFlow:
         unknown, and are reconciled before any of them, or any other intent of
         the same operation for the same caller, can be sent.
         """
-        if not (isinstance(self.call_type, type) and issubclass(self.call_type, FlowCall)):
-            raise TypeError(f'{self.call_type.__name__} is its own call class; open its calls with it')
         facts = self.state_type.model_validate(deepcopy(state.model_dump()), extra='forbid')
         call = self.call_type(state=FlowState[self.state_type](agent=self.start, facts=facts))  # ty: ignore[invalid-type-form]
         call._identity_field, call._collectible, call._derived = self.identity, self.collectible, self.derived
@@ -2434,8 +2395,8 @@ class StepFlow:
         return ' '.join(w for w in words if w)
 
     def sequence(self) -> list[Step]:
-        """The steps walked in order, without the endings and without hand-built steps, which move by their exits."""
-        return [s for s in self.steps if not isinstance(s, End | AgentStep)]
+        """The steps walked in order, without the endings."""
+        return [s for s in self.steps if not isinstance(s, End)]
 
     def collects_after(self, step: Step) -> list[CollectStep]:
         order = self.sequence()
@@ -2457,7 +2418,7 @@ class StepFlow:
 
     def destinations(self, step: Step) -> tuple[str, ...]:
         """Every step this one can hand the caller to: onward (skipping done steps), or elsewhere."""
-        if isinstance(step, AgentStep | End | ConversationStep):
+        if isinstance(step, End | ConversationStep):
             return step.elsewhere
         order = self.sequence()
         onward = [s.id for s in order[order.index(step) + 1 :]] if not step.then else [step.then]

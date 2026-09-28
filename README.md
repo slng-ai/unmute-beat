@@ -2,7 +2,9 @@
 
 **A reusable conversation runtime for voice applications.** An application defines its own typed state, conversational nodes, prompts and backend functions. The harness runs that definition and manages the conversation across turns, corrections, interruptions and tool calls.
 
-The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the implemented node-agent architecture in the migration stack. Integrating that stack and completing qualification are still in progress.
+The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the node-agent architecture now merged into `main`. Qualification and migration of the remaining examples are still in progress.
+
+For a step-by-step explanation, start with the [architecture guide](docs/architecture/README.md). Its five chapters move from the voice stack to turns, typed state, graph routing and operation recovery.
 
 ## One runtime, different applications
 

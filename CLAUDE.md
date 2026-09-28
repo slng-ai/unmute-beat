@@ -7,8 +7,10 @@ transport, VAD, turn taking, STT and TTS; the agents own the conversation.
 transport.input() -> SlngSTT -> user_aggregator -> PydanticAgentProcessor -> SlngTTS -> transport.output()
 ```
 
-`README.md` is the long version: how to run it and every design choice with
-its supporting link. Read it before changing how a turn works.
+[README.md](README.md) introduces the package and how to run it. The
+[architecture guide](docs/architecture/README.md) explains the current public
+path from the voice stack through state, routing and recovery, with source
+and test links. Read it before changing how a turn works.
 
 ## Layout
 

@@ -219,7 +219,7 @@ class Brain:
                 return ('call', 'collect', {'values': {'slot': wanted or next(iter(offered))}})
             if refused and offered and facts.slot not in offered:
                 return ('call', 'collect', {'values': {'slot': next(iter(offered))}})
-            return ('call', 'options')
+            return ('call', 'collect', {'values': {'booking_time': caller.time}})
         return ('say', 'How can I help?')
 
 

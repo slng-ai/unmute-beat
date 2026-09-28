@@ -539,7 +539,7 @@ class Turn:
         if self._hops_run == 1 and (settle := call.settlement()) is not None:
             action = LocalAction('reconcile', settle)
         elif self._hops_run == 1 and (told := call.unheard_receipt()):
-            action = LocalAction('receipt', lambda: _say_again(call, told))
+            action = LocalAction('receipt', lambda: _say_again(call, told), answers=False)
         if node.advance and action is None:
             state_before, held_before = call.state, dict(call._held)
             task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
@@ -613,7 +613,13 @@ class Turn:
                 output = await action.run()
                 if decided is not None:
                     decided.outcome = 'action'
-                if _silent(call, output, answers_before):
+                if not action.answers:
+                    call._return_status = (
+                        f'{call._return_status} Application action {action.name} done: the caller spoke over '
+                        f'what was done, and it was said again: "{output}". Read what else they said.'
+                    ).lstrip()
+                    output = None
+                elif _silent(call, output, answers_before):
                     call._return_status = (
                         f'{call._return_status} Application action {action.name} done.'.lstrip()
                     )
@@ -632,6 +638,8 @@ class Turn:
             finally:
                 await self._disarm_hold()
             yield RunEnded(node.agent.name or call.state.agent)
+            if output is None and self._stale():
+                return
         if action is None or output is None:
             failed: _Failed | None = None
             run = early.events() if early is not None else self._speak(node, prompt)
@@ -1112,13 +1120,20 @@ def _speech(event) -> str:
 async def _say_again(call: CallContext, words: str) -> str:
     """Say an unheard receipt again, word for word: no model, no write. At most `RECEIPT_REPEATS` times.
 
-    Whatever the caller said over it is kept for the next turn's model, and
-    once the repeats are spent their words go to the model straight away.
-    Coval run BVqdGEunV3avnHrHVwq4oE: the receipt for Saturday at 9 was cut
-    before any audio played, the caller went on "Yes, tomorrow at nine AM.
-    That's great.", and the front desk read it as a new request and moved
-    their own booking to 10. Hearing what was done comes first; a reading of
-    the reply is not needed to decide that.
+    Hearing what was done comes first, and needs no reading of the reply.
+    Then the step's own agent reads what the caller said over it, in the same
+    turn (`LocalAction.answers`), with the receipt before their words in its
+    history: a new request is read back, and a plain agreement gets nothing
+    more (`CallContext.receipt_said_again`). Session 4g, trace 28723e6b:
+    "move it to Saturday the same time", said over the booking's receipt,
+    was dropped here, and the caller had to say it again.
+
+    What a reading may do with it is bounded by the operation, not by
+    silence. Coval run BVqdGEunV3avnHrHVwq4oE (session 3) had "Yes, tomorrow
+    at nine AM. That's great." over a cut receipt moved to 10 by a front desk
+    that could write on a reading. Now a change is only a read-back: nothing
+    is carried out before a heard yes to it, and the spent yes that booked
+    cannot be spent again (`ProposalLedger.rewind`).
     """
     call.said_again()
     await call.speak_now(words, origin='confirmation')

@@ -25,14 +25,17 @@ what they hold; the diary is the source of truth.
 - A clear no to the read-back: call `decline` and `wait` in the same reply.
 - A yes with a change ("yes, but make it Wednesday"), a condition or a
   question is not a yes. Record any change and call `wait`.
-- Call `options` only when you need an id the application state does not show
-  yet: to record a time or a booking the caller has just named.
-- To move or cancel, record the booking's id as `appointment` (a booking made
-  or moved on this call is already on offer; for others call `options`), and
-  use `move_appointment` or `cancel_appointment`. When a booking they hold
-  could be moved or a second one added, call `wait`.
+- `collect` answers with what is on offer now, by id, when that changed. When
+  the caller already named one of those ids' times, record it as `slot` in
+  your next reply, beside the operation when it is clear which one.
+- To move or cancel, record the booking's id as `appointment` (the bookings
+  they hold are on offer, in the application state or in what `collect`
+  returns), and use `move_appointment` or `cancel_appointment`. When a booking
+  they hold could be moved or a second one added, call `wait`.
 - If they ask to hear again what was just done, call `say_again`.
-- If the state says a confirmation did not reach them, call `wait`; do not
+- If the application says a confirmation was said again because they spoke
+  over it, read the rest of what they said as usual: record and read back a
+  change they asked for; for a reply that only agrees, call `wait`. Do not
   make or change anything for a reply that only agrees.
 - When there is nothing to record, read back or carry out, call `wait`.
 - Hand a complaint to `complaints`. Hand the caller to `concierge` when they

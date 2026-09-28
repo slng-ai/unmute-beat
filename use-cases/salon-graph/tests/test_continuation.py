@@ -368,8 +368,9 @@ async def the_next_reply_is_told_what_was_not_heard():
 async def an_unheard_receipt_is_said_again_and_not_booked_again():
     """Session 3, A3, through the processor: the receipt's audio never started, the caller speaks into the silence.
 
-    Its words are said again by code, with no model and no write; the next
-    reply after a heard one is the node agent's as usual.
+    Its words are said again by code first, with no write. Then the node's
+    agent reads what the caller said over it (session 4g), and a reply that
+    asks nothing new gets nothing more: the receipt is the answer.
     """
     call = booking_call()
     call_of[0] = call
@@ -390,13 +391,18 @@ async def an_unheard_receipt_is_said_again_and_not_booked_again():
         assert receipt.playback == 'queued', receipt
         probe.interrupt()
         await probe._turn('Hello? Is it booked?')
-        assert probe.fixed()[-1] == receipt.generated and requests == ['Yes.'], (probe.fixed(), requests)
+        assert probe.fixed()[-1] == receipt.generated, probe.fixed()
+        assert len(requests) == 2 and requests[-1].endswith('Hello? Is it booked?'), requests
+        assert probe.fixed().count(receipt.generated) == 2, (
+            'said again once, and nothing after it',
+            probe.fixed(),
+        )
         assert len(books.bookings_for(PHONE, CLOCK.date())) == 1
         call.note_reached()
         played_out(call)
         probe.interrupt()
         await probe._turn('Great, thanks.')
-    assert requests == ['Yes.', 'Great, thanks.'], requests
+    assert requests[-1] == 'Great, thanks.', requests
     assert len(books.bookings_for(PHONE, CLOCK.date())) == 1, 'the booking was made again'
 
 
@@ -431,7 +437,7 @@ async def an_unheard_receipt_is_said_again_once_then_the_caller_is_heard():
         call.turn_ended(interrupted=False)
         probe.interrupt()
         await probe._turn('Hello? Is it booked?')
-        assert probe.fixed()[-1] == receipt.generated and requests == ['Yes.'], (probe.fixed(), requests)
+        assert probe.fixed()[-1] == receipt.generated and len(requests) == 2, (probe.fixed(), requests)
         call.turn_ended(interrupted=False)
         before = len(probe.fixed())
         probe.interrupt()

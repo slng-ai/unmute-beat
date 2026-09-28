@@ -407,9 +407,12 @@ async def late_options_offer_nothing():
 
 
 async def an_unheard_receipt_is_said_again():
-    """P2/P7: the receipt was cut before it reached the caller; their next words hear it again, no model, no write.
+    """P2/P7: the receipt was cut before it reached the caller; their next words hear it again first, with no write.
 
-    With the rule switched off, the same reply goes to a model instead: the
+    Then the step's agent reads what they said over it, in the same turn,
+    with the receipt before their words (session 4g: before, a request said
+    over a receipt was dropped). With the rule switched off, the agent
+    answers unaware and the caller never hears what was done: the
     regression this check exists to catch.
     """
     for rule in (True, False):
@@ -423,18 +426,22 @@ async def an_unheard_receipt_is_said_again():
         call.acknowledge(receipt.id, heard='')
         requests = len(script.steps)
         if rule:
-            said = await turn(flow, call, script, 'Yes, Tuesday at ten, great.')
+            said = await turn(flow, call, script, 'Yes, Tuesday at ten, great.', ('say', 'See you then.'))
         else:
             with patch.object(type(call), 'unheard_receipt', lambda self: ''):
                 said = await turn(
                     flow, call, script, 'Yes, Tuesday at ten, great.', ('say', 'Anything else?')
                 )
         assert call.services.calls == 1 and len(call.evidence) == 1, 'the booking was made again'
+        assert len(script.steps) == requests + 1, 'the words said over the receipt were not read'
         if rule:
-            assert said == ['Booked for Tuesday at 10:00 AM, reference CL001.'], said
-            assert len(script.steps) == requests, 'saying the receipt again asked a model'
+            assert said == ['Booked for Tuesday at 10:00 AM, reference CL001.', 'See you then.'], said
+            sent = script.told[-1]
+            assert sent.rfind("TextPart(content='Booked for Tuesday") < sent.rfind(
+                "UserPromptPart(content='Yes, Tuesday at ten, great."
+            ), 'the receipt did not come before the words said over it'
         else:
-            assert len(script.steps) == requests + 1, 'without the rule a model answers, unaware'
+            assert said == ['Anything else?'], 'without the rule the receipt was still said'
 
 
 async def model_words_beside_an_operation_are_not_said():

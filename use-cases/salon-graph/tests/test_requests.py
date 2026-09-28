@@ -20,6 +20,13 @@ printed at the end is the report's scripted request count.
 
 Scripted models prove what the runtime allows and what it costs, never what a
 real model will choose: that is the live check's job.
+
+Since session 4g the rendered booking step has no `options` tool: the old
+variant's calls to it get the SDK's unknown-tool retry, which costs the same
+request, so the old counts stand as 4f printed them. K8 costs one request
+more in both variants (4f: 6 and 4): the words said over a cut receipt are
+now read by the step's agent after the receipt is said again, where before
+they were dropped (`tests.test_contract` G2, G3).
 """
 
 import asyncio

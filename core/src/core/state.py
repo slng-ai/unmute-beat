@@ -563,6 +563,8 @@ class CallContext(BaseModel):
     """The one question this call is waiting on an answer to. See `core.proposals`."""
     _told: tuple[int, str, str, int] = PrivateAttr(default=(0, '', '', 0))
     """The turn, words and intent of the latest receipt speech (`note_receipt`), and how often it was said again."""
+    _told_again_at: tuple[int, int] = PrivateAttr(default=(0, 0))
+    """The turn and piece on which the latest receipt was last said again (`said_again`)."""
     _approved: tuple[int, int] = PrivateAttr(default=(0, -1))
     """The question serial the active step's agent approved, and the turn generation that did. See `approve`."""
     _interpretations: dict[str, Interpretation] = PrivateAttr(default_factory=dict)
@@ -1450,6 +1452,16 @@ class CallContext(BaseModel):
         """The latest receipt was just said again, on this turn: the same receipt, for the same intent, once more."""
         _turn, words, intent, repeats = self._told
         self._told = (self.turn, words, intent, repeats + 1)
+        self._told_again_at = (self.turn, len(self._pieces))
+
+    def receipt_said_again(self) -> bool:
+        """Whether this piece of the caller's turn has already said the latest receipt again: nothing more is owed.
+
+        A step's `wait` then has nothing to add, and `say_again` would say the
+        same words twice in a row (session 4g). Only the automatic repeat
+        counts: a lookup's receipt said on the way to another step is not this.
+        """
+        return bool(self._told[1]) and self._told_again_at == (self.turn, len(self._pieces))
 
     def unheard_receipt(self, repeats: int = RECEIPT_REPEATS) -> str:
         """The latest receipt speech, if it is known not to have reached the caller and may be said again.

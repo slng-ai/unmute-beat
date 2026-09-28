@@ -1,0 +1,47 @@
+
+A 3771f9b3 observed: 9 requests, 6 caller turns, 0 repetitions
+  2  'Hey Robin, I would like to book a haircut appointment for Friday.' -> ['Which phone number should I use? Please say it with the country code.']
+  1  '+34 680 840 464.' -> ['Is your number +34 680 84 04 64?']
+  3  'Yes.' -> ['Thanks, I have you.', 'On Friday the 2nd I have 9:00 AM, 9:30 AM or 10:00 AM. Which would suit you?']
+  1  '9:00 AM.' -> ['Shall I book a haircut, Friday the 2nd at 9:00 AM?']
+  1  'Yes, please.' -> ["You're all set for Friday the 2nd at 9:00 AM. Anything else I can help with?"]
+  1  "I'm good, thanks." -> ['Thanks for calling Sage and Stone. Have a lovely day!']
+  diary: [('BK0001', '+34680840464', '2026-10-02', '09:00', 1, 1)]
+
+A 3771f9b3 repaired: 8 requests, 6 caller turns, 0 repetitions
+  2  'Hey Robin, I would like to book a haircut appointment for Friday.' -> ['Which phone number should I use? Please say it with the country code.']
+  1  '+34 680 840 464.' -> ['Is your number +34 680 84 04 64?']
+  2  'Yes.' -> ['Thanks, I have you.', 'On Friday the 2nd I have 9:00 AM, 9:30 AM or 10:00 AM. Which would suit you?']
+  1  '9:00 AM.' -> ['Shall I book a haircut, Friday the 2nd at 9:00 AM?']
+  1  'Yes, please.' -> ["You're all set for Friday the 2nd at 9:00 AM. Anything else I can help with?"]
+  1  "I'm good, thanks." -> ['Thanks for calling Sage and Stone. Have a lovely day!']
+  diary: [('BK0001', '+34680840464', '2026-10-02', '09:00', 1, 1)]
+
+B 28723e6b observed: 23 requests, 13 caller turns, 3 repetitions
+  2  'Hey Robin, I would like to book a haircut appointment for Friday.' -> ['Which phone number should I use? Please say it with the country code.']
+  1  "It's +34 680 840 46. 4." -> ['Is your number +34 680 84 04 64?']
+  3  'That sounds about right.' -> ['Thanks, I have you.', 'On Friday the 2nd I have 9:00 AM, 9:30 AM or 10:00 AM. Which would suit you?']
+  4  "Uh, let's do 9:00 AM." -> ['9:00 AM on Friday the 2nd is free. I also have 9:30 AM or 10:00 AM.']
+  1  '9:00 AM is perfect.' -> ['Shall I book a haircut, Friday the 2nd at 9:00 AM?']
+  1  'Yes, please.' -> ["You're all set for Friday the 2nd at 9:00 AM. Anything else I can help with?"]
+  0  'Sorry, can I— can you actually move the appointment to Saturday the same time?' -> ["You're all set for Friday the 2nd at 9:00 AM. Anything else I can help with?"]
+  3  'If you can move the appointment to Saturday the same time.' -> ['9:00 AM on Saturday the 3rd is free. I also have 9:30 AM or 10:00 AM.']
+  2  'Hmm, no, I asked for 9:00.' -> ['Shall I move your haircut from Friday the 2nd at 9:00 AM to Saturday the 3rd at 9:00 AM?']
+  1  'Yes, please.' -> ["That's moved to Saturday the 3rd at 9:00 AM. Anything else I can help with?"]
+  3  'Can you actually cancel at all the appointment?' -> ['Shall I cancel your haircut Saturday the 3rd at 9:00 AM?']
+  1  'Yes.' -> ["That's cancelled for you. Anything else I can help with?"]
+  1  "I'm good, thanks." -> ['Thanks for calling Sage and Stone. Have a lovely day!']
+  diary: [('BK0001', '+34680840464', '2026-10-03', '09:00', 3, 0)]
+
+B 28723e6b repaired: 20 requests, 10 caller turns, 0 repetitions
+  2  'Hey Robin, I would like to book a haircut appointment for Friday.' -> ['Which phone number should I use? Please say it with the country code.']
+  1  "It's +34 680 840 46. 4." -> ['Is your number +34 680 84 04 64?']
+  2  'That sounds about right.' -> ['Thanks, I have you.', 'On Friday the 2nd I have 9:00 AM, 9:30 AM or 10:00 AM. Which would suit you?']
+  3  "Uh, let's do 9:00 AM." -> ['Sorry, I had a problem there. Could you say that again?']
+  2  'Yes, please.' -> ['Sorry, I had a problem there. Could you say that again?']
+  3  'Sorry, can I— can you actually move the appointment to Saturday the same time?' -> ['Sorry, I had a problem there. Could you say that again?']
+  2  'Yes, please.' -> ['Sorry, I had a problem there. Could you say that again?']
+  2  'Can you actually cancel at all the appointment?' -> ['Sorry, I had a problem there. Could you say that again?']
+  2  'Yes.' -> ['Sorry, I had a problem there. Could you say that again?']
+  1  "I'm good, thanks." -> ['Thanks for calling Sage and Stone. Have a lovely day!']
+  diary: []

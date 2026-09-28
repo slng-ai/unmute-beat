@@ -1,0 +1,55 @@
+
+--- tests.test_classes ---
+classes ok: ledger, default operation, rule interpreter, final methods held
+
+--- tests.test_history ---
+ok
+
+--- tests.test_reuse ---
+reuse ok: a second use case on the same core classes, with no salon code
+
+--- tests.test_clock ---
+clock ok: labels, calendar, one reading per call
+
+--- tests.test_package ---
+package ok: importing and checking loads no env, no voice, no tracing, no provider
+
+--- tests.test_delivery ---
+delivery ok: no record, queued, unacknowledged, partial, estimated and late copies never authorise
+
+--- tests.test_public ---
+authored orchestration, native salon: {'call.py': 158, 'handlers.py': 354, 'speech.py': 255} ; clinic slice: 0 lines
+public ok: load, compile, open, text turns, acknowledgement, one guarded booking
+
+--- tests.test_session ---
+session ok: atomic state, owned fields, isolation, freshness, stale work, evidence
+
+--- tests.test_sdk ---
+sdk ok: whole candidates, owned fields, typed prompts, AgentSpec on the graph, state-derived schemas
+
+--- tests.test_authoring ---
+authored, non-blank lines: {'domain (clinic.py)': 130, 'configuration (3 manifests)': 114, 'prompts': 8, 'orchestration': 0, 'native salon orchestration (call, handlers, speech, writes)': 750}
+authoring ok: manifest, operations, choices, take-back, three patterns, early diagnostics
+
+--- tests.test_nodes ---
+<frozen runpy>:130: RuntimeWarning: 'tests.test_nodes' found in sys.modules after import of package 'tests', but prior to execution of 'tests.test_nodes'; this may result in unpredictable behaviour
+nodes ok: no reader, hostile calls, mixed reply, holding, code node, late options, unheard receipt, no echo, code read-back, a question is not a no
+
+--- tests.test_intents ---
+intents ok: I1-I15
+
+--- tests.test_tickets ---
+<frozen runpy>:130: RuntimeWarning: 'tests.test_tickets' found in sys.modules after import of package 'tests', but prior to execution of 'tests.test_tickets'; this may result in unpredictable behaviour
+tests.test_tickets FAILED: AssertionError: ['reset no es una de las opciones que tengo. Puedo dejarlo como un reembolso o un abono en la cuenta. ¿Qué prefiere?']
+
+--- tests.test_outcomes ---
+outcomes ok: O1-O9
+
+--- tests.test_speech ---
+speech ok: S1-S8, a rendered step says no model words; a prose claim nothing backs is corrected
+
+--- tests.test_webrtc ---
+webrtc ok: W1-W10 on the real SmallWebRTC transport, an aiortc browser and the desk flow
+
+1 of 16 modules failed:
+  tests.test_tickets

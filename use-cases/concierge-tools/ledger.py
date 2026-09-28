@@ -63,10 +63,10 @@ CLASSIFIER = 'You classify the answer to a question'
 """The first words of every harness classifier's instructions (`core.classifiers.TASK`)."""
 TASKS = frozenset({
     'save_booking', 'record_complaint', 'save_name', 'activate_plan', 'record_answer',
-    'book_appointment', 'move_appointment', 'cancel_appointment',
+    'book_appointment', 'move_appointment', 'cancel_appointment', 'create_learner', 'record_attempt',
 })  # fmt: skip
 """Tool calls that change the business: the work a call is for. The salon's (session 3, then session 4's
-operations), then Faro's (`examples/faro`)."""
+operations), then Faro's: its legacy writes (`save_name`, `record_answer`), then session 5's."""
 FAILED = ('error', 'nothing was', 'refus', 'not saved')
 """Words in a tool's output that mean the write did not happen."""
 
@@ -213,15 +213,16 @@ ANSWERS = {
     'move_appointment': ('move_appointment',),
     'cancel_appointment': ('cancel_appointment',),
     'lookup_customer': ('lookup_customer',),
-    'confirm_phone': ('phone',),
-    'activate_plan': ('plan',),
+    'confirm_phone': ('phone', 'confirm_phone'),
+    'activate_plan': ('plan', 'activate_plan'),
 }
 """Compatibility mapping for audits that do not say whether they needed a yes: the questions whose yes can
 authorise each write. Every write named here needed one.
 
 A write named nowhere is not "needs no yes": its consent is unknown (`needs_consent` is None) until its
 audit carries `needs_approval` itself, as an audit written from the operation's own declaration will.
-Session 4's operations are asked about under their own name (`about` is the action); the native build's
+Session 4's operations, and Faro's since session 5, are asked about under their own name (`about` is the
+action), and Faro's legacy traces under `phone` and `plan`; the native build's
 `confirm_customer` and `save_booking` about `phone` and `booking` (`salon-pipecat-flows/graph_salon/writes.py`).
 """
 

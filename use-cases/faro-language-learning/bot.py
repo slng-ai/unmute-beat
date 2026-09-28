@@ -42,10 +42,11 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 from pipecat_slng import SlngSTTService, SlngTTSService
 
+import faro
 from core.graph import model_clients
 from core.observability import setup
-from core.processor import PydanticAgentProcessor, playout, record_ending, serve_client
-from faro import AGENTS, GREETING, STT_LANGUAGE, TTS_LANGUAGE, close_call, open_call
+from core.processor import PydanticAgentProcessor, playout, record_ending, reports_playback, serve_client
+from faro import STT_LANGUAGE, TTS_LANGUAGE, close_call, greeting, open_call
 
 NAME = 'faro call'
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
@@ -169,9 +170,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''
     setup(session=session_id, trace_name=NAME)
     stt, tts = speech_services()
-    call = open_call(os.getenv('CALLER_ID', ''))
-    context, node = LLMContext(), PydanticAgentProcessor(call, AGENTS)
+    flow = faro.FLOW
+    call = open_call(flow, os.getenv('CALLER_ID', ''))
+    context, node = LLMContext(), PydanticAgentProcessor(call, flow.nodes)
     user_aggregator, assistant_aggregator = aggregators(context)
+    wiring = playout(transport, call, simulate=os.getenv('DELIVERY') == 'simulated')
     pipeline = Pipeline(
         [
             transport.input(),
@@ -180,7 +183,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             node,
             tts,
             transport.output(),
-            *playout(transport, call, simulate=os.getenv('DELIVERY') == 'simulated'),
+            *wiring,
             assistant_aggregator,
         ]
     )
@@ -188,8 +191,23 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     playback(node, assistant_aggregator)
 
     async def greet() -> None:
-        """The opening line, written for this call: with a caller ID it is a read-back the caller can answer."""
-        await node.greet(GREETING(call))
+        """The opening line, written for this call, or, on a line that can never confirm anything, the refusal.
+
+        With a caller ID the greeting is a read-back the caller can answer.
+        A line with no playback evidence (a browser client that reports none,
+        a phone far end that returns no marks, outside simulation) could never
+        confirm a read-back, so no number, sign-up or plan could ever be
+        agreed on it: saying so first means nobody gives details for nothing.
+        """
+        if flow.confirms and not await reports_playback(wiring, call):
+            logger.error(
+                f'this {call.transport} line reports no playback: open the page core serves at /voice/'
+            )
+            call.note_ending('unconfirmable', 'the line reports no playback', observed=True)
+            await node.greet(call.locale.unconfirmable)
+            await node.hang_up()
+            return
+        await node.greet(greeting(flow, call))
 
     @worker.rtvi.event_handler('on_client_ready')
     async def on_client_ready(rtvi):
@@ -214,7 +232,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
     try:
-        async with model_clients(AGENTS, warm=True):
+        async with model_clients(flow.nodes, warm=True):
             await runner.run()
     finally:
         call.note_ending('pipeline_end', 'the pipeline stopped', observed=True)

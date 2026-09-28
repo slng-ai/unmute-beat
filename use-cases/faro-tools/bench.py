@@ -7,14 +7,14 @@
 The keys come from `--env-file`: importing core reads no `.env`.
 
 Makes billable model requests. There is no audio: each caller line goes
-through the real turn engine (`core.turn.take_turn`) with the real agent and
-readings, so what is measured is the harness and the model, not STT or TTS.
+through the real turn engine (`core.turn.run_turn`) with Faro's real step
+agents, so what is measured is the harness and the model, not STT or TTS.
 
 Each case starts from a new fixture database. Every call in a case runs in a
 process of its own, on the same file, so a resume after a call is a resume
 after a real restart; one case kills its process straight after an
 acknowledged save. The caller is a scripted learner (`Learner`): it answers
-what the call is asking, read from the call's phase, so a model that words a
+what the call is asking, read from the step it is in, so a model that words a
 question differently still gets a sensible reply. The checks read the
 database and what the caller heard, never the model's own account.
 
@@ -71,7 +71,7 @@ ANSWERS = {
 
 @dataclass
 class Learner:
-    """A scripted caller: what they want, said in their language, chosen from the phase the call is in."""
+    """A scripted caller: what they want, said in their language, chosen from the step the call is in."""
 
     speaks: str = 'ES'
     """The language the caller talks to Faro in, outside the exercises."""
@@ -90,70 +90,72 @@ class Learner:
     answers: int = 2
     """How many exercises they answer before saying goodbye."""
     opening: list[str] = field(default_factory=list)
-    """Lines said first, whatever the phase, before the script takes over."""
+    """Lines said first, whatever the step, before the script takes over."""
     after: list[str] = field(default_factory=list)
-    """Lines said once their phone is confirmed, whatever the phase, before the script takes over again."""
+    """Lines said once their phone is confirmed, whatever the step, before the script takes over again."""
     stop: Callable[[Any], bool] = lambda call: False
     """When the caller stops talking without a goodbye: the line drops or the process dies."""
 
     def reply(self, call, turn: int, state: dict) -> str | None:
-        s = call.state
+        """What the learner says next, from the step the call is in and what it has recorded."""
+        s, step = call.state.facts, call.state.agent
         es = self.speaks == 'ES'
         bye = 'Nada más por hoy, gracias. Adiós.' if es else "That's all for today, thanks. Bye."
-        if call.ended or s.phase == 'closed':
+        if call.ended:
             return None
         if self.opening:
             return self.opening.pop(0)
-        asked = call._proposals.asked
-        about = asked.about if asked is not None and asked.turn == call.turn else ''
-        if s.phase in ('identify', 'signup', 'name') and state.setdefault('turns_before_id', 0) > 6:
+        asked = call.open_question()
+        about = asked.about if asked is not None else ''
+        if step in ('identify', 'signup') and state.setdefault('turns_before_id', 0) > 6:
             return bye
-        if s.phone and self.after and s.phase not in ('signup', 'name'):
+        if s.confirmed and self.after and step != 'signup':
             return self.after.pop(0)
-        if s.phase == 'identify':
+        if step == 'identify':
             state['turns_before_id'] = state.get('turns_before_id', 0) + 1
-            if about == 'phone':
+            if about == 'confirm_phone':
                 return 'Sí, es correcto.' if es else "Yes, that's right."
             return self.number or LUCIA
-        if s.phase == 'signup':
+        if step == 'signup' and not s.signup_agreed:
             if not self.signup:
                 return (
                     'No, gracias, no quiero crear un perfil.' if es else "No thanks, I don't want a profile."
                 )
             return 'Sí, vale, créalo.' if es else 'Yes, please create one.'
-        if s.phase == 'name':
+        if step == 'signup':
             return f'Llámame {self.name}.' if es else f'Call me {self.name}.'
-        if s.phase == 'onboarding':
-            if about == 'resume':
-                return 'Sí, sigamos.' if es else "Yes, let's carry on."
-            if not s.target:
-                asked = state.get('target_asks', 0)
-                state['target_asks'] = asked + 1
-                choice = self.then if asked and self.then else self.target
+        if step == 'onboarding':
+            if not s.learn:
+                asked_before = state.get('target_asks', 0)
+                state['target_asks'] = asked_before + 1
+                choice = self.then if asked_before and self.then else self.target
                 return f'Quiero aprender {choice}.' if es else f'I want to learn {choice}.'
-            if not s.goal:
+            if not s.purpose:
                 return f'Lo quiero {self.goal}.' if es else f'I want it {self.goal}.'
             return (
                 f'{self.minutes.capitalize()} está bien.' if es else f'{self.minutes.capitalize()} is fine.'
             )
-        if s.phase == 'assessment':
-            if about == 'resume':
-                return 'Sí, sigamos.' if es else "Yes, let's carry on."
-            return ANSWERS.get(s.task, 'I am not sure.')
-        if s.phase == 'plan':
+        if step == 'assessment':
+            return ANSWERS.get(s.waiting, 'I am not sure.')
+        if step == 'plan':
             said = state.setdefault('plan_replies', 0)
             state['plan_replies'] = said + 1
             return self.plan[min(said, len(self.plan) - 1)]
-        if s.phase == 'menu':
+        if step == 'menu':
             if state.get('answered', 0) >= self.answers:
                 return bye
             return self.menu
-        if s.phase == 'lesson':
+        if step in ('lesson', 'coach'):
             if state.get('answered', 0) >= self.answers:
                 return bye
             state['answered'] = state.get('answered', 0) + 1
-            return ANSWERS.get(s.item, 'I do not know.')
+            return ANSWERS.get(s.waiting, 'I do not know.')
         return bye
+
+
+def attempts(call) -> int:
+    """Attempts the store accepted on this call: what a case waits for before it drops the line or dies."""
+    return sum(e.operation == 'record_attempt' and e.succeeded for e in call.evidence)
 
 
 def english(**overrides: Any) -> Learner:
@@ -508,18 +510,17 @@ CASES = [
             Call(
                 NEW,
                 Learner(
-                    opening=['¿Podemos hablar en español?'], stop=lambda call: call.state.target is not None
+                    opening=['¿Podemos hablar en español?'],
+                    stop=lambda call: call.state.facts.learn is not None,
                 ),
                 ends='kill',
             ),
             Call(
                 NEW,
-                Learner(
-                    stop=lambda call: len(call.session.checkpoint.evidence) >= 1 if call._session else False
-                ),
+                Learner(stop=lambda call: attempts(call) >= 1),
                 ends='kill',
             ),
-            Call(NEW, Learner(stop=lambda call: call.state.phase == 'plan'), ends='kill'),
+            Call(NEW, Learner(stop=lambda call: call.state.agent == 'plan'), ends='kill'),
             Call(NEW, Learner(answers=0)),
         ],
         _resumed,
@@ -613,7 +614,7 @@ CASES = [
         ],
         _honest,
     ),
-    Case('L11-EN', [Call(NEW, english(answers=0), barge_on='plan')], _barge),
+    Case('L11-EN', [Call(NEW, english(answers=0), barge_on='activate_plan')], _barge),
     Case(
         'L12-goodbye',
         [Call(LUCIA, Learner(answers=1)), Call(LUCIA, Learner(menu='No, gracias.', answers=0))],
@@ -626,7 +627,7 @@ CASES = [
                 LUCIA,
                 Learner(
                     answers=5,
-                    stop=lambda call: call.session.checkpoint.learned >= 1 if call._session else False,
+                    stop=lambda call: attempts(call) >= 1,
                 ),
                 ends='drop',
             ),
@@ -641,7 +642,7 @@ CASES = [
                 LUCIA,
                 Learner(
                     answers=5,
-                    stop=lambda call: call.session.checkpoint.learned >= 1 if call._session else False,
+                    stop=lambda call: attempts(call) >= 1,
                 ),
                 ends='kill',
             ),
@@ -690,12 +691,12 @@ async def run_call(path: str, case_id: str, index: int, session: str) -> dict:
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
 
+    import core
+    import faro
     from core.observability import setup
     from core.policies import TurnBudget
-    from core.turn import FixedSpeech, TextDelta, TurnFinished, greet, note_spoken, receive, run_turn
-    from faro import AGENTS, GREETING, close_call
-    from faro.operations import finish
-    from faro.state import open_call
+    from core.turn import FixedSpeech, TextDelta, TurnFinished, note_spoken, receive, run_turn
+    from faro import close_call, greeting, open_call
     from faro.store import Store
 
     setup(session=session, trace_name='faro call')
@@ -703,7 +704,8 @@ async def run_call(path: str, case_id: str, index: int, session: str) -> dict:
     spec = next(c for c in CASES if c.id == case_id).calls[index]
     store = Store(path)
     store.open()
-    call = open_call(spec.caller_id, learning=store)
+    flow = faro.FLOW
+    call = open_call(flow, spec.caller_id, learning=store)
     record: dict = {'session': session, 'turns': [], 'phone': '', 'outcome': '', 'activated_on_barge': False}
     heard: list[str] = []
 
@@ -716,29 +718,28 @@ async def run_call(path: str, case_id: str, index: int, session: str) -> dict:
     call._say, call._end = say, end
     state: dict = {}
     with tracer.start_as_current_span('conversation', attributes={'faro.case': case_id, 'faro.call': index}):
-        first = greet(call, GREETING(call))
-        record['turns'].append({'caller': '', 'heard': first, 'identified': False, 'phase': call.state.phase})
+        first = core.greet(call, greeting(flow, call))
+        record['turns'].append({'caller': '', 'heard': first, 'identified': False, 'step': call.state.agent})
         for turn in range(30):
             words = spec.learner.reply(call, turn, state)
             if words is None:
                 break
-            barged = (
-                spec.barge_on
-                and not state.get('barged')
-                and call._proposals.asked is not None
-                and call._proposals.asked.about == spec.barge_on
-            )
+            asked = call.open_question()
+            barged = bool(spec.barge_on) and not state.get('barged') and asked is not None
+            barged = barged and asked.about == spec.barge_on
             if barged:
                 state['barged'] = True
                 segment = call.spoken[-1]
                 note_spoken(call, segment.text[:25], interrupted=True, segment_ids=(segment.id,))
             receive(call)
-            before, plan_before = len(heard), call.plan
+            learner = call.state.facts.learner_id
+            plan_before = await store.active_plan(learner) if learner else None
+            before = len(heard)
             with tracer.start_as_current_span('turn', attributes={'faro.caller': words}) as span:
                 started, first = time.perf_counter(), None
                 said_parts: list[str] = []
                 done = None
-                async for event in run_turn(call, AGENTS, words, TurnBudget()):
+                async for event in run_turn(call, flow.nodes, words, TurnBudget()):
                     if isinstance(event, TextDelta | FixedSpeech):
                         said_parts.append(event.text)
                     elif isinstance(event, TurnFinished):
@@ -752,27 +753,29 @@ async def run_call(path: str, case_id: str, index: int, session: str) -> dict:
                     span.set_attribute('turn.user_bot_latency_seconds', first - started)
                     span.set_attribute('faro.latency', 'text in to first speech out, no STT or TTS')
             assert done is not None
-            if barged and plan_before is None and call.plan is not None:
+            learner = call.state.facts.learner_id
+            if barged and plan_before is None and learner and await store.active_plan(learner) is not None:
                 record['activated_on_barge'] = True
             record['turns'].append(
                 {
                     'caller': words,
                     'heard': ' '.join([*heard[before:], said]),
                     'status': done.status,
-                    'identified': bool(call.state.phone),
-                    'phase': call.state.phase,
+                    'identified': bool(call.state.facts.confirmed),
+                    'step': call.state.agent,
                 }
             )
             if spec.learner.stop(call):
                 break
-        if spec.ends == 'drop' or (spec.ends == 'goodbye' and not call.ended):
+        if spec.ends != 'kill':
             await close_call(call)
-        elif spec.ends != 'kill' and not call.ended:
-            await finish(call, 'goodbye')
-    record['phone'] = call.state.phone
-    if call._session is not None:
-        found = await store.lookup(call.state.phone)
-        record['outcome'] = found[2].outcome if found and found[2] and found[2].id == call._session.id else ''
+    record['phone'] = call.state.facts.confirmed
+    if call.state.facts.session_id:
+        found = await store.lookup(call.state.facts.confirmed)
+        last = found[2] if found is not None else None
+        record['outcome'] = (
+            last.outcome if last is not None and last.id == call.state.facts.session_id else ''
+        )
     provider = trace.get_tracer_provider()
     if isinstance(provider, TracerProvider):
         provider.force_flush()

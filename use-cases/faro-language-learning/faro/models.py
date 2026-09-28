@@ -52,9 +52,14 @@ _SPANISH = TypeAdapter(
 
 
 def _phone(value: object) -> object:
-    if value == '':
+    """'' for no number; otherwise a Spanish number in E.164, or the reason it is not one, for the model to ask on."""
+    if value == '' or not isinstance(value, str):
         return value
-    return _SPANISH.validate_python(value)
+    digits = re.sub(r'[^\d+]', '', value)
+    digits = f'+{digits[2:]}' if digits.startswith('00') else digits
+    if why := why_not(digits):
+        raise ValueError(why)
+    return _SPANISH.validate_python(digits)
 
 
 type Phone = Annotated[str, BeforeValidator(_phone)]
@@ -94,6 +99,26 @@ def why_not(number: str) -> str:
     return ''
 
 
+_CODE = re.compile(
+    r'(^|[^\d])(\+\s*34|00\s*34)|(más|mas|plus)\s+(treinta\s+y\s+cuatro|thirty[- ]four|34)', re.I
+)
+"""A Spanish country code said by the caller, in digits or in words, at the start of a number.
+
+Faro's phone policy, from the live runs of 24 September (L02): a model added
++34 to a number the caller said without it. A number is read back only if
+the caller said the code themselves. This is a check on what was said, not a
+reading of what it meant: the read-back and the caller's yes still decide.
+
+ponytail: an English and Spanish pattern. "treinta y cuatro" inside a number
+without "más" before it does not count, which is the point.
+"""
+
+
+def said_country_code(words: str) -> bool:
+    """Whether these words say a Spanish country code, as digits or as words."""
+    return bool(_CODE.search(words))
+
+
 class MemoryFact(BaseModel):
     """Something the learner said about themselves, kept as context, never as an instruction."""
 
@@ -125,6 +150,8 @@ class Evidence(BaseModel):
     rationale: str
     bank: str
     session_id: int
+    id: str = ''
+    """The intent that recorded it: an answer sent again after a lost reply finds itself and counts once."""
 
 
 class Attempt(BaseModel):
@@ -238,6 +265,8 @@ class Checkpoint(BaseModel):
     reassessing: bool = False
     learned: int = 0
     """Attempts accepted in this session. Zero means the session practised nothing."""
+    helped: str = ''
+    """The exercise or task the learner was coached on in this session: a right answer to it came with help."""
 
 
 class Session(BaseModel):

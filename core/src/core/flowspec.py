@@ -55,6 +55,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
+from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Literal, TypeAliasType, get_args, get_origin, get_type_hints
@@ -524,7 +525,15 @@ class _Resolver:
                 choose := self.function(step, ref.function if isinstance(ref, ChoiceSpec) else ref, 2)
             ) is not None:
                 found[name] = choose
-        return found
+        dependencies = {
+            name: sorted((self.choice_after[name] or frozenset()) & found.keys()) for name in found
+        }
+        try:
+            ordered = tuple(TopologicalSorter(dependencies).static_order())
+        except CycleError:
+            self.fail(step, 'has a cycle in its choice dependencies (after:)')
+            return found
+        return {name: found[name] for name in ordered}
 
     def after(self, refs: Mapping[str, str | ChoiceSpec]) -> dict[str, frozenset[str]]:
         """The declared `after:` of each choice that has one."""

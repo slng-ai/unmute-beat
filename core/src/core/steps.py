@@ -1737,7 +1737,7 @@ class ConversationStep(Step):
         `options` would have: the application decides what is eligible, no
         model does. A refused pick on that offer is recorded; one that is not
         stays refused, and on a rendered step `wait` says the refusal, then
-        this fresh offer. In the step's order, so a pick that a pick rests on
+        this fresh offer. In dependency order, so a pick that a pick rests on
         is taken first (a ticket, then a category, then a resolution).
 
         Nothing old is accepted for looking familiar: the pick must be on an
@@ -1756,16 +1756,19 @@ class ConversationStep(Step):
             if name not in call._offers or name in refused:
                 found = await _offer(call, {name: choose}, rendered=self.rendered)
                 if 'stale' in found or 'unavailable' in found:
+                    refused += [
+                        field for field in _not_on_offer(call, self.choices, asked) if field not in refused
+                    ]
                     return refused, made | found
                 made |= {
                     name: shown for name, shown in found.items() if shown.get('options') or shown.get('note')
                 }
-            if (
-                name in refused
-                and str(asked[name]) in call._offers.get(name, {})
-                and not flow.record(call, {name: asked[name]}, self.choices)
-            ):
-                refused.remove(name)
+            if name in asked:
+                if flow.record(call, {name: asked[name]}, self.choices):
+                    if name not in refused:
+                        refused.append(name)
+                elif name in refused:
+                    refused.remove(name)
         return refused, made
 
     async def _confirmed(

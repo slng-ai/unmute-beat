@@ -99,8 +99,9 @@ flowchart TD
    application's own choice function for the state as it now stands. This is what `options` did. The
    application decides what is eligible. The model does not.
 4. A refused pick that is on that fresh offer is recorded, as a second validated candidate. One that is not
-   on it stays refused. The choices are taken in the step's order, so a chain (ticket, then category, then
-   resolution) resolves in one pass.
+   on it stays refused. The choices are taken in declared dependency order, so a chain (ticket, then category, then
+   resolution) resolves in one pass, regardless of YAML order. Supplied children are rechecked after
+   accepting a parent, even if those children were initially accepted and then invalidated.
 5. `collect` returns what it offered, so the agent can record the caller's pick in its next reply with no
    `options` request. A rendered step has no `options` tool at all.
 6. A pick is still not a yes. Every operation reads back and waits for a heard yes. Nothing old is accepted
@@ -334,3 +335,24 @@ not produced, by this session. [budget.json](session-4f/budget.json) is unchange
 4. **Frozen qualification** on the final implementation: the reserved 10 + 10 candidate calls and the
    10 + 12 native calls, with N12 measured once more. N12's relative rule is the user's decision (4f's
    proposal stands).
+
+
+## Review follow-up: reuse across dependent choices
+
+The review reproduced a generic defect on the support desk: when a newly available parent choice was
+accepted, its supplied child choices were cleared but the tool reported them as recorded. Reversing the
+YAML choice order also left valid dependent picks unrecorded.
+
+The compiler now orders choices by their declared `after:` dependencies with stdlib `graphlib` and
+rejects cycles. The runtime rechecks every supplied choice through the existing state validation after
+its parents, and a failed refresh reports missing picks as refused. No domain rule, prompt or dependency
+was added. R23 runs through the public loader and text entry point: fresh parents, reversed declarations,
+incompatible children, unavailable lookup, no dispatch and cyclic manifests.
+
+Validation: core's 16 modules and salon's 21 modules pass, as do Ruff and both members' type checks.
+Reverting either the runtime recheck or dependency ordering makes R23 fail. These are offline checks;
+no model request, Coval call or paid rescoring was run. The earlier live semantic checkpoint remains open.
+
+The README now describes the reusable public architecture and application-owned nodes, rather than
+using the salon's booking node as the package definition. LiveKit remains planned and qualification is
+not represented as complete.

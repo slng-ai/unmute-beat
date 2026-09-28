@@ -31,6 +31,7 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
   never recorded as cut.
 * R21: a pick counts on the offer for the state the update ends in, made by code: right for it, recorded;
   wrong for it, refused.
+* R23: supplied dependent picks survive a fresh parent, regardless of YAML order; cyclic dependencies fail.
 * R22: a change asked for over a cut receipt is read in the same turn: the receipt, then its read-back.
 
 Scripted models prove runtime properties, not language understanding.
@@ -1285,6 +1286,110 @@ async def a_request_over_a_cut_receipt_is_read(folder: Path):
             assert said == [receipt] and call.state.facts == facts and desk.sent() == 1, said
 
 
+async def chained_picks_survive_a_fresh_parent(folder: Path) -> None:
+    """R23: supplied children are rechecked after a fresh parent, in dependency order, never YAML order."""
+    original = (HERE / 'chained.yaml').read_text()
+    choices = (
+        '      ticket_id: {function: tickets.py:open_tickets, after: []}\n',
+        '      category: {function: tickets.py:categories, after: [ticket_id]}\n',
+        '      resolution: {function: tickets.py:resolutions, after: [category]}\n',
+    )
+    manifest = HERE / '_chained_review.yaml'
+    try:
+        for reverse in (False, True):
+            manifest.write_text(
+                original.replace(''.join(choices), ''.join(reversed(choices))) if reverse else original
+            )
+            desk = desk_in(folder / str(reverse))
+            script, flow, call = opened(desk, manifest)
+            await turn(
+                flow,
+                call,
+                script,
+                'Cuenta ACC-1234, T-101, facturación, un reembolso.',
+                (
+                    'call',
+                    'collect',
+                    {
+                        'account_id': 'ACC-1234',
+                        'ticket_id': 'T-101',
+                        'category': 'billing',
+                        'resolution': 'refund',
+                    },
+                ),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-101',
+                'billing',
+                'refund',
+            ), (reverse, call.state.facts)
+            assert 'T-102' not in call._offers['ticket_id']
+            desk.seed('ACC-1234', 'T-102')
+            await turn(
+                flow,
+                call,
+                script,
+                'Perdona, el T-102, facturación, un reembolso.',
+                ('call', 'collect', {'ticket_id': 'T-102', 'category': 'billing', 'resolution': 'refund'}),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-102',
+                'billing',
+                'refund',
+            ), (reverse, call.state.facts)
+            assert 'Recorded: category, resolution, ticket_id.' in script.told[-1], script.told[-1]
+            desk.seed('ACC-1234', 'T-103')
+            await turn(
+                flow,
+                call,
+                script,
+                'El T-103, de acceso, con un reembolso.',
+                ('call', 'collect', {'ticket_id': 'T-103', 'category': 'access', 'resolution': 'refund'}),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-103',
+                'access',
+                '',
+            ), (reverse, call.state.facts)
+            assert 'Recorded: category, ticket_id.' in script.told[-1], script.told[-1]
+            assert 'Not recorded:' in script.told[-1], script.told[-1]
+
+            def unavailable(services: Desk, facts: DeskState) -> dict[str, str]:
+                raise RuntimeError('choice service unavailable')
+
+            flow.steps[0].choices['resolution'] = unavailable
+            desk.seed('ACC-1234', 'T-104')
+            await turn(
+                flow,
+                call,
+                script,
+                'El T-104, facturación, un reembolso.',
+                ('call', 'collect', {'ticket_id': 'T-104', 'category': 'billing', 'resolution': 'refund'}),
+                ('say', 'Vale.'),
+            )
+            assert (call.state.facts.ticket_id, call.state.facts.category, call.state.facts.resolution) == (
+                'T-104',
+                'billing',
+                '',
+            ), (reverse, call.state.facts)
+            assert 'Recorded: category, ticket_id.' in script.told[-1], script.told[-1]
+            assert 'Not recorded:' in script.told[-1] and 'unavailable' in script.told[-1], script.told[-1]
+            assert desk.sent() == 0, 'recording a choice must not dispatch an operation'
+
+        manifest.write_text(original.replace('after: [ticket_id]', 'after: [resolution]'))
+        try:
+            core.load(manifest).compile(model=Script().model)
+        except core.FlowSpecError as error:
+            assert 'cycle' in str(error), error
+        else:
+            raise AssertionError('a cycle of choice dependencies compiled')
+    finally:
+        manifest.unlink(missing_ok=True)
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -1311,6 +1416,7 @@ async def main() -> None:
                 a_missing_acknowledgement_is_not_a_cut,
                 a_pick_counts_on_the_offer_for_the_state_it_ends_in,
                 a_request_over_a_cut_receipt_is_read,
+                chained_picks_survive_a_fresh_parent,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -1326,7 +1432,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R22, no phone, date, appointment or slot')
+    print('tickets ok: R1-R23, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

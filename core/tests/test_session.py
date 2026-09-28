@@ -77,7 +77,7 @@ async def what_the_caller_keeps_cannot_reach_the_state():
 
 
 async def two_calls_on_one_flow_share_nothing():
-    """Two sessions interleaved on one compiled flow: separate proposals, readings, histories, state and receipts."""
+    """Two sessions interleaved on one compiled flow: separate proposals, approvals, histories, state and receipts."""
     script = Script()
     flow = core.load('tests/clinic_flow/agent.yaml').compile(model=script.model)
     backend = Backend()
@@ -89,14 +89,12 @@ async def two_calls_on_one_flow_share_nothing():
     assert one._asked.owner == 'P-1111' and two._asked.owner == 'P-2222'
     script.label = 'accept'
     await turn(flow, one, script, 'Yes.')
-    assert two._interpretations == {} or 'confirm' not in two._interpretations, (
-        'a reading leaked across calls'
-    )
+    assert not two.approved() and not backend.bookings.get('CL002'), 'a yes on one call approved the other'
     await turn(flow, two, script, 'Yes.')
     assert backend.bookings == {'CL001': ('P-1111', '0900'), 'CL002': ('P-2222', '1000')}, backend.bookings
     assert [e.receipt['reference'] for e in one.evidence] == ['CL001']
     assert [e.receipt['reference'] for e in two.evidence] == ['CL002']
-    assert one.messages is not two.messages and one._interpretations is not two._interpretations
+    assert one.messages is not two.messages and one._proposals is not two._proposals
     assert one.state.facts.slot == '0900' and two.state.facts.slot == '1000'
 
 

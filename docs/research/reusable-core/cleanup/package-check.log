@@ -1,0 +1,4 @@
+2026-09-28 13:57:47.903 | INFO     | core.turn:_speak:874 - find_ticket carried out by code after collect
+2026-09-28 13:57:47.904 | INFO     | core.turn:_hop:622 - handoff desk -> resolve (find_ticket says so)
+2026-09-28 13:57:47.904 | DEBUG    | core.turn:take_turn:1108 - turn answered in 0.01s
+package check ok: client page in the wheel (/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/d0e13395-5626-449a-9303-936cdb268c67/scratchpad/package-proof/app/.venv/lib/python3.14/site-packages/core/client), no retired module, routed flow runs

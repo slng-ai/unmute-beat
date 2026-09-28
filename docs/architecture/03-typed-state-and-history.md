@@ -132,7 +132,7 @@ The guarantee applies to each validated update. A `collect` tool invocation can 
 
 Validators can also normalize equivalent inputs before core compares them. If the application's validator stores both “complete” and “ COMPLETE ” as `complete`, recording the second spelling does not count as a changed request.
 
-Core supplies the call's `today`, `now` and previous facts as `before` through Pydantic's validation context. An application can use these to interpret a relative date consistently or validate a correction against the previous state. Core supplies the context; the application supplies the interpretation. It does not invoke a model to normalize values.
+Core supplies the call's `today`, `now`, previous facts as `before`, and the caller's words this turn as `heard` through Pydantic's validation context. An application can use these to interpret a relative date consistently, validate a correction against the previous state, or refuse a new value the caller never said. The whole state is validated on every change, so a check on `heard` compares with `before` and leaves an unchanged value alone. Core supplies the context; the application supplies the interpretation. It does not invoke a model to normalize values.
 
 ## 6. Keep choices tied to the facts that produced them
 

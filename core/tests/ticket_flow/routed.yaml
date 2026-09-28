@@ -1,0 +1,78 @@
+# The support desk with code moving the caller: a lookup carried out by code once the ticket is recorded,
+# whose receipt names the step for the ticket (`route:`), and a desk that answers in the caller's language.
+# Nothing here is Faro's: the flow rules session 5 added, proven on a business with no learner in it.
+version: 1
+id: support-desk-routed
+state: tickets.py:RoutedState
+identity: account_id
+entry: desk
+language: idioma
+locales:
+  es: {base: spanish, goodbye: Gracias por llamar al soporte. Hasta pronto.}
+  en: {base: english, goodbye: Thanks for calling support. Goodbye.}
+agents:
+  agent:
+    prompt: prompts/agent.md
+operations:
+  find_ticket:
+    function: tickets.py:find
+    args: {account_id: account_id, ticket_id: ticket_id}
+    approval: none
+    changes: false
+    matches: {account_id: account_id, ticket_id: ticket_id}
+    succeeds: {found: true}
+    assign: {revision: revision, ticket_status: status}
+    route: next
+    say: '{said}'
+  resolve_ticket:
+    function: tickets.py:resolve
+    args: {account_id: account_id, ticket_id: ticket_id, revision: revision, resolution: resolution}
+    readback: tickets.py:resolve_words_in
+    reconcile: tickets.py:find_effect
+    subject: ticket_id
+    resource: ticket
+    version: now_revision
+    idempotent: true
+    matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    succeeds: {status: resolved}
+    rejects: {status: stale}
+    assign: {revision: now_revision, ticket_status: status}
+    say: 'Ticket {ticket_id} resuelto.'
+  reopen_ticket:
+    function: tickets.py:reopen
+    args: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    readback: tickets.py:reopen_words
+    reconcile: tickets.py:find_effect
+    subject: ticket_id
+    resource: ticket
+    version: now_revision
+    idempotent: true
+    matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    succeeds: {status: open}
+    rejects: {status: stale}
+    assign: {revision: now_revision, ticket_status: status}
+    say: 'Ticket {ticket_id} reabierto.'
+steps:
+  - id: desk
+    kind: conversation
+    agent: agent
+    prompt: prompts/faq.md
+    fields: [account_id, ticket_id, idioma]
+    asks: {ticket_id: '¿Qué ticket es?'}
+    carries_out: {find_ticket: [ticket_id]}
+  - id: resolve
+    kind: conversation
+    agent: agent
+    prompt: prompts/desk.md
+    speech: rendered
+    fields: [resolution, idioma]
+    operations: [resolve_ticket]
+    reads_back: {resolve_ticket: [resolution, idioma]}
+  - id: reopen
+    kind: conversation
+    agent: agent
+    prompt: prompts/reopen.md
+    speech: rendered
+    fields: [idioma]
+    operations: [reopen_ticket]
+    opens_with: reopen_ticket

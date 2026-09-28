@@ -18,11 +18,8 @@ receipt. Importing this module loads no `.env`, builds no client and imports
 no Pipecat or Langfuse.
 
 Voice is `core.processor.PydanticAgentProcessor` (the `voice` extra), and
-tracing is `core.observability.setup` (the `tracing` extra).
-
-ponytail: salon-graph, Faro, faro-tools and the salon evaluators still
-import core's modules directly and subclass `CallContext`; those deep
-imports stay until their migration sessions (4, 5 and 6).
+tracing is `core.observability.setup` (the `tracing` extra). Launchers and
+tests still import those adapters, and a few engine helpers, by their module.
 """
 
 from core.flowspec import FlowSpec, FlowSpecError

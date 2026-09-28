@@ -2,9 +2,9 @@
 
 If `core` only worked for the salon it would not be reusable, so everything
 here is built from `core` alone: a two-field state, one proposal kind, one
-operation using the default authorisation, one rule interpreter. The last
-check proves no subclass loaded here overrides a `@final` method; salon-graph's
-`test_flow` holds the salon's own subclasses to the same rule.
+operation using the default authorisation, its yes bound by
+`CallContext.approve` as a step's agent binds it. The last check proves no
+subclass loaded here overrides a `@final` method.
 """
 
 import asyncio
@@ -14,8 +14,6 @@ import inspect
 from pydantic import BaseModel, ValidationError
 from pydantic_ai import ModelRetry
 
-from core.decisions import Accept, Decision, NoDecision
-from core.interpreters import Interpreter, RuleInterpreter
 from core.operations import Operation, OutcomeUnknownError
 from core.proposals import BaseProposal, Proposal
 from core.state import CallContext, VoiceState
@@ -34,25 +32,6 @@ class LibraryCall(CallContext):
         return self.state.member
 
 
-class Heard(BaseModel):
-    text: str
-
-
-class Reading(BaseModel):
-    decision: Accept | NoDecision
-
-
-class YesOrNothing(RuleInterpreter[LibraryCall, Heard, Reading]):
-    def _input(self, call):
-        return Heard(text=call.heard)
-
-    def _rule(self, value):
-        return Reading(decision=Accept() if value.text.strip('. ').lower() == 'yes' else NoDecision())
-
-
-READER = YesOrNothing('yes', Reading(decision=NoDecision()))
-
-
 class Renewal(BaseModel):
     book: str
 
@@ -63,7 +42,7 @@ class Renewed(BaseModel):
 
 
 class RenewLoan(Operation[LibraryCall, Renewal, Renewed, str]):
-    """Uses the default `_authorise`: a pending `renew_loan` question for this book, and a yes."""
+    """Uses the default `_authorise`: a pending `renew_loan` question for this book, and a yes bound to it."""
 
     name = 'renew_loan'
     args_type = Renewal
@@ -76,7 +55,7 @@ class RenewLoan(Operation[LibraryCall, Renewal, Renewed, str]):
         return BaseProposal(about='renew_loan', value=args.book, spoken=f'Renew {args.book}?')
 
     async def _agreed(self, call, question, *, usage, usage_limits):
-        return isinstance((await READER.interpret(call)).decision, Accept)
+        return call.approved()
 
     async def _execute(self, call, args, grant):
         return self.backend(args.book)
@@ -148,6 +127,8 @@ async def the_default_operation():
     call.turn_started('renew Dune')
     asked(call, renew.proposal(Renewal(book='Dune')))
     call.turn_started('Yes.')
+    assert not call.approve('renew_loan', value='Emma'), 'a yes binds only to the question asked'
+    assert call.approve('renew_loan', value='Dune')
     try:
         await renew.run(call, Renewal(book='Emma'))
     except ModelRetry:
@@ -169,6 +150,7 @@ async def the_default_operation():
     call.turn_started('renew Dune')
     asked(call, broken.proposal(Renewal(book='Dune')))
     call.turn_started('yes')
+    call.approve('renew_loan', value='Dune')
     try:
         await broken.run(call, Renewal(book='Dune'))
     except OutcomeUnknownError as error:
@@ -182,6 +164,7 @@ async def the_default_operation():
     call.turn_started('renew Dune')
     asked(call, broken.proposal(Renewal(book='Dune')))
     call.turn_started('yes')
+    call.approve('renew_loan', value='Dune')
     with contextlib.suppress(OutcomeUnknownError):
         await broken.run(call, Renewal(book='Dune'))
     assert sent == ['Dune'], 'an intent whose outcome is unknown was sent again'
@@ -195,7 +178,7 @@ def subclasses(cls):
 
 def nothing_overrides_a_final_method():
     """Every subclass loaded so far keeps the base's final methods. salon-graph's `test_flow` runs this with the salon loaded."""
-    for base in (Operation, Interpreter):
+    for base in (Operation,):
         final = {name for name, member in vars(base).items() if getattr(member, '__final__', False)}
         assert final, base
         found = list(subclasses(base))
@@ -204,14 +187,13 @@ def nothing_overrides_a_final_method():
             overridden = final & set(vars(sub))
             assert not overridden, f'{sub.__name__} overrides {overridden}'
             assert not inspect.isabstract(sub) or sub.__module__.startswith('core.'), sub
-    assert issubclass(Accept, Decision)
 
 
 async def main():
     the_ledger()
     await the_default_operation()
     nothing_overrides_a_final_method()
-    print('classes ok: ledger, default operation, rule interpreter, final methods held')
+    print('classes ok: ledger, default operation, a yes bound to its question, final methods held')
 
 
 if __name__ == '__main__':

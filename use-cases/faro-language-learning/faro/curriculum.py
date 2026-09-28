@@ -3,8 +3,8 @@
 Everything a benchmark run has to repeat is here, in code, and versioned:
 which placement task comes next, which items a lesson has and in what order,
 which item is the independent check, and the words of every question the
-application puts to the learner. A grading reading judges answers; no model
-chooses an item id or the order.
+application puts to the learner. The step's own agent grades an answer, in
+fields the application validates; no model chooses an item id or the order.
 
 Every instruction is written twice, in English and in Spanish. The learner
 hears it in their explanation language (their mother tongue) and answers in
@@ -13,8 +13,8 @@ languages, so each is written once per goal and given an id per target:
 `en-travel-2` is the café lesson for someone learning English, `es-travel-2`
 the same lesson for someone learning Spanish.
 
-ponytail: one item set per lesson for every level. The grading reading and
-the companion adapt to the learner's level. Author per-level variants when a
+ponytail: one item set per lesson for every level. The examiner and the
+coach adapt to the learner's level. Author per-level variants when a
 live review shows the gap matters.
 """
 
@@ -447,12 +447,8 @@ def spaced(phone: str) -> str:
     return f'+34 {digits[:3]} {digits[3:6]} {digits[6:]}'
 
 
-def greeting(caller_id: str) -> str:
-    """The opening line, in English, offering Spanish. With a caller ID it reads the number back."""
-    opener = "Hi, I'm Faro, your language companion. Si prefieres hablar en español, dímelo."
-    if caller_id:
-        return f'{opener} Can you confirm your number is {spaced(caller_id)}?'
-    return f'{opener} What is your full phone number, starting with plus thirty-four?'
+GREETING = "Hi, I'm Faro, your language companion. Si prefieres hablar en español, dímelo."
+"""The opening words, in English, offering Spanish. The identify step's read-back or question follows them."""
 
 
 def ask_number(explanation: Lang) -> str:
@@ -628,16 +624,64 @@ def next_step(explanation: Lang, item_id: str) -> str:
     return f'La próxima vez: el {ordinal} ejercicio de {topic}.'
 
 
-def saved(explanation: Lang, learned: int) -> str:
-    """What the goodbye says was saved: progress only when this session recorded some."""
-    if explanation == 'EN':
-        if learned:
-            return 'Your progress is saved. See you next time!'
-        return "I've saved today's summary; your next step stays the same. See you next time!"
-    if learned:
-        return 'Tu progreso está guardado. ¡Hasta la próxima!'
-    return 'He guardado el resumen de hoy; tu siguiente paso sigue igual. ¡Hasta la próxima!'
+def summary(explanation: Lang, learned: int, next_item: str) -> str:
+    """What a session did, written by code from the store's count, for the plan's record. No model writes it."""
+    if explanation == 'ES':
+        said = (
+            f'Hoy has practicado {learned} ejercicio{"s" if learned != 1 else ""}.'
+            if learned
+            else 'Hoy hemos hablado sin hacer ejercicios nuevos.'
+        )
+    else:
+        said = (
+            f'Today you practised {learned} exercise{"s" if learned != 1 else ""}.'
+            if learned
+            else 'Today we talked without new exercises.'
+        )
+    return f'{said} {next_step(explanation, next_item)}' if next_item else said
 
 
-def goodbye(explanation: Lang, summary: str, learned: int) -> str:
-    return f'{summary} {saved(explanation, learned)}'
+def finished_plan(name: str, explanation: Lang) -> str:
+    """A returning learner whose plan has no lesson left: the two things they can do."""
+    if explanation == 'ES':
+        return f'Hola, {name}. Has completado todas las lecciones de tu plan. ¿Hacemos una evaluación nueva o repasamos?'
+    return f'Hi, {name}. You have finished every lesson in your plan. Shall we reassess, or recap?'
+
+
+def hello(name: str, explanation: Lang) -> str:
+    return f'Hola, {name}.' if explanation == 'ES' else f'Hi, {name}.'
+
+
+def retained(level: str, explanation: Lang) -> str:
+    """A reassessment that found the same level: the agreed plan stays."""
+    if explanation == 'ES':
+        return f'Tu nivel sigue en {level}, así que mantenemos tu plan. ¿Seguimos con la lección?'
+    return f'Your level is still {level}, so your plan stays as it is. Shall we carry on with the lesson?'
+
+
+def kept_plan(explanation: Lang) -> str:
+    """A revised proposal turned down: the plan agreed before stands."""
+    if explanation == 'ES':
+        return 'De acuerdo, mantenemos tu plan como estaba. ¿Seguimos con la lección o prefieres un repaso?'
+    return 'Fine, your plan stays as it was. Shall we carry on with the lesson, or would you like a recap?'
+
+
+def noted(explanation: Lang) -> str:
+    return 'Anotado.' if explanation == 'ES' else 'Noted.'
+
+
+def recap(explanation: Lang, done: list[str], review: list[str], following: str) -> str:
+    """A recap of the plan as the store has it: what is done, what needs review, what comes next. Completes nothing."""
+    if explanation == 'ES':
+        parts = [
+            f'Has completado: {", ".join(done)}.' if done else 'Todavía no has completado ninguna lección.',
+            f'Para repasar: {"; ".join(review)}.' if review else 'No tienes nada pendiente de repaso.',
+            f'Lo siguiente: {following}.' if following else 'Has terminado tu plan.',
+        ]
+        return ' '.join([*parts, '¿Seguimos?'])
+    parts = [
+        f'You have completed: {", ".join(done)}.' if done else 'You have not completed a lesson yet.',
+        f'To review: {"; ".join(review)}.' if review else 'Nothing is waiting for review.',
+        f'Next: {following}.' if following else 'You have finished your plan.',
+    ]
+    return ' '.join([*parts, 'Shall we carry on?'])

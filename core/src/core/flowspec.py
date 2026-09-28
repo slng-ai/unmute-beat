@@ -10,11 +10,11 @@ module holding its deterministic code, and where it can go next.
       prompts/team.md       one prompt file per step that runs a model
       steps/submit.py       one module per step that runs code
 
-Six step kinds. `collect`, `conversation` and `agent` run a model, so each
-names a `prompt`. `confirm`, `action` and `end` are code only: they have no
-prompt field at all, because the words the caller agrees to are written by
-code, never by a model. An `agent` step is a hand-built step (the salon's):
-its module's `node` function builds its agent, tools and openings.
+Five step kinds. `collect` and `conversation` run a model, so each names a
+`prompt`. `confirm` reads back words code wrote and has an agent read the
+reply; `action` and `end` run no model. None of those three has a prompt
+field, because the words the caller agrees to are written by code, never by
+a model.
 
 What a file may refer to:
 
@@ -68,13 +68,11 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
 from core.flow import Flow
-from core.graph import Exit
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
 from core.state import CallContext, Intent
 from core.steps import (
     ActionStep,
-    AgentStep,
     CollectStep,
     ConfirmStep,
     ConversationStep,
@@ -212,6 +210,8 @@ class _Resolver:
         """Declared operation to the state fields its receipt sets, checked against what the model collects."""
         self.choice_after: dict[str, frozenset[str] | None] = {}
         """Choice to the fields its offer rests on, as the first step that offers it declared (None: every field)."""
+        self.routes: dict[str, frozenset[str]] = {}
+        """Declared operation to the steps its receipt can move the caller to (`route`)."""
 
     def fail(self, where: str, problem: str) -> None:
         """Keep a problem once: one missing file named by three references is one thing to fix."""
@@ -229,14 +229,7 @@ class _Resolver:
         return self._cache[kind, key]
 
     def call_type(self) -> type[CallContext]:
-        def find() -> type[CallContext]:
-            found = self.folder.attr(self.spec.call)
-            if not (isinstance(found, type) and issubclass(found, CallContext)):
-                raise _ProblemError(f'{self.spec.call!r} is not a CallContext class')
-            return found
-
-        if self.spec.call:
-            return self._once('call', self.spec.call, 'call', find) or FlowCall[NoFacts]
+        """The call every step's agent is given: `FlowCall` over the application's state model."""
         return FlowCall[self.state_type()]  # ty: ignore[invalid-type-form]
 
     def state_type(self) -> type[BaseModel]:
@@ -335,9 +328,6 @@ class _Resolver:
 
         return self._once('knowledge', ref, step, find)
 
-    def module(self, step: str, ref: str) -> ModuleType | None:
-        return self._once('module', ref, step, lambda: self.folder.module(ref))
-
     def function(self, where: str, ref: str, arity: int) -> Callable[..., Any] | None:
         """A plain function (or class) from the flow folder, callable with exactly `arity` positional arguments."""
 
@@ -412,6 +402,7 @@ class _Resolver:
             'rejects': dict(decl.rejects),
             'idempotent': decl.idempotent,
             'confirms_by_restating': decl.restated == 'confirms',
+            'route': decl.route,
         }
         if decl.restated == 'confirms' and (decl.changes or decl.approval != 'readback'):
             self.fail(
@@ -469,6 +460,8 @@ class _Resolver:
                 self.fail(
                     where, f'names version {decl.version!r}, which {receipt_type.__name__} does not have'
                 )
+            if decl.route:
+                self.routes[name] = self._route(where, receipt_type, decl.route)
         self.assigned[name] = set(decl.assign)
         if decl.approval == 'readback' and not decl.readback:
             self.fail(where, 'needs approval, so it needs a readback function (readback: file.py:words)')
@@ -505,6 +498,21 @@ class _Resolver:
         found = type(f'{name.title().replace("_", "")}Operation', (FunctionOperation,), attrs)
         self._cache['declared', name] = found
         return found
+
+    def _route(self, where: str, receipt_type: type[BaseModel], route: str) -> frozenset[str]:
+        """The steps a receipt's `route` field can name: a `Literal` of step ids, checked against the manifest."""
+        if route not in receipt_type.model_fields:
+            self.fail(where, f'routes by {route!r}, which {receipt_type.__name__} does not have')
+            return frozenset()
+        kind = _bare(receipt_type.model_fields[route].annotation)
+        values = get_args(kind) if get_origin(kind) is Literal else ()
+        if not values or not all(isinstance(value, str) for value in values):
+            self.fail(where, f'routes by {route!r}, which must be a Literal of step ids')
+            return frozenset()
+        known = {step.id for step in self.spec.steps}
+        for value in sorted(set(values) - known - {''}):
+            self.fail(where, f'routes to {value!r}, which is not a step')
+        return frozenset(values) - {''}
 
     def choices(
         self, step: str, fields: list[str], refs: Mapping[str, str | ChoiceSpec]
@@ -775,6 +783,15 @@ class ConversationSpec(StepSpec):
 
     Only while that operation is the one this step could run (`ConversationStep.reads_back`).
     """
+    carries_out: dict[str, list[str]] = {}
+    """Operation -> fields: an operation with no read-back that code carries out when a reply only records one of these.
+
+    The approval-free twin of `reads_back`. The model records what the
+    caller said (an exercise answer and its grade) and is never offered the
+    operation itself, so it cannot run it on values recorded on an earlier
+    turn: whatever it runs on was recorded by this reply
+    (`ConversationStep.carries`).
+    """
 
     @field_validator('exits', mode='before')
     @classmethod
@@ -811,6 +828,26 @@ class ConversationSpec(StepSpec):
             resolve.fail(
                 self.id, 'words refusals, which only a rendered step says: on a prose step the model does'
             )
+        for name, fields in self.carries_out.items():
+            declared = resolve.spec.operations.get(name)
+            if declared is None:
+                resolve.fail(self.id, f'carries out {name!r}, which `operations:` does not declare')
+                continue
+            if declared.approval != 'none':
+                resolve.fail(
+                    self.id, f'carries out {name!r} by code, which needs a read-back and a yes first'
+                )
+            if name in self.operations:
+                resolve.fail(
+                    self.id, f'carries out {name!r} by code and offers it to the model too; pick one'
+                )
+            if not declared.say:
+                resolve.fail(self.id, f'carries out {name!r}, which has no `say:` for its receipt')
+            for field_name in sorted(set(fields) - set(self.fields)):
+                resolve.fail(
+                    self.id, f'carries out {name!r} on {field_name!r}, which is not one of its fields'
+                )
+            resolve.declared(name)
         for name, fields in self.reads_back.items():
             if name not in self.operations:
                 resolve.fail(self.id, f'reads back {name!r}, which is not one of its operations')
@@ -858,70 +895,21 @@ class ConversationSpec(StepSpec):
                 if (found := resolve.function(self.id, ref, 1)) is not None
             },
             reads_back={name: tuple(fields) for name, fields in self.reads_back.items()},
-            spec=resolve.persona(self.id, self.agent),
-        )
-
-
-class ExitSpec(BaseModel):
-    """One legal move out of a hand-built step: where, when (a guard in the step's module), and which borrowed tools make it."""
-
-    model_config = SPEC
-    to: str
-    when: str = ''
-    via: list[str] = []
-
-
-class AgentSpec(StepSpec):
-    kind: Literal['agent']
-    prompt: str
-    code: str
-    """The step's module: `steps/verify.py`, which must provide `node(step) -> Node`."""
-    exits: list[ExitSpec] = []
-    requires: list[str] = []
-    satisfied_by: str = ''
-    guarded: bool = False
-
-    @field_validator('exits', mode='before')
-    @classmethod
-    def _plain_names(cls, exits: Any) -> Any:
-        """`exits: [concierge]` is short for `exits: [{to: concierge}]`."""
-        return [{'to': exit} if isinstance(exit, str) else exit for exit in exits or []]
-
-    def destinations(self) -> list[str]:
-        return [*(exit.to for exit in self.exits), *([self.satisfied_by] if self.satisfied_by else [])]
-
-    def check(self, resolve: _Resolver) -> None:
-        resolve.prompt(self.id, self.prompt)
-        module = resolve.module(self.id, self.code)
-        if module is None:
-            return
-        if not callable(getattr(module, 'node', None)):
-            resolve.fail(self.id, f'{self.code!r} has no node(step) function')
-        for exit in self.exits:
-            for name in [*([exit.when] if exit.when else []), *exit.via]:
-                if not hasattr(module, name):
-                    resolve.fail(
-                        self.id, f'exit to {exit.to} names {name!r}, which {self.code!r} does not have'
+            carries=tuple(
+                (resolve.operation(name), tuple(fields)) for name, fields in self.carries_out.items()
+            ),
+            routes=tuple(
+                sorted(
+                    frozenset().union(
+                        *(
+                            resolve.routes.get(name, frozenset())
+                            for name in [*self.operations, *self.carries_out]
+                        )
                     )
-
-    def to_step(self, resolve: _Resolver) -> Step:
-        module = resolve.module(self.id, self.code)
-        assert module is not None
-        exits = tuple(
-            Exit(exit.to, getattr(module, exit.when), tuple(getattr(module, name) for name in exit.via))
-            if exit.when
-            else Exit(exit.to, via=tuple(getattr(module, name) for name in exit.via))
-            for exit in self.exits
-        )
-        return AgentStep(
-            id=self.id,
-            then=self.then,
-            instructions=resolve.prompt(self.id, self.prompt),
-            build=module.node,
-            exits=exits,
-            requires=tuple(self.requires),
-            satisfied_by=self.satisfied_by,
-            guarded=self.guarded,
+                    - {self.id}
+                )
+            ),
+            spec=resolve.persona(self.id, self.agent),
         )
 
 
@@ -940,7 +928,7 @@ class EndSpec(StepSpec):
 
 
 type AnyStep = Annotated[
-    CollectSpec | ConfirmSpec | ActionSpec | ConversationSpec | AgentSpec | EndSpec,
+    CollectSpec | ConfirmSpec | ActionSpec | ConversationSpec | EndSpec,
     Field(discriminator='kind'),
 ]
 
@@ -1008,6 +996,14 @@ class OperationSpec(BaseModel):
     on a change: it, not the order answers arrive in, says which of two changes stands."""
     idempotent: bool = False
     """The backend dedups by the intent id (the function's `Intent` parameter), so an unknown intent may be sent again."""
+    route: str = ''
+    """The receipt field naming the step the caller moves to once this succeeds: code's move, not a model's.
+
+    Its type must be a `Literal` of step ids, each one the running step
+    itself (stay) or a step the manifest declares, so the graph knows every
+    move before a call runs. The application's receipt says which, from its
+    own records (where a returning learner left off); no model chooses it.
+    """
 
 
 class PersonaSpec(BaseModel):
@@ -1071,6 +1067,10 @@ class FlowSpec(BaseModel):
 
     Speech settings belong to the voice adapter.
     """
+    language: str = ''
+    """The state attribute (a field or a property) holding the language a call is in, for `locales`."""
+    locales: dict[str, Literal['english', 'spanish'] | LocaleSpec] = {}
+    """The fixed lines for each value of `language`, chosen per call as that value changes. `locale` is the fallback."""
     agents: dict[str, PersonaSpec] = {}
     operations: dict[str, OperationSpec] = {}
     greeting: str = ''
@@ -1079,12 +1079,6 @@ class FlowSpec(BaseModel):
     """The application's state model, like `models.py:ClinicState`: plain data, every field with a default."""
     identity: str = ''
     """The state field that says who the caller is. A question put to one identity is not answered by another."""
-    call: str = ''
-    """A call class of the application's own, like `models/state.py:SalonCall`, instead of `state`.
-
-    ponytail: kept for salon-graph and Faro, which still subclass `CallContext`
-    until their migration sessions (4 and 5); remove it then.
-    """
     voice: str = ''
     """A file added to the top of every step's prompt: the shared tone and persona."""
     includes: dict[str, str] = {}
@@ -1096,11 +1090,14 @@ class FlowSpec(BaseModel):
 
     def _resolver(self, registry: Registry) -> _Resolver:
         resolve = _Resolver(self, registry)
-        if self.call and self.state:
-            resolve.fail('', 'name the state model or a call class, not both')
-        resolve.call_type()
         if self.identity:
             resolve.state_field('identity', self.identity)
+        if bool(self.language) != bool(self.locales):
+            resolve.fail(
+                'language', 'language and locales go together: the state attribute, and a locale per value'
+            )
+        elif self.language and not _attribute(resolve.state_type(), self.language):
+            resolve.fail('language', f'names {self.language!r}, which the state has no field or property for')
         business = [s for s in self.steps if isinstance(s, CollectSpec | ConfirmSpec | ActionSpec)]
         if business and not self.state:
             resolve.fail('', 'a flow with collect, confirm or action steps needs a state model (`state:`)')
@@ -1148,7 +1145,7 @@ class FlowSpec(BaseModel):
 
     def _unguarded_actions(self, resolve: _Resolver) -> None:
         """An action that needs approval must be unreachable except through a confirm step for that operation."""
-        business = [s for s in self.steps if not isinstance(s, EndSpec | AgentSpec)]
+        business = [s for s in self.steps if not isinstance(s, EndSpec)]
         edges: dict[str, set[str]] = {s.id: set(s.destinations()) for s in self.steps}
         for index, step in enumerate(business):
             if not step.then and index + 1 < len(business):
@@ -1181,11 +1178,7 @@ class FlowSpec(BaseModel):
     def prompt(self, step_id: str, registry: Registry | None = None) -> TemplateStr:
         """One step's compiled prompt, exactly as its agent receives it."""
         step = next(
-            (
-                s
-                for s in self.steps
-                if s.id == step_id and isinstance(s, CollectSpec | ConversationSpec | AgentSpec)
-            ),
+            (s for s in self.steps if s.id == step_id and isinstance(s, CollectSpec | ConversationSpec)),
             None,
         )
         if step is None:
@@ -1223,14 +1216,25 @@ class FlowSpec(BaseModel):
             settings=settings,
             state_type=state,
             identity=self.identity,
-            call_type=resolve.call_type() if self.call else None,
             entry=self.entry,
             services=resolve.function('services', self.services, 0) if self.services else None,
-            locale=self.locale.build() if isinstance(self.locale, LocaleSpec) else LOCALES.get(self.locale),
+            locale=_built(self.locale) if self.locale else None,
+            locales={value: _built(spec) for value, spec in self.locales.items()},
+            language=self.language,
             version=self.app_version,
         )
         Flow.of(flow.nodes)
         return flow
+
+
+def _attribute(state: type[BaseModel], name: str) -> bool:
+    """Whether the state model has this field, or a property of that name."""
+    return name in state.model_fields or isinstance(getattr(state, name, None), property)
+
+
+def _built(spec: str | LocaleSpec) -> Locale:
+    """A manifest locale: a language's own lines, or those lines with the application's words for its domain."""
+    return spec.build() if isinstance(spec, LocaleSpec) else LOCALES[spec]
 
 
 def _positional(function: Callable[..., Any]) -> int:

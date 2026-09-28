@@ -208,6 +208,26 @@ class Store:
             return _plan(row)
 
     @_offloaded
+    def session(self, session_id: int, learner_id: int) -> Session:
+        """One of this learner's sessions, as the store has it now: what a write is built on and checked against."""
+        with self._tx() as db:
+            row = db.execute(
+                'SELECT * FROM sessions WHERE id = ? AND learner_id = ?', (session_id, learner_id)
+            ).fetchone()
+            if row is None:
+                raise OwnershipError(f'session {session_id} does not belong to this learner')
+            return _session(row)
+
+    @_offloaded
+    def active_plan(self, learner_id: int) -> Plan | None:
+        """This learner's agreed plan, or None before they agreed one."""
+        with self._tx() as db:
+            row = db.execute(
+                "SELECT * FROM plans WHERE learner_id = ? AND status = 'active'", (learner_id,)
+            ).fetchone()
+            return _plan(row) if row else None
+
+    @_offloaded
     def create_learner(self, phone: str, name: str, explanation: str) -> tuple[Learner, Session]:
         """A new onboarding profile and its first session, together. A second profile for one phone is refused."""
         with self._tx() as db:
@@ -236,7 +256,11 @@ class Store:
             active = db.execute(
                 "SELECT id FROM plans WHERE learner_id = ? AND status = 'active'", (learner_id,)
             ).fetchone()
-            carried = _session(last).checkpoint.model_copy(update={'learned': 0}) if last else Checkpoint()
+            carried = (
+                _session(last).checkpoint.model_copy(update={'learned': 0, 'helped': ''})
+                if last
+                else Checkpoint()
+            )
             return self._insert_session(
                 db, learner_id, active['id'] if active else None, last['id'] if last else None, carried
             )

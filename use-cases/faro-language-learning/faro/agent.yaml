@@ -1,0 +1,268 @@
+# Faro, a bilingual language-learning companion, on core's public contract: one agent per step, sharing one
+# call's state and conversation, each with its own prompt, fields and operations.
+#
+# The steps are the learner's journey: identify, sign up, onboard, place, agree a plan, then lessons from the
+# menu. Where a learner goes next after a save is the store's answer, in the receipt (`route: next`), never a
+# model's. Grading is the step's agent's: it records the attempt and its grade with `collect`, and code carries
+# out `record_attempt` at once (`carries_out`). Only the coach may explain or hint, and reaching it goes through
+# `help`, which marks the exercise helped in the store first: an answer after help is never independent.
+# Everything is checked when Faro starts, never mid-call.
+
+version: 1
+id: faro
+app_version: '2026.09.28-s5'
+state: state.py:FaroState
+identity: phone
+entry: identify
+language: explanation
+locales:
+  EN:
+    base: english
+    goodbye: Goodbye, and see you next time!
+    claims:
+      - "\\b(?:saved|recorded|activated|updated your|marked)\\b"
+      - "\\b(?:guardad[oa]s?|registrad[oa]s?|activad[oa]|actualizad[oa]|marcad[oa]s?)\\b"
+  ES:
+    base: spanish
+    goodbye: ¡Hasta la próxima!
+    claims:
+      - "\\b(?:saved|recorded|activated|updated your|marked)\\b"
+      - "\\b(?:guardad[oa]s?|registrad[oa]s?|activad[oa]|actualizad[oa]|marcad[oa]s?)\\b"
+model: google-cloud:gemini-3.5-flash-lite
+
+agents:
+  faro:
+    prompt: prompts/_voice.md
+    spec:
+      model_settings:
+        service_tier: priority
+        google_thinking_config: {thinking_level: MINIMAL}
+
+operations:
+  confirm_phone:
+    function: functions.py:confirm_phone
+    args: {phone: phone}
+    readback: functions.py:phone_words
+    matches: {phone: phone}
+    assign:
+      confirmed: phone
+      learner_id: learner_id
+      learner_name: learner_name
+      profile_language: profile_language
+      session_id: session_id
+      notes: notes
+      waiting: waiting
+      draft_id: draft_id
+      draft_revision: draft_revision
+      draft_target: draft_target
+      draft_goal: draft_goal
+      draft_level: draft_level
+      draft_minutes: draft_minutes
+    route: next
+    say: '{said}'
+  agree_signup:
+    function: functions.py:agree_signup
+    args: {phone: confirmed}
+    readback: functions.py:signup_words
+    changes: false
+    matches: {phone: phone}
+    succeeds: {agreed: true}
+    assign: {signup_agreed: agreed}
+    say: '{said}'
+  create_learner:
+    function: functions.py:create_learner
+    args: {phone: confirmed, name: name, agreed: signup_agreed}
+    approval: none
+    matches: {phone: phone}
+    assign:
+      learner_id: learner_id
+      learner_name: learner_name
+      profile_language: profile_language
+      session_id: session_id
+      notes: notes
+    route: next
+    say: '{said}'
+  save_onboarding:
+    function: functions.py:save_onboarding
+    args: {learner_id: learner_id, session_id: session_id, learn: learn, purpose: purpose, length: length}
+    approval: none
+    matches: {learner_id: learner_id}
+    assign: {waiting: waiting}
+    route: next
+    say: '{said}'
+  repeat_waiting:
+    function: functions.py:repeat_waiting
+    args: {learner_id: learner_id, session_id: session_id}
+    approval: none
+    changes: false
+    matches: {learner_id: learner_id}
+    say: '{said}'
+  note_help:
+    function: functions.py:note_help
+    args: {learner_id: learner_id, session_id: session_id, waiting: waiting}
+    approval: none
+    matches: {learner_id: learner_id}
+    say: '{said}'
+  record_attempt:
+    function: functions.py:record_attempt
+    args:
+      learner_id: learner_id
+      session_id: session_id
+      answer: answer
+      grade: grade
+      feedback: feedback
+      evidence: evidence
+    approval: none
+    idempotent: true
+    reconcile: functions.py:find_attempt
+    matches: {learner_id: learner_id}
+    assign:
+      waiting: waiting
+      draft_id: draft_id
+      draft_revision: draft_revision
+      draft_target: draft_target
+      draft_goal: draft_goal
+      draft_level: draft_level
+      draft_minutes: draft_minutes
+    route: next
+    say: '{said}'
+  activate_plan:
+    function: functions.py:activate_plan
+    args:
+      learner_id: learner_id
+      session_id: session_id
+      plan_id: draft_id
+      revision: draft_revision
+      target: draft_target
+      level: draft_level
+      goal: draft_goal
+      minutes: draft_minutes
+      new_goal: plan_goal
+      new_minutes: plan_minutes
+    readback: functions.py:proposal_words
+    matches: {learner_id: learner_id}
+    route: next
+    say: '{said}'
+  decline_plan:
+    function: functions.py:decline_plan
+    args: {learner_id: learner_id, session_id: session_id, plan_id: draft_id, keep: keep_plan}
+    approval: none
+    matches: {learner_id: learner_id}
+    route: next
+    say: '{said}'
+  continue_lesson:
+    function: functions.py:continue_lesson
+    args: {learner_id: learner_id, session_id: session_id}
+    approval: none
+    matches: {learner_id: learner_id}
+    assign: {waiting: waiting}
+    route: next
+    say: '{said}'
+  start_reassessment:
+    function: functions.py:start_reassessment
+    args: {learner_id: learner_id, session_id: session_id}
+    approval: none
+    matches: {learner_id: learner_id}
+    assign: {waiting: waiting}
+    route: next
+    say: '{said}'
+  read_progress:
+    function: functions.py:read_progress
+    args: {learner_id: learner_id, session_id: session_id}
+    approval: none
+    changes: false
+    matches: {learner_id: learner_id}
+    say: '{said}'
+  remember:
+    function: functions.py:remember
+    args: {learner_id: learner_id, session_id: session_id, key: fact_key, text: fact_text}
+    approval: none
+    matches: {learner_id: learner_id}
+    say: '{said}'
+
+steps:
+  - id: identify
+    kind: conversation
+    agent: faro
+    prompt: prompts/identify.md
+    guarded: true
+    fields: [phone, asked_language]
+    operations: [confirm_phone]
+    opens_with: confirm_phone
+    asks: {phone: 'What is your full phone number, starting with plus thirty-four?'}
+    reads_back: {confirm_phone: [phone, asked_language]}
+
+  - id: signup
+    kind: conversation
+    agent: faro
+    prompt: prompts/signup.md
+    guarded: true
+    fields: [name, asked_language]
+    operations: [agree_signup]
+    opens_with: agree_signup
+    reads_back: {agree_signup: [asked_language]}
+    carries_out: {create_learner: [name]}
+
+  - id: onboarding
+    kind: conversation
+    agent: faro
+    prompt: prompts/onboarding.md
+    guarded: true
+    fields: [learn, purpose, length, asked_language]
+    carries_out: {save_onboarding: [learn, purpose, length]}
+
+  - id: assessment
+    kind: conversation
+    agent: faro
+    prompt: prompts/assessment.md
+    speech: rendered
+    fields: [answer, grade, feedback, evidence, asked_language]
+    quoted: [answer]
+    carries_out: {record_attempt: [grade], repeat_waiting: [asked_language]}
+    exits:
+      - {to: help, purpose: 'a question, a request to explain, repeat or slow down, or hesitation: anything but an attempt'}
+
+  - id: plan
+    kind: conversation
+    agent: faro
+    prompt: prompts/plan.md
+    guarded: true
+    fields: [plan_minutes, plan_goal, keep_plan, asked_language]
+    operations: [activate_plan]
+    opens_with: activate_plan
+    reads_back: {activate_plan: [plan_minutes, plan_goal, asked_language]}
+    carries_out: {decline_plan: [keep_plan]}
+
+  - id: menu
+    kind: conversation
+    agent: faro
+    prompt: prompts/menu.md
+    guarded: true
+    fields: [fact_key, fact_text, asked_language]
+    operations: [continue_lesson, start_reassessment, read_progress]
+    carries_out: {remember: [fact_text]}
+
+  - id: lesson
+    kind: conversation
+    agent: faro
+    prompt: prompts/lesson.md
+    speech: rendered
+    fields: [answer, grade, feedback, asked_language]
+    quoted: [answer]
+    carries_out: {record_attempt: [grade], repeat_waiting: [asked_language]}
+    exits:
+      - {to: help, purpose: 'a question, a request to explain, repeat or slow down, a hint, or hesitation: anything but an attempt'}
+      - {to: menu, purpose: 'they want a recap, to check their level, or to stop the lesson'}
+
+  - {id: help, kind: action, operation: note_help, then: coach, on_error: coach, on_unknown: coach}
+
+  - id: coach
+    kind: conversation
+    agent: faro
+    prompt: prompts/coach.md
+    guarded: true
+    fields: [answer, grade, feedback, evidence, fact_key, fact_text, asked_language]
+    quoted: [answer]
+    carries_out: {record_attempt: [grade], remember: [fact_text]}
+    exits:
+      - {to: menu, purpose: 'they want a recap, to check their level, or to stop practising this'}

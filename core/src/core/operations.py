@@ -44,7 +44,6 @@ arbitrates, by the intent id it is handed.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import inspect
 import json
 from abc import ABC, abstractmethod
@@ -64,16 +63,6 @@ _tracer = trace.get_tracer('voice.operations')
 
 NOTE_INTENT_SECONDS = 2.0
 """How long a service's `note_intent` may take before the intent is taken as never dispatched."""
-
-
-def operation_token(*parts: object) -> str:
-    """A stable name derived from its parts. Faro's legacy operations key their own records with it.
-
-    Not an intent: arguments alone cannot tell a retry of one action from a
-    second action with the same arguments. Core's operations are named by
-    their `Intent`, which it issues.
-    """
-    return hashlib.sha256('|'.join(str(part) for part in parts).encode()).hexdigest()[:16]
 
 
 class OutcomeUnknownError(Exception):
@@ -113,6 +102,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
     """The backend dedups by the intent id, so an intent whose outcome is unknown may be sent again, as itself."""
     confirms_by_restating: ClassVar[bool] = False
     """The caller saying the read-back's value again confirms it (`restated: confirms`). Only ever a lookup."""
+    route: ClassVar[str] = ''
+    """The receipt field naming the step a success moves the caller to (`route:`), or '' for none."""
     subject: ClassVar[str] = ''
     """The receipt field naming the resource it acts on (a booking id, a ticket id). See `CallContext.effective`."""
     resource: ClassVar[str] = ''

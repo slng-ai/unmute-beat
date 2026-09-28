@@ -24,11 +24,11 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal, Protocol
+from typing import Any, Literal
 
 from loguru import logger
 from pydantic_ai import (
@@ -52,11 +52,11 @@ from pydantic_ai.messages import InstructionPart, ModelRequest, ModelResponse, U
 from pydantic_ai.usage import UsageLimitExceeded
 
 from core.flow import Answered, Flow, Moved
-from core.graph import LocalAction, Node, Restated, moved_by, route
+from core.graph import LocalAction, Node, Restated, route
 from core.history import paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
-from core.state import _FILLERS, CallContext, Checkpoint, Handoff, Question, Spoken, turn_generation
+from core.state import CallContext, Checkpoint, Handoff, Question, Spoken, turn_generation
 
 STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
     ENGLISH.stumble,
@@ -68,12 +68,6 @@ STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
 _CLAUSE = re.compile(r'[.!?,;:]')
 _CLAUSE_MAX = 60
 """Where one clause ends, and the cap that stops a model that never punctuates from holding the whole answer."""
-EARLY_AFTER = 0.05
-"""Seconds `advance` may take before the step's run is started beside it (`_Early`).
-
-A decision made by code is back well inside this; one waiting on a model
-reading takes 0.7 s or more, and that is the wait the early run overlaps.
-"""
 
 
 @dataclass(frozen=True)
@@ -156,66 +150,6 @@ class Barge:
             self._events.cancel()  # ty: ignore[unresolved-attribute]
 
 
-@dataclass
-class _Hold:
-    """Internal: what keeps an early run quiet until the readings have decided nothing."""
-
-    opened: asyncio.Event = field(default_factory=asyncio.Event)
-    dropped: bool = False
-    """The readings decided something: the run is cancelled, and nothing it produced is kept or said."""
-
-
-_DONE = object()
-
-
-class _Early:
-    """Internal: the step's run, started while `advance` waits on its readings.
-
-    A reading takes 0.7 s or more, and a turn it does not decide used to pay
-    for it and then for the step's first request, one after the other. Here
-    the request goes out at the same time. The run stops at its first event
-    and waits (`_Hold`): the SDK's event stream has no buffer, so the run can
-    get no further, and no tool or output function runs, no speech is
-    recorded and nothing reaches the caller until the readings are done. If
-    they decide an action, the run is dropped; if they decide nothing, it goes
-    on from where it stopped, its first request already answered.
-
-    ponytail: a dropped run's request is still billed for its input. That is
-    the price of the overlap, paid only on the turns a reading decides.
-    """
-
-    def __init__(self, run: Callable[[_Hold], AsyncIterator[object]]) -> None:
-        self.hold = _Hold()
-        self._queue: asyncio.Queue[object] = asyncio.Queue()
-
-        async def pump() -> None:
-            try:
-                async for event in run(self.hold):
-                    await self._queue.put(event)
-            finally:
-                self._queue.put_nowait(_DONE)
-
-        self._task = asyncio.ensure_future(pump())
-
-    async def drop(self) -> None:
-        """Cancel the run and keep nothing of it."""
-        self.hold.dropped = True
-        self._task.cancel()
-        with suppress(asyncio.CancelledError):
-            await self._task
-
-    async def events(self) -> AsyncIterator[object]:
-        """Let the run go on, and pass its events out as they come. Its errors are raised here."""
-        self.hold.opened.set()
-        try:
-            while (event := await self._queue.get()) is not _DONE:
-                yield event
-            await self._task
-        finally:
-            if not self._task.done():
-                await self.drop()
-
-
 @dataclass(frozen=True)
 class _Stalled:
     """Internal: a step request sent nothing within `TurnBudget.first_part`, so its run was cancelled."""
@@ -247,7 +181,6 @@ class _Outcome:
     """Internal: what one run produced, handed back to the hop loop."""
 
     output: object
-    succeeded: set[str]
 
 
 HOLD_CANCEL_SECONDS = 1.0
@@ -444,13 +377,10 @@ class Turn:
         is the one sentence the caller's next reply will be read as an answer
         to.
 
-        A run that did not hand over may still have moved the caller by a
-        borrowed tool that *succeeded*; the move is committed after the run,
-        so the step that spoke is the step whose prompt wrote the words. Every
-        move and every handoff is fenced on the turn's generation and the
-        barge signal: a superseded or interrupted turn does not get to choose
-        who takes the caller next, though a tool's own effect stands and is
-        reconciled by its operation token.
+        Every handoff is fenced on the turn's generation and the barge
+        signal: a superseded or interrupted turn does not get to choose who
+        takes the caller next, though a tool's own effect stands and is
+        reconciled by its intent.
 
         A prerequisite step reporting `completed` or `unserved` restores the
         owner's checkpoint and tells the receiving agent, through an
@@ -527,65 +457,36 @@ class Turn:
         call, nodes, barge = self.call, self.nodes, self.barge
         node = nodes[call.state.agent]
         output = None
-        succeeded: set[str] = set()
 
         if self._stale():
             return
         retained_before = call.input_retained
-        requests_before = len(call.requests)
         action = None
-        early: _Early | None = None
-        retained_early = retained_before
         if self._hops_run == 1 and (settle := call.settlement()) is not None:
             action = LocalAction('reconcile', settle)
         elif self._hops_run == 1 and (told := call.unheard_receipt()):
             action = LocalAction('receipt', lambda: _say_again(call, told), answers=False)
         if node.advance and action is None:
-            state_before, held_before = call.state, dict(call._held)
             task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
             barge.attach(task)
             try:
-                done, _ = await asyncio.wait({task}, timeout=EARLY_AFTER)
-                if not done:
-                    retained_early = call.input_retained
-                    sent = None if retained_early else prompt
-                    early = _Early(lambda hold: self._speak(node, sent, hold))
                 action = await task
             except asyncio.CancelledError:
-                if early is not None:
-                    await early.drop()
                 if not barge.hit:
                     raise
                 return
             except UsageLimitExceeded, TimeoutError:
-                if early is not None:
-                    await early.drop()
                 raise
             except Exception as error:
                 logger.exception('advance failed on {}', call.state.agent)
-                if early is not None:
-                    await early.drop()
                 yield _Failed(f'{type(error).__name__}: {error}')
                 return
             finally:
                 barge.detach()
-            if early is not None and (
-                action is not None
-                or self._stale()
-                or node.opening(call) is not None
-                or call.state is not state_before
-                or call._held != held_before
-                or call.input_retained != retained_early
-            ):
-                await early.drop()
-                early = None
         if self._stale():
             return
         if not retained_before and call.input_retained:
             prompt = None
-        classified = next((r for r in call.requests[requests_before:] if r.kind == 'classifier'), None)
-        if classified is not None and action is None:
-            classified.outcome = 'none'
         if action is None:
             action = node.opening(call)
         if action is not None:
@@ -606,13 +507,10 @@ class Turn:
             if self._stale():
                 yield RunEnded(node.agent.name or call.state.agent)
                 return
-            decided = classified if classified is not None and not classified.outcome else None
             answers_before = call._answers
             self._arm_hold()
             try:
                 output = await action.run()
-                if decided is not None:
-                    decided.outcome = 'action'
                 if not action.answers:
                     call._return_status = (
                         f'{call._return_status} Application action {action.name} done: the caller spoke over '
@@ -625,8 +523,6 @@ class Turn:
                     )
                     output = None
             except ModelRetry as error:
-                if decided is not None:
-                    decided.outcome = 'refused'
                 call.retain_action(action.name, {'refused': str(error)})
                 call._return_status = (
                     f'{call._return_status} Application action {action.name} refused: {error}'.lstrip()
@@ -642,14 +538,14 @@ class Turn:
                 return
         if action is None or output is None:
             failed: _Failed | None = None
-            run = early.events() if early is not None else self._speak(node, prompt)
+            run = self._speak(node, prompt)
             while True:
                 stalled = False
                 async for event in run:
                     if failed is not None:
                         continue
                     if isinstance(event, _Outcome):
-                        output, succeeded = event.output, event.succeeded
+                        output = event.output
                     elif isinstance(event, _Stalled):
                         stalled = True
                     elif isinstance(event, _Failed):
@@ -670,22 +566,28 @@ class Turn:
                 run = self._speak(node, None if call.input_retained else prompt)
 
         call._return_status, call._entered = '', ''
-        if isinstance(output, Restated):
+        while isinstance(output, Restated):
             if barge.hit:
                 return
-            about, output = output.about, await output.run(self.usage, self.limits)
-            succeeded = {*succeeded, about}
+            about = output.about
+            try:
+                output = await output.run(self.usage, self.limits)
+            except ModelRetry as error:
+                call.retain_action(about, {'refused': str(error)})
+                call._return_status = f'Application action {about} refused: {error}'
+                output = None
+                async for event in self._speak(node, None):
+                    if isinstance(event, _Outcome):
+                        output = event.output
+                    elif isinstance(event, _Failed):
+                        yield event
+                        return
+                    elif not isinstance(event, _Stalled):
+                        yield event
+                call._return_status, call._entered = '', ''
         if isinstance(output, Question) and not barge.hit:
             await call.speak_now(output.put(call), origin='ask')
         if not isinstance(output, Handoff):
-            landed = moved_by(call.state, node, nodes, succeeded)
-            if landed != call.state.agent:
-                if self._stale():
-                    logger.info('fenced a move to {} from turn {}', landed, self.generation)
-                    return
-                logger.info('moved {} -> {} (via {})', call.state.agent, landed, ', '.join(sorted(succeeded)))
-                self.handoffs.append(landed)
-                call.commit(agent=landed)
             return
         if self._stale():
             logger.info('fenced a handoff from turn {}', self.generation)
@@ -710,13 +612,7 @@ class Turn:
         else:
             going_to, waiting = route(call.state, nodes, output.to)
             if waiting is not None and going_to != waiting and call._checkpoint is None:
-                call._checkpoint = Checkpoint(
-                    waiting,
-                    deepcopy(call.messages),
-                    frozenset(s.id for s in call.all_spoken),
-                    call.heard,
-                    call.turn,
-                )
+                call._checkpoint = Checkpoint(waiting, call.heard)
             call._entered = 'handoff'
             call._return_status = (
                 f'Application handoff: {call.state.agent} -> {going_to}. '
@@ -730,35 +626,23 @@ class Turn:
             prompt = None
         if barge.hit:
             return
-        if (
-            output.ends_turn
-            and output.reply
-            and nodes[going_to].opening(call) is None
-            and not call.claims_completion(output.reply)
-        ):
-            call._return_status, call._entered = '', ''
-            await call.speak_now(output.reply, origin='switch')
-            return
-        if lines := nodes[going_to].enter:
-            await call.say(pick(f'enter:{output.to}', lines), origin='entry')
+        if output.ends_turn and nodes[going_to].opening(call) is None:
+            if not output.reply:
+                call._return_status, call._entered = '', ''
+                return
+            if not call.claims_completion(output.reply):
+                call._return_status, call._entered = '', ''
+                await call.speak_now(output.reply, origin='switch')
+                return
         yield _Continue(prompt)
 
-    async def _speak(
-        self, node: Node, prompt: str | None, hold: _Hold | None = None
-    ) -> AsyncIterator[object]:
+    async def _speak(self, node: Node, prompt: str | None) -> AsyncIterator[object]:
         """Run one step's agent, streaming whatever it says.
 
-        With `hold`, this is an early run (`_Early`): it stops at its first
-        event until the readings have decided nothing, and a dropped one keeps
-        nothing. The barge signal is attached only once it goes on, because
-        until then the signal belongs to `advance`.
-
-        `Node.outputs` builds the run's `output_type` from the live state; the
-        per-request narrowing that keeps it honest across several requests
-        inside one run is a capability on the agent itself. An output set that
-        is the agent's own is not passed again: Pydantic AI rebuilds a run's
-        output schema whenever one is passed, which cost about 5 ms of every
-        hand-over turn in the N12 measurement (session 2).
+        The run's output set is the agent's own, never passed again: Pydantic
+        AI rebuilds a run's output schema whenever one is passed, which cost
+        about 5 ms of every hand-over turn in the N12 measurement (session 2).
+        The per-request narrowing of `hand_over` is a capability on the agent.
 
         On a step that can write, speech is released a clause at a time so
         each clause can be read before the caller hears it, and a clause that
@@ -793,9 +677,6 @@ class Turn:
         full, they said it again as their answer (`Restated`): code says
         `Locale.restated` and carries the operation out, no second request.
 
-        Which tools *succeeded* is how a free edge is taken: the result, never
-        the call, because the call event fires before the tool runs.
-
         Messages are retained across cancellation from the SDK's own
         `new_messages()` boundary after teardown, never by slicing at the
         original history length: SDK normalisation can merge old requests, and
@@ -811,11 +692,7 @@ class Turn:
         """
         call, barge = self.call, self.barge
         agent: Agent = node.agent
-        output_type = node.outputs(call.state) if node.outputs is not None else None
-        if output_type is agent.output_type:
-            output_type = None
         step = call.state.agent
-        succeeded: set[str] = set()
         output = None
         gate: str | None = 'clause' if node.guarded else None
         held = ''
@@ -891,8 +768,6 @@ class Turn:
             """
             nonlocal retained_run
             retained_run = True
-            if hold is not None and hold.dropped:
-                return
             overlap = next(
                 (
                     k
@@ -928,13 +803,11 @@ class Turn:
                 deps=call,
                 message_history=initial,
                 capabilities=[Hooks(before_model_request=prepare, after_model_request=tag)],
-                output_type=output_type,
                 usage=self.usage,
                 usage_limits=self.limits,
                 retries={'tools': self.budget.repair_retries, 'output': self.budget.output_retries},
             ) as events:
-                if hold is None:
-                    barge.attach(events)
+                barge.attach(events)
                 async for event in events:
                     if isinstance(event, PartStartEvent):
                         disarm()
@@ -958,9 +831,6 @@ class Turn:
                                 else:
                                     for text in _release(call, reply):
                                         yield TextDelta(text, step)
-                    if hold is not None and not hold.opened.is_set():
-                        await hold.opened.wait()
-                        barge.attach(events)
                     if chunk := _speech(event):
                         if not node.model_speech:
                             continue
@@ -991,7 +861,6 @@ class Turn:
                         if isinstance(event, FunctionToolResultEvent) and not isinstance(
                             event.part, RetryPromptPart
                         ):
-                            succeeded.add(event.part.tool_name)
                             recorded += event.part.tool_name == 'collect'
                             if (
                                 node.reads_back is not None
@@ -1002,9 +871,7 @@ class Turn:
                                 and (asked := node.reads_back(call)) is not None
                             ):
                                 if isinstance(asked, Restated):
-                                    logger.info(
-                                        '{} restated unchanged after its read-back: carried out', asked.about
-                                    )
+                                    logger.info('{} carried out by code after collect', asked.about)
                                 else:
                                     logger.info('read back {} by code after collect', asked.about)
                                 output = asked
@@ -1034,10 +901,10 @@ class Turn:
                 else:
                     retain(new_messages)
             barge.detach()
-            if reply and not barge.hit and not (hold is not None and hold.dropped):
+            if reply and not barge.hit:
                 for text in _release(call, reply):
                     yield TextDelta(text, step)
-            if held and gate != 'blocked' and not (hold is not None and hold.dropped):
+            if held and gate != 'blocked':
                 call.note_model_text(held)
                 call._spoke = True
                 yield TextDelta(held, step)
@@ -1050,7 +917,7 @@ class Turn:
             call.note_said('fixed', line, origin='error')
             yield FixedSpeech(line, reason='withheld')
         yield RunEnded(step)
-        yield _Stalled() if stalled and not barge.hit else _Outcome(output, succeeded)
+        yield _Stalled() if stalled and not barge.hit else _Outcome(output)
 
 
 REMINDERS = 2
@@ -1154,22 +1021,6 @@ def _silent(call: CallContext, output: object, answers_before: int) -> bool:
     return call._answers == answers_before
 
 
-def _covering(call: CallContext, segment: Spoken) -> bool:
-    """A covering line said in this turn, such as a check's "Thanks, I have you".
-
-    The rest of a check is hidden from the step it hands back to, whose
-    history is the one from before the check. This line is not: the caller
-    has just heard it, and the step answering next must not say it again.
-    """
-    return segment.turn == call.turn and segment.origin in _FILLERS
-
-
-def _delivered(call: CallContext) -> str:
-    """What the caller actually heard of the model's current segment."""
-    segments = [s for s in call.spoken if s.kind == 'model']
-    return segments[-1].text if segments else ''
-
-
 def note_spoken(
     call: CallContext, content: str, interrupted: bool, *, segment_ids: tuple[str, ...] = ()
 ) -> None:
@@ -1223,28 +1074,6 @@ async def text_turn(
     """
     text, finished = await take_turn(call, getattr(flow, 'nodes', flow), words, budget, barge)
     return TextReply(text, tuple(s for s in call.spoken if s.text), finished)
-
-
-class Asks[C](Protocol):
-    """A question a use case words for its own call type: `put` records it on that call and returns its words."""
-
-    def put(self, call: C, /) -> str: ...
-
-
-def read_out[C: CallContext](
-    call: C, line: str | Asks[C], origin: str = 'ask', kind: Literal['fixed', 'model'] = 'fixed'
-) -> str:
-    """Say a line to a text reader who gets all of it: put it on the call if it is a question, record it, acknowledge it.
-
-    The text runtime's whole delivery of one line, for a reader that
-    receives words the moment they are written. `kind='model'` is the step's
-    model wording a question the code asked without words. Returns the words.
-    """
-    if not isinstance(line, str):
-        line = line.put(call)
-    call.note_said(kind, line, origin=origin)
-    call.acknowledge(call.spoken[-1].id)
-    return line
 
 
 async def take_turn(

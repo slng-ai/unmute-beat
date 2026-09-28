@@ -306,7 +306,7 @@ async def run_case(
                 done = event
         turn_end = time.time() - start
         said = ' '.join([*heard[before:], ''.join(parts)]).strip()
-        readings = [{'kind': r.kind, 'seconds': r.duration} for r in call.requests]
+        first_outputs = [{'kind': r.kind, 'ttft': r.ttft} for r in call.requests]
         delivered = acknowledge(call)
         ended = collector.take()
         requests = [s for s in ended if is_request(s)]
@@ -334,7 +334,7 @@ async def run_case(
             'said': said,
             'delivered': delivered,
             'status': done.status if done else 'none',
-            'readings': readings,
+            'request_ttft': first_outputs,
             'requests': len(requests),
             'tokens': {'input': tokens_in, 'output': tokens_out},
             'seconds': {

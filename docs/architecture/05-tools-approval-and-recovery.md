@@ -111,7 +111,7 @@ The mappings have specific directions:
 
 The model selects `apply_change`; it does not submit another unchecked copy of these arguments. Core takes them from validated state and validates them again as `ChangeArgs`.
 
-Approval and business effects are separate settings. By default, this operation requires approval and declares a change. The lookup instead declares both `approval: none` and `changes: false`. A read can require approval, and an application can explicitly permit a change without conversational approval. The manifest chooses that policy; types do not choose it automatically.
+Approval and business effects are separate settings. By default, this operation requires approval and declares a change. The lookup instead declares both `approval: none` and `changes: false`. A read can require approval, and an application can explicitly permit a change without conversational approval. The manifest chooses that policy; types do not choose it automatically. An operation with `approval: none` can also be kept out of the model's tools entirely and carried out by code after `collect` records its input (`carries_out`, chapter 04).
 
 ## 4. Read back one exact proposal
 

@@ -30,7 +30,7 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 MODULES = (
     'tests.test_classes',
     'tests.test_history',
-    'tests.test_reuse',
+    'tests.test_engine',
     'tests.test_clock',
     'tests.test_package',
     'tests.test_delivery',
@@ -41,6 +41,7 @@ MODULES = (
     'tests.test_nodes',
     'tests.test_intents',
     'tests.test_tickets',
+    'tests.test_flow_rules',
     'tests.test_outcomes',
     'tests.test_speech',
     'tests.test_webrtc',

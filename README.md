@@ -54,9 +54,9 @@ Three libraries have distinct roles in the implementation:
 
 An application brings an `agent.yaml` manifest, its state model, prompt files and typed Python functions. `core.load(...)` reads the definition; `compile(...)` checks its references and builds a reusable flow; `flow.open(...)` creates an independent call with its own state and services. See the [manifest compiler](core/src/core/flowspec.py) and [graph implementation](core/src/core/flow.py).
 
-A `conversation` node has its own prompt, writable fields, choices, operations and exits. Its agent interprets the caller's words and selects an action or a permitted destination. There is no classifier pre-pass on this public path. A node can stay active for several turns, and a turn can involve several model requests or nodes.
+A `conversation` node has its own prompt, writable fields, choices, operations and exits. Its agent interprets the caller's words and selects an action or a permitted destination. No classifier runs before it, in any application. A node can stay active for several turns, and a turn can involve several model requests or nodes.
 
-An `action` node runs deterministic code and follows a declared result path without a model request. Prerequisites can route through another node and return to the unfinished request. The application decides the shape of its graph: a small single-agent flow and a structured multi-node flow use the same runtime.
+An `action` node runs deterministic code and follows a declared result path without a model request. Prerequisites can route through another node and return to the unfinished request. An operation's receipt can name the node the caller goes to next (`route:`), from the application's own records, and an operation with no read-back can be carried out by code straight after the agent records its input (`carries_out:`). The application decides the shape of its graph: a small single-agent flow and a structured multi-node flow use the same runtime.
 
 State is shared across nodes **within a call**, not across callers. Updates validate a complete candidate state before committing it. Application validators can use the call's clock and previous state. Declared dependencies invalidate choices and derived facts when their inputs change; moving to another node preserves the call's state and conversation history.
 
@@ -104,4 +104,4 @@ uv run --directory core python -m tests
 
 The suite disables model requests. It verifies runtime behavior with scripted models; live evaluations are needed to assess language understanding and audio behavior.
 
-Other examples are at different migration stages. In particular, Faro still uses the legacy authoring path; it is not evidence that migration of every application is complete. See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.
+Faro, a bilingual language-learning companion, uses the same public path since session 5: nine nodes, its grading and placement in its own typed functions, and its fixed lines in the learner's language. Its new build has offline evidence only; see the [cleanup report](docs/research/reusable-core/core-cleanup.md). See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.

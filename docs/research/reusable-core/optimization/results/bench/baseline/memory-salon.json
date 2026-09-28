@@ -1,0 +1,45 @@
+{
+ "mode": "memory",
+ "workload": "salon",
+ "label": "",
+ "seconds": 17.310576124989893,
+ "environment": {
+  "python": "3.14.5",
+  "machine": "arm64",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "cpus": 15,
+  "versions": {
+   "pydantic": "2.13.5",
+   "pydantic-ai-slim": "2.46.0",
+   "pydantic-graph": "2.46.0",
+   "pipecat-ai": "1.11.0",
+   "slng-voice-core": "0.1.0"
+  },
+  "core": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/baseline/core/src/core"
+ },
+ "result": {
+  "definitions": {
+   "compiled": 50,
+   "alive": 50,
+   "retained_kib": 18003.6416015625
+  },
+  "completed": {
+   "calls": 20,
+   "alive": 0,
+   "retained_kib": -3.1083984375
+  },
+  "open": {
+   "active": 5,
+   "turns_each": 3,
+   "held_kib_each": 73.3916015625,
+   "alive_after_release": 0,
+   "retained_after_release_kib": -2.607421875
+  },
+  "rss_mb": {
+   "start": 129.078125,
+   "after_compiles": 166.875,
+   "after_calls": 168.34375,
+   "end": 168.359375
+  }
+ }
+}

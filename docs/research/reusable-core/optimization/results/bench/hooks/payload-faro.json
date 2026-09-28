@@ -1,0 +1,105 @@
+{
+ "mode": "payload",
+ "workload": "faro",
+ "label": "",
+ "seconds": 0.24753054097527638,
+ "environment": {
+  "python": "3.14.5",
+  "machine": "arm64",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "cpus": 15,
+  "versions": {
+   "pydantic": "2.13.5",
+   "pydantic-ai-slim": "2.46.0",
+   "pydantic-graph": "2.46.0",
+   "pipecat-ai": "1.11.0",
+   "slng-voice-core": "0.1.0"
+  },
+  "core": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core"
+ },
+ "result": {
+  "warmup_requests": 1,
+  "warmed": [
+   {
+    "model": "function:reading:probed",
+    "answered": false,
+    "input_tokens": null,
+    "output_tokens": null,
+    "error": "AssertionError"
+   }
+  ],
+  "requests": [
+   {
+    "step": "identify",
+    "instructions": 2785,
+    "context": 939,
+    "history": 130,
+    "tools": 5,
+    "schemas": 1759
+   },
+   {
+    "step": "menu",
+    "instructions": 3661,
+    "context": 1899,
+    "history": 321,
+    "tools": 6,
+    "schemas": 2302
+   },
+   {
+    "step": "lesson",
+    "instructions": 4397,
+    "context": 2342,
+    "history": 480,
+    "tools": 4,
+    "schemas": 2716
+   },
+   {
+    "step": "coach",
+    "instructions": 4583,
+    "context": 2537,
+    "history": 579,
+    "tools": 3,
+    "schemas": 3057
+   },
+   {
+    "step": "coach",
+    "instructions": 4432,
+    "context": 2386,
+    "history": 625,
+    "tools": 3,
+    "schemas": 3057
+   },
+   {
+    "step": "lesson",
+    "instructions": 4267,
+    "context": 2212,
+    "history": 864,
+    "tools": 4,
+    "schemas": 2716
+   },
+   {
+    "step": "lesson",
+    "instructions": 4512,
+    "context": 2457,
+    "history": 1137,
+    "tools": 4,
+    "schemas": 2716
+   },
+   {
+    "step": "menu",
+    "instructions": 4410,
+    "context": 2648,
+    "history": 1427,
+    "tools": 6,
+    "schemas": 2302
+   }
+  ],
+  "totals": {
+   "instructions": 33047,
+   "context": 17420,
+   "history": 5563,
+   "schemas": 20625,
+   "requests": 8
+  }
+ }
+}

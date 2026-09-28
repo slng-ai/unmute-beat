@@ -74,7 +74,9 @@ async def pending(case: Case, answered: bool = True) -> SalonCall:
         call, _ = verified('concierge')
         call.ask(Asked(about='closing', spoken=case.spoken, owner=PHONE))
     call.note_said('fixed', case.spoken, origin='ask')
-    if not case.delivered:
+    if case.delivered:
+        call.acknowledge(call.spoken[-1].id)
+    else:
         call.note_heard(case.spoken[:12])
     if case.stale:
         call.turn_started('One moment.')

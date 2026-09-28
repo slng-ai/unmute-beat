@@ -84,15 +84,23 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
 
         Every authorised attempt leaves one `write` span, whichever path ran it
         (a model's tool or `advance` with no model), carrying `write.audit`:
-        the action, its arguments, the question the caller was answering and
-        what they said, and whether it landed (ok, failed, or unknown when the
-        service's outcome is). `evals.ledger` reads it. A refusal leaves none:
-        nothing was attempted.
+        the action, its arguments, the question the caller was answering (its
+        serial and the segments that carried it to them) and what they said,
+        and whether it landed (ok, failed, or unknown when the service's
+        outcome is). `evals.ledger` reads it. A refusal leaves none: nothing
+        was attempted.
+
+        A validated receipt is filed on the call (`CallContext.evidence`)
+        before anything else can wait: a caller cutting in during the
+        confirmation cancels the speech, never the record of what the service
+        did. Evidence is append-only; a later turn, a new topic or a stale
+        generation never erases it.
         """
         checked: ArgsT = self.args_type.model_validate(args.model_dump())  # ty: ignore[invalid-assignment]
         if (early := await self._before(call, checked)) is not None:
             return early
         asked = call.pending_question()
+        answering = call.answering()
         heard = call.heard
         grant = await self._authorise(call, checked, usage=usage, usage_limits=usage_limits)
         with _tracer.start_as_current_span('write') as span:
@@ -102,6 +110,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 'question': asked.spoken if asked is not None else '',
                 'about': asked.about if asked is not None else '',
                 'asked_turn': asked.turn if asked is not None else None,
+                'proposal': answering[0] if asked is not None else 0,
+                'segments': list(answering[1]) if asked is not None else [],
                 'turn': call.turn,
                 'heard': heard,
                 'status': 'unknown',
@@ -110,6 +120,13 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 call.note_business_attempt()
                 raw = await self._execute(call, checked, grant)
                 receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
+                call.note_evidence(
+                    self.name,
+                    audit['args'],
+                    receipt.model_dump(mode='json'),
+                    proposal=audit['proposal'],
+                    segments=tuple(audit['segments']),
+                )
                 output = await self._record(call, checked, receipt)
                 audit.update(status='ok', receipt=receipt.model_dump(mode='json'))
                 return output

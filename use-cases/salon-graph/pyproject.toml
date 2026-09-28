@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Sage and Stone, the salon, as a graph of typed steps on core."
 requires-python = ">=3.14"
 dependencies = [
-    "slng-voice-core",
+    "slng-voice-core[voice,tracing]",
+    # The model this application picks; core names no provider.
+    "pydantic-ai-slim[google,openai]>=2.46.0",
     # Google's libphonenumber: a regex cannot know a Spanish number has nine national digits.
     "pydantic-extra-types[phonenumbers]>=2.11.1",
     "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",

@@ -1,8 +1,10 @@
 """Faro's benchmark cases, live: scripted text calls on the real model, one Langfuse session per call.
 
     cd use-cases/faro-tools
-    uv run bench.py              # every case
-    uv run bench.py L03 L07-ES   # some of them
+    uv run --env-file ../../.env bench.py              # every case
+    uv run --env-file ../../.env bench.py L03 L07-ES   # some of them
+
+The keys come from `--env-file`: importing core reads no `.env`.
 
 Makes billable model requests. There is no audio: each caller line goes
 through the real turn engine (`core.turn.take_turn`) with the real agent and
@@ -690,7 +692,7 @@ async def run_call(path: str, case_id: str, index: int, session: str) -> dict:
 
     from core.observability import setup
     from core.policies import TurnBudget
-    from core.turn import FixedSpeech, TextDelta, TurnFinished, greet, note_spoken, run_turn
+    from core.turn import FixedSpeech, TextDelta, TurnFinished, greet, note_spoken, receive, run_turn
     from faro import AGENTS, GREETING, close_call
     from faro.operations import finish
     from faro.state import open_call
@@ -730,6 +732,7 @@ async def run_call(path: str, case_id: str, index: int, session: str) -> dict:
                 state['barged'] = True
                 segment = call.spoken[-1]
                 note_spoken(call, segment.text[:25], interrupted=True, segment_ids=(segment.id,))
+            receive(call)
             before, plan_before = len(heard), call.plan
             with tracer.start_as_current_span('turn', attributes={'faro.caller': words}) as span:
                 started, first = time.perf_counter(), None

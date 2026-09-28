@@ -30,6 +30,7 @@ from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from core.processor import PydanticAgentProcessor
+from core.turn import read_out, receive
 from salon import agents, diary
 from salon.agents import AGENTS
 from salon.diary import Diary, times_named
@@ -111,9 +112,15 @@ def _context(call):
 async def _agree(call, action: Literal['book', 'move'], slot_id: str, booking_id: str = '') -> str:
     """Read the change back, hear a yes, and write it: a picked time is agreement only once read back."""
     question = await agents.ask_booking(_context(call), action, slot_id, booking_id)
-    question.put(call)
+    read_out(call, question)
     call.turn_started('Yes.')
     return await agents.save_booking(_context(call), action, slot_id, booking_id)
+
+
+def _model_asks(call, words: str) -> None:
+    """The step's model puts the refusal's question to the caller in its own words, and they hear all of it."""
+    call.note_said('model', words)
+    receive(call)
 
 
 async def _refuses(fn, *args) -> str:
@@ -258,12 +265,12 @@ async def go_for_it_approves_only_the_pending_move():
     assert books.bookings_for(PHONE, CLOCK.date())[0] == held
 
     question = await agents.ask_booking(_context(call), 'move', monday['slot_id'], held['booking_id'])
-    question.put(call)
+    read_out(call, question)
     call.turn_started('Go for it, but make it eleven instead')
     await _refuses(agents.save_booking, _context(call), 'move', monday['slot_id'], held['booking_id'])
     assert books.bookings_for(PHONE, CLOCK.date())[0] == held
 
-    question.put(call)
+    read_out(call, question)
     call.turn_started('Go for it.')
     moved = await agents.save_booking(_context(call), 'move', monday['slot_id'], held['booking_id'])
     after = books.bookings_for(PHONE, CLOCK.date())
@@ -392,6 +399,7 @@ async def n3_an_answered_question_books_what_they_answered():
     call.turn_started('three in the afternoon as well')
     second = _slot(call, 'friday', 'haircut', '15:00')
     await _refuses(agents.save_booking, _context(call), 'book', second['slot_id'], '')
+    _model_asks(call, 'Would you like to move your nine o clock, or add another one?')
 
     call.turn_started('another one, on top of the nine o clock')
     saved = await agents.save_booking(_context(call), 'book', second['slot_id'], '')
@@ -433,7 +441,7 @@ async def n4_a_yes_about_spain_verifies_nobody():
     call.turn_started('my number is six eight zero, eight four zero, four six four')
     question = await agents.ask_number(_context(call), PHONE)
     assert '+34 680 840 464' in question.spoken, question.spoken
-    question.put(call)
+    read_out(call, question)
     call.turn_started("yes, that's right")
     handoff = await agents.confirm_customer(_context(call), PHONE)
     assert call.state.customer_verified and call.state.phone_confirmed
@@ -449,7 +457,7 @@ async def n4_a_correction_is_not_an_agreement():
     call = _salon(verified=False)
     _heard(call)
     call.turn_started('my number is six eight zero...')
-    (await agents.ask_number(_context(call), PHONE)).put(call)
+    read_out(call, await agents.ask_number(_context(call), PHONE))
     call.turn_started('no, it ends four six five')
     refusal = await _refuses(agents.confirm_customer, _context(call), PHONE)
     assert 'did not agree' in refusal, refusal
@@ -458,7 +466,7 @@ async def n4_a_correction_is_not_an_agreement():
     call = _salon(verified=False)
     _heard(call)
     call.turn_started('my number is six eight zero...')
-    (await agents.ask_number(_context(call), PHONE)).put(call)
+    read_out(call, await agents.ask_number(_context(call), PHONE))
     call.turn_started('sorry, what were the opening hours again?')
     call.turn_started('yes')
     assert call.pending('phone', value=PHONE) is None
@@ -544,7 +552,7 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
     summary = 'the last cut was completely uneven'
     question = await agents.ask_complaint(_context(call), summary, 'a free redo')
     assert summary in question.spoken and question.spoken.endswith('?'), question.spoken
-    question.put(call)
+    read_out(call, question)
 
     call.turn_started("yes, that's right")
     record = await complaints._record_complaint(_context(call), summary, 'a free redo')
@@ -562,7 +570,7 @@ async def a_redo_request_keeps_the_booking_and_is_told_the_truth():
 
     call.turn_started('actually I want a full refund')
     refund = 'the last cut was completely uneven'
-    (await agents.ask_complaint(_context(call), refund, 'a full refund')).put(call)
+    read_out(call, await agents.ask_complaint(_context(call), refund, 'a full refund'))
     call.turn_started('yes')
     await complaints._record_complaint(_context(call), refund, 'a full refund')
     latest = [seg.text for seg in call.spoken if seg.kind == 'fixed'][-1]
@@ -592,7 +600,7 @@ async def a_complaint_is_written_in_the_words_they_agreed_to():
     assert 'ask_complaint' in refusal, refusal
     assert books.complaints() == []
 
-    (await agents.ask_complaint(_context(call), 'the colour came out wrong', 'a refund')).put(call)
+    read_out(call, await agents.ask_complaint(_context(call), 'the colour came out wrong', 'a refund'))
     call.turn_started("yes, that's right")
     other = await _refuses(
         complaints._record_complaint, _context(call), 'the stylist was rude', 'a full refund'

@@ -1,0 +1,219 @@
+{
+  "notes": [
+    "The N1-N13 native comparison, version 1. The matrix driver (`python -m matrix`) reads this file.",
+    "Each row names the checks each arm runs. A check is an existing assert function (`tests.test_x:name`, passed when it returns) or a line scenario (`scenario:name`, the same name and acceptance condition in both builds' `evals/matrix.py`).",
+    "`core/` runs a check in the core member; the harness arm is core plus salon-graph.",
+    "`native_expect` is what the native build is expected to show against the harness's acceptance condition. A native fail is a recorded difference, never a relaxed rule.",
+    "native.files_sha256 is one digest over every runtime file of the reference (all but evals/ and tests/): `python -m matrix pin` prints it, and the driver refuses to run when it differs.",
+    "timing (N12) was frozen before the first measurement: warm-up and paired repetitions, alternating which arm goes first, each run in a process of its own.",
+    "`@scripted-readings` runs a check under salon-graph's `tests.classifier_model.classifier_model()`, as its own module does under `__main__`. Every check runs in a process of its own."
+  ],
+  "version": 1,
+  "native": {
+    "member": "use-cases/salon-pipecat-flows",
+    "revision": "26114758246bfb4cd05a0242ed48e335d3f1ed4a",
+    "files_sha256": "550dd67c4bae37901d93e6af069c2fd556a59b9a022a3a2677e83272f06496af"
+  },
+  "harness": {
+    "member": "use-cases/salon-graph"
+  },
+  "rows": {
+    "N1": {
+      "title": "Invalid arguments, receipt shape and mismatch, unknown fields, atomic state",
+      "native_expect": "pass",
+      "native": [
+        "tests.test_graph_salon:arguments_are_validated_before_anything_runs",
+        "tests.test_graph_salon:a_malformed_receipt_changes_nothing",
+        "tests.test_graph_salon:every_tool_has_its_pydantic_schema",
+        "scenario:bad_slot"
+      ],
+      "harness": [
+        "tests.test_state:a_failed_batch_commits_nothing",
+        "tests.test_state:a_malformed_service_response_writes_nothing",
+        "tests.test_salon:a_result_about_a_different_slot_is_not_accepted@scripted-readings",
+        "core/tests.test_session:invalid_updates_change_nothing",
+        "core/tests.test_sdk:the_collect_schema_is_the_states_own",
+        "scenario:bad_slot"
+      ]
+    },
+    "N2": {
+      "title": "Missing, same-turn and wrong-identity approval, rejection, correction, replay",
+      "native_expect": "pass",
+      "native": [
+        "tests.test_graph_salon:a_write_needs_a_proposal",
+        "tests.test_graph_salon:a_yes_in_the_same_turn_writes_nothing_and_a_later_yes_writes_once",
+        "tests.test_graph_salon:a_yes_from_somebody_else_is_refused",
+        "tests.test_graph_salon:a_no_takes_the_question_off_the_table",
+        "scenario:booking",
+        "scenario:replay"
+      ],
+      "harness": [
+        "tests.test_consent:n3_a_flipped_flag_is_not_consent@scripted-readings",
+        "tests.test_consent:n4_a_correction_is_not_an_agreement@scripted-readings",
+        "tests.test_state:correcting_the_number_withdraws_the_old_authorisation",
+        "core/tests.test_session:only_the_delivered_current_proposal_authorises",
+        "scenario:booking",
+        "scenario:replay"
+      ]
+    },
+    "N3": {
+      "title": "Verification detour and the resumed booking",
+      "native_expect": "pass",
+      "native": [
+        "tests.test_graph_salon:an_unidentified_booking_goes_through_verify_and_resumes",
+        "tests.test_graph_salon:a_booking_asked_of_the_concierge_is_read_by_code_after_the_lookup",
+        "scenario:booking"
+      ],
+      "harness": [
+        "tests.test_recovery:service_requests_verify_first@scripted-readings",
+        "tests.test_consent:n2_the_day_survives_the_verification_detour@scripted-readings",
+        "tests.test_optimization:openings_skip_the_model@scripted-readings",
+        "scenario:booking"
+      ]
+    },
+    "N4": {
+      "title": "Offered choice, booking, move, cancel, complaint",
+      "native_expect": "pass",
+      "native": [
+        "tests.test_graph_salon:a_complaint_is_recorded_after_its_read_back",
+        "scenario:booking"
+      ],
+      "harness": [
+        "tests.test_consent:n1_the_move_it_asked_for_is_the_move_it_makes@scripted-readings",
+        "tests.test_consent:a_complaint_is_written_in_the_words_they_agreed_to@scripted-readings",
+        "tests.test_salon:the_same_slot_can_be_booked_again_after_it_is_cancelled@scripted-readings",
+        "scenario:booking"
+      ]
+    },
+    "N5": {
+      "title": "One action per reply, tool, request and transition budget",
+      "native_expect": "pass",
+      "native": [
+        "tests.test_graph_salon:one_action_per_reply",
+        "tests.test_graph_salon:the_turn_budget_ends_with_a_fixed_line"
+      ],
+      "harness": [
+        "tests.test_flow:a_second_action_is_refused_before_it_runs",
+        "tests.test_budget:exhaustion_makes_no_further_request@scripted-readings",
+        "tests.test_budget:the_tool_limit_is_its_own_number@scripted-readings"
+      ]
+    },
+    "N6": {
+      "title": "Model or tool failure, empty output, a duplicate answer or receipt",
+      "native_expect": "pass",
+      "native": [
+        "tests.test_graph_salon:a_fault_is_a_fixed_line_not_an_error_for_the_model",
+        "tests.test_graph_salon:an_empty_reply_is_run_again_once_then_answered",
+        "tests.test_graph_salon:the_claim_filter_drops_an_unbacked_claim",
+        "tests.test_graph_salon:a_copy_of_a_code_line_never_reaches_the_caller",
+        "scenario:empty_output"
+      ],
+      "harness": [
+        "tests.test_core:a_claim_the_salon_cannot_bear_out_is_corrected_out_loud@scripted-readings",
+        "tests.test_budget:repair_retries_are_bounded@scripted-readings",
+        "tests.test_budget:a_request_that_sends_nothing_is_tried_again@scripted-readings",
+        "tests.test_salon:the_note_is_said_once@scripted-readings",
+        "scenario:empty_output"
+      ]
+    },
+    "N7": {
+      "title": "A node change while playback or an action-completion frame is cut or missing",
+      "native_expect": "pass",
+      "native": [
+        "tests.test_graph_salon:the_say_action_speaks_state_and_waits_for_nothing",
+        "tests.test_graph_salon:no_node_waits_on_a_frame_a_barge_in_drops",
+        "scenario:action_frame_dropped",
+        "scenario:barge_during_entry_line"
+      ],
+      "harness": [
+        "tests.test_core:a_barge_in_after_a_tool_still_moves_nobody@scripted-readings",
+        "tests.test_continuation:a_missing_barge_never_merges_turns",
+        "scenario:barge_during_entry_line"
+      ]
+    },
+    "N8": {
+      "title": "Cancellation before dispatch, during an unknown outcome, after a receipt",
+      "native_expect": "pass",
+      "native": [
+        "scenario:cut_receipt"
+      ],
+      "harness": [
+        "tests.test_overlap:barge_before_the_write",
+        "tests.test_overlap:barge_while_the_outcome_is_unknown",
+        "tests.test_overlap:barge_after_the_receipt",
+        "tests.test_budget:an_uncertain_write_is_reconciled_not_repeated@scripted-readings",
+        "core/tests.test_session:a_cut_confirmation_keeps_the_booking_once",
+        "scenario:cut_receipt"
+      ]
+    },
+    "N9": {
+      "title": "Generated, partial, repeated and late playback on one frame timeline",
+      "native_expect": "fail",
+      "native": [
+        "scenario:unplayed_read_back",
+        "scenario:partial_read_back"
+      ],
+      "harness": [
+        "core/tests.test_delivery:a_read_back_queued_and_never_played_is_not_heard",
+        "core/tests.test_delivery:text_with_no_acknowledgement_is_unknown",
+        "core/tests.test_delivery:a_partly_read_read_back_is_not_heard",
+        "core/tests.test_delivery:the_full_repeat_after_a_cut_copy_is_heard_once",
+        "core/tests.test_delivery:a_late_stop_cannot_play_a_copy_queued_after_the_cut",
+        "tests.test_continuation:a_read_back_cut_off_is_not_agreed_to",
+        "tests.test_continuation:a_reply_split_by_a_pause_is_one_answer",
+        "tests.test_overlap:pauses_around_the_thresholds",
+        "tests.test_budget:a_superseded_turn_cannot_move_the_caller@scripted-readings",
+        "scenario:unplayed_read_back",
+        "scenario:partial_read_back"
+      ]
+    },
+    "N10": {
+      "title": "Provider-specific messages and tool call and result pairs in the context",
+      "native_expect": "pass",
+      "native": [
+        "scenario:provider_messages_in_context"
+      ],
+      "harness": [
+        "core/tests.test_history:cancellation_keeps_receipts",
+        "core/tests.test_history:interrupted_protocol",
+        "tests.test_recovery:cancelled_queue_keeps_all_accepted_input@scripted-readings",
+        "scenario:provider_messages_in_context"
+      ]
+    },
+    "N11": {
+      "title": "Two concurrent sessions; setup failure and disconnect",
+      "native_expect": "pass",
+      "native": [
+        "scenario:two_calls"
+      ],
+      "harness": [
+        "core/tests.test_session:two_calls_on_one_flow_share_nothing",
+        "tests.test_continuation:a_yes_said_as_the_line_drops_still_counts",
+        "scenario:two_calls"
+      ]
+    },
+    "N13": {
+      "title": "New application authoring and portable packaging (session 2 foundation)",
+      "native_expect": "pass",
+      "native": [],
+      "harness": [
+        "core/tests.test_public:one_booking_through_the_public_boundary",
+        "core/tests.test_public:what_the_application_wrote",
+        "core/tests.test_package:importing_and_checking_loads_nothing_else"
+      ]
+    }
+  },
+  "timing": {
+    "warmup": 3,
+    "repetitions": 20,
+    "delays": [
+      0.0,
+      0.05
+    ],
+    "tolerance": {
+      "overhead_ms": 5,
+      "overhead_share": 0.25,
+      "harness_turn_max_ms": 50
+    }
+  }
+}

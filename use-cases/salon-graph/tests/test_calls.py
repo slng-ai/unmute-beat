@@ -16,6 +16,7 @@ from dataclasses import replace
 from unittest.mock import patch
 
 from opentelemetry.sdk.trace import TracerProvider
+from pydantic_ai import Agent
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from evals.calls import CASES, CLOCK, PHONE, Record, Rule, lose_first_answer, run_case, spans, watch
@@ -49,10 +50,17 @@ CALLER = (Rule(('what can i do',), ('Goodbye.',), last=True),)
 
 
 async def one(case, **limits) -> Record:
-    """One scripted call, with tracing setup stubbed: importing core loads the root `.env`
-    (`tests.defects` in core), so the real setup would export these spans to Langfuse.
+    """One scripted call, with tracing setup stubbed down to its instrumentation.
+
+    The real setup exports to Langfuse whenever the shell has its keys, and a
+    scripted call's spans do not belong there. Instrumenting the agents is
+    what makes their requests into spans the evaluator counts.
     """
-    with patch('evals.calls.setup', lambda *a, **k: None), classifier_model(), every_agent_says(HELLO):
+    with (
+        patch('evals.calls.setup', lambda *a, **k: Agent.instrument_all()),
+        classifier_model(),
+        every_agent_says(HELLO),
+    ):
         return await run_case(case, spans(), **limits)
 
 

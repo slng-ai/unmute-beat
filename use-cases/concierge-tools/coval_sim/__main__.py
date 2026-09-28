@@ -39,12 +39,14 @@ from dotenv import dotenv_values
 
 from coval_sim.coval import CovalClient, CovalError
 from coval_sim.models import FOLDERS, Agent, Persona
-from coval_sim.runtime import NotReadyError, Process, Tunnel, answers_http
+from coval_sim.runtime import NotReadyError, Process, Tunnel, answers_http, ceiling
 
 PORT = 7860
 RUN_TIMEOUT_S = 45 * 60
 MAX_CALL_SECONDS = 180
 """The longest a simulated call may run. Coval cannot cap a call's length, so `bot.py` hangs up at it."""
+FINISH_SECONDS = 8
+"""How long salon-graph's bot lets a running turn finish after its limit; the runner allows the same."""
 STILL_RUNNING = 3
 """The exit code when a run had not finished by the local timeout: neither passed nor failed, and not cancelled."""
 CALLER = '+15005550006'
@@ -131,6 +133,10 @@ class Job:
     persona: Persona
     iterations: int
     label: str
+    limit: str = 'bot.py (MAX_CALL_SECONDS)'
+    """Who ends a call at the limit: the bot itself, or this runner stopping a bot that has no limit."""
+    concurrency: int = 1
+    """How many of the job's calls Coval places at once. Not part of the job's key: the same calls, sooner."""
 
     @property
     def simulations(self) -> int:
@@ -153,7 +159,11 @@ class Job:
             f'iterations   {self.iterations}',
             'mutations    none',
             f'simulations  {self.simulations} = {len(self.case_ids)} case(s) x {self.iterations} iteration(s) x 1',
-            f'call limit   {MAX_CALL_SECONDS}s each, enforced by bot.py (MAX_CALL_SECONDS)',
+            f'call limit   {MAX_CALL_SECONDS}s each, enforced by {self.limit}',
+            f'concurrency  {self.concurrency}' + (
+                ' at once: the calls share this machine and the speech providers, '
+                'so their latency is not comparable to a run of one call at a time' if self.concurrency > 1 else ''
+            ),
             f'label        {self.label}',
         ])  # fmt: skip
 
@@ -240,16 +250,27 @@ class Repository:
             raise ValueError(f'agency {agency}: no bot.py in {folder}')
         return folder
 
-    def bot(self, agency: str, env: dict[str, str], host: str, log: Path) -> Process:
-        """Start the agency's `bot.py`, from its own folder, on the runner's Twilio route; return once it answers HTTP."""
+    def limits_itself(self, agency: str) -> bool:
+        """Whether the agency's `bot.py` ends its own calls at `MAX_CALL_SECONDS`."""
+        return 'MAX_CALL_SECONDS' in (self.use_case(agency) / 'bot.py').read_text()
+
+    def bot(self, agency: str, env: dict[str, str], host: str, log: Path, port: int = PORT) -> Process:
+        """Start the agency's `bot.py`, from its own folder, on the runner's Twilio route; return once it answers HTTP.
+
+        A bot with no call limit of its own is stopped from outside once a
+        call has run `MAX_CALL_SECONDS` plus the time a running turn may take
+        to finish (`FINISH_SECONDS`), the same ceiling salon-graph's bot keeps.
+        """
         bot = Process(
             'Pipecat bot',
-            ['uv', 'run', 'python', 'bot.py', '-t', 'twilio', '-x', host, '--port', str(PORT)],
+            ['uv', 'run', 'python', 'bot.py', '-t', 'twilio', '-x', host, '--port', str(port)],
             self.use_case(agency),
             {**env, **BOT_ENV, **(GRAPH_ENV if agency == GRAPH else {})},
             log,
         )
-        bot.wait_until(lambda: answers_http(f'http://127.0.0.1:{PORT}/'), 600)
+        bot.wait_until(lambda: answers_http(f'http://127.0.0.1:{port}/'), 600)
+        if not self.limits_itself(agency):
+            ceiling(bot, MAX_CALL_SECONDS + FINISH_SECONDS)
         return bot
 
 
@@ -263,7 +284,11 @@ class ReleaseCheck:
         runs: The run log.
     """
 
-    def __init__(self, repo: Repository, coval: CovalClient, workdir: Path, runs: RunLog) -> None:
+    def __init__(
+        self, repo: Repository, coval: CovalClient, workdir: Path, runs: RunLog, port: int = PORT
+    ) -> None:
+        self.port = port
+        """The local port of this job's bot and tunnel. Jobs run side by side need one each."""
         self.repo = repo
         self.coval = coval
         self.workdir = workdir
@@ -279,6 +304,7 @@ class ReleaseCheck:
         iterations: int,
         max_simulations: int,
         label: str,
+        concurrency: int = 1,
     ) -> Job:
         """The one job these arguments name, checked against what Coval holds. Reads only.
 
@@ -290,6 +316,8 @@ class ReleaseCheck:
             iterations: Times each case runs.
             max_simulations: The most calls this job may place.
             label: What this launch belongs to (a session); the same job twice under one label is refused.
+            concurrency: How many calls Coval places at once. A run of N calls one at a time
+                waits N times for Coval's dial and its scoring after each call; at once, about once.
 
         Raises:
             PlanError: Listing every reason the job is refused.
@@ -326,9 +354,21 @@ class ReleaseCheck:
             problems.append('iterations must be at least 1')
         if problems:
             raise PlanError(problems)
-        job = Job(agency, agent, test_set_id, case_ids, people[0], iterations, label)
+        limit = (
+            'bot.py (MAX_CALL_SECONDS)'
+            if self.repo.limits_itself(agency)
+            else f'this runner: the bot has none, and is stopped {MAX_CALL_SECONDS + FINISH_SECONDS:.0f}s after the call connects'
+        )
+        job = Job(agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency)
         if job.simulations > max_simulations:
             problems.append(f'{job.simulations} simulations planned, allowance is {max_simulations}')
+        if not 1 <= concurrency <= job.simulations:
+            problems.append(f'concurrency must be from 1 to the {job.simulations} simulation(s) planned')
+        if concurrency > 1 and not self.repo.limits_itself(agency):
+            problems.append(
+                f'{agency} has no call limit of its own, and this runner stops its whole bot one limit after '
+                'the first call connects, which would cut later calls short: concurrency 1 only'
+            )
         previous = self.runs.latest(job.key)
         if previous is not None:
             problems.append(self._duplicate(job, previous))
@@ -359,12 +399,20 @@ class ReleaseCheck:
         log = self.workdir / f'{job.agency}-bot.log'
         name = f'{job.label} {job.agency} {job.test_set_id} {uuid.uuid4().hex[:8]}'
         try:
-            with Tunnel(PORT, self.workdir) as tunnel, self.repo.bot(job.agency, env, tunnel.host, log):
+            with (
+                Tunnel(self.port, self.workdir) as tunnel,
+                self.repo.bot(job.agency, env, tunnel.host, log, self.port),
+            ):
                 self.coval.update_connection(job.agent, connection(tunnel.host))
                 self.runs.write(job.key, name=name, status='intent')
                 try:
                     run_id = self.coval.launch(
-                        job.agent, job.persona, job.test_set_id, iterations=job.iterations, name=name
+                        job.agent,
+                        job.persona,
+                        job.test_set_id,
+                        iterations=job.iterations,
+                        concurrency=job.concurrency,
+                        name=name,
                     )
                 except CovalError as error:
                     return self._uncertain(job, name, error, log)
@@ -444,7 +492,19 @@ def _parser() -> argparse.ArgumentParser:
             '--max-simulations', type=int, required=True, help='the most calls this job may place'
         )
         job.add_argument('--label', required=True, help='what this launch belongs to, such as session-1')
+        job.add_argument(
+            '--concurrency',
+            type=int,
+            default=1,
+            help='calls Coval places at once; a bot with its own limit only',
+        )
         job.add_argument('--log', type=Path, default=Path('runs.jsonl'), help='the run log')
+        job.add_argument(
+            '--port',
+            type=int,
+            default=PORT,
+            help='the local port for this bot and tunnel; one per job run at once',
+        )
     add = commands.add_parser('add', help="create a flow's Coval agent")
     add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
     return parser
@@ -464,7 +524,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     workdir = Path(tempfile.mkdtemp(prefix='coval-sim-'))
     check = ReleaseCheck(
-        repo, CovalClient(env['COVAL_API_KEY']), workdir, RunLog(getattr(args, 'log', Path()))
+        repo,
+        CovalClient(env['COVAL_API_KEY']),
+        workdir,
+        RunLog(getattr(args, 'log', Path())),
+        getattr(args, 'port', PORT),
     )
     try:
         if args.command == 'add':
@@ -481,6 +545,7 @@ def main(argv: list[str] | None = None) -> int:
             iterations=args.iterations,
             max_simulations=args.max_simulations,
             label=args.label,
+            concurrency=args.concurrency,
         )
         print(job.describe(), flush=True)
         if args.command == 'plan':

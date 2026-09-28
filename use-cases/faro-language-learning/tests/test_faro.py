@@ -23,7 +23,7 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.locale import ENGLISH, SPANISH
-from core.turn import greet, note_spoken, take_turn
+from core.turn import greet, note_spoken, receive, take_turn
 from faro import AGENTS, GREETING, close_call, curriculum
 from faro.conversation import FARO, GRADE, ONBOARD
 from faro.models import Attempt
@@ -103,7 +103,12 @@ class Line:
         self.ended = True
 
     async def turn(self, words: str, *steps, **labels: Any) -> str:
-        """One caller turn: what they heard in it. `grade=` and `feedback=` script the grading reading."""
+        """One caller turn: what they heard in it. `grade=` and `feedback=` script the grading reading.
+
+        The learner read the last reply before answering it: whatever was said
+        and not cut off reached them (`receive`).
+        """
+        receive(self.call)
         before = len(self.heard)
         self.script = Script(*steps)
         with (

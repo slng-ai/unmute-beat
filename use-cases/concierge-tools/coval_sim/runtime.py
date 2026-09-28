@@ -5,6 +5,7 @@ import os
 import re
 import signal
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -83,6 +84,35 @@ class Process:
         tb: TracebackType | None,
     ) -> None:
         self.stop()
+
+
+CONNECTED = 'WebSocket connection accepted'
+"""What Pipecat's runner logs when a Twilio call's media stream connects: where a call begins, seen from outside."""
+
+
+def ceiling(bot: Process, seconds: float, marker: str = CONNECTED) -> threading.Thread:
+    """Stop the bot `seconds` after its log first shows the call connecting: a call-length limit from outside.
+
+    For a bot with no limit of its own (salon-pipecat-flows has no
+    `MAX_CALL_SECONDS`), so its reference code stays unchanged. Stopping the
+    bot drops the call, which ends the simulation at Coval.
+
+    ponytail: one ceiling for the whole bot, from the first call, so `plan`
+    allows such a bot one call at a time. A per-call ceiling (one watch per
+    connection, closing that call's websocket) if its calls ever run at once.
+    """
+
+    def watch() -> None:
+        while bot._proc.poll() is None:
+            if marker in bot.output():
+                time.sleep(seconds)
+                bot.stop()
+                return
+            time.sleep(0.5)
+
+    thread = threading.Thread(target=watch, name=f'{bot.name} ceiling', daemon=True)
+    thread.start()
+    return thread
 
 
 def answers_http(url: str) -> bool:

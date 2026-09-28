@@ -341,6 +341,7 @@ SALON = SalonConversation(
             when=_unidentified,
             why_not=number_problem,
             say_why=say_guidance,
+            turns=3,
         ),
     ),
     take_backs=(

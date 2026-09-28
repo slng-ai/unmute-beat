@@ -85,9 +85,12 @@ class RenewLoan(Operation[LibraryCall, Renewal, Renewed, str]):
         return f'{receipt.book} is due {receipt.due}'
 
 
-def asked(call: LibraryCall, proposal: Proposal, spoken: str | None = None) -> None:
+def asked(call: LibraryCall, proposal: Proposal, spoken: str | None = None, *, received: bool = True) -> None:
+    """Put the question to the caller; `received` says the words reached them in full."""
     call.ask(proposal)
     call.note_said('fixed', spoken or proposal.spoken, origin='ask')
+    if received:
+        call.acknowledge(call.spoken[-1].id)
 
 
 def the_ledger():
@@ -105,7 +108,7 @@ def the_ledger():
     assert call.pending_question() is None and call._asked is None, 'aged out after one turn'
 
     call.turn_started('hello')
-    asked(call, BaseProposal(about='renew_loan', value='Dune', spoken='Renew Dune?'))
+    asked(call, BaseProposal(about='renew_loan', value='Dune', spoken='Renew Dune?'), received=False)
     call.note_heard('Renew')
     call.turn_started('yes')
     last = call.last_proposal()

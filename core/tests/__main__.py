@@ -32,6 +32,11 @@ MODULES = (
     'tests.test_history',
     'tests.test_reuse',
     'tests.test_clock',
+    'tests.test_package',
+    'tests.test_delivery',
+    'tests.test_public',
+    'tests.test_session',
+    'tests.test_sdk',
 )
 
 

@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from core.state import STRICT
 
 if TYPE_CHECKING:
-    from core.state import CallContext
+    from core.state import CallContext, Spoken
 
 
 @runtime_checkable
@@ -78,16 +78,25 @@ class ProposalLedger[P: Proposal]:
     the caller heard it in full. `last` relaxes the last condition, for
     interpretation only: a question the caller spoke over can be corrected or
     abandoned, but nothing that authorises an action reads it.
+
+    Every question asked gets a serial, and every copy of its words that goes
+    out is stamped with it (`bind`). Whether it was heard is the fate of its
+    latest stamped copy, found by serial rather than by text: the same words
+    said for an older question, or an older copy of these, prove nothing
+    about this one.
     """
 
     def __init__(self) -> None:
         self.asked: P | None = None
-        self._answering: P | None = None
+        self.serial = 0
+        """The serial of `asked`: which question, not just which words."""
+        self._asks = 0
+        self._answering: tuple[P | None, int] = (None, 0)
         """The question as it stood when this caller turn began: the one their words are an answer to."""
 
     def open_turn(self) -> None:
         """A new caller turn begins: remember which question it can answer, in case the turn has to be taken back."""
-        self._answering = self.asked
+        self._answering = (self.asked, self.serial)
 
     def rewind(self, call: CallContext) -> None:
         """The last piece of this turn reached nobody, so the caller is still answering the same question.
@@ -97,37 +106,54 @@ class ProposalLedger[P: Proposal]:
         is put back. Unless a business action was attempted on it: that answer
         is spent, and restoring it could authorise the same write twice.
         """
-        self.asked = None if call.acted_this_turn else self._answering
+        self.asked, self.serial = (None, 0) if call.acted_this_turn else self._answering
 
     def ask(self, call: CallContext, proposal: P) -> None:
         """Record that this question has gone out to the caller, on this turn."""
-        self.asked = proposal.model_copy(update={'turn': call.turn})
+        self._asks += 1
+        self.asked, self.serial = proposal.model_copy(update={'turn': call.turn}), self._asks
+
+    def bind(self, call: CallContext, segment: Spoken) -> None:
+        """Stamp a segment going out now as a copy of the question, if it is one.
+
+        A question with fixed words is carried by a segment saying exactly
+        them, on the turn it was asked. A question with none (the model words
+        it) is carried by the model's speech after it on that turn.
+        """
+        question = self.asked
+        if question is None or question.turn != call.turn or segment.turn != call.turn:
+            return
+        if (segment.generated == question.spoken) if question.spoken else segment.kind == 'model':
+            segment.proposal = self.serial
+
+    def copies(self, call: CallContext) -> list[Spoken]:
+        """Every segment that carried the recorded question, oldest first."""
+        return [s for s in call.all_spoken if self.serial and s.proposal == self.serial]
 
     def age(self, call: CallContext) -> None:
         """Forget a question nobody answered on the turn it could have been answered."""
         if self.asked is not None and self.asked.turn < call.turn - 1:
-            self.asked = None
+            self.asked, self.serial = None, 0
 
     def last(self, call: CallContext) -> tuple[P, bool] | None:
         """Last turn's question under the caller's current identity, and whether they heard it in full.
 
-        Whether they heard it is the last copy's fate: a read-back the caller
-        talked over and that was then said again, whole, on the same turn, was
-        heard (Coval run 4eDqRVLR, K3: the cut-off first copy left the "yes"
-        to the second with nothing pending).
+        Heard means its latest copy was delivered (`Spoken.delivered`): the
+        runtime's playback signal or an explicit text acknowledgement says it
+        ran out before the caller cut in. No copy, a copy queued and never
+        played, a copy only estimated to have played, and a copy cut short are
+        all not heard. A read-back the caller talked over and that was then
+        said again, whole, on the same turn, was heard (Coval run 4eDqRVLR,
+        K3: the cut-off first copy left the "yes" to the second with nothing
+        pending).
         """
         question = self.asked
         if question is None or question.turn != call.turn - 1:
             return None
         if question.owner and question.owner != call.identity():
             return None
-        copies = [
-            segment
-            for segment in call.all_spoken
-            if segment.turn == question.turn and segment.generated == question.spoken
-        ]
-        heard = not (question.spoken and copies and copies[-1].interrupted)
-        return question, heard
+        copies = self.copies(call)
+        return question, bool(copies) and copies[-1].delivered == 'delivered'
 
     def pending(self, call: CallContext) -> P | None:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
@@ -143,4 +169,4 @@ class ProposalLedger[P: Proposal]:
 
     def consume(self) -> None:
         """One answer authorises one action."""
-        self.asked = None
+        self.asked, self.serial = None, 0

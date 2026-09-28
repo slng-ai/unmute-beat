@@ -13,18 +13,23 @@ import subprocess
 import sys
 import time
 from contextlib import ExitStack, contextmanager
+from functools import partial
 from unittest.mock import patch
 
 import httpx2
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
-from tests.clinic import CLINIC, ClinicCall, desk
 
 from core.graph import Node
 from core.locale import Locale
 from core.policies import TurnBudget
-from core.turn import Turn, take_turn
+from core.turn import Turn
+from core.turn import take_turn as unread_turn
+from tests.clinic import CLINIC, ClinicCall, desk
+
+take_turn = partial(unread_turn, received=True)
+"""A turn whose every word reached the caller: these are text conversations, each line read in full."""
 
 
 @contextmanager
@@ -66,6 +71,7 @@ def opened() -> tuple[ClinicCall, list[str], Desk]:
 
     call._say = say
     call.note_said('fixed', call.offer(), origin='ask')
+    call.acknowledge(call.spoken[-1].id)
     return call, heard, Desk()
 
 
@@ -126,7 +132,7 @@ async def a_goodbye_to_a_cut_off_question_does_not_hang_up():
         with scripted(chosen_time='0900'):
             await take_turn(call, nodes, 'Nine, please.')
         with scripted(confirmation='accept'):
-            await take_turn(call, nodes, 'Yes.')
+            await unread_turn(call, nodes, 'Yes.')
         told, turn = heard[-1], call.turn
         call.note_reached()
         for signal in order:

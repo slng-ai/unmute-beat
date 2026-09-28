@@ -603,9 +603,10 @@ source = { editable = "use-cases/faro-language-learning" }
 dependencies = [
     { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
     { name = "pipecat-slng" },
+    { name = "pydantic-ai-slim", extra = ["google"] },
     { name = "pydantic-extra-types", extra = ["phonenumbers"] },
     { name = "python-dotenv" },
-    { name = "slng-voice-core" },
+    { name = "slng-voice-core", extra = ["tracing", "voice"] },
     { name = "websockets" },
 ]
 
@@ -619,9 +620,10 @@ dev = [
 requires-dist = [
     { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
     { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-ai-slim", extras = ["google"], specifier = ">=2.46.0" },
     { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
-    { name = "slng-voice-core", editable = "core" },
+    { name = "slng-voice-core", extras = ["voice", "tracing"], editable = "core" },
     { name = "websockets", specifier = ">=16.1.1" },
 ]
 
@@ -2481,9 +2483,10 @@ source = { virtual = "use-cases/salon-graph" }
 dependencies = [
     { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
     { name = "pipecat-slng" },
+    { name = "pydantic-ai-slim", extra = ["google", "openai"] },
     { name = "pydantic-extra-types", extra = ["phonenumbers"] },
     { name = "python-dotenv" },
-    { name = "slng-voice-core" },
+    { name = "slng-voice-core", extra = ["tracing", "voice"] },
     { name = "websockets" },
 ]
 
@@ -2497,9 +2500,10 @@ dev = [
 requires-dist = [
     { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
     { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-ai-slim", extras = ["google", "openai"], specifier = ">=2.46.0" },
     { name = "pydantic-extra-types", extras = ["phonenumbers"], specifier = ">=2.11.1" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
-    { name = "slng-voice-core", editable = "core" },
+    { name = "slng-voice-core", extras = ["voice", "tracing"], editable = "core" },
     { name = "websockets", specifier = ">=16.1.1" },
 ]
 
@@ -2606,11 +2610,22 @@ name = "slng-voice-core"
 version = "0.1.0"
 source = { editable = "core" }
 dependencies = [
-    { name = "langfuse" },
-    { name = "pipecat-ai" },
-    { name = "pydantic-ai-slim", extra = ["google", "openai", "spec"] },
-    { name = "python-dotenv" },
+    { name = "httpx" },
+    { name = "loguru" },
+    { name = "opentelemetry-api" },
+    { name = "pydantic" },
+    { name = "pydantic-ai-slim", extra = ["spec"] },
+    { name = "pydantic-graph" },
     { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+tracing = [
+    { name = "langfuse" },
+    { name = "opentelemetry-sdk" },
+]
+voice = [
+    { name = "pipecat-ai" },
 ]
 
 [package.dev-dependencies]
@@ -2621,12 +2636,18 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langfuse", specifier = ">=4.15.4" },
-    { name = "pipecat-ai", specifier = ">=1.11.0" },
-    { name = "pydantic-ai-slim", extras = ["google", "openai", "spec"], specifier = ">=2.46.0" },
-    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "langfuse", marker = "extra == 'tracing'", specifier = ">=4.15.4" },
+    { name = "loguru", specifier = ">=0.7.3" },
+    { name = "opentelemetry-api", specifier = ">=1.44.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.44.0" },
+    { name = "pipecat-ai", marker = "extra == 'voice'", specifier = ">=1.11.0" },
+    { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "pydantic-ai-slim", extras = ["spec"], specifier = ">=2.46.0" },
+    { name = "pydantic-graph", specifier = ">=2.46.0" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
+provides-extras = ["voice", "tracing"]
 
 [package.metadata.requires-dev]
 dev = [

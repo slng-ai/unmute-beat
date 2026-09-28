@@ -15,7 +15,7 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from core.graph import Node, model_clients
 from core.policies import TurnBudget
 from core.processor import PydanticAgentProcessor
-from core.turn import Barge, RunStarted, run_turn, take_turn
+from core.turn import Barge, RunStarted, read_out, receive, run_turn, take_turn
 from salon import agents, diary
 from salon.diary import Diary
 from salon.models.consent import Asked
@@ -74,7 +74,7 @@ def fresh(agent='booking'):
 async def offered():
     call = fresh()
     slot = books.find_slots(PHONE, 'Friday', 'haircut', CLOCK, offered_to=call.id)['slots'][0]
-    (await agents.ask_booking(context(call), 'book', slot['slot_id'], '')).put(call)
+    read_out(call, await agents.ask_booking(context(call), 'book', slot['slot_id'], ''))
     return call
 
 
@@ -129,7 +129,7 @@ async def approvals_and_receipts():
 async def cancellation_keeps_committed_receipt():
     call = fresh('complaints')
     call.turn_started('My haircut was uneven. I want a refund.')
-    (await agents.ask_complaint(context(call), 'My haircut was uneven', 'I want a refund')).put(call)
+    read_out(call, await agents.ask_complaint(context(call), 'My haircut was uneven', 'I want a refund'))
     entered = asyncio.Event()
 
     async def blocked_speech(text):
@@ -151,7 +151,9 @@ async def cancellation_keeps_committed_receipt():
     assert len(receipt) == 1 and books.complaints()[0]['reference'] in str(receipt)
     call.turn_started('Yes.')
     assert (await agents.advance(call)) is None
-    assert len(call.requests) == 1 and call.requests[0].kind == 'classifier'
+    last = call.last_proposal()
+    assert last is not None and last[0].about == 'closing' and last[1] is False
+    assert call.requests == [], 'the closing question never played, so no reading weighs a yes against it'
 
 
 async def barge_before_execution():
@@ -202,7 +204,7 @@ async def phone_and_lifecycle():
     assert (await agents.advance(call)) is None, 'nothing was asked, so nothing is answered'
     action = agents.AGENTS['verify'].opening(call)
     assert action and action.name == 'ask_number'
-    (await action.run()).put(call)
+    read_out(call, await action.run())  # ty: ignore[invalid-argument-type]
     call.turn_started('Yes, that is my number.')
     action = await agents.advance(call)
     assert action and action.name == 'confirm_customer'
@@ -210,7 +212,7 @@ async def phone_and_lifecycle():
     assert result.to == 'booking' and call.state.verified_phone == PHONE
     call = open_call(PHONE, diary=books)
     call.commit(agent='verify')
-    (await agents.ask_number(context(call), PHONE)).put(call)
+    read_out(call, await agents.ask_number(context(call), PHONE))
     call.commit(customer_phone='+34934567890')
     call.turn_started('Yes.')
     assert (await agents.advance(call)) is None, 'phone approval survived an identity change'
@@ -298,6 +300,7 @@ async def openings_skip_the_model():
     with agents.AGENTS['verify'].agent.override(model=verify):
         await probe._turn('It is plus three four, six hundred, one one one, two two two.')
     assert probe.requests() == 1 and call.pending('phone') is None, 'a readback went out'
+    receive(call)
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn("Yes, that's right.")
@@ -308,6 +311,7 @@ async def openings_skip_the_model():
     assert call.state.agent == 'booking' and call.state.customer_verified, call.state
     assert call.state.wanted is None and len(call.state.offered) == 3, call.state
     assert call.spoken[-1].text.startswith('For a haircut on Friday the 25th, I have 9:00 AM'), call.spoken
+    receive(call)
 
     with agents.AGENTS['booking'].agent.override(model=never):
         await probe._turn('9:00 AM, please.')
@@ -316,6 +320,7 @@ async def openings_skip_the_model():
         assert call.spoken[-1].text.startswith(
             'Shall I book you in for a haircut, Friday the 25th at 9:00 AM'
         ), call.spoken
+        receive(call)
         await probe._turn('Yes.')
     assert {r.kind for r in call.requests} == {'classifier'}, 'the yes to it needs no model either'
     assert call.state.writes == 1, call.state
@@ -353,6 +358,7 @@ async def a_changed_request_runs_the_model():
         await probe._turn(
             'It is plus three four, six hundred, one one one, two two two. Make it Saturday instead.'
         )
+    receive(call)
     booking_model, seen = scripted(('booking_guidance', {'topic': 'day'}))
     with agents.AGENTS['booking'].agent.override(model=booking_model):
         await probe._turn("Yes, that's right.")

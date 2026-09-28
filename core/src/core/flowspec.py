@@ -23,12 +23,20 @@ What a file may refer to:
   into arbitrary code;
 * a name in the `Registry`, for code shared by several flows.
 
+The application's state is one Pydantic model, named by `state:`
+(`models.py:ClinicState`). Collect steps name its fields; operations take
+their arguments from it by name; `identity:` names the field that says who
+the caller is. The engine keeps it as `call.state.facts`, of exactly that
+type, and no application subclasses the call.
+
 `FlowSpec.compile` refuses a flow with every problem it has, not just the
 first: an unknown kind or field, a repeated id, a destination that does not
 exist, a missing file or name, a module without what its step needs, a prompt
-naming a field the call does not have, a prompt shared by two steps, a fact no
-earlier step collects, and an action that needs approval but can be reached
-without its confirmation.
+naming a field the call does not have, a prompt shared by two steps, a field
+the state does not have, a fact no earlier step collects, an operation
+argument the state cannot supply, and an action that needs approval but can
+be reached without its confirmation. Checking needs no model and no key:
+`problems()` connects to nothing, and only `compile` builds agents.
 
 Files are read with `yaml.safe_load`, which builds only plain data, and JSON
 is valid YAML, so either format loads. Plain YAML turns an unquoted `no`,
@@ -43,13 +51,12 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, create_model, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from pydantic_ai import TemplateStr
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
@@ -66,6 +73,7 @@ from core.steps import (
     ConversationStep,
     End,
     FlowCall,
+    NoFacts,
     Step,
     StepFlow,
     confirm_interpreter,
@@ -95,7 +103,6 @@ class Registry:
     interpreter (an `Operation` subclass, typically).
     """
 
-    fields: Mapping[str, type[BaseModel]] = field(default_factory=dict)
     operations: Mapping[str, Callable[[Any], Operation]] = field(default_factory=dict)
     knowledge: Mapping[str, str] = field(default_factory=dict)
     checks: Mapping[str, Callable[[Mapping[str, Any]], bool]] = field(default_factory=dict)
@@ -197,7 +204,32 @@ class _Resolver:
                 raise _ProblemError(f'{self.spec.call!r} is not a CallContext class')
             return found
 
-        return (self._once('call', self.spec.call, 'call', find) if self.spec.call else None) or FlowCall
+        if self.spec.call:
+            return self._once('call', self.spec.call, 'call', find) or FlowCall[NoFacts]
+        return FlowCall[self.state_type()]  # ty: ignore[invalid-type-form]
+
+    def state_type(self) -> type[BaseModel]:
+        """The application's state model, or `NoFacts` for a flow that keeps none."""
+
+        def find() -> type[BaseModel]:
+            found = self.folder.attr(self.spec.state)
+            if not (isinstance(found, type) and issubclass(found, BaseModel)) or issubclass(
+                found, CallContext
+            ):
+                raise _ProblemError(f'{self.spec.state!r} is not a Pydantic model of plain data')
+            try:
+                found()
+            except Exception:
+                raise _ProblemError(
+                    f'{self.spec.state!r} needs a default for every field: a call starts empty'
+                ) from None
+            return found
+
+        return (self._once('state', self.spec.state, 'state', find) if self.spec.state else None) or NoFacts
+
+    def state_field(self, step: str, name: str) -> None:
+        if name not in self.state_type().model_fields:
+            self.fail(step, f'names {name!r}, which the state {self.state_type().__name__} does not have')
 
     def prompt(self, step: str, ref: str) -> TemplateStr | None:
         """The step's prompt: its file, the flow's includes and voice, compiled against the call now."""
@@ -220,17 +252,6 @@ class _Resolver:
                 raise _ProblemError(f'prompt {ref!r} does not fit the call: {error}') from None
 
         return self._once('prompt', ref, step, find)
-
-    def fields(self, step: str, ref: str) -> type[BaseModel] | None:
-        def find() -> type[BaseModel]:
-            found = self.folder.attr(ref) if is_path(ref) else self.registry.fields.get(ref)
-            if found is None:
-                raise _ProblemError(f'field model {ref!r} is not registered')
-            if not (isinstance(found, type) and issubclass(found, BaseModel)):
-                raise _ProblemError(f'{ref!r} is not a Pydantic model')
-            return found
-
-        return self._once('fields', ref, step, find)
 
     def operation_type(self, step: str, ref: str) -> tuple[Callable[[Any], Operation], Any] | None:
         """An operation's factory and its module's `accepts`, if it has one."""
@@ -275,30 +296,6 @@ class _Resolver:
         return self._once('module', ref, step, lambda: self.folder.module(ref))
 
 
-class FieldSpec(BaseModel):
-    """One inline field: a type and plain limits, nothing executable."""
-
-    model_config = SPEC
-    type: Literal['string', 'integer', 'date', 'choice'] = 'string'
-    description: str = ''
-    required: bool = True
-    min_length: int | None = None
-    max_length: int | None = None
-    choices: list[str] = []
-
-    def annotation(self) -> Any:
-        if self.type == 'choice':
-            return Literal[tuple(self.choices)]  # ty: ignore[invalid-type-form]
-        return {'string': str, 'integer': int, 'date': date}[self.type]
-
-    def field(self) -> Any:
-        default = ... if self.required else None
-        limits = Field(
-            default, description=self.description, min_length=self.min_length, max_length=self.max_length
-        )
-        return (self.annotation(), limits)
-
-
 class StepSpec(BaseModel, ABC):
     """One step in a flow file."""
 
@@ -320,35 +317,26 @@ class CollectSpec(StepSpec):
     kind: Literal['collect']
     prompt: str
     question: str
-    fields: dict[str, FieldSpec] = {}
-    model: str = ''
-    """A field model with rules an inline field cannot state: `steps/fields.py:Team`, or a registry name."""
+    fields: list[str]
+    """Fields of the flow's state model this step asks the caller for. Their types and descriptions are the state's."""
     after: list[str] = []
     lookahead: bool = True
 
     def check(self, resolve: _Resolver) -> None:
         resolve.prompt(self.id, self.prompt)
-        if self.model:
-            resolve.fields(self.id, self.model)
-        elif not self.fields:
-            resolve.fail(self.id, 'a collect step needs fields or a model')
+        if not self.fields:
+            resolve.fail(self.id, 'a collect step needs fields')
+        for name in [*self.fields, *self.after]:
+            resolve.state_field(self.id, name)
 
     def produces(self, resolve: _Resolver) -> set[str]:
-        model = resolve.fields(self.id, self.model) if self.model else None
-        return set(model.model_fields) if model is not None else set(self.fields)
+        return set(self.fields)
 
     def to_step(self, resolve: _Resolver) -> Step:
-        model = resolve.fields(self.id, self.model) if self.model else None
-        if model is None:
-            model = create_model(
-                f'{self.id.title()}Fields',
-                __config__=ConfigDict(extra='forbid'),
-                **{name: spec.field() for name, spec in self.fields.items()},
-            )
         return CollectStep(
             id=self.id,
             then=self.then,
-            fields=model,
+            fields=tuple(self.fields),
             question=self.question,
             after=frozenset(self.after),
             lookahead=self.lookahead,
@@ -374,7 +362,10 @@ class _Operated(StepSpec):
         if self.code and not self.code.endswith('.py'):
             resolve.fail(self.id, f'code {self.code!r} must be a Python file in the flow folder')
             return
-        resolve.operation_type(self.id, self.uses)
+        found = resolve.operation_type(self.id, self.uses)
+        args = getattr(getattr(found[0], 'args_type', None), 'model_fields', {}) if found else {}
+        for name in args:
+            resolve.state_field(self.id, f'{name}')
 
 
 class ConfirmSpec(_Operated):
@@ -531,8 +522,16 @@ class FlowSpec(BaseModel):
     id: str
     greeting: str = ''
     """The first thing a caller hears."""
+    state: str = ''
+    """The application's state model, like `models.py:ClinicState`: plain data, every field with a default."""
+    identity: str = ''
+    """The state field that says who the caller is. A question put to one identity is not answered by another."""
     call: str = ''
-    """The call class the prompts are checked against, like `models/state.py:SalonCall`. Empty means `FlowCall`."""
+    """A call class of the application's own, like `models/state.py:SalonCall`, instead of `state`.
+
+    ponytail: kept for salon-graph and Faro, which still subclass `CallContext`
+    until their migration sessions (4 and 5); remove it then.
+    """
     voice: str = ''
     """A file added to the top of every step's prompt: the shared tone and persona."""
     includes: dict[str, str] = {}
@@ -544,7 +543,14 @@ class FlowSpec(BaseModel):
 
     def _resolver(self, registry: Registry) -> _Resolver:
         resolve = _Resolver(self, registry)
+        if self.call and self.state:
+            resolve.fail('', 'name the state model or a call class, not both')
         resolve.call_type()
+        if self.identity:
+            resolve.state_field('identity', self.identity)
+        business = [s for s in self.steps if isinstance(s, CollectSpec | ConfirmSpec | ActionSpec)]
+        if business and not self.state:
+            resolve.fail('', 'a flow with collect, confirm or action steps needs a state model (`state:`)')
         ids = [step.id for step in self.steps]
         for repeated in sorted({i for i in ids if ids.count(i) > 1}):
             resolve.fail('', f'step id {repeated!r} is used more than once')
@@ -562,8 +568,6 @@ class FlowSpec(BaseModel):
                         resolve.fail(step.id, f'depends on {name!r}, which no earlier step collects')
             if isinstance(step, CollectSpec):
                 collected |= step.produces(resolve)
-            if isinstance(step, ActionSpec):
-                collected.add(step.id)
         self._unguarded_actions(resolve)
         return resolve
 
@@ -629,12 +633,15 @@ class FlowSpec(BaseModel):
         if resolve.problems:
             raise FlowSpecError(resolve.problems)
         resolve.interpreter = confirm_interpreter(model, settings)
+        state = resolve.state_type()
         flow = StepFlow(
             [step.to_step(resolve) for step in self.steps],
             model=model,
             interpreter=resolve.interpreter,
             settings=settings,
-            call_type=resolve.call_type(),
+            state_type=state,
+            identity=self.identity,
+            call_type=resolve.call_type() if self.call else None,
         )
         Flow.of(flow.nodes)
         return flow

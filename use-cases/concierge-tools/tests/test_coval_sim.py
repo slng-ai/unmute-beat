@@ -8,7 +8,10 @@ and nothing here starts the coval binary: every method that would is replaced.
 Asserts, no pytest, no fixtures, same as the rest.
 """
 
+import os
+import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +37,7 @@ from coval_sim.models import (
     RunResults,
     Simulation,
 )
+from coval_sim.runtime import CONNECTED, Process, ceiling
 
 
 class FakeCoval(CovalClient):
@@ -86,7 +90,7 @@ AGENTS = [
 
 def checker(coval: FakeCoval | None = None, log: Path | None = None) -> ReleaseCheck:
     log = log or Path(tempfile.mkdtemp()) / 'runs.jsonl'
-    return ReleaseCheck(Repository(Path('.')), coval or FakeCoval(AGENTS), Path('.'), RunLog(log))
+    return ReleaseCheck(Repository.find(Path.cwd()), coval or FakeCoval(AGENTS), Path('.'), RunLog(log))
 
 
 def refused(
@@ -286,7 +290,71 @@ def test_fallbacks() -> None:
     assert spoke('a').fallbacks == []
 
 
+def test_call_ceiling() -> None:
+    """A bot with no call limit of its own is stopped from outside, counted from when its call connects."""
+    repo = Repository.find(Path.cwd())
+    assert repo.limits_itself('salon') and not repo.limits_itself('salon-pipecat-flows')
+    with tempfile.TemporaryDirectory() as folder:
+        program = f'import time; time.sleep(0.5); print({CONNECTED!r}, flush=True); time.sleep(60)'
+        bot = Process(
+            'sleeper',
+            [sys.executable, '-c', program],
+            Path(folder),
+            dict(os.environ),
+            Path(folder) / 'bot.log',
+        )
+        started = time.monotonic()
+        ceiling(bot, 1.0).join(15)
+        assert bot._proc.poll() is not None, 'the bot outlived its ceiling'
+        assert 1.4 < time.monotonic() - started < 15, 'stopped before its call connected, or far too late'
+
+
+def test_concurrency() -> None:
+    """Calls at once, the one speed-up on this side: planned, passed to Coval, and refused where it would cut calls."""
+    native = Agent(id='N', display_name='voice-harness-salon-pipecat-flows-pipecat', test_set_ids=['THREE'])
+    check = checker(FakeCoval([*AGENTS, native]))
+
+    def plan(agency: str = 'salon', agent: str = 'S', concurrency: int = 3) -> list[str]:
+        try:
+            job = check.plan(
+                agency,
+                agent,
+                'THREE',
+                'calm',
+                iterations=1,
+                max_simulations=3,
+                label='s',
+                concurrency=concurrency,
+            )
+        except PlanError as error:
+            return error.problems
+        assert f'concurrency  {concurrency}' in job.describe(), job.describe()
+        return []
+
+    assert plan() == [] and plan(concurrency=1) == []
+    assert (
+        plan(concurrency=0)
+        == plan(concurrency=4)
+        == ['concurrency must be from 1 to the 3 simulation(s) planned']
+    )
+    assert 'concurrency 1 only' in plan('salon-pipecat-flows', 'N', 2)[0], 'its ceiling would cut later calls'
+    assert plan('salon-pipecat-flows', 'N', 1) == []
+
+    class Launches(CovalClient):
+        """The real `launch`, with the coval binary replaced by a record of its arguments."""
+
+        def _call(self, *args: str):
+            self.args = args
+            return {'run_id': 'R'}
+
+    coval = Launches(api_key='test', binary='/nonexistent/coval')
+    agent, persona = AGENTS[0], Persona(id='calm', name='Standard Customer')
+    assert coval.launch(agent, persona, 'THREE', iterations=1, concurrency=3, name='n') == 'R'
+    assert coval.args[coval.args.index('--concurrency') + 1] == '3', coval.args
+
+
 if __name__ == '__main__':
+    test_call_ceiling()
     test_plan()
     test_run_log()
     test_still_running()
@@ -294,4 +362,5 @@ if __name__ == '__main__':
     test_graph_build()
     test_problems()
     test_fallbacks()
+    test_concurrency()
     print('ok')

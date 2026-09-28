@@ -31,6 +31,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from core.policies import TurnBudget
 from core.processor import EXHAUSTED, PydanticAgentProcessor
+from core.turn import read_out
 from salon import agents
 from salon.agents import AGENTS
 from salon.diary import Diary
@@ -327,6 +328,7 @@ async def a_permitted_repair_succeeds():
     probe = Probe(call, budget=TurnBudget(repair_retries=2))
     probe._agents = {**AGENTS, 'verify': replace(AGENTS['verify'], advance=None)}
     call.ask(Asked(about='phone', value=PHONE))
+    read_out(call, 'Is that right?', kind='model')
     attempts = []
 
     async def wrong_then_right(messages, info: AgentInfo):
@@ -388,6 +390,7 @@ async def an_uncertain_write_is_reconciled_not_repeated():
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])
     call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
+    read_out(call, 'Is that right?', kind='model')
     call.turn_started("yes, that's right")
 
     real = books.save_booking
@@ -442,6 +445,7 @@ async def a_write_that_never_landed_is_reported_unresolved():
     slot = read['slots'][0]
     call.commit(booking_day=read['date'])
     call.ask(Asked(about='booking', value=slot['slot_id'], action='book'))
+    read_out(call, 'Is that right?', kind='model')
     call.turn_started("yes, that's right")
 
     def never_answers(

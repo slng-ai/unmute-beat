@@ -40,6 +40,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from core.policies import TurnBudget
 from core.processor import EXHAUSTED, PydanticAgentProcessor
+from core.turn import read_out
 from salon import agents, diary
 from salon.agents import AGENTS
 from salon.diary import Diary
@@ -276,6 +277,7 @@ def agreed(call, about='booking', said="yes, that's right", **fields):
     went out last turn, and this turn the caller agreed to it.
     """
     call.ask(Asked(about=about, **fields))
+    read_out(call, 'Is that right?', kind='model')
     call.turn_started(said)
 
 
@@ -308,6 +310,7 @@ async def verify_then_book():
 
     day = diary.spoken_day(open_days()[-1], books.now().date())
     call.ask(Asked(about='phone', value=PHONE))
+    read_out(call, 'Is that right?', kind='model')
     with scripted(
         concierge=then(
             outputs('hand_over', to='booking', because='wants a haircut'),
@@ -426,6 +429,7 @@ async def resume_after_finisher():
     call = open_call(PHONE, diary=books)
     call.commit(agent='verify', pending='booking')
     call.ask(Asked(about='phone', value=PHONE))
+    read_out(call, 'Is that right?', kind='model')
     probe = Probe(call, budget=TurnBudget(step_runs=3))
 
     with scripted(
@@ -502,6 +506,7 @@ async def correction_refuses_stale_slot():
     said_first, said_second = diary.spoken_day(first, today), diary.spoken_day(second, today)
     stale = books.find_slots(PHONE, first.isoformat(), 'haircut', books.now())['slots'][0]
     call.ask(Asked(about='booking', value=stale['slot_id'], action='book'))
+    read_out(call, 'Is that right?', kind='model')
 
     with scripted(
         booking=then(
@@ -559,6 +564,7 @@ async def save_finishes():
     slot_id = slot['slots'][0]['slot_id']
     call.commit(booking_day=slot['date'])
     call.ask(Asked(about='booking', value=slot_id, action='book'))
+    read_out(call, 'Is that right?', kind='model')
 
     with scripted(
         booking=outputs('save_booking', action='book', slot_id=slot_id, booking_id=''),
@@ -657,6 +663,7 @@ async def the_note_is_said_once():
             requested_resolution='a redo',
         )
     )
+    read_out(call, 'Is that right?', kind='model')
     probe = Probe(call)
 
     with scripted(
@@ -703,6 +710,7 @@ async def a_tool_result_is_never_a_script():
             resolution=complaints._gist('a redo'),
         )
     )
+    read_out(call, 'Is that right?', kind='model')
     call.turn_started("yes, that's right")
     results = [
         await read_diary(ctx, 'tomorrow', 'haircut'),

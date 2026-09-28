@@ -29,20 +29,26 @@ import time
 from typing import Any
 
 from opentelemetry import trace
-from pipecat.frames.frames import (
-    BotStartedSpeakingFrame,
-    BotStoppedSpeakingFrame,
-    EndWorkerFrame,
-    Frame,
-    InterruptionFrame,
-    LLMContextFrame,
-    LLMFullResponseEndFrame,
-    LLMFullResponseStartFrame,
-    LLMTextFrame,
-    TTSSpeakFrame,
-)
-from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+
+try:
+    from pipecat.frames.frames import (
+        BotStartedSpeakingFrame,
+        BotStoppedSpeakingFrame,
+        EndWorkerFrame,
+        Frame,
+        InterruptionFrame,
+        LLMContextFrame,
+        LLMFullResponseEndFrame,
+        LLMFullResponseStartFrame,
+        LLMTextFrame,
+        TTSSpeakFrame,
+    )
+    from pipecat.processors.aggregators.llm_context import LLMContext
+    from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+except ImportError as missing:
+    raise ImportError(
+        f'core.processor needs the voice extra: install slng-voice-core[voice] ({missing})'
+    ) from missing
 
 from core import turn as core
 from core.graph import Node

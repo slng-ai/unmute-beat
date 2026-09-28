@@ -14,6 +14,7 @@ from pydantic_ai import ModelRequest, ModelResponse, ModelRetry, RunContext, Tex
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from core.processor import PydanticAgentProcessor
+from core.turn import read_out, receive
 from salon import agents, diary
 from salon.classification import classify_reply
 from salon.diary import Diary
@@ -34,6 +35,12 @@ def played_out(call) -> None:
     if call._burst != float('inf'):
         call._burst -= 60
     call.note_drained()
+
+
+def played_in_full(call) -> None:
+    """Everything said so far started playing and ran out before the caller spoke again."""
+    call.note_reached()
+    played_out(call)
 
 
 def context(call):
@@ -98,6 +105,7 @@ async def service_requests_verify_first():
                 await probe._turn('How much is a haircut?')
                 assert visits == ['concierge'] and call.state.pending is None
                 await probe._turn(request)
+                played_in_full(call)
                 if not known:
                     assert call.state.agent == 'verify' and call.state.pending == destination
                     assert destination not in visits and call._checkpoint.owner == destination
@@ -144,7 +152,7 @@ async def verified_complaint_uses_exact_approved_wording():
     call = open_call(PHONE, diary=books)
     call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
     call.turn_started('My haircut yesterday was uneven. I would like a redo.')
-    (await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')).put(call)
+    read_out(call, await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo'))
     call.turn_started('Absolutely.')
     try:
         await complaints._record_complaint(context(call), 'My haircut yesterday was uneven', 'a refund')
@@ -190,6 +198,7 @@ async def complaint_cannot_skip_readback():
 
     with agents.AGENTS['complaints'].agent.override(model=FunctionModel(stream_function=stream)):
         await Probe(call, agents.AGENTS)._turn('My haircut last week was uneven. I would like a redo.')
+    played_in_full(call)
     call.turn_started('Yes.')
     await classify_reply(call)
     assert call.complaint_approved
@@ -314,6 +323,7 @@ async def verification_speech_must_establish_the_question():
         assert emitted[0].startswith('Let me read that back to you:')
         assert unwanted not in emitted[0]
         assert call._asked and call._asked.about == 'phone' and call._asked.value == PHONE
+        played_in_full(call)
         call.turn_started('Yes, that is my number.')
         assert call.pending('phone'), 'one yes must approve the question actually spoken'
         assert not call.state.customer_verified, 'readback approval is not a customer lookup'
@@ -331,7 +341,7 @@ async def approved_complaint_records_once():
     call = open_call(PHONE, diary=books)
     call.commit(agent='complaints', customer_verified='existing', verified_phone=PHONE)
     call.turn_started('My haircut last week was uneven. I would like a redo.')
-    (await agents.ask_complaint(context(call), 'My haircut last week was uneven', 'a redo')).put(call)
+    read_out(call, await agents.ask_complaint(context(call), 'My haircut last week was uneven', 'a redo'))
     instructions = []
 
     async def stream(messages, info):
@@ -373,7 +383,7 @@ async def complaint_readback_uses_caller_evidence():
     question = await agents.ask_complaint(
         context(call), 'My last haircut was completely uneven', 'Can my upcoming booking be free?'
     )
-    question.put(call)
+    read_out(call, question)
     assert 'no refund or booking change is approved' in question.spoken
     call.turn_started('No, just record the uneven haircut.')
     assert not call.complaint_approved
@@ -416,7 +426,7 @@ async def complaint_approval_ends_with_its_intent():
         call = open_call(PHONE, diary=books)
         call.commit(agent='complaints')
         call.turn_started('My haircut yesterday was uneven. I want a redo.')
-        (await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo')).put(call)
+        read_out(call, await agents.ask_complaint(context(call), 'My haircut yesterday was uneven', 'a redo'))
         call.turn_started('Yes.')
         await classify_reply(call)
         assert call.complaint_approved
@@ -528,6 +538,7 @@ async def a_selected_time_is_read_back_with_no_model():
         call.commit(agent='booking', customer_verified='existing', verified_phone=PHONE)
         call.turn_started('A haircut on Friday.')
         await booking.offer(call, 'Friday', 'haircut')
+        receive(call)
         call.turn_ended(interrupted=False)
         slot = next(s.model_dump() for s in call.state.offered if (s.time.hour, s.time.minute) == (9, 30))
 

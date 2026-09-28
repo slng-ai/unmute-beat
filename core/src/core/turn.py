@@ -28,7 +28,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from loguru import logger
 from pydantic_ai import (
@@ -702,7 +702,10 @@ class Turn:
 
         `Node.outputs` builds the run's `output_type` from the live state; the
         per-request narrowing that keeps it honest across several requests
-        inside one run is a capability on the agent itself.
+        inside one run is a capability on the agent itself. An output set that
+        is the agent's own is not passed again: Pydantic AI rebuilds a run's
+        output schema whenever one is passed, which cost about 5 ms of every
+        hand-over turn in the N12 measurement (session 2).
 
         On a step that can write, speech is released a clause at a time so
         each clause can be read before the caller hears it, and a clause that
@@ -742,6 +745,8 @@ class Turn:
         call, barge = self.call, self.barge
         agent: Agent = node.agent
         output_type = node.outputs(call.state) if node.outputs is not None else None
+        if output_type is agent.output_type:
+            output_type = None
         step = call.state.agent
         succeeded: set[str] = set()
         output = None
@@ -1025,18 +1030,70 @@ def greet(call: CallContext, line: str | Question) -> str:
     return line
 
 
+@dataclass(frozen=True)
+class TextReply:
+    """One caller turn over text: the words, the segments that carried them, and how the turn ended."""
+
+    text: str
+    segments: tuple[Spoken, ...]
+    """This turn's speech, each with the id `CallContext.acknowledge` takes once the reader has it."""
+    finished: TurnFinished
+
+
+async def text_turn(
+    flow: Any, call: CallContext, words: str, budget: TurnBudget | None = None, barge: Barge | None = None
+) -> TextReply:
+    """Run one caller turn of a compiled flow over text. Nothing is acknowledged here.
+
+    `flow` is a `StepFlow`, or its `nodes`. The reply's segments stay
+    unknown until the text runtime says they reached the reader
+    (`call.acknowledge(*ids)`): a turn returning is not the words arriving.
+    """
+    text, finished = await take_turn(call, getattr(flow, 'nodes', flow), words, budget, barge)
+    return TextReply(text, tuple(s for s in call.spoken if s.text), finished)
+
+
+class Asks[C](Protocol):
+    """A question a use case words for its own call type: `put` records it on that call and returns its words."""
+
+    def put(self, call: C, /) -> str: ...
+
+
+def read_out[C: CallContext](
+    call: C, line: str | Asks[C], origin: str = 'ask', kind: Literal['fixed', 'model'] = 'fixed'
+) -> str:
+    """Say a line to a text reader who gets all of it: put it on the call if it is a question, record it, acknowledge it.
+
+    The text runtime's whole delivery of one line, for a reader that
+    receives words the moment they are written. `kind='model'` is the step's
+    model wording a question the code asked without words. Returns the words.
+    """
+    if not isinstance(line, str):
+        line = line.put(call)
+    call.note_said(kind, line, origin=origin)
+    call.acknowledge(call.spoken[-1].id)
+    return line
+
+
 async def take_turn(
     call: CallContext,
     agents: dict[str, Node[Any]],
     prompt: str | None,
     budget: TurnBudget | None = None,
     barge: Barge | None = None,
+    *,
+    received: bool = False,
 ) -> tuple[str, TurnFinished]:
     """Everything one turn said, and how it ended. For tests.
 
     The same engine the Pipecat processor drives, with the events collected
     instead of translated into frames, which is what makes "the same scenario,
     both ways" a comparison rather than two different programs.
+
+    `received` says a text consumer got every word the turn said, and
+    acknowledges each segment once the turn is over (`receive`). Without it
+    the turn's speech stays unknown, as speech handed to a runtime that never
+    reports playback is: a read-back in it cannot be agreed to.
     """
     said: list[str] = []
     done: TurnFinished | None = None
@@ -1048,4 +1105,19 @@ async def take_turn(
             done = event
     assert done is not None, 'run_turn always finishes with a TurnFinished'
     logger.debug('turn {} in {:.2f}s', done.status, time.perf_counter() - started)
+    if received:
+        receive(call)
     return ''.join(said), done
+
+
+def receive(call: CallContext) -> tuple[str, ...]:
+    """A text consumer got everything this turn has said so far: acknowledge each segment. Returns their ids.
+
+    The text runtime's playback signal (`CallContext.acknowledge`). Call it
+    when the words have actually reached the reader, never merely because a
+    turn returned.
+    """
+    ids = tuple(s.id for s in call.spoken if s.text)
+    if ids:
+        call.acknowledge(*ids)
+    return ids

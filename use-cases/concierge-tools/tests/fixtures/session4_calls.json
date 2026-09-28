@@ -1,0 +1,1399 @@
+[
+ {
+  "run": "2NZdaNpZX4Dys5rEZyAtmR",
+  "simulation": {
+   "simulation_id": "kwUbc4PRZhe4Absq4yxScy",
+   "status": "COMPLETED",
+   "call_sid": "CA3bf0451600f34218a5c98af34a484aef",
+   "test_case_id": "GRdmreeb7SP4G8yegtMntC"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:29:37.064000+00:00",
+    "end": "2026-09-25T23:29:45.062000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o1",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T23:29:37.064000+00:00",
+    "end": "2026-09-25T23:31:48.936000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o2",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:29:45.752000+00:00",
+    "end": "2026-09-25T23:29:55.281000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.3384590148925781",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:29:56.302000+00:00",
+    "end": "2026-09-25T23:30:07.914000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.671009063720703",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:30:07.914000+00:00",
+    "end": "2026-09-25T23:30:13.606000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.449646234512329",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:30:13.606000+00:00",
+    "end": "2026-09-25T23:30:27.498000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:30:15.136000+00:00",
+    "end": "2026-09-25T23:30:15.136000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"confirm_customer\", \"args\": {\"kind\": \"phone\", \"phone\": \"+34671273454\"}, \"question\": \"Let me read that back to you: +34 671 273 454. Have I got that right?\", \"about\": \"phone\", \"asked_turn\": 5, \"turn\": 6, \"heard\": \"that's\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o7",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:30:33.118000+00:00",
+    "end": "2026-09-25T23:30:41.596000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.6112761497497559",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o8",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:30:47.155000+00:00",
+    "end": "2026-09-25T23:30:55.959000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "4.754020929336548",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o9",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:30:55.959000+00:00",
+    "end": "2026-09-25T23:31:11.302000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.078294038772583",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o10",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:31:11.749000+00:00",
+    "end": "2026-09-25T23:31:21.950000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.1672720909118652",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o11",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:31:22.204000+00:00",
+    "end": "2026-09-25T23:31:26.866000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o12",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:31:24.605000+00:00",
+    "end": "2026-09-25T23:31:24.605000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"save_booking\", \"args\": {\"kind\": \"booking\", \"action\": \"book\", \"slot_id\": \"2026-10-03T0900|haircut\", \"booking_id\": \"\", \"additional\": false}, \"question\": \"Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?\", \"about\": \"booking\", \"asked_turn\": 11, \"turn\": 12, \"heard\": \"yes that's perfect\", \"status\": \"ok\", \"receipt\": {\"status\": \"booked\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-10-03\", \"time\": \"09:00:00\", \"spoken\": \"Saturday the 3rd at 9:00 AM\"}}"
+    }
+   },
+   {
+    "id": "o13",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:31:26.866000+00:00",
+    "end": "2026-09-25T23:31:37.379000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.076746940612793",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o14",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:31:42.753000+00:00",
+    "end": "2026-09-25T23:31:46.317000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "true"
+    }
+   }
+  ]
+ },
+ {
+  "run": "57wWUrMHSP7T3wbMFHsR5x",
+  "simulation": {
+   "simulation_id": "cYMMixAchYqsXAAFpLUccQ",
+   "status": "COMPLETED",
+   "call_sid": "CAc55c9058f9db48d6950588b0f260b38e",
+   "test_case_id": "M5Z8LjVyQZPuhSubmt26w7"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:32:54.335000+00:00",
+    "end": "2026-09-25T22:33:02.198000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o1",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T22:32:54.335000+00:00",
+    "end": "2026-09-25T22:34:42.841000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o2",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:33:03.101000+00:00",
+    "end": "2026-09-25T22:33:15.586000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.127741813659668",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:33:21.652000+00:00",
+    "end": "2026-09-25T22:33:29.875000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:33:30.737000+00:00",
+    "end": "2026-09-25T22:33:49.031000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.8425920009613037",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:33:49.140000+00:00",
+    "end": "2026-09-25T22:34:04.974000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.2776241302490234",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T22:33:51.478000+00:00",
+    "end": "2026-09-25T22:33:51.478000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"lookup_customer\", \"args\": {\"phone\": \"+34671273454\"}, \"question\": \"Is your number +34 671 27 34 54?\", \"about\": \"lookup_customer\", \"asked_turn\": 3, \"proposal\": 1, \"segments\": [\"72b0f21c9c32:3:8\"], \"turn\": 4, \"heard\": \"yes that's correct\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o7",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:34:05.059000+00:00",
+    "end": "2026-09-25T22:34:14.500000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.672339916229248",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o8",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:34:20.297000+00:00",
+    "end": "2026-09-25T22:34:27.991000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o9",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:34:33.298000+00:00",
+    "end": "2026-09-25T22:34:42.499000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.577648878097534",
+     "turn.was_interrupted": "true"
+    }
+   }
+  ]
+ },
+ {
+  "run": "5YWfZDoPQihTXbfiY3wJWs",
+  "simulation": {
+   "simulation_id": "3CyVWZmpnotfM4nfdru2e2",
+   "status": "COMPLETED",
+   "call_sid": "CA4fb153ba57994918a9ca45d71f732d61",
+   "test_case_id": "GRdmreeb7SP4G8yegtMntC"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T23:17:00.137000+00:00",
+    "end": "2026-09-25T23:19:49.487000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o1",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:17:00.137000+00:00",
+    "end": "2026-09-25T23:17:08.188000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o2",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:17:08.946000+00:00",
+    "end": "2026-09-25T23:17:18.015000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.3657171726226807",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:17:18.343000+00:00",
+    "end": "2026-09-25T23:17:31.595000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.4258902072906494",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:17:32.279000+00:00",
+    "end": "2026-09-25T23:17:38.302000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.7849657535552979",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:17:38.302000+00:00",
+    "end": "2026-09-25T23:17:52.945000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.667086124420166",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:17:58.571000+00:00",
+    "end": "2026-09-25T23:18:08.615000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.795708179473877",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o7",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:18:08.616000+00:00",
+    "end": "2026-09-25T23:18:36.255000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "3.205165147781372",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o8",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:18:09.818000+00:00",
+    "end": "2026-09-25T23:18:09.818000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"confirm_customer\", \"args\": {\"kind\": \"phone\", \"phone\": \"+34671273454\"}, \"question\": \"Let me read that back to you: +34 671 273 454. Have I got that right?\", \"about\": \"phone\", \"asked_turn\": 8, \"turn\": 9, \"heard\": \"go ahead\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o9",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:18:36.785000+00:00",
+    "end": "2026-09-25T23:18:45.584000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.7978589534759521",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o10",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:18:45.584000+00:00",
+    "end": "2026-09-25T23:18:56.043000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "3.311783790588379",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o11",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:18:48.609000+00:00",
+    "end": "2026-09-25T23:18:48.610000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"save_booking\", \"args\": {\"kind\": \"booking\", \"action\": \"book\", \"slot_id\": \"2026-10-02T0900|haircut\", \"booking_id\": \"\", \"additional\": false}, \"question\": \"Shall I book you in for a haircut, Friday at 9:00 AM?\", \"about\": \"booking\", \"asked_turn\": 14, \"turn\": 15, \"heard\": \"silence underscore tool\", \"status\": \"ok\", \"receipt\": {\"status\": \"booked\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-10-02\", \"time\": \"09:00:00\", \"spoken\": \"Friday at 9:00 AM\"}}"
+    }
+   },
+   {
+    "id": "o12",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:18:57.067000+00:00",
+    "end": "2026-09-25T23:19:14.084000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "3.0631072521209717",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o13",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:19:14.507000+00:00",
+    "end": "2026-09-25T23:19:23.095000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "4.377279996871948",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o14",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:19:23.096000+00:00",
+    "end": "2026-09-25T23:19:35.222000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.931811809539795",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o15",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:19:27.424000+00:00",
+    "end": "2026-09-25T23:19:27.424000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"save_booking\", \"args\": {\"kind\": \"booking\", \"action\": \"move\", \"slot_id\": \"2026-10-03T0900|haircut\", \"booking_id\": \"BK0001\", \"additional\": false}, \"question\": \"Shall I move your appointment to Saturday the 3rd at 9:00 AM?\", \"about\": \"booking\", \"asked_turn\": 19, \"turn\": 20, \"heard\": \"yes nine am on saturday works for me\", \"status\": \"ok\", \"receipt\": {\"status\": \"moved\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-10-03\", \"time\": \"09:00:00\", \"spoken\": \"Saturday the 3rd at 9:00 AM\"}}"
+    }
+   },
+   {
+    "id": "o16",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:19:40.977000+00:00",
+    "end": "2026-09-25T23:19:45.177000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "true"
+    }
+   }
+  ]
+ },
+ {
+  "run": "B6c7CSHw32Lt6PqxRR9yCZ",
+  "simulation": {
+   "simulation_id": "C26pPHK6Fkjz57N9bmZupD",
+   "status": "COMPLETED",
+   "call_sid": "CA31386078e3904c3fa89a08bc4b9d75f1",
+   "test_case_id": "GRdmreeb7SP4G8yegtMntC"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T23:06:57.822000+00:00",
+    "end": "2026-09-25T23:08:55.491000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o1",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:06:57.823000+00:00",
+    "end": "2026-09-25T23:07:05.685000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o2",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:07:06.707000+00:00",
+    "end": "2026-09-25T23:07:17.850000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.1091618537902832",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:07:18.134000+00:00",
+    "end": "2026-09-25T23:07:28.664000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.0500738620758057",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:07:28.665000+00:00",
+    "end": "2026-09-25T23:07:34.061000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.343653678894043",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:07:34.061000+00:00",
+    "end": "2026-09-25T23:07:45.729000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.1253371238708496",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:07:46.012000+00:00",
+    "end": "2026-09-25T23:07:53.289000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.03951096534729",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o7",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:07:49.187000+00:00",
+    "end": "2026-09-25T23:07:49.187000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"lookup_customer\", \"args\": {\"phone\": \"+34671273454\"}, \"question\": \"Is your number +34 671 27 34 54?\", \"about\": \"lookup_customer\", \"asked_turn\": 3, \"proposal\": 2, \"segments\": [\"6bf67abdf5ae:3:7\"], \"turn\": 4, \"heard\": \"yes that's right\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o8",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:07:53.289000+00:00",
+    "end": "2026-09-25T23:08:03.900000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o9",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:08:03.900000+00:00",
+    "end": "2026-09-25T23:08:07.022000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.4695708751678467",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o10",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:08:07.022000+00:00",
+    "end": "2026-09-25T23:08:14.618000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o11",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:08:19.825000+00:00",
+    "end": "2026-09-25T23:08:35.338000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.1107120513916016",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o12",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:08:35.339000+00:00",
+    "end": "2026-09-25T23:08:39.318000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.3521308898925781",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o13",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:08:39.318000+00:00",
+    "end": "2026-09-25T23:08:50.979000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.049697160720825",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o14",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:08:50.979000+00:00",
+    "end": "2026-09-25T23:08:55.038000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.3594131469726562",
+     "turn.was_interrupted": "true"
+    }
+   }
+  ]
+ },
+ {
+  "run": "B6c7CSHw32Lt6PqxRR9yCZ",
+  "simulation": {
+   "simulation_id": "VuhAwZ3etdM8ERrZWMndxh",
+   "status": "COMPLETED",
+   "call_sid": "CA941c5b40321245599d78e7175d9d55c6",
+   "test_case_id": "GRdmreeb7SP4G8yegtMntC"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T23:01:11.541000+00:00",
+    "end": "2026-09-25T23:04:32.828000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o1",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:01:11.541000+00:00",
+    "end": "2026-09-25T23:01:19.304000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o2",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:01:20.398000+00:00",
+    "end": "2026-09-25T23:01:33.085000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.1690399646759033",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:01:33.357000+00:00",
+    "end": "2026-09-25T23:01:44.355000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.5809202194213867",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:01:44.718000+00:00",
+    "end": "2026-09-25T23:01:49.924000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.1288371086120605",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:01:49.925000+00:00",
+    "end": "2026-09-25T23:02:01.420000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.141752004623413",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:02:20.436000+00:00",
+    "end": "2026-09-25T23:02:30.754000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.7141690254211426",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o7",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:02:57.315000+00:00",
+    "end": "2026-09-25T23:03:01.763000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.7735249996185303",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o8",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:02:59.918000+00:00",
+    "end": "2026-09-25T23:02:59.918000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"lookup_customer\", \"args\": {\"phone\": \"+34671273454\"}, \"question\": \"Is your number +34 671 27 34 54?\", \"about\": \"lookup_customer\", \"asked_turn\": 4, \"proposal\": 5, \"segments\": [\"e2b87dcd4945:4:12\"], \"turn\": 5, \"heard\": \"yes that's correct\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o9",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:03:01.763000+00:00",
+    "end": "2026-09-25T23:03:14.500000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.7267608642578125",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o10",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:03:19.758000+00:00",
+    "end": "2026-09-25T23:03:28.932000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.493095874786377",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o11",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:03:34.159000+00:00",
+    "end": "2026-09-25T23:03:41.005000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.8717381954193115",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o12",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:03:41.005000+00:00",
+    "end": "2026-09-25T23:03:55.791000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "3.3488028049468994",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o13",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:03:56.594000+00:00",
+    "end": "2026-09-25T23:04:05.628000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.38816499710083",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o14",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:11.395000+00:00",
+    "end": "2026-09-25T23:04:17.100000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.1442480087280273",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o15",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:04:13.608000+00:00",
+    "end": "2026-09-25T23:04:13.609000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"book_appointment\", \"args\": {\"phone\": \"+34671273454\", \"slot\": \"2026-10-03T0900|haircut\"}, \"question\": \"Shall I book a haircut, Saturday the 3rd at 9:00 AM?\", \"about\": \"book_appointment\", \"asked_turn\": 9, \"proposal\": 7, \"segments\": [\"e2b87dcd4945:9:20\"], \"turn\": 10, \"heard\": \"yes please that's perfect\", \"status\": \"ok\", \"receipt\": {\"status\": \"booked\", \"phone\": \"+34671273454\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"spoken\": \"Saturday the 3rd at 9:00 AM\", \"service_spoken\": \"haircut\", \"reason\": \"\"}}"
+    }
+   },
+   {
+    "id": "o16",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:17.100000+00:00",
+    "end": "2026-09-25T23:04:26.308000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.131495714187622",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o17",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:26.754000+00:00",
+    "end": "2026-09-25T23:04:32.510000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.1678719520568848",
+     "turn.was_interrupted": "true"
+    }
+   }
+  ]
+ },
+ {
+  "run": "GYZdoiie3dVF9VuguVRyQi",
+  "simulation": {
+   "simulation_id": "fymMyWTiyz6eqfK3RwRTRX",
+   "status": "COMPLETED",
+   "call_sid": "CA09f5c0958d564d9782dc10947e8e421c",
+   "test_case_id": "GRdmreeb7SP4G8yegtMntC"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": null,
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T19:17:23.416000+00:00",
+    "end": "2026-09-25T19:17:33.516000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o1",
+    "parent": null,
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T19:17:34.556000+00:00",
+    "end": "2026-09-25T19:17:46.802000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.3116259574890137",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o2",
+    "parent": null,
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T19:17:46.965000+00:00",
+    "end": "2026-09-25T19:17:56.901000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.1891353130340576",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": null,
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T19:17:58.327000+00:00",
+    "end": "2026-09-25T19:18:04.487000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.0273680686950684",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": null,
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T19:18:04.487000+00:00",
+    "end": "2026-09-25T19:18:11.189000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.6150109767913818",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T19:18:07.022000+00:00",
+    "end": "2026-09-25T19:18:07.023000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"lookup_customer\", \"args\": {\"phone\": \"+34671273454\"}, \"question\": \"Let me read that back to you: +34 671 27 34 54. Have I got that right?\", \"about\": \"lookup_customer\", \"asked_turn\": 3, \"proposal\": 1, \"segments\": [\"5a0c789242ed:3:8\"], \"turn\": 4, \"heard\": \"that's two seven three four five four\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": null,
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T19:18:11.189000+00:00",
+    "end": "2026-09-25T19:18:24.365000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   }
+  ]
+ },
+ {
+  "run": "GwX9FkFXZRHqv9D3irjFaA",
+  "simulation": {
+   "simulation_id": "iPFgi5qqowDhHxEE66H85W",
+   "status": "COMPLETED",
+   "call_sid": "CAecf6261f1e8f408cb3305e9b31fb21cf",
+   "test_case_id": "GRdmreeb7SP4G8yegtMntC"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T23:43:32.310000+00:00",
+    "end": "2026-09-26T00:01:57.391000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o1",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:43:32.311000+00:00",
+    "end": "2026-09-25T23:43:40.368000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o2",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:43:40.954000+00:00",
+    "end": "2026-09-25T23:43:50.693000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.1062328815460205",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:43:50.916000+00:00",
+    "end": "2026-09-25T23:44:03.973000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.380934238433838",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:44:03.973000+00:00",
+    "end": "2026-09-26T00:01:56.923000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "true"
+    }
+   }
+  ]
+ },
+ {
+  "run": "e38JbJ9raccRmr4DBd4zwh",
+  "simulation": {
+   "simulation_id": "SB4GGMzURZEKaYgDf2RkdU",
+   "status": "COMPLETED",
+   "call_sid": "CA41a566420bc24d5dafd3cb64023ea737",
+   "test_case_id": "M5Z8LjVyQZPuhSubmt26w7"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T22:48:39.638000+00:00",
+    "end": "2026-09-25T22:50:55.211000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o1",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:48:39.638000+00:00",
+    "end": "2026-09-25T22:48:47.523000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o2",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:48:48.336000+00:00",
+    "end": "2026-09-25T22:49:00.091000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.4898500442504883",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:49:26.616000+00:00",
+    "end": "2026-09-25T22:49:35.570000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.6336348056793213",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:49:36.511000+00:00",
+    "end": "2026-09-25T22:49:55.893000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.1186208724975586",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:49:56.093000+00:00",
+    "end": "2026-09-25T22:50:02.270000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.5130019187927246",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T22:49:58.536000+00:00",
+    "end": "2026-09-25T22:49:58.536000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"lookup_customer\", \"args\": {\"phone\": \"+34671273454\"}, \"question\": \"Is your number +34 671 27 34 54?\", \"about\": \"lookup_customer\", \"asked_turn\": 3, \"proposal\": 1, \"segments\": [\"c2bfe5cae352:3:6\"], \"turn\": 4, \"heard\": \"yes that's correct\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o7",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:50:02.271000+00:00",
+    "end": "2026-09-25T22:50:22.757000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.259099006652832",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o8",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:50:23.173000+00:00",
+    "end": "2026-09-25T22:50:33.070000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.214106798171997",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o9",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:50:38.552000+00:00",
+    "end": "2026-09-25T22:50:49.877000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.6912920475006104",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o10",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T22:50:42.622000+00:00",
+    "end": "2026-09-25T22:50:42.622000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"book_appointment\", \"args\": {\"phone\": \"+34671273454\", \"slot\": \"2026-10-02T0900|haircut\"}, \"question\": \"Shall I book a haircut, Friday the 2nd at 9:00 AM?\", \"about\": \"book_appointment\", \"asked_turn\": 6, \"proposal\": 2, \"segments\": [\"c2bfe5cae352:6:12\"], \"turn\": 7, \"heard\": \"yes please that's perfect\", \"status\": \"ok\", \"receipt\": {\"status\": \"booked\", \"phone\": \"+34671273454\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"spoken\": \"Friday the 2nd at 9:00 AM\", \"service_spoken\": \"haircut\", \"reason\": \"\"}}"
+    }
+   },
+   {
+    "id": "o11",
+    "parent": "o0",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T22:50:50.374000+00:00",
+    "end": "2026-09-25T22:50:54.822000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.5866148471832275",
+     "turn.was_interrupted": "true"
+    }
+   }
+  ]
+ },
+ {
+  "run": "mM5ma5y6VBhhUxJJnW2Mob",
+  "simulation": {
+   "simulation_id": "YzkhPWRpDFUKuEmBWNmfrA",
+   "status": "COMPLETED",
+   "call_sid": "CAa24472f088d44304815811b516268390",
+   "test_case_id": "GRdmreeb7SP4G8yegtMntC"
+  },
+  "observations": [
+   {
+    "id": "o0",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:19.798000+00:00",
+    "end": "2026-09-25T23:04:27.700000+00:00",
+    "attrs": {
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o1",
+    "parent": null,
+    "type": "SPAN",
+    "name": "conversation",
+    "start": "2026-09-25T23:04:19.798000+00:00",
+    "end": "2026-09-25T23:07:44.305000+00:00",
+    "attrs": {}
+   },
+   {
+    "id": "o2",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:28.457000+00:00",
+    "end": "2026-09-25T23:04:37.841000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.5448870658874512",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o3",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:38.077000+00:00",
+    "end": "2026-09-25T23:04:46.774000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.8360071182250977",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o4",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:46.891000+00:00",
+    "end": "2026-09-25T23:04:52.328000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.5629470348358154",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o5",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:04:52.328000+00:00",
+    "end": "2026-09-25T23:05:17.534000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "3.4343318939208984",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o6",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:05:05.571000+00:00",
+    "end": "2026-09-25T23:05:05.571000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"confirm_customer\", \"args\": {\"kind\": \"phone\", \"phone\": \"+34671273454\"}, \"question\": \"Let me read that back to you: +34 671 273 454. Have I got that right?\", \"about\": \"phone\", \"asked_turn\": 3, \"turn\": 11, \"heard\": \"that's right\", \"status\": \"ok\", \"receipt\": {\"customer_status\": \"created\", \"customer_phone\": \"+34671273454\"}}"
+    }
+   },
+   {
+    "id": "o7",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:05:17.689000+00:00",
+    "end": "2026-09-25T23:05:22.796000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.7367172241210938",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o8",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:05:22.796000+00:00",
+    "end": "2026-09-25T23:05:31.393000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "1.2255918979644775",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o9",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:05:25.166000+00:00",
+    "end": "2026-09-25T23:05:25.166000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"save_booking\", \"args\": {\"kind\": \"booking\", \"action\": \"book\", \"slot_id\": \"2026-10-02T0900|haircut\", \"booking_id\": \"\", \"additional\": false}, \"question\": \"Shall I book you in for a haircut, Friday at 9:00 AM?\", \"about\": \"booking\", \"asked_turn\": 13, \"turn\": 14, \"heard\": \"nine works for me thanks\", \"status\": \"ok\", \"receipt\": {\"status\": \"booked\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-10-02\", \"time\": \"09:00:00\", \"spoken\": \"Friday at 9:00 AM\"}}"
+    }
+   },
+   {
+    "id": "o10",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:05:36.833000+00:00",
+    "end": "2026-09-25T23:05:53.255000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "3.3574469089508057",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o11",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:05:58.635000+00:00",
+    "end": "2026-09-25T23:06:04.195000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "2.2880401611328125",
+     "turn.was_interrupted": "true"
+    }
+   },
+   {
+    "id": "o12",
+    "parent": "o1",
+    "type": "SPAN",
+    "name": "turn",
+    "start": "2026-09-25T23:06:04.195000+00:00",
+    "end": "2026-09-25T23:06:16.432000+00:00",
+    "attrs": {
+     "turn.user_bot_latency_seconds": "4.251543998718262",
+     "turn.was_interrupted": "false"
+    }
+   },
+   {
+    "id": "o13",
+    "parent": null,
+    "type": "SPAN",
+    "name": "write",
+    "start": "2026-09-25T23:06:08.998000+00:00",
+    "end": "2026-09-25T23:06:08.998000+00:00",
+    "attrs": {
+     "write.audit": "{\"action\": \"save_booking\", \"args\": {\"kind\": \"booking\", \"action\": \"move\", \"slot_id\": \"2026-10-03T0900|haircut\", \"booking_id\": \"BK0001\", \"additional\": false}, \"question\": \"Shall I move your appointment to Saturday the 3rd at 9:00 AM?\", \"about\": \"booking\", \"asked_turn\": 17, \"turn\": 20, \"heard\": \"that's great\", \"status\": \"ok\", \"receipt\": {\"status\": \"moved\", \"booking_id\": \"BK0001\", \"service\": \"haircut\", \"date\": \"2026-10-03\", \"time\": \"09:00:00\", \"spoken\": \"Saturday the 3rd at 9:00 AM\"}}"
+    }
+   }
+  ]
+ }
+]

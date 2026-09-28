@@ -6,8 +6,20 @@ count below was once wrong by hand. Asserts, no pytest, no network.
 
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
-from ledger import Obs, groups, quantile, read_call, summary
+from ledger import (
+    Call,
+    Obs,
+    _session_traces,
+    from_json,
+    groups,
+    needs_consent,
+    quantile,
+    read_call,
+    summary,
+    to_json,
+)
 
 T0 = datetime(2026, 9, 24, 12, tzinfo=UTC)
 CLASSIFY = [{'role': 'system', 'content': 'You classify the answer to a question. ...'}]
@@ -118,7 +130,7 @@ def reads_the_audit_of_a_write():
     assert (write.name, write.status, write.heard_before) == ('save_booking', 'ok', 'Yes.'), write
     assert call.tasks == 1 and call.unmatched() == []
     lines = summary('harness', [call])
-    assert any('1 of 1 writes answered a matching question' in line for line in lines), lines
+    assert any('1 of 1 writes that needed a yes answered a question' in line for line in lines), lines
 
     unasked = [o for o in harness_call() if o.id != 'w1']
     unasked.append(
@@ -160,6 +172,50 @@ def reads_the_audit_of_a_write():
     assert len(read_call('harness', operation('lookup_customer')).unmatched()) == 1, (
         'a yes to the number read-back never books'
     )
+
+
+def an_unmapped_write_is_consent_unknown_not_consent_free():
+    """The mapping used to be read as "not named here needs no yes": native `confirm_customer` escaped every check."""
+
+    def write(action: str, about: str, **extra: object) -> Call:
+        audit = {'action': action, 'about': about, 'question': 'Is that your number?', 'asked_turn': 5,
+                 'turn': 6, 'heard': "that's", 'status': 'ok'} | extra  # fmt: skip
+        obs = Obs('w', 't3', 'SPAN', 'write', at(20.1), at(20.2), attrs={'write.audit': json.dumps(audit)})
+        return read_call('x', [o for o in harness_call() if o.id != 'w1'] + [obs])
+
+    native = write('confirm_customer', 'phone')
+    assert (
+        needs_consent(native.writes[0].audit) is True and native.unmatched() == [] and native.unmapped() == []
+    )
+    assert len(write('confirm_customer', 'booking').unmatched()) == 1, (
+        'a yes about a booking never confirms a number'
+    )
+    unknown = write('save_name', 'name')
+    assert needs_consent(unknown.writes[0].audit) is None and len(unknown.unmapped()) == 1
+    assert any('CONSENT UNKNOWN save_name' in line for line in summary('x', [unknown]))
+    declared = write('save_name', 'save_name', needs_approval=True)
+    assert declared.unmapped() == [] and declared.unmatched() == [], "the audit's own declaration is enough"
+    assert write('save_name', 'save_name', needs_approval=False).unmapped() == []
+
+
+def pages_every_trace_of_a_session():
+    """`fetch` took one page of 100 traces as the whole session."""
+
+    class Listed:
+        def __init__(self, ids: list[str], pages: int) -> None:
+            self.data = [SimpleNamespace(id=i) for i in ids]
+            self.meta = SimpleNamespace(total_pages=pages)
+
+    pages = {1: Listed(['a', 'b'], 2), 2: Listed(['c'], 2)}
+    lf = SimpleNamespace(
+        api=SimpleNamespace(trace=SimpleNamespace(list=lambda session_id, limit, page: pages[page]))
+    )
+    assert _session_traces(lf, 'CA1') == ['a', 'b', 'c']
+
+
+def a_saved_observation_reads_back_the_same():
+    for o in harness_call():
+        assert from_json(json.loads(json.dumps(to_json(o)))) == o, o
 
 
 def reads_livekit_the_same_way():
@@ -217,9 +273,50 @@ def reports_what_it_cannot_measure():
         raise AssertionError(f'{bad} was accepted')
 
 
+def a_tool_call_is_dropped_only_for_its_own_audit():
+    """Once any write was audited, every unaudited tool call was dropped: a separate cancel vanished too."""
+
+    def tool(id_: str, name: str, output, start: float = 20) -> Obs:
+        return Obs(id_, 't3', 'TOOL', name, at(start), at(start + 0.3), output=output)
+
+    audit = {'action': 'book_appointment', 'about': 'book_appointment', 'question': 'Shall I book it?',
+             'asked_turn': 2, 'turn': 3, 'heard': 'Yes.', 'status': 'ok'}  # fmt: skip
+    own = Obs('w9', 'tb', 'SPAN', 'write', at(20.1), at(20.2), attrs={'write.audit': json.dumps(audit)})
+    readback = json.dumps({'about': 'book_appointment', 'spoken': 'Shall I book a haircut, Friday at 9?'})
+    base = [o for o in harness_call() if o.id != 'w1']
+    pair = read_call('x', [*base, tool('tb', 'book_appointment', 'booked'), own])
+    assert [(w.name, bool(w.audit)) for w in pair.writes] == [('book_appointment', True)], (
+        'a tool call and the write below it are one write'
+    )
+    asked = read_call(
+        'x', [*base, tool('ta', 'book_appointment', readback), tool('tb', 'book_appointment', 'ok'), own]
+    )
+    assert len(asked.writes) == 1, 'a tool call that only read its operation back wrote nothing'
+    hidden = read_call(
+        'x',
+        [
+            *base,
+            tool('tb', 'book_appointment', 'ok'),
+            own,
+            tool('tc', 'cancel_appointment', 'cancelled BK0001', 25),
+        ],
+    )
+    assert [(w.name, w.status, w.audit) for w in hidden.writes] == [
+        ('book_appointment', 'ok', audit), ('cancel_appointment', 'ok', {})
+    ], 'a separate unaudited cancel is kept, with no audit'  # fmt: skip
+    legacy = read_call('x', [*base[:-1], tool('tb', 'save_booking', 'saved')])
+    assert [(w.name, w.audit) for w in legacy.writes] == [('save_booking', {})], (
+        'a build with no audits: as before'
+    )
+
+
 def main():
     counts_every_request_once()
     reads_the_audit_of_a_write()
+    a_tool_call_is_dropped_only_for_its_own_audit()
+    an_unmapped_write_is_consent_unknown_not_consent_free()
+    pages_every_trace_of_a_session()
+    a_saved_observation_reads_back_the_same()
     reads_livekit_the_same_way()
     splits_latency_into_turn_taking_and_answer()
     reports_what_it_cannot_measure()

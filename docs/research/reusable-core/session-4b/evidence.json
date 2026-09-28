@@ -1,0 +1,1039 @@
+{
+ "cases": {
+  "GRdmreeb7SP4G8yegtMntC": {
+   "bookings": 1,
+   "service": "haircut"
+  },
+  "M5Z8LjVyQZPuhSubmt26w7": {
+   "bookings": 1,
+   "service": "haircut"
+  }
+ },
+ "facts": {
+  "2Kx2fiJVXTiaQJcBpZuh67": {
+   "ended_by": "agent",
+   "media_seconds": 89.754,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "2UJ48UxRn4ikP5dEq8w4Hf": {
+   "media_seconds": 88.65,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: 3 pipeline closes around its tracing end; none bound to it"
+  },
+  "347RFS8MFxwzmxkbSZGg4T": {
+   "ended_by": "agent",
+   "media_seconds": 173.006,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-4324mfpe/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "3CyVWZmpnotfM4nfdru2e2": {
+   "ended_by": "agent",
+   "media_seconds": 169.712,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-t_47cgo6/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "3QtyKPQJWyoNEDP45ZoQat": {
+   "ended_by": "agent",
+   "media_seconds": 83.457,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "3UjW42ECWUsu7kUNPDdYJD": {
+   "ended_by": "agent",
+   "media_seconds": 159.857,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "45HtVxq63H8Q7tKG95gi25": {
+   "ended_by": "agent",
+   "media_seconds": 138.217,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "4GEQhCavKYaEr2hYVCEAMV": {
+   "ended_by": "agent",
+   "media_seconds": 94.893,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "4MLUnEJBM4qgb7K8DBkuWT": {
+   "ended_by": "agent",
+   "media_seconds": 87.862,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "4RDavx8xjBsarHXrwse5zL": {
+   "ended_by": "agent",
+   "media_seconds": 91.929,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "5dGYa2jXamdRJN8RTR7MEt": {
+   "ended_by": "agent",
+   "media_seconds": 82.804,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-h_rc61av/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "5t7pjWna7wjR8tfjXmGbhG": {
+   "ended_by": "agent",
+   "media_seconds": 105.065,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "5ymkGHedR7ymahxecRmXvx": {
+   "ended_by": "agent",
+   "media_seconds": 119.994,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "6Di83S3tBNvtFZ8PqNF3UJ": {
+   "ended_by": "agent",
+   "media_seconds": 96.529,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "6DooWPckR4Ex7r49HjrnqQ": {
+   "ended_by": "agent",
+   "media_seconds": 131.976,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "7C5cmvqichucwpcypVwxeq": {
+   "ended_by": "agent",
+   "media_seconds": 213.05,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "7T45xDL3E8e5izhrTy5pV2": {
+   "ended_by": "agent",
+   "media_seconds": 109.616,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "7UEVy92ZfExsnHrSbhFbb9": {
+   "ended_by": "agent",
+   "media_seconds": 96.166,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-8zai7wle/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "7YU34Ve8pFbr9XVDjbyErf": {
+   "ended_by": "agent",
+   "media_seconds": 80.036,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-k3mhznh0/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "7oMsKxvHm5LECnNeabdxA6": {
+   "ended_by": "agent",
+   "media_seconds": 102.29,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "7oRuKHUEnZJu39yes5f2uk": {
+   "ended_by": "caller",
+   "media_seconds": 128.63,
+   "observed": false,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log (shared): CancelFrame(reason: None), a caller line nearby but not bound to this call"
+  },
+  "8HJCRNEgf54SdqDJRGpZEy": {
+   "ended_by": "agent",
+   "media_seconds": 83.047,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_8elvlug/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "8Kb4Zo8j222BcMYCiy2qvJ": {
+   "ended_by": "agent",
+   "media_seconds": 96.143,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "8Y5mzxVqZXYU35SGPFi8tz": {
+   "ended_by": "agent",
+   "media_seconds": 151.562,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-4324mfpe/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "8opr2oigPcynN6vEv6nRUd": {
+   "ended_by": "caller",
+   "media_seconds": 113.469,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-wm66vfkf/salon-pipecat-flows-bot.log (one call): client disconnected, then CancelFrame(reason: None)"
+  },
+  "9WXAr3XqEvfLi3syKvRvMc": {
+   "ended_by": "agent",
+   "media_seconds": 91.692,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "9fGNFVX7p8oEkQykDKdUKo": {
+   "ended_by": "agent",
+   "media_seconds": 134.023,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "A8x9VyDzknymV6tH3mggDS": {
+   "ended_by": "agent",
+   "media_seconds": 142.934,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "ArS5ZMnu9XXfUzdyifj6LY": {
+   "ended_by": "ceiling",
+   "media_seconds": 180.572,
+   "observed": false,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log (shared): CancelFrame(reason: None), a ceiling line nearby but not bound to this call"
+  },
+  "B9u9WZdqbyCKATCsmQJszs": {
+   "ended_by": "agent",
+   "media_seconds": 100.331,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "B9xrkb4SWYARbsiCqgsiWL": {
+   "ended_by": "agent",
+   "media_seconds": 72.297,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-1chpb4zl/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "BWqBhyLjH6hjfv7tygCkud": {
+   "ended_by": "agent",
+   "media_seconds": 205.375,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "BgyW7LQULMEkAukpphKuwy": {
+   "ended_by": "agent",
+   "media_seconds": 138.933,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "BksyjbtjxaBDFKxPm8vHNT": {
+   "ended_by": "agent",
+   "media_seconds": 154.197,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "BpraHnbwQZ8wDTJWRBRKaq": {
+   "ended_by": "caller",
+   "media_seconds": 133.94,
+   "observed": false,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log (shared): CancelFrame(reason: None), a caller line nearby but not bound to this call"
+  },
+  "BsdTQTsZ23otiZg2wHLYnu": {
+   "ended_by": "agent",
+   "media_seconds": 106.876,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-3o1frxls/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "C26pPHK6Fkjz57N9bmZupD": {
+   "ended_by": "agent",
+   "media_seconds": 117.917,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "CBwwKSbMSzzhT7vt2iiJpv": {
+   "ended_by": "agent",
+   "media_seconds": 88.736,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "CFvPcXubVv7L9PSvwYFEEq": {
+   "ended_by": "agent",
+   "media_seconds": 103.647,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "CKssEhDLQquPvSCHXkNeWJ": {
+   "ended_by": "agent",
+   "media_seconds": 240.075,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "CSSVxduBJcdRJqtq34w7T4": {
+   "ended_by": "agent",
+   "media_seconds": 145.647,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "CWdNQatUNQYBcbK6mH8s7R": {
+   "ended_by": "agent",
+   "media_seconds": 82.223,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "DFMG2uFkuX4gqCM3usiKVu": {
+   "ended_by": "agent",
+   "media_seconds": 169.846,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-4324mfpe/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "DRoSn8HqAjPEnktBRsDzGi": {
+   "ended_by": "agent",
+   "media_seconds": 146.508,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "DVCKMxb7JU5KuMHKT9oaW9": {
+   "ended_by": "agent",
+   "media_seconds": 167.15,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "DXhP49VMJmuiJUXbqJ5KGp": {
+   "ended_by": "agent",
+   "media_seconds": 147.383,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "Dui5EEvbXK3ceoPfqdHE7A": {
+   "ended_by": "ceiling",
+   "media_seconds": 180.554,
+   "observed": false,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log (shared): CancelFrame(reason: None), a ceiling line nearby but not bound to this call"
+  },
+  "E7YSKtLyvutq5dJdeaFNNM": {
+   "ended_by": "agent",
+   "media_seconds": 84.21,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "EWcngw68AMEMumChPCuAyV": {
+   "ended_by": "agent",
+   "media_seconds": 158.833,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "F7sitnhR58SxMXnUpcpuyB": {
+   "ended_by": "agent",
+   "media_seconds": 185.497,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "F88eigQQnhK76yPU7D3ktU": {
+   "ended_by": "caller",
+   "media_seconds": 175.741,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-h0ap_zam/salon-pipecat-flows-bot.log (one call): client disconnected, then CancelFrame(reason: None)"
+  },
+  "FNDkWSuG9TCCbqXRUqsio6": {
+   "ended_by": "agent",
+   "media_seconds": 135.255,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "GUpJoB3UDYhxgogxq5Ls9P": {
+   "ended_by": "agent",
+   "media_seconds": 235.605,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "GbULHRHPbL4taaEzHryhbt": {
+   "ended_by": "agent",
+   "media_seconds": 109.64,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-3o1frxls/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "GsPAHtrngUJwwZV6mCPSct": {
+   "ended_by": "agent",
+   "media_seconds": 86.472,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "HHqqbKJz5oQUFs8Zu5kVvq": {
+   "ended_by": "caller",
+   "media_seconds": 87.372,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-iy9oa8t1/salon-pipecat-flows-bot.log (one call): client disconnected, then CancelFrame(reason: None)"
+  },
+  "HJS5pYLKZHQ22gPthc2ZNQ": {
+   "media_seconds": 134.309,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log: 2 pipeline closes around its tracing end; none bound to it"
+  },
+  "J8a4nUeYyhe7XJzQDtUwJe": {
+   "ended_by": "agent",
+   "media_seconds": 110.753,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "Khs7tVuSX4b8Pwghtxz3jX": {
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: 3 pipeline closes around its failed hang-up request; none bound to it"
+  },
+  "LDCFnwtxfdchBPXBBoW4d2": {
+   "ended_by": "agent",
+   "media_seconds": 97.745,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "LdVa6nrmCzGfrYfo9Qvz53": {
+   "ended_by": "agent",
+   "media_seconds": 76.901,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-j3b0kjai/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "MeSFmdkX22SdvhBXWdCje4": {
+   "ended_by": "agent",
+   "media_seconds": 160.092,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "Mm2VjV3LzFDkPqQ8LcWYUw": {
+   "ended_by": "agent",
+   "media_seconds": 171.168,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-4324mfpe/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "Mo3fcHnBMh5uXDuWaytxHv": {
+   "ended_by": "agent",
+   "media_seconds": 125.367,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "MwgpVnuCQ7gonuNQmG5mc2": {
+   "ended_by": "agent",
+   "media_seconds": 87.582,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "NXBccLf5wgihzqtb9G4TeL": {
+   "ended_by": "agent",
+   "media_seconds": 82.758,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "NdkBKGCNZfxfrcsDLXKN8L": {
+   "ended_by": "ceiling",
+   "media_seconds": 180.771,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2ajopo5k/salon-bot.log (one call): call ceiling reached, then CancelFrame(reason: None)"
+  },
+  "Nob9XXSRf4C7VdUyWTBDQC": {
+   "ended_by": "agent",
+   "media_seconds": 149.429,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "P9rYzJjB3JymvmkB4oLx4P": {
+   "ended_by": "agent",
+   "media_seconds": 81.161,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "PfmkB2LYQo45kmVSyKBxXP": {
+   "ended_by": "agent",
+   "media_seconds": 110.283,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "QeJTxmKmEJTZsGTFs3CXui": {
+   "ended_by": "ceiling",
+   "media_seconds": 180.596,
+   "observed": false,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log (shared): CancelFrame(reason: None), a ceiling line nearby but not bound to this call"
+  },
+  "RrBb5MxKfz8astLjwR7oYB": {
+   "ended_by": "agent",
+   "media_seconds": 90.963,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "S5u6D2uTe5ko4ZecS4fD6E": {
+   "ended_by": "agent",
+   "media_seconds": 159.449,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "SB4GGMzURZEKaYgDf2RkdU": {
+   "ended_by": "agent",
+   "media_seconds": 135.829,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "SXrWX2JRkYdZGuaJZBJoxF": {
+   "ended_by": "agent",
+   "media_seconds": 89.147,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "Skx5ZjD7LTF5AFXjhEs7hh": {
+   "ended_by": "agent",
+   "media_seconds": 85.835,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "TohdDeaaBSWVknfrdoLrgc": {
+   "ended_by": "agent",
+   "media_seconds": 84.689,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "U263nHKdGkUbV5BGDuDNym": {
+   "ended_by": "caller",
+   "media_seconds": 139.359,
+   "observed": false,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log (shared): CancelFrame(reason: None), a caller line nearby but not bound to this call"
+  },
+  "UD4fMgUZJCFBaGrijoAyBz": {
+   "media_seconds": 180.708,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: 3 pipeline closes around its failed hang-up request; none bound to it"
+  },
+  "Ua6tdL8NZyT7oL5sjLSwnZ": {
+   "ended_by": "agent",
+   "media_seconds": 93.295,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "V48AKSkjLQaHjm3qNBqquQ": {
+   "ended_by": "agent",
+   "media_seconds": 190.126,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "VuhAwZ3etdM8ERrZWMndxh": {
+   "ended_by": "agent",
+   "media_seconds": 201.533,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "VyksE67VYKTwtegjr8U7Eh": {
+   "ended_by": "agent",
+   "media_seconds": 136.979,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "WjF5R6SwRG3SurEWNVj5pM": {
+   "ended_by": "agent",
+   "media_seconds": 226.52,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "WtgtzDdFpuVNu4bxPCiCn3": {
+   "ended_by": "agent",
+   "media_seconds": 97.616,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "X99Ru3eAv4kV7LivLnLUNY": {
+   "ended_by": "agent",
+   "media_seconds": 125.861,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "XSe2nRijZ8bqxzJUqQjHnL": {
+   "ended_by": "agent",
+   "media_seconds": 94.677,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "Xay9L9U4VjpPQLSnEu8anP": {
+   "ended_by": "agent",
+   "media_seconds": 76.847,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-8unc12qz/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "XooHVoLZaGSYGQ8nnjgACo": {
+   "ended_by": "agent",
+   "media_seconds": 91.837,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "Xq23dg3Gkyh5hNqxBbvK7e": {
+   "ended_by": "agent",
+   "media_seconds": 97.295,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "YJRpB5JELbchFkXm465uRG": {
+   "ended_by": "caller",
+   "media_seconds": 201.147,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-venjwuao/salon-pipecat-flows-bot.log (one call): client disconnected, then CancelFrame(reason: None)"
+  },
+  "YSLmK7GLvs38RkD2wFETfA": {
+   "ended_by": "agent",
+   "media_seconds": 154.264,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "YpGKThqieVUo47gPpGjNby": {
+   "ended_by": "agent",
+   "media_seconds": 98.181,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "YzkhPWRpDFUKuEmBWNmfrA": {
+   "ended_by": "caller",
+   "media_seconds": 204.506,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-iovpllzx/salon-pipecat-flows-bot.log (one call): client disconnected, then CancelFrame(reason: None)"
+  },
+  "Z7m4nq59AFV2cfPQYEDxpB": {
+   "ended_by": "agent",
+   "media_seconds": 100.947,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "ZXykbDDf3Fer4DYAxsaL8U": {
+   "ended_by": "agent",
+   "media_seconds": 162.761,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "ZiGrTDzYLpwGw6YZZHoBLG": {
+   "media_seconds": 127.136,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-_kgx2z7h/salon-bot.log: 2 pipeline closes around its failed hang-up request; none bound to it"
+  },
+  "ZuuMq9ZJY5Rx2sAHkPW2Xh": {
+   "ended_by": "agent",
+   "media_seconds": 87.454,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "a3y8pY2dAeWPREwa8KAUEF": {
+   "ended_by": "agent",
+   "media_seconds": 97.907,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-62e88sha/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "aQ8WhZsKB9GA89sn9wYXxw": {
+   "ended_by": "agent",
+   "media_seconds": 203.355,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "adbR6DRYyMhDLayhpookKD": {
+   "ended_by": "agent",
+   "media_seconds": 156.81,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "b7BSSwtXQyeaRdc95tBbdy": {
+   "ended_by": "agent",
+   "media_seconds": 142.123,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "b7YMAbn6yqD8njkzAF7m5S": {
+   "ended_by": "agent",
+   "media_seconds": 97.177,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "bF2sNufskoyDrq9vhgCEEH": {
+   "media_seconds": 87.919,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: 3 pipeline closes around its failed hang-up request; none bound to it"
+  },
+  "c4wZXXVrVpgkdjhg8zSNxx": {
+   "ended_by": "agent",
+   "media_seconds": 131.767,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "cAxvwUZRBekgiyzFQqKHBs": {
+   "ended_by": "agent",
+   "media_seconds": 144.071,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "cBrx4NhRQXYyTgSfY8zmhA": {
+   "ended_by": "agent",
+   "media_seconds": 33.847,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "cYMMixAchYqsXAAFpLUccQ": {
+   "ended_by": "agent",
+   "media_seconds": 108.761,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "cyYESUGZwB8PjmxpGwmXXh": {
+   "ended_by": "agent",
+   "media_seconds": 109.627,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-3o1frxls/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "d2iF4s2nkV7AnmerVszL6M": {
+   "ended_by": "agent",
+   "media_seconds": 152.055,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-4324mfpe/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "d7NTokufPyhwL875p7k7n8": {
+   "ended_by": "agent",
+   "media_seconds": 93.354,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "e52ESZoSX9FNhM6TKbwARe": {
+   "ended_by": "agent",
+   "media_seconds": 151.511,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "eSUTDShXc566AbXiQC7Cpv": {
+   "ended_by": "agent",
+   "media_seconds": 81.463,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "eiabwX4CnDyEApeYCYLrmZ": {
+   "ended_by": "agent",
+   "media_seconds": 87.27,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "fk5ZrLQmq3Wc8ATdvqoxRe": {
+   "ended_by": "agent",
+   "media_seconds": 119.262,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-8gva586v/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "fymMyWTiyz6eqfK3RwRTRX": {
+   "ended_by": "test_runner",
+   "media_seconds": 68.035,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: runner log docs/research/reusable-core/session-4/coval-complex.log:14 (Coval HTTP 429), ledger.md call 1: the runner exited and took the bot down (its log shows only the client disconnecting)"
+  },
+  "fzMA8L6VjWNEabjHJk7WEB": {
+   "ended_by": "agent",
+   "media_seconds": 138.554,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "g6txUkVEqrGNTewmFx3ApU": {
+   "ended_by": "agent",
+   "media_seconds": 99.82,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "gDaxFqvxHWCiaAQF8kGuwJ": {
+   "ended_by": "agent",
+   "media_seconds": 162.233,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "gyaSM3AxwQeTReJTyiwf7K": {
+   "ended_by": "ceiling",
+   "media_seconds": 180.585,
+   "observed": false,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log (shared): CancelFrame(reason: None), a ceiling line nearby but not bound to this call"
+  },
+  "hKghfBWs4xUN96Si85EAus": {
+   "ended_by": "agent",
+   "media_seconds": 79.792,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "hNDmzZGTqo4Jm9Lt9emZgd": {
+   "ended_by": "agent",
+   "media_seconds": 136.507,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "iPFgi5qqowDhHxEE66H85W": {
+   "ended_by": "provider_stall",
+   "media_seconds": 49.742,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-n8cmuy26/salon-pipecat-flows-bot.log: LLM completion timeout, then CancelFrame(reason: idle timeout)"
+  },
+  "iSJyaJs8cpG2WpTmLKhfGr": {
+   "ended_by": "agent",
+   "media_seconds": 101.594,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "iWKTxx7Hn77NwQubcZsfUn": {
+   "ended_by": "agent",
+   "media_seconds": 131.799,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "j3aCXXq8CrcmUoQt2mBxAN": {
+   "ended_by": "caller",
+   "media_seconds": 172.05,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-ct8qvgfa/salon-pipecat-flows-bot.log (one call): client disconnected, then CancelFrame(reason: None)"
+  },
+  "jEisR2g6VdBaGZ9tjcX3b7": {
+   "ended_by": "agent",
+   "media_seconds": 114.966,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-3o1frxls/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "jVSqvfBN9hEhoByWo562eT": {
+   "ended_by": "agent",
+   "media_seconds": 96.737,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "kwUbc4PRZhe4Absq4yxScy": {
+   "ended_by": "agent",
+   "media_seconds": 132.235,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-j50t413s/salon-pipecat-flows-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "mgRcY7No7TyKpxwfUN9vPc": {
+   "ended_by": "agent",
+   "media_seconds": 118.71,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-psfjx6ae/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "mmsw4hwc8DUoWVH7hTpYCn": {
+   "ended_by": "agent",
+   "media_seconds": 91.47,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-__vaucsh/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "moerHWcoFRgXfVz2gMhZUg": {
+   "ended_by": "agent",
+   "media_seconds": 160.323,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-2lor699a/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "nY3wFz4ZxDQfCXvcFfX6MR": {
+   "ended_by": "agent",
+   "media_seconds": 153.229,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-qbmme80g/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "nnGmXURQxCYeELXcW46YBx": {
+   "ended_by": "agent",
+   "media_seconds": 108.298,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-3o1frxls/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "o4CAK59e9UhmZL8N3YvwUP": {
+   "ended_by": "agent",
+   "media_seconds": 86.695,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "oLSm3S8HZgguha44aENBMV": {
+   "ended_by": "agent",
+   "media_seconds": 87.19,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "oMcvAjjqhMH889sFrihCac": {
+   "ended_by": "agent",
+   "media_seconds": 148.413,
+   "observed": true,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: the pipeline closed on the application's EndFrame(reason: None), the agent's hang-up"
+  },
+  "oYjbYp4Q3kFvQokaswF2yH": {
+   "media_seconds": 89.537,
+   "source": "recording: Coval simulations audio; ending: bot log coval-sim-xb8lko4h/salon-bot.log: 3 pipeline closes around its failed hang-up request; none bound to it"
+  }
+ },
+ "reviews": {
+  "3CyVWZmpnotfM4nfdru2e2": {
+   "claims": [
+    {
+     "action": "moved",
+     "appointment": {
+      "date": "2026-10-03",
+      "time": "09:00:00"
+     }
+    }
+   ],
+   "final": {
+    "date": "2026-10-03",
+    "phone": "+34671273454",
+    "service": "haircut",
+    "time": "09:00:00"
+   },
+   "note": "book then move of the same BK0001: one appointment, not two",
+   "reviewer": "agent",
+   "source": "langfuse trace CA4fb153: tts, stt and write spans; closing claims: langfuse trace: the text each closing sent to speech (tts input), read 2026-09-26; words sent, not heard",
+   "writes": {
+    "confirm_customer@9": {
+     "note": "ambiguous: 'go ahead' to 'Have I got that right?'"
+    },
+    "save_booking@15": {
+     "accepted": false,
+     "note": "'silence underscore tool' is simulator tool noise, not a yes"
+    },
+    "save_booking@20": {
+     "accepted": true
+    }
+   }
+  },
+  "C26pPHK6Fkjz57N9bmZupD": {
+   "claims": [],
+   "final": {
+    "date": "2026-10-03",
+    "phone": "+34671273454",
+    "service": "haircut",
+    "time": "09:00:00"
+   },
+   "note": "yes 0.3 s into the Saturday read-back, then goodbye; the agent said only 'Goodbye!'",
+   "reviewer": "agent",
+   "source": "langfuse trace CA313860: tts, stt and write spans",
+   "writes": {
+    "lookup_customer@4": {
+     "accepted": true
+    }
+   }
+  },
+  "SB4GGMzURZEKaYgDf2RkdU": {
+   "claims": [
+    {
+     "action": "booked",
+     "appointment": {
+      "date": "2026-10-02",
+      "time": "09:00:00"
+     }
+    }
+   ],
+   "final": {
+    "date": "2026-10-02",
+    "phone": "+34671273454",
+    "service": "haircut",
+    "time": "09:00:00"
+   },
+   "reviewer": "agent",
+   "source": "langfuse trace CA41a566: tts, stt and write spans; closing claims: langfuse trace: the text each closing sent to speech (tts input), read 2026-09-26; words sent, not heard",
+   "writes": {
+    "book_appointment@7": {
+     "accepted": true
+    },
+    "lookup_customer@4": {
+     "accepted": true
+    }
+   }
+  },
+  "VuhAwZ3etdM8ERrZWMndxh": {
+   "claims": [
+    {
+     "action": "booked",
+     "appointment": {
+      "date": "2026-10-03",
+      "time": "09:00:00"
+     }
+    }
+   ],
+   "final": {
+    "date": "2026-10-03",
+    "phone": "+34671273454",
+    "service": "haircut",
+    "time": "09:00:00"
+   },
+   "reviewer": "agent",
+   "source": "langfuse trace CA941c5b: tts, stt and write spans; closing claims: langfuse trace: the text each closing sent to speech (tts input), read 2026-09-26; words sent, not heard",
+   "writes": {
+    "book_appointment@10": {
+     "accepted": true
+    },
+    "lookup_customer@5": {
+     "accepted": true
+    }
+   }
+  },
+  "YzkhPWRpDFUKuEmBWNmfrA": {
+   "claims": [
+    {
+     "action": "moved",
+     "appointment": {
+      "date": "2026-10-03",
+      "time": "09:00:00"
+     }
+    }
+   ],
+   "final": {
+    "date": "2026-10-03",
+    "phone": "+34671273454",
+    "service": "haircut",
+    "time": "09:00:00"
+   },
+   "note": "book then move of the same BK0001: one appointment, not two",
+   "reviewer": "agent",
+   "source": "langfuse trace CAa24472: tts, stt and write spans; closing claims: langfuse trace: the text each closing sent to speech (tts input), read 2026-09-26; words sent, not heard",
+   "writes": {
+    "confirm_customer@11": {
+     "accepted": true
+    },
+    "save_booking@14": {
+     "accepted": false,
+     "delivered": false,
+     "note": "'nine works for me thanks' 1.7 s into the read-back: a time pick, not a yes"
+    },
+    "save_booking@20": {
+     "note": "ambiguous: the caller repeated the pick, then 'that's great'"
+    }
+   }
+  },
+  "cYMMixAchYqsXAAFpLUccQ": {
+   "claims": [
+    {
+     "action": "booked",
+     "appointment": {
+      "date": "2026-10-02",
+      "service": "haircut",
+      "time": "09:00:00"
+     }
+    }
+   ],
+   "final": {
+    "date": "2026-10-02",
+    "phone": "+34671273454",
+    "service": "haircut",
+    "time": "09:00:00"
+   },
+   "note": "goodbye said 'your haircut is booked for Friday the 2nd'; only a lookup was written",
+   "reviewer": "agent",
+   "source": "langfuse trace CAc55c90: tts, stt and write spans; closing claims: langfuse trace: the text each closing sent to speech (tts input), read 2026-09-26; words sent, not heard",
+   "writes": {
+    "lookup_customer@4": {
+     "accepted": true
+    }
+   }
+  },
+  "fymMyWTiyz6eqfK3RwRTRX": {
+   "claims": [],
+   "note": "the runner took the bot down at 68 s; no day or time was chosen",
+   "reviewer": "agent",
+   "source": "langfuse trace CA09f5c0: tts, stt and write spans; recording not listened to",
+   "writes": {
+    "lookup_customer@4": {
+     "accepted": false,
+     "delivered": false,
+     "note": "read-back started 39.1 s; caller spoke 40.9 s repeating digits: not a yes, and 1.8 s cannot play the read-back"
+    }
+   }
+  },
+  "iPFgi5qqowDhHxEE66H85W": {
+   "claims": [],
+   "note": "no write; the model request at 43 s never returned",
+   "reviewer": "agent",
+   "source": "langfuse trace CAecf626 and the bot log"
+  },
+  "kwUbc4PRZhe4Absq4yxScy": {
+   "claims": [
+    {
+     "action": "booked",
+     "appointment": {
+      "date": "2026-10-03",
+      "time": "09:00:00"
+     }
+    }
+   ],
+   "final": {
+    "date": "2026-10-03",
+    "phone": "+34671273454",
+    "service": "haircut",
+    "time": "09:00:00"
+   },
+   "reviewer": "agent",
+   "source": "langfuse trace CA3bf045: tts, stt and write spans; closing claims: langfuse trace: the text each closing sent to speech (tts input), read 2026-09-26; words sent, not heard",
+   "writes": {
+    "confirm_customer@6": {
+     "accepted": false,
+     "delivered": false,
+     "note": "'that's' 0.7 s into the number read-back"
+    },
+    "save_booking@12": {
+     "accepted": true
+    }
+   }
+  }
+ }
+}

@@ -5,6 +5,13 @@ The automatic columns come from Langfuse and the write records; Coval scored not
 The review column is what reading the call showed. A booking is correct when it is on the day the caller
 finally chose. Calls longer than the run's limit are marked by the report, not failed by it.
 
+> **Erratum, 26 September 2026.** These columns come from the session-4 `load_report.py`, which counted
+> booking receipts as appointments, read a matching question label as consent, never checked native
+> `confirm_customer`, and read a trace span as the call's length. The review notes for `YzkhPWRp` and
+> `3CyVWZmp` ("booked Saturday as a second appointment") are wrong: each moved the same BK0001. `iPFgi5qq`
+> did not reach the limit: its recording is 49.7 s. The rows are kept as they were. The rescored calls are
+> in [session 4b](../session-4b/inventory.md) ([report](../session-4b-evaluator.md)).
+
 ## Complex stress, calls 1-2
 
 harness 044057e (call 1), 52eb245 (call 2); profile v1, 180 s. Exactly one booking: 1 of 2. Writes without a matching question: 0.

@@ -10,6 +10,9 @@ from pydantic import TypeAdapter
 
 from coval_sim.models import Agent, Persona, Run, Simulation
 
+PAGE = 100
+"""Simulations asked for per list call. The CLI's default page is 50 and it returns no next-page token."""
+
 
 class CovalError(RuntimeError):
     """A coval command failed."""
@@ -168,8 +171,12 @@ class CovalClient:
         """Every call in a run, each with its transcript.
 
         The list endpoint leaves the transcript out, so each call is read again.
+        A full page may not be the whole run, so it is refused rather than
+        judged as if it were: this tool's runs are far smaller than a page.
         """
-        listed = self._call('simulations', 'list', '--run-id', run_id) or []
+        listed = self._call('simulations', 'list', '--run-id', run_id, '--page-size', str(PAGE)) or []
+        if len(listed) >= PAGE:
+            raise CovalError(f'run {run_id} filled a page of {PAGE} simulations; the rest were not read')
         return [
             Simulation.model_validate(self._call('simulations', 'get', item['simulation_id']))
             for item in listed

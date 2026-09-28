@@ -1,0 +1,3926 @@
+[
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "PfmkB2LYQo45kmVSyKBxXP",
+  "call": "CA2a5b0fbdd6114df1bf44360a6ab9e349",
+  "status": "COMPLETED",
+  "span_seconds": 110.023,
+  "media_seconds": 110.283,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 5,
+    "turn": 6,
+    "heard": "Yes, please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@6: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@6: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@6: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@6: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@6: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@6: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 9,
+  "completed": 16,
+  "cancelled": 4,
+  "input_tokens": 32230,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 2,
+   "3": 1,
+   "5": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   1.1439929008483887,
+   1.0898191928863525,
+   1.2460451126098633,
+   1.8924939632415771,
+   1.171543836593628,
+   1.2869629859924316,
+   0.8051719665527344
+  ],
+  "requests": [
+   0.78,
+   0.815,
+   0.567,
+   0.422,
+   0.503,
+   0.566,
+   0.503,
+   0.826,
+   0.71,
+   0.809,
+   0.679,
+   0.786,
+   0.726,
+   0.861,
+   0.658,
+   0.79
+  ],
+  "tails": [
+   0.08599999999999997,
+   0.08400000000000002,
+   0.07600000000000001,
+   0.19700000000000006
+  ],
+  "statuses": {
+   "answered": 8
+  },
+  "pieces": 4,
+  "interrupted": 2,
+  "booked_after": 98.086,
+  "problems": [
+   "1 caller turn(s) with repeated holding lines"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "d7NTokufPyhwL875p7k7n8",
+  "call": "CA9ddef058a50f499aa57f556b224c764a",
+  "status": "COMPLETED",
+  "span_seconds": 93.027,
+  "media_seconds": 93.354,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes. That's. Correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes, please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes. That's. Correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes. That's. Correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 7,
+  "completed": 13,
+  "cancelled": 6,
+  "input_tokens": 26949,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   1.825387954711914,
+   0.9824111461639404,
+   2.783132314682007,
+   0.9136288166046143,
+   3.147905111312866,
+   1.0632240772247314
+  ],
+  "requests": [
+   0.574,
+   0.476,
+   0.527,
+   0.575,
+   0.722,
+   0.583,
+   0.818,
+   0.719,
+   0.745,
+   0.585,
+   0.657,
+   0.735
+  ],
+  "tails": [
+   0.09300000000000003,
+   0.2929999999999999
+  ],
+  "statuses": {
+   "answered": 6
+  },
+  "pieces": 5,
+  "interrupted": 1,
+  "booked_after": 79.965,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "Mo3fcHnBMh5uXDuWaytxHv",
+  "call": "CAeecbd31c816f431397fdc3dc8d0f8ac4",
+  "status": "COMPLETED",
+  "span_seconds": 125.094,
+  "media_seconds": 125.367,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 8,
+    "turn": 9,
+    "heard": "Yes.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@7: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@7: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@9: whether 'Yes.' accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@7: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@7: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@7: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@9: whether 'Yes.' accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@7: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 11,
+  "completed": 26,
+  "cancelled": 1,
+  "input_tokens": 50647,
+  "echo": [],
+  "filler_copies": 1,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "4": 1,
+   "6": 1,
+   "8": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > hand_over > text",
+   "hand_over > hand_over > text",
+   "hand_over > hand_over > text",
+   "hand_over > hand_over > text",
+   "text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   2.6456000804901123,
+   0.9515492916107178,
+   0.8724427223205566,
+   2.4589970111846924,
+   1.0081331729888916,
+   0.9969069957733154,
+   2.475900173187256,
+   1.0430090427398682,
+   2.6538209915161133,
+   1.3502099514007568
+  ],
+  "requests": [
+   0.608,
+   0.515,
+   0.602,
+   0.547,
+   0.558,
+   0.602,
+   0.64,
+   0.517,
+   0.715,
+   0.839,
+   0.556,
+   0.676,
+   0.589,
+   0.506,
+   0.525,
+   0.671,
+   0.658,
+   0.548,
+   0.648,
+   0.678,
+   0.702,
+   0.852,
+   0.541,
+   0.597
+  ],
+  "tails": [
+   0.08599999999999997,
+   0.07900000000000001,
+   0.119,
+   0.15100000000000002,
+   0.136,
+   0.10599999999999998,
+   0.030000000000000027,
+   0.14400000000000002
+  ],
+  "statuses": {
+   "answered": 11
+  },
+  "pieces": 3,
+  "interrupted": 1,
+  "booked_after": 111.584,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "P9rYzJjB3JymvmkB4oLx4P",
+  "call": "CA0692a6aaceab430e93bd0619d3846332",
+  "status": "COMPLETED",
+  "span_seconds": 80.862,
+  "media_seconds": 81.161,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes, please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 8,
+  "completed": 14,
+  "cancelled": 4,
+  "input_tokens": 28483,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   1.0170392990112305,
+   0.9734258651733398,
+   1.0339279174804688,
+   0.9698083400726318,
+   1.15926194190979,
+   0.9616050720214844,
+   1.1310441493988037
+  ],
+  "requests": [
+   0.572,
+   0.501,
+   0.43,
+   0.617,
+   0.547,
+   0.538,
+   0.59,
+   0.731,
+   0.618,
+   0.7,
+   0.698,
+   0.5,
+   0.609,
+   0.652
+  ],
+  "tails": [
+   0.08300000000000002,
+   0.19699999999999995
+  ],
+  "statuses": {
+   "answered": 6
+  },
+  "pieces": 3,
+  "interrupted": 2,
+  "booked_after": 69.709,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "B9u9WZdqbyCKATCsmQJszs",
+  "call": "CA2ada0f83ea71439f9be0f9568e96b871",
+  "status": "COMPLETED",
+  "span_seconds": 100.008,
+  "media_seconds": 100.331,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes, please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 7,
+  "completed": 13,
+  "cancelled": 4,
+  "input_tokens": 27122,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   0.9523561000823975,
+   1.189532995223999,
+   1.1953160762786865,
+   1.233572006225586,
+   2.8924052715301514,
+   2.5865890979766846
+  ],
+  "requests": [
+   0.651,
+   0.529,
+   0.937,
+   0.598,
+   0.646,
+   0.992,
+   0.432,
+   0.85,
+   0.849,
+   0.774,
+   0.798,
+   0.725
+  ],
+  "tails": [
+   0.29400000000000004,
+   0.0
+  ],
+  "statuses": {
+   "answered": 6
+  },
+  "pieces": 2,
+  "interrupted": 1,
+  "booked_after": 87.151,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "EWcngw68AMEMumChPCuAyV",
+  "call": "CAa5360d9813c643338b530964d6e81bfc",
+  "status": "COMPLETED",
+  "span_seconds": 158.533,
+  "media_seconds": 158.833,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes, that's right.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "Yes, please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@5: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@5: whether \"Yes, that's right.\" accepted the proposal (not reviewed)",
+    "book_appointment@7: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@7: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@7: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@5: whether \"Yes, that's right.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@7: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@7: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@7: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 10,
+  "completed": 15,
+  "cancelled": 5,
+  "input_tokens": 30014,
+  "echo": [],
+  "filler_copies": 1,
+  "holding": {
+   "1": 1,
+   "3": 1,
+   "4": 1
+  },
+  "chains": {},
+  "patterns": [
+   "collect+hand_over > text",
+   "collect+lookup_customer",
+   "lookup_customer",
+   "hand_over > hand_over > text",
+   "hand_over > hand_over",
+   "lookup_customer > options > text",
+   "book_appointment+collect",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   1.0281243324279785,
+   1.1824402809143066,
+   3.150131940841675,
+   1.2733843326568604,
+   2.8120360374450684,
+   1.7733640670776367,
+   1.2729549407958984,
+   1.195958137512207
+  ],
+  "requests": [
+   0.768,
+   0.517,
+   0.592,
+   0.718,
+   0.82,
+   0.578,
+   0.736,
+   0.682,
+   0.763,
+   0.718,
+   0.603,
+   0.756,
+   0.708,
+   0.652,
+   0.921
+  ],
+  "tails": [
+   0.062,
+   0.09799999999999998,
+   0.22999999999999998
+  ],
+  "statuses": {
+   "answered": 9
+  },
+  "pieces": 6,
+  "interrupted": 2,
+  "booked_after": 139.637,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "eiabwX4CnDyEApeYCYLrmZ",
+  "call": "CA2b286eac2f3244e18b9d2859de87e788",
+  "status": "COMPLETED",
+  "span_seconds": 87.03,
+  "media_seconds": 87.27,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes. That's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes. Please.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@5: whether 'Yes. Please.' accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@5: whether 'Yes. Please.' accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 8,
+  "completed": 14,
+  "cancelled": 5,
+  "input_tokens": 29094,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   2.692570209503174,
+   1.377251148223877,
+   1.1020941734313965,
+   1.0587446689605713,
+   0.9794681072235107,
+   1.1860029697418213,
+   1.0996689796447754
+  ],
+  "requests": [
+   0.613,
+   0.511,
+   0.591,
+   0.659,
+   0.677,
+   0.523,
+   0.587,
+   0.589,
+   0.804,
+   0.921,
+   0.498,
+   0.75,
+   0.734
+  ],
+  "tails": [
+   0.10299999999999998,
+   0.0
+  ],
+  "statuses": {
+   "answered": 7
+  },
+  "pieces": 5,
+  "interrupted": 2,
+  "booked_after": 73.791,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "5ymkGHedR7ymahxecRmXvx",
+  "call": "CA3253d32f0eac4fe6a4cbc2c74a685cb2",
+  "status": "COMPLETED",
+  "span_seconds": 119.734,
+  "media_seconds": 119.994,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "Yes. Please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@5: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@5: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@7: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@7: whether \"Yes. Please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@7: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@5: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@7: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@7: whether \"Yes. Please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@7: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 10,
+  "completed": 19,
+  "cancelled": 4,
+  "input_tokens": 37592,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1,
+   "6": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "text",
+   "text",
+   "text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.415226936340332,
+   1.2022242546081543,
+   0.8859841823577881,
+   0.8884599208831787,
+   1.9402387142181396,
+   1.1383519172668457,
+   2.0081748962402344
+  ],
+  "requests": [
+   0.474,
+   0.569,
+   0.501,
+   0.583,
+   0.492,
+   0.762,
+   0.791,
+   0.532,
+   0.575,
+   0.764,
+   0.573,
+   0.854,
+   0.827,
+   0.76,
+   0.81,
+   0.713,
+   0.758,
+   0.462
+  ],
+  "tails": [
+   0.07200000000000001,
+   0.07900000000000001,
+   0.15400000000000003,
+   0.21200000000000008,
+   0.07099999999999995,
+   0.241
+  ],
+  "statuses": {
+   "answered": 10
+  },
+  "pieces": 6,
+  "interrupted": 2,
+  "booked_after": 107.25,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "Xq23dg3Gkyh5hNqxBbvK7e",
+  "call": "CA145b809119504a9294bbe1d06f256209",
+  "status": "COMPLETED",
+  "span_seconds": 97.03,
+  "media_seconds": 97.295,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes, please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@5: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 10,
+  "completed": 16,
+  "cancelled": 8,
+  "input_tokens": 33142,
+  "echo": [
+   "lookup_customer: One moment."
+  ],
+  "filler_copies": 1,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.625281810760498,
+   0.9720008373260498,
+   0.7807202339172363,
+   0.9226889610290527,
+   1.8894469738006592,
+   3.6914210319519043,
+   1.1620252132415771,
+   0.9109570980072021,
+   0.8986942768096924
+  ],
+  "requests": [
+   0.76,
+   0.601,
+   0.589,
+   0.437,
+   0.474,
+   0.529,
+   0.577,
+   0.64,
+   0.527,
+   0.736,
+   0.783,
+   0.56,
+   0.768,
+   0.838,
+   0.807
+  ],
+  "tails": [
+   0.119,
+   0.09199999999999997,
+   0.21199999999999997
+  ],
+  "statuses": {
+   "answered": 6
+  },
+  "pieces": 3,
+  "interrupted": 4,
+  "booked_after": 79.411,
+  "problems": [
+   "1 reply(s) spoke beside an operation"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "bV22oPLohTsYUqCWBXpzNz",
+  "simulation": "Ua6tdL8NZyT7oL5sjLSwnZ",
+  "call": "CAaaabdff7f9d04933a095e1dfd2628274",
+  "status": "COMPLETED",
+  "span_seconds": 93.048,
+  "media_seconds": 93.295,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 4,
+    "turn": 5,
+    "heard": "Yes. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@5: whether \"Yes. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@5: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@5: whether \"Yes. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@5: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 8,
+  "completed": 14,
+  "cancelled": 7,
+  "input_tokens": 29327,
+  "echo": [
+   "lookup_customer: Let's verify. I have +34 671 273 454. Is that right?",
+   "book_appointment: Let me check the diary."
+  ],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "4": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.580054998397827,
+   1.0834641456604004,
+   1.2605540752410889,
+   0.9867968559265137,
+   2.6548171043395996,
+   1.9980969429016113,
+   3.3881289958953857
+  ],
+  "requests": [
+   0.677,
+   0.82,
+   0.724,
+   0.581,
+   0.572,
+   0.825,
+   0.595,
+   0.437,
+   0.697,
+   0.737,
+   0.63,
+   0.934,
+   0.826
+  ],
+  "tails": [
+   0.07499999999999996,
+   0.21999999999999997,
+   0.0,
+   0.11099999999999999
+  ],
+  "statuses": {
+   "answered": 6
+  },
+  "pieces": 3,
+  "interrupted": 2,
+  "booked_after": 81.766,
+  "problems": [
+   "2 reply(s) spoke beside an operation"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "hNDmzZGTqo4Jm9Lt9emZgd",
+  "call": "CA646280cc768c4e5b84218aab8256d032",
+  "status": "COMPLETED",
+  "span_seconds": 136.036,
+  "media_seconds": 136.507,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "Yes. That's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, tomorrow at 9:00 AM?",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "Yes, please 9:00 AM tomorrow is great.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-09-26T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "tomorrow at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "tomorrow at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-09-26",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@4: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@7: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@7: whether 'Yes, please 9:00 AM tomorrow is great.' accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@7: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@4: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@7: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@7: whether 'Yes, please 9:00 AM tomorrow is great.' accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@7: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 12,
+  "completed": 24,
+  "cancelled": 6,
+  "input_tokens": 58637,
+  "echo": [
+   "lookup_customer: One moment.",
+   "book_appointment: One moment.Shall I book you in for a haircut, tomorrow at 9:00 AM?"
+  ],
+  "filler_copies": 4,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "5": 2,
+   "6": 2
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 2
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "collect > options > text",
+   "collect > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.7301321029663086,
+   0.9488518238067627,
+   1.096595048904419,
+   1.0379483699798584,
+   1.2483062744140625,
+   1.3226571083068848,
+   1.0635480880737305,
+   1.1913180351257324,
+   1.030113935470581,
+   0.9149019718170166,
+   2.5100462436676025
+  ],
+  "requests": [
+   0.664,
+   0.541,
+   0.789,
+   0.911,
+   0.692,
+   0.635,
+   0.785,
+   0.792,
+   0.519,
+   0.581,
+   0.553,
+   0.612,
+   0.624,
+   0.848,
+   0.685,
+   0.685,
+   0.653,
+   0.584,
+   0.775,
+   0.527,
+   0.601,
+   0.523,
+   0.674
+  ],
+  "tails": [
+   0.127,
+   0.1409999999999999,
+   0.18200000000000005,
+   0.18599999999999994,
+   0.134,
+   0.15600000000000003,
+   0.09699999999999998,
+   0.16400000000000003,
+   0.125
+  ],
+  "statuses": {
+   "answered": 11
+  },
+  "pieces": 6,
+  "interrupted": 4,
+  "booked_after": 116.986,
+  "problems": [
+   "2 reply(s) spoke beside an operation",
+   "2 caller turn(s) with repeated holding lines"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "S5u6D2uTe5ko4ZecS4fD6E",
+  "call": "CAde8a3dd924cb430a8dfbc4a246c92f10",
+  "status": "COMPLETED",
+  "span_seconds": 159.105,
+  "media_seconds": 159.449,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?",
+    "asked_turn": 8,
+    "turn": 9,
+    "heard": "Yes, please, that's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-03T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Saturday the 3rd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-03",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@9: whether \"Yes, please, that's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@9: whether \"Yes, please, that's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 14,
+  "completed": 25,
+  "cancelled": 5,
+  "input_tokens": 64558,
+  "echo": [
+   "lookup_customer: Let me have a look.",
+   "book_appointment: Let me have a look.Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?"
+  ],
+  "filler_copies": 4,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "5": 1,
+   "6": 1,
+   "7": 1,
+   "8": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 2
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "collect > options > text",
+   "collect > options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.6227359771728516,
+   1.050955057144165,
+   1.4947621822357178,
+   1.7986462116241455,
+   1.1887941360473633,
+   1.1855840682983398,
+   1.2471752166748047,
+   1.278578281402588,
+   0.9096100330352783,
+   1.2311089038848877,
+   1.2474470138549805,
+   1.0021171569824219
+  ],
+  "requests": [
+   0.804,
+   0.657,
+   0.655,
+   0.804,
+   0.516,
+   0.856,
+   0.54,
+   0.53,
+   0.787,
+   0.464,
+   0.704,
+   0.521,
+   0.631,
+   0.509,
+   0.733,
+   0.862,
+   0.62,
+   0.897,
+   0.519,
+   0.773,
+   0.954,
+   0.753,
+   0.704,
+   0.828,
+   0.72
+  ],
+  "tails": [
+   0.09599999999999997,
+   0.064,
+   0.08000000000000002,
+   0.16099999999999992,
+   0.19299999999999995,
+   0.139,
+   0.08700000000000002,
+   0.19800000000000006,
+   0.30499999999999994,
+   0.19799999999999995
+  ],
+  "statuses": {
+   "answered": 13
+  },
+  "pieces": 7,
+  "interrupted": 4,
+  "booked_after": 146.379,
+  "problems": [
+   "2 reply(s) spoke beside an operation"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "Khs7tVuSX4b8Pwghtxz3jX",
+  "call": "CAa4df9080030e4c0ebad7456396636c26",
+  "status": "IN PROGRESS",
+  "span_seconds": 180.398,
+  "media_seconds": null,
+  "writes": [],
+  "bookings": [],
+  "active": [],
+  "applied": [],
+  "first_booking": null,
+  "unmatched": [],
+  "outcome": {
+   "verdict": "fail",
+   "failed": [
+    "0 active appointment(s), 1 requested"
+   ],
+   "unknown": [],
+   "basis": []
+  },
+  "authorization": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "no write needed a yes"
+   ]
+  },
+  "delivery": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "no proposal authorised a write"
+   ]
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "call IN PROGRESS: not finished",
+    "how the call ended: not measured (the trace span, 180 s, is not its length)"
+   ],
+   "basis": []
+  },
+  "missing": [
+   "completion: what the agent said it had done: its closing was not reviewed",
+   "operational: call IN PROGRESS: not finished",
+   "operational: how the call ended: not measured (the trace span, 180 s, is not its length)"
+  ],
+  "caller_turns": 3,
+  "completed": 5,
+  "cancelled": 3,
+  "input_tokens": 6610,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1
+  },
+  "chains": {},
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text"
+  ],
+  "latency": [
+   1.159419059753418,
+   1.4077599048614502
+  ],
+  "requests": [
+   0.864,
+   0.806,
+   0.666,
+   0.799,
+   0.75
+  ],
+  "tails": [
+   0.21300000000000002,
+   0.14200000000000002
+  ],
+  "statuses": {
+   "answered": 2
+  },
+  "pieces": 2,
+  "interrupted": 0,
+  "booked_after": null,
+  "problems": [],
+  "verdict": "fail"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "moerHWcoFRgXfVz2gMhZUg",
+  "call": "CAb4e769a524894501a2a0b444b8cf3fdf",
+  "status": "COMPLETED",
+  "span_seconds": 160.089,
+  "media_seconds": 160.323,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes, that's right.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?",
+    "asked_turn": 7,
+    "turn": 8,
+    "heard": "Yes, please, Saturday the 3rd. At 9:00 AM. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-03T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Saturday the 3rd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-03",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes, that's right.\" accepted the proposal (not reviewed)",
+    "book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@8: whether \"Yes, please, Saturday the 3rd. At 9:00 AM. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes, that's right.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@8: whether \"Yes, please, Saturday the 3rd. At 9:00 AM. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 15,
+  "completed": 25,
+  "cancelled": 6,
+  "input_tokens": 64800,
+  "echo": [
+   "lookup_customer: Let me have a look.",
+   "book_appointment: One moment.Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?"
+  ],
+  "filler_copies": 4,
+  "holding": {
+   "1": 1,
+   "2": 2,
+   "4": 1,
+   "5": 1,
+   "6": 1,
+   "7": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 2
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "collect > options > text",
+   "collect > options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   1.2171988487243652,
+   0.9661149978637695,
+   1.2225100994110107,
+   1.0187897682189941,
+   1.2307629585266113,
+   0.8962879180908203,
+   1.0669841766357422,
+   1.1176648139953613,
+   0.5349547863006592,
+   1.2242372035980225,
+   1.137450933456421,
+   1.0540509223937988,
+   0.9945840835571289
+  ],
+  "requests": [
+   0.596,
+   0.805,
+   0.639,
+   0.659,
+   0.452,
+   0.746,
+   0.701,
+   0.669,
+   0.487,
+   0.545,
+   0.578,
+   0.622,
+   0.47,
+   0.717,
+   0.802,
+   0.804,
+   0.787,
+   0.72,
+   0.57,
+   0.734,
+   0.818,
+   0.636,
+   0.671,
+   0.72
+  ],
+  "tails": [
+   0.11599999999999999,
+   0.062,
+   0.21199999999999997,
+   0.10299999999999998,
+   0.18100000000000005,
+   0.2230000000000001,
+   0.14800000000000002,
+   0.15099999999999997,
+   0.19499999999999995,
+   0.174
+  ],
+  "statuses": {
+   "answered": 14
+  },
+  "pieces": 11,
+  "interrupted": 6,
+  "booked_after": 138.253,
+  "problems": [
+   "2 reply(s) spoke beside an operation",
+   "1 caller turn(s) with repeated holding lines"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "adbR6DRYyMhDLayhpookKD",
+  "call": "CA4a3a5d37f576468eb052f88cf06fc11e",
+  "status": "COMPLETED",
+  "span_seconds": 156.288,
+  "media_seconds": 156.81,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, tomorrow at 9:00 AM?",
+    "asked_turn": 7,
+    "turn": 8,
+    "heard": "Yes. Please 09:00 tomorrow is perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-09-26T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "tomorrow at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "tomorrow at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-09-26",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@8: whether 'Yes. Please 09:00 tomorrow is perfect.' accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@8: whether 'Yes. Please 09:00 tomorrow is perfect.' accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 14,
+  "completed": 26,
+  "cancelled": 8,
+  "input_tokens": 67944,
+  "echo": [
+   "lookup_customer: Let me have a look.",
+   "book_appointment: Let me have a look.Shall I book you in for a haircut, tomorrow at 9:00 AM?"
+  ],
+  "filler_copies": 3,
+  "holding": {
+   "1": 1,
+   "2": 2,
+   "4": 1,
+   "5": 1,
+   "6": 1,
+   "7": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 2
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "collect > options > text",
+   "options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   0.9851791858673096,
+   1.2689728736877441,
+   1.2328331470489502,
+   1.0937559604644775,
+   2.4719910621643066,
+   1.193490982055664,
+   2.6004021167755127,
+   0.9571659564971924,
+   1.2260160446166992,
+   1.3996353149414062,
+   2.8861629962921143,
+   1.4727098941802979,
+   0.8736481666564941
+  ],
+  "requests": [
+   0.537,
+   0.938,
+   0.468,
+   0.432,
+   0.512,
+   0.697,
+   0.558,
+   0.746,
+   0.568,
+   0.539,
+   0.895,
+   0.787,
+   0.446,
+   0.704,
+   0.591,
+   0.765,
+   0.595,
+   0.874,
+   0.606,
+   1.774,
+   0.893,
+   0.695,
+   0.663,
+   0.718,
+   0.919
+  ],
+  "tails": [
+   0.07,
+   0.08100000000000002,
+   0.10200000000000004,
+   0.12799999999999995,
+   0.08999999999999997,
+   0.15400000000000003,
+   0.07499999999999996,
+   0.05700000000000005,
+   0.18400000000000005
+  ],
+  "statuses": {
+   "answered": 12
+  },
+  "pieces": 8,
+  "interrupted": 5,
+  "booked_after": 137.103,
+  "problems": [
+   "2 reply(s) spoke beside an operation",
+   "1 caller turn(s) with repeated holding lines"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "gDaxFqvxHWCiaAQF8kGuwJ",
+  "call": "CAbea1783f0f914997896cd3e653a226f6",
+  "status": "COMPLETED",
+  "span_seconds": 161.891,
+  "media_seconds": 162.233,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes. That's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?",
+    "asked_turn": 7,
+    "turn": 8,
+    "heard": "Yes, that's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-03T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Saturday the 3rd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-03",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@8: whether \"Yes, that's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@8: whether \"Yes, that's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 15,
+  "completed": 24,
+  "cancelled": 11,
+  "input_tokens": 61832,
+  "echo": [
+   "book_appointment: Let me have a look."
+  ],
+  "filler_copies": 3,
+  "holding": {
+   "1": 1,
+   "2": 2,
+   "4": 1,
+   "5": 1,
+   "6": 1,
+   "7": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 2
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "collect > options > text",
+   "collect > options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "",
+   "",
+   "goodbye"
+  ],
+  "latency": [
+   0.4212830066680908,
+   0.7920129299163818,
+   1.0857033729553223,
+   0.45639491081237793,
+   1.0856220722198486,
+   1.5936191082000732,
+   1.4181928634643555,
+   1.0738930702209473,
+   1.0067050457000732,
+   1.1098530292510986,
+   2.5944061279296875,
+   1.1258230209350586
+  ],
+  "requests": [
+   0.621,
+   0.581,
+   0.523,
+   0.445,
+   0.518,
+   0.513,
+   0.433,
+   0.475,
+   0.521,
+   0.731,
+   0.675,
+   0.418,
+   0.739,
+   0.775,
+   0.658,
+   0.8,
+   0.608,
+   0.799,
+   0.726,
+   0.764,
+   0.623,
+   0.835,
+   0.855,
+   0.843
+  ],
+  "tails": [
+   0.08100000000000002,
+   0.08000000000000002,
+   0.18799999999999994,
+   0.125,
+   0.19000000000000006,
+   0.19700000000000006,
+   0.16499999999999992,
+   0.17900000000000005,
+   0.1519999999999999
+  ],
+  "statuses": {
+   "answered": 14
+  },
+  "pieces": 12,
+  "interrupted": 6,
+  "booked_after": 144.771,
+  "problems": [
+   "1 reply(s) spoke beside an operation",
+   "1 caller turn(s) with repeated holding lines"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "DXhP49VMJmuiJUXbqJ5KGp",
+  "call": "CA1c9d886e11ee43319faf5082f03b8585",
+  "status": "COMPLETED",
+  "span_seconds": 147.137,
+  "media_seconds": 147.383,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?",
+    "asked_turn": 8,
+    "turn": 9,
+    "heard": "Yes, please book me in for Saturday the 3rd at 9 in the morning.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-03T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Saturday the 3rd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Saturday the 3rd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-03",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@9: whether 'Yes, please book me in for Saturday the 3rd at 9 in the morning.' accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@9: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@9: whether 'Yes, please book me in for Saturday the 3rd at 9 in the morning.' accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@9: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 15,
+  "completed": 26,
+  "cancelled": 7,
+  "input_tokens": 67266,
+  "echo": [
+   "lookup_customer: Let me have a look.",
+   "book_appointment: Let me have a look.Shall I book you in for a haircut, Saturday the 3rd at 9:00 AM?"
+  ],
+  "filler_copies": 4,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "5": 1,
+   "6": 1,
+   "7": 1,
+   "8": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 2
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer",
+   "lookup_customer > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "collect > options > text",
+   "collect > options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   2.7861127853393555,
+   1.0205261707305908,
+   1.026597023010254,
+   1.0605661869049072,
+   0.9790351390838623,
+   2.5430848598480225,
+   1.1298260688781738,
+   1.063234806060791,
+   0.9169270992279053,
+   1.051910400390625,
+   0.9714682102203369,
+   0.9674170017242432,
+   1.1560642719268799
+  ],
+  "requests": [
+   0.505,
+   0.49,
+   0.598,
+   0.577,
+   0.514,
+   0.67,
+   0.657,
+   0.521,
+   0.642,
+   0.533,
+   0.641,
+   0.91,
+   0.52,
+   0.651,
+   0.68,
+   0.695,
+   0.739,
+   0.576,
+   0.505,
+   0.493,
+   0.525,
+   0.693,
+   1.183,
+   0.592,
+   0.565
+  ],
+  "tails": [
+   0.10399999999999998,
+   0.09100000000000003,
+   0.121,
+   0.127,
+   0.08799999999999997,
+   0.17999999999999994,
+   0.09100000000000003,
+   0.10099999999999998,
+   0.07900000000000001,
+   0.526
+  ],
+  "statuses": {
+   "answered": 13
+  },
+  "pieces": 8,
+  "interrupted": 5,
+  "booked_after": 131.462,
+  "problems": [
+   "2 reply(s) spoke beside an operation"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "U263nHKdGkUbV5BGDuDNym",
+  "call": "CA84b79b1726d343f6b64f6584c96dcdca",
+  "status": "COMPLETED",
+  "span_seconds": 139.229,
+  "media_seconds": 139.359,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 3,
+    "turn": 4,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, tomorrow at 9:00 AM?",
+    "asked_turn": 7,
+    "turn": 8,
+    "heard": "Yes. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-09-26T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "tomorrow at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "tomorrow at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-09-26",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@8: whether \"Yes. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "ended by caller: inferred, not an observed event"
+   ],
+   "basis": []
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@4: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@4: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@8: whether \"Yes. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@4: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed",
+   "operational: ended by caller: inferred, not an observed event"
+  ],
+  "caller_turns": 14,
+  "completed": 25,
+  "cancelled": 10,
+  "input_tokens": 63928,
+  "echo": [
+   "book_appointment: Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+   "book_appointment: Shall I book you in for a haircut, tomorrow at 9:00 AM?"
+  ],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 1,
+   "5": 1,
+   "6": 1,
+   "7": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 1,
+   "collect > book_appointment": 2
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer",
+   "lookup_customer > collect > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "book_appointment",
+   "collect > options > text",
+   "collect > book_appointment",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   0.8947339057922363,
+   1.0892322063446045,
+   1.048102855682373,
+   1.2145590782165527,
+   1.0235378742218018,
+   0.8669519424438477,
+   1.2501931190490723,
+   1.1204259395599365,
+   2.918678045272827,
+   1.1847598552703857,
+   1.276116132736206,
+   1.1113312244415283
+  ],
+  "requests": [
+   0.784,
+   0.612,
+   0.604,
+   0.83,
+   0.676,
+   0.509,
+   0.426,
+   0.545,
+   0.731,
+   0.894,
+   0.624,
+   0.607,
+   0.694,
+   0.779,
+   0.88,
+   0.749,
+   0.658,
+   0.779,
+   0.707,
+   0.953,
+   0.469,
+   0.788,
+   0.502,
+   0.707,
+   0.859
+  ],
+  "tails": [
+   0.06499999999999995,
+   0.19200000000000006,
+   0.14099999999999996,
+   0.254,
+   0.1529999999999999,
+   0.066
+  ],
+  "statuses": {
+   "answered": 12
+  },
+  "pieces": 11,
+  "interrupted": 5,
+  "booked_after": 129.906,
+  "problems": [
+   "2 reply(s) spoke beside an operation"
+  ],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "6DooWPckR4Ex7r49HjrnqQ",
+  "call": "CA8db0007042c64786a91df1aca95cc64e",
+  "status": "COMPLETED",
+  "span_seconds": 131.697,
+  "media_seconds": 131.976,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 2,
+    "turn": 3,
+    "heard": "Yes. That's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, tomorrow at 9:00 AM?",
+    "asked_turn": 7,
+    "turn": 8,
+    "heard": "Yes, please. That's perfect.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-09-26T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "tomorrow at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "tomorrow at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-09-26",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@3: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@8: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "pass",
+   "failed": [],
+   "unknown": [],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@3: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@3: whether \"Yes. That's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@8: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@8: whether \"Yes, please. That's perfect.\" accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@3: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@8: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed"
+  ],
+  "caller_turns": 14,
+  "completed": 21,
+  "cancelled": 6,
+  "input_tokens": 54947,
+  "echo": [],
+  "filler_copies": 0,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "5": 1,
+   "6": 1
+  },
+  "chains": {},
+  "patterns": [
+   "collect+hand_over > text",
+   "collect > text",
+   "collect+lookup_customer",
+   "lookup_customer > options > text",
+   "book_appointment+collect",
+   "text",
+   "book_appointment",
+   "text",
+   "collect > options > text",
+   "options > text",
+   "book_appointment+collect",
+   "book_appointment",
+   "goodbye"
+  ],
+  "latency": [
+   0.9313251972198486,
+   1.1147987842559814,
+   0.9213178157806396,
+   1.2267329692840576,
+   1.232187032699585,
+   1.0199038982391357,
+   1.2654812335968018,
+   3.371192216873169,
+   1.1323039531707764,
+   1.1358511447906494,
+   3.0451600551605225
+  ],
+  "requests": [
+   0.816,
+   0.589,
+   0.782,
+   0.658,
+   0.454,
+   0.759,
+   0.577,
+   0.601,
+   0.659,
+   0.632,
+   0.434,
+   0.486,
+   0.769,
+   0.624,
+   0.652,
+   0.635,
+   0.522,
+   0.589,
+   0.72,
+   0.751,
+   0.663
+  ],
+  "tails": [
+   0.119,
+   0.121,
+   0.12,
+   0.139,
+   0.063,
+   0.14100000000000001,
+   0.15299999999999997
+  ],
+  "statuses": {
+   "answered": 13
+  },
+  "pieces": 9,
+  "interrupted": 5,
+  "booked_after": 114.164,
+  "problems": [],
+  "verdict": "unknown"
+ },
+ {
+  "run": "3hZu7PPkjgn2RyzVVnC8A2",
+  "simulation": "UD4fMgUZJCFBaGrijoAyBz",
+  "call": "CAba8a1c89535d4e8392d855616d83ee38",
+  "status": "COMPLETED",
+  "span_seconds": 180.437,
+  "media_seconds": 180.708,
+  "writes": [
+   {
+    "action": "lookup_customer",
+    "status": "ok",
+    "about": "lookup_customer",
+    "question": "Let me read that back to you: +34 671 27 34 54. Have I got that right?",
+    "asked_turn": 6,
+    "turn": 7,
+    "heard": "Yes, that's correct.",
+    "args": {
+     "phone": "+34671273454"
+    },
+    "receipt": {
+     "customer_status": "created",
+     "customer_phone": "+34671273454"
+    }
+   },
+   {
+    "action": "book_appointment",
+    "status": "ok",
+    "about": "book_appointment",
+    "question": "Shall I book you in for a haircut, Friday the 2nd at 9:00 AM?",
+    "asked_turn": 9,
+    "turn": 10,
+    "heard": "Yes. That works for me.",
+    "args": {
+     "phone": "+34671273454",
+     "slot": "2026-10-02T0900|haircut"
+    },
+    "receipt": {
+     "status": "booked",
+     "phone": "+34671273454",
+     "booking_id": "BK0001",
+     "service": "haircut",
+     "spoken": "Friday the 2nd at 9:00 AM",
+     "service_spoken": "haircut",
+     "reason": ""
+    }
+   }
+  ],
+  "bookings": [
+   "Friday the 2nd at 9:00 AM"
+  ],
+  "active": [
+   {
+    "service": "haircut",
+    "date": "2026-10-02",
+    "time": "09:00:00",
+    "phone": "+34671273454"
+   }
+  ],
+  "applied": [
+   "book BK0001"
+  ],
+  "first_booking": "BK0001",
+  "unmatched": [],
+  "outcome": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "the final day, time and number asked for: not reviewed"
+   ],
+   "basis": [
+    "deterministic"
+   ]
+  },
+  "authorization": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@7: which arguments its read-back named (no proposal_args in its audit)",
+    "lookup_customer@7: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+    "book_appointment@10: which arguments its read-back named (no proposal_args in its audit)",
+    "book_appointment@10: whether 'Yes. That works for me.' accepted the proposal (not reviewed)"
+   ],
+   "basis": []
+  },
+  "delivery": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "lookup_customer@7: no evidence the proposal played in full (the runtime estimate is not)",
+    "book_appointment@10: no evidence the proposal played in full (the runtime estimate is not)"
+   ],
+   "basis": []
+  },
+  "completion": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "what the agent said it had done: its closing was not reviewed"
+   ],
+   "basis": []
+  },
+  "operational": {
+   "verdict": "unknown",
+   "failed": [],
+   "unknown": [
+    "how the call ended: not measured (the trace span, 180 s, is not its length)"
+   ],
+   "basis": []
+  },
+  "missing": [
+   "outcome: the final day, time and number asked for: not reviewed",
+   "authorization: lookup_customer@7: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: lookup_customer@7: whether \"Yes, that's correct.\" accepted the proposal (not reviewed)",
+   "authorization: book_appointment@10: which arguments its read-back named (no proposal_args in its audit)",
+   "authorization: book_appointment@10: whether 'Yes. That works for me.' accepted the proposal (not reviewed)",
+   "delivery: lookup_customer@7: no evidence the proposal played in full (the runtime estimate is not)",
+   "delivery: book_appointment@10: no evidence the proposal played in full (the runtime estimate is not)",
+   "completion: what the agent said it had done: its closing was not reviewed",
+   "operational: how the call ended: not measured (the trace span, 180 s, is not its length)"
+  ],
+  "caller_turns": 16,
+  "completed": 30,
+  "cancelled": 5,
+  "input_tokens": 78541,
+  "echo": [
+   "lookup_customer: One moment.",
+   "lookup_customer: Let me have a look.One moment.Let me read that back to you: +34 671 27 34 54. Is that right?",
+   "move_appointment: One moment.Shall I move your haircut from Friday the 2nd at 9:00 AM to tomorrow at 9:00 AM?"
+  ],
+  "filler_copies": 7,
+  "holding": {
+   "1": 1,
+   "2": 1,
+   "3": 2,
+   "4": 1,
+   "5": 2,
+   "6": 1,
+   "9": 1,
+   "11": 1,
+   "12": 1
+  },
+  "chains": {
+   "collect > lookup_customer": 2,
+   "collect > book_appointment": 1,
+   "collect > move_appointment": 1
+  },
+  "patterns": [
+   "collect > hand_over > text",
+   "collect > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "collect > text",
+   "collect > text",
+   "collect > text",
+   "collect > lookup_customer",
+   "lookup_customer > options > text",
+   "text",
+   "collect > book_appointment",
+   "book_appointment",
+   "collect > options > text",
+   "text",
+   "collect > move_appointment"
+  ],
+  "latency": [
+   1.4098901748657227,
+   1.2037920951843262,
+   1.1202301979064941,
+   1.1290111541748047,
+   1.0139291286468506,
+   1.1671521663665771,
+   1.1463720798492432,
+   1.3834848403930664,
+   0.9324941635131836,
+   0.9833259582519531,
+   2.4802849292755127,
+   1.2804789543151855,
+   1.1548340320587158,
+   1.1344702243804932
+  ],
+  "requests": [
+   0.788,
+   0.73,
+   0.826,
+   0.636,
+   0.498,
+   0.621,
+   0.741,
+   0.738,
+   0.605,
+   0.792,
+   0.809,
+   0.726,
+   0.51,
+   0.748,
+   0.581,
+   0.566,
+   0.924,
+   0.825,
+   0.412,
+   0.781,
+   0.648,
+   0.583,
+   0.664,
+   0.858,
+   0.544,
+   0.714,
+   0.726,
+   0.861,
+   0.741,
+   0.843
+  ],
+  "tails": [
+   0.16699999999999993,
+   0.062,
+   0.16700000000000004,
+   0.118,
+   0.1160000000000001,
+   0.09100000000000003,
+   0.08499999999999996,
+   0.246,
+   0.265,
+   0.118,
+   0.18999999999999995,
+   0.17399999999999993,
+   0.15799999999999992
+  ],
+  "statuses": {
+   "answered": 15
+  },
+  "pieces": 7,
+  "interrupted": 5,
+  "booked_after": 134.012,
+  "problems": [
+   "3 reply(s) spoke beside an operation",
+   "2 caller turn(s) with repeated holding lines"
+  ],
+  "verdict": "unknown"
+ }
+]

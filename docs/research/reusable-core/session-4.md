@@ -1,5 +1,21 @@
 # Session 4: one agent per node, tested live
 
+> **Erratum, 26 September 2026.** Several figures below overstate what the evidence shows. The text below is kept as written. The corrections, with their evidence, are in [session 4b, stage A](session-4b-evaluator.md), [the rescored inventory](session-4b/inventory.md) and [the independent review](session-4-review.md):
+>
+> - **140 calls:** 140 were authorised and **138 placed**: 120 harness, 18 native. Two native interruptive calls were never placed.
+> - **"Wrong bookings: 2 (Friday and Saturday both booked)":** false. `YzkhPWRp` and `3CyVWZmp` each booked Friday and then **moved the same BK0001** to Saturday. Each ends with one appointment, on the day the caller chose. Their premature Friday authorizations ("nine works for me thanks", "silence underscore tool") are real consent faults.
+> - **Native interruptive "1 of 8":** three native calls end with one Saturday appointment. Each has a failed authorization on an earlier write, including `kwUbc4PR`, whose number was accepted on "that's". This is not a success rate.
+> - **"227 writes, every one answered a matching question":** a label check on harness writes only. It also passed call 1's consent fault. The native build's 16 `confirm_customer` writes were never checked. It does not show that a proposal was heard, or that an answer meant yes.
+> - **"67 of 69" and "42 of 50":** 51 harness interruptive calls were placed. Call 1 (`fymMyWTi`) is missing from these denominators.
+> - **A native call "ran to the 300 s limit":** `iPFgi5qq`'s recording is 49.7 s. Its 1,105 s trace span came from a model request that never returned.
+> - **"No call saw another call's booking":** every call had its own fresh diary, so BK0001 first is expected. It is not an isolation test.
+> - **N1-N13:** native N9 fails, native N13 is not exercised, and the N12 timing command reports `passed: false`.
+> - **"Safe? Yes" and "fixed with regression tests":** each safety patch was tested for its own case only. It is not a general guarantee. The review reproduced three core defects that are still open.
+> - **How calls ended** (added after the [review of stage A](session-4b-evaluator-review.md)): a "Failed to terminate Twilio call" line proves a hang-up attempt, not who ended the call. The rechecked endings (observed: 115 agent, 6 caller, 1 ceiling, 1 provider stall, 1 test runner; 14 inferred or not attributable) are in the [stage A report](session-4b-evaluator.md#ending-provenance-118-agent-labels-rechecked).
+> - **Safe? "Yes, with one caveat":** not established. Delivery was never checked independently of the runtime. The audit passed four writes a review has since failed: call 1's harness lookup, the two early native Friday bookings, and `kwUbc4PR`'s native identity write.
+>
+> No corrected success rate is published yet: most calls still lack a reviewed final request and any recording review.
+
 The classifier path is gone from the salon and from core's public path. Each conversational node now has one agent that reads the caller itself, and code decides what it may do. Over 140 Coval calls this build made no write without a yes to a question the caller heard, except one early fault that was found and fixed. On the final build, 19 of 20 interruptive callers booked correctly. It is safe, tested and faster than native Pipecat on these two cases. It is not yet stable: each gate found a new fault class, and a clean normal-caller gate on the final build is still missing.
 
 Evidence: [ledger](session-4/ledger.md) (every decision and run, in order), [every Coval call](session-4/coval-evals.md) (with Coval and Langfuse links), and the reports under [`session-4/load/`](session-4/load/).

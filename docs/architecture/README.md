@@ -33,12 +33,4 @@ Start with 01–02 for the mental model. Read 03–05 when authoring or reviewin
 | Receipt | A typed backend result. Its declared fields determine whether it establishes success, refusal or an unknown outcome. |
 | Playback evidence | An acknowledgement associated with a speech segment. It supports a delivery decision, not proof of a person's comprehension. |
 
-## How to read the examples
-
-The main example is the existing [support-desk fixture](../../core/tests/ticket_flow/agent.yaml). Its account, ticket, revision and resolution fields belong to that application. Core does not require them. The [clinic fixtures](../../core/tests/clinic_flow/) demonstrate another definition using the same public entry points.
-
-Manifest excerpts are labelled and link to their complete source. The runnable commands use existing fixtures and disable model requests. They establish runtime behavior, not the accuracy of a live model interpreting speech.
-
-Each chapter ends with the implementation and tests supporting its explanation. Relative links follow the checked-out code; the revision above identifies the baseline reviewed for this edition. External library documentation explains the libraries' concepts, while the repository shows which features this harness actually uses.
-
 [Start with the stack and boundaries →](01-stack-and-boundaries.md)

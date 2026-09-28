@@ -47,10 +47,6 @@ The application's **backend** is the database or API that does its business work
 | Read-back and result wording | Speaks precise application statements without asking the model to invent them. |
 | Services and persistence | Performs domain work and, where provided, persists and reconciles intents. |
 
-There is no built-in booking, verification, ticket or lesson node. A name such as `desk` or `booking` identifies an application-defined step. Its behavior comes from its declaration, prompt and functions, not a matching branch in core.
-
-For example, a support desk can supply `ticket_id` and `resolve_ticket`; another application can supply a different state model and action names. Both use the same state validation, graph execution, proposal and recovery machinery. The [renamed support-desk regression](../../core/tests/test_tickets.py) exercises that substitution without changing core.
-
 ## Why use a separate conversation layer?
 
 A native media application can implement all these rules itself. The benefit sought here is to implement the recurring mechanics once: carrying state between nodes, restricting model-writable facts, binding approval to a specific question, retaining interrupted history and reconciling uncertain operations.

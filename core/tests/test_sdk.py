@@ -16,6 +16,10 @@
 * The collect tool's schema is the state's own: an enum and a pattern reach
   the model as the runtime will enforce them.
 
+* Each step's agent carries core's hooks on one `Hooks`, every hook on its
+  own event: the SDK dispatches each capability separately, so four cost
+  four times the dispatch of one, for the same handlers.
+
 Hooks and `new_messages()` retention are checked where they are used:
 `one_action_per_reply` and budgets in salon-graph's `test_budget`, retained
 input and results after cancellation in `tests.test_history`.
@@ -26,6 +30,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, SecretStr, TypeAdapter, ValidationError
 from pydantic_ai import Agent, TemplateStr
+from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import core
@@ -185,6 +190,31 @@ async def a_warm_up_ends_before_its_client_closes():
     assert warmed and not warmed[0]['answered'], warmed
 
 
+def every_step_has_one_hooks():
+    """One `Hooks` per step agent, holding the clock and, where a step acts, one action per reply and its bounds."""
+    from pathlib import Path
+
+    flow = core.load(Path(__file__).parent / 'ticket_flow' / 'agent.yaml').compile(model=Script().model)
+
+    def hooks_in(capability) -> list[Hooks]:
+        found = [capability] if isinstance(capability, Hooks) else []
+        for inner in getattr(capability, 'capabilities', None) or []:
+            found += hooks_in(inner)
+        return found
+
+    for name, node in flow.nodes.items():
+        [hooks] = hooks_in(node.agent.root_capability)
+        events = {event for event, entries in hooks._registry.items() if entries}
+        assert 'before_model_request' in events, (name, events)
+        assert all(len(entries) <= 1 for entries in hooks._registry.values()), (name, hooks._registry)
+    desk = {
+        e for e, entries in hooks_in(flow.nodes['desk'].agent.root_capability)[0]._registry.items() if entries
+    }
+    assert {'after_model_request', 'before_tool_execute', 'prepare_tools', 'prepare_output_tools'} <= desk, (
+        desk
+    )
+
+
 async def main() -> None:
     await a_warm_up_ends_before_its_client_closes()
     whole_candidates_refuse_nested_unknown_keys()
@@ -192,6 +222,7 @@ async def main() -> None:
     prompts_see_the_state_and_nothing_else()
     await an_agent_spec_runs_on_the_existing_graph()
     await the_collect_schema_is_the_states_own()
+    every_step_has_one_hooks()
     print(
         'sdk ok: whole candidates, owned fields, typed prompts, AgentSpec on the graph, state-derived schemas'
     )

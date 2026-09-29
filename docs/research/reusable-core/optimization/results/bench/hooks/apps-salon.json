@@ -1,0 +1,36 @@
+{
+ "mode": "apps",
+ "workload": "salon",
+ "label": "",
+ "seconds": 0.5636504999711178,
+ "environment": {
+  "python": "3.14.5",
+  "machine": "arm64",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "cpus": 15,
+  "versions": {
+   "pydantic": "2.13.5",
+   "pydantic-ai-slim": "2.46.0",
+   "pydantic-graph": "2.46.0",
+   "pipecat-ai": "1.11.0",
+   "slng-voice-core": "0.1.0"
+  },
+  "core": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core"
+ },
+ "result": {
+  "operations": {
+   "salon": [
+    "book_appointment",
+    "lookup_customer"
+   ],
+   "faro": [
+    "confirm_phone",
+    "continue_lesson",
+    "note_help",
+    "record_attempt"
+   ]
+  },
+  "salon_requests": 10,
+  "faro_requests": 8
+ }
+}

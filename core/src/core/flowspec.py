@@ -67,7 +67,6 @@ from pydantic_ai.agent.spec import AgentSpec as NativeSpec
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
-from core.flow import Flow
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
 from core.state import CallContext, Intent
@@ -1223,7 +1222,6 @@ class FlowSpec(BaseModel):
             language=self.language,
             version=self.app_version,
         )
-        Flow.of(flow.nodes)
         return flow
 
 

@@ -49,6 +49,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.completion import FieldsPresent, ReceiptMatched
+from core.flow import Nodes
 from core.graph import Exit, LocalAction, Node, Opening, Restated, holds
 from core.locale import Locale
 from core.operations import Operation, OutcomeUnknownError, _tracer
@@ -847,7 +848,9 @@ class Step(ABC):
         """This step as a node the turn engine runs."""
 
 
-def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list, **agent: Any) -> Agent[Any, object]:
+def _agent(
+    flow: StepFlow, step: Step, instructions: Any, outputs: list, hooks: Hooks | None = None, **agent: Any
+) -> Agent[Any, object]:
     """A step's agent, from its persona's native `AgentSpec`: its model unless the flow's was given explicitly.
 
     `FlowSpec.compile(model=...)` strips each persona's model, so an explicit
@@ -857,9 +860,14 @@ def _agent(flow: StepFlow, step: Step, instructions: Any, outputs: list, **agent
     Every step's agent times each provider request (`request_clock`), which is
     where a turn's time to first token comes from; the hand-built steps had it
     from `AgentBuilder`, and session 4 found the public steps without it.
+
+    All of core's hooks for the step go on one `Hooks` (`hooks`, with the
+    clock added), each on its own event, so the handlers and their order are
+    those of separate capabilities: one capability is dispatched once, where
+    four cost the SDK four dispatches per hook point on every request.
     """
     spec = step.spec or AgentSpec()
-    capabilities = [*(agent.pop('capabilities', None) or []), request_clock()]
+    capabilities = [request_clock(into=hooks)]
     built = Agent.from_spec(
         spec,
         deps_type=flow.call_type,
@@ -2051,18 +2059,11 @@ class ConversationStep(Step):
         text = self.instructions
         if self.knowledge and isinstance(text, str):
             text += f'\n\nKnowledge:\n{self.knowledge}'
-        agent = _agent(
-            flow,
-            self,
-            text,
-            outputs,
-            tools=tools,
-            capabilities=[
-                *([one_action_per_reply(actions, frozenset({'collect'}))] if actions else []),
-                Hooks(prepare_output_tools=narrow),
-                speak_by(SPEAK_BY),
-            ],
-        )
+        hooks = Hooks(prepare_output_tools=narrow)
+        if actions:
+            one_action_per_reply(actions, frozenset({'collect'}), into=hooks)
+        speak_by(SPEAK_BY, into=hooks)
+        agent = _agent(flow, self, text, outputs, hooks=hooks, tools=tools)
         return _node(
             flow,
             self,
@@ -2258,7 +2259,8 @@ class StepFlow:
         """The application's own version, from the manifest (`app_version`): what a trace or a report names."""
         self.model = model
         self.settings = settings
-        self.nodes: dict[str, Node[Any]] = {step.id: step.node(self) for step in self.steps}
+        self.nodes: dict[str, Node[Any]] = Nodes({step.id: step.node(self) for step in self.steps})
+        """The steps table, owning its graph (`core.flow.Nodes`): built here, once per compile."""
 
     @property
     def start(self) -> str:

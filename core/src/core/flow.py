@@ -1,6 +1,7 @@
 """An agency's steps as a Pydantic graph: which step may follow which, checked while the call runs.
 
-`Flow.of(nodes)` builds one `pydantic_graph.Graph` per steps table. Each
+A compiled steps table (`Nodes`) owns its `pydantic_graph.Graph`, built
+once with the table and collected with it; `Flow.of(nodes)` finds it. Each
 step is a graph step; after it, a decision with a branch for every move that
 step can legally make and one to the end. A move the table does not allow
 matches no branch, and the graph refuses it, so an illegal transition is an
@@ -18,8 +19,9 @@ position already lives on its state.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, ClassVar, Protocol
+from typing import Any, Protocol
 
 from pydantic_graph import Graph, GraphBuilder, StepContext
 from pydantic_graph.step import StepFunction
@@ -70,10 +72,7 @@ def legal_moves(nodes: dict[str, Node[Any]]) -> dict[str, frozenset[str]]:
 
 
 class Flow:
-    """One steps table, compiled once into a graph and shared by every call that uses it."""
-
-    _built: ClassVar[dict[int, tuple[dict[str, Node[Any]], Flow]]] = {}
-    """Every table compiled so far, with the table itself held so its id cannot be reused."""
+    """One steps table, compiled into a graph and shared by every call that uses it."""
 
     def __init__(self, nodes: dict[str, Node[Any]]) -> None:
         self.nodes = nodes
@@ -82,11 +81,8 @@ class Flow:
 
     @classmethod
     def of(cls, nodes: dict[str, Node[Any]]) -> Flow:
-        """The flow for this table, built on first use. Keyed by identity: a table is a module-level constant."""
-        cached = cls._built.get(id(nodes))
-        if cached is None or cached[0] is not nodes:
-            cached = cls._built[id(nodes)] = (nodes, cls(nodes))
-        return cached[1]
+        """The graph a compiled table owns, or, for a table built by hand, one built now for this use."""
+        return nodes.flow if isinstance(nodes, Nodes) else cls(nodes)
 
     def _build(self) -> Graph[None, Hopper, Moved, Answered]:
         g = GraphBuilder[None, Hopper, Moved, Answered](
@@ -125,6 +121,26 @@ class Flow:
     def render(self) -> str:
         """The flow as a Mermaid state diagram."""
         return self.graph.render()
+
+
+class Nodes(dict[str, Node[Any]]):
+    """A compiled flow's steps table, which owns the graph built from it (`flow`).
+
+    The graph lives exactly as long as the table: a call running on the
+    table holds it, and a table nobody holds is collected with its graph,
+    its agents and whatever they captured. There is no process-wide cache,
+    so compiling and discarding definitions retains nothing, and two
+    compiles of the same manifest never share a graph. The graph holds step
+    names and the moves between them, never call state or services.
+
+    ponytail: a table changed after it is built keeps the graph it was built
+    with; nothing changes a compiled table today. Rebuild on change if
+    something ever must.
+    """
+
+    def __init__(self, nodes: Mapping[str, Node[Any]]) -> None:
+        super().__init__(nodes)
+        self.flow = Flow(self)
 
 
 def _runner(name: str) -> StepFunction[None, Hopper, Moved, Moved | Answered]:

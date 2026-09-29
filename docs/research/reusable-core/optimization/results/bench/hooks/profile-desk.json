@@ -1,0 +1,509 @@
+{
+ "mode": "profile",
+ "workload": "desk",
+ "label": "",
+ "seconds": 1.4119635830284096,
+ "environment": {
+  "python": "3.14.5",
+  "machine": "arm64",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "cpus": 15,
+  "versions": {
+   "pydantic": "2.13.5",
+   "pydantic-ai-slim": "2.46.0",
+   "pydantic-graph": "2.46.0",
+   "pipecat-ai": "1.11.0",
+   "slng-voice-core": "0.1.0"
+  },
+  "core": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core"
+ },
+ "result": {
+  "per_call_own_ms_total": 61.939566250000006,
+  "per_call_own_ms_core": 1.8696667500000002,
+  "top_own": [
+   {
+    "where": "~:0:<method 'control' of 'select.kqueue' objects>",
+    "calls": 13980,
+    "own_ms": 8.73280025,
+    "cum_ms": 8.73280025
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/dataclasses.py:1781:_replace",
+    "calls": 23680,
+    "own_ms": 4.74416785,
+    "cum_ms": 7.7423191000000005
+   },
+   {
+    "where": "~:0:<built-in method builtins.getattr>",
+    "calls": 787160,
+    "own_ms": 1.9229528000000002,
+    "cum_ms": 1.9265654
+   },
+   {
+    "where": "~:0:<method 'execute' of 'sqlite3.Connection' objects>",
+    "calls": 720,
+    "own_ms": 1.70587905,
+    "cum_ms": 1.70587905
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1977:_run_once",
+    "calls": 13982,
+    "own_ms": 1.29243295,
+    "cum_ms": 60.94791705
+   },
+   {
+    "where": "~:0:<method 'close' of 'sqlite3.Connection' objects>",
+    "calls": 140,
+    "own_ms": 1.14873965,
+    "cum_ms": 1.14873965
+   },
+   {
+    "where": "~:0:<method 'executescript' of 'sqlite3.Connection' objects>",
+    "calls": 20,
+    "own_ms": 0.9554792000000001,
+    "cum_ms": 0.9554792000000001
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:461:create_task",
+    "calls": 4580,
+    "own_ms": 0.9264442500000001,
+    "cum_ms": 1.1956563
+   },
+   {
+    "where": "~:0:<built-in method builtins.isinstance>",
+    "calls": 275880,
+    "own_ms": 0.8893986000000002,
+    "cum_ms": 1.1885039000000002
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py:860:_run_context_init_with_capability_loaded",
+    "calls": 17580,
+    "own_ms": 0.7867057,
+    "cum_ms": 1.4191637000000001
+   },
+   {
+    "where": "<string>:2:__init__",
+    "calls": 17580,
+    "own_ms": 0.5735273000000001,
+    "cum_ms": 0.6324580000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:422:__enter__",
+    "calls": 11880,
+    "own_ms": 0.56928925,
+    "cum_ms": 0.9486656000000002
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:862:_spawn",
+    "calls": 3680,
+    "own_ms": 0.5421575000000001,
+    "cum_ms": 2.4190432
+   },
+   {
+    "where": "~:0:<built-in method builtins.compile>",
+    "calls": 1680,
+    "own_ms": 0.5242088500000001,
+    "cum_ms": 0.5242088500000001
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/copy.py:110:deepcopy",
+    "calls": 43780,
+    "own_ms": 0.5197875,
+    "cum_ms": 1.4525022
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:453:__exit__",
+    "calls": 11880,
+    "own_ms": 0.509042,
+    "cum_ms": 0.9878360500000001
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/dataclasses.py:1762:replace",
+    "calls": 23680,
+    "own_ms": 0.46679005000000007,
+    "cum_ms": 8.46708545
+   },
+   {
+    "where": "~:0:<built-in method _sqlite3.connect>",
+    "calls": 140,
+    "own_ms": 0.4077744,
+    "cum_ms": 0.4427458000000001
+   },
+   {
+    "where": "~:0:<method 'run' of '_contextvars.Context' objects>",
+    "calls": 21440,
+    "own_ms": 0.40674245000000003,
+    "cum_ms": 48.888326400000004
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/sniffio/_impl.py:25:current_async_library",
+    "calls": 20460,
+    "own_ms": 0.4051220000000001,
+    "cum_ms": 0.5556975000000001
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:846:_call_soon",
+    "calls": 20200,
+    "own_ms": 0.37107805000000005,
+    "cum_ms": 0.7193287500000001
+   },
+   {
+    "where": "~:0:<built-in method builtins.hasattr>",
+    "calls": 77040,
+    "own_ms": 0.36325485,
+    "cum_ms": 0.6852576000000001
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/typing.py:1231:__call__",
+    "calls": 11420,
+    "own_ms": 0.33659725,
+    "cum_ms": 1.7339105
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic/fields.py:1432:__getattr__",
+    "calls": 18380,
+    "own_ms": 0.32200275,
+    "cum_ms": 0.3723977
+   },
+   {
+    "where": "~:0:<method 'get' of 'dict' objects>",
+    "calls": 79880,
+    "own_ms": 0.31068140000000005,
+    "cum_ms": 0.31068140000000005
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:404:__init__",
+    "calls": 18080,
+    "own_ms": 0.30741135,
+    "cum_ms": 0.3080718
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/selectors.py:540:select",
+    "calls": 13980,
+    "own_ms": 0.3008207,
+    "cum_ms": 10.96456925
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/inspect.py:2413:_signature_from_callable",
+    "calls": 2320,
+    "own_ms": 0.2979209,
+    "cum_ms": 2.56266555
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:817:call_soon",
+    "calls": 20200,
+    "own_ms": 0.2951554,
+    "cum_ms": 1.0837896500000002
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py:92:_run",
+    "calls": 20880,
+    "own_ms": 0.2540634,
+    "cum_ms": 48.3280091
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/streams/memory.py:115:receive",
+    "calls": 5280,
+    "own_ms": 0.25203795,
+    "cum_ms": 1.4737123
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py:2530:build_run_context",
+    "calls": 1980,
+    "own_ms": 0.24540910000000005,
+    "cum_ms": 1.6773012
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py:41:__init__",
+    "calls": 21060,
+    "own_ms": 0.2387606,
+    "cum_ms": 0.3086508
+   },
+   {
+    "where": "~:0:<method 'add' of 'set' objects>",
+    "calls": 55300,
+    "own_ms": 0.22607705,
+    "cum_ms": 0.22607705
+   },
+   {
+    "where": "/Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/copy.py:198:_deepcopy_dict",
+    "calls": 3840,
+    "own_ms": 0.22584430000000003,
+    "cum_ms": 1.0712236000000002
+   },
+   {
+    "where": "~:0:<built-in method builtins.len>",
+    "calls": 66140,
+    "own_ms": 0.22021639999999998,
+    "cum_ms": 0.22021639999999998
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic/main.py:1015:__getattr__",
+    "calls": 18380,
+    "own_ms": 0.21584835000000005,
+    "cum_ms": 0.7613610000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_core/_tasks.py:302:__init__",
+    "calls": 3680,
+    "own_ms": 0.20993525000000002,
+    "cum_ms": 1.28791125
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:870:task_done",
+    "calls": 3680,
+    "own_ms": 0.20950635,
+    "cum_ms": 0.4671257000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_core/_tasks.py:322:_run_coro",
+    "calls": 7660,
+    "own_ms": 0.2061167,
+    "cum_ms": 10.55665135
+   }
+  ],
+  "top_core_cumulative": [
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/flow.py:149:run",
+    "calls": 2000,
+    "own_ms": 0.024541100000000003,
+    "cum_ms": 4.218697000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:428:hop",
+    "calls": 2000,
+    "own_ms": 0.050694050000000004,
+    "cum_ms": 4.19293045
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:450:_hop",
+    "calls": 2060,
+    "own_ms": 0.08733475,
+    "cum_ms": 4.06046875
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:639:_speak",
+    "calls": 2020,
+    "own_ms": 0.1853432,
+    "cum_ms": 3.25134045
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:2288:open",
+    "calls": 20,
+    "own_ms": 0.013658400000000001,
+    "cum_ms": 2.6537019500000003
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/flow.py:117:run",
+    "calls": 1200,
+    "own_ms": 0.015117550000000002,
+    "cum_ms": 2.48061535
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:760:retain",
+    "calls": 120,
+    "own_ms": 0.03888115,
+    "cum_ms": 1.20628755
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/history.py:52:project",
+    "calls": 260,
+    "own_ms": 0.19686145000000002,
+    "cum_ms": 0.87733355
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:731:prepare",
+    "calls": 140,
+    "own_ms": 0.030597050000000004,
+    "cum_ms": 0.67008685
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/operations.py:118:run",
+    "calls": 100,
+    "own_ms": 0.013387199999999998,
+    "cum_ms": 0.65316855
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:2081:operate",
+    "calls": 80,
+    "own_ms": 0.009416550000000001,
+    "cum_ms": 0.5768247000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/operations.py:163:_dispatch",
+    "calls": 100,
+    "own_ms": 0.02253915,
+    "cum_ms": 0.5278769
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:292:events",
+    "calls": 840,
+    "own_ms": 0.0462076,
+    "cum_ms": 0.5114579499999999
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:1863:_approved",
+    "calls": 60,
+    "own_ms": 0.0018625000000000002,
+    "cum_ms": 0.3918147
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:1516:_carry_out",
+    "calls": 60,
+    "own_ms": 0.0036315,
+    "cum_ms": 0.38960855000000005
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:1286:act",
+    "calls": 40,
+    "own_ms": 0.0040667,
+    "cum_ms": 0.3345188
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:884:application_state",
+    "calls": 140,
+    "own_ms": 0.0056960000000000005,
+    "cum_ms": 0.322048
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:891:context",
+    "calls": 140,
+    "own_ms": 0.057975650000000004,
+    "cum_ms": 0.3163520000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/operations.py:240:_settled",
+    "calls": 40,
+    "own_ms": 0.0158469,
+    "cum_ms": 0.26003555
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:763:_record",
+    "calls": 40,
+    "own_ms": 0.0171263,
+    "cum_ms": 0.17176035
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/state.py:1863:commit",
+    "calls": 140,
+    "own_ms": 0.024273250000000003,
+    "cum_ms": 0.1716938
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/history.py:27:paired",
+    "calls": 120,
+    "own_ms": 0.03071455,
+    "cum_ms": 0.16007305
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:195:turn_started",
+    "calls": 80,
+    "own_ms": 0.00347055,
+    "cum_ms": 0.15220205000000003
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:2046:narrow",
+    "calls": 140,
+    "own_ms": 0.01362205,
+    "cum_ms": 0.15110415
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:227:update",
+    "calls": 60,
+    "own_ms": 0.011888300000000001,
+    "cum_ms": 0.15093735
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:363:_hops",
+    "calls": 760,
+    "own_ms": 0.014681000000000003,
+    "cum_ms": 0.14953500000000003
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/state.py:1947:turn_started",
+    "calls": 80,
+    "own_ms": 0.028317750000000003,
+    "cum_ms": 0.1468315
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:1981:collect",
+    "calls": 20,
+    "own_ms": 0.00477445,
+    "cum_ms": 0.13060200000000002
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:402:_through_graph",
+    "calls": 760,
+    "own_ms": 0.021488200000000002,
+    "cum_ms": 0.1305287
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/state.py:1524:intent_for",
+    "calls": 120,
+    "own_ms": 0.06657715,
+    "cum_ms": 0.12097055000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:1793:_record",
+    "calls": 20,
+    "own_ms": 0.0010935000000000003,
+    "cum_ms": 0.11852915000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:2465:record",
+    "calls": 20,
+    "own_ms": 0.0064542,
+    "cum_ms": 0.11736255000000002
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/turn.py:279:_disarm_hold",
+    "calls": 480,
+    "own_ms": 0.0101627,
+    "cum_ms": 0.10809415000000003
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:603:proposal_for",
+    "calls": 40,
+    "own_ms": 0.0030354,
+    "cum_ms": 0.10469355
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/state.py:1616:spoken",
+    "calls": 1000,
+    "own_ms": 0.017231450000000002,
+    "cum_ms": 0.10081960000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:752:_execute",
+    "calls": 80,
+    "own_ms": 0.006535650000000001,
+    "cum_ms": 0.0985105
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/state.py:1101:all_spoken",
+    "calls": 620,
+    "own_ms": 0.01254965,
+    "cum_ms": 0.09024615
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:363:collect",
+    "calls": 20,
+    "own_ms": 0.0102795,
+    "cum_ms": 0.08986659999999999
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:2342:recaps",
+    "calls": 160,
+    "own_ms": 0.0109607,
+    "cum_ms": 0.08953950000000001
+   },
+   {
+    "where": "/private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/core/src/core/steps.py:222:identity",
+    "calls": 800,
+    "own_ms": 0.021732500000000002,
+    "cum_ms": 0.08860130000000001
+   }
+  ],
+  "pstats": "         3692644 function calls (3600323 primitive calls) in 1.239 seconds\n\n   Ordered by: internal time\n   List reduced from 1647 to 40 due to restriction <40>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n    13980    0.175    0.000    0.175    0.000 {method 'control' of 'select.kqueue' objects}\n    23680    0.095    0.000    0.155    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/dataclasses.py:1781(_replace)\n   787160    0.038    0.000    0.039    0.000 {built-in method builtins.getattr}\n      720    0.034    0.000    0.034    0.000 {method 'execute' of 'sqlite3.Connection' objects}\n13982/13980    0.026    0.000    1.219    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1977(_run_once)\n      140    0.023    0.000    0.023    0.000 {method 'close' of 'sqlite3.Connection' objects}\n       20    0.019    0.001    0.019    0.001 {method 'executescript' of 'sqlite3.Connection' objects}\n     4580    0.019    0.000    0.024    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:461(create_task)\n   275880    0.018    0.000    0.024    0.000 {built-in method builtins.isinstance}\n    17580    0.016    0.000    0.028    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic_ai/_run_context.py:860(_run_context_init_with_capability_loaded)\n    17580    0.011    0.000    0.013    0.000 <string>:2(__init__)\n    11880    0.011    0.000    0.019    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:422(__enter__)\n     3680    0.011    0.000    0.048    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:862(_spawn)\n     1680    0.010    0.000    0.010    0.000 {built-in method builtins.compile}\n43780/1100    0.010    0.000    0.029    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/copy.py:110(deepcopy)\n    11880    0.010    0.000    0.020    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:453(__exit__)\n    23680    0.009    0.000    0.169    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/dataclasses.py:1762(replace)\n      140    0.008    0.000    0.009    0.000 {built-in method _sqlite3.connect}\n21440/21160    0.008    0.000    0.978    0.000 {method 'run' of '_contextvars.Context' objects}\n    20460    0.008    0.000    0.011    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/sniffio/_impl.py:25(current_async_library)\n    20200    0.007    0.000    0.014    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:846(_call_soon)\n77040/58660    0.007    0.000    0.014    0.000 {built-in method builtins.hasattr}\n11420/11020    0.007    0.000    0.035    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/typing.py:1231(__call__)\n    18380    0.006    0.000    0.007    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic/fields.py:1432(__getattr__)\n    79880    0.006    0.000    0.006    0.000 {method 'get' of 'dict' objects}\n    18080    0.006    0.000    0.006    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:404(__init__)\n    13980    0.006    0.000    0.219    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/selectors.py:540(select)\n2320/1800    0.006    0.000    0.051    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/inspect.py:2413(_signature_from_callable)\n    20200    0.006    0.000    0.022    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:817(call_soon)\n    20880    0.005    0.000    0.967    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py:92(_run)\n     5280    0.005    0.000    0.029    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/streams/memory.py:115(receive)\n     1980    0.005    0.000    0.034    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic_ai/_agent_graph.py:2530(build_run_context)\n    21060    0.005    0.000    0.006    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/events.py:41(__init__)\n    55300    0.005    0.000    0.005    0.000 {method 'add' of 'set' objects}\n3840/1460    0.005    0.000    0.021    0.000 /Users/nicoferdi/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/copy.py:198(_deepcopy_dict)\n    66140    0.004    0.000    0.004    0.000 {built-in method builtins.len}\n    18380    0.004    0.000    0.015    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/pydantic/main.py:1015(__getattr__)\n     3680    0.004    0.000    0.026    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_core/_tasks.py:302(__init__)\n     3680    0.004    0.000    0.009    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py:870(task_done)\n     7660    0.004    0.000    0.211    0.000 /private/tmp/claude-501/-Users-nicoferdi-Documents-GitHub-slng-voice-harness/aa1f963f-14d0-49d0-b870-6d2012d34ec0/scratchpad/hooks/.venv/lib/python3.14/site-packages/anyio/_core/_tasks.py:322(_run_coro)\n\n\n"
+ }
+}

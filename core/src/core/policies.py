@@ -96,7 +96,7 @@ class TurnBudget:
         )
 
 
-def request_clock() -> Hooks:
+def request_clock(into: Hooks | None = None) -> Hooks:
     """Stamp every provider request as it goes out, so time to first token is per request.
 
     The turn's own clock cannot stand in for one. A run that calls a tool makes
@@ -107,8 +107,13 @@ def request_clock() -> Hooks:
     the extra one a repair retry buys, and `ctx.deps` is the call, so one list
     collects every request of every run in the turn. The turn engine closes
     each entry when the first part of the response arrives.
+
+    `into` registers the hook on an agent's existing `Hooks` rather than a
+    new one, as every policy here does: Pydantic AI dispatches each
+    capability separately, and measured about 110 us per run for each extra
+    `Hooks` on a bare agent (`docs/research/reusable-core/core-optimization.md`).
     """
-    hooks = Hooks()
+    hooks = into if into is not None else Hooks()
 
     @hooks.on.before_model_request
     async def stamp(ctx, request_context):
@@ -137,7 +142,9 @@ def claim_or_refuse(ctx, actions: frozenset[str]) -> None:
         raise ModelRetry(CONFLICT.format(other=claim))
 
 
-def one_action_per_reply(actions: frozenset[str], updates: frozenset[str] = frozenset()) -> Hooks:
+def one_action_per_reply(
+    actions: frozenset[str], updates: frozenset[str] = frozenset(), into: Hooks | None = None
+) -> Hooks:
     """One flow-changing or business-mutating action per model response.
 
     Two of them in one reply is the model proposing two futures. Letting both
@@ -168,7 +175,7 @@ def one_action_per_reply(actions: frozenset[str], updates: frozenset[str] = froz
     response has not run yet when the action does (`_unapplied`), so the
     action refuses with a retry and is called again once it has.
     """
-    hooks = Hooks()
+    hooks = into if into is not None else Hooks()
 
     @hooks.on.after_model_request
     async def choose(ctx, *, request_context, response):
@@ -203,7 +210,7 @@ def one_action_per_reply(actions: frozenset[str], updates: frozenset[str] = froz
     return hooks
 
 
-def speak_by(request: int) -> Hooks:
+def speak_by(request: int, into: Hooks | None = None) -> Hooks:
     """From this request on, a run has no ordinary tools left: it answers with what it has.
 
     The turn budget is the last resort and its failure mode is an apology. This
@@ -216,7 +223,7 @@ def speak_by(request: int) -> Hooks:
 
     `ctx.run_step` counts model requests from 1 within one run.
     """
-    hooks = Hooks()
+    hooks = into if into is not None else Hooks()
 
     @hooks.on.prepare_tools
     async def only_speech(ctx, defs):

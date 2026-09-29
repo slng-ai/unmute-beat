@@ -19,15 +19,9 @@ locales:
   EN:
     base: english
     goodbye: Goodbye, and see you next time!
-    claims:
-      - "\\b(?:saved|recorded|activated|updated your|marked)\\b"
-      - "\\b(?:guardad[oa]s?|registrad[oa]s?|activad[oa]|actualizad[oa]|marcad[oa]s?)\\b"
   ES:
     base: spanish
     goodbye: ¡Hasta la próxima!
-    claims:
-      - "\\b(?:saved|recorded|activated|updated your|marked)\\b"
-      - "\\b(?:guardad[oa]s?|registrad[oa]s?|activad[oa]|actualizad[oa]|marcad[oa]s?)\\b"
 model: google-cloud:gemini-3.5-flash-lite
 
 agents:
@@ -185,7 +179,6 @@ steps:
     kind: conversation
     agent: faro
     prompt: prompts/identify.md
-    guarded: true
     fields: [phone, asked_language]
     operations: [confirm_phone]
     opens_with: confirm_phone
@@ -196,7 +189,6 @@ steps:
     kind: conversation
     agent: faro
     prompt: prompts/signup.md
-    guarded: true
     fields: [name, asked_language]
     operations: [agree_signup]
     opens_with: agree_signup
@@ -207,7 +199,6 @@ steps:
     kind: conversation
     agent: faro
     prompt: prompts/onboarding.md
-    guarded: true
     fields: [learn, purpose, length, asked_language]
     carries_out: {save_onboarding: [learn, purpose, length]}
 
@@ -226,7 +217,6 @@ steps:
     kind: conversation
     agent: faro
     prompt: prompts/plan.md
-    guarded: true
     fields: [plan_minutes, plan_goal, keep_plan, asked_language]
     operations: [activate_plan]
     opens_with: activate_plan
@@ -237,7 +227,6 @@ steps:
     kind: conversation
     agent: faro
     prompt: prompts/menu.md
-    guarded: true
     fields: [fact_key, fact_text, asked_language]
     operations: [continue_lesson, start_reassessment, read_progress]
     carries_out: {remember: [fact_text]}
@@ -260,7 +249,6 @@ steps:
     kind: conversation
     agent: faro
     prompt: prompts/coach.md
-    guarded: true
     fields: [answer, grade, feedback, evidence, fact_key, fact_text, asked_language]
     quoted: [answer]
     carries_out: {record_attempt: [grade], remember: [fact_text]}

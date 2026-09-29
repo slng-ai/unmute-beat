@@ -10,6 +10,7 @@ whole history on every model request cost 0.12 s of CPU over ten N12
 booking traces under the profiler, and bought nothing (session 4c).
 """
 
+from collections.abc import Collection
 from dataclasses import replace
 
 from pydantic_ai.messages import (
@@ -17,6 +18,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     RetryPromptPart,
+    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -153,3 +155,73 @@ def _caller_turn(call, message: ModelMessage) -> int:
 def _answers_tools(message: ModelMessage) -> bool:
     """Whether a request holds tool results, which must follow the response that called them."""
     return any(isinstance(p, (ToolReturnPart, RetryPromptPart)) for p in message.parts)
+
+
+def conversation(call, messages: list[ModelMessage], *, loaded: Collection[str] = ()) -> list[ModelMessage]:
+    """`history: messages`: earlier caller turns as the conversation alone, what was said and heard.
+
+    Before this caller turn, only the caller's words and the agent's speech
+    are kept: `project` has already put the speech that was delivered, the
+    read-backs, receipts and fixed lines, into the responses as text. Tool
+    calls, tool results, retries and application results of earlier turns
+    are left out. This turn's messages, and the run going out now, are kept
+    whole, so the SDK can finish its own tool loop.
+
+    One exception, so a loaded capability is not paid for twice: a
+    `load_capability` call and its return are kept, as a pair, when the
+    capability is one this step registers (`loaded`). Pydantic AI finds what
+    is loaded, and the bundle's instructions, in exactly that pair. A step
+    that does not register it never sees it.
+
+    Adjacent requests, or adjacent responses, left by the filter are joined
+    into one, so the roles still alternate.
+    """
+    start = next(
+        (
+            i
+            for i, m in enumerate(messages)
+            if isinstance(m, ModelRequest) and ((m.metadata or {}).get('caller_turn') or 0) >= call.turn
+        ),
+        None,
+    )
+    if start is None:
+        start = next(
+            (
+                i
+                for i in range(len(messages) - 1, -1, -1)
+                if isinstance(messages[i], ModelRequest)
+                and any(isinstance(p, UserPromptPart) for p in messages[i].parts)
+            ),
+            len(messages),
+        )
+    kept = {
+        p.tool_call_id
+        for m in messages[:start]
+        for p in m.parts
+        if getattr(p, 'tool_kind', None) == 'capability-load'
+        and isinstance(p, ToolCallPart)
+        and _capability(p) in loaded
+    }
+    result: list[ModelMessage] = []
+    for message in messages[:start]:
+        parts = [
+            p
+            for p in message.parts
+            if not isinstance(p, (ToolCallPart, ToolReturnPart, RetryPromptPart, SystemPromptPart))
+            or (isinstance(p, SystemPromptPart) and not (message.metadata or {}).get('application_action'))
+            or getattr(p, 'tool_call_id', None) in kept
+        ]
+        if not parts:
+            continue
+        if result and type(result[-1]) is type(message):
+            result[-1] = replace(result[-1], parts=[*result[-1].parts, *parts])
+        else:
+            result.append(replace(message, parts=parts))
+    return [*result, *messages[start:]]
+
+
+def _capability(part: ToolCallPart) -> str:
+    try:
+        return str(part.args_as_dict().get('id', ''))
+    except ValueError, AssertionError:
+        return ''

@@ -48,7 +48,6 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import re
 import sys
 import typing
 from abc import ABC, abstractmethod
@@ -59,14 +58,18 @@ from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Literal, TypeAliasType, get_args, get_origin, get_type_hints
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
+from pydantic import AliasPath, BaseModel, ConfigDict, Field, PrivateAttr, RootModel, field_validator
 from pydantic_ai import TemplateStr
 from pydantic_ai.agent.spec import AgentSpec as NativeSpec
+from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
+from core.actions import Action
+from core.clock import CallClock
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
 from core.state import CallContext, Intent
@@ -82,6 +85,7 @@ from core.steps import (
     Step,
     StepFlow,
 )
+from core.values import Receipt, Rejection, Subject, Version
 
 SPEC = ConfigDict(extra='forbid', frozen=True)
 QUOTE_CALLER = (
@@ -311,6 +315,21 @@ class _Resolver:
             self.operations[ref] = found[0]()
         return self.operations[ref]
 
+    def capability(self, step: str, ref: str) -> Any:
+        """A native Pydantic AI capability from the flow folder: the object itself, or what a factory with no arguments makes."""
+
+        def find() -> Any:
+            found = self.folder.attr(ref)
+            if isinstance(found, type) or (callable(found) and not isinstance(found, AbstractCapability)):
+                found = found()
+            if not isinstance(found, AbstractCapability):
+                raise _ProblemError(f'{ref!r} is not a Pydantic AI capability')
+            if found.defer_loading and not (found.id and found.description):
+                raise _ProblemError(f'{ref!r} loads on demand, so it needs an id and a description')
+            return found
+
+        return self._once('capability', ref, step, find)
+
     def check(self, step: str, name: str) -> Callable[[Mapping[str, Any]], bool] | None:
         if name not in self.registry.checks:
             self.fail(step, f'check {name!r} is not registered')
@@ -376,6 +395,28 @@ class _Resolver:
 
         return self._once('function', ref, where, find)
 
+    def action(self, name: str) -> type[Action] | None:
+        """The class a declared operation names (`name: file.py:Class`), or None for the long form or a broken ref."""
+        ref = self.spec.operations.get(name)
+        if not isinstance(ref, str):
+            return None
+
+        def find() -> type[Action]:
+            found = self.folder.attr(ref)
+            if not (isinstance(found, type) and issubclass(found, Action)):
+                raise _ProblemError(f'{ref!r} is not a core.Lookup or core.Write')
+            return found
+
+        return self._once('action', ref, f'operation {name}', find)
+
+    def decl(self, name: str) -> OperationSpec | None:
+        """A declared operation in its long form, as the step checks read it; a class says the same keys itself."""
+        declared = self.spec.operations.get(name)
+        if not isinstance(declared, str):
+            return declared
+        action = self.action(name)
+        return OperationSpec(function=declared, **(action.spoken() if action is not None else {}))
+
     def declared(self, name: str) -> type[FunctionOperation]:
         """A declared operation, as one `FunctionOperation` subclass: every problem with it is kept, none raised.
 
@@ -386,7 +427,12 @@ class _Resolver:
         """
         if (cached := self._cache.get(('declared', name))) is not None:
             return cached
+        if isinstance(self.spec.operations[name], str):
+            found = self._declared_class(name)
+            self._cache['declared', name] = found
+            return found
         decl, where = self.spec.operations[name], f'operation {name}'
+        assert isinstance(decl, OperationSpec)
         attrs: dict[str, Any] = {'name': name, 'binds': dict(decl.args), 'assign': dict(decl.assign)}
         attrs |= {
             'succeeds': dict(decl.succeeds),
@@ -497,6 +543,166 @@ class _Resolver:
         found = type(f'{name.title().replace("_", "")}Operation', (FunctionOperation,), attrs)
         self._cache['declared', name] = found
         return found
+
+    def _declared_class(self, name: str) -> type[FunctionOperation]:
+        """A class operation (`core.actions`), as the same `FunctionOperation` a long-form declaration builds.
+
+        Every key the long form writes is read from the class and its
+        receipt types, and checked the same way: bindings against the state,
+        receipt fields against the receipt, the version beside the subject.
+        """
+        where = f'operation {name}'
+        action = self.action(name)
+        if action is None:
+            return type(f'{name.title().replace("_", "")}Operation', (FunctionOperation,), {'name': name})
+        state = self.state_type().model_fields
+        binds, paths = self._action_binds(where, action, state)
+        try:
+            returned = get_type_hints(action.run, include_extras=True).get('return')
+        except Exception as error:
+            self.fail(where, f'{action.__name__}.run has a return annotation that does not resolve: {error}')
+            returned = None
+        members, tag = _members(returned)
+        if not members:
+            self.fail(
+                where,
+                f'{action.__name__}.run must annotate its return with a core.Receipt, or a union of them',
+            )
+        for member in members:
+            if not issubclass(member, Receipt):
+                self.fail(where, f'{member.__name__} is not a core.Receipt: every receipt subclasses it')
+        if len(members) > 1 and not tag:
+            self.fail(
+                where, 'a receipt union needs a discriminator: Annotated[A | B, Field(discriminator=...)]'
+            )
+        won = [m for m in members if not issubclass(m, Rejection)]
+        lost = [m for m in members if issubclass(m, Rejection)]
+        if members and not won:
+            self.fail(where, 'every receipt it can return is a core.Rejection: nothing could succeed')
+        succeeds: dict[str, Any] = (
+            {tag: [v for m in won for v in _tags(m, tag)]} if tag and len(members) > 1 else {}
+        )
+        rejects: dict[str, Any] = {tag: [v for m in lost for v in _tags(m, tag)]} if tag and lost else {}
+        subject, kind, version = _marked(won)
+        for field_name in action.matches:
+            if field_name not in action.model_fields:
+                self.fail(where, f'matches {field_name!r}, which is not one of its arguments')
+            for member in members:
+                if field_name not in member.model_fields:
+                    self.fail(where, f'matches {field_name!r}, which {member.__name__} does not have')
+        assign = (
+            dict(action.assign) if action.assign is not None else self._inferred_assign(where, won, state)
+        )
+        for field_name, source in assign.items():
+            if field_name not in state:
+                self.fail(where, f'assigns {field_name!r}, which the state does not have')
+            elif source == '*':
+                if not any(_fits(m, state[field_name].annotation) for m in won):
+                    self.fail(
+                        where, f'{field_name!r} cannot hold the whole receipt: it holds another kind of value'
+                    )
+            elif any(source not in m.model_fields for m in won):
+                self.fail(where, f'assigns from {source!r}, which a success receipt does not have')
+        if action.changes and subject and not version:
+            self.fail(where, 'names a subject it changes, so its receipt needs a core.Version field')
+        if action.recap and not action.changes:
+            self.fail(where, 'changes nothing, so a goodbye has nothing of it to recap (recap)')
+        if action.needs_approval() and not action.defines('readback'):
+            self.fail(where, f'needs approval, so {action.__name__} needs a readback method')
+        if action.restated_confirms and (action.changes or not action.needs_approval()):
+            self.fail(
+                where,
+                'restated_confirms is only for a read-back of a lookup: a value said again is never a yes to a change',
+            )
+        if action.route and won:
+            self.routes[name] = self._route(where, won[0], action.route)
+        self.assigned[name] = set(assign)
+        receipt_type: type[BaseModel] = (
+            members[0] if len(members) == 1 else RootModel[returned] if members else NoFacts
+        )
+        attrs: dict[str, Any] = {
+            'name': name,
+            'binds': binds,
+            'paths': paths,
+            'assign': assign,
+            'succeeds': succeeds,
+            'rejects': rejects,
+            'say': action.say,
+            'needs_approval': action.needs_approval(),
+            'matches': {field_name: field_name for field_name in action.matches},
+            'changes': action.changes,
+            'recap': action.recap,
+            'subject': subject,
+            'resource': kind,
+            'version': version,
+            'idempotent': action.idempotent,
+            'confirms_by_restating': action.restated_confirms,
+            'route': action.route,
+            'function': staticmethod(_method(action, 'run')),
+            'function_takes_intent': True,
+            'args_type': action,
+            'receipt_type': receipt_type,
+        }
+        if action.defines('readback'):
+            attrs['readback'] = staticmethod(_method(action, 'readback'))
+            attrs['readback_uses_services'] = True
+        if action.defines('reconcile'):
+            attrs['reconcile'] = staticmethod(_method(action, 'reconcile'))
+            attrs['reconcile_takes_intent'] = True
+        return type(f'{name.title().replace("_", "")}Operation', (FunctionOperation,), attrs)
+
+    def _action_binds(
+        self, where: str, action: type[Action], state: Mapping[str, Any]
+    ) -> tuple[dict[str, str], dict[str, tuple[str, ...]]]:
+        """Each argument's state field, by name or by its alias, and the path inside it for a nested one."""
+        binds: dict[str, str] = {}
+        paths: dict[str, tuple[str, ...]] = {}
+        for arg, info in action.model_fields.items():
+            alias = info.validation_alias
+            if alias is None:
+                path: tuple[str, ...] = (arg,)
+            elif isinstance(alias, str):
+                path = (alias,)
+            elif isinstance(alias, AliasPath) and all(isinstance(step, str) for step in alias.path):
+                path = tuple(str(step) for step in alias.path)
+            else:
+                self.fail(
+                    where,
+                    f'{arg!r} names its source with an alias core cannot follow: a name or an AliasPath',
+                )
+                continue
+            if path[0] not in state:
+                self.fail(where, f'{arg!r} comes from {path[0]!r}, which the state does not have')
+                continue
+            kind: Any = state[path[0]].annotation
+            for step in path[1:]:
+                inner = _bare(kind)
+                if not (_model(inner) and step in inner.model_fields):
+                    self.fail(where, f'{arg!r} comes from {".".join(path)}, which the state does not have')
+                    break
+                kind = inner.model_fields[step].annotation
+            else:
+                if not _fits(kind, info.annotation):
+                    self.fail(
+                        where, f'{".".join(path)!r} cannot supply {arg!r}: they hold different kinds of value'
+                    )
+            binds[arg] = path[0]
+            if len(path) > 1:
+                paths[arg] = path
+        return binds, paths
+
+    def _inferred_assign(
+        self, where: str, won: list[type[BaseModel]], state: Mapping[str, Any]
+    ) -> dict[str, str]:
+        """The one state field typed as the success receipt, given the whole receipt; none, or refused when two are."""
+        holders = [name for name, info in state.items() if any(_bare(info.annotation) is m for m in won)]
+        if len(holders) > 1:
+            self.fail(
+                where,
+                f'{", ".join(holders)} could each hold its receipt: say which with assign = {{field: "*"}}',
+            )
+            return {}
+        return {holders[0]: '*'} if holders else {}
 
     def _route(self, where: str, receipt_type: type[BaseModel], route: str) -> frozenset[str]:
         """The steps a receipt's `route` field can name: a `Literal` of step ids, checked against the manifest."""
@@ -650,7 +856,7 @@ class ConfirmSpec(_Operated):
 
     def check(self, resolve: _Resolver) -> None:
         super().check(resolve)
-        declared = resolve.spec.operations.get(self.uses)
+        declared = resolve.decl(self.uses)
         if declared is not None and declared.approval != 'readback':
             resolve.fail(self.id, f'confirms {self.uses!r}, which is declared with no readback to confirm')
 
@@ -723,6 +929,31 @@ class HandoverSpec(BaseModel):
     purpose: str = ''
 
 
+class ContextSpec(BaseModel):
+    """What a step's agent is sent from before this caller turn: `context: {history: messages, facts: [slot]}`.
+
+    `history`: `all` (the whole retained history, tool exchanges included),
+    `messages` (what was said and heard: the caller's words and the agent's
+    delivered speech) or `none`. `facts`: `all`, `none`, or the state fields
+    it may see. The current caller turn always reaches the step. Limiting
+    `facts` hides nothing the permitted history already holds: a value the
+    caller said is in `messages`. What the application enforces (approval,
+    receipts, the ledgers) is the same whatever the step sees.
+    """
+
+    model_config = SPEC
+    history: Literal['all', 'messages', 'none'] = 'all'
+    facts: Literal['all', 'none'] | list[str] = 'all'
+
+    def shown(self) -> tuple[str, ...] | None:
+        """The facts as a step holds them: None for all, () for none, else the listed fields."""
+        return None if self.facts == 'all' else () if self.facts == 'none' else tuple(self.facts)
+
+
+NO_CONTEXT = ContextSpec(history='none', facts='none')
+"""`context: none`: neither earlier turns nor facts. This turn's words still reach the step."""
+
+
 class ConversationSpec(StepSpec):
     """An agent node: one agent in its own words, answering, and, when declared, recording, offering, acting and handing over.
 
@@ -746,23 +977,21 @@ class ConversationSpec(StepSpec):
     requires: list[str] = []
     """State facts this step needs before it runs; `satisfied_by` is interposed until they hold."""
     satisfied_by: str = ''
-    guarded: bool = False
-    """Whether model speech here is held a clause at a time and checked against what was done (`Node.guarded`)."""
     speech: Literal['prose', 'rendered'] = 'prose'
     """Who words what the caller hears here.
 
-    `prose`: the step's agent speaks in its own words. On a `guarded` step
-    its clauses are checked against the application's claim words, which is
-    best effort: a paraphrase in any language can still claim a change that
-    never happened.
+    `prose`: the step's agent speaks in its own words. What was done is
+    still said by code, from the receipt, and model text beside an
+    operation's own speech is dropped (`Node.speaks_for`); no word list
+    checks the rest, so a model claiming a change nothing made is an
+    evaluation failure to measure, not something core can catch.
 
     `rendered`: the agent says nothing itself. It still reads the caller and
     chooses: record, read back, carry out, hand over, say goodbye, or wait.
     Every word is the application's or core's: `asks:` lines, read-backs,
     receipts (`say:`), recaps and fixed lines. So nothing here can claim a
     change no valid receipt made. Its `choices` functions word their own
-    offers (`say` beside `options`), and none is `guarded`: there is no
-    model prose to check.
+    offers (`say` beside `options`).
     """
     quoted: list[str] = []
     """Fields among `fields` that must be the caller's own words, found in what they said (a complaint)."""
@@ -783,6 +1012,22 @@ class ConversationSpec(StepSpec):
     Only while that operation is the one this step could run (`ConversationStep.reads_back`).
     """
     carries_out: dict[str, list[str]] = {}
+    context: ContextSpec | Literal['none'] | None = None
+    """What this step's agent is sent from before this turn (`ContextSpec`). None: the flow's `context:`."""
+    consults: list[HandoverSpec] = []
+    """Specialists this step may ask on the caller's behalf: `{to, purpose}`, like an exit that comes back.
+
+    The specialist speaks for itself, asks for what it needs, and calls
+    `done` once it has answered; the caller is back here with no second
+    request, and a read-back that was waiting is put again, fresh. One
+    consultation at a time: a specialist does not consult.
+    """
+    capabilities: list[str] = []
+    """Native Pydantic AI capabilities for this step's agent, as `file.py:name` (an instance, or a factory taking none).
+
+    An on-demand one (`defer_loading=True`, with an `id` and a `description`)
+    is listed in a short catalog and loaded by the model when it needs it.
+    """
     """Operation -> fields: an operation with no read-back that code carries out when a reply only records one of these.
 
     The approval-free twin of `reads_back`. The model records what the
@@ -799,7 +1044,10 @@ class ConversationSpec(StepSpec):
         return [{'to': exit} if isinstance(exit, str) else exit for exit in exits or []]
 
     def destinations(self) -> list[str]:
-        return [*(exit.to for exit in self.exits), *([self.satisfied_by] if self.satisfied_by else [])]
+        return [
+            *(exit.to for exit in [*self.exits, *self.consults]),
+            *([self.satisfied_by] if self.satisfied_by else []),
+        ]
 
     def check(self, resolve: _Resolver) -> None:
         resolve.prompt(self.id, self.prompt, self.agent)
@@ -813,8 +1061,6 @@ class ConversationSpec(StepSpec):
             )
         for name in sorted(set(self.quoted) - set(self.fields)):
             resolve.fail(self.id, f'quotes {name!r}, which is not one of its fields')
-        if self.speech == 'rendered' and self.guarded:
-            resolve.fail(self.id, 'is rendered and guarded: a rendered step has no model prose to guard')
         if self.opens_with and self.opens_with not in self.operations:
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         for name in sorted(set(self.asks) - set(self.fields)):
@@ -828,7 +1074,7 @@ class ConversationSpec(StepSpec):
                 self.id, 'words refusals, which only a rendered step says: on a prose step the model does'
             )
         for name, fields in self.carries_out.items():
-            declared = resolve.spec.operations.get(name)
+            declared = resolve.decl(name)
             if declared is None:
                 resolve.fail(self.id, f'carries out {name!r}, which `operations:` does not declare')
                 continue
@@ -856,16 +1102,35 @@ class ConversationSpec(StepSpec):
                 )
         if self.knowledge:
             resolve.knowledge(self.id, self.knowledge)
+        for name in self.seen(resolve).shown() or ():
+            resolve.state_field(self.id, name)
+        for ref in self.capabilities:
+            resolve.capability(self.id, ref)
+        for consult in self.consults:
+            target = next((step for step in resolve.spec.steps if step.id == consult.to), None)
+            if target is not None and not isinstance(target, ConversationSpec):
+                resolve.fail(self.id, f'consults {consult.to!r}, which is not a conversation step')
+            elif target is not None and target.consults:
+                resolve.fail(
+                    self.id, f'consults {consult.to!r}, which consults others: one consultation at a time'
+                )
+            if consult.to in {exit.to for exit in self.exits}:
+                resolve.fail(self.id, f'hands over to {consult.to!r} and consults it too; pick one')
         for name in self.fields:
             resolve.state_field(self.id, name)
         resolve.choices(self.id, self.fields, self.choices)
         for name in self.operations:
             if name not in resolve.spec.operations:
                 resolve.fail(self.id, f'carries out {name!r}, which `operations:` does not declare')
-            elif not resolve.spec.operations[name].say:
+            elif not (found := resolve.decl(name)) or not found.say:
                 resolve.fail(self.id, f'carries out {name!r}, which has no `say:` for its receipt')
             else:
                 resolve.declared(name)
+
+    def seen(self, resolve: _Resolver) -> ContextSpec:
+        """This step's context: its own, else the flow's, else everything."""
+        found = self.context if self.context is not None else resolve.spec.context
+        return NO_CONTEXT if found == 'none' else found if isinstance(found, ContextSpec) else ContextSpec()
 
     def to_step(self, resolve: _Resolver) -> Step:
         prompt = resolve.prompt(self.id, self.prompt, self.agent)
@@ -879,11 +1144,17 @@ class ConversationSpec(StepSpec):
             choices=resolve.choices(self.id, self.fields, self.choices),
             choice_after=resolve.after(self.choices),
             operations=tuple(resolve.operation(name) for name in self.operations),
-            exits=tuple(exit.to for exit in self.exits),
-            purposes={exit.to: exit.purpose for exit in self.exits if exit.purpose},
+            exits=tuple(exit.to for exit in [*self.exits, *self.consults]),
+            purposes={exit.to: exit.purpose for exit in [*self.exits, *self.consults] if exit.purpose},
+            consults=frozenset(consult.to for consult in self.consults),
+            consulted=any(
+                consult.to == self.id
+                for step in resolve.spec.steps
+                if isinstance(step, ConversationSpec)
+                for consult in step.consults
+            ),
             requires=tuple(self.requires),
             satisfied_by=self.satisfied_by,
-            guarded=self.guarded,
             rendered=self.speech == 'rendered',
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
@@ -909,6 +1180,11 @@ class ConversationSpec(StepSpec):
                 )
             ),
             spec=resolve.persona(self.id, self.agent),
+            history=self.seen(resolve).history,
+            facts=self.seen(resolve).shown(),
+            capabilities=tuple(
+                found for ref in self.capabilities if (found := resolve.capability(self.id, ref)) is not None
+            ),
         )
 
 
@@ -1020,30 +1296,51 @@ LOCALES: dict[str, Locale] = {'english': ENGLISH, 'spanish': SPANISH}
 class LocaleSpec(BaseModel):
     """A language for the engine's fixed lines, with the application's own words where its domain decides them.
 
-    `claims` are the verbs that claim a change in this application ("booked",
-    "resolved"): patterns for the clause check on a `guarded` step. `goodbye`
-    replaces the language's closing line. Each pattern is compiled here, so a
-    broken one fails at load, never on a call.
+    `goodbye` replaces the language's closing line; `refusals` word a
+    refused value for the caller, by its validator's error type.
     """
 
     model_config = SPEC
     base: Literal['english', 'spanish']
-    claims: list[str] = []
     goodbye: str = ''
-
-    @field_validator('claims')
-    @classmethod
-    def _compiles(cls, claims: list[str]) -> list[str]:
-        for pattern in claims:
-            try:
-                re.compile(pattern)
-            except re.error as error:
-                raise ValueError(f'claim pattern {pattern!r} does not compile: {error}') from None
-        return claims
+    refusals: dict[str, str] = {}
+    """The caller's words for a refused value, by its validator's error type, over the language's own (`Locale.refusals`)."""
 
     def build(self) -> Locale:
         base = LOCALES[self.base]
-        return replace(base, claims=tuple(self.claims), goodbye=self.goodbye or base.goodbye)
+        return replace(
+            base, goodbye=self.goodbye or base.goodbye, refusals={**base.refusals, **self.refusals}
+        )
+
+
+class CurrentDatetimeSpec(BaseModel):
+    """The call's clock: `current_datetime: {enabled: true, timezone: Europe/Madrid, calendar_days: 14}`.
+
+    Where the business counts its day, read once when a call opens. With
+    `enabled`, every step's model is told today's date, weekday and time,
+    and the next `calendar_days` days, each labelled ("tomorrow", "Saturday
+    next week"), so it works a date out from a list instead of counting.
+    `enabled: false` keeps the date out of the prompts; validators still
+    read it. The locale is a separate thing: a Spanish desk in London is
+    Europe/London.
+    """
+
+    model_config = SPEC
+    enabled: bool = True
+    timezone: str = 'UTC'
+    calendar_days: int = Field(0, ge=0, le=366)
+
+    @field_validator('timezone')
+    @classmethod
+    def _known(cls, name: str) -> str:
+        try:
+            ZoneInfo(name)
+        except ZoneInfoNotFoundError, ValueError:
+            raise ValueError(f'{name!r} is not a timezone (an IANA name, like Europe/Madrid)') from None
+        return name
+
+    def build(self) -> CallClock:
+        return CallClock(zone=ZoneInfo(self.timezone), calendar_days=self.calendar_days, shown=self.enabled)
 
 
 class FlowSpec(BaseModel):
@@ -1071,7 +1368,8 @@ class FlowSpec(BaseModel):
     locales: dict[str, Literal['english', 'spanish'] | LocaleSpec] = {}
     """The fixed lines for each value of `language`, chosen per call as that value changes. `locale` is the fallback."""
     agents: dict[str, PersonaSpec] = {}
-    operations: dict[str, OperationSpec] = {}
+    operations: dict[str, OperationSpec | str] = {}
+    """Each business action: the long form, or `file.py:Class`, a `core.Lookup` or `core.Write` that says it all itself."""
     greeting: str = ''
     """The first thing a caller hears."""
     state: str = ''
@@ -1084,6 +1382,10 @@ class FlowSpec(BaseModel):
     """Files substituted for `<!--name-->` markers in any prompt: shared rules, documents."""
     quote_caller: bool = False
     """End every prompt with the caller's latest words."""
+    context: ContextSpec | Literal['none'] | None = None
+    """What every step's agent is sent from before this caller turn, unless a step says otherwise. None: everything."""
+    current_datetime: CurrentDatetimeSpec | None = None
+    """The call's timezone, and whether and how far ahead each step's model is shown the date. None: UTC, today only."""
     steps: list[AnyStep]
     _root: Path | None = PrivateAttr(default=None)
 
@@ -1221,6 +1523,7 @@ class FlowSpec(BaseModel):
             locales={value: _built(spec) for value, spec in self.locales.items()},
             language=self.language,
             version=self.app_version,
+            clock=self.current_datetime.build() if self.current_datetime is not None else None,
         )
         return flow
 
@@ -1295,6 +1598,59 @@ def _fits(source: Any, target: Any) -> bool:
             return set(values) <= set(get_args(held))
         return isinstance(held, type) and all(isinstance(value, held) for value in values)
     return given == held
+
+
+def _members(returned: Any) -> tuple[list[type[BaseModel]], str]:
+    """The receipt models a class operation can return, and the union's discriminator: `([Saved, Declined], 'status')`."""
+    tag = ''
+    kind = returned
+    if get_origin(kind) is Annotated:
+        kind, *meta = get_args(kind)
+        tag = next(
+            (str(m.discriminator) for m in meta if isinstance(getattr(m, 'discriminator', None), str)), ''
+        )
+    options = get_args(kind) if get_origin(kind) in (typing.Union, type(int | None)) else (kind,)
+    members = [m for m in options if m is not type(None)]
+    return ([m for m in members if _model(m)] if all(_model(m) for m in members) else []), tag
+
+
+def _tags(member: type[BaseModel], tag: str) -> list[Any]:
+    """The discriminator values one union member answers with: its `Literal`'s values."""
+    info = member.model_fields.get(tag)
+    kind = _bare(info.annotation) if info is not None else None
+    return list(get_args(kind)) if get_origin(kind) is Literal else []
+
+
+def _marked(won: list[type[BaseModel]]) -> tuple[str, str, str]:
+    """The success receipts' `Subject` field, its resource kind, and their `Version` field: '' where unmarked."""
+    subject = kind = version = ''
+    for member in won:
+        for field_name, info in member.model_fields.items():
+            for mark in info.metadata:
+                if isinstance(mark, Subject) and not subject:
+                    subject, kind = field_name, mark.kind or field_name
+                elif isinstance(mark, Version) and not version:
+                    version = field_name
+    return subject, kind, version
+
+
+def _method(action: type[Action], method: str) -> Callable[..., Any]:
+    """`(services, args, intent)` calling `args.<method>(services[, intent])`: a coroutine when the method is one."""
+    bound = getattr(action, method)
+    takes_intent = method != 'readback'
+    if inspect.iscoroutinefunction(bound):
+
+        async def run_async(services: Any, args: Any, intent: Intent | None = None) -> Any:
+            return await (
+                getattr(args, method)(services, intent) if takes_intent else getattr(args, method)(services)
+            )
+
+        return run_async
+
+    def run(services: Any, args: Any, intent: Intent | None = None) -> Any:
+        return getattr(args, method)(services, intent) if takes_intent else getattr(args, method)(services)
+
+    return run
 
 
 def load(text: str, root: str | Path | None = None) -> FlowSpec:

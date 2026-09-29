@@ -10,10 +10,13 @@ dependencies = [
     "loguru>=0.7.3",
     # `operations` names its write spans through the OpenTelemetry API; no tracer is configured here.
     "opentelemetry-api>=1.44.0",
+    # `values.Phone`: libphonenumber, through pydantic-extra-types' own validator.
+    "phonenumbers>=9.0.39",
     "pydantic>=2.13.5",
     # `spec` pulls pydantic-handlebars, which compiles each use case's prompts against its call type.
     # Provider packages (`google`, `openai`) belong to the application that picks the model.
     "pydantic-ai-slim[spec]>=2.46.0",
+    "pydantic-extra-types>=2.11.1",
     "pydantic-graph>=2.46.0",
     # Flow files are YAML: `core.flowspec` reads them with safe_load, never load.
     "pyyaml>=6.0",

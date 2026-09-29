@@ -1,0 +1,22 @@
+# The one-agent clinic (`one_agent.yaml`) with its operations written as classes (`actions.py`): one line each.
+version: 1
+id: clinic-desk-classes
+state: clinic.py:ClinicState
+identity: patient
+services: clinic.py:Backend
+current_datetime: {timezone: Europe/Madrid, calendar_days: 7}
+agents:
+  receptionist:
+    prompt: prompts/receptionist.md
+operations:
+  book: actions.py:Book
+  cancel: actions.py:Cancel
+  remind: actions.py:Remind
+steps:
+  - id: desk
+    kind: conversation
+    agent: receptionist
+    prompt: prompts/desk.md
+    fields: [patient, slot]
+    choices: {slot: clinic.py:free_times}
+    operations: [book, cancel]

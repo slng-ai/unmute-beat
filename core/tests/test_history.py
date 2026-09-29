@@ -142,7 +142,7 @@ async def resets():
         FunctionModel(stream_function=stream), deps_type=Call, tools=[Tool(touch, takes_ctx=False)]
     )
     call = Call(state=State())
-    nodes = {'owner': Node(agent, history='reset')}
+    nodes = {'owner': Node(agent, history='none')}
     await take_turn(call, nodes, 'First reset input.')
     await take_turn(call, nodes, 'Second reset input.')
     assert 'First reset input.' not in text(seen[2])

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 
 WEEKDAYS = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
 
@@ -91,3 +91,18 @@ class Today:
                 'Work a day out from this list, never by counting.',
             ]
         )
+
+
+@dataclass(frozen=True)
+class CallClock:
+    """A flow's clock, from its manifest (`current_datetime:`): where its day is counted, and what the model is shown.
+
+    Read once when a call opens (`StepFlow.open`), so every step and every
+    validator of the call agree on today. `shown: false` keeps the date out
+    of every prompt; validators still read it (`today`, `now`).
+    """
+
+    zone: tzinfo
+    calendar_days: int = 0
+    """How many days after today each step's model is shown, labelled. 0: the "Today is" line alone."""
+    shown: bool = True

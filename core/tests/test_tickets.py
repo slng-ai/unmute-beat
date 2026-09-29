@@ -638,11 +638,11 @@ async def a_rendered_step_offers_in_the_desks_words(folder: Path):
         .replace('speech: rendered', 'speech: rendered\n    guarded: true')
     )
     try:
-        core.load(broken).compile(model='test')
-    except core.FlowSpecError as error:
-        assert 'rendered and guarded' in str(error), str(error)
+        core.load(broken)
+    except ValidationError as error:
+        assert 'guarded' in str(error), str(error)
     else:
-        raise AssertionError('a rendered step was allowed to be guarded')
+        raise AssertionError('a manifest asked for the retired claim guard, and loaded')
     finally:
         broken.unlink()
 

@@ -22,7 +22,6 @@ ordering that awaiting the callback already has.
 from __future__ import annotations
 
 import asyncio
-import re
 import time
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -53,21 +52,13 @@ from pydantic_ai.usage import UsageLimitExceeded
 
 from core.flow import Answered, Flow, Moved
 from core.graph import LocalAction, Node, Restated, route
-from core.history import paired, project
+from core.history import conversation, paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
 from core.state import CallContext, Checkpoint, Handoff, Question, Spoken, turn_generation
 
-STUMBLE, EXHAUSTED, UNBACKED, WITHHELD = (
-    ENGLISH.stumble,
-    ENGLISH.exhausted,
-    ENGLISH.unbacked,
-    ENGLISH.withheld,
-)
+STUMBLE, EXHAUSTED, WITHHELD = ENGLISH.stumble, ENGLISH.exhausted, ENGLISH.withheld
 """The English fixed lines, by their old names. What a call hears is its own locale's (`CallContext.locale`)."""
-_CLAUSE = re.compile(r'[.!?,;:]')
-_CLAUSE_MAX = 60
-"""Where one clause ends, and the cap that stops a model that never punctuates from holding the whole answer."""
 
 
 @dataclass(frozen=True)
@@ -101,7 +92,7 @@ class FixedSpeech:
     """
 
     text: str
-    reason: Literal['error', 'exhausted', 'unbacked', 'withheld']
+    reason: Literal['error', 'exhausted']
 
 
 @dataclass(frozen=True)
@@ -294,11 +285,11 @@ class Turn:
 
         An exhausted turn is told so in one fixed line, with no further model
         request: there used to be one more run here, outside the budget that
-        had just been declared spent, so the budget bounded nothing. The
-        unbacked-claim check runs whatever else happened, because an exhausted
-        or failed turn is exactly when a model is most likely to have invented
-        an outcome; not after a barge-in, because then what the caller heard is
-        not what was generated.
+        had just been declared spent, so the budget bounded nothing.
+
+        No word list checks model prose here. What was done is said by code,
+        from the receipt; a model's own words claiming a change nothing made
+        are an evaluation failure, not something a pattern could catch.
         """
         call, barge = self.call, self.barge
         self.generation = call.begin_turn()
@@ -337,12 +328,6 @@ class Turn:
             logger.warning('turn exhausted: {}', spent)
             call.note_said('fixed', call.locale.exhausted, origin='error')
             yield FixedSpeech(call.locale.exhausted, reason='exhausted')
-
-        if not barge.hit and (claim := call.unbacked_claim()):
-            logger.error('unbacked claim, nothing was written this turn: {!r}', claim)
-            line = call.correction(call.locale.unbacked)
-            call.note_said('fixed', line, origin='error')
-            yield FixedSpeech(line, reason='unbacked')
 
         call.turn_ended(interrupted=barge.hit)
         status: Literal['answered', 'interrupted', 'exhausted', 'failed'] = 'answered'
@@ -592,6 +577,16 @@ class Turn:
         if self._stale():
             logger.info('fenced a handoff from turn {}', self.generation)
             return
+        if output.status == 'returned':
+            going_to = call.state.consulting or call.state.agent
+            logger.info('consultation {} -> {} done', call.state.agent, going_to)
+            self.handoffs.append(going_to)
+            call.commit(agent=going_to, consulting=None)
+            call._return_status, call._entered = '', ''
+            if not barge.hit and (words := call.reissue_waiting()):
+                await call.speak_now(words, origin='ask')
+            return
+        consulting = call.state.consulting
         if output.status != 'handoff':
             going_to, waiting = output.to, None
             checkpoint = call._checkpoint
@@ -609,8 +604,17 @@ class Turn:
                 prompt = (
                     call.heard if output.status == 'unserved' and call.heard != checkpoint.heard else None
                 )
+        elif output.to in node.consults:
+            going_to, waiting, consulting = output.to, call.state.pending, call.state.agent
+            call._detour_question = call._proposals.asked
+            call._entered = 'handoff'
+            call._return_status = (
+                f'Application consultation: {call.state.agent} asked {going_to}. You are now {going_to}: '
+                'answer the caller, ask them for anything you need, and call done once you have answered.'
+            )
         else:
             going_to, waiting = route(call.state, nodes, output.to)
+            consulting = None
             if waiting is not None and going_to != waiting and call._checkpoint is None:
                 call._checkpoint = Checkpoint(waiting, call.heard)
             call._entered = 'handoff'
@@ -621,19 +625,16 @@ class Turn:
             )
         logger.info('handoff {} -> {} ({})', call.state.agent, going_to, output.because or '-')
         self.handoffs.append(going_to)
-        call.commit(agent=going_to, pending=waiting)
+        call.commit(agent=going_to, pending=waiting, consulting=consulting)
         if output.status == 'handoff':
             prompt = None
         if barge.hit:
             return
         if output.ends_turn and nodes[going_to].opening(call) is None:
-            if not output.reply:
-                call._return_status, call._entered = '', ''
-                return
-            if not call.claims_completion(output.reply):
-                call._return_status, call._entered = '', ''
+            call._return_status, call._entered = '', ''
+            if output.reply:
                 await call.speak_now(output.reply, origin='switch')
-                return
+            return
         yield _Continue(prompt)
 
     async def _speak(self, node: Node, prompt: str | None) -> AsyncIterator[object]:
@@ -643,12 +644,6 @@ class Turn:
         AI rebuilds a run's output schema whenever one is passed, which cost
         about 5 ms of every hand-over turn in the N12 measurement (session 2).
         The per-request narrowing of `hand_over` is a capability on the agent.
-
-        On a step that can write, speech is released a clause at a time so
-        each clause can be read before the caller hears it, and a clause that
-        claims a change nothing has made is not said at all. The gate is off
-        once the step has written something, because the confirmation is then
-        the business's own words, and off entirely on a step that cannot write.
 
         A `reset` step is asked the caller's own question outright and sent no
         conversation: what it needs is projected into its instructions, and
@@ -694,19 +689,17 @@ class Turn:
         agent: Agent = node.agent
         step = call.state.agent
         output = None
-        gate: str | None = 'clause' if node.guarded else None
-        held = ''
         reply: list[str] = []
         reply_text, reply_tools, recorded = False, [], 0
 
         call.attempt_started()
         caller_turn = call.turn
         run_id = f'{caller_turn}:{call.attempt}'
-        accepted_prompt = call.heard if node.history == 'reset' else prompt
+        accepted_prompt = call.heard if node.history == 'none' else prompt
         requested = 0
         streamed = 0
-        excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'reset' else frozenset()
-        initial = [] if node.history == 'reset' else paired(project(call, call.messages))
+        excluded = frozenset(s.id for s in call.all_spoken) if node.history == 'none' else frozenset()
+        initial = [] if node.history == 'none' else paired(project(call, call.messages))
         if accepted_prompt is None and call.heard and not (initial and isinstance(initial[-1], ModelRequest)):
             accepted_prompt = call.heard
 
@@ -735,9 +728,17 @@ class Turn:
             disarm()
             stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
             messages = project(call, request.messages, excluded=excluded)
+            if node.history == 'messages':
+                messages = conversation(call, messages, loaded=node.capabilities)
             parameters = request.model_request_parameters
             notes = [
-                note for note in (call.today.instructions(), call.spoken_over, call._return_status) if note
+                note
+                for note in (
+                    call.today.instructions() if call._today_shown else '',
+                    call.spoken_over,
+                    call._return_status,
+                )
+                if note
             ]
             if notes:
                 parameters = replace(
@@ -822,12 +823,9 @@ class Turn:
                                 call.note_first_output('tool')
                                 reply_tools.append(name)
                                 if name in node.speaks_for:
-                                    if reply or held:
-                                        logger.info(
-                                            'echo dropped beside {}: {!r}', name, ''.join(reply) + held
-                                        )
+                                    if reply:
+                                        logger.info('echo dropped beside {}: {!r}', name, ''.join(reply))
                                     reply.clear()
-                                    held = ''
                                 else:
                                     for text in _release(call, reply):
                                         yield TextDelta(text, step)
@@ -835,18 +833,7 @@ class Turn:
                         if not node.model_speech:
                             continue
                         reply_text = True
-                        if gate is not None:
-                            held += chunk
-                            if not (_CLAUSE.search(held) or len(held) >= _CLAUSE_MAX):
-                                continue
-                            text, held = held, ''
-                            if call.claims_completion(text):
-                                logger.error('withheld an unbacked claim: {!r}', text.strip())
-                                gate = 'blocked'
-                                reply.clear()
-                                break
-                        else:
-                            text = chunk
+                        text = chunk
                         if node.speaks_for:
                             reply.append(text)
                             continue
@@ -904,18 +891,8 @@ class Turn:
             if reply and not barge.hit:
                 for text in _release(call, reply):
                     yield TextDelta(text, step)
-            if held and gate != 'blocked':
-                call.note_model_text(held)
-                call._spoke = True
-                yield TextDelta(held, step)
             call.close_model_text()
 
-        if gate == 'blocked':
-            if model := [s for s in call.spoken if s.kind == 'model']:
-                note_spoken(call, model[-1].text, interrupted=True, segment_ids=(model[-1].id,))
-            line = call.correction(call.locale.withheld)
-            call.note_said('fixed', line, origin='error')
-            yield FixedSpeech(line, reason='withheld')
         yield RunEnded(step)
         yield _Stalled() if stalled and not barge.hit else _Outcome(output)
 

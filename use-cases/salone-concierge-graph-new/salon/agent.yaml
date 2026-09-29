@@ -1,0 +1,108 @@
+# Sage and Stone on core's simpler contract: one class per operation, core's value types, a manifest clock.
+#
+# Each step is one agent. It reads the caller's replies itself and answers
+# through what is declared here: fields it may record, choices it may offer,
+# operations it may carry out (each read back first, and done only on the
+# caller's yes to that read-back), steps it may hand the caller to, and a
+# stylist it may consult and get the caller back from. Everything is checked
+# when the salon starts, never mid-call.
+
+version: 1
+id: sage-and-stone
+app_version: '2026.09.29-simple'
+greeting: "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
+state: state.py:SalonState
+identity: customer_phone
+entry: concierge
+current_datetime: {timezone: Europe/Madrid, calendar_days: 14}
+context: {history: messages}
+locale:
+  base: english
+  goodbye: Thanks for calling Sage and Stone. Have a lovely day!
+model: google-cloud:gemini-3.5-flash-lite
+quote_caller: true
+includes:
+  diary: prompts/_diary.md
+  services: prompts/knowledge/services.md
+  complaint_guidance: prompts/knowledge/complaint-guidance.md
+  stylist: prompts/knowledge/stylist.md
+
+agents:
+  robin:
+    prompt: prompts/_voice.md
+    spec:
+      model_settings:
+        service_tier: priority
+        google_thinking_config: {thinking_level: MINIMAL}
+
+operations:
+  lookup_customer: operations.py:LookupCustomer
+  book_appointment: operations.py:BookAppointment
+  move_appointment: operations.py:MoveAppointment
+  cancel_appointment: operations.py:CancelAppointment
+  record_complaint: operations.py:RecordComplaint
+
+steps:
+  - id: concierge
+    kind: conversation
+    agent: robin
+    prompt: prompts/concierge.md
+    fields: [service, booking_day, booking_time]
+    capabilities: [capabilities.py:refunds]
+    exits:
+      - {to: booking, purpose: 'a new booking, or a change or cancellation of one they hold'}
+      - {to: complaints, purpose: 'a complaint, a refund, a manager, or a free visit because of a past service'}
+      - {to: verify, purpose: 'a correction to a phone number already confirmed'}
+    consults:
+      - {to: stylist, purpose: 'a question about hair: which service suits them, colour, aftercare, how long a service takes'}
+
+  - id: verify
+    kind: conversation
+    agent: robin
+    prompt: prompts/verify.md
+    fields: [customer_phone, service, booking_day, booking_time]
+    operations: [lookup_customer]
+    opens_with: lookup_customer
+    reads_back: {lookup_customer: [customer_phone]}
+    asks: {customer_phone: "Which phone number should I use? Please say it with the country code."}
+    exits:
+      - {to: concierge, purpose: 'the caller will not confirm a number, or asks about something else entirely'}
+
+  - id: booking
+    kind: conversation
+    agent: robin
+    prompt: prompts/booking.md
+    requires: [customer]
+    satisfied_by: verify
+    fields: [service, booking_day, booking_time, slot, booking_id]
+    choices:
+      # The booking being moved or cancelled rests on no field; a time on offer rests on what was asked for.
+      booking_id: {function: offers.py:held_bookings, after: []}
+      slot: {function: offers.py:find_times, after: [service, booking_day, booking_time]}
+    operations: [book_appointment, move_appointment, cancel_appointment]
+    reads_back: {book_appointment: [slot]}
+    capabilities: [capabilities.py:refunds]
+    exits:
+      - {to: complaints, purpose: 'a complaint about a past service'}
+      - {to: concierge, purpose: 'they give up booking, or ask about something unrelated to booking'}
+    consults:
+      - {to: stylist, purpose: 'a question about hair: which service suits them, colour, aftercare, how long a service takes'}
+
+  - id: complaints
+    kind: conversation
+    agent: robin
+    prompt: prompts/complaints.md
+    requires: [customer]
+    satisfied_by: verify
+    fields: [complaint, wanted_outcome, wants_refund]
+    operations: [record_complaint]
+    capabilities: [capabilities.py:refunds]
+    exits:
+      - {to: booking, purpose: 'they want to book, move or cancel an appointment'}
+      - {to: concierge, purpose: 'a separate salon question, or they abandon the complaint'}
+
+  - id: stylist
+    kind: conversation
+    agent: robin
+    prompt: prompts/stylist.md
+    context: {history: messages, facts: [service, booking_day, booking_time]}

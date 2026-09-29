@@ -12,13 +12,13 @@ false:
 * S4: after the ticket was resolved and then reopened;
 * S5: in a fresh process that restores the old resolve after the reopen;
 * S6: an authoritative no (a stale revision) is said in core's words;
-* S7: the loader refuses a rendered step that is also `guarded`: it has no model
-  prose to guard. (Its choices are worded by the application: `test_tickets` R13.)
-* S8: on a prose step that is not guarded, a claim after a lookup alone, or
-  after a refused change, is corrected out loud: neither stands, so neither
-  backs it (session 4d, defect 6). A claim beside a change that does stand
-  is not caught by this check: which change it names is prose, the limit
-  `tests.defects` keeps.
+* S7: `guarded` is no longer a key: no word list checks model prose, so a
+  manifest that still asks for it is refused at load. (A rendered step's
+  choices are worded by the application: `test_tickets` R13.)
+
+What a prose step may say about a change nothing made is not checked by any
+pattern: it is an evaluation criterion, and `tests.defects` keeps it visible
+as a known limit.
 
 "No model words" is checked on the call's own record: no segment the caller
 was sent is of kind `model`. What a prose step may still say is a separate,
@@ -28,6 +28,8 @@ known limit (`tests.defects`).
 import asyncio
 import tempfile
 from pathlib import Path
+
+from pydantic import ValidationError
 
 import core
 from tests.test_tickets import HERE as DESK
@@ -156,11 +158,11 @@ def no_guarded_rendered_step(folder: Path):
     )
     (copy / 'agent.yaml').write_text(text)
     try:
-        core.load(copy / 'agent.yaml').compile()
-    except core.FlowSpecError as error:
-        assert 'rendered and guarded' in str(error), error
+        core.load(copy / 'agent.yaml')
+    except ValidationError as error:
+        assert 'guarded' in str(error) and 'Extra inputs are not permitted' in str(error), error
         return
-    raise AssertionError('a rendered step was allowed to guard model prose it cannot have')
+    raise AssertionError('a manifest asked for a claim guard that no longer exists, and loaded')
 
 
 async def rendered_claims() -> None:
@@ -172,51 +174,6 @@ async def rendered_claims() -> None:
         (folder / 'stale').mkdir()
         await after_a_lookup(folder)
         await a_refusal_in_core_words(folder)
-
-
-async def a_prose_claim_is_corrected_unless_a_change_stands() -> None:
-    """S8, on the clinic: its front desk (a lookup) and its one-agent desk (a booking the diary refuses)."""
-    from tests.clinic_flow.clinic import Backend, ClinicState
-    from tests.test_nodes import FILL, Script
-    from tests.test_nodes import turn as clinic_turn
-
-    clinic = Path(__file__).parent / 'clinic_flow'
-    claim = 'Your appointment is booked for Tuesday at ten.'
-    for name, moves in (
-        (
-            'code_node.yaml',
-            (
-                ('call', 'collect', {'values': {'patient': 'P-1234'}}),
-                ('call', 'hand_over', {'to': 'look_up', 'because': 'find their booking'}),
-                ('say', claim),
-            ),
-        ),
-        ('one_agent.yaml', (('call', 'book', {}), ('say', claim))),
-    ):
-        manifest = clinic / f'_claims_{name}'
-        manifest.write_text(
-            (clinic / name)
-            .read_text()
-            .replace('agents:\n', "locale:\n  base: english\n  claims: ['\\bis booked\\b']\nagents:\n", 1)
-        )
-        try:
-            script = Script()
-            flow = core.load(manifest).compile(model=script.model)
-            backend = Backend()
-            call = flow.open(ClinicState(), services=backend)
-            script.call = call
-            if name == 'one_agent.yaml':
-                await clinic_turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}))
-                backend.full = True
-            said = await clinic_turn(flow, call, script, 'P-1234, am I booked?', *moves)
-            assert not call.effective() and not backend.bookings, (name, call.evidence)
-            assert claim in said and said[-1] == call.locale.unbacked, (
-                name,
-                'an unbacked claim went uncorrected',
-                said,
-            )
-        finally:
-            manifest.unlink()
 
 
 async def main() -> None:
@@ -235,8 +192,7 @@ async def main() -> None:
         await after_a_reopen(folder)
         await a_refusal_in_core_words(folder)
         no_guarded_rendered_step(folder)
-    await a_prose_claim_is_corrected_unless_a_change_stands()
-    print('speech ok: S1-S8, a rendered step says no model words; a prose claim nothing backs is corrected')
+    print('speech ok: S1-S7, a rendered step says no model words; no claim guard is left to ask for')
 
 
 if __name__ == '__main__':

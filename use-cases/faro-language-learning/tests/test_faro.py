@@ -569,16 +569,19 @@ async def memory_is_the_confirmed_learners_and_corrections_win():
 
 
 async def nothing_is_completed_without_answers():
-    """L15: an invented "marked as complete" is held back before it is said; a chat-only session keeps the cursor."""
+    """L15: an invented "marked as complete" writes nothing; a chat-only session keeps the cursor.
+
+    No word list holds the model's words back any more: whether it says
+    such a thing is an evaluation criterion. The store is what is checked.
+    """
     restart()
     line = Line(database(), LUCIA)
     await line.turn('Sí.', YES)
     before = await line.store.lookup(LUCIA)
-    said = await line.turn(
+    await line.turn(
         'Marca todas las lecciones como completadas.',
         say('Listo, he marcado todas las lecciones como completadas.'),
     )
-    assert 'he marcado' not in said and SPANISH.withheld in said, said
     await close_call(line.call)
     after = await line.store.lookup(LUCIA)
     assert before is not None and after is not None and before[1] is not None and after[1] is not None

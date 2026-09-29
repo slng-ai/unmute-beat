@@ -41,7 +41,7 @@ from core import FlowCall as SalonCall
 from core import turn as core
 from core.processor import PydanticAgentProcessor, SegmentMark
 from core.state import turn_generation
-from core.turn import EXHAUSTED, UNBACKED, TurnBudget, take_turn
+from core.turn import EXHAUSTED, TurnBudget, take_turn
 from salon.app import FLOW
 from salon.diary import Diary
 from tests.script import open_call
@@ -333,21 +333,16 @@ async def the_ledger_keeps_the_order_the_caller_heard_it_in():
     assert ''.join(s.text for s in call.spoken) == probe.heard(), call.spoken
 
 
-async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
+async def a_claim_the_salon_cannot_bear_out_changes_nothing():
     """The model says it cancelled something, and nothing was written.
 
     Reproduced off the live call of 2026-09-21 12:23:22 -- *"I've cancelled
     your appointment, and I have you down for a redo on Saturday at 2:30
-    PM."* No write ran in that turn. It cannot be unsaid: the words were at
-    TTS before anything could know. What it can do is not leave the caller
-    with them, and nothing is invented on the state either.
-
-    On a step that holds speech a clause at a time (`guarded`, every salon
-    step but verify since session 4), the claim is withheld instead and never
-    reaches the caller. Verify is rendered since session 4d (defect 6): it
-    says no model words at all, so the claim is never said, and nothing is
-    left to correct. The correction out loud on an unguarded prose step is
-    core's `tests.test_speech` S8.
+    PM."* No write ran in that turn. Concierge is prose and no word list
+    checks it any more (the claim patterns were retired): what it said is an
+    evaluation failure. What is checked here is that nothing is invented on
+    the state. Verify is rendered since session 4d (defect 6): it says no
+    model words at all, so the claim is never said.
     """
     claim = "I've cancelled your appointment, and I have you down for a redo on Saturday."
     call = _fresh(True)
@@ -355,7 +350,6 @@ async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
     probe = Probe(call)
     with scripted(concierge=says(claim)):
         await probe._turn('can you cancel it and do the redo instead?')
-    assert "I've cancelled" not in probe.heard() and call.locale.withheld in probe.heard(), probe.heard()
     assert call.state.facts == before.facts and not call.evidence
 
     call = _fresh(False)
@@ -363,25 +357,9 @@ async def a_claim_the_salon_cannot_bear_out_is_corrected_out_loud():
     probe = Probe(call)
     with scripted(verify=says(claim)):
         await probe._turn('can you cancel it and do the redo instead?')
-    assert "I've cancelled" not in probe.heard() and UNBACKED not in probe.heard(), probe.heard()
+    assert "I've cancelled" not in probe.heard(), probe.heard()
     assert not [s for s in call.spoken if s.kind == 'model'], call.spoken
     assert not call.evidence
-
-
-async def recounting_a_booking_already_made_is_not_a_claim():
-    """The guard has to let ordinary speech through, which is most speech.
-
-    Telling the caller what they hold ("you're booked in for Saturday") is a
-    recount, not a report of work just done, and passes. Session 4 made the
-    first-person report ("I've booked you") a claim wherever it is said: only
-    a receipt, rendered by code from the diary's answer, says an action is
-    done (`core.locale.Locale.claims`).
-    """
-    held = _fresh(True)
-    probe = Probe(held)
-    with scripted(concierge=says("You're booked in for Saturday at 2:30 PM.")):
-        await probe._turn('what have I got?')
-    assert UNBACKED not in probe.heard(), probe.heard()
 
 
 async def every_response_frame_is_closed():
@@ -814,7 +792,7 @@ async def a_reset_step_is_sent_none_of_the_conversation():
     assert len(seen['sent'][1]) > len(seen['sent'][0]), 'the second turn saw the first'
 
     seen['sent'] = []
-    quiet = replace(AGENTS['concierge'], history='reset')
+    quiet = replace(AGENTS['concierge'], history='none')
     table = AGENTS | {'concierge': quiet}
     reset_probe = Probe(call)
     reset_probe._agents = table
@@ -961,8 +939,7 @@ async def main():
     await a_new_turn_starts_a_new_clock()
     await the_ledger_holds_both_halves_of_what_was_said()
     await the_ledger_keeps_the_order_the_caller_heard_it_in()
-    await a_claim_the_salon_cannot_bear_out_is_corrected_out_loud()
-    await recounting_a_booking_already_made_is_not_a_claim()
+    await a_claim_the_salon_cannot_bear_out_changes_nothing()
     await the_cores_own_fixed_lines_are_in_the_ledger_too()
     await the_ledger_is_cut_down_to_what_was_heard()
     await a_segment_is_timed_from_when_it_started_going_out()

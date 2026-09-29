@@ -122,14 +122,6 @@ class Node[S: VoiceState]:
     """State fields that must be present before this step may run."""
     satisfied_by: str = ''
     """The step that fills `requires`. The graph interposes it and comes back; no prompt states the ordering."""
-    guarded: bool = False
-    """Whether this step can change the business.
-
-    On one that can, the turn engine holds each clause of model speech back
-    until it is complete and drops the run's speech if it claims a change
-    nothing has made. Costs one clause of streaming latency, on these steps
-    only, and only until something is actually written.
-    """
     model_speech: bool = True
     """False for a step that speaks only through output functions, never through provider text."""
     speaks_for: frozenset[str] = frozenset()
@@ -146,13 +138,20 @@ class Node[S: VoiceState]:
     Returns the read-back (a `Question`) or None. Saves the second request
     that only called the operation for its read-back (43 in the baseline).
     """
-    history: Literal['messages', 'reset'] = 'messages'
-    """What conversation this step is sent.
+    history: Literal['all', 'messages', 'none'] = 'all'
+    """What conversation from earlier caller turns this step is sent (`context: {history: ...}`).
 
-    `messages` is the delivered conversation so far. `reset` sends none of it:
-    the step gets its own instructions and the named values projected into
-    them, and nothing the caller said to anybody else.
+    `all` is the whole retained history, tool exchanges included.
+    `messages` is what was said and heard: the caller's words and the
+    agent's delivered speech, with earlier tool exchanges left out
+    (`core.history.conversation`). `none` sends none of it: the step gets
+    its own instructions, the facts it may see, and this turn's words. The
+    current caller turn always reaches the step whole.
     """
+    consults: frozenset[str] = frozenset()
+    """The exits that are consultations: the caller comes back here when that step is `done`."""
+    capabilities: frozenset[str] = frozenset()
+    """The ids of the on-demand capabilities this step registers: their load records survive `history: messages`."""
     advance: Callable[[Any, RunUsage, UsageLimits], Awaitable[LocalAction | None]] | None = None
     """Resolve a decision within the shared budget, or return None to run the conversational agent."""
     openings: tuple[Opening[Any], ...] = ()

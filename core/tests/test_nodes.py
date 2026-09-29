@@ -204,35 +204,6 @@ async def hostile_calls_are_refused():
     assert call.state.facts.reference == '', 'a model wrote a field only a receipt may set'
 
 
-async def a_confirm_steps_answer_claims_nothing():
-    """B2: a confirm step's `answer` is model words on a step that is about to write; the application's claim words hold there too."""
-    text = (HERE / 'agent.yaml').read_text()
-    claimed = HERE / '_claims_agent.yaml'
-    claimed.write_text(
-        text.replace('locale: english\n', "locale:\n  base: english\n  claims: ['\\bbooked\\b']\n", 1)
-    )
-    try:
-        script = Script()
-        flow, call = opened('_claims_agent.yaml', script)
-        await turn(flow, call, script, 'P-1234.', ('call', 'collect', {'values': {'patient': 'P-1234'}}))
-        await turn(flow, call, script, 'Ten.', ('call', 'collect', {'values': {'slot': '1000'}}))
-        said = await turn(
-            flow,
-            call,
-            script,
-            'Is it booked?',
-            ('call', 'answer', {'words': 'Yes, you are booked.'}),
-            ('call', 'answer', {'words': 'Not yet: I need your yes first.'}),
-        )
-        assert not any('you are booked' in s for s in said), (
-            'a confirm step claimed a booking nothing made',
-            said,
-        )
-        assert call.services.calls == 0 and said[0] == 'Not yet: I need your yes first.', said
-    finally:
-        claimed.unlink()
-
-
 async def a_change_in_the_same_reply_spends_no_yes():
     """P5: "yes, but at nine" as `collect` + `book` in one response, in both orders: nothing is booked.
 
@@ -689,7 +660,6 @@ async def main() -> None:
     await no_reader_runs_in_any_pattern()
     public_path_loads_no_reader()
     await hostile_calls_are_refused()
-    await a_confirm_steps_answer_claims_nothing()
     await a_change_in_the_same_reply_spends_no_yes()
     await holding_covers_work_not_thinking()
     await a_cut_off_tool_leaves_no_timer()

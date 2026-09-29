@@ -365,8 +365,8 @@ class Handoff(BaseModel):
 
     to: str
     because: str = Field(default='', description='One short sentence: what the caller wants. Never spoken.')
-    status: Literal['handoff', 'completed', 'unserved'] = 'handoff'
-    """A plain handoff, or a prerequisite step reporting that it finished, or that it gave up."""
+    status: Literal['handoff', 'completed', 'unserved', 'returned'] = 'handoff'
+    """A plain handoff, a prerequisite step reporting that it finished or gave up, or a consultation ending."""
     ends_turn: bool = False
     """Whether the move itself answers the caller, so the destination does not run a model this turn.
 
@@ -425,7 +425,7 @@ class VoiceState(BaseModel):
         going to send the caller to next is an answer to a question they have
         moved on from.
         """
-        return frozenset({'agent', 'pending'})
+        return frozenset({'agent', 'pending', 'consulting'})
 
     agent: str
     pending: str | None = None
@@ -435,6 +435,14 @@ class VoiceState(BaseModel):
     the step that satisfies it. One slot, not a list: no satisfier has
     prerequisites of its own, so `route` cannot chain, and a list invited
     in-place mutation that no validator would ever see.
+    """
+    consulting: str | None = None
+    """The step that sent the caller to a specialist for a short consultation, and gets them back on `done`.
+
+    Kept apart from `pending` on purpose: booking waits for verification
+    (`pending`), verification consults a specialist (`consulting`), the
+    specialist finishes and verification is back, still with booking
+    waiting. One consultation at a time; a specialist does not consult.
     """
 
 
@@ -655,6 +663,14 @@ class CallContext(BaseModel):
     _leaving: bool = PrivateAttr(default=False)
     """The caller said goodbye in the same reply as the answer this turn runs (`core.readings.Acts`)."""
     _today: Today | None = PrivateAttr(default=None)
+    _detour_question: Any = PrivateAttr(default=None)
+    """The read-back that was waiting when a consultation began: put again, fresh, when the caller comes back."""
+    _zone: tzinfo | None = PrivateAttr(default=None)
+    """Where this call's day is counted, from the flow's `current_datetime:`. None: the class's `timezone`."""
+    _calendar_days: int | None = PrivateAttr(default=None)
+    """How many labelled days this call's steps are shown, from the flow. None: the class's `calendar_days`."""
+    _today_shown: bool = PrivateAttr(default=True)
+    """Whether each step's model is told today's date (`current_datetime: {enabled: false}` turns it off)."""
     """The call's clock, read once (`today`): a call that crosses midnight keeps its day."""
     _spoken_over: str = PrivateAttr(default='')
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
@@ -667,13 +683,18 @@ class CallContext(BaseModel):
 
     def now(self) -> datetime:
         """The time now, where this call's day is counted: the injected clock (`clock`), or the wall clock."""
-        return self._clock() if self._clock is not None else datetime.now(self.timezone)
+        zone = self._zone or self.timezone
+        if self._clock is None:
+            return datetime.now(zone)
+        now = self._clock()
+        return now.astimezone(zone) if self._zone is not None and now.tzinfo is not None else now
 
     @property
     def today(self) -> Today:
         """Today's date for this call, read from `now` the first time it is asked for, then kept."""
         if self._today is None:
-            self._today = Today(self.now(), self.calendar_days)
+            days = self.calendar_days if self._calendar_days is None else self._calendar_days
+            self._today = Today(self.now(), days)
         return self._today
 
     @property
@@ -1262,6 +1283,16 @@ class CallContext(BaseModel):
             self._proposals.consume()
             self._approved = (0, -1)
 
+    def reissue_waiting(self) -> str:
+        """A read-back still waiting for its answer, put again as a fresh copy: its words, or '' when none waits.
+
+        Said when a consultation hands the caller back. The copy before the
+        detour cannot be answered any more (a yes counts only after the
+        latest copy played), so no consent given before it is reused. This
+        base has no read-backs; a flow's call does.
+        """
+        return ''
+
     def pending_question(self) -> Any:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
         return self._proposals.pending(self)
@@ -1776,20 +1807,6 @@ class CallContext(BaseModel):
             segment.delivery = 'runtime-estimate'
         return True
 
-    def unbacked_claim(self) -> str:
-        """Model speech this turn asserting something only the business can assert. '' when clean.
-
-        The claim itself, when there is one, so it can be logged and traced.
-        This base has no business to write to and so nothing to check against;
-        an agency that does overrides it. The turn engine says a correction out
-        loud rather than leaving the caller with it.
-        """
-        return ''
-
-    def wrote_this_turn(self) -> bool:
-        """Whether this turn has already changed the business. Base: it has no business."""
-        return False
-
     def settlement(self) -> Callable[[], Awaitable[object]] | None:
         """What settles an earlier write whose outcome is unknown, run before any model this turn. Base: none."""
         return None
@@ -1823,16 +1840,6 @@ class CallContext(BaseModel):
                 {'said': s.kind, 'text': s.text} for s in self.all_spoken if s.turn == turn and s.text
             )
         return result
-
-    def claims_completion(self, clause: str) -> bool:
-        """Whether this clause, on its own, tells the caller the business has changed.
-
-        Asked of each clause **before** it goes out, on a step that can write,
-        so the answer can be to not say it. `unbacked_claim` asks the same
-        question of a whole turn afterwards, which is all that can be done once
-        the words are at TTS. This base has no business to check against.
-        """
-        return False
 
     def note_first_output(self, kind: Literal['text', 'tool']) -> None:
         """The newest step request has produced its first part.

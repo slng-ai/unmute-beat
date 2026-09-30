@@ -477,7 +477,7 @@ async def consent_is_code_s():
     said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
     assert said == [READ_BACK['1000']] and clinic.calls == 0, 'an ordinary question is not a read-back'
     await turn(flow, call, script, 'No, not now.', Reply('All right.', decline=True))
-    assert call.declined_this_turn() and clinic.calls == 0
+    assert call.turn in call._declined.values() and clinic.calls == 0
     said, _ = await turn(flow, call, script, 'Actually yes.', Call('book'))
     assert said == [READ_BACK['1000']] and clinic.calls == 0, 'a declined read-back is spent'
     clinic.failing = True

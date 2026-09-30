@@ -506,27 +506,23 @@ class CallContext(BaseModel):
     """
     _changing: set[str] = PrivateAttr(default_factory=set)
     """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
-    _unapplied: set[str] = PrivateAttr(default_factory=set)
-    """Fields the current model response changes after its action: not yet run when the action does."""
     _reading: bool = PrivateAttr(default=False)
-    """The current model response also calls a read (`speech: structured`): no answer or action runs beside it."""
+    """The current model response also calls a read (`core.structured.Read`): no answer or action runs beside it."""
     _patcher: str | None = PrivateAttr(default=None)
-    """The one tool call in the current model response allowed to carry an `update` (`speech: structured`)."""
+    """The one tool call in the current model response allowed to carry an `update` (`core.structured`)."""
     _tries: Counter[str] = PrivateAttr(default_factory=Counter)
     """How many times a model response in this caller turn tried to record each field (`one_action_per_reply`)."""
     _kept: Counter[str] = PrivateAttr(default_factory=Counter)
-    """How many of those tries recorded the field with the value it already had (`collect`, or a structured update).
+    """How many of those tries recorded the field with the value it already had (a step's update).
 
     `_changing` also holds a field recorded again unchanged: the caller saying
     the read-back's value back. A read-back is confirmed by that
     (`core.graph.Restated`) only while every try at its fields kept the value.
-    On a structured step, an operation called again with an update that keeps
-    the value read back is still the yes the model read (`_operate`): only a
-    field some try changed, or one the state refused, blocks it as a change.
-    A prose step keeps session 4d's rule: `collect` beside the operation in
-    one reply is read back again, whatever it records.
-    A try the tool's schema refused never reaches `collect`, so it counts as
-    a try and not as kept: "half nine, well, ten then" is a change, and
+    An operation called again with an update that keeps the value read back
+    is still the yes the model read (`_operate`): only a field some try
+    changed, or one the state refused, blocks it as a change. A try the
+    schema refused never reaches `collect`, so it counts as a try and not as
+    kept: "half nine, well, ten then" is a change, and
     "ten, no, nine, no, ten" too, never a yes to ten.
     """
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
@@ -1203,10 +1199,6 @@ class CallContext(BaseModel):
         self.answered()
         return True
 
-    def declined_this_turn(self) -> bool:
-        """Whether a read-back was turned down on this caller turn: a rendered step says so, not "pardon"."""
-        return self._turn in self._declined.values()
-
     def hearing(self, segment: Spoken | None) -> Hearing:
         """What the evidence says about one copy of a question, for the model's context and the audits.
 
@@ -1368,8 +1360,7 @@ class CallContext(BaseModel):
     def receipt_said_again(self) -> bool:
         """Whether this piece of the caller's turn has already said the latest receipt again: nothing more is owed.
 
-        A step's `wait` then has nothing to add, and `say_again` would say the
-        same words twice in a row (session 4g). Only the automatic repeat
+        `say_again` would then say the same words twice in a row (session 4g). Only the automatic repeat
         counts: a lookup's receipt said on the way to another step is not this.
         """
         return bool(self._told[1]) and self._told_again_at == (self.turn, len(self._pieces))
@@ -1637,14 +1628,6 @@ class CallContext(BaseModel):
             args = args_type.model_validate_json(intent.args)
             self._intents[intent.id] = intent.model_copy(update={'status': 'unknown'})
             self._unknown[intent.id] = (operation, args)
-
-    def correction(self, line: str) -> str:
-        """A fixed line that says nothing changed, unless an intent's outcome is unknown: then the unsettled line.
-
-        "Nothing has been changed" is a claim too, and a false one while a
-        write may have landed.
-        """
-        return self.locale.unsettled if self.unresolved() else line
 
     @property
     def departed(self) -> bool:

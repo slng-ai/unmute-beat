@@ -22,7 +22,7 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 import core
 from core.graph import Node
-from core.history import paired, project
+from core.history import History, paired, project
 from core.processor import PydanticAgentProcessor
 from core.state import CallContext, Handoff, VoiceState
 from core.turn import Barge, note_spoken, take_turn
@@ -148,7 +148,9 @@ async def resets():
     assert 'First reset input.' not in text(seen[2])
     assert 'Answer 2.' not in text(seen[2])
     assert 'loop-result' in str(seen[3]) and [m for m in seen[3] if m.parts] == paired(seen[3])
-    await take_turn(call, {'owner': replace(nodes['owner'], history='messages')}, 'Normal input.')
+    await take_turn(
+        call, {'owner': replace(nodes['owner'], history=History(scope='conversation'))}, 'Normal input.'
+    )
     assert text(seen[4]).count('First reset input.') == 1
     assert text(seen[4]).count('Second reset input.') == 1
     assert 'Answer 2.' in text(seen[4]) and 'Answer 4.' in text(seen[4])

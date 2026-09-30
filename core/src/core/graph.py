@@ -58,7 +58,7 @@ class Restated:
 
     "Is your number +34 671 51 01 05?" answered "No, it's six seven one,
     five one zero, one zero five" is the same number, grouped the caller's
-    own way. The step's agent only records what it heard (`collect`); code
+    own way. The step's agent only records what it heard (`record`); code
     finds the recorded value equal to the read-back the caller heard in full
     before they began (`CallContext.pending`), and that is the yes
     (`core.steps.ConversationStep._reads_back`). `run` binds the approval to
@@ -94,7 +94,7 @@ class Opening[C: CallContext]:
     check. It answers an arrival by a hand-over only: a step already running
     at the start of the turn, or one a prerequisite returned to, runs its
     agent, which reads what the caller said meanwhile. It is tried only after
-    `advance` has declined, so an answer to a pending question always wins; a
+    settlement and an unheard receipt said again, so those always come first; a
     refusal from the executor is context for the model run that follows,
     never a second attempt.
     """
@@ -132,42 +132,25 @@ class Node[S: VoiceState]:
     satisfied_by: str = ''
     """The step that fills `requires`. The graph interposes it and comes back; no prompt states the ordering."""
     model_speech: bool = True
-    """False for a step that speaks only through output functions, never through provider text."""
-    speaks_for: frozenset[str] = frozenset()
-    """Outputs that say their own words (a step's operations): model text in the same reply is not said.
-
-    The model wrote the application's read-back, or a holding line, beside
-    the operation that then said it again: 19 times in 10 of 20 calls of the
-    session-4 baseline. The turn engine holds a reply's text on such a step
-    until the reply shows whether one of these is called.
-    """
-    reads_back: Callable[[Any], Any] | None = None
-    """What code reads back when a reply that only records fields has just recorded an operation's (`reads_back`).
-
-    Returns the read-back (a `Question`) or None. Saves the second request
-    that only called the operation for its read-back (43 in the baseline).
-    """
-    history: Literal['all', 'messages', 'none'] | History = 'all'
+    """False for a step that speaks only through output functions, never through provider text: every conversation step."""
+    history: Literal['all', 'none'] | History = 'all'
     """What conversation from earlier caller turns this step is sent (`context: {history: ...}`).
 
-    `all` is the whole retained history, tool exchanges included.
-    `messages` is what was said and heard: the caller's words and the
-    agent's delivered speech, with earlier tool exchanges left out
-    (`core.history.conversation`). `none` sends none of it: the step gets
-    its own instructions, the facts it may see, and this turn's words. The
-    current caller turn always reaches the step whole. A `History` object
-    picks whole caller turns by the step that handled them (`History.select`).
+    A `History` object picks whole caller turns by the step that handled
+    them, as what was said and heard (`History.select`). `none` sends none
+    of it: the step gets its own instructions, the facts it may see, and
+    this turn's words. `all`, the whole retained history, is only what an
+    action or end step's agent is given. The current caller turn always
+    reaches the step whole.
     """
     scope: Scope | None = None
-    """The step's scoped view (`core.history.Scope`), or None for a v1 context: what its automatic context shows."""
+    """A conversation step's view (`core.history.Scope`): what its automatic context shows. None at an action or end step."""
     consults: frozenset[str] = frozenset()
     """The exits that are consultations: the caller comes back here when that step is `done`."""
     capabilities: frozenset[str] = frozenset()
-    """The ids of the on-demand capabilities this step registers: their load records survive `history: messages`."""
-    advance: Callable[[Any, RunUsage, UsageLimits], Awaitable[LocalAction | None]] | None = None
-    """Resolve a decision within the shared budget, or return None to run the conversational agent."""
+    """The ids of the on-demand capabilities this step registers: their load records survive its history window."""
     openings: tuple[Opening[Any], ...] = ()
-    """What this step does on arrival without a model, tried in order after `advance` declines."""
+    """What this step does on arrival without a model, tried in order."""
     returns: bool = False
     """Whether a caller handed here goes back to the step that handed them over once it is done (a code node).
 

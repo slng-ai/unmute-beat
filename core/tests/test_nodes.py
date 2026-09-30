@@ -191,7 +191,6 @@ async def holding_covers_work_not_thinking():
             instructions='Help.',
             fields=('patient', 'slot'),
             choices={'slot': slow_times},
-            structured=True,
         )
         flow = StepFlow([step], model=script.model, state_type=ClinicState)
         call = flow.open(ClinicState(), services=Backend())
@@ -225,7 +224,6 @@ async def a_cut_off_tool_leaves_no_timer():
         instructions='Help.',
         fields=('patient', 'slot'),
         choices={'slot': hanging_times},
-        structured=True,
     )
     flow = StepFlow([step], model=script.model, state_type=ClinicState)
     call = flow.open(ClinicState(), services=Backend())

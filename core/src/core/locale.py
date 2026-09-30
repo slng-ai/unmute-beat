@@ -25,8 +25,6 @@ class Locale:
     """Said when a run raised: an error the caller can hear beats silence on an open line."""
     exhausted: str
     """Said when a turn runs out of budget: no further model request, no business work, no second allowance."""
-    withheld: str
-    """Said on a rendered step when its operation met an authoritative no this turn and nothing else is to be said."""
     holding: tuple[str, ...]
     """Said once in a turn that is taking a while, before anything else: a tool is running, or nothing was said yet.
 
@@ -65,23 +63,14 @@ class Locale:
     """
     idle_goodbye: str = ''
     """Said before the line is closed, once reminders went unanswered."""
-    pardon: str = ''
-    """Said on a rendered step (`speech: rendered`) when its agent chose to wait and nothing is missing to ask for."""
-    declined: str = ''
-    """Said on a rendered step when its agent read the caller's reply as a no to the read-back (`decline`): nothing was done.
-
-    Before whatever else `wait` says (the offer, what is still needed), and
-    instead of `pardon`: after "No." the caller hears their no was taken,
-    never "Sorry, could you say that again?".
-    """
     refusals: Mapping[str, str] = field(default_factory=dict, hash=False)
     """The caller's words for a refused value, by the error type its validator raised (`core.values`).
 
     Formatted with the error's own context (`{grouped}`, `{day}`). The
     model reads the validator's message; these are what the caller hears
-    about the same problem, said by code on a rendered step and suggested to
-    the model on a prose step. An application adds its own types, or words
-    them its own way, under `locale: {refusals: {...}}`.
+    about the same problem, suggested to the model beside it. An application
+    adds its own types, or words them its own way, under
+    `locale: {refusals: {...}}`.
     """
     restated: str = ''
     """Said before a read-back is carried out because the caller answered it by saying the same value again.
@@ -104,7 +93,6 @@ class Locale:
 ENGLISH = Locale(
     stumble='Sorry, I had a problem there. Could you say that again?',
     exhausted="Sorry, I'm going round in circles there. Could you say that again?",
-    withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
     holding=('Let me have a look.', 'One moment.'),
     unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
     goodbye='Thanks for calling. Goodbye.',
@@ -116,8 +104,6 @@ ENGLISH = Locale(
     left_undone="I haven't made that last change.",
     still_there='Are you still there?',
     idle_goodbye="I'll let you go for now. Call back any time. Goodbye.",
-    pardon='Sorry, could you say that again?',
-    declined="All right, I haven't changed anything.",
     restated="Yes, that's the same as I read back.",
     refusals={
         'phone_no_country_code': 'Which country is that phone number from?',
@@ -133,7 +119,6 @@ ENGLISH = Locale(
 SPANISH = Locale(
     stumble='Perdona, he tenido un problema. ¿Me lo repites?',
     exhausted='Perdona, me estoy liando. ¿Me lo repites?',
-    withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
     holding=('Déjame mirar.', 'Un momento.'),
     unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
     goodbye='Gracias por llamar. Adiós.',
@@ -145,8 +130,6 @@ SPANISH = Locale(
     left_undone='No he hecho ese último cambio.',
     still_there='¿Sigues ahí?',
     idle_goodbye='Te dejo por ahora. Llámanos cuando quieras. Adiós.',
-    pardon='Perdona, ¿me lo repites?',
-    declined='De acuerdo, no he cambiado nada.',
     restated='Sí, es lo mismo que te he leído.',
     refusals={
         'phone_no_country_code': '¿De qué país es ese número?',

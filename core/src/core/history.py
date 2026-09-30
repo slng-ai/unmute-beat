@@ -264,65 +264,6 @@ def _answers_tools(message: ModelMessage) -> bool:
     return any(isinstance(p, (ToolReturnPart, RetryPromptPart)) for p in message.parts)
 
 
-def conversation(call, messages: list[ModelMessage], *, loaded: Collection[str] = ()) -> list[ModelMessage]:
-    """`history: messages`: earlier caller turns as the conversation alone, what was said and heard.
-
-    Before this caller turn, only the caller's words and the agent's speech
-    are kept: `project` has already put the speech that was delivered, the
-    read-backs, receipts and fixed lines, into the responses as text. Tool
-    calls, tool results, retries and application results of earlier turns
-    are left out. This turn's messages, and the run going out now, are kept
-    whole, so the SDK can finish its own tool loop.
-
-    One exception, so a loaded capability is not paid for twice: a
-    `load_capability` call and its return are kept, as a pair, when the
-    capability is one this step registers (`loaded`). Pydantic AI finds what
-    is loaded, and the bundle's instructions, in exactly that pair. A step
-    that does not register it never sees it.
-
-    Adjacent requests, or adjacent responses, left by the filter are joined
-    into one, so the roles still alternate.
-    """
-    start = next(
-        (
-            i
-            for i, m in enumerate(messages)
-            if isinstance(m, ModelRequest) and ((m.metadata or {}).get('caller_turn') or 0) >= call.turn
-        ),
-        None,
-    )
-    if start is None:
-        start = next(
-            (
-                i
-                for i in range(len(messages) - 1, -1, -1)
-                if isinstance(messages[i], ModelRequest)
-                and any(isinstance(p, UserPromptPart) for p in messages[i].parts)
-            ),
-            len(messages),
-        )
-    kept = {
-        p.tool_call_id
-        for m in messages[:start]
-        for p in m.parts
-        if getattr(p, 'tool_kind', None) == 'capability-load'
-        and isinstance(p, ToolCallPart)
-        and _capability(p) in loaded
-    }
-    result: list[ModelMessage] = []
-    for message in messages[:start]:
-        parts = [
-            p
-            for p in message.parts
-            if not isinstance(p, (ToolCallPart, ToolReturnPart, RetryPromptPart, SystemPromptPart))
-            or (isinstance(p, SystemPromptPart) and not (message.metadata or {}).get('application_action'))
-            or getattr(p, 'tool_call_id', None) in kept
-        ]
-        if parts:
-            _join(result, message, parts)
-    return [*result, *messages[start:]]
-
-
 def _capability(part: ToolCallPart) -> str:
     try:
         return str(part.args_as_dict().get('id', ''))
@@ -376,8 +317,7 @@ class History(BaseModel):
     the most recent of those; the current turn is always sent on top. It
     counts caller turns, not messages or tokens.
 
-    Like `history: messages`, earlier turns are sent as what was said and
-    heard: the caller's words and the speech they were sent, with tool
+    Earlier turns are sent as what was said and heard: the caller's words and the speech they were sent, with tool
     exchanges and application results left out. In the current turn, only
     this run's own tool exchange is sent; another step's from the same caller
     turn is not (a parent's `hand_over` before a consultation).
@@ -393,8 +333,6 @@ class History(BaseModel):
     This minimises context. It is not a confidentiality boundary: words the
     caller says, and speech sent to them, may name anything, and are sent as
     said. Nothing is removed from the call's retained history.
-
-    A history object opts the step into the scoped view (`Scope`).
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
@@ -498,7 +436,7 @@ class History(BaseModel):
 
 @dataclass(frozen=True)
 class Scope:
-    """What a scoped step's automatic context may show of the call: what `core.steps.context` asks.
+    """What a conversation step's automatic context may show of the call: what `core.steps.context` asks.
 
     Built at compile from the step's manifest entry. The call keeps
     everything; this only decides what the step is told. `facts` are the

@@ -1,10 +1,9 @@
-"""Structured conversation steps (`speech: structured`): one typed terminal decision per model response.
+"""Conversation steps: one typed terminal decision per model response.
 
-A prose step records the caller's words with an ordinary `collect` tool, and
-a reply that only records them costs a second request to say something
-(session 2 of the typed-node proposal: 17 exact collect, options, speech
-chains in 20 saved calls). Here the update travels inside the decision it
-belongs to, as one validated argument:
+A step whose agent recorded the caller's words with a tool of their own paid a
+second request to say something after it (session 2 of the typed-node
+proposal: 17 record, options, speech chains in 20 saved calls). Here the
+update travels inside the decision it belongs to, as one validated argument:
 
 - `reply(say, update)` answers the caller and ends the run: one request.
 - `record(update)` records and lets code speak what follows (an operation
@@ -19,7 +18,7 @@ belongs to, as one validated argument:
 
 Every update is applied whole or not at all (`Decision.apply`): the
 application's own types, validators, whole-state rules and validation
-context, and the choice rules, through the same commit path `collect` uses.
+context, and the choice rules, through `FlowCall.collect`.
 A refusal commits nothing and says nothing. Words are said only after the
 decision they come with is committed; partial streamed arguments are never
 read. Nothing here decides consent: every operation still reads back and runs
@@ -183,7 +182,6 @@ class Decision:
                 + '; '.join(f'{given[name]!r} is not on offer for {name}' for name in refused)
                 + '. Only an id on offer can be recorded.'
             )
-        call._refusal = None
         call._kept.update(name for name in given if getattr(call.state.facts, name, None) == before[name])
         call._recorded = frozenset(given)
         return frozenset(given)
@@ -379,12 +377,12 @@ class Offering:
 
 
 class Structured:
-    """The tools and outputs of one `speech: structured` step, built once at compile, shared by every call.
+    """The tools and outputs of one conversation step, built once at compile, shared by every call.
 
-    `ConversationStep.node` hands in what it built for every step kind
-    (`goodbye`, `say_again`, its operations, `hand_over`) and gets back the
-    structured set: no text output, no `collect`, no `decline` tool, and
-    every decision that may carry the caller's words takes them as `update`.
+    `ConversationStep.node` hands in what it built (`goodbye`, `say_again`,
+    its operations, `hand_over`) and gets back the step's set: no text
+    output, and every decision that may carry the caller's words takes them
+    as `update`.
     """
 
     def __init__(

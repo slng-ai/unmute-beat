@@ -1,20 +1,20 @@
 """Flow files: a flow folder described by one YAML file, checked before it can run.
 
-A flow is a folder. `flow.yaml` lists the steps in order, and each step
-carries its whole definition there: its kind, its own prompt file, the Python
-module holding its deterministic code, and where it can go next.
+A flow is a folder. `agent.yaml` keys its steps by id, in order, and each
+step carries its whole definition there: its kind, its own prompt file, the
+Python module holding its deterministic code, and where it can go next.
 
     flows/access/
-      flow.yaml
+      agent.yaml
       voice.md              added to the top of every prompt
       prompts/team.md       one prompt file per step that runs a model
       steps/submit.py       one module per step that runs code
 
-Five step kinds. `collect` and `conversation` run a model, so each names a
-`prompt`. `confirm` reads back words code wrote and has an agent read the
-reply; `action` and `end` run no model. None of those three has a prompt
-field, because the words the caller agrees to are written by code, never by
-a model.
+Three step kinds. A `conversation` step runs a model, so it names a
+`prompt`; its agent answers with one typed decision per response
+(`core.structured`), and code says every read-back and receipt. `action`
+runs one operation with no model; `end` says the closing line. Neither has
+a prompt field.
 
 What a file may refer to:
 
@@ -24,7 +24,7 @@ What a file may refer to:
 * a name in the `Registry`, for code shared by several flows.
 
 The application's state is one Pydantic model, named by `state:`
-(`models.py:ClinicState`). Collect steps name its fields; operations take
+(`models.py:ClinicState`). Conversation steps name its fields; operations take
 their arguments from it by name; `identity:` names the field that says who
 the caller is. The engine keeps it as `call.state.facts`, of exactly that
 type, and no application subclasses the call.
@@ -33,9 +33,9 @@ type, and no application subclasses the call.
 first: an unknown kind or field, a repeated id, a destination that does not
 exist, a missing file or name, a module without what its step needs, a prompt
 naming a field the call does not have, a prompt shared by two steps, a field
-the state does not have, a fact no earlier step collects, an operation
-argument the state cannot supply, and an action that needs approval but can
-be reached without its confirmation. Checking needs no model and no key:
+the state does not have, an operation argument the state cannot supply,
+and an action step whose operation needs a read-back. Checking needs no
+model and no key:
 `problems()` connects to nothing, and only `compile` builds agents.
 
 Files are read with a `yaml.SafeLoader` that builds only plain data and
@@ -44,11 +44,9 @@ YAML, so either format loads. Plain YAML turns an unquoted `no`, `yes`, `on`
 or `off` into a boolean and an unquoted `2026-10-01` into a date; a text
 field given one of those is refused with the step and field named.
 
-Two manifest versions compile to the same steps table. Version 1 lists its
-steps, each with its `id` and `kind`. Version 2 keys them by id and reads a
-step with no `kind` as a `conversation` with `speech: structured`, under a
-flow context of no facts and the step's own history (`FlowSpec._normalized`).
-Every other key means the same in both.
+The manifest is `version: 2`, the only version. A step with no `kind` is a
+`conversation`, under a flow context of no facts and the step's own history
+(`FlowSpec._normalized`).
 """
 
 from __future__ import annotations
@@ -58,7 +56,6 @@ import inspect
 import sys
 import typing
 from abc import ABC, abstractmethod
-from collections import deque
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field, replace
 from graphlib import CycleError, TopologicalSorter
@@ -94,11 +91,8 @@ from core.operations import Operation
 from core.state import CallContext, Intent
 from core.steps import (
     ActionStep,
-    CollectStep,
-    ConfirmStep,
     ConversationStep,
     End,
-    FlowCall,
     FunctionOperation,
     NoFacts,
     Step,
@@ -115,13 +109,12 @@ QUOTE_CALLER = (
 
 
 class ViewTemplate(TemplateStr):
-    """A scoped step's prompt: compiled against the step's view of the call, and rendered from that view alone.
+    """A conversation step's prompt: compiled against the step's view of the call, and rendered from that view alone.
 
     The view is `{heard, state: {facts}}` with only the state fields the step
     sees, so `{{state.facts.x}}` for a hidden field, `{{services...}}` or
     anything else of the call fails when the manifest loads
     (`TemplateSchemaError`), and nothing outside the view is ever rendered.
-    A v1 prompt keeps `TemplateStr` over the whole `FlowCall`.
     """
 
     __slots__ = ('_names', '_seen', '_state', '_view')
@@ -279,10 +272,6 @@ class _Resolver:
                 self._cache[kind, key] = None
         return self._cache[kind, key]
 
-    def call_type(self) -> type[CallContext]:
-        """The call every step's agent is given: `FlowCall` over the application's state model."""
-        return FlowCall[self.state_type()]  # ty: ignore[invalid-type-form]
-
     def state_type(self) -> type[BaseModel]:
         """The application's state model, or `NoFacts` for a flow that keeps none."""
 
@@ -306,14 +295,12 @@ class _Resolver:
         if name not in self.state_type().model_fields:
             self.fail(step, f'names {name!r}, which the state {self.state_type().__name__} does not have')
 
-    def prompt(
-        self, step: str, ref: str, agent: str = '', view: ContextSpec | None = None
-    ) -> TemplateStr | None:
+    def prompt(self, step: str, ref: str, agent: str, view: ContextSpec) -> TemplateStr | None:
         """The step's prompt: its agent's shared instructions, its own file, the flow's includes and voice, compiled now.
 
         A persona's prompt may serve many steps; a step's own prompt belongs to
-        that step alone. `view`, a scoped step's context, compiles it against
-        what that step sees (`ViewTemplate`) instead of the whole call.
+        that step alone. It compiles against what that step sees (`view`,
+        `ViewTemplate`), never the whole call.
         """
         if agent and agent not in self.spec.agents:
             return None
@@ -336,18 +323,14 @@ class _Resolver:
             if self.spec.quote_caller:
                 text += QUOTE_CALLER
             try:
-                if view is not None:
-                    return ViewTemplate(text, state=self.state_type(), facts=view.shown())
-                return TemplateStr(text, deps_type=self.call_type())
+                return ViewTemplate(text, state=self.state_type(), facts=view.shown())
             except Exception as error:
-                if view is not None:
-                    raise _ProblemError(
-                        f"prompt {ref or agent!r} reaches past this step's context (its facts and the caller's "
-                        f'words): {error}'
-                    ) from None
-                raise _ProblemError(f'prompt {ref!r} does not fit the call: {error}') from None
+                raise _ProblemError(
+                    f"prompt {ref or agent!r} reaches past this step's context (its facts and the caller's "
+                    f'words): {error}'
+                ) from None
 
-        key = f'{agent}|{ref}' if view is None else f'{agent}|{ref}|{view.shown()}'
+        key = f'{agent}|{ref}|{view.shown()}'
         return self._once('prompt', key, step, find)
 
     def operation_type(self, step: str, ref: str) -> tuple[Callable[[], Operation], Any] | None:
@@ -368,7 +351,7 @@ class _Resolver:
         return self._once('operation', ref, step, find)
 
     def operation(self, ref: str) -> Operation:
-        """The one instance of an operation for this flow, shared by its confirm step and its action step."""
+        """The one instance of an operation for this flow, shared by every step that names it."""
         if ref not in self.operations:
             found = self.operation_type('', ref)
             assert found is not None
@@ -850,45 +833,6 @@ class StepSpec(BaseModel, ABC):
     def to_step(self, resolve: _Resolver) -> Step: ...
 
 
-class CollectSpec(StepSpec):
-    kind: Literal['collect']
-    prompt: str = ''
-    agent: str = ''
-    """A persona from `agents:`: its shared instructions come first, and its native spec builds this step's agent."""
-    question: str
-    fields: list[str]
-    """Fields of the flow's state model this step asks the caller for. Their types and descriptions are the state's."""
-    choices: dict[str, str] = {}
-    """A field picked from options, and the function offering them: `{slot: clinic.py:free_times}`."""
-    after: list[str] = []
-    lookahead: bool = True
-
-    def check(self, resolve: _Resolver) -> None:
-        resolve.prompt(self.id, self.prompt, self.agent)
-        resolve.persona(self.id, self.agent)
-        if not self.fields:
-            resolve.fail(self.id, 'a collect step needs fields')
-        for name in [*self.fields, *self.after]:
-            resolve.state_field(self.id, name)
-        resolve.choices(self.id, self.fields, self.choices)
-
-    def produces(self, resolve: _Resolver) -> set[str]:
-        return set(self.fields)
-
-    def to_step(self, resolve: _Resolver) -> Step:
-        return CollectStep(
-            id=self.id,
-            then=self.then,
-            fields=tuple(self.fields),
-            question=self.question,
-            after=frozenset(self.after),
-            lookahead=self.lookahead,
-            prompt=resolve.prompt(self.id, self.prompt, self.agent),
-            choices=resolve.choices(self.id, self.fields, self.choices),
-            spec=resolve.persona(self.id, self.agent),
-        )
-
-
 class _Operated(StepSpec):
     """A step that runs an operation: named by its module (`code`) or by a registry name (`operation`)."""
 
@@ -915,36 +859,10 @@ class _Operated(StepSpec):
             resolve.state_field(self.id, f'{name}')
 
 
-class ConfirmSpec(_Operated):
-    kind: Literal['confirm']
-    then: str
-    on_reject: str
-    on_revise: str
-
-    def destinations(self) -> list[str]:
-        return [self.then, self.on_reject, self.on_revise]
-
-    def check(self, resolve: _Resolver) -> None:
-        super().check(resolve)
-        declared = resolve.decl(self.uses)
-        if declared is not None and declared.approval != 'readback':
-            resolve.fail(self.id, f'confirms {self.uses!r}, which is declared with no readback to confirm')
-
-    def to_step(self, resolve: _Resolver) -> Step:
-        return ConfirmStep(
-            id=self.id,
-            then=self.then,
-            operation=resolve.operation(self.uses),
-            on_reject=self.on_reject,
-            on_revise=self.on_revise,
-        )
-
-
 class ActionSpec(_Operated):
     kind: Literal['action']
     accepts: str = ''
     """A registered receipt check. Without one, the module's own `accepts`, if it has one, decides."""
-    after: list[str] = []
     on_error: str = ''
     on_unknown: str = ''
     returns: bool = False
@@ -969,7 +887,6 @@ class ActionSpec(_Operated):
             then=self.then,
             operation=operation,
             accepts=accepts or (lambda _: True),
-            after=frozenset(self.after),
             on_error=self.on_error,
             on_unknown=self.on_unknown,
             returns=self.returns,
@@ -1000,20 +917,20 @@ class HandoverSpec(BaseModel):
 
 
 class ContextSpec(BaseModel):
-    """What a step's agent is sent from before this caller turn: `context: {history: messages, facts: [slot]}`.
+    """What a step's agent is sent from before this caller turn: `context: {history: {scope: node}, facts: [slot]}`.
 
-    `history`: `all` (the whole retained history, tool exchanges included),
-    `messages` (what was said and heard: the caller's words and the agent's
-    delivered speech) or `none`. `facts`: `all`, `none`, or the state fields
-    it may see. The current caller turn always reaches the step. Limiting
-    `facts` hides nothing the permitted history already holds: a value the
-    caller said is in `messages`. What the application enforces (approval,
-    receipts, the ledgers) is the same whatever the step sees.
+    `history`: which earlier caller turns, as what was said and heard
+    (`core.history.History`), or `none`. `facts`: `all`, `none`, or the
+    state fields it may see. The current caller turn always reaches the
+    step. Limiting `facts` hides nothing the permitted history already
+    holds: a value the caller said is in their words. What the application
+    enforces (approval, receipts, the ledgers) is the same whatever the step
+    sees.
     """
 
     model_config = SPEC
-    history: Literal['all', 'messages', 'none'] | History = 'all'
-    facts: Literal['all', 'none'] | list[str] = 'all'
+    history: Literal['none'] | History = History()
+    facts: Literal['all', 'none'] | list[str] = 'none'
 
     @field_validator('facts')
     @classmethod
@@ -1031,17 +948,11 @@ class ContextSpec(BaseModel):
         """The facts as a step holds them: None for all, () for none, else the listed fields."""
         return None if self.facts == 'all' else () if self.facts == 'none' else tuple(self.facts)
 
-    @property
-    def scoped(self) -> bool:
-        """A history object opts into the scoped view (`core.history.Scope`); the v1 strings keep their meaning."""
-        return isinstance(self.history, History)
-
     def under(self, root: ContextSpec | None) -> ContextSpec:
-        """This step's context in scoped mode: the flow's, with each member this step sets replacing it.
+        """This step's context: the flow's, with each member this step sets replacing it.
 
-        `facts` replaces the flow's list, never adds to it; `history`, a string
-        or an object, replaces the flow's as a unit. What this step leaves out
-        is the flow's.
+        `facts` replaces the flow's list, never adds to it; `history` replaces
+        the flow's as a unit. What this step leaves out is the flow's.
         """
         base = root if root is not None else ContextSpec()
         return base.model_copy(update={name: getattr(self, name) for name in self.model_fields_set})
@@ -1064,7 +975,7 @@ class ConversationSpec(StepSpec):
     knowledge: str = ''
     """Added to the end of the prompt: a file in the flow folder, or a registry name."""
     fields: list[str] = []
-    """State fields this step's agent may record from the caller (`collect`)."""
+    """State fields this step's agent may record from the caller, in a decision's `update`."""
     choices: dict[str, str | ChoiceSpec] = {}
     """A field picked from options, and the function offering them, with the fields its offer rests on (`ChoiceSpec`)."""
     operations: list[str] = []
@@ -1074,30 +985,6 @@ class ConversationSpec(StepSpec):
     requires: list[str] = []
     """State facts this step needs before it runs; `satisfied_by` is interposed until they hold."""
     satisfied_by: str = ''
-    speech: Literal['prose', 'rendered', 'structured'] = 'prose'
-    """Who words what the caller hears here.
-
-    `prose`: the step's agent speaks in its own words. What was done is
-    still said by code, from the receipt, and model text beside an
-    operation's own speech is dropped (`Node.speaks_for`); no word list
-    checks the rest, so a model claiming a change nothing made is an
-    evaluation failure to measure, not something core can catch.
-
-    `rendered`: the agent says nothing itself. It still reads the caller and
-    chooses: record, read back, carry out, hand over, say goodbye, or wait.
-    Every word is the application's or core's: `asks:` lines, read-backs,
-    receipts (`say:`), recaps and fixed lines. So nothing here can claim a
-    change no valid receipt made. Its `choices` functions word their own
-    offers (`say` beside `options`).
-
-    `structured` (opt-in, `core.structured`): the agent's words and the
-    caller's update travel in one typed decision. A local answer is `reply`,
-    one request, with no `collect`; a read it needs continues with the
-    update and comes back to it; operations, hand-overs and `done` take the
-    same update. Read-backs, receipts, recaps and fixed lines are still
-    code's words. A pure read (no read-back, `changes: false`, no `route`)
-    needs no `say:` here, since its answer goes back to the agent.
-    """
     quoted: list[str] = []
     """Fields among `fields` that must be the caller's own words, found in what they said (a complaint)."""
     opens_with: str = ''
@@ -1113,19 +1000,20 @@ class ConversationSpec(StepSpec):
     arrival to the agent with the function's note (`ConversationStep.offers`).
     Tried after `opens_with` and `asks`.
     """
-    refusals: dict[str, str] = {}
-    """Field -> `file.py:words`, `(value) -> str`: on a rendered step, what the caller hears when `collect` refused that value.
-
-    A validator's reason is written for the model; with no model words on a
-    rendered step, the application says what to ask instead ("Please give me
-    the rest of the digits."), in its own words. '' falls back to `asks:`.
-    """
     reads_back: dict[str, list[str]] = {}
     """Operation -> fields: a reply that only records one of them gets the operation read back by code, no request.
 
     Only while that operation is the one this step could run (`ConversationStep.reads_back`).
     """
     carries_out: dict[str, list[str]] = {}
+    """Operation -> fields: an operation with no read-back that code carries out when a reply only records one of these.
+
+    The approval-free twin of `reads_back`. The model records what the
+    caller said (an exercise answer and its grade) and is never offered the
+    operation itself, so it cannot run it on values recorded on an earlier
+    turn: whatever it runs on was recorded by this reply
+    (`ConversationStep.carries`).
+    """
     context: ContextSpec | Literal['none'] | None = None
     """What this step's agent is sent from before this turn (`ContextSpec`). None: the flow's `context:`."""
     consults: list[HandoverSpec] = []
@@ -1142,14 +1030,6 @@ class ConversationSpec(StepSpec):
     An on-demand one (`defer_loading=True`, with an `id` and a `description`)
     is listed in a short catalog and loaded by the model when it needs it.
     """
-    """Operation -> fields: an operation with no read-back that code carries out when a reply only records one of these.
-
-    The approval-free twin of `reads_back`. The model records what the
-    caller said (an exercise answer and its grade) and is never offered the
-    operation itself, so it cannot run it on values recorded on an earlier
-    turn: whatever it runs on was recorded by this reply
-    (`ConversationStep.carries`).
-    """
 
     @field_validator('exits', mode='before')
     @classmethod
@@ -1164,7 +1044,7 @@ class ConversationSpec(StepSpec):
         ]
 
     def check(self, resolve: _Resolver) -> None:
-        resolve.prompt(self.id, self.prompt, self.agent, self.view(resolve))
+        resolve.prompt(self.id, self.prompt, self.agent, self.seen(resolve))
         resolve.persona(self.id, self.agent)
         for name in self.requires:
             resolve.state_field(self.id, name)
@@ -1182,14 +1062,6 @@ class ConversationSpec(StepSpec):
         for name in self.offers:
             if name not in self.choices:
                 resolve.fail(self.id, f'offers {name!r} on arrival, which is not one of its choices')
-        for name, ref in self.refusals.items():
-            if name not in self.fields:
-                resolve.fail(self.id, f'words a refusal of {name!r}, which is not one of its fields')
-            resolve.function(self.id, ref, 1)
-        if self.refusals and self.speech != 'rendered':
-            resolve.fail(
-                self.id, 'words refusals, which only a rendered step says: on a prose step the model does'
-            )
         for name, fields in self.carries_out.items():
             declared = resolve.decl(name)
             if declared is None:
@@ -1222,7 +1094,7 @@ class ConversationSpec(StepSpec):
         shown = self.seen(resolve).shown()
         for name in shown or ():
             resolve.state_field(self.id, name)
-        if resolve.spec.version == 2 and shown is not None:
+        if shown is not None:
             for name in sorted(set(self.fields) - set(shown)):
                 resolve.fail(self.id, f'may change {name!r} but cannot see it: add it to context.facts')
         for ref in self.capabilities:
@@ -1249,48 +1121,23 @@ class ConversationSpec(StepSpec):
                 resolve.declared(name)
 
     def _reads(self, declared: Any) -> bool:
-        """A pure read on a structured step: no read-back, no change, no route. Its answer goes back to the agent."""
-        return (
-            self.speech == 'structured'
-            and declared.approval == 'none'
-            and not declared.changes
-            and not declared.route
-        )
+        """A pure read: no read-back, no change, no route. Its answer goes back to the agent."""
+        return declared.approval == 'none' and not declared.changes and not declared.route
 
     def seen(self, resolve: _Resolver) -> ContextSpec:
-        """This step's context.
+        """This step's context: the flow's, with this step's members replacing it one by one (`ContextSpec.under`).
 
-        v1 (no history object at either level): its own, else the flow's, else
-        everything, each replacing the other whole. A step's `{facts: [x]}`
-        therefore has history `all` even under a flow's `history: messages`.
-
-        Scoped (a history object at the flow or here): the flow's context is
-        the default and this step's members replace it one by one
-        (`ContextSpec.under`); `context: none` is no facts and no history.
+        `context: none` is no facts and no history. It is what the step's
+        prompt compiles against (`ViewTemplate`).
         """
         root = resolve.spec.context
-        root = NO_CONTEXT if root == 'none' else root if isinstance(root, ContextSpec) else None
+        root = NO_CONTEXT if root == 'none' else root
         own = NO_CONTEXT if self.context == 'none' else self.context
-        if self.scoped(resolve):
-            return own.under(root) if own is not None else root or ContextSpec()
-        found = own if own is not None else root
-        return found if found is not None else ContextSpec()
+        return own.under(root) if own is not None else root
 
-    def scoped(self, resolve: _Resolver) -> bool:
-        """Whether this step gets the scoped view: always in version 2; in version 1 a history object opts it in."""
-        return resolve.spec.version == 2 or any(
-            isinstance(found, ContextSpec) and found.scoped for found in (resolve.spec.context, self.context)
-        )
-
-    def view(self, resolve: _Resolver) -> ContextSpec | None:
-        """This step's context when it is scoped, else None: what its prompt compiles against."""
-        return self.seen(resolve) if self.scoped(resolve) else None
-
-    def scope(self, resolve: _Resolver) -> Scope | None:
-        """What this step's automatic context may show when it is scoped (`core.history.Scope`), else None."""
-        view = self.view(resolve)
-        if view is None:
-            return None
+    def scope(self, resolve: _Resolver) -> Scope:
+        """What this step's automatic context may show (`core.history.Scope`)."""
+        view = self.seen(resolve)
         owned = [
             found
             for name in dict.fromkeys([*self.operations, *self.carries_out])
@@ -1305,15 +1152,12 @@ class ConversationSpec(StepSpec):
         )
 
     def to_step(self, resolve: _Resolver) -> Step:
-        view = self.view(resolve)
+        view = self.seen(resolve)
         prompt = resolve.prompt(self.id, self.prompt, self.agent, view)
         if self.knowledge and prompt is not None:
             knowledge = resolve.knowledge(self.id, self.knowledge) or ''
-            text = f'{prompt}\n\nKnowledge:\n{knowledge}'
-            prompt = (
-                ViewTemplate(text, state=resolve.state_type(), facts=view.shown())
-                if view is not None
-                else TemplateStr(text, deps_type=resolve.call_type())
+            prompt = ViewTemplate(
+                f'{prompt}\n\nKnowledge:\n{knowledge}', state=resolve.state_type(), facts=view.shown()
             )
         return ConversationStep(
             id=self.id,
@@ -1333,17 +1177,10 @@ class ConversationSpec(StepSpec):
             ),
             requires=tuple(self.requires),
             satisfied_by=self.satisfied_by,
-            rendered=self.speech == 'rendered',
-            structured=self.speech == 'structured',
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             asks=dict(self.asks),
             offers=tuple(self.offers),
-            refusals={
-                name: found
-                for name, ref in self.refusals.items()
-                if (found := resolve.function(self.id, ref, 1)) is not None
-            },
             reads_back={name: tuple(fields) for name, fields in self.reads_back.items()},
             carries=tuple(
                 (resolve.operation(name), tuple(fields)) for name, fields in self.carries_out.items()
@@ -1360,8 +1197,8 @@ class ConversationSpec(StepSpec):
                 )
             ),
             spec=resolve.persona(self.id, self.agent),
-            history=self.seen(resolve).history,
-            facts=self.seen(resolve).shown(),
+            history=view.history,
+            facts=view.shown(),
             scope=self.scope(resolve),
             capabilities=tuple(
                 found for ref in self.capabilities if (found := resolve.capability(self.id, ref)) is not None
@@ -1374,7 +1211,7 @@ class EndSpec(StepSpec):
     outcome: Literal['completed', 'cancelled', 'failed', 'pending']
     say: str
     take_back: str = ''
-    """Where a caller who takes the result back goes: a confirm step for the undo operation."""
+    """Where a caller who takes the result back goes: the step whose operation undoes it, with its own read-back."""
 
     def destinations(self) -> list[str]:
         return [self.take_back] if self.take_back else []
@@ -1384,7 +1221,7 @@ class EndSpec(StepSpec):
 
 
 type AnyStep = Annotated[
-    CollectSpec | ConfirmSpec | ActionSpec | ConversationSpec | EndSpec,
+    ActionSpec | ConversationSpec | EndSpec,
     Field(discriminator='kind'),
 ]
 
@@ -1528,8 +1365,8 @@ class FlowSpec(BaseModel):
     """A whole flow file: the application's manifest, `agent.yaml`."""
 
     model_config = SPEC
-    version: Literal[1, 2]
-    """The manifest format's version: 1 lists the steps, 2 keys them by id with shorter defaults (`_normalized`)."""
+    version: Literal[2]
+    """The manifest format's version: 2, steps keyed by id (`_normalized`)."""
     id: str
     app_version: str = ''
     """The application's own version, reported by the compiled flow."""
@@ -1563,8 +1400,8 @@ class FlowSpec(BaseModel):
     """Files substituted for `<!--name-->` markers in any prompt: shared rules, documents."""
     quote_caller: bool = False
     """End every prompt with the caller's latest words."""
-    context: ContextSpec | Literal['none'] | None = None
-    """What every step's agent is sent from before this caller turn, unless a step says otherwise. None: everything."""
+    context: ContextSpec | Literal['none'] = ContextSpec()
+    """What every step's agent is sent from before this caller turn, unless a step says otherwise: no facts, its own turns."""
     current_datetime: CurrentDatetimeSpec | None = None
     """The call's timezone, and whether and how far ahead each step's model is shown the date. None: UTC, today only."""
     steps: list[AnyStep]
@@ -1573,40 +1410,26 @@ class FlowSpec(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def _normalized(cls, data: Any) -> Any:
-        """Version 2 as the list version 1 compiles from: one steps table, one set of spec classes, one runtime.
+        """The steps keyed by id as one ordered steps table.
 
         A step's key is its id; an `id:` inside it that says otherwise is
         refused, never picked between. A step with no `kind` is a
-        conversation, and a conversation with no `speech` is `structured`;
-        an explicit kind or speech is kept. The flow's context defaults to no
-        facts and each step's own history, every turn of it (`History()`);
-        members it sets are kept, and `context: none` stays none. Steps keep
-        the order they are written in, so `entry` and `then` default as in
-        version 1. Version 1 is returned as it came.
+        conversation. Steps keep the order they are written in, so `entry`
+        and `then` default to the next one.
         """
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or data.get('version') != 2:
             return data
         steps = data.get('steps')
-        if data.get('version') != 2:
-            if data.get('version') == 1 and isinstance(steps, dict):
-                raise ValueError('version 1 lists its steps (`- id: desk`); steps keyed by id are version 2')
-            return data
         if not isinstance(steps, dict):
-            raise ValueError('version 2 keys its steps by id (`steps: {desk: {...}}`); a list is version 1')
+            raise ValueError('steps are keyed by id (`steps: {desk: {...}}`), not listed')
         listed = []
         for key, body in steps.items():
             if not isinstance(body, dict):
                 raise ValueError(f'step {key!r}: a step is a mapping of its keys')
             if body.get('id', key) != key:
                 raise ValueError(f'step {key!r}: its id {body["id"]!r} differs from its key; keep one')
-            step = {'id': key, 'kind': 'conversation', **body}
-            if step['kind'] == 'conversation':
-                step.setdefault('speech', 'structured')
-            listed.append(step)
-        context = data.get('context', {})
-        if isinstance(context, dict):
-            context = {'facts': 'none', 'history': {'scope': 'node'}, **context}
-        return {**data, 'steps': listed, 'context': context}
+            listed.append({'id': key, 'kind': 'conversation', **body})
+        return {**data, 'steps': listed}
 
     def _resolver(self, registry: Registry) -> _Resolver:
         resolve = _Resolver(self, registry)
@@ -1618,9 +1441,8 @@ class FlowSpec(BaseModel):
             )
         elif self.language and not _attribute(resolve.state_type(), self.language):
             resolve.fail('language', f'names {self.language!r}, which the state has no field or property for')
-        business = [s for s in self.steps if isinstance(s, CollectSpec | ConfirmSpec | ActionSpec)]
-        if business and not self.state:
-            resolve.fail('', 'a flow with collect, confirm or action steps needs a state model (`state:`)')
+        if any(isinstance(s, ActionSpec) for s in self.steps) and not self.state:
+            resolve.fail('', 'a flow with action steps needs a state model (`state:`)')
         ids = [step.id for step in self.steps]
         for repeated in sorted({i for i in ids if ids.count(i) > 1}):
             resolve.fail('', f'step id {repeated!r} is used more than once')
@@ -1650,21 +1472,13 @@ class FlowSpec(BaseModel):
                 if to not in known:
                     resolve.fail(step.id, f'sends the caller to {to!r}, which is not a step')
             step.check(resolve)
-        spoken = {n for s in self.steps if isinstance(s, CollectSpec | ConversationSpec) for n in s.fields}
+        spoken = {n for s in self.steps if isinstance(s, ConversationSpec) for n in s.fields}
         for name, fields in resolve.assigned.items():
             for field_name in sorted(fields & spoken):
                 resolve.fail(
                     f'operation {name}',
                     f'assigns {field_name!r}, which the caller gives; a receipt may not overwrite it',
                 )
-        collected: set[str] = set()
-        for step in self.steps:
-            if isinstance(step, CollectSpec | ActionSpec):
-                for name in step.after:
-                    if name not in collected:
-                        resolve.fail(step.id, f'depends on {name!r}, which no earlier step collects')
-            if isinstance(step, CollectSpec):
-                collected |= step.produces(resolve)
         self._unguarded_actions(resolve)
         return resolve
 
@@ -1673,47 +1487,27 @@ class FlowSpec(BaseModel):
         return self._resolver(registry or Registry()).problems
 
     def _unguarded_actions(self, resolve: _Resolver) -> None:
-        """An action that needs approval must be unreachable except through a confirm step for that operation."""
-        business = [s for s in self.steps if not isinstance(s, EndSpec)]
-        edges: dict[str, set[str]] = {s.id: set(s.destinations()) for s in self.steps}
-        for index, step in enumerate(business):
-            if not step.then and index + 1 < len(business):
-                edges[step.id].add(business[index + 1].id)
+        """An action step runs its operation with no model, so it may not run one that needs a read-back and a yes.
+
+        That operation belongs on a conversation step, which reads it back and
+        carries it out only on a heard yes.
+        """
         for action in [s for s in self.steps if isinstance(s, ActionSpec)]:
             found = resolve._cache.get(('operation', action.uses))
             operation_type = found[0] if found else None
-            if not isinstance(operation_type, type) or not getattr(operation_type, 'needs_approval', True):
-                continue
-            gates = {
-                s.id
-                for s in self.steps
-                if isinstance(s, ConfirmSpec) and s.uses == action.uses and s.then == action.id
-            }
-            if not gates:
+            if isinstance(operation_type, type) and getattr(operation_type, 'needs_approval', True):
                 resolve.fail(
-                    action.id, f'needs approval, and no confirm step for {action.uses!r} leads to it'
+                    action.id,
+                    f'runs {action.uses!r}, which needs a read-back and a yes: carry it out on a conversation step',
                 )
-                continue
-            start = business[0].id if business else ''
-            seen, queue = {start}, deque([start])
-            while queue:
-                for there in edges.get(queue.popleft(), ()):
-                    if there not in gates and there not in seen:
-                        seen.add(there)
-                        queue.append(there)
-            if action.id in seen:
-                resolve.fail(action.id, 'can be reached without its confirmation')
 
     def prompt(self, step_id: str, registry: Registry | None = None) -> TemplateStr:
         """One step's compiled prompt, exactly as its agent receives it."""
-        step = next(
-            (s for s in self.steps if s.id == step_id and isinstance(s, CollectSpec | ConversationSpec)),
-            None,
-        )
+        step = next((s for s in self.steps if s.id == step_id and isinstance(s, ConversationSpec)), None)
         if step is None:
             raise FlowSpecError([f'{step_id!r} is not a step with a prompt'])
         resolve = _Resolver(self, registry or Registry())
-        compiled = resolve.prompt(step_id, step.prompt, getattr(step, 'agent', ''))
+        compiled = resolve.prompt(step_id, step.prompt, step.agent, step.seen(resolve))
         if compiled is None:
             raise FlowSpecError(resolve.problems)
         return compiled
@@ -1901,7 +1695,7 @@ class _Manifest(yaml.SafeLoader):
 
 
 def _by_step(error: ValidationError, steps: Any) -> list[str]:
-    """A version 2 file's validation errors, each named by its step's key rather than a list index."""
+    """A manifest's validation errors, each named by its step's key rather than a list index."""
     names = list(steps) if isinstance(steps, dict) else []
     found = []
     for each in error.errors():
@@ -1920,9 +1714,8 @@ def _by_step(error: ValidationError, steps: Any) -> list[str]:
 def load(text: str, root: str | Path | None = None) -> FlowSpec:
     """Read a flow file's text, YAML or JSON; `root` is its folder. Unknown kinds and fields fail here.
 
-    A repeated key fails in either version. A version 2 file's problems are
-    one `FlowSpecError`, each named by its step; version 1 raises Pydantic's
-    `ValidationError` as it always has.
+    A repeated key fails. Every problem is in one `FlowSpecError`, each named
+    by its step.
     """
     data = yaml.load(text, Loader=_Manifest)
     if not isinstance(data, dict):
@@ -1930,8 +1723,6 @@ def load(text: str, root: str | Path | None = None) -> FlowSpec:
     try:
         spec = FlowSpec.model_validate(data)
     except ValidationError as error:
-        if data.get('version') != 2:
-            raise
         raise FlowSpecError(_by_step(error, data.get('steps'))) from None
     spec._root = Path(root) if root is not None else None
     return spec

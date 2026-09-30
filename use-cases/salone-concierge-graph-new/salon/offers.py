@@ -28,6 +28,8 @@ class Times(BaseModel):
     options: dict[str, str] = {}
     note: str = ''
     say: str = ''
+    pick: str = ''
+    """The one booking the caller holds: nothing to ask about which one."""
 
 
 def _listed(items: list[str], last: str = 'or') -> str:
@@ -97,9 +99,7 @@ def find_times(salon: Salon, state: SalonState) -> Times:
             notes.append(f"{wanted:%H:%M} is their own booking {own.booking_id}, not someone else's.")
     if found.price_euros is not None:
         notes.append(f'The price is {found.price_euros} euros.')
-    said = [
-        spoken_time(s.time) + ('' if state.service else f' for a {spoken_service(s.service)}') for s in slots
-    ]
+    said = [spoken_time(s.time) for s in slots]
     return Times(
         options={s.slot_id: f'{spoken_service(s.service)} {s.spoken}' for s in slots},
         note=' '.join(notes),
@@ -132,25 +132,31 @@ NONE_HELD = "I can't find an upcoming booking for this number. Would you like to
 
 
 def bookings_to_move(salon: Salon, state: SalonState) -> Times:
-    """What a move can name, with moving's first line: the booking they hold and the new day, or which one."""
+    """What a move can name, with moving's first line: the one booking held is picked, then the new day is asked.
+
+    With the new day already given (a hand-over from booking with it), there is
+    nothing to ask here: the times for that day come next.
+    """
     held = _held(salon, state)
     if not held:
         return Times(note='They hold no upcoming booking.', say=NONE_HELD)
     if len(held) == 1:
-        [(_, words)] = held.items()
-        return Times(options=held, say=f'You have {words}. Which day would you like to move it to?')
+        [(booking, words)] = held.items()
+        ask = '' if state.booking_day else f'You have {words}. Which day would you like to move it to?'
+        return Times(options=held, pick=booking, say=ask)
     return Times(
         options=held, say=f'You have {_listed(list(held.values()))}. Which one would you like to move?'
     )
 
 
 def bookings_to_cancel(salon: Salon, state: SalonState) -> Times:
-    """What a cancel can name. One booking has no words: its cancel read-back is the question, asked once."""
+    """What a cancel can name. The one booking held is picked: its cancel read-back is the question, asked once."""
     held = _held(salon, state)
     if not held:
         return Times(note='They hold no upcoming booking.', say=NONE_HELD)
     if len(held) == 1:
-        return Times(options=held, note='They hold one booking: read its cancel back.')
+        [booking] = held
+        return Times(options=held, pick=booking)
     return Times(
         options=held, say=f'You have {_listed(list(held.values()))}. Which one would you like to cancel?'
     )

@@ -9,13 +9,13 @@ of truth.
 
 ## Choosing and confirming
 
-- The booking to move is one of those on offer as `booking_id`. When they say
-  which one, or they hold only one, put its id as `booking_id` in your update.
-- Record the new day and time they want, then call `options` with them in its
-  update for the times on offer. The service stays the booking's own unless
-  they change it.
+- The booking to move is one of those on offer as `booking_id`. When they hold
+  only one, the application has already picked it. When they hold several,
+  put the one they name as `booking_id` in your update.
+- Record the new day and time they want with `record`: the application offers
+  the times. The service stays the booking's own unless they change it.
 - When they pick one of the times on offer, call `move_appointment` with its
-  id as `slot` and the booking's id as `booking_id` in the update. The first
+  id as `slot` in the update. The first
   call reads it back: never read a move back yourself, and never read ids or
   lists out.
 - A clear yes to the read-back they just heard: call `move_appointment` again.

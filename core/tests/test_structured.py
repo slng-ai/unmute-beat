@@ -700,6 +700,42 @@ async def an_offer_on_arrival_is_code_s():
         assert told in script.payloads[-1].history and ('slot' in call._offers) == (not closed), closed
 
 
+async def a_pick_is_read_back_and_a_record_offers_again():
+    """`offers:` after a `record` as on arrival: one time is picked and read back by code, with no request.
+
+    Two times for a cleaning are ids with no words: the agent says them. The
+    caller changes to a checkup, only recorded: the times rest on the service,
+    so code asks again, and the one time left is picked and read back.
+    """
+    text = (
+        (HERE / 'structured.v2.yaml')
+        .read_text()
+        .replace('structured.py:free_times', 'structured.py:the_only_time')
+        .replace('    operations: [book, quote]\n', '    offers: [slot]\n    operations: [book, quote]\n')
+    )
+    asked = 'Shall I book Tuesday at 10:00 AM for P-1234?'
+    script = Script()
+    flow = core.flowspec.load(text, root=HERE).compile(model=script.model)
+    call = flow.open(VisitState(service='checkup'), services=Clinic(), clock=lambda: CLOCK)
+    call.commit(agent='front', pending='desk')
+    call._checkpoint = Checkpoint('desk', 'A checkup, please.')
+    said, done = await turn(
+        flow, call, script, 'P-1234.', ('call', 'check_in', {'update': {'patient': 'P-1234'}})
+    )
+    assert said == ['Thanks, I have you checked in.', asked] and done.requests == 1, (said, done)
+    assert call.state.facts.slot == '1000'
+    script = Script()
+    flow = core.flowspec.load(text, root=HERE).compile(model=script.model)
+    clinic = Clinic()
+    known = VisitState(service='cleaning', patient='P-1234', checked_in=CheckedIn(patient='P-1234'))
+    call = flow.open(known, services=clinic, clock=lambda: CLOCK)
+    call.commit(agent='desk')
+    said, done = await turn(
+        flow, call, script, 'Make it a checkup.', ('call', 'record', {'update': {'service': 'checkup'}})
+    )
+    assert said == [asked] and done.requests == 1 and clinic.availability == ['checkup'], (said, done)
+
+
 async def partial_output_commits_nothing():
     script = Script()
     flow, call, _ = opened(script)
@@ -767,6 +803,7 @@ async def each_test(manifest: str):
     await the_caller_s_words_come_back_whatever_the_summary()
     await a_consultation_keeps_the_prerequisite_apart()
     await an_offer_on_arrival_is_code_s()
+    await a_pick_is_read_back_and_a_record_offers_again()
     await partial_output_commits_nothing()
     await a_committed_update_stays_when_its_words_are_cut()
     print(

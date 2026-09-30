@@ -2,10 +2,10 @@
   "booking, the read-back request": {
     "bytes": {
       "history": 704,
-      "instructions": 7570,
-      "outputs": 6693,
+      "instructions": 7622,
+      "outputs": 8073,
       "tools": 2424,
-      "total": 17391
+      "total": 18823
     },
     "history": [
       {
@@ -92,11 +92,12 @@
       "## Availability",
       "",
       "Record the caller's service, day and time in your update as soon as they say",
-      "them. Record the day as a date, YYYY-MM-DD, worked out from the calendar in",
-      "your instructions: \"Saturday next week\" is the date that calendar labels that",
-      "way. When the caller's words could mean two dates, ask which one, naming both.",
-      "`options`, with them in its update, returns the times on offer. Ask for a day if missing. Offer",
-      "only returned times; if none fit, say so and ask about another day.",
+      "them. When that is all their reply gives, use `record`: the application then",
+      "offers the times for it, or asks for what it still needs. Record the day as a",
+      "date, YYYY-MM-DD, worked out from the calendar in your instructions: \"Saturday",
+      "next week\" is the date that calendar labels that way. When the caller's words",
+      "could mean two dates, ask which one with `reply`, naming both. Offer only",
+      "times on offer; if none fit, say so and ask about another day.",
       "",
       "Offer up to three times, nearest the time they asked for, naming the service",
       "and day once, and end with \"Which time works for you?\". If the exact time they",
@@ -396,6 +397,89 @@
           "parameters_json_schema": {
             "additionalProperties": false,
             "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Record what the caller has just said when the application answers it: it reads back or carries out what follows. Say nothing yourself.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "record",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "booking_day": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The date the caller asked for, as YYYY-MM-DD, worked out from the calendar you are shown."
+              },
+              "booking_time": {
+                "anyOf": [
+                  {
+                    "format": "time",
+                    "type": "string"
+                  },
+                  {
+                    "enum": [
+                      "morning",
+                      "afternoon",
+                      "evening"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The time the caller asked for: HH:MM on a 24-hour clock (14:00 for 2 PM), or morning, afternoon or evening."
+              },
+              "service": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "haircut",
+                      "hair-color",
+                      "blowout"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The service the caller wants: haircut, hair-color or blowout."
+              },
+              "slot": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The id of the time the caller picked, from the times on offer."
+              }
+            },
+            "title": "BookingUpdate",
             "type": "object"
           },
           "return_schema": null,

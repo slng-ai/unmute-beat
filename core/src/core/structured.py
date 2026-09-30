@@ -417,14 +417,18 @@ class Structured:
         update cannot carry, since its arguments do not rest on it: Faro's
         `asked_language`, which changes only the read-back's words. Any other
         `reads_back` operation is offered with its update, which reads it
-        back in the same one request.
+        back in the same one request. A step that `offers:` has it too: the
+        day the caller gives is recorded, and code offers the times for it.
         """
         step = self.step
         read_back = [op for op in step.operations if op.name in step.reads_back]
-        return self.read_back is not None and (
-            bool(step.carries)
-            or any(op.confirms_by_restating for op in read_back)
-            or any(not set(step.reads_back[op.name]) <= _resting_on(op) for op in read_back)
+        return bool(step.offers) or (
+            self.read_back is not None
+            and (
+                bool(step.carries)
+                or any(op.confirms_by_restating for op in read_back)
+                or any(not set(step.reads_back[op.name]) <= _resting_on(op) for op in read_back)
+            )
         )
 
     @property
@@ -547,7 +551,7 @@ class Structured:
         return _shaped(leave_declining, {'recap': (list[str] | None, None), 'decline': (bool, False)}, str)
 
     def _record(self) -> Callable[..., Awaitable[Any]]:
-        decision, actions, read_back = self.decision, self.actions, self.read_back
+        decision, actions, read_back, step = self.decision, self.actions, self.read_back, self.step
 
         async def record(ctx: RunContext[FlowCall[Any]], update: BaseModel) -> Any:
             """Record what the caller has just said when the application answers it: it reads back or carries out what follows. Say nothing yourself."""
@@ -556,6 +560,8 @@ class Structured:
             if not await decision.apply(ctx, update):
                 raise ModelRetry('Nothing was recorded: the update is empty. Answer the caller with reply.')
             asked = read_back(call) if read_back is not None else None
+            if asked is None and step.owes_offer(call):
+                return await step.offer(call)
             if asked is None:
                 raise ModelRetry(
                     f'Recorded: {", ".join(sorted(call._recorded))}. Nothing follows from it for the application '

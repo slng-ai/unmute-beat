@@ -79,6 +79,17 @@ def free_times(clinic: Clinic, state: VisitState) -> dict[str, str]:
     return {slot: TIMES[slot] for slot in wanted if slot not in taken}
 
 
+class Times(BaseModel):
+    options: dict[str, str]
+    pick: str = ''
+
+
+def the_only_time(clinic: Clinic, state: VisitState) -> Times:
+    """`free_times`, with the one time picked by the clinic when there is only one (`Options.pick`)."""
+    free = free_times(clinic, state)
+    return Times(options=free, pick=next(iter(free)) if len(free) == 1 else '')
+
+
 class Unpriced(core.Rejection):
     status: Literal['unpriced']
     service: Service

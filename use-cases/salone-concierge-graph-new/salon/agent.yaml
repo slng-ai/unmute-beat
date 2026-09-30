@@ -71,8 +71,9 @@ steps:
     exits:
       - {to: concierge, purpose: 'the caller will not confirm a number, or asks about something else entirely'}
 
-  # Each of the next three does one thing, so its first line on arrival is code's (`offers:`): find_times
-  # offers the times or asks for the service or day it still needs; the others name the bookings held.
+  # Each of the next three does one thing, so what it says next is code's (`offers:`), on arrival and after a
+  # `record`: find_times offers the times or asks for the service or day it still needs; the other two pick
+  # the one booking held (a cancel is then read back at once) or ask which one.
   booking:
     agent: robin
     prompt: prompts/booking.md
@@ -105,7 +106,7 @@ steps:
       # The booking being moved rests on no field; a time on offer rests on what was asked for, as in booking.
       booking_id: {function: offers.py:bookings_to_move, after: []}
       slot: {function: offers.py:find_times, after: [booking_id, service, booking_day, booking_time]}
-    offers: [booking_id]
+    offers: [booking_id, slot]
     operations: [move_appointment]
     reads_back: {move_appointment: [slot]}
     capabilities: [capabilities.py:refunds]

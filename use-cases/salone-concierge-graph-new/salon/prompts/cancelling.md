@@ -4,7 +4,8 @@ Cancel a booking this caller holds. They are already identified. The bookings
 they hold are on offer as `booking_id` in the state below; the diary is the
 source of truth.
 
-- When they say which booking, or they hold only one, call
+- When they hold only one booking, the application reads its cancellation
+  back on arrival. When they hold several and say which one, call
   `cancel_appointment` with its id as `booking_id` in the update. The first
   call reads it back: never read a cancellation back yourself, and never read
   ids or lists out.

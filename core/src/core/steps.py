@@ -1615,6 +1615,13 @@ class Options(BaseModel):
     options: dict[str, str] = {}
     note: str = ''
     say: str = ''
+    pick: str = ''
+    """One of `options` the application picks itself, for a step that offers it (`offers:`): the caller has only one.
+
+    The pick still has to be on offer, and whatever an operation does with it
+    is read back first: a caller who holds one booking hears "Shall I cancel
+    your haircut Friday?" without being asked which one.
+    """
 
 
 async def _offer(
@@ -1665,15 +1672,20 @@ async def _offer(
             Options(options=dict(answer))
             if isinstance(answer, Mapping)
             else Options(
-                options=dict(answer.options), note=getattr(answer, 'note', ''), say=getattr(answer, 'say', '')
+                options=dict(answer.options),
+                note=getattr(answer, 'note', ''),
+                say=getattr(answer, 'say', ''),
+                pick=getattr(answer, 'pick', ''),
             )
         )
     if call._version != version or call._generation != generation or call.state.agent != agent:
         return {'stale': 'The request changed while these were looked up. Nothing is offered; look again.'}
     result: dict[str, Any] = {}
     for name, options in found.items():
-        call._offers.put(name, options.options, options.say, call.turn if kept else 0, agent if kept else '')
+        call._offers.put(name, options.options, options.say, call.turn if kept else 0, agent)
         result[name] = {'options': options.options, **({'note': options.note} if options.note else {})}
+        if options.pick in options.options:
+            result[name]['pick'] = options.pick
     return result
 
 
@@ -1808,13 +1820,16 @@ class ConversationStep(Step):
     rerun, cBrx4NhR). Tried after `opens_with`.
     """
     offers: tuple[str, ...] = ()
-    """Choices whose function says the step's first line on arrival (`say`), with no model request.
+    """Choices whose function says the step's next line (`say`), with no model request: `ConversationStep.offer`.
 
-    On arrival by a hand-over or a completed prerequisite, while the choice has
-    no standing offer. The function decides: an offer (ids and words), a
-    question for what it still needs (words alone), ids for the agent to word,
-    or a note for the agent. Session 4, Coval runs
-    82gmB8t5 and DezcEAK4: booking reached from verify spent three requests
+    On arrival by a hand-over or a completed prerequisite, and after a
+    `record` that left one with no offer of this step's own (the caller gave
+    the day). The function decides: an offer (ids and words), a question for
+    what it still needs (words alone), ids for the agent to word, a `pick`
+    when the caller has only one, or a note for the agent. A reply that only
+    gave the day for the times cost two requests (`options`, then `reply`),
+    and a hand-over with the new day three (session 4, text paths). In Coval runs
+    82gmB8t5 and DezcEAK4, booking reached from verify spent three requests
     (`options`, then `reply`) on the offer the request already decided, and the
     caller talked over the silence after "Thanks, I have you." A choice with
     nothing to offer, or no words, leaves the arrival to the step's agent.
@@ -1874,38 +1889,75 @@ class ConversationStep(Step):
         return self.asks[missing] if missing else ''
 
     def _offer_first(self) -> tuple[Opening[Any], ...]:
-        return tuple(self._offer_on_arrival(name) for name in self.offers)
+        if not self.offers:
+            return ()
+        return (
+            Opening('options', self.owes_offer, self.offer, arrivals=frozenset({'handoff', 'completed'})),
+        )
 
-    def _offer_on_arrival(self, name: str) -> Opening[Any]:
-        """The choice function's first line, said by code: an offer, a question for what it needs, or nothing."""
-        choose = self.choices[name]
+    def owes_offer(self, call: FlowCall[Any]) -> bool:
+        """Some choice in `offers:` has no offer this step made standing: none, or one another step made."""
+        return any(self._unoffered(call, name) for name in self.offers)
 
-        async def offer(call: FlowCall[Any]) -> str:
-            found = await _offer(call, {name: choose}, announce=True)
+    def _unoffered(self, call: FlowCall[Any], name: str) -> bool:
+        standing = call._offers._by_choice.get(name)
+        return standing is None or standing.step != self.id
+
+    async def offer(self, call: FlowCall[Any]) -> Prompted | str:
+        """Code's next line for `offers:`, on arrival or after a `record`: a read-back, an offer, or a question.
+
+        Each choice in turn that has no offer of this step's own asks its
+        function. A `pick` (the caller has only one) is recorded, and when an
+        operation of this step then has every argument, it is read back. Else
+        the function's words are said: an offer, or a question for what it
+        still needs. A choice with no words goes on to the next. When none has
+        anything to say, the step's agent answers with the functions' notes.
+        """
+        notes = []
+        for name in self.offers:
+            if not self._unoffered(call, name):
+                continue
+            found = await _offer(call, {name: self.choices[name]}, announce=True)
             problem = found.get('stale') or found.get('unavailable') or ''
             if problem:
                 call._offers.take(name)
                 raise ModelRetry(problem)
             pickable = bool(call._offers.get(name))
+            if pick := found[name].get('pick'):
+                call.collect(tuple(self.choices), atomic=True, **{name: pick})
+                if (asked := self._ready(call)) is not None:
+                    return asked
             words = call._offers.announce(call.state.agent, [name], call.turn)
             if not pickable:
                 call._offers.take(name)
             if words:
                 await call.speak_now(words, origin='ask')
                 return words
-            note = found.get(name, {}).get('note', '')
-            if pickable:
-                raise ModelRetry(
-                    f'{name} is on offer now, under "On offer": carry on from it. {note}'.strip()
-                )
-            raise ModelRetry(f'nothing is on offer for {name}. {note}'.strip())
+            note = found[name].get('note', '')
+            notes.append(
+                f'{name} is on offer now, under "On offer": carry on from it. {note}'.strip()
+                if pickable
+                else f'nothing is on offer for {name}. {note}'.strip()
+            )
+        raise ModelRetry(' '.join(notes) or 'Everything is on offer already: carry on from it.')
 
-        return Opening(
-            'options',
-            lambda call: name not in call._offers,
-            offer,
-            arrivals=frozenset({'handoff', 'completed'}),
-        )
+    def _ready(self, call: FlowCall[Any]) -> Prompted | None:
+        """The read-back of this step's one operation that now has every argument and is not already asked."""
+        ready = []
+        for operation in self.operations:
+            try:
+                args = _args(operation, call)
+            except ValidationError:
+                continue
+            if operation.needs_approval:
+                ready.append((operation, args))
+        if len(ready) != 1:
+            return None
+        operation, args = ready[0]
+        proposal = operation.proposal_for(call, args)
+        if call.pending(operation.name, value=proposal.value) is not None:
+            return None
+        return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
 
     def _ask_first(self) -> tuple[Opening[Any], ...]:
         if not self.asks:

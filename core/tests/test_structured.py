@@ -519,6 +519,32 @@ async def consent_is_code_s():
     assert booking(call)[-1] == 'unknown', 'no invented outcome'
 
 
+async def a_yes_that_repeats_its_value_is_a_yes():
+    """A yes whose update sends again the value just read back is carried out; a different value is read back.
+
+    Live, a model answering "yes, that's perfect" often fills the operation's
+    update with the value it already sent (session 4, Coval run
+    82gmB8t5BHAGjq8bHeTysX). The question it answers is unchanged, so the yes
+    stands; only a value that changes, or one the state refuses, is a change.
+    """
+    script = Script()
+    flow, call, clinic = opened(script)
+    await offered(flow, call, script)
+    await read_back(flow, call, script)
+    said, _ = await turn(
+        flow, call, script, 'Yes, ten is perfect.', ('call', 'book', {'update': {'slot': '1000'}})
+    )
+    assert said == ['Booked for Tuesday at 10:00 AM, reference CL001.'] and clinic.calls == 1, said
+    script = Script()
+    flow, call, clinic = opened(script)
+    await offered(flow, call, script)
+    await read_back(flow, call, script)
+    said, _ = await turn(
+        flow, call, script, 'Yes, nine then.', ('call', 'book', {'update': {'slot': '0900'}})
+    )
+    assert said == [READ_BACK['0900']] and clinic.calls == 0, 'a new value is a change: read back fresh'
+
+
 async def a_consultation_answers_once():
     script = Script()
     flow, call, clinic = opened(script)
@@ -695,6 +721,7 @@ async def each_test(manifest: str):
     await a_cancelled_read_assigns_nothing()
     await one_decision_per_response()
     await consent_is_code_s()
+    await a_yes_that_repeats_its_value_is_a_yes()
     await a_consultation_answers_once()
     await a_stale_read_back_is_not_put_again()
     await the_caller_s_words_come_back_whatever_the_summary()

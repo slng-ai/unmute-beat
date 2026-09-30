@@ -515,11 +515,16 @@ class CallContext(BaseModel):
     _tries: Counter[str] = PrivateAttr(default_factory=Counter)
     """How many times a model response in this caller turn tried to record each field (`one_action_per_reply`)."""
     _kept: Counter[str] = PrivateAttr(default_factory=Counter)
-    """How many of those tries recorded the field with the value it already had (`collect`).
+    """How many of those tries recorded the field with the value it already had (`collect`, or a structured update).
 
     `_changing` also holds a field recorded again unchanged: the caller saying
     the read-back's value back. A read-back is confirmed by that
     (`core.graph.Restated`) only while every try at its fields kept the value.
+    On a structured step, an operation called again with an update that keeps
+    the value read back is still the yes the model read (`_operate`): only a
+    field some try changed, or one the state refused, blocks it as a change.
+    A prose step keeps session 4d's rule: `collect` beside the operation in
+    one reply is read back again, whatever it records.
     A try the tool's schema refused never reaches `collect`, so it counts as
     a try and not as kept: "half nine, well, ten then" is a change, and
     "ten, no, nine, no, ten" too, never a yes to ten.

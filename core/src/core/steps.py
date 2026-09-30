@@ -2363,8 +2363,11 @@ class ConversationStep(Step):
                         f'Nothing was done: this reply also changes {", ".join(sorted(call._unapplied & resting_on))}. '
                         f'Record the change first, then call {operation.name} again to read it back.'
                     )
-                if call._changing & resting_on or not call.approve(proposal.about, value=proposal.value):
-                    _blocked(call, proposal, 'changing' if call._changing & resting_on else '')
+                changed = call._changing & resting_on
+                if self.structured:
+                    changed = {name for name in changed if call._tries[name] != call._kept[name]}
+                if changed or not call.approve(proposal.about, value=proposal.value):
+                    _blocked(call, proposal, 'changing' if changed else '')
                     return read_back
             return await self._approved(flow, operation, call, ctx.usage, ctx.usage_limits)
 

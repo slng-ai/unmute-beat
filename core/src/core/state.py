@@ -1928,7 +1928,7 @@ class CallContext(BaseModel):
                 updates = {name: value for name, value in updates.items() if name not in late}
             if not updates:
                 return
-        candidate = self.state.model_dump() | deepcopy(updates)
+        candidate = self.state.model_dump(exclude=set(updates)) | deepcopy(updates)
         self.state = type(self.state).model_validate(
             candidate, extra='forbid', context=self.validation_context()
         )

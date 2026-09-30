@@ -719,7 +719,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
 
     def _bound(self, data: Any, args: BaseModel) -> list[str]:
         """The `matches` fields on which a receipt is about something other than these arguments."""
-        given = args.model_dump()
+        given = args.model_dump(include=set(self.matches.values()))
         return [
             f for f, arg in self.matches.items() if not isinstance(data, Mapping) or data.get(f) != given[arg]
         ]
@@ -804,7 +804,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
                     raise OutcomeUnknownError(
                         f'{self.name}: reconciliation answered in a shape that is not the receipt'
                     ) from error
-                if wrong := self._bound(receipt.model_dump(), args):
+                if wrong := self._bound(receipt.model_dump(include=set(self.matches)), args):
                     raise OutcomeUnknownError(
                         f'{self.name}: reconciliation answered about a different {", ".join(wrong)}'
                     )
@@ -2163,8 +2163,7 @@ class ConversationStep(Step):
         step waiting on it (`return_after`).
         """
         said, receipt = await _carry_out(call, operation, usage, limits, rendered=self.rendered)
-        dumped = receipt.model_dump() if isinstance(receipt, BaseModel) else {}
-        to = str(dumped.get(operation.route, '')) if operation.route else ''
+        to = str(getattr(receipt, operation.route, '')) if operation.route and isinstance(receipt, BaseModel) else ''
         if to and to != self.id:
             if to not in self.routes:
                 raise ValueError(

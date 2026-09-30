@@ -379,6 +379,6 @@ These checks use scripted models and controlled faults. They test the runtime's 
 - [Proposal ledger](../../core/src/core/proposals.py) and [session records](../../core/src/core/state.py): exact question binding, delivery, withdrawal, restoration and effective receipts.
 - [Intent tests](../../core/tests/test_intents.py) and [outcome tests](../../core/tests/test_outcomes.py): cancellation, safe retries, late effects, malformed results and recovery.
 - [Support-desk backend](../../core/tests/ticket_flow/tickets.py) and [tests](../../core/tests/test_tickets.py): durable intent records, stale revisions, process death and receipt-only repetition.
-- [Flow-rule tests](../../core/tests/test_flow_rules.py): receipt routing on immediate success and operations carried out after a record. [Faro's cleanup report](../research/reusable-core/core-cleanup.md#what-is-not-verified) records the narrower recovery and live-validation coverage of that application.
+- [Flow-rule tests](../../core/tests/test_flow_rules.py): receipt routing on immediate success and operations carried out after a record.
 
 [← Nodes and agent.yaml](04-typed-flows-and-node-agents.md) · [Reading guide](README.md)

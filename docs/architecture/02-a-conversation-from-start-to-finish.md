@@ -1,224 +1,191 @@
 # 02 — A conversation from start to finish
 
-Let us follow what the caller hears before looking at configuration. Our example changes a **record**: one item stored by an application, such as a support case. Account `A-42` owns record `R-17`, and the caller wants to mark it complete.
+This chapter follows one real salon call before any configuration. The caller books a haircut, then asks to move it
+to the next day. Each turn shows what the model chose and what code said. Every turn costs one model request.
 
-The conversation below illustrates a successful path, not a recording or a promise that a live model will always choose correctly. The code checks at the end exercise the same mechanics with a scripted model.
+The words below come from a real-model text run of the reference salon
+([`use-cases/salone-concierge-graph-new`](../../use-cases/salone-concierge-graph-new/)). A live model can still
+choose wrongly. The offline check at the end runs the same mechanics with a scripted model.
 
-## 1. Give each node a clear job
+## 1. The nodes this call uses
 
-This example uses three nodes:
-
-| Node name | Its job | Uses an agent? |
+| Node | Its one job | Uses a model? |
 |---|---|---|
-| `front` | Understand the initial request and answer general questions | Yes |
-| `request` | Gather the details, ask for approval and handle the change | Yes |
-| `lookup` | Fetch the record from the backend and return | No model request is needed to choose this known action |
-
-These are the application's names. Core has no built-in node called `request` or `lookup`.
+| `concierge` | understand what the caller wants, and send them to the right job | yes |
+| `verify` | confirm the caller's phone number and look them up | yes, to read the reply |
+| `booking` | make a new booking | yes |
+| `moving` | move a booking the caller holds | yes |
 
 ```mermaid
 flowchart LR
-    Front["front: understand the request"] --> Request["request: gather details and confirm"]
-    Request -->|"need current information"| Lookup["lookup: fetch the record"]
-    Lookup -->|"result ready"| Request
-    Request -->|"general question"| Front
+    concierge -->|"a new booking"| booking
+    booking -.->|"needs a known customer first"| verify
+    verify -.->|"customer found, back"| booking
+    booking -->|"move the one just made"| moving
 ```
 
-A move to another node is called a **handoff**. It changes which job is active; it does not open another call or erase the information collected so far. You could also put the lookup operation directly on `request`. The separate node is a design choice, not a requirement for tool use.
+These are the salon's names. Core has no built-in node called `booking`. A move to another node is a **hand-over**.
+It changes which job is active. It does not start a new call or lose what the caller said.
 
-## 2. Ask for what is missing
+## 2. The call, turn by turn
 
-Here is a conversation in which the caller supplies one detail at a time:
+| # | Caller | What the model chose | What the caller hears, and who wrote it |
+|---:|---|---|---|
+| 1 | "Hi, I'd like a haircut this Friday, please." | `concierge`: `hand_over` to `booking`, with the update `service: haircut, booking_day: 2026-10-02` | Code: "Which phone number should I use? Please say it with the country code." |
+| 2 | "Plus three four, six hundred, two zero zero, zero zero four." | `verify`: `lookup_customer`, with the update `customer_phone: +34600200004` | Code: "Is your number +34 600 20 00 04?" |
+| 3 | "Yes, that's right." | `verify`: `lookup_customer` again, which is the yes | Code: "Thanks, I have you. On Friday the 2nd I have 9:00 AM, 9:30 AM or 10:00 AM. Which time works for you?" |
+| 4 | "The first one, please." | `booking`: `book_appointment`, with the update `slot: 2026-10-02T0900\|haircut` | Code: "Shall I book a haircut, Friday the 2nd at 9:00 AM?" |
+| 5 | "Yes, please." | `booking`: `book_appointment` again, which is the yes | Code: "You're all set for Friday the 2nd at 9:00 AM. Anything else I can help with?" |
+| 6 | "Actually, can you move it to the day after?" | `booking`: `hand_over` to `moving`, with the update `booking_day: 2026-10-03` | Code: "On Saturday the 3rd I have 9:00 AM, 9:30 AM or 10:00 AM. Which time works for you?" |
+| 7 | "The first one, please." | `moving`: `move_appointment`, with the update `slot: 2026-10-03T0900\|haircut` | Code: "Shall I move your haircut from Friday the 2nd at 9:00 AM to Saturday the 3rd at 9:00 AM?" |
+| 8 | "Yes, please." | `moving`: `move_appointment` again | Code: "That's moved to Saturday the 3rd at 9:00 AM. Anything else I can help with?" |
+| 9 | "No, that's all. Bye." | `moving`: `goodbye` | Code: "Your appointment is now Saturday the 3rd at 9:00 AM. Thanks for calling Sage and Stone. Have a lovely day!" |
 
-| What the caller or assistant says | What happens inside |
-|---|---|
-| Caller: “I'd like to change a record.” | `front` chooses to hand over to `request`. |
-| Assistant: “What is your account identifier?” | On arrival, `request` has no account identifier. Code asks its configured question. |
-| Caller: “A-42.” | The `request` agent records `caller_id='A-42'` through `collect`. |
-| Assistant: “Which record should I change?” | The agent chooses `wait`; code asks for the next missing field. |
-| Caller: “R-17.” | The same agent records `record_id='R-17'`. |
-| Assistant: “What would you like to change?” | Another `wait` selects the missing-change question. |
-| Caller: “Mark it complete.” | The agent records `requested_change='complete'` and can request the lookup. |
+Nine caller turns, nine model requests. The model never wrote a word the caller heard in this call. It read each
+reply and chose one typed decision. Code said the rest. This is the pattern every node follows:
 
-**All the questions after the handoff belong to the same `request` node.** A node describes a responsibility, not one question. `wait` means “give the applicable reply and await the caller,” not “sleep” or “stay silent.”
+1. **The model reads and decides.** Each response is exactly one typed decision. The facts the caller gave ride on
+   it as an `update`.
+2. **Code validates first.** The update becomes a complete new state and is checked as a whole. A pick must be on
+   offer. A hand-over must follow a declared exit.
+3. **Code says what it knows.** Questions for missing facts, offers, read-backs, confirmations and goodbyes are
+   written by the application, not paraphrased by the model.
 
-`collect` is the agent's tool for remembering accepted values. Think of the state as a form that fills up:
+## 3. Who asks for what is missing
 
-```text
-At first:          account = ?      record = ?      requested change = ?
-After “A-42”:      account = A-42   record = ?      requested change = ?
-After “R-17”:      account = A-42   record = R-17   requested change = ?
-After “complete”:  account = A-42   record = R-17   requested change = complete
-```
+**Turn 1.** The caller asked for a booking, so `concierge` handed them to `booking`. But `booking` declares
+`requires: [customer]`, and nobody knows the caller yet. The graph therefore put `verify` first, remembering that
+`booking` is waiting. `verify` has a fixed question for a missing number (`asks:`), so code asked it with no second
+request.
 
-The caller can also give all three details in one reply. The agent can collect them together, and already-known fields do not need their missing-field questions. Understanding that reply is the agent's job; validating and storing the proposed values is core's job.
+**Turn 3.** The yes made code run the lookup. Its receipt says "Thanks, I have you." That satisfied the
+prerequisite, so the call went back to `booking`. `booking` has `offers: [slot]`. On arrival, code asked its choice
+function, `find_times`, what to offer for the state as it stands (haircut, Friday). The function returned the free
+times and the words for them. So the offer was said in the same turn, with no model request.
 
-## 3. Decide who writes the questions
+If the caller had said no day, `find_times` would have returned only a question: "Which day would you like?" When
+the caller then says "Friday", the model answers with `record`, which only records the day. Code then offers the
+Friday times. That is still one request.
 
-The harness supports two speech modes on a conversation node:
+The model writes free words only with `reply`. It uses that for answers code does not know, such as a question about
+the salon's prices or a date that could mean two days.
 
-| Mode | Who writes ordinary replies? | Example |
+## 4. Confirm the exact change
+
+A **read-back** states the change and asks the caller to agree. Core keeps it as the pending **proposal**. Choosing
+`book_appointment` the first time only prepares that question. The backend does not change.
+
+On "Yes, please", the model chooses `book_appointment` again. Core then checks four things before the change runs:
+
+1. The arguments are the same ones that were read back.
+2. The caller is the same.
+3. The read-back has playback evidence: it finished playing to the caller.
+4. The caller's reply began after it finished.
+
+Then the operation runs. The backend answers with a **receipt**, which core validates. The application's words for
+it are then said: "You're all set…". The receipt proves the change, not the model saying "done".
+
+| Moment | State | Did the backend change? |
 |---|---|---|
-| **Prose** | The agent, using its prompt, current facts and history | “Of course. Do you have the record number handy?” |
-| **Rendered** | Application code, configured questions or result templates | “Which record should I change?” |
+| The pick is recorded | haircut, Friday, 9:00 on offer and picked | No |
+| The read-back is said | that exact booking is waiting for a yes | No |
+| The yes is carried out | the booking exists, with its receipt | Yes |
 
-Our `request` node uses **rendered** speech so the example has visible, predictable questions. The application declares them with `asks`:
+A correction such as "yes, but make it 9:30" is not a yes. The model records the new pick, and code reads the new
+booking back. A clear no is `reply` with `decline` set: the waiting read-back is dropped, and nothing is booked.
 
-```yaml
-speech: rendered
-asks:
-  caller_id: What is your account identifier?
-  record_id: Which record should I change?
-  requested_change: What would you like to change?
-```
+## 5. A change of mind is a hand-over
 
-Read `caller_id` as the name of a blank and the sentence beside it as the question for that blank. These are application words; they could be written more warmly. They are not instructions for the model to paraphrase.
+**Turn 6.** "Actually, can you move it to the day after?" is a new job, so `booking` handed the caller to `moving`.
+The hand-over carried the new day, Saturday.
 
-On arrival, code can ask the first missing field in this order without a model request. On a later caller reply, the agent runs, records what it understood and may choose `wait`. Code then selects the next applicable question. The whole conversation is not a fixed script: the agent can also select an allowed operation, handoff or goodbye.
+On arrival, `moving` has `offers: [booking_id, slot]`:
 
-For flexible acknowledgements, explanations and follow-up wording, a node can use **prose**, the default. Its prompt tells it how to ask for missing information, and its current state tells it what is already known. The model generates the question; it does not need a new node for each follow-up. Whether it asks the right question naturally still needs live evaluation.
+1. `bookings_to_move` found that the caller holds one booking, so it **picked** it. The caller had already said the
+   new day, so it said nothing.
+2. `find_times` then offered Saturday for the booking's own service.
 
-**A prose node can still use exact code-written approval and result lines.** Selecting an operation with a read-back uses the same approval checks in either mode. Natural conversation does not require letting the model invent the approved action or bypass its requirements. If a prose node also declares `asks`, those automatic arrival questions remain application-written.
+The caller heard the Saturday times in the same turn. The move's read-back in turn 7 names both the old and the new
+time, so the pick is confirmed before anything happens.
 
-In a rendered node, a question needing an explanation must have an application response or an allowed handoff to a prose node. The model cannot freely add an explanation there. Here `request` can send a general question back to `front`.
+The state carried across the hand-over. `moving` sees only the facts it lists (`booking_id`, `service`, `booking_day`,
+`booking_time`, `slot`), and its own recent turns. [Chapter 03](03-typed-state-and-history.md) shows how that view is
+built.
 
-## 4. Answer after the lookup
+## 6. Speech delivery is separate from text
 
-Once the required details are known, the `request` agent selects the handoff to `lookup`. What happens next is:
+The application produces words. Pipecat's TTS turns them into audio, and its transport plays them. Sending words to
+TTS does not prove the caller heard them.
 
-1. Code calls `fetch_record` with the account and record identifiers.
-2. The backend returns information, for example that R-17 is `open` at revision `1`. A revision is a version number used to notice later changes.
-3. Core checks the result and puts the permitted values into state.
-4. The lookup's `returns: true` sends execution back to `request`, the node that asked for it.
-5. The `request` agent runs with the updated state and existing conversation. It can now select `apply_change`.
-6. Code speaks that operation's exact read-back: “Mark record R-17 complete?”
+For a voice call, core uses playback reports tied to each speech segment: Twilio marks, or the browser page's report.
+They say what the transport observed. They cannot prove that a person understood.
 
-The caller does **not** need to speak between the lookup finishing and that question. Both happen while handling the same caller turn. A caller turn can contain several model requests and node visits; they share limits on how much work may run.
-
-```mermaid
-sequenceDiagram
-    participant User as Caller
-    participant Agent as request agent
-    participant Lookup as lookup code
-    participant Core as Core and audio output
-    User->>Agent: Mark it complete
-    Agent->>Lookup: Fetch the record
-    Lookup-->>Agent: Checked state: open, revision 1, return to request
-    Agent->>Core: Select apply_change
-    Core-->>User: Mark record R-17 complete?
-    Note over User,Core: The next caller reply is needed here
-```
-
-Where do the words come from? The lookup operation can have a `say` template, such as “Record R-17 is currently open.” If it does, that result line is spoken as well. In this walkthrough, assume the lookup is silent: the next spoken line is the change operation's read-back. Returning data does not automatically produce an LLM-written explanation.
-
-On a prose `request` node, the agent could also compose a suitable explanation. On the rendered node shown here, only the application's reply paths can speak. The full routing configuration is in [chapter 04](04-typed-flows-and-node-agents.md#3-declare-each-nodes-capabilities).
-
-## 5. Confirm the exact change
-
-A **read-back** states what the assistant is about to do and asks the caller to agree. Core remembers it as the pending **proposal**. Selecting `apply_change` the first time prepares that question; it does not change the backend.
-
-> Assistant: “Mark record R-17 complete?”
->
-> Caller: “Yes.”
-
-The `request` agent interprets the reply and selects `apply_change` again. Core checks that it still refers to the same arguments and caller, that the read-back has playback evidence, and that the reply began after it finished playing. Then the permitted operation runs.
-
-The backend returns a result saying the record is complete, now at revision 2. Core validates that result, saves the updated facts and speaks the application's result wording:
-
-> “Record R-17 is complete.”
-
-This backend result is called a **receipt**. The receipt, rather than the model saying “done,” establishes the operation's outcome. No extra model request is needed just to paraphrase that configured result line.
-
-| Moment | Current state | Did the backend change? |
-|---|---|---|
-| Details collected | A-42 wants R-17 marked complete | No |
-| Lookup finished | R-17 is open at revision 1 | No; it was read only |
-| Read-back spoken | That exact change is awaiting approval | No |
-| Approved operation succeeds | R-17 is complete at revision 2 | Yes |
-
-A correction such as “Sorry, R-18” needs its own lookup and proposal. It cannot approve the old question. A clear no, interpreted with `decline`, consumes the pending question without making the change. The model still has to interpret those replies correctly; core checks the conditions under which its interpretation may act.
-
-Completing a change does not necessarily end the call. The caller can make another request. If they want to leave, the agent can select `goodbye`; code speaks eligible result recaps and the farewell.
-
-## 6. Keep speech delivery separate from text
-
-The agent or application produces words. Pipecat's TTS turns them into audio, and its transport sends them to the caller. Sending those words to TTS is not proof that a read-back finished playing.
-
-For a voice call, core uses playback reports associated with the particular speech segment. They report what the page or transport observed, not whether someone understood or heard a physical speaker.
-
-The text driver requires an explicit acknowledgement too. In a text integration that is ready to treat the returned text as delivered:
+A text driver acknowledges delivery itself:
 
 ```python
 reply = await core.text_turn(flow, call, words)
 call.acknowledge(*(segment.id for segment in reply.segments))
 ```
 
-This is **simulated delivery** for text. A voice integration must use its playback evidence instead of acknowledging text as if it were audio.
+This is **simulated delivery**. A voice integration must use playback evidence instead.
 
-Pipecat also reports interruptions. Core keeps accepted input and completed tool results, and prevents obsolete work from moving the conversation later. If the caller continues before a non-filler answer finishes playing, those words may be joined into the same turn. A read-back without confirmed delivery cannot approve a change; repetitions are bounded.
-
-If the tool was already sent when an interruption happened, stopping the conversation task does not prove the backend stopped. [Chapter 05](05-tools-approval-and-recovery.md) explains how core tracks an uncertain result instead of blindly repeating the change.
+When the caller talks over a read-back, the read-back was not heard in full, so it cannot be approved. Code says it
+again. Repeats are bounded. When the caller keeps talking before an answer has played out, their words join the same
+turn. [Chapter 05](05-tools-approval-and-recovery.md) explains what happens when a change was sent but its answer was
+lost.
 
 ## 7. Connect this to the application files
 
-Now that the conversation is clear, each file has a specific job:
-
-| File or definition | What it contributes to this example |
+| File | What it gives this call |
 |---|---|
-| Pydantic state model | Names and types for the account, record, requested change, revision and status |
-| Typed functions | `fetch_record` and `apply_change`, with declared inputs and results |
-| Prompts | Instructions for how `front` and `request` should interpret and respond |
-| Manifest (`agent.yaml`) | Connects the nodes, functions, questions and allowed routes |
+| [`state.py`](../../use-cases/salone-concierge-graph-new/salon/state.py) | `SalonState`: the phone, customer, service, day, time, slot and booking id |
+| [`operations.py`](../../use-cases/salone-concierge-graph-new/salon/operations.py) | `LookupCustomer`, `BookAppointment` and `MoveAppointment`, each with its read-back and receipt words |
+| [`offers.py`](../../use-cases/salone-concierge-graph-new/salon/offers.py) | `find_times` and `bookings_to_move`: what is on offer, and the words for it |
+| [`prompts/`](../../use-cases/salone-concierge-graph-new/salon/prompts/) | one prompt per node, and the shared voice and diary rules |
+| [`agent.yaml`](../../use-cases/salone-concierge-graph-new/salon/agent.yaml) | the nodes, what each sees and changes, and how they connect |
 
-Startup reads and checks those definitions. **Compile** means build the reusable executable flow; **open** means create the separate state for one call. With the application's files and chosen model supplied:
+At startup the application loads and checks these files once. For each call it opens a separate state:
 
 ```python
 import core
 
-spec = core.load('application/agent.yaml')
-flow = spec.compile(model=model)
-call = flow.open(ApplicationState(), services=backend)
+flow = core.load('salon/agent.yaml').compile()
+call = flow.open(SalonState(), services=salon, clock=clock)
 ```
 
-This is a lifecycle excerpt, not a standalone application. `ApplicationState` and `backend` are the application's model and service object. Chapter 03 builds the state; chapter 04 shows the manifest and compilation; chapter 05 defines the operation contracts.
+This is an excerpt: `salon/app.py` does it for real, with the diary as the service. Opening a call does not connect
+a microphone. `bot.py` wires the call to Pipecat and says the greeting.
 
-Opening a call does not connect a microphone. The voice launcher wires it to Pipecat. It can use `flow.greeting(call, words)` to include the entry node's question, pass the result to `core.greet`, and send it through the normal audio path. A greeting containing a read-back still needs playback evidence before the first reply can approve it.
+## Run it offline
 
-## Run a concrete version offline
-
-
-The repository's [support-desk fixture](../../core/tests/ticket_flow/agent.yaml) implements this pattern with domain-specific names: `faq` is the front node, `desk` handles requests, and `look_up` runs the lookup. Its `resolve_ticket` operation changes a ticket after approval. The fixture speaks Spanish; neither those words nor its ticket rules are built into core.
-
-From the repository root after `uv sync --all-packages`, run the existing walkthrough with provider requests disabled and a temporary database:
+From the repository root, after `uv sync --all-packages`, run the salon's move-and-cancel check. It uses a scripted
+model, so no provider request is made:
 
 ```bash
-uv run --directory core python - <<'PY'
+cd use-cases/salone-concierge-graph-new
+GOOGLE_API_KEY=x uv run python -c "
 import asyncio
-import tempfile
-from pathlib import Path
-
-from pydantic_ai import models
-
-models.ALLOW_MODEL_REQUESTS = False
-
-from tests.test_tickets import a_heard_yes_resolves_once
-
-with tempfile.TemporaryDirectory() as folder:
-    asyncio.run(a_heard_yes_resolves_once(Path(folder)))
-
-print('Read-back first; one resolution after the acknowledged yes.')
-PY
+from tests.test_business import a_booking_is_moved_and_cancelled, the_booking_just_made_moves_to_the_day_given
+asyncio.run(a_booking_is_moved_and_cancelled())
+asyncio.run(the_booking_just_made_moves_to_the_day_given())
+print('moved and cancelled, one request per turn')
+"
 ```
 
-This check uses a scripted model and explicit text acknowledgements. It asserts that the read-back precedes the write, the backend stays unchanged before approval, and the approved request commits one resolution. It checks the execution sequence, not live language understanding or audio delivery.
+The first check hands a caller to `moving`, which names their booking with no request. It records the new day, and
+code offers its times. After the move, a hand-over to `cancelling` reads the cancel back with no second request. The
+second check is turn 6 above: a hand-over carrying Saturday, answered with Saturday's times. Both check the
+execution, not live language understanding or audio.
 
 ## Check this against the code
 
-- [Manifest compiler](../../core/src/core/flowspec.py): `FlowSpec.compile` resolves the definition and constructs the flow.
-- [Compiled steps](../../core/src/core/steps.py): `StepFlow`, `ConversationStep.node`, `ActionStep.node` and `StepFlow.open` build nodes and open calls.
-- [Executable graph](../../core/src/core/flow.py): `legal_moves`, `Flow._build` and `Flow.run` derive routes and walk them.
-- [Turn engine](../../core/src/core/turn.py) and [media adapter](../../core/src/core/processor.py): the common execution path and its Pipecat integration.
-- [Walkthrough script](../../core/tests/ticket_flow/worker.py) and [support-desk tests](../../core/tests/test_tickets.py): the concrete tool sequence and assertions.
-- [Delivery tests](../../core/tests/test_delivery.py) and [Pipecat/text equivalence tests](../../use-cases/salon-graph/tests/test_core.py): the boundaries the text walkthrough does not exercise.
+- [Structured decisions](../../core/src/core/structured.py): `reply`, `record`, an operation with its `update`,
+  `hand_over`, `goodbye`, and how each is applied.
+- [Compiled steps](../../core/src/core/steps.py): `ConversationStep.offer` (what code says on arrival and after a
+  `record`) and `ConversationStep._operate` (read-back, then carry out on a yes).
+- [Executable graph](../../core/src/core/flow.py) and [turn engine](../../core/src/core/turn.py): prerequisites,
+  hand-overs, and one caller turn from start to end.
+- [Salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py): every path above, with the
+  requests pinned in `golden/payloads.json`.
 
-[← Stack and boundaries](01-stack-and-boundaries.md) · [Reading guide](README.md) · [Next: typed state and history →](03-typed-state-and-history.md)
+[← Stack and boundaries](01-stack-and-boundaries.md) · [Reading guide](README.md) · [Next: state, memory, records and services →](03-typed-state-and-history.md)

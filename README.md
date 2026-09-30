@@ -1,107 +1,205 @@
 # SLNG Voice Harness
 
-**A reusable conversation runtime for voice applications.** An application defines its own typed state, conversational nodes, prompts and backend functions. The harness runs that definition and manages the conversation across turns, corrections, interruptions and tool calls.
+A runtime for voice agents that keeps the conversation correct. Pipecat still does the audio: transport, turn
+taking, speech-to-text (STT) and text-to-speech (TTS). The harness sits where Pipecat's LLM service would, and runs
+the conversation between what the caller said and what the bot says back.
 
-The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. This README describes the architecture on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32): salon and Faro use the public node-agent path, and the legacy classifier path has been removed. Live qualification and performance optimization remain open.
+The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. An application brings a typed state
+model, a manifest (`agent.yaml`), prompts and typed Python functions. Core has no booking or verification logic of
+its own.
 
-For a beginner-friendly explanation, start with the [architecture guide](docs/architecture/README.md). It first explains agents, tools and nodes, then follows a conversation: asking for missing information, replying after a lookup and confirming a change. Python, YAML and recovery details come afterward.
+The reference application is the salon in [`use-cases/salone-concierge-graph-new`](use-cases/salone-concierge-graph-new/).
+Everything below uses it as the example.
 
-## One runtime, different applications
-
-Core has no built-in booking, customer verification, support-ticket or teaching node. Those are application definitions. A node called `booking` in an example has no special meaning to the runtime: it is an application-owned instance of the same `conversation` step another application uses for troubleshooting or onboarding.
-
-| The application supplies | The harness provides |
-|---|---|
-| A plain Pydantic model for its facts | Validated state updates and separate state for each call |
-| Node names, prompts, available tools and allowed destinations | Agent execution and a graph that enforces declared routes |
-| Typed functions for its backend | Argument and result validation, operation tracking and recovery hooks |
-| Choices and the fields those choices depend on | Invalidation and refresh when the underlying facts change |
-| Approval requirements and the exact words for a read-back or result | A pending proposal tied to its arguments, reply and playback evidence |
-| Services, persistence and deployment configuration | Per-call history, turn budgets, cancellation handling and lifecycle hooks |
-
-Adding a use case means supplying these definitions, rather than copying the turn engine or adding domain branches to core. Business rules, such as interpreting a date, checking capacity or deciding which actions require approval, remain in the application.
-
-Reuse is exercised through the same public API by the [clinic flows](core/tests/clinic_flow/) and the [support-desk flow](core/tests/ticket_flow/). The [support-desk checks](core/tests/test_tickets.py) include changing every domain field and operation name without changing core. The [salon application](use-cases/salon-graph/) is a more demanding integration example, not the package's data model.
-
-## Where it fits in the voice stack
-
-The implemented adapter replaces the LLM service position in a **Pipecat** pipeline. Pipecat still owns transport, VAD, endpointing, STT, TTS and audio output. The harness owns the conversation between recognized input and the words sent to speech synthesis.
+## The approach
 
 ```mermaid
 flowchart LR
-    Input["Pipecat transport, STT and turn taking"] --> Adapter["Pipecat adapter"]
-    Adapter --> Core["Core: typed state, graph and node agents"]
-    Core <--> Functions["Application functions and backend"]
-    Core --> Adapter
-    Adapter --> Output["Pipecat TTS and transport output"]
-    Output --> Playback["Playback evidence"]
-    Playback --> Core
+    Caller["Caller's words"] --> Node["The active node's agent"]
+    Node --> Decision["One typed decision"]
+    Decision --> Code["Core: validate the state, offer, read back, run the operation"]
+    Code --> Speech["What the caller hears"]
+    Code --> Next["Next node, if the decision moves the caller"]
 ```
 
-This preserves the media framework's components while making conversation rules reusable and testable independently of audio. The [turn engine](core/src/core/turn.py) also has a text entry point. Importing the [public package](core/src/core/__init__.py) does not import Pipecat or Langfuse, load environment files or create provider clients.
+1. The call is always in one **node**. Each node does one job, such as booking, moving or cancelling.
+2. The node's agent reads what the caller said. It answers with **one typed decision**: a reply, an update to the
+   facts, an operation, a hand-over to another node, or a goodbye. The update rides on the decision itself.
+3. **Code checks the decision.** The new facts are validated as a whole state. A pick must be one that was offered.
+   A hand-over must be to a node the manifest allows.
+4. **Code says every line it already knows.** That covers the times on offer, the question for a missing fact, the
+   read-back of a change, the confirmation, and the goodbye. The model only writes free replies.
+5. **Nothing changes without consent.** An operation is read back first. It runs only on a yes to that exact
+   read-back, and only after the caller heard the read-back in full (playback evidence from Twilio or the browser).
 
-**LiveKit integration is planned, not implemented.** The intended boundary is the same: an adapter between LiveKit's native media/session components and the conversation engine. Its interruption and playback behavior still needs its own implementation and verification.
+The goal is one model request per caller turn. On the six salon text paths, every turn is one request, switches
+between nodes included.
 
-## Typed state, typed flow
+## Why nodes, and how to design them
 
-Three libraries have distinct roles in the implementation:
+A node is one job the caller wants done. It is not a sentence or a tool. Split by the job, and keep each node
+small. This is the house style for every use case.
 
-| Library | Role |
+```mermaid
+flowchart LR
+    concierge -->|new booking| booking
+    concierge -->|move| moving
+    concierge -->|cancel| cancelling
+    concierge -->|complaint| complaints
+    booking -->|"move the one I just made"| moving
+    booking -->|"cancel it"| cancelling
+    moving -->|"cancel instead"| cancelling
+    verify -.->|prerequisite, then back| booking
+    booking -.->|side question, then back| stylist
+```
+
+The salon used to have one booking node that also moved and cancelled. It is now three nodes:
+
+| Node | Its one job | Its first line on arrival (said by code) |
+|---|---|---|
+| `booking` | make a new booking | "On Friday I have 9:00, 9:30 or 10:00. Which time works for you?", or "Which day would you like?" |
+| `moving` | move a booking the caller holds | "You have a haircut Friday at 9:00. Which day would you like to move it to?" |
+| `cancelling` | cancel a booking the caller holds | "Shall I cancel your haircut Friday at 9:00?" (the read-back is the only question) |
+
+The rules:
+
+1. **One job, one operation.** `booking` books, `moving` moves, `cancelling` cancels. A node's prompt and tools
+   cover only that job.
+2. **Code opens the node.** `offers:` names the choice whose function writes the node's first line. It also runs
+   after the model records a new day or time. When the caller has only one booking, the function picks it, and
+   the cancel is read back at once.
+3. **Prerequisites are declared.** `requires: [customer]` with `satisfied_by: verify` makes the graph put the caller
+   through verification first, then come back.
+4. **Changes of mind are exits.** "Actually, move the one I just made" is `booking` → `moving`, with a purpose the
+   model reads. A hand-over can carry the new day, so the next node offers times at once.
+5. **Side questions are consultations.** `consults: stylist` answers a hair question, then returns the caller to
+   the same node.
+
+Why this works:
+
+- **Small prompts and schemas.** Each request carries only one job's instructions, facts and outputs. That suits a
+  small, fast model (`gemini-3.5-flash-lite` here).
+- **Fewer requests.** Code already knows each node's first line, so no model request is spent on it.
+- **Mistakes stay contained.** A wrong reading in `moving` cannot book, and one in `cancelling` cannot move.
+
+## How `agent.yaml` is defined
+
+Manifest version 2 keys the steps by id. A step is a conversation node with `speech: structured` unless it says
+otherwise. This is the real `booking` step, trimmed:
+
+```yaml
+version: 2
+state: state.py:SalonState
+identity: customer_phone
+entry: concierge
+current_datetime: {timezone: Europe/Madrid, calendar_days: 14}
+context: {facts: none, history: {scope: node, turns: 8}}
+
+operations:
+  book_appointment: operations.py:BookAppointment
+
+steps:
+  booking:
+    prompt: prompts/booking.md
+    requires: [customer]
+    satisfied_by: verify
+    fields: [service, booking_day, booking_time, slot]
+    context: {facts: [service, booking_day, booking_time, slot]}
+    choices:
+      slot: {function: offers.py:find_times, after: [booking_id, service, booking_day, booking_time]}
+    offers: [slot]
+    operations: [book_appointment]
+    reads_back: {book_appointment: [slot]}
+    exits:
+      - {to: moving, purpose: 'moving a booking they hold, the one just made included'}
+      - {to: cancelling, purpose: 'cancelling a booking they hold, the one just made included'}
+    consults:
+      - {to: stylist, purpose: 'a question about hair'}
+```
+
+| Key | What it means |
 |---|---|
-| **Pydantic** | Validates application state, operation arguments, results and configuration. |
-| **Pydantic AI** | Runs each conversational node's agent, tools and model requests. Agent definitions use its native `AgentSpec`. |
-| **Pydantic Graph** | Executes the declared nodes and routes. The graph is built from the application definition, rather than maintained separately. |
+| `fields` | The state fields this node may change. Their types come from `state.py`. |
+| `context.facts` | The state fields this node's model sees. A field it may change must be one it sees. |
+| `choices` | A field picked from an offer. Its function returns the ids and the words. `after:` names the fields the offer rests on. When one of them changes, the offer and the pick are reset. |
+| `offers` | The choices whose function writes what the node says on arrival, and again after a `record`. |
+| `operations` | What this node may carry out. Each is read back, then run on a yes. |
+| `reads_back` | Recording this field makes code read the operation back with no second request. |
+| `requires` / `satisfied_by` | A fact that must exist first, and the node that gets it. |
+| `exits` / `consults` | Where the node may hand the caller, and which specialist it may ask. |
 
-An application brings an `agent.yaml` manifest, its state model, prompt files and typed Python functions. `core.load(...)` reads the definition; `compile(...)` checks its references and builds a reusable flow; `flow.open(...)` creates an independent call with its own state and services. See the [manifest compiler](core/src/core/flowspec.py) and [graph implementation](core/src/core/flow.py).
+The loader checks every name, file, field, operation and exit when the application starts, never mid-call.
 
-A `conversation` node has its own prompt, writable fields, choices, operations and exits. Its agent interprets the caller's words and selects an action or a permitted destination. Core runs no classifier before it. A node can stay active for several turns, and a turn can involve several model requests or nodes.
+Each file has one job:
 
-An `action` node runs deterministic code and follows a declared result path without a model request. Prerequisites can route through another node and return to the unfinished request. On a conversation step, an operation's receipt can name the next node (`route:`), and an approval-free operation can run immediately after the agent records a declared trigger field (`carries_out:`). Start-of-turn reconciliation currently repairs the effect and its presentation without following that receipt route; see [recovery limits](docs/architecture/05-tools-approval-and-recovery.md#8-reconcile-before-deciding-to-resend). The application decides the shape of its graph: a small single-agent flow and a structured multi-node flow use the same runtime.
+| File | Holds |
+|---|---|
+| `state.py` | `SalonState`, one plain Pydantic model with every fact the call keeps |
+| `operations.py` | the typed operations (`core.Lookup` and `core.Write` classes): arguments, run, read-back, recovery, receipt words |
+| `offers.py` | the choice functions: which times or bookings are on offer, and their words |
+| `prompts/*.md` | one prompt per node, plus the shared voice and diary rules |
+| `agent.yaml` | the nodes, what each may see and change, and how they connect |
 
-State is shared across nodes **within a call**, not across callers. Updates validate a complete candidate state before committing it. Application validators can use the call's clock, previous state and accepted caller words. Declared dependencies invalidate choices and derived facts when their inputs change; moving to another node preserves the call's state and conversation history.
+## State, memory, records and services
 
-These types make contracts executable. They do not guarantee that a model interpreted a caller correctly.
+Four kinds of data live in a call. They are kept apart on purpose.
 
-## Reusable reliability mechanisms
+| | What it holds | Who writes it | What the model sees | Lifetime |
+|---|---|---|---|---|
+| **Application state** | the facts: phone, customer, service, day, time, slot, booking id | the model's update and operation receipts, validated as one whole state | only each node's `context.facts` | the call |
+| **Conversation memory** | what was said and heard, turn by turn | the turn engine | each node's own recent turns (`history: {scope: node, turns: 8}`) | the call |
+| **Runtime records** | the pending read-back, offers, intents, receipts, the speech and playback ledger | core only | a short status line when relevant | the call; intents and receipts also go to the backend |
+| **Services** | the backend (the salon's diary), its clients and keys | the application | never | the process |
 
-For an operation requiring approval, the application supplies the read-back. Core tracks the exact proposal and checks whether its speech had playback evidence before accepting a subsequent confirmation. The node agent interprets the reply; code enforces the operation's declared requirements.
+1. **State is replaced whole.** Every change builds a complete new state and validates it, or changes nothing. A
+   change also resets what rested on the old value. A new day drops the times offered for the old day.
+2. **Memory is scoped.** A node sees its own turns, plus the caller's words that brought it there. It does not see
+   another node's tool calls.
+3. **Records are core's.** A model cannot write "approved" or "booked". Only a heard yes and a validated receipt do.
+4. **Services stay out of prompts.** A prompt cannot name them, and the loader refuses one that tries.
 
-An operation has a tracked intent. If execution is interrupted after dispatch and the outcome is uncertain, it stays unknown until reconciliation establishes what happened. Applications provide reconciliation and backend idempotency where required. A typed receipt establishes the result; generated prose alone does not.
+## Live results
 
-Nodes can use `speech: rendered` to keep free-form model output out of speech and let code render the reply. Application receipt fields can still contain model-written content, such as feedback, so rendered speech does not guarantee semantic accuracy. In ordinary prose nodes, the model supplies conversational language, with weaker guarantees about its wording. These are generic choices available to any application.
+Measured on Coval over the real Twilio line, on the v2 salon. The verdict comes from the salon's diary at the end of
+each call, the traces, and [`load_report`](use-cases/concierge-tools/load_report.py). Coval's LLM judges are
+reported but not used as the verdict: on these runs they gave several NO answers that contradicted the transcript
+or their own explanation.
 
-For voice delivery, the Pipecat adapter supports Twilio marks and a browser integration built on the official Pipecat client SDK plus a small playback-reporting module. Browser reports require continuous playback of the segment, rather than merely sending its audio. They cannot prove that a person heard a physical speaker. The browser implementation has offline Chrome coverage; support across other browsers is not yet qualified.
+| Run | Callers | Calls | Result | Requests per turn | Input tokens per call | Turn latency p50 |
+|---|---|---:|---|---:|---:|---:|
+| [Routine bookings](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/75m8jevu6ywGEkwSaUQave) | normal | 5, 5 at once | 5 of 5 pass every `load_report` check | 0.86 | 17.0k | 1.86 s |
+| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/fMHCmkqa9pBfykQjBMmcEv) | normal | 8, 8 at once | 7 of 8 right in the diary | 0.94 | 21.2k | 2.69 s |
+| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/iWbBgavGcmL7YiVZbZzgwJ) | interruptive | 8, 8 at once | 8 of 8 right in the diary | 1.06 | 31.5k | 2.50 s |
 
-The corresponding mechanisms live in [steps](core/src/core/steps.py), [operations](core/src/core/operations.py), [state](core/src/core/state.py), [history](core/src/core/history.py) and the [Pipecat adapter](core/src/core/processor.py).
+The graph-paths set has eight cases:
 
-## Reuse and deployment are separate questions
+1. book;
+2. book with no day given;
+3. move a held booking;
+4. book, then move it to the next day;
+5. cancel a held booking;
+6. book, move, then cancel;
+7. hold two bookings and cancel one;
+8. ask to move with nothing held, then book instead.
 
-A compiled flow is shared while each call gets its own state, history, pending proposals and budgets. Application services may be shared deliberately. Their databases must enforce ownership, concurrency and idempotency; isolated conversation state does not make a shared backend safe by itself.
+In every call, each change was read back and confirmed before it happened, and nothing was booked twice. The one
+miss was a date: on a Wednesday, "Thursday" became the Thursday of next week. It was read back, and the caller
+accepted it.
 
-The harness does not supply a universal database, distributed scheduler or automatic durable graph execution. Applications choose those deployment components. The current concurrency evidence comes from a bounded MacBook setup and does not establish production server capacity.
+## Try it
 
-The latency goal is small measured runtime overhead, while avoiding unnecessary model requests for work code already knows how to perform. Typed flows can narrow prompts and tool sets, but do not automatically lower token usage. Speed, token cost and accuracy need comparable measurements on the chosen model, transport and workload.
-
-Current qualification remains open: the N12 absolute overhead ceiling passes, its relative rule still fails, and native latency parity is not established. The [cleanup report](docs/research/reusable-core/core-cleanup.md) records the current implementation and its limits; the [preceding salon qualification report](docs/research/reusable-core/session-4g.md) covers its earlier voice checks. These limits concern the evidence available today, not application-specific requirements imposed by core.
-
-## Try an existing integration
-
-The workspace uses Python 3.14+ and uv. From the repository root:
+The workspace uses Python 3.14+ and uv. Put the provider keys in the root `.env`, then:
 
 ```bash
 uv sync --all-packages
-cd use-cases/salon-graph
-uv run bot.py
+cd use-cases/salone-concierge-graph-new
+uv run bot.py              # voice in the browser, http://localhost:7860
+uv run python -m tests     # the offline suite, no model requests
 ```
 
-Configure the application's provider credentials in the root `.env` before starting. Open `http://localhost:7860`, which serves the SDK-based client at `/voice/`. The stock `/client/` page does not provide the playback evidence required by this integration.
+## Read more
 
-For an offline core check, from the repository root:
-
-```bash
-uv run --directory core python -m tests
-```
-
-The suite disables model requests. It verifies runtime behavior with scripted models; live evaluations are needed to assess language understanding and audio behavior.
-
-Faro, a bilingual language-learning companion, uses the same public path: eight conversation nodes and one code node. Its node agent proposes a grade; Faro's typed functions validate and save it and apply the learning rules. Its fixed core lines follow the learner's language. Its new build has offline evidence only; see the [cleanup report](docs/research/reusable-core/core-cleanup.md). See [CLAUDE.md](CLAUDE.md) for the workspace layout and development commands.
+- The [architecture guide](docs/architecture/README.md) follows one salon call through nodes, state, operations and
+  recovery, with the code behind each step.
+- [CLAUDE.md](CLAUDE.md) has the workspace layout, every module's job and the development commands.
+- Faro, a language-learning companion, runs on the same core ([`use-cases/faro-language-learning`](use-cases/faro-language-learning/)).

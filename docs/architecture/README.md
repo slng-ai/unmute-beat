@@ -1,46 +1,56 @@
 # Architecture guide
 
-Start here even if you have never built an agent or read a graph. The guide follows one caller who wants to change a record, explains what they hear, and then shows the code and configuration behind it. You can read chapters 01–02 without knowing Python or YAML.
+Start here even if you have never built an agent or read a graph. The guide follows one real salon call: the caller
+books a haircut, then moves it. It shows what the caller hears, then the configuration and code behind it. You can
+read chapters 01 and 02 without knowing Python or YAML.
 
-The central idea is simple: **the agent interprets and chooses, application functions do the work, and core remembers the call and checks the execution rules.** A node can ask several questions. Moving between nodes does not start a new conversation.
+The central idea: **each node does one job. Its agent reads the caller and chooses one typed decision. Application
+code does the work and says every line it already knows. Core remembers the call and checks the rules.** Moving
+between nodes does not start a new conversation.
 
 ## Reading order
 
 | Chapter | The question it answers |
 |---|---|
-| [01 — Stack and boundaries](01-stack-and-boundaries.md) | What are an agent, a tool and a node? What does the harness add? |
-| [02 — A conversation from start to finish](02-a-conversation-from-start-to-finish.md) | Who asks for missing information, what happens after a lookup, and who writes the spoken reply? |
-| [03 — Typed state and history](03-typed-state-and-history.md) | How does the assistant remember answers and handle corrections? First Python examples. |
-| [04 — Typed flows and node agents](04-typed-flows-and-node-agents.md) | How do we configure those jobs, questions and routes? The YAML and graph implementation. |
-| [05 — Tools, approval and recovery](05-tools-approval-and-recovery.md) | How do functions run safely, and what happens when we do not know whether a change finished? |
+| [01 — Stack and boundaries](01-stack-and-boundaries.md) | What are an agent, a tool and a node? What does the harness add to Pipecat? |
+| [02 — A conversation from start to finish](02-a-conversation-from-start-to-finish.md) | In one real call, what does the model choose, what does code say, and how many requests does it cost? |
+| [03 — State, memory, records and services](03-typed-state-and-history.md) | Where does each kind of data live, who may write it, and what does each node's model see? |
+| [04 — Nodes and agent.yaml](04-typed-flows-and-node-agents.md) | How do we design the nodes, write the manifest, and what does core build from it? |
+| [05 — Operations, approval and recovery](05-tools-approval-and-recovery.md) | How does a change run safely, and what happens when we do not know whether it finished? |
 
-Read in order for a gradual introduction. Source links and runnable offline checks are at the end of each chapter; you can skip them on a first reading. Examples labelled as excerpts need the other application files described around them. Transport internals and a dedicated performance/concurrency guide are deferred.
+Read in order for a gradual introduction. Each chapter ends with a runnable offline check and links to the code.
+Examples marked as excerpts need the other application files around them.
 
-For the two common questions, go directly to [asking naturally for missing information](02-a-conversation-from-start-to-finish.md#3-decide-who-writes-the-questions) or [answering after a lookup](02-a-conversation-from-start-to-finish.md#4-answer-after-the-lookup).
+To go straight to the design rules, read [one job per node](04-typed-flows-and-node-agents.md#1-one-job-per-node).
+For the four kinds of data, read [chapter 03, section 1](03-typed-state-and-history.md#1-the-four-kinds-of-data).
 
 ## Terms used throughout
 
 | Term | Meaning here |
 |---|---|
-| Application / use case | A conversation definition and the domain services behind it. |
-| Manifest | The application's YAML definition, commonly `agent.yaml`, loaded as a `FlowSpec`. |
-| Step | An author's declared unit of work, such as `conversation` or `action`. |
-| Node | One job in the conversation, implemented by an agent and/or code. It can span several turns. |
-| Flow | The jobs and allowed routes, built into a runnable application (`StepFlow`). |
+| Application / use case | A conversation definition and the business services behind it. The reference is the salon in `use-cases/salone-concierge-graph-new`. |
+| Manifest | The application's `agent.yaml`, loaded as a `FlowSpec`. Version 2 keys the steps by id. |
+| Node / step | One job the caller wants done, such as moving a booking. It can span several turns. A step is its declaration in the manifest. |
+| Flow | The nodes and allowed moves, built into a runnable application (`StepFlow`). |
 | Call | One `FlowCall`, with its own facts, position, history, speech records and pending work. |
-| Caller turn | A reply cycle recognized by core; interrupted pieces may continue the same turn. It is not identical to a VAD segment. |
-| Model request | One provider request. A caller turn may need none, one or several. |
-| Tool | A model-visible function or output, such as `collect`, an operation or `hand_over`. |
-| Operation | A declared application action executed through core's validation, approval and outcome tracking. It may be a read or a write. |
-| Proposal | The exact action and arguments currently being read back for approval. |
+| Caller turn | One reply cycle. Pieces the caller says before an answer has played out join the same turn. It is not the same as a VAD segment. |
+| Model request | One provider request. The target is one per caller turn. |
+| Decision | The one typed output a node's agent returns per request: `reply`, `record`, an operation, `hand_over`, `goodbye`, or `done` for a consulted node. The caller's update rides on it. |
+| Tool | An ordinary function the agent may call and get a result from in the same turn, such as `options` or a pure read. |
+| Offer | The ids a caller may pick for a choice field, with the application's words for them. It stands only for the state it was made for. |
+| Operation | A declared application action run through core's validation, approval and outcome tracking. It may be a read or a write. |
+| Proposal | The exact action and arguments being read back for approval. |
 | Intent | A tracked attempt at an operation, with a stable identifier and an outcome. |
-| Receipt | The backend's answer, checked against the application's result model and rules. |
-| Playback evidence | An acknowledgement associated with a speech segment. It supports a delivery decision, not proof of a person's comprehension. |
+| Receipt | The backend's answer, checked against the application's result model. |
+| Playback evidence | A report that a speech segment finished playing. It supports a delivery decision. It does not prove a person understood. |
 
 ## Implementation status
 
-This guide describes the implementation on `main` after [PR #32](https://github.com/slng-ai/slng-voice-harness/pull/32). Both salon and Faro use the public manifest path; the old classifier modules, `kind: agent` and application-defined `call:` classes have been removed. The [cleanup report](../research/reusable-core/core-cleanup.md#5-public-compatibility-changes) lists the replacements for those APIs.
+Both maintained applications on core, the salon and Faro, use manifest version 2. The salon's nodes are all
+`speech: structured`. Version 1 still loads until the cleanup, for `use-cases/salon-graph`, which will be retired.
 
-The new Faro build has offline verification only. Its live grading accuracy is still unmeasured, and receipt recovery has routing limits described in chapter 05. [The documentation review](../research/reusable-core/pr32-architecture-review.md) records what was checked at this revision.
+The salon's results on Coval, over the real phone line, are in the [root README](../../README.md#live-results). A
+bare weekday name can still be read as the wrong week. The fix to the calendar text is planned, not made. Receipt
+recovery has the routing limits described in chapter 05.
 
 [Start with the stack and boundaries →](01-stack-and-boundaries.md)

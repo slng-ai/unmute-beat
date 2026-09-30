@@ -1,376 +1,338 @@
-# 04 — Typed flows and node agents
+# 04 — Nodes and agent.yaml
 
-Chapter 02 showed the conversation; this chapter shows how to configure it. The **flow** is the set of jobs and allowed moves. A **node** is one job. An **edge** is permission to move from one job to another.
+A **flow** is the set of jobs and the allowed moves between them. A **node** is one job. An **edge** is permission
+to move from one job to another. The application declares all of them in `agent.yaml`. Core checks the file when the
+application starts, builds one agent per node, and enforces the edges on every turn.
 
-The agent decides what the caller seems to need. The graph checks whether the requested move is allowed. For example, `front` may move to `request`, while `lookup` returns to the node waiting for its result. The graph does not write the assistant's sentences.
+The agent decides what the caller seems to need. The graph checks that the move is allowed. Code says the lines it
+already knows. This chapter shows how to design the nodes, how to write the manifest, and what happens to it.
 
-Continue the example from [chapter 02](02-a-conversation-from-start-to-finish.md): `front` understands the request, `request` collects and confirms a change, and `lookup` fetches the current record. This chapter follows those declarations into the compiled graph, then shows how the engine walks it during a turn.
+## 1. One job per node
 
-## 1. Choose where language decisions belong
+Split the conversation by the job the caller wants done. Do not split it by sentence or by tool. This is the house
+style for every use case on core.
 
-Start by separating work that needs interpretation from work whose next action is already known:
+The salon started with one `booking` node that also moved and cancelled. It is now three:
 
-| Responsibility | Example | Step kind |
-|---|---|---|
-| Interpret a request or answer | Decide whether “please mark R-17 complete” is a change request | `conversation` |
-| Run a known operation | Fetch R-17 once its identifiers have been collected | `action` |
-| Finish a structured path | Record completion and say a farewell | `end` |
+| Node | Its one job | Operation | What code says on arrival |
+|---|---|---|---|
+| `booking` | make a new booking | `book_appointment` | the times for the day asked, or "Which day would you like?" |
+| `moving` | move a booking the caller holds | `move_appointment` | "You have a haircut Friday at 9:00. Which day would you like to move it to?" |
+| `cancelling` | cancel a booking the caller holds | `cancel_appointment` | "Shall I cancel your haircut Friday at 9:00?" |
 
-A conversation node can stay active for several caller turns. It can collect missing information, ask for approval and handle a correction without moving elsewhere. An action node is useful when code already knows which function should run and where its result should lead.
+```mermaid
+flowchart LR
+    concierge -->|new booking| booking
+    concierge -->|move| moving
+    concierge -->|cancel| cancelling
+    concierge -->|complaint| complaints
+    booking -->|"move the one I just made"| moving
+    booking -->|"cancel it"| cancelling
+    moving -->|"a new booking instead"| booking
+    moving -->|"cancel instead"| cancelling
+    cancelling -->|"move instead"| moving
+```
 
-The graph does not require one node per sentence or per tool. In this example, `apply_change` remains an operation on `request`: proposing it and executing it do not require separate nodes. A simpler application could combine `front` and `request` if separating their responsibilities added no useful boundary.
+The rules:
 
-There are five supported step kinds: `collect`, `confirm`, `action`, `conversation` and `end`. A `collect` step gathers a form's typed fields. A `confirm` step renders its read-back in code and uses an agent to interpret the answer; it is not an entirely model-free node. The [clinic definitions](../../core/tests/clinic_flow/) demonstrate those alongside conversation-based flows. This chapter follows the `conversation` and `action` path.
+1. **One job, one operation.** A node's prompt, facts and outputs cover only its job. `cancelling` cannot book.
+2. **Code opens the node.** `offers:` names the choice whose function writes the first line. The model is not
+   asked to say something code already knows.
+3. **Prerequisites are declared, not prompted.** `requires` and `satisfied_by` make the graph interpose `verify`
+   and come back.
+4. **A change of mind is an exit.** "Move the one I just made" is an exit from `booking` to `moving`, with a purpose
+   the model reads. The hand-over can carry the new day.
+5. **A side question is a consultation.** `consults: stylist` answers a hair question and hands the caller back.
+6. **An entry node routes.** `concierge` works out the job, answers general questions, and hands over.
 
-The old hand-built `kind: agent` and `call:` application class are no longer supported. Application authors supply a plain state model and declared steps; core creates the call and node agents.
+Why this works:
 
-## 2. Connect the application files
+- **Small prompts and schemas.** Each request carries one job's instructions, facts and outputs. A booking request
+  is about 18 kB at the model boundary. That suits a small, fast model.
+- **Fewer requests.** Code already knows each node's first line, so no model request is spent on it. On the six
+  salon text paths, every caller turn is one request.
+- **Mistakes stay contained.** A wrong reading inside `moving` cannot book or cancel.
 
-An application folder for the running example contains these pieces:
+A node can still span many turns. `moving` names the booking, takes the day, offers times, reads the move back,
+and handles "no, make it 10:30", all in the same node.
+
+## 2. The application folder
 
 ```text
-application/
-  __init__.py
-  agent.yaml
-  models.py
-  functions.py
-  prompts/
-    assistant.md
-    front.md
-    request.md
+salon/
+  agent.yaml        the nodes, what each sees and changes, and how they connect
+  state.py          SalonState: every fact the call keeps (chapter 03)
+  operations.py     LookupCustomer, BookAppointment, MoveAppointment, ... (chapter 05)
+  offers.py         find_times, bookings_to_move, bookings_to_cancel: what is on offer, and its words
+  receipts.py       the typed answers the diary may give
+  capabilities.py   the refund policy, loaded only when asked about
+  prompts/          one prompt per node, plus _voice.md and _diary.md shared by several
+  app.py            FLOW = SPEC.compile(), and open_call for each call
 ```
 
-| File | What the author supplies |
-|---|---|
-| `__init__.py` | Makes the folder a Python package so its functions can import its models |
-| `models.py` | `ApplicationState` from chapter 03, plus argument and receipt models |
-| `functions.py` | `fetch_record`, `apply_change`, read-back wording and reconciliation |
-| `prompts/assistant.md` | Shared persona instructions |
-| `prompts/front.md` | Instructions for understanding and routing an initial request |
-| `prompts/request.md` | Instructions for collecting values, requesting a lookup and interpreting approval |
-| `agent.yaml` | References connecting those pieces and declaring the routes |
+Each file has one job. Python owns the types and the business actions. YAML owns the graph and the permissions.
+Prompts own the conversational instructions. Core owns the pending question, the typed outputs, approval, delivery
+and routing.
 
-The manifest is a YAML file: indentation groups settings, `name: value` gives a setting, and a line starting with `-` adds a list item. Here its top section names the state model, the identity field, the starting node (`entry`) and shared agent instructions. Those shared instructions are called a **persona**:
+## 3. The manifest, top to bottom
+
+The header of the salon's [`agent.yaml`](../../use-cases/salone-concierge-graph-new/salon/agent.yaml), trimmed:
 
 ```yaml
-version: 1
-id: record-changes
-state: models.py:ApplicationState
-identity: caller_id
-entry: front
+version: 2
+id: sage-and-stone
+app_version: '2026.09.30-v2'
+greeting: "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
+state: state.py:SalonState
+identity: customer_phone
+entry: concierge
+current_datetime: {timezone: Europe/Madrid, calendar_days: 14}
+context: {facts: none, history: {scope: node, turns: 8}}
+locale:
+  base: english
+  goodbye: Thanks for calling Sage and Stone. Have a lovely day!
+model: google-cloud:gemini-3.5-flash-lite
+includes:
+  diary: prompts/_diary.md
+
 agents:
-  assistant:
-    prompt: prompts/assistant.md
+  robin:
+    prompt: prompts/_voice.md
+
+operations:
+  lookup_customer: operations.py:LookupCustomer
+  book_appointment: operations.py:BookAppointment
+  move_appointment: operations.py:MoveAppointment
+  cancel_appointment: operations.py:CancelAppointment
 ```
 
-This is a header excerpt. The complete application also needs `operations:` and `steps:`. [Chapter 05](05-tools-approval-and-recovery.md) builds the `apply_change` declaration; `fetch_record` supplies the lookup used below. A model can be selected in the manifest or passed to `compile(model=...)`.
+| Key | What it does |
+|---|---|
+| `version: 2` | Steps are keyed by id. A step with no `kind` is a conversation, and one with no `speech` is `structured`. |
+| `state` / `identity` | The application's state model, and the field that names the caller. |
+| `entry` | The node every call starts in. |
+| `current_datetime` | The call's clock. Every node's model sees today and a labelled 14-day calendar. |
+| `context` | The default view for every node: no facts, and its own last eight turns. Each node lists its own facts. |
+| `locale` | Core's own fixed lines, in one language, with the salon's goodbye. |
+| `includes` | Files pasted into prompts where `<!--diary-->` appears. |
+| `agents` | Shared personas. `robin` is the voice every node speaks in, with native Pydantic AI `AgentSpec` settings. |
+| `operations` | Each business action, one line: a `core.Lookup` or `core.Write` class. |
 
-## 3. Declare each node's capabilities
-
-This configures the conversation from chapter 02. It is an excerpt: it needs the header above, operation definitions and the referenced Python and prompt files. Read one node at a time; the table below explains its keys.
+A node, the real `moving` step:
 
 ```yaml
 steps:
-  - id: front
-    kind: conversation
-    agent: assistant
-    prompt: prompts/front.md
+  moving:
+    agent: robin
+    prompt: prompts/moving.md
+    requires: [customer]
+    satisfied_by: verify
+    fields: [booking_id, service, booking_day, booking_time, slot]
+    context: {facts: [booking_id, service, booking_day, booking_time, slot]}
+    choices:
+      booking_id: {function: offers.py:bookings_to_move, after: []}
+      slot: {function: offers.py:find_times, after: [booking_id, service, booking_day, booking_time]}
+    offers: [booking_id, slot]
+    operations: [move_appointment]
+    reads_back: {move_appointment: [slot]}
+    capabilities: [capabilities.py:refunds]
     exits:
-      - {to: request, purpose: changing an existing record}
-  - id: request
-    kind: conversation
-    agent: assistant
-    prompt: prompts/request.md
-    fields: [caller_id, record_id, requested_change]
-    operations: [apply_change]
-    speech: rendered
-    asks:
-      caller_id: What is your account identifier?
-      record_id: Which record should I change?
-      requested_change: What would you like to change?
-    exits:
-      - {to: lookup, purpose: fetch the current record once its identifiers are known}
-      - {to: front, purpose: answering a general question}
-  - id: lookup
-    kind: action
-    operation: fetch_record
-    returns: true
-    on_error: request
-    on_unknown: request
-  - {id: done, kind: end, outcome: completed, say: Goodbye.}
+      - {to: booking, purpose: 'a new booking instead of a move'}
+      - {to: cancelling, purpose: 'cancelling instead of moving'}
+      - {to: complaints, purpose: 'a complaint about a past service'}
+      - {to: concierge, purpose: 'they give up, or ask about something unrelated'}
 ```
 
-Read the `request` node as a list of permissions and response choices:
-
-| Setting | Plain meaning |
+| Key | What it does |
 |---|---|
-| `id: request` | The name of this job, chosen by the application |
-| `kind: conversation` | Run an agent to interpret caller replies |
-| `agent: assistant` / `prompt:` | Use these shared instructions and this node's own instructions |
-| `fields` | These are the facts this agent may record with `collect` |
-| `operations` | These application actions may be selected by this agent; their execution rules still apply |
-| `speech: rendered` | Do not send the agent's free-form text to the caller; code produces the reply |
-| `asks` | If a listed field is missing, these are the words available to ask for it |
-| `exits` | These are the destinations the agent may request with `hand_over` |
-| `purpose` | Explain to the agent when an exit is useful; this is prompt guidance, not a condition evaluated by code |
+| `prompt` | This node's instructions, after the persona's. |
+| `requires` / `satisfied_by` | `customer` must exist first. If it does not, the graph runs `verify` and comes back. |
+| `fields` | The facts this node's model may change. The update's types come from `SalonState`. |
+| `context.facts` | The facts this node's model sees. A field it may change must be one it sees. |
+| `choices` | A field picked from an offer. The function returns the ids and the words. `after:` names what the offer rests on: `booking_id` rests on nothing, and the times rest on the booking and the request. |
+| `offers` | The choices code asks for the node's next line, in order, on arrival and after a `record` (section 5). |
+| `operations` | What this node may carry out. Each is read back first. |
+| `reads_back` | When the model only records `slot`, code reads the move back. No second request is needed. |
+| `capabilities` | Native Pydantic AI capabilities. The refund policy is loaded on demand, only when asked about. |
+| `exits` | Where the model may hand the caller. `purpose` is shown to the model. It is guidance, not a condition. |
+| `consults` | (on `booking` and `concierge`) a specialist that answers and hands the caller back. |
 
-The `lookup` node is different: `kind: action` runs the known `fetch_record` operation. `returns: true` returns to the node that requested it after success. `on_error` and `on_unknown` say where to go after a refusal or an uncertain outcome. An unknown outcome does not mean that a write failed; chapter 05 explains why.
+Other keys exist for other shapes:
 
-For example, the `request` prompt could instruct its agent to collect the caller's identifiers, hand over to `lookup` when a current revision is needed, and select `apply_change` to propose the requested change. That instruction does not grant any additional tool or route. Giving the same instruction to `front` would not let it execute `apply_change`.
+- `asks` and `opens_with`, which `verify` uses: ask for a missing field, or read a value back on arrival.
+- `route:` and `carries_out:`, in section 7.
+- `kind: action`, a code node with no model.
+- `language:` and `locales:`, a language per call.
 
-Both conversation steps name `assistant`, but compilation creates a separate agent for each step. They share persona configuration while retaining different prompts and available actions. They do not create separate calls or private copies of the application's facts.
+Every key is checked at load.
 
-The `done` step satisfies the completion-endpoint requirement: `lookup` is an action step with no `then`, so the flow needs an `End` it could finish on. The successful lookup normally returns to `request`, and a conversation node can end through `goodbye`; the presence of `done` does not force a visit after every operation.
+## 4. What the model can choose
 
-## 4. Follow compilation from files to graph
+Each node's agent answers every request with **exactly one typed decision**. The caller's update rides on it. This
+is `speech: structured`, in [`core/structured.py`](../../core/src/core/structured.py). A booking request offers:
 
-**Compile** means check the definition and build the objects that will run it. It happens before serving calls. It is not asking the language model to invent a graph. With the referenced application code and prompts supplied, startup is:
+| Output | What it does | Who speaks |
+|---|---|---|
+| `reply(say, update, decline)` | answers the caller, with what they said recorded | the model's `say`, once the update commits |
+| `record(update)` | records only, when the application answers next: an offer, a read-back, or an operation code carries out | code |
+| `book_appointment(update)` | first call: read the booking back. Called again on a yes to that read-back: book it | code: the read-back, then the receipt |
+| `hand_over(to, because, update)` | moves the caller to a declared exit or consultation | the next node, often code's first line |
+| `goodbye(recap, decline)` | ends the call | code: the recaps, then the locale's goodbye |
+| `say_again` | the caller asked to hear again what was done | code: the latest receipt |
+
+It also has two ordinary tools, which return a result to the same agent in the same turn:
+
+- `options(update)` asks a choice function for fresh offers.
+- `load_capability` loads the refund policy.
+
+A pure read (no read-back, no change, no route) is an ordinary tool too.
+
+The rules on an update:
+
+1. A field left out is kept.
+2. `null` clears a field only if it may be empty.
+3. `False`, `0` and `''` are values.
+4. The whole update commits, or none of it does.
+
+A consulted node, such as `stylist`, answers with `done(answer, handback)`, which returns the caller.
+
+One response may carry one decision. A hostile reply that asks for two actions gets one, and the other is refused.
+
+## 5. Offers: code says the next line
+
+`offers:` is how a node opens without a model request. Core runs it on arrival, whether by a hand-over or back from a
+prerequisite, and after a `record`. It goes through the listed choices in order. For each one with no offer of this
+node's own, it asks the choice function, then:
+
+1. If the function returns a **`pick`** (the caller has only one booking), code records it. If an operation now has
+   every argument, code reads it back and stops. That is how `cancelling` asks "Shall I cancel your haircut Friday?"
+   with no request.
+2. If the function returns **words**, code says them and stops. That is an offer ("On Friday I have…") or a question
+   for what it still needs ("Which day would you like?").
+3. If there are no words, it goes on to the next choice. `bookings_to_move` says nothing when the new day is already
+   known, so `find_times` offers that day's times.
+4. If nothing has words, the node's agent answers, with the functions' notes.
+
+The choice functions are plain application code. [`offers.py`](../../use-cases/salone-concierge-graph-new/salon/offers.py):
 
 ```python
-import core
+def bookings_to_cancel(salon: Salon, state: SalonState) -> Times:
+    """What a cancel can name. The one booking held is picked: its cancel read-back is the question, asked once."""
+    held = _held(salon, state)
+    if not held:
+        return Times(note='They hold no upcoming booking.', say=NONE_HELD)
+    if len(held) == 1:
+        [booking] = held
+        return Times(options=held, pick=booking)
+    return Times(options=held, say=f'You have {_listed(list(held.values()))}. Which one would you like to cancel?')
+```
 
-spec = core.load('application/agent.yaml')
-flow = spec.compile(model=model)
+A pick is still only an offered id, and it changes nothing by itself. The operation's read-back names the booking,
+and the caller's yes is still required.
+
+## 6. Follow compilation from files to graph
+
+**Compile** means check the definition and build the objects that run it. It happens once, before any call. The
+salon does it at import (`salon/app.py`):
+
+```python
+FLOW = SPEC.compile()                 # SPEC = core.load(Path(__file__).with_name('agent.yaml'))
+call = FLOW.open(SalonState(), services=salon, caller_id=from_number, clock=clock)
 ```
 
 ```mermaid
 flowchart TD
-    Files["Manifest, models, prompts and functions"] --> Load["core.load: FlowSpec"]
-    Load --> Resolve["compile: resolve and check references"]
-    Resolve --> Steps["Build ConversationStep, ActionStep and End"]
-    Steps --> Nodes["StepFlow.nodes: one Node per step id"]
-    Nodes --> Routes["Flow.of: derive legal moves"]
-    Routes --> Graph["GraphBuilder: steps and routing decisions"]
+    Files["agent.yaml, state.py, operations.py, offers.py, prompts"] --> Load["core.load: FlowSpec (v2 normalized)"]
+    Load --> Resolve["compile: resolve and check every reference"]
+    Resolve --> Steps["one ConversationStep or ActionStep per step"]
+    Steps --> Nodes["StepFlow.nodes: one agent per node"]
+    Nodes --> Routes["Flow.of: the legal moves"]
+    Routes --> Graph["pydantic_graph: steps and routing decisions"]
 ```
 
-The stages have different jobs:
+1. **Load.** `core.load` parses the YAML and refuses a key given twice. Version 2 is normalized into the same
+   internal steps table (`FlowSpec._normalized`), so there is one executor.
+2. **Resolve.** Core finds the state model, operation classes, choice functions, capabilities and prompt files. It
+   checks that every field, exit, choice and `after:` name exists and that operation arguments fit the state. Each
+   prompt is compiled against the view its node sees, so a placeholder naming a hidden field fails here.
+3. **Build.** Each step becomes a `Node` with its own agent (`Agent.from_spec`), outputs and openings.
+4. **Route.** `Flow.of` derives every legal move: exits, consultations and their returns, prerequisite detours,
+   receipt routes. Pydantic Graph runs them.
 
-1. **Load the manifest.** `core.load` parses YAML, validates the declaration shape and records the application folder for resolving file references.
-2. **Resolve the definitions.** Compilation finds the state model, functions, argument and receipt types, personas and prompt files. It checks that fields and destinations exist and that operation bindings fit their types. `FlowSpec.problems()` can inspect definition problems without running a model.
-3. **Build runtime steps and nodes.** Each declared kind becomes its corresponding step object. `StepFlow` calls each step's `node` method and stores the resulting `Node` under its id in `flow.nodes`.
-4. **Build legal routes.** `Flow.of(flow.nodes)` derives permitted moves, including receipt destinations, automatic returns and prerequisite routes. Pydantic Graph's `GraphBuilder` turns those into executable steps and decisions. The node table (`core.flow.Nodes`) owns the graph: it is built once per compile and collected with the table.
+Every refusal names its step, for example `moving: may change 'slot' but cannot see it: add it to context.facts`.
+Nothing fails mid-call for a wiring mistake. Compilation checks the wiring. It does not prove a prompt reads every
+reply right.
 
-Missing prompts, unknown fields or exits, incompatible function bindings and cyclic choice dependencies fail before a call runs. Compilation checks the wiring; it does not prove that a prompt will produce the right interpretation of every caller reply.
+## 7. Let code handle returns, prerequisites and known next steps
 
-## 5. See what the agent receives
+**Prerequisites.** When `concierge` hands a caller to `booking` and `customer` is missing, routing sends them to
+`verify` and records that `booking` is waiting. When the lookup's receipt sets `customer`, code resumes `booking`,
+and its offers open it in the same turn. `requires` checks that the fact exists. Only a trusted operation should set
+a fact that stands for verification, as the salon's lookup receipt does. The return has one waiting destination,
+not a stack.
 
-Before each model request, core combines the active node's instructions with current facts and the history view described in [chapter 03](03-typed-state-and-history.md). It then exposes the tools and outputs that node supports.
+**Consultations.** `booking` consults `stylist`. The stylist answers with `done`. The caller goes back to `booking`,
+and a read-back that was waiting is put again.
 
-For `request`, the declaration above produces these choices:
+**Receipt routes.** An operation can declare `route: next`, so its receipt's `next` field names the destination.
+The field must be a `Literal` of step ids, and the loader checks it. Faro uses this: after a save, the store says
+where the learner continues.
 
-| Choice | What it does | Where control goes |
-|---|---|---|
-| `collect` | Record the three permitted caller-supplied fields | Tool result returns to the same agent run |
-| `decline` | Record a no to the pending read-back | Tool result returns to the same agent run |
-| `apply_change` | Propose the operation, or execute it after valid approval | Back to the turn engine |
-| `hand_over` | Request `lookup` or `front`, with a reason | Back to the engine to check and perform the move |
-| `wait` | Ask code to choose the applicable fixed response | Back to the engine with rendered speech |
-| `say_again` | Repeat the newest eligible change receipt | Back to the engine, without another backend write |
-| `goodbye` | Request the call's end with eligible recaps and a farewell | Back to the engine to finish the conversation |
+**Carried-out operations.** `carries_out: {find_ticket: [ticket_id]}` runs an approval-free operation as soon as a
+`record` has recorded its trigger field. The model never calls it, so it runs only on what this reply recorded. See
+the [routed support desk](../../core/tests/ticket_flow/routed.yaml).
 
-`decline` is available because this operation requires approval. `say_again` is available because it is a change with receipt wording. These are generated capabilities, not functions the application must implement itself.
+**A code node.** `kind: action` runs one known operation with no model. `returns: true` goes back to the node that
+asked, and `on_error` and `on_unknown` say where a refusal or an unknown outcome goes.
 
-The model can ask core to remember something and keep thinking, or return a decision for core to act on. Those two possibilities are called an ordinary function tool and an **output tool**. `collect` can return information to the agent so it can choose another action in the same run. Model-visible operations and handoffs are output tools: their selection returns control to the engine, which can speak fixed words or enter another node. With a `carries_out` declaration, a collection-only response can also return control directly to code for its declared operation, without another model request.
+## 8. Language and greeting
 
-A handoff's destination schema lists only that node's declared exits. Core also enforces routes during execution. The turn policy permits only one action that moves the caller or changes the business per model reply; requesting several does not make them all execute.
+`language:` names a state field, and `locales:` maps its values to locales. Core's own lines then follow the
+caller's language during the call. This does not translate prompts or application wording, and does not switch STT
+or TTS. Faro uses it for English and Spanish.
 
-## 6. Walk caller input through the generated graph
+`flow.greeting(call, words)` returns the greeting, then what the entry node opens with, such as a caller ID read
+back. That read-back then becomes the question the first reply answers. It still needs playback evidence.
 
-The caller first says, “I'd like to change a record.” The `front` agent hands over to `request`. On arrival, `asks` immediately speaks “What is your account identifier?” because that field is empty. This is code-entry behavior: it finishes the turn before the `request` agent runs.
+## 9. Version 1
 
-After hearing the question, the caller says, “For account A-42, please mark record R-17 complete.” This next turn starts at `request`. One valid execution is:
-
-| Hop | Work performed | What happens next? |
-|---|---|---|
-| `request` | Agent collects the facts, then selects `hand_over` to `lookup` | The graph enters the code node |
-| `lookup` | Code runs `fetch_record` and validates the result | Successful return resumes `request` |
-| `request` | Agent selects `apply_change` | Core speaks the read-back and finishes this turn |
-
-Each generated graph step asks the turn engine to perform one node's work. Its result is either `Moved`, naming the next node, or `Answered`, ending this graph execution. The decision after the step routes `Moved` only to a permitted destination and routes `Answered` to the graph's end.
-
-The graph's start decision can enter whichever node the call currently occupies. On the next caller reply, this call starts its graph execution at `request`, not at `front`. `Answered` ends the current execution, not necessarily the call; it also covers interruption, failure or an exhausted budget.
-
-The graph uses `state=None`: the turn driver is passed as a dependency, and the `FlowCall` holds facts and position. Pydantic Graph is enforcing transitions here, not keeping a second copy of conversational state or persisting a paused call.
-
-## 7. Let code handle returns and prerequisites
-
-For `lookup`, the handoff records that `request` is waiting. On success, `returns: true` sends execution back there. No model request is needed to choose that return. A refusal or an unknown outcome follows the separately declared `on_error` or `on_unknown` destination.
-
-The action still goes through the normal operation boundary. Making a step deterministic does not bypass argument validation, receipt checks or an operation's approval requirement. This example's `fetch_record` explicitly declares `approval: none` and `changes: false`.
-
-A prerequisite is a related but different routing rule. As an optional extension, suppose `request` should run only after a separate identification step has established the caller. Add these fields to its declaration:
-
-```yaml
-requires: [caller_id]
-satisfied_by: identify
-```
-
-This extension also needs a declared `identify` step that can establish `caller_id`. Its behavior is:
-
-```mermaid
-flowchart LR
-    Front["front requests handoff to request"] --> Check{"caller_id present?"}
-    Check -->|"yes"| Request["request"]
-    Check -->|"no"| Identify["identify, with request waiting"]
-    Identify -->|"required fact established"| Request
-```
-
-Routing checks the required facts and inserts the prerequisite when they are missing. Once they are present, code resumes the waiting destination. `requires` checks presence; it does not authenticate a caller simply because a string is populated. If the prerequisite represents verification, the application should require a fact that its trusted verification operation establishes.
-
-The current return mechanism has one pending destination, not a stack of nested detours. A second interposition replaces the waiting destination. Keep that limit in mind when designing prerequisites that themselves need prerequisites.
-
-Two more rules let a conversation step use code where the next action is already known.
-
-**Follow a receipt with `route:`.** An operation can declare `route: next`, meaning that its receipt's `next` field names the destination. That field must have a type such as `Literal['request', 'review']`; compilation checks that these steps exist and includes the routes in the graph. These destinations do not become model-selectable `hand_over` exits unless the application also declares them as exits.
-
-After the operation succeeds, a different destination takes precedence over a prerequisite's pending return. The engine moves there and ends the turn unless that node has an opening of its own. A receipt naming the current step, or an allowed empty string, requests no new move; normal return handling still applies.
-
-This routing is implemented for operations executed by conversation steps. An `action` step follows its own `then`, `returns`, `on_error` and `on_unknown` rules. Start-of-turn reconciliation does not apply the receipt route either; [chapter 05](05-tools-approval-and-recovery.md#8-reconcile-before-deciding-to-resend) explains that recovery limit.
-
-**Run an operation after collection with `carries_out:`.** The [routed support desk](../../core/tests/ticket_flow/routed.yaml) declares:
-
-```yaml
-carries_out: {find_ticket: [ticket_id]}
-```
-
-Here `find_ticket` is a declared operation with `approval: none`, validated arguments and receipt wording. It is not also listed in this node's model-visible `operations`. The rule means:
-
-1. The agent returns only successful `collect` calls, with no model prose or other selected action.
-2. The latest collection records at least one declared trigger field, here `ticket_id`, and the operation's complete arguments can be built from state.
-3. Code runs the first eligible carried operation in declaration order through the ordinary operation boundary. No second model request is needed just to select it.
-4. Its receipt can assign facts, speak a result and name a route. An authoritative refusal returns to the same node's agent with the reason; it does not silently retry the save.
-
-The trigger must be newly recorded, but **not every argument must be new**. For example, `account_id` can already be in state when `ticket_id` is collected. Applications must validate the combination and any domain preconditions. This rule selects one operation; it is not a queue that runs every matching save.
-
-Faro uses these same mechanisms. It has eight conversation nodes and one deterministic `help` node. Its examiner records an answer and a grade; code saves the attempt. The receipt reports where the store says the learner should continue. Its agents can still choose declared detours, such as asking the coach for help. Thus receipts determine progress after saves without removing the agents' conversational choices.
-
-## 8. Choose who writes the spoken answer
-
-`front` uses the default `prose` mode, so its agent can compose answers to general questions. `request` uses `speech: rendered`, so the agent chooses actions while code supplies the words.
-
-For example, after arriving at `request`, code can ask “What is your account identifier?” without running that node's agent. When the caller answers, the agent runs and records the answer with `collect`. If it selects `wait` and the record identifier is still missing, code can ask “Which record should I change?” The node stays active throughout.
-
-`asks` supplies missing-field wording, not a script that forces every question to be asked. An already-known field is skipped. `wait` means “choose the appropriate rendered response,” not “sleep.” Other responses take priority when appropriate, such as a read-back or a refusal.
-
-If you want the agent to phrase its own follow-up, use `speech: prose` (or omit `speech`, since prose is the default). A prompt can ask it to acknowledge the answer briefly and ask only for the missing detail. That still requires the model to choose good words; it is not a naturalness guarantee.
-
-**Prose does not turn approval into a prompt-only rule.** In either mode, selecting `apply_change` uses its exact application read-back and execution checks. A prose node can therefore mix natural explanations with code-written approval and receipt lines, without a new node for each kind of sentence. Keeping `asks` on a prose node still supplies fixed arrival questions; it does not ask the model to rewrite them.
-
-A rendered node cannot improvise an answer to “Why do you need that?” It needs an application response or a declared handoff to a prose node such as `front`. A move is useful when another node has the right responsibility, not merely because the caller asked another question. Selecting `say_again` repeats a recorded result without executing the tool again.
-
-Rendered speech prevents free-form agent output from going directly to TTS. It does not make every receipt field model-independent: Faro includes agent-written feedback in the receipt text its application returns. Templates and application validation control that path, but the feedback and grade still need semantic evaluation. Intent interpretation and field extraction also still depend on the agent. A prose node's optional `guarded` mode can filter unsupported completion claims using application-supplied rules, but that is a best-effort check. A rendered node has no model prose to guard and cannot also declare `guarded`.
-
-Additional declarations such as `opens_with` and `reads_back` can make code select a predictable read-back on arrival or after collection. They are useful when the application already knows that next action; the simpler sequence above does not need them.
-
-A flow can also follow the caller's language. The manifest names a state field or property and maps its values to locales. This excerpt assumes an `explanation` attribute on the application state:
-
-```yaml
-language: explanation
-locales:
-  EN: english
-  ES: spanish
-```
-
-Core's own lines follow that value during the call. An unmapped value falls back to `locale:`, or core's default if none is supplied. This does not translate prompts, `asks` strings or backend wording, and does not switch STT or TTS. Applications choose those separately. When a configured `reads_back` rule runs after collection and finds new wording for the same pending value, core puts the question again in those words. The next yes must follow delivery of that copy.
-
-`flow.greeting(call, words)` returns the application's greeting followed by what the entry step opens with: its `opens_with` read-back when the state already gives the arguments, such as a caller ID, or its first `asks` line. Passed to `core.greet` and sent through the launcher's audio path, a read-back becomes the question the first reply answers. Its delivery must still be acknowledged; constructing a greeting does not prove playback.
-
-A third mode, `speech: structured`, puts the agent's words and the caller's update into one typed decision ([`core/structured.py`](../../core/src/core/structured.py)). The agent answers with `reply(say, update)`. That is one request, with no `collect`. A pure read, meaning one with no read-back, no change and no `route`, is an ordinary tool that takes the update and returns its result to the same agent. Operations, `hand_over` and a consultation's `done` take the same update. Read-backs, receipts and fixed lines are still code's words. An update keeps what it leaves out, clears only a field that may be null, and commits whole or not at all.
-
-## 9. Write the same flow in manifest version 2
-
-Version 2 is a shorter way to write the same steps table. It is not a second runtime. The loader turns it into the version 1 list, and the same spec classes check it ([`FlowSpec._normalized`](../../core/src/core/flowspec.py)). The `request` node from section 3, in version 2:
-
-```yaml
-version: 2
-id: record-changes
-state: models.py:ApplicationState
-identity: caller_id
-entry: front
-voice: prompts/assistant.md
-steps:
-  front:
-    prompt: prompts/front.md
-    exits:
-      - {to: request, purpose: changing an existing record}
-  request:
-    prompt: prompts/request.md
-    speech: rendered
-    fields: [caller_id, record_id, requested_change]
-    context: {facts: [caller_id, record_id, requested_change]}
-    operations: [apply_change]
-    exits: [lookup, front]
-  lookup: {kind: action, operation: fetch_record, returns: true, on_error: request, on_unknown: request}
-  done: {kind: end, outcome: completed, say: Goodbye.}
-```
-
-What changes, and what does not:
-
-| | Version 1 | Version 2 |
-|---|---|---|
-| Steps | a list, each with `id` and `kind` | a mapping keyed by id; an `id:` inside must equal its key |
-| A step with no `kind` | refused | `conversation` |
-| A conversation with no `speech` | `prose` | `structured` |
-| Flow `context` with no `facts` | every fact | no facts |
-| Flow `context` with no `history` | `all` | `{scope: node}`: the step's own turns, every one |
-| A step's `context` | replaces the flow's whole | replaces the flow's member by member |
-| A field in `fields` not in the step's facts | allowed | refused: a step sees what it may change |
-| A key given twice | refused (both versions) | refused |
-| Everything else | | the same keys, with the same meaning |
-
-`front` has no `agent`, so it speaks in the flow's `voice`. `request` pins `speech: rendered`, and an explicit speech or kind is always kept. The `context` lines are the one thing version 2 asks for that version 1 did not. A step that writes a field must list it, because the flow's facts default to none.
-
-Every refusal names its step. For example: `step 'request': colour: Extra inputs are not permitted`, `request: may change 'record_id' but cannot see it: add it to context.facts`, or `request: its agent 'assistant' sets spec.output_schema, which core would replace with this step's own outputs; leave it out`. The last one applies in both versions, since core builds each step's outputs itself.
-
-Version 1 files load exactly as before. [`core/tests/test_v2.py`](../../core/tests/test_v2.py) checks that each version 2 twin of a clinic fixture normalizes to its version 1 source, compiles to the same legal moves, and sends the same requests byte for byte.
-
-Both applications on core that are still maintained run version 2:
-
-- [`salone-concierge-graph-new/salon/agent.yaml`](../../use-cases/salone-concierge-graph-new/salon/agent.yaml): every step structured.
-- [`faro-language-learning/faro/agent.yaml`](../../use-cases/faro-language-learning/faro/agent.yaml): four steps structured, two prose, two rendered.
-
-Their prompts name the structured outputs. The shape is `put it in the update on book_appointment`, never `record it with collect`. salon-graph is the one application still on version 1.
-
-A structured step gets `record` when a reply that only records can be answered by code:
-
-- code carries something out (`carries_out`);
-- a restated value confirms its read-back;
-- a `reads_back` field is one the operation's update cannot carry. Faro's identify reads the number back in the learner's language, and `asked_language` is not an argument of `confirm_phone`.
-
-A value the state's own types refuse in an update's arguments comes back to the model with the locale's words for the caller, as it does for `collect`.
+Version 1 manifests still load until the cleanup. They use a list of steps with `id` and `kind`, `prose` speech by
+default, and the `collect` tool as the model's write path. The one application still on version 1 is `salon-graph`.
+It will be retired. Write new use cases in version 2. [`core/tests/test_v2.py`](../../core/tests/test_v2.py) checks
+that each version 2 twin of a clinic fixture normalizes to its version 1 source and sends the same requests.
 
 ## Inspect a compiled graph offline
 
-The support-desk fixture implements the same structure with `faq`, `desk` and `look_up` in place of `front`, `request` and `lookup`. From the repository root after `uv sync --all-packages`, compile it and inspect the actual route table without provider requests:
+From the repository root after `uv sync --all-packages`, compile the salon and print its legal moves, without any
+provider request:
 
 ```bash
-uv run --directory core python - <<'PY'
-import core
+cd use-cases/salone-concierge-graph-new
+GOOGLE_API_KEY=x uv run python -c "
 from core.flow import Flow
-from pydantic_ai import models
-from pydantic_ai.models.test import TestModel
-
-models.ALLOW_MODEL_REQUESTS = False
-flow = core.load('tests/ticket_flow/agent.yaml').compile(model=TestModel())
-graph = Flow.of(flow.nodes)
-
-assert graph.moves['faq'] == frozenset({'desk'})
-assert graph.moves['desk'] == frozenset({'faq', 'look_up'})
-assert 'desk' in graph.moves['look_up']
-print(graph.render())
-print('Declared routes and the lookup return are present.')
-PY
+from salon.app import FLOW
+moves = Flow.of(FLOW.nodes).moves
+assert {'booking', 'moving', 'cancelling', 'complaints'} <= moves['concierge']
+assert {'moving', 'cancelling'} <= moves['booking']
+for step, allowed in sorted(moves.items()):
+    print(f'{step:12} -> {sorted(allowed)}')
+"
 ```
 
-`core.flow.Flow` is the internal inspection helper, not an additional public export from `core`. Its Mermaid output contains generated decisions, fallback routes and turn endings, so it is more detailed than an application-path diagram. The route table describes what is allowed, not a transcript of the choices a live model will make.
+The table says what is allowed, including prerequisite and consultation returns. It is not a transcript of what a
+live model will choose.
 
 ## Check this against the code
 
-- [Manifest compiler](../../core/src/core/flowspec.py): `FlowSpec`, declaration checks and conversion to runtime steps.
-- [Compiled steps](../../core/src/core/steps.py): `ConversationStep.node`, `ActionStep.node`, `StepFlow.destinations` and prerequisite returns.
-- [Executable graph](../../core/src/core/flow.py): `legal_moves`, `Flow._build`, `Moved` and `Answered`.
-- [Routing](../../core/src/core/graph.py): `route`, `holds` and the pending return destination.
-- [Authoring tests](../../core/tests/test_authoring.py) and [node tests](../../core/tests/test_nodes.py): different flow shapes, generated capabilities and rejected actions.
-- [Flow rule tests](../../core/tests/test_flow_rules.py) on the [routed support desk](../../core/tests/ticket_flow/routed.yaml): a language per call, routed and code-carried operations, the greeting, and validators reading `heard`.
+- [Manifest compiler](../../core/src/core/flowspec.py): `FlowSpec`, `_normalized` for version 2, and every load check.
+- [Structured decisions](../../core/src/core/structured.py): the outputs above and how an update is applied.
+- [Compiled steps](../../core/src/core/steps.py): `ConversationStep.offer`, `owes_offer`, `_operate`, and prerequisite
+  returns.
+- [Executable graph](../../core/src/core/flow.py) and [routing](../../core/src/core/graph.py): legal moves,
+  `Opening`, `route`.
+- [Structured tests](../../core/tests/test_structured.py): one request per local answer, a pick read back by code,
+  and a `record` that offers again.
+- [Salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py): every node's first line said by
+  code, and the whole call at one request per turn.
 
-[← Typed state and history](03-typed-state-and-history.md) · [Reading guide](README.md) · [Next: tools, approval and recovery →](05-tools-approval-and-recovery.md)
+[← State, memory, records and services](03-typed-state-and-history.md) · [Reading guide](README.md) · [Next: operations, approval and recovery →](05-tools-approval-and-recovery.md)

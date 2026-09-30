@@ -4,14 +4,12 @@ A runtime for voice agents that keeps the conversation correct. Pipecat still do
 taking, speech-to-text (STT) and text-to-speech (TTS). The harness sits where Pipecat's LLM service would, and runs
 the conversation between what the caller said and what the bot says back.
 
-The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. An application brings a typed state
-model, a manifest (`agent.yaml`), prompts and typed Python functions. Core has no booking or verification logic of
-its own.
+The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. It has no business logic of its own.
+An application brings five things: a state model, operations, choice functions, prompts and a manifest
+(`agent.yaml`). The first part of this README explains how to build any application this way. The second part shows
+the reference application, a hair salon that books, moves and cancels appointments.
 
-The reference application is the salon in [`use-cases/salone-concierge-graph-new`](use-cases/salone-concierge-graph-new/).
-Everything below uses it as the example.
-
-## The approach
+## How a turn works
 
 ```mermaid
 flowchart LR
@@ -22,23 +20,298 @@ flowchart LR
     Code --> Next["Next node, if the decision moves the caller"]
 ```
 
-1. The call is always in one **node**. Each node does one job, such as booking, moving or cancelling.
-2. The node's agent reads what the caller said. It answers with **one typed decision**: a reply, an update to the
-   facts, an operation, a hand-over to another node, or a goodbye. The update rides on the decision itself.
-3. **Code checks the decision.** The new facts are validated as a whole state. A pick must be one that was offered.
-   A hand-over must be to a node the manifest allows.
-4. **Code says every line it already knows.** That covers the times on offer, the question for a missing fact, the
-   read-back of a change, the confirmation, and the goodbye. The model only writes free replies.
-5. **Nothing changes without consent.** An operation is read back first. It runs only on a yes to that exact
-   read-back, and only after the caller heard the read-back in full (playback evidence from Twilio or the browser).
+1. The call is always in one **node**. Each node does one job the caller wants done.
+2. The node's agent reads what the caller said. It answers with **one typed decision**, such as a reply, an
+   operation or a hand-over to another node. The facts the caller gave ride on the decision as an `update`.
+3. **Code checks the decision.** The new facts are validated as one whole state. A pick must be one that was
+   offered. A hand-over must follow an exit the manifest declares.
+4. **Code says every line it already knows.** That covers offers, questions for missing facts, read-backs,
+   confirmations and goodbyes. The model writes words only when it answers something code cannot know.
+5. **Nothing changes without consent.** An operation that changes something is read back first. It runs only on a
+   yes to that exact read-back, and only after the caller heard it in full.
 
-The goal is one model request per caller turn. On the six salon text paths, every turn is one request, switches
-between nodes included.
+The target is one model request per caller turn.
 
-## Why nodes, and how to design them
+### The decisions a node's agent can make
 
-A node is one job the caller wants done. It is not a sentence or a tool. Split by the job, and keep each node
-small. This is the house style for every use case.
+| Decision | What it does | Who speaks |
+|---|---|---|
+| `reply(say, update)` | Answers the caller, and records any facts they gave | the model's `say` |
+| `record(update)` | Only records facts, such as a new day | code: the node's next offer or question |
+| an operation, with its `update` | The first call reads the change back. The same call after a yes carries it out. | code: the read-back, then the receipt's words |
+| `hand_over(to, because, update)` | Moves the caller to another node, with the facts they gave | code: the new node's first line |
+| `goodbye(recap)` | Ends the call | code: the recaps and the goodbye line |
+| `say_again` | Repeats the last confirmation | code |
+| `done(answer)` | Ends a consultation and returns the caller | the model's `answer` |
+
+A clear no to a read-back is `reply` or `goodbye` with `decline` set. The node's own prompt says which decisions to
+use when. Core only offers the decisions a node can make: a node with no operation has no operation output.
+
+## Build an application
+
+An application is one folder, and the folder is a Python package with an `__init__.py`. The files import each
+other by the package name, such as `from shop.state import ShopState`. Each file has one job:
+
+| File | Holds |
+|---|---|
+| `state.py` | one plain Pydantic model with every fact the call keeps |
+| `operations.py` | the business actions: arguments, what runs, the read-back, and how a lost answer is found again |
+| `offers.py` | the choice functions: what the caller may pick from, and the words for it |
+| `prompts/*.md` | one prompt per node, plus shared prompts for the voice and the business rules |
+| `agent.yaml` | the nodes, what each may see and change, and how they connect |
+| `app.py` | loads the manifest once, and opens one call per caller |
+| `bot.py` | the Pipecat pipeline: copy it from the salon and change the import |
+
+The steps below build a small example: a shop that takes an order. Every code block is a skeleton. The salon has
+the full, working version of each.
+
+### 1. Write the state model
+
+```python
+class ShopState(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    customer_phone: core.Phone | None = None
+    customer: Customer | None = None
+    item: str | None = Field(None, description='The id of the item the caller picked, from the items on offer.')
+    delivery_day: Annotated[date, core.NotPast] | None = Field(None, description='The day they want it, as YYYY-MM-DD.')
+```
+
+1. **Every field has a default.** A call starts empty.
+2. **The types carry the rules.** `core.Phone` is checked with libphonenumber. `core.NotPast` refuses a past date.
+   `core.Quoted` checks the text is the caller's own words.
+3. **The descriptions are prompt text.** The model sees each field with its type and description.
+4. **A receipt can be a field.** `customer` is set only by the lookup's receipt, never by the model.
+
+### 2. Write the operations
+
+An operation is a class. Its fields are its arguments, taken from the state by name. Its return type is the
+outcome.
+
+```python
+class PlaceOrder(core.Write[Shop]):
+    phone: core.Phone = Field(validation_alias=AliasPath('customer', 'customer_phone'))
+    item: str
+    matches = ('phone',)
+    say = 'Your order {order_id} is placed. Anything else?'
+    recap = 'Your order {order_id} is placed.'
+
+    def run(self, shop: Shop, intent: core.Intent) -> Placed | Refused: ...
+    def readback(self, shop: Shop) -> str:
+        return f'Shall I order {shop.name_of(self.item)}?'
+    def reconcile(self, shop: Shop, intent: core.Intent) -> Placed | Refused: ...
+```
+
+1. **`core.Write` always needs a heard read-back and a yes.** `core.Lookup` needs one only when it defines
+   `readback`.
+2. **Arguments come from the state, never from the model's words.** `AliasPath` reads a nested field, here the
+   number the lookup verified.
+3. **The return type is the outcome.** Each member is a `core.Receipt` model. A member that subclasses
+   `core.Rejection` is an authoritative no.
+4. **`say` and `recap` are the words for the receipt.** Code fills them from the receipt's fields.
+5. **`reconcile` finds a lost answer.** If the backend did not answer, core asks it by the intent's id before
+   anything is sent again. Set `idempotent = True` when the backend deduplicates by that id.
+
+The class `Shop` is the application's services: the backend client and anything else the operations need. It is a
+plain dataclass. The model never sees it.
+
+### 3. Write the choice functions
+
+A choice function says what the caller may pick for one field. It reads the services and the state.
+
+```python
+class Offer(BaseModel):
+    options: dict[str, str] = {}
+    say: str = ''
+    note: str = ''
+    pick: str = ''
+
+def items_in_stock(shop: Shop, state: ShopState) -> Offer:
+    items = shop.in_stock()
+    if not items:
+        return Offer(say='Nothing is in stock today. Can I help with anything else?')
+    return Offer(options=items, say=f'I have {", ".join(items.values())}. Which one would you like?')
+```
+
+| Field | Meaning |
+|---|---|
+| `options` | the ids the caller may pick, with the words for each |
+| `say` | what code says to the caller: the offer, or a question for a fact still missing |
+| `note` | what the model is told and the caller is not |
+| `pick` | the one id, when there is only one choice. Code records it with no question. |
+
+A pick counts only if it was offered, so the model cannot invent an id.
+
+### 4. Write the prompts
+
+1. One shared prompt for the voice: tone, length, how to say numbers. The manifest's persona points at it.
+2. One prompt per node. Say what the node's job is, and which decision to use when. Name only the outputs that
+   node has.
+3. Shared text, such as opening hours, goes in its own file. A prompt includes it with a marker like
+   `<!--hours-->`, declared under `includes:`.
+
+The prompt never lists the facts or the offers. Code adds them before every request, with today's date and a
+calendar.
+
+### 5. Write `agent.yaml`
+
+```yaml
+version: 2
+id: shop
+state: state.py:ShopState
+identity: customer_phone
+entry: front_desk
+greeting: "Hi, you've reached the shop. How can I help?"
+current_datetime: {timezone: Europe/Madrid, calendar_days: 14}
+context: {facts: none, history: {scope: node, turns: 8}}
+model: google-cloud:gemini-3.5-flash-lite
+
+agents:
+  clerk: {prompt: prompts/_voice.md}
+
+operations:
+  lookup_customer: operations.py:LookupCustomer
+  place_order: operations.py:PlaceOrder
+
+steps:
+  front_desk:
+    agent: clerk
+    prompt: prompts/front_desk.md
+    exits:
+      - {to: ordering, purpose: 'a new order'}
+
+  verify:
+    agent: clerk
+    prompt: prompts/verify.md
+    fields: [customer_phone]
+    context: {facts: [customer_phone, customer]}
+    operations: [lookup_customer]
+    reads_back: {lookup_customer: [customer_phone]}
+    asks: {customer_phone: 'Which phone number should I use?'}
+
+  ordering:
+    agent: clerk
+    prompt: prompts/ordering.md
+    requires: [customer]
+    satisfied_by: verify
+    fields: [item, delivery_day]
+    context: {facts: [item, delivery_day]}
+    choices:
+      item: {function: offers.py:items_in_stock, after: [delivery_day]}
+    offers: [item]
+    operations: [place_order]
+    reads_back: {place_order: [item]}
+    exits:
+      - {to: front_desk, purpose: 'they give up, or ask about something else'}
+```
+
+The top of the file describes the whole application:
+
+| Key | What it means |
+|---|---|
+| `state`, `identity` | the state model, and the field that identifies the caller |
+| `entry`, `greeting` | the first node, and the first words of the call |
+| `current_datetime` | the time zone and how many labelled days of calendar every node sees |
+| `context` | the default for what each node sees: here no facts, and its own last eight turns |
+| `model`, `agents` | the model, and the personas with their shared prompt and model settings |
+| `operations` | every operation, one line each: `file.py:Class` |
+| `locale`, `includes` | the fixed lines in the caller's language, and shared prompt files |
+
+Each step is one node. A step with no `kind` is a conversation node, and its speech is `structured`:
+
+| Key | What it means |
+|---|---|
+| `prompt`, `agent` | the node's prompt, and the persona it speaks as |
+| `fields` | the state fields this node may change |
+| `context.facts` | the state fields this node's model sees. A field it may change must be one it sees. |
+| `choices` | a field picked from an offer, with its function. `after:` names the fields the offer rests on. When one changes, the offer and the pick are reset. |
+| `offers` | the choices whose `say` code speaks on arrival, and again after a `record` |
+| `operations` | what this node may carry out |
+| `reads_back` | recording this field makes code read the operation back with no second request |
+| `asks` | the fixed question code asks for a missing field on arrival |
+| `opens_with` | an operation code reads back on arrival, when its arguments are already known |
+| `requires`, `satisfied_by` | a fact that must exist first, and the node that gets it. The graph sends the caller there, then back. |
+| `exits` | the nodes this one may hand the caller to, each with a purpose the model reads |
+| `consults` | a specialist node that answers a side question and returns the caller |
+| `capabilities` | Pydantic AI capabilities, such as a policy loaded only when asked about |
+| `carries_out` | an operation with no read-back that code runs after a `record` |
+
+The loader checks every name, file, field, operation and exit when the application starts. A mistake fails at
+startup, never mid-call.
+
+### 6. Open a call
+
+```python
+SPEC = core.load(Path(__file__).with_name('agent.yaml'))
+FLOW = SPEC.compile()
+
+def open_call(flow: core.StepFlow, from_number: str, backend: Backend) -> core.FlowCall:
+    return flow.open(ShopState(), services=Shop(backend), caller_id=from_number)
+```
+
+1. `compile()` runs once per process. Every call shares the compiled flow and nothing else.
+2. `open()` gives each caller a separate call, with its own state, history and pending work.
+3. `caller_id` fills the identity field from the carrier's number, when it is a real one.
+
+`bot.py` wires the call to Pipecat with `core.processor.PydanticAgentProcessor`. It also wires the playback
+evidence (Twilio marks, or the browser page's report), without which no read-back can be approved.
+
+## Design the nodes
+
+A node is one job the caller wants done. It is not a sentence or a tool. This is the house style for every
+application:
+
+1. **One job, one operation.** Split by what the caller wants: booking, moving and cancelling are three nodes, not
+   one. A node's prompt and outputs cover only its job.
+2. **Code opens the node.** Name the choice in `offers:` whose `say` is the node's first line. When the caller has
+   only one choice, the function returns it as `pick`, and the next question comes at once.
+3. **Declare prerequisites.** A fact every job needs first, such as a verified caller, is `requires` with
+   `satisfied_by`. Do not repeat it in every prompt.
+4. **A change of mind is an exit.** Give each exit a purpose the model can read. A hand-over can carry the new
+   facts, so the next node starts with them.
+5. **A side question is a consultation.** `consults:` answers it in a specialist node, then returns the caller to
+   the same place.
+6. **Show each node only what its job needs.** List its facts in `context.facts`. Keep history to its own turns.
+
+Why this works:
+
+- **Small prompts and schemas.** Each request carries one job's instructions, facts and outputs. That suits a small,
+  fast model.
+- **Fewer requests.** Code knows each node's first line, so no request is spent on it.
+- **Mistakes stay contained.** A wrong reading in the moving node cannot book, and one in the cancelling node cannot
+  move.
+
+## State, memory, records and services
+
+Four kinds of data live in a call. They are kept apart on purpose.
+
+| | What it holds | Who writes it | What the model sees | Lifetime |
+|---|---|---|---|---|
+| **Application state** | the facts in your state model | the model's update and operation receipts, validated as one whole state | only each node's `context.facts` | the call |
+| **Conversation memory** | what was said and heard, turn by turn | the turn engine | each node's own recent turns (`history`) | the call |
+| **Runtime records** | the pending read-back, offers, intents, receipts, the speech and playback ledger | core only | a short status line when relevant | the call; intents and receipts also go to the backend |
+| **Services** | the backend, its clients and keys | the application | never | the process |
+
+1. **State is replaced whole.** Every change builds a complete new state and validates it, or changes nothing. A
+   change also resets what rested on the old value, through `after:`.
+2. **Memory is scoped.** A node sees its own turns, plus the caller's words that brought it there. It does not see
+   another node's tool calls.
+3. **Records are core's.** A model cannot write "approved" or "done". Only a heard yes and a validated receipt do.
+4. **Services stay out of prompts.** A prompt cannot name them, and the loader refuses one that tries.
+
+## Test it
+
+1. **Offline.** Drive the real flow with a scripted model, so no provider request is made. Check the end state of
+   the backend, not the words. Pin each node's request in a golden file, so a prompt or schema change shows in a
+   diff. The salon's [`tests/`](use-cases/salone-concierge-graph-new/tests/) folder is the pattern to copy.
+2. **Live.** Run the calls on Coval over a real phone line, with
+   [`coval_sim`](use-cases/concierge-tools/coval_sim/). Judge them by the backend's end state, the traces and
+   [`load_report`](use-cases/concierge-tools/load_report.py).
+
+## Example: the salon
+
+The reference application is [`use-cases/salone-concierge-graph-new`](use-cases/salone-concierge-graph-new/), a hair
+salon called Sage and Stone. Its backend is a diary of bookings.
 
 ```mermaid
 flowchart LR
@@ -61,109 +334,59 @@ The salon used to have one booking node that also moved and cancelled. It is now
 | `moving` | move a booking the caller holds | "You have a haircut Friday at 9:00. Which day would you like to move it to?" |
 | `cancelling` | cancel a booking the caller holds | "Shall I cancel your haircut Friday at 9:00?" (the read-back is the only question) |
 
-The rules:
+Each of the three requires a known customer, so `verify` runs first when the caller is not yet known. `verify`
+reads the caller's number back, and the lookup runs on a yes. `stylist` answers questions about hair and returns
+the caller.
 
-1. **One job, one operation.** `booking` books, `moving` moves, `cancelling` cancels. A node's prompt and tools
-   cover only that job.
-2. **Code opens the node.** `offers:` names the choice whose function writes the node's first line. It also runs
-   after the model records a new day or time. When the caller has only one booking, the function picks it, and
-   the cancel is read back at once.
-3. **Prerequisites are declared.** `requires: [customer]` with `satisfied_by: verify` makes the graph put the caller
-   through verification first, then come back.
-4. **Changes of mind are exits.** "Actually, move the one I just made" is `booking` → `moving`, with a purpose the
-   model reads. A hand-over can carry the new day, so the next node offers times at once.
-5. **Side questions are consultations.** `consults: stylist` answers a hair question, then returns the caller to
-   the same node.
-
-Why this works:
-
-- **Small prompts and schemas.** Each request carries only one job's instructions, facts and outputs. That suits a
-  small, fast model (`gemini-3.5-flash-lite` here).
-- **Fewer requests.** Code already knows each node's first line, so no model request is spent on it.
-- **Mistakes stay contained.** A wrong reading in `moving` cannot book, and one in `cancelling` cannot move.
-
-## How `agent.yaml` is defined
-
-Manifest version 2 keys the steps by id. A step is a conversation node with `speech: structured` unless it says
-otherwise. This is the real `booking` step, trimmed:
+This is the real `booking` step:
 
 ```yaml
-version: 2
-state: state.py:SalonState
-identity: customer_phone
-entry: concierge
-current_datetime: {timezone: Europe/Madrid, calendar_days: 14}
-context: {facts: none, history: {scope: node, turns: 8}}
-
-operations:
-  book_appointment: operations.py:BookAppointment
-
-steps:
-  booking:
-    prompt: prompts/booking.md
-    requires: [customer]
-    satisfied_by: verify
-    fields: [service, booking_day, booking_time, slot]
-    context: {facts: [service, booking_day, booking_time, slot]}
-    choices:
-      slot: {function: offers.py:find_times, after: [booking_id, service, booking_day, booking_time]}
-    offers: [slot]
-    operations: [book_appointment]
-    reads_back: {book_appointment: [slot]}
-    exits:
-      - {to: moving, purpose: 'moving a booking they hold, the one just made included'}
-      - {to: cancelling, purpose: 'cancelling a booking they hold, the one just made included'}
-    consults:
-      - {to: stylist, purpose: 'a question about hair'}
+booking:
+  agent: robin
+  prompt: prompts/booking.md
+  requires: [customer]
+  satisfied_by: verify
+  fields: [service, booking_day, booking_time, slot]
+  context: {facts: [service, booking_day, booking_time, slot]}
+  choices:
+    slot: {function: offers.py:find_times, after: [booking_id, service, booking_day, booking_time]}
+  offers: [slot]
+  operations: [book_appointment]
+  reads_back: {book_appointment: [slot]}
+  capabilities: [capabilities.py:refunds]
+  exits:
+    - {to: moving, purpose: 'moving a booking they hold, the one just made included'}
+    - {to: cancelling, purpose: 'cancelling a booking they hold, the one just made included'}
+    - {to: complaints, purpose: 'a complaint about a past service'}
+    - {to: concierge, purpose: 'they give up booking, or ask about something unrelated to booking'}
+  consults:
+    - {to: stylist, purpose: 'a question about hair: which service suits them, colour, aftercare, how long a service takes'}
 ```
 
-| Key | What it means |
-|---|---|
-| `fields` | The state fields this node may change. Their types come from `state.py`. |
-| `context.facts` | The state fields this node's model sees. A field it may change must be one it sees. |
-| `choices` | A field picked from an offer. Its function returns the ids and the words. `after:` names the fields the offer rests on. When one of them changes, the offer and the pick are reset. |
-| `offers` | The choices whose function writes what the node says on arrival, and again after a `record`. |
-| `operations` | What this node may carry out. Each is read back, then run on a yes. |
-| `reads_back` | Recording this field makes code read the operation back with no second request. |
-| `requires` / `satisfied_by` | A fact that must exist first, and the node that gets it. |
-| `exits` / `consults` | Where the node may hand the caller, and which specialist it may ask. |
+1. On arrival, `find_times` offers the free times for the service and day the caller already gave. If the day is
+   missing, it asks for it. Code says either one, with no model request.
+2. When the caller says a day, the model answers `record`. The day changes, so the old offer is reset, and code
+   offers the new day's times.
+3. When the caller picks a time, the model calls `book_appointment` with the slot. Code reads the booking back.
+4. On a yes, the model calls `book_appointment` again. The booking runs, and code says the receipt's words.
+5. The refund policy is loaded only if the caller asks about money back.
 
-The loader checks every name, file, field, operation and exit when the application starts, never mid-call.
-
-Each file has one job:
+The salon's files:
 
 | File | Holds |
 |---|---|
-| `state.py` | `SalonState`, one plain Pydantic model with every fact the call keeps |
-| `operations.py` | the typed operations (`core.Lookup` and `core.Write` classes): arguments, run, read-back, recovery, receipt words |
-| `offers.py` | the choice functions: which times or bookings are on offer, and their words |
-| `prompts/*.md` | one prompt per node, plus the shared voice and diary rules |
-| `agent.yaml` | the nodes, what each may see and change, and how they connect |
+| [`state.py`](use-cases/salone-concierge-graph-new/salon/state.py) | `SalonState`: phone, customer, service, day, time, slot, booking id, complaint |
+| [`operations.py`](use-cases/salone-concierge-graph-new/salon/operations.py) | `LookupCustomer`, `BookAppointment`, `MoveAppointment`, `CancelAppointment`, `RecordComplaint` |
+| [`offers.py`](use-cases/salone-concierge-graph-new/salon/offers.py) | `find_times`, `bookings_to_move`, `bookings_to_cancel` |
+| [`prompts/`](use-cases/salone-concierge-graph-new/salon/prompts/) | one prompt per node, `_voice.md` and `_diary.md` |
+| [`agent.yaml`](use-cases/salone-concierge-graph-new/salon/agent.yaml) | seven nodes and five operations, about 150 lines |
 
-## State, memory, records and services
+### Live results
 
-Four kinds of data live in a call. They are kept apart on purpose.
-
-| | What it holds | Who writes it | What the model sees | Lifetime |
-|---|---|---|---|---|
-| **Application state** | the facts: phone, customer, service, day, time, slot, booking id | the model's update and operation receipts, validated as one whole state | only each node's `context.facts` | the call |
-| **Conversation memory** | what was said and heard, turn by turn | the turn engine | each node's own recent turns (`history: {scope: node, turns: 8}`) | the call |
-| **Runtime records** | the pending read-back, offers, intents, receipts, the speech and playback ledger | core only | a short status line when relevant | the call; intents and receipts also go to the backend |
-| **Services** | the backend (the salon's diary), its clients and keys | the application | never | the process |
-
-1. **State is replaced whole.** Every change builds a complete new state and validates it, or changes nothing. A
-   change also resets what rested on the old value. A new day drops the times offered for the old day.
-2. **Memory is scoped.** A node sees its own turns, plus the caller's words that brought it there. It does not see
-   another node's tool calls.
-3. **Records are core's.** A model cannot write "approved" or "booked". Only a heard yes and a validated receipt do.
-4. **Services stay out of prompts.** A prompt cannot name them, and the loader refuses one that tries.
-
-## Live results
-
-Measured on Coval over the real Twilio line, on the v2 salon. The verdict comes from the salon's diary at the end of
-each call, the traces, and [`load_report`](use-cases/concierge-tools/load_report.py). Coval's LLM judges are
-reported but not used as the verdict: on these runs they gave several NO answers that contradicted the transcript
-or their own explanation.
+Measured on Coval over the real Twilio line. The verdict comes from the salon's diary at the end of each call, the
+traces, and [`load_report`](use-cases/concierge-tools/load_report.py). Coval's LLM judges are reported but not used
+as the verdict: on these runs they gave several NO answers that contradicted the transcript or their own
+explanation.
 
 | Run | Callers | Calls | Result | Requests per turn | Input tokens per call | Turn latency p50 |
 |---|---|---:|---|---:|---:|---:|
@@ -186,7 +409,7 @@ In every call, each change was read back and confirmed before it happened, and n
 miss was a date: on a Wednesday, "Thursday" became the Thursday of next week. It was read back, and the caller
 accepted it.
 
-## Try it
+### Try it
 
 The workspace uses Python 3.14+ and uv. Put the provider keys in the root `.env`, then:
 

@@ -123,19 +123,19 @@ def paired(messages: list[ModelMessage]) -> list[ModelMessage]:
         if isinstance(p, (ToolReturnPart, RetryPromptPart)) and p.tool_call_id
     }
     complete = calls & results
-    projected = []
-    for message in messages:
-        parts = [
-            p
-            for p in message.parts
-            if not isinstance(p, (ToolCallPart, ToolReturnPart, RetryPromptPart))
-            or not p.tool_call_id
-            or p.tool_call_id in complete
-        ]
-        message = replace(message, parts=parts)
-        if message.parts:
-            projected.append(message)
-    return projected
+    return [
+        replace(message, parts=parts)
+        for message in messages
+        if (
+            parts := [
+                p
+                for p in message.parts
+                if not isinstance(p, (ToolCallPart, ToolReturnPart, RetryPromptPart))
+                or not p.tool_call_id
+                or p.tool_call_id in complete
+            ]
+        )
+    ]
 
 
 def project(

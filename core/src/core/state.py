@@ -12,11 +12,12 @@ import contextvars
 import json
 import re
 import time
-from collections import Counter
+from collections import Counter, deque
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, tzinfo
+from itertools import accumulate
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
@@ -626,7 +627,7 @@ class CallContext(BaseModel):
     """How many clears this call sent: part of every mark's name, so a mark from before one is told apart."""
     _marks_known: bool = PrivateAttr(default=False)
     """The transport returns marks (or writes locally): only then can speech be delivered by one."""
-    _onsets: list[float] = PrivateAttr(default_factory=list)
+    _onsets: deque[float] = PrivateAttr(default_factory=lambda: deque(maxlen=32))
     """When the caller was heard starting to speak, newest last, bounded (`note_onset`)."""
     _answer_lead: float = PrivateAttr(default=0.0)
     """How much earlier than its report caller speech may have begun (the adapter's VAD start window)."""
@@ -637,7 +638,7 @@ class CallContext(BaseModel):
     _audits: int = PrivateAttr(default=0)
     _endings: list[dict[str, Any]] = PrivateAttr(default_factory=list)
     """How the call ended, as each part of it was observed or intended, in order (`note_ending`)."""
-    _playback_log: list[dict[str, Any]] = PrivateAttr(default_factory=list)
+    _playback_log: deque[dict[str, Any]] = PrivateAttr(default_factory=lambda: deque(maxlen=256))
     """Every mark sent, returned, ignored or cleared, in order, for the write audit (`playback_for`)."""
     _return_status: str = PrivateAttr(default='')
     _entered: Entry = PrivateAttr(default='')
@@ -955,7 +956,7 @@ class CallContext(BaseModel):
 
     def note_onset(self, at: float) -> None:
         """The caller was heard starting to speak (the adapter's voice detector), on the segments' clock."""
-        self._onsets = [*self._onsets[-31:], at]
+        self._onsets.append(at)
 
     def answered_in_time(self, segment: Spoken) -> bool:
         """Whether this segment had played to its end before the caller began the reply it is being answered by.
@@ -969,10 +970,10 @@ class CallContext(BaseModel):
         """
         if segment.played_at is None:
             return False
-        onsets = [t for t in self._onsets if t >= segment.at]
-        if not onsets:
+        earliest = min((t for t in self._onsets if t >= segment.at), default=None)
+        if earliest is None:
             return not self._marks_known or segment.heard_by == 'ack'
-        return segment.played_at <= min(onsets) - self._answer_lead
+        return segment.played_at <= earliest - self._answer_lead
 
     def wall(self, at: float) -> str:
         """A time on the segments' clock (`time.perf_counter`) as UTC wall time, for a record read elsewhere.
@@ -1000,10 +1001,10 @@ class CallContext(BaseModel):
             for e in self._playback_log
             if e.get('proposal') == serial and e['kind'] in kinds
         ]
-        onsets = [t for t in self._onsets if copies and t >= copies[-1].at]
-        if not marks or not onsets:
+        earliest = min((t for t in self._onsets if copies and t >= copies[-1].at), default=None)
+        if not marks or earliest is None:
             return None
-        return {'marks': marks, 'answered_at': self.wall(min(onsets) - self._answer_lead)}
+        return {'marks': marks, 'answered_at': self.wall(earliest - self._answer_lead)}
 
     def simulated_for(self, serial: int) -> list[dict[str, Any]]:
         """A question's delivery that is not a transport mark: a text acknowledgement, or audio written at real time.
@@ -1031,10 +1032,9 @@ class CallContext(BaseModel):
         segment = name.split('~', 1)[0]
         if proposal is None:
             proposal = next((s.proposal for s in self.all_spoken if s.id == segment), 0)
-        self._playback_log = [
-            *self._playback_log[-255:],
-            {'proposal': proposal, 'segment': segment, 'mark': name, 'kind': kind, 'at': at},
-        ]
+        self._playback_log.append(
+            {'proposal': proposal, 'segment': segment, 'mark': name, 'kind': kind, 'at': at}
+        )
 
     def turn_ended(self, *, interrupted: bool) -> None:
         """The run for this piece is over. `interrupted` is whether the caller cut it off by speaking again."""
@@ -1810,11 +1810,11 @@ class CallContext(BaseModel):
         if updates is None or remaining:
             if not interrupted:
                 return False
-            count, updates = len(heard), []
-            for segment in selected:
-                text = segment.generated or segment.text
-                updates.append(_first_words(text, count))
-                count = max(0, count - len(_words(text)))
+            texts = [segment.generated or segment.text for segment in selected]
+            said = accumulate((len(_words(text)) for text in texts), initial=0)
+            updates = [
+                _first_words(text, max(0, len(heard) - n)) for text, n in zip(texts, said, strict=False)
+            ]
         if any(
             s.delivery == 'runtime-estimate' and not s.text.strip().startswith(text.strip())
             for s, text in zip(selected, updates, strict=True)

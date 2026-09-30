@@ -213,10 +213,7 @@ def one_action_per_reply(
     async def choose(ctx, *, request_context, response):
         ctx.deps._claim = None
         calls = [part for part in response.parts if isinstance(part, ToolCallPart)]
-        for part in calls:
-            if part.tool_name in actions:
-                ctx.deps._claim = part.tool_call_id
-                break
+        ctx.deps._claim = next((part.tool_call_id for part in calls if part.tool_name in actions), None)
         ctx.deps._unapplied = set()
         ctx.deps._reading = any(part.tool_name in reads for part in calls)
         ctx.deps._patcher = None

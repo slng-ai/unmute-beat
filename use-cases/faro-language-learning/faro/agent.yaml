@@ -1,16 +1,18 @@
-# Faro, a bilingual language-learning companion, on core's public contract: one agent per step, sharing one
-# call's state and conversation, each with its own prompt, fields and operations.
+# Faro, a bilingual language-learning companion, on core's public contract in manifest version 2: one agent
+# per step, keyed by id, sharing one call's state, each with its own prompt, fields and operations.
 #
 # The steps are the learner's journey: identify, sign up, onboard, place, agree a plan, then lessons from the
 # menu. Where a learner goes next after a save is the store's answer, in the receipt (`route: next`), never a
-# model's. Grading is the step's agent's: it records the attempt and its grade with `collect`, and code carries
-# out `record_attempt` at once (`carries_out`). Only the coach may explain or hint, and reaching it goes through
-# `help`, which marks the exercise helped in the store first: an answer after help is never independent.
-# Everything is checked when Faro starts, never mid-call.
+# model's. A step is a `speech: structured` conversation unless it says otherwise: identify, plan, menu and
+# coach are; signup and onboarding are prose, and assessment and lesson rendered. Grading is the step's
+# agent's: it records the attempt and its grade, and code carries out `record_attempt` at once
+# (`carries_out`). Only the coach may explain or hint, and reaching it goes through `help`, which marks the
+# exercise helped in the store first: an answer after help is never independent. Each step sees only the
+# facts it lists, and by default its own turns. Everything is checked when Faro starts, never mid-call.
 
-version: 1
+version: 2
 id: faro
-app_version: '2026.09.28-s5'
+app_version: '2026.09.30-v2'
 state: state.py:FaroState
 identity: phone
 entry: identify
@@ -19,15 +21,9 @@ locales:
   EN:
     base: english
     goodbye: Goodbye, and see you next time!
-    claims:
-      - "\\b(?:saved|recorded|activated|updated your|marked)\\b"
-      - "\\b(?:guardad[oa]s?|registrad[oa]s?|activad[oa]|actualizad[oa]|marcad[oa]s?)\\b"
   ES:
     base: spanish
     goodbye: ¡Hasta la próxima!
-    claims:
-      - "\\b(?:saved|recorded|activated|updated your|marked)\\b"
-      - "\\b(?:guardad[oa]s?|registrad[oa]s?|activad[oa]|actualizad[oa]|marcad[oa]s?)\\b"
 model: google-cloud:gemini-3.5-flash-lite
 
 agents:
@@ -181,88 +177,91 @@ operations:
     say: '{said}'
 
 steps:
-  - id: identify
-    kind: conversation
+  identify:
     agent: faro
     prompt: prompts/identify.md
-    guarded: true
     fields: [phone, asked_language]
+    context: {facts: [phone, asked_language, explanation]}
     operations: [confirm_phone]
     opens_with: confirm_phone
     asks: {phone: 'What is your full phone number, starting with plus thirty-four?'}
     reads_back: {confirm_phone: [phone, asked_language]}
 
-  - id: signup
-    kind: conversation
+  signup:
     agent: faro
     prompt: prompts/signup.md
-    guarded: true
+    speech: prose
     fields: [name, asked_language]
+    context: {facts: [name, asked_language, explanation]}
     operations: [agree_signup]
     opens_with: agree_signup
     reads_back: {agree_signup: [asked_language]}
     carries_out: {create_learner: [name]}
 
-  - id: onboarding
-    kind: conversation
+  onboarding:
     agent: faro
     prompt: prompts/onboarding.md
-    guarded: true
+    speech: prose
     fields: [learn, purpose, length, asked_language]
+    context: {facts: [learn, purpose, length, asked_language, explanation, learner_name]}
     carries_out: {save_onboarding: [learn, purpose, length]}
 
-  - id: assessment
-    kind: conversation
+  assessment:
     agent: faro
     prompt: prompts/assessment.md
     speech: rendered
     fields: [answer, grade, feedback, evidence, asked_language]
     quoted: [answer]
+    context: {facts: [answer, grade, feedback, evidence, asked_language, explanation, waiting, learner_name, notes]}
     carries_out: {record_attempt: [grade], repeat_waiting: [asked_language]}
     exits:
       - {to: help, purpose: 'a question, a request to explain, repeat or slow down, or hesitation: anything but an attempt'}
 
-  - id: plan
-    kind: conversation
+  plan:
     agent: faro
     prompt: prompts/plan.md
-    guarded: true
     fields: [plan_minutes, plan_goal, keep_plan, asked_language]
+    context:
+      facts: [plan_minutes, plan_goal, keep_plan, asked_language, explanation, learner_name, notes,
+              draft_target, draft_goal, draft_level, draft_minutes]
     operations: [activate_plan]
     opens_with: activate_plan
     reads_back: {activate_plan: [plan_minutes, plan_goal, asked_language]}
     carries_out: {decline_plan: [keep_plan]}
 
-  - id: menu
-    kind: conversation
+  menu:
     agent: faro
     prompt: prompts/menu.md
-    guarded: true
     fields: [fact_key, fact_text, asked_language]
+    context: {facts: [fact_key, fact_text, asked_language, explanation, learner_name, notes]}
     operations: [continue_lesson, start_reassessment, read_progress]
     carries_out: {remember: [fact_text]}
 
-  - id: lesson
-    kind: conversation
+  lesson:
     agent: faro
     prompt: prompts/lesson.md
     speech: rendered
     fields: [answer, grade, feedback, asked_language]
     quoted: [answer]
+    context: {facts: [answer, grade, feedback, asked_language, explanation, waiting, learner_name, notes]}
     carries_out: {record_attempt: [grade], repeat_waiting: [asked_language]}
     exits:
       - {to: help, purpose: 'a question, a request to explain, repeat or slow down, a hint, or hesitation: anything but an attempt'}
       - {to: menu, purpose: 'they want a recap, to check their level, or to stop the lesson'}
 
-  - {id: help, kind: action, operation: note_help, then: coach, on_error: coach, on_unknown: coach}
+  help: {kind: action, operation: note_help, then: coach, on_error: coach, on_unknown: coach}
 
-  - id: coach
-    kind: conversation
+  coach:
     agent: faro
     prompt: prompts/coach.md
-    guarded: true
     fields: [answer, grade, feedback, evidence, fact_key, fact_text, asked_language]
     quoted: [answer]
+    # The exercise the coach helps with was said on the lesson's turns, not the coach's: it sees the whole
+    # conversation, as in `agent.yaml`. State has no field holding the exercise's words to show it instead.
+    context:
+      facts: [answer, grade, feedback, evidence, fact_key, fact_text, asked_language, explanation, waiting,
+              learner_name, notes]
+      history: {scope: conversation}
     carries_out: {record_attempt: [grade], remember: [fact_text]}
     exits:
       - {to: menu, purpose: 'they want a recap, to check their level, or to stop practising this'}

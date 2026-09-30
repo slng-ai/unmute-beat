@@ -9,9 +9,6 @@ entry: faq
 locale:
   base: spanish
   goodbye: Gracias por llamar al soporte. Hasta pronto.
-  claims:
-    - '\b(?:he|hemos)\s+(?:ya\s+)?(?:resuelto|cerrado|reabierto)\b'
-    - '\b(?:est[aá]|queda)\s+(?:ya\s+)?(?:resuelto|cerrado|reabierto)\b'
 agents:
   agent:
     prompt: prompts/agent.md

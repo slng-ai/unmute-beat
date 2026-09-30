@@ -10,6 +10,7 @@ members = [
     "salon-graph",
     "salon-pipecat-flows",
     "salon-prompt",
+    "salone-concierge-graph-new",
     "slng-voice-core",
 ]
 
@@ -2584,6 +2585,41 @@ dev = [
 ]
 
 [[package]]
+name = "salone-concierge-graph-new"
+version = "0.1.0"
+source = { virtual = "use-cases/salone-concierge-graph-new" }
+dependencies = [
+    { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
+    { name = "pipecat-slng" },
+    { name = "pydantic-ai-slim", extra = ["google", "openai"] },
+    { name = "python-dotenv" },
+    { name = "slng-voice-core", extra = ["tracing", "voice"] },
+    { name = "websockets" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
+    { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-ai-slim", extras = ["google", "openai"], specifier = ">=2.46.0" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "slng-voice-core", extras = ["voice", "tracing"], editable = "core" },
+    { name = "websockets", specifier = ">=16.1.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
+[[package]]
 name = "sentry-sdk"
 version = "2.69.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2613,8 +2649,10 @@ dependencies = [
     { name = "httpx" },
     { name = "loguru" },
     { name = "opentelemetry-api" },
+    { name = "phonenumbers" },
     { name = "pydantic" },
     { name = "pydantic-ai-slim", extra = ["spec"] },
+    { name = "pydantic-extra-types" },
     { name = "pydantic-graph" },
     { name = "pyyaml" },
 ]
@@ -2641,9 +2679,11 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "opentelemetry-api", specifier = ">=1.44.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.44.0" },
+    { name = "phonenumbers", specifier = ">=9.0.39" },
     { name = "pipecat-ai", marker = "extra == 'voice'", specifier = ">=1.11.0" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-ai-slim", extras = ["spec"], specifier = ">=2.46.0" },
+    { name = "pydantic-extra-types", specifier = ">=2.11.1" },
     { name = "pydantic-graph", specifier = ">=2.46.0" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]

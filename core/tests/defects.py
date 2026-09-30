@@ -340,9 +340,9 @@ def a_prose_step_can_still_claim() -> bool:
     Stage C closes the route on `rendered` steps and on every code route. The
     desk's informational `faq` step stays prose, so its model can still say
     the ticket is solved when nothing was done. Truthful completion is not
-    claimed for prose steps; the salon's booking step is one. Whether the
-    salon's write steps become rendered is a Stage D decision, because it
-    changes their prompts and needs live checks.
+    claimed for prose steps. Since the claim patterns were retired
+    (simpler-authoring session), no word list stands in front of prose at
+    all: a claim like this is an evaluation failure, measured on live calls.
     """
     import tempfile
 
@@ -441,46 +441,6 @@ def a_cancel_during_the_version_check_sends_again() -> bool:
     return asyncio.run(check())
 
 
-def a_lookup_backs_a_prose_claim() -> bool:
-    """Session 4d, defect 6: a lookup's receipt counted as "wrote this turn", so a prose claim went uncorrected.
-
-    The clinic's front desk looks the patient up (a read), comes back, and its
-    model says a booking was made. Nothing was booked, so the caller must
-    hear the correction after it.
-    """
-    import core
-    from tests.clinic_flow.clinic import Backend, ClinicState
-    from tests.test_nodes import Script
-
-    claim = 'Your appointment is booked for Tuesday at ten.'
-    manifest = HERE / '_defect_lookup_claim.yaml'
-    manifest.write_text(
-        (HERE / 'code_node.yaml')
-        .read_text()
-        .replace('agents:\n', "locale:\n  base: english\n  claims: ['\\bis booked\\b']\nagents:\n")
-    )
-
-    async def check() -> bool:
-        script = Script()
-        flow = core.load(manifest).compile(model=script.model)
-        call = flow.open(ClinicState(), services=Backend())
-        script.call = call
-        script.moves = [
-            ('call', 'collect', {'values': {'patient': 'P-1234'}}),
-            ('call', 'hand_over', {'to': 'look_up', 'because': 'find their booking'}),
-            ('say', claim),
-        ]
-        reply = await core.text_turn(flow, call, 'P-1234, have I got a booking?')
-        said = [s.text for s in reply.segments]
-        assert [e.operation for e in call.evidence] == ['look_up'], (call.evidence, said)
-        return claim in said and call.locale.unbacked not in said
-
-    try:
-        return asyncio.run(check())
-    finally:
-        manifest.unlink()
-
-
 def old_speech_is_sent_as_the_last_words() -> bool:
     """Live call CAd33c3c (session 4d, call 3): lines from turns 2 and 6 were sent as the agent's latest words.
 
@@ -510,7 +470,6 @@ DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
         a_cancel_during_the_version_check_sends_again,
         '4d defect 2',
     ),
-    'a lookup receipt lets a prose claim through uncorrected': (a_lookup_backs_a_prose_claim, '4d defect 6'),
     'a prose step can still say an unbacked claim (known limit)': (
         a_prose_step_can_still_claim,
         'Stage D decision',

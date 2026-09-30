@@ -21,6 +21,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from core.history import History, Scope
 from core.state import CallContext, VoiceState, present
 
 
@@ -102,10 +103,18 @@ class Opening[C: CallContext]:
     """The action's name in traces and budgets: the tool it stands in for."""
     applies: Callable[[C], bool]
     run: Callable[[C], Awaitable[object]]
+    arrivals: frozenset[str] = frozenset({'handoff'})
+    """How the step may have been reached for this opening to answer: a hand-over, or also a completed prerequisite.
+
+    A step a prerequisite returned to usually runs its agent, which reads what
+    the caller said meanwhile. An offer the request already decides (`offers:`)
+    is the exception: the caller's words this turn answered the prerequisite,
+    whose own step recorded any change they made.
+    """
 
     def action(self, call: C) -> LocalAction | None:
         """This opening as the turn's next action, or None when it does not apply to this call now."""
-        if call.entered != 'handoff' or not self.applies(call):
+        if call.entered not in self.arrivals or not self.applies(call):
             return None
         return LocalAction(self.name, lambda: self.run(call))
 
@@ -122,14 +131,6 @@ class Node[S: VoiceState]:
     """State fields that must be present before this step may run."""
     satisfied_by: str = ''
     """The step that fills `requires`. The graph interposes it and comes back; no prompt states the ordering."""
-    guarded: bool = False
-    """Whether this step can change the business.
-
-    On one that can, the turn engine holds each clause of model speech back
-    until it is complete and drops the run's speech if it claims a change
-    nothing has made. Costs one clause of streaming latency, on these steps
-    only, and only until something is actually written.
-    """
     model_speech: bool = True
     """False for a step that speaks only through output functions, never through provider text."""
     speaks_for: frozenset[str] = frozenset()
@@ -146,13 +147,23 @@ class Node[S: VoiceState]:
     Returns the read-back (a `Question`) or None. Saves the second request
     that only called the operation for its read-back (43 in the baseline).
     """
-    history: Literal['messages', 'reset'] = 'messages'
-    """What conversation this step is sent.
+    history: Literal['all', 'messages', 'none'] | History = 'all'
+    """What conversation from earlier caller turns this step is sent (`context: {history: ...}`).
 
-    `messages` is the delivered conversation so far. `reset` sends none of it:
-    the step gets its own instructions and the named values projected into
-    them, and nothing the caller said to anybody else.
+    `all` is the whole retained history, tool exchanges included.
+    `messages` is what was said and heard: the caller's words and the
+    agent's delivered speech, with earlier tool exchanges left out
+    (`core.history.conversation`). `none` sends none of it: the step gets
+    its own instructions, the facts it may see, and this turn's words. The
+    current caller turn always reaches the step whole. A `History` object
+    picks whole caller turns by the step that handled them (`History.select`).
     """
+    scope: Scope | None = None
+    """The step's scoped view (`core.history.Scope`), or None for a v1 context: what its automatic context shows."""
+    consults: frozenset[str] = frozenset()
+    """The exits that are consultations: the caller comes back here when that step is `done`."""
+    capabilities: frozenset[str] = frozenset()
+    """The ids of the on-demand capabilities this step registers: their load records survive `history: messages`."""
     advance: Callable[[Any, RunUsage, UsageLimits], Awaitable[LocalAction | None]] | None = None
     """Resolve a decision within the shared budget, or return None to run the conversational agent."""
     openings: tuple[Opening[Any], ...] = ()

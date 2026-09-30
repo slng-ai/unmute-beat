@@ -10,8 +10,6 @@ lives now, is in `docs/research/reusable-core/session-4.md`.
 
 import asyncio
 
-from core.flowspec import LocaleSpec
-from core.locale import SPANISH
 from salon.diary import Diary
 from tests.script import CLOCK, PHONE, opened, slot, turn
 
@@ -600,11 +598,13 @@ async def a_wait_with_nothing_to_say_offers_what_there_is():
 
 
 async def model_speech_never_claims_a_completed_action():
-    """Claims: on a writing step, only a receipt says something is done, in any supported language.
+    """Claims: on booking, only a receipt says something is done; on a prose step, a claim writes nothing.
 
     Booking is rendered (session 4e): a model that writes a claim, or a copy
-    of the options it was shown, says nothing at all. On a guarded prose step
-    (concierge, complaints) a claim is withheld and a truthful line is not.
+    of the options it was shown, says nothing at all. Concierge and
+    complaints are prose, and no word list checks them any more (the claim
+    patterns were retired): what they may say is an evaluation criterion.
+    What is checked here is that their words change nothing.
     """
     script, flow, call, diary = await at_booking()
     said = await turn(
@@ -625,45 +625,10 @@ async def model_speech_never_claims_a_completed_action():
     said = await turn(
         flow, call, script, 'Did it save?', ('say', 'Nothing was saved yet. Which time would you like?')
     )
-    assert said == ['Nothing was saved yet. Which time would you like?'], (
-        'a truthful "nothing was saved" was withheld'
-    )
-    call.commit(agent='booking')
-    await read_back(flow, call, script)
-    await turn(flow, call, script, 'Yes.', ('call', 'book_appointment'))
+    assert said == ['Nothing was saved yet. Which time would you like?'], said
     call.commit(agent='complaints')
-    said = await turn(flow, call, script, 'And my complaint?', ('say', 'Your complaint is saved as well.'))
-    assert 'Your complaint is saved' not in ' '.join(said) and diary.complaints() == [], said
-    assert call.claims_completion("I've booked you for Saturday at nine"), (
-        'a claim about other arguments passed'
-    )
-    call._locale = SPANISH
-    assert not call.claims_completion('Te he reservado el sábado a las nueve.'), (
-        "core's own Spanish carries no domain verbs: which words claim a change is the application's"
-    )
-    call._locale = LocaleSpec(
-        base='spanish',
-        claims=[
-            r'\b(?:te\s+|le\s+)?(?:he|hemos)\s+(?:ya\s+)?(?:reservado|cancelado|movido|registrado)\b',
-            r'\b(?:ya\s+)?(?:est[aá]|queda)\s+(?:ya\s+)?(?:reservad[oa]|registrad[oa]|confirmad[oa])\b',
-        ],
-    ).build()
-    assert call.claims_completion('Te he reservado el sábado a las nueve.') and call.claims_completion(
-        'Ya está registrada.'
-    )
-    assert not call.claims_completion('No se ha guardado nada.')
-
-    script, flow, call, diary = opened(verified_phone=PHONE, customer_status='existing')
-    said = await turn(
-        flow,
-        call,
-        script,
-        'A haircut on Friday morning, please.',
-        ('say', "I've got you down for a haircut this Friday morning. Which time suits you?"),
-    )
-    assert call.state.agent == 'concierge' and "I've got you down" not in ' '.join(said), (
-        'the concierge said a booking was made before anything was (Coval call b7BSSwtX)'
-    )
+    await turn(flow, call, script, 'And my complaint?', ('say', 'Your complaint is saved as well.'))
+    assert diary.complaints() == [], 'prose words wrote a complaint'
 
 
 async def a_goodbye_never_claims_a_booking_nothing_made():

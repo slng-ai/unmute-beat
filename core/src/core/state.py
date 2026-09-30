@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
-type Entry = Literal['', 'handoff', 'completed', 'unserved']
+type Entry = Literal['', 'handoff', 'completed', 'unserved', 'returned']
 """How a step was reached within a turn. '' means it was already running when the turn began."""
 
 turn_generation: contextvars.ContextVar[tuple[str, int] | None] = contextvars.ContextVar(
@@ -178,6 +178,8 @@ class Spoken:
     interrupted: bool = False
     """Cut down to what the caller actually heard, once the runtime says so."""
     turn: int = 0
+    step: str = ''
+    """The step the caller was with when it was said (`VoiceState.agent`): whose conversation it is part of."""
     response: str = ''
     generated: str = ''
     delivery: Literal['submitted', 'runtime-estimate'] = 'submitted'
@@ -365,8 +367,8 @@ class Handoff(BaseModel):
 
     to: str
     because: str = Field(default='', description='One short sentence: what the caller wants. Never spoken.')
-    status: Literal['handoff', 'completed', 'unserved'] = 'handoff'
-    """A plain handoff, or a prerequisite step reporting that it finished, or that it gave up."""
+    status: Literal['handoff', 'completed', 'unserved', 'returned'] = 'handoff'
+    """A plain handoff, a prerequisite step reporting that it finished or gave up, or a consultation ending."""
     ends_turn: bool = False
     """Whether the move itself answers the caller, so the destination does not run a model this turn.
 
@@ -425,7 +427,7 @@ class VoiceState(BaseModel):
         going to send the caller to next is an answer to a question they have
         moved on from.
         """
-        return frozenset({'agent', 'pending'})
+        return frozenset({'agent', 'pending', 'consulting'})
 
     agent: str
     pending: str | None = None
@@ -435,6 +437,14 @@ class VoiceState(BaseModel):
     the step that satisfies it. One slot, not a list: no satisfier has
     prerequisites of its own, so `route` cannot chain, and a list invited
     in-place mutation that no validator would ever see.
+    """
+    consulting: str | None = None
+    """The step that sent the caller to a specialist for a short consultation, and gets them back on `done`.
+
+    Kept apart from `pending` on purpose: booking waits for verification
+    (`pending`), verification consults a specialist (`consulting`), the
+    specialist finishes and verification is back, still with booking
+    waiting. One consultation at a time; a specialist does not consult.
     """
 
 
@@ -498,14 +508,23 @@ class CallContext(BaseModel):
     """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
     _unapplied: set[str] = PrivateAttr(default_factory=set)
     """Fields the current model response changes after its action: not yet run when the action does."""
+    _reading: bool = PrivateAttr(default=False)
+    """The current model response also calls a read (`speech: structured`): no answer or action runs beside it."""
+    _patcher: str | None = PrivateAttr(default=None)
+    """The one tool call in the current model response allowed to carry an `update` (`speech: structured`)."""
     _tries: Counter[str] = PrivateAttr(default_factory=Counter)
     """How many times a model response in this caller turn tried to record each field (`one_action_per_reply`)."""
     _kept: Counter[str] = PrivateAttr(default_factory=Counter)
-    """How many of those tries recorded the field with the value it already had (`collect`).
+    """How many of those tries recorded the field with the value it already had (`collect`, or a structured update).
 
     `_changing` also holds a field recorded again unchanged: the caller saying
     the read-back's value back. A read-back is confirmed by that
     (`core.graph.Restated`) only while every try at its fields kept the value.
+    On a structured step, an operation called again with an update that keeps
+    the value read back is still the yes the model read (`_operate`): only a
+    field some try changed, or one the state refused, blocks it as a change.
+    A prose step keeps session 4d's rule: `collect` beside the operation in
+    one reply is read back again, whatever it records.
     A try the tool's schema refused never reaches `collect`, so it counts as
     a try and not as kept: "half nine, well, ten then" is a change, and
     "ten, no, nine, no, ten" too, never a yes to ten.
@@ -655,8 +674,24 @@ class CallContext(BaseModel):
     _leaving: bool = PrivateAttr(default=False)
     """The caller said goodbye in the same reply as the answer this turn runs (`core.readings.Acts`)."""
     _today: Today | None = PrivateAttr(default=None)
+    _detour_question: Any = PrivateAttr(default=None)
+    """The read-back that was waiting when a consultation began: put again, fresh, when the caller comes back."""
+    _zone: tzinfo | None = PrivateAttr(default=None)
+    """Where this call's day is counted, from the flow's `current_datetime:`. None: the class's `timezone`."""
+    _calendar_days: int | None = PrivateAttr(default=None)
+    """How many labelled days this call's steps are shown, from the flow. None: the class's `calendar_days`."""
+    _today_shown: bool = PrivateAttr(default=True)
+    """Whether each step's model is told today's date (`current_datetime: {enabled: false}` turns it off)."""
     """The call's clock, read once (`today`): a call that crosses midnight keeps its day."""
     _spoken_over: str = PrivateAttr(default='')
+    _arrived: dict[str, int] = PrivateAttr(default_factory=dict)
+    """Each step, and the caller turn in which the caller was last sent to it: the words that asked for it.
+
+    Set on a hand-over or a consultation, and for the step a prerequisite
+    interrupted, so when it finally runs its history keeps the turn that asked
+    for it (`core.history.History.window`). A return from the prerequisite
+    leaves it as it was.
+    """
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
     """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
 
@@ -667,18 +702,23 @@ class CallContext(BaseModel):
 
     def now(self) -> datetime:
         """The time now, where this call's day is counted: the injected clock (`clock`), or the wall clock."""
-        return self._clock() if self._clock is not None else datetime.now(self.timezone)
+        zone = self._zone or self.timezone
+        if self._clock is None:
+            return datetime.now(zone)
+        now = self._clock()
+        return now.astimezone(zone) if self._zone is not None and now.tzinfo is not None else now
 
     @property
     def today(self) -> Today:
         """Today's date for this call, read from `now` the first time it is asked for, then kept."""
         if self._today is None:
-            self._today = Today(self.now(), self.calendar_days)
+            days = self.calendar_days if self._calendar_days is None else self._calendar_days
+            self._today = Today(self.now(), days)
         return self._today
 
     @property
     def entered(self) -> Entry:
-        """How the current step was reached in this turn: by a handoff, by a prerequisite's return, or not at all."""
+        """How the current step was reached in this turn: a handoff, a prerequisite's return, a consultation's handback, or not at all."""
         return self._entered
 
     @property
@@ -1078,7 +1118,9 @@ class CallContext(BaseModel):
         """Accept a model-free turn once, without inventing a provider exchange."""
         if self.input_retained:
             return
-        message = ModelRequest(parts=[UserPromptPart(self.fresh)], metadata={'caller_turn': self.turn})
+        message = ModelRequest(
+            parts=[UserPromptPart(self.fresh)], metadata={'caller_turn': self.turn, 'step': self.state.agent}
+        )
         self.messages.append(message)
         self._protocol.append(deepcopy(message))
         self.mark_retained()
@@ -1093,7 +1135,7 @@ class CallContext(BaseModel):
             return
         message = ModelRequest(
             parts=[SystemPromptPart(content=f'Application result {name}: {json.dumps(receipt)}')],
-            metadata={'application_action': name, 'caller_turn': self.turn},
+            metadata={'application_action': name, 'caller_turn': self.turn, 'step': self.state.agent},
         )
         self.messages.append(message)
         self._protocol.append(deepcopy(message))
@@ -1261,6 +1303,16 @@ class CallContext(BaseModel):
         if getattr(self._proposals.asked, 'intent', '') == intent_id:
             self._proposals.consume()
             self._approved = (0, -1)
+
+    def reissue_waiting(self) -> str:
+        """A read-back still waiting for its answer, put again as a fresh copy: its words, or '' when none waits.
+
+        Said when a consultation hands the caller back. The copy before the
+        detour cannot be answered any more (a yes counts only after the
+        latest copy played), so no consent given before it is reused. This
+        base has no read-backs; a flow's call does.
+        """
+        return ''
 
     def pending_question(self) -> Any:
         """The question this turn's reply can answer: last turn's, same identity, heard in full."""
@@ -1650,6 +1702,7 @@ class CallContext(BaseModel):
                 id=self.next_segment(),
                 attempt=self._attempt,
                 turn=self._turn,
+                step=self.state.agent,
                 response=self._response,
                 generated=text,
                 tool_call_id=tool_call_id,
@@ -1691,6 +1744,7 @@ class CallContext(BaseModel):
                 id=self.next_segment(),
                 attempt=self._attempt,
                 turn=self._turn,
+                step=self.state.agent,
                 response=self._response,
             )
             self._proposals.bind(self, self._open)
@@ -1776,20 +1830,6 @@ class CallContext(BaseModel):
             segment.delivery = 'runtime-estimate'
         return True
 
-    def unbacked_claim(self) -> str:
-        """Model speech this turn asserting something only the business can assert. '' when clean.
-
-        The claim itself, when there is one, so it can be logged and traced.
-        This base has no business to write to and so nothing to check against;
-        an agency that does overrides it. The turn engine says a correction out
-        loud rather than leaving the caller with it.
-        """
-        return ''
-
-    def wrote_this_turn(self) -> bool:
-        """Whether this turn has already changed the business. Base: it has no business."""
-        return False
-
     def settlement(self) -> Callable[[], Awaitable[object]] | None:
         """What settles an earlier write whose outcome is unknown, run before any model this turn. Base: none."""
         return None
@@ -1823,16 +1863,6 @@ class CallContext(BaseModel):
                 {'said': s.kind, 'text': s.text} for s in self.all_spoken if s.turn == turn and s.text
             )
         return result
-
-    def claims_completion(self, clause: str) -> bool:
-        """Whether this clause, on its own, tells the caller the business has changed.
-
-        Asked of each clause **before** it goes out, on a step that can write,
-        so the answer can be to not say it. `unbacked_claim` asks the same
-        question of a whole turn afterwards, which is all that can be done once
-        the words are at TTS. This base has no business to check against.
-        """
-        return False
 
     def note_first_output(self, kind: Literal['text', 'tool']) -> None:
         """The newest step request has produced its first part.
@@ -2022,9 +2052,13 @@ class CallContext(BaseModel):
         Recorded even with no runtime attached: the words were decided and
         handed on, and whether anyone received them is a separate fact
         (`Spoken.delivered`), unknown until a signal or an acknowledgement.
+
+        `origin='model'` is a structured step's answer: the model wrote the
+        words, and code says them only once the decision they came with is
+        valid and committed (`core.structured`). It is recorded as the model's.
         """
         self._answers += 1
-        self.note_said('fixed', text, origin=origin)
+        self.note_said('model' if origin == 'model' else 'fixed', text, origin=origin)
         if self._say is not None:
             await self._say(text)
 

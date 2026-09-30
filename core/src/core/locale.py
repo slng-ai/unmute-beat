@@ -12,7 +12,9 @@ an application needs one.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -23,18 +25,8 @@ class Locale:
     """Said when a run raised: an error the caller can hear beats silence on an open line."""
     exhausted: str
     """Said when a turn runs out of budget: no further model request, no business work, no second allowance."""
-    unbacked: str
-    """Said when the model told the caller it changed something the business has no record of changing.
-
-    It cannot be unsaid, the words are already at TTS, so the next thing the
-    caller hears is the correction.
-    """
     withheld: str
-    """Said in place of a clause that claimed a change nothing made, on a step that can write.
-
-    Unlike `unbacked`, these words were caught before they reached TTS, so
-    nothing has to be taken back.
-    """
+    """Said on a rendered step when its operation met an authoritative no this turn and nothing else is to be said."""
     holding: tuple[str, ...]
     """Said once in a turn that is taking a while, before anything else: a tool is running, or nothing was said yet.
 
@@ -51,21 +43,6 @@ class Locale:
     and the `unsettled` line when an intent's outcome is still unknown. So a
     goodbye can claim nothing the business did not do. See
     `core.steps.ConversationStep`.
-    """
-    claims: tuple[str, ...] = ()
-    """Patterns for a model telling the caller the business changed something. Empty here: an application's to give.
-
-    On a step that can write (`guarded`), a clause matching one is never
-    said: what was done is said by the receipt, in words code rendered from
-    the validated result (`say:`), so it cannot be about a different action,
-    different arguments or somebody else. Which verbs claim a change is the
-    application's domain ("booked", "resolved"), so core ships none; a
-    manifest names its own (`locale: {base: english, claims: [...]}`).
-
-    ponytail: a best-effort guard on model prose, not a guarantee. The
-    guarantee is structural: receipt speech, fixed lines and goodbye recaps
-    are rendered by code. Ordinary model speech stays a semantic behaviour to
-    evaluate.
     """
     gave_up: str = ''
     """Said once, instead of a read-back past its limit (`core.steps.READBACKS`, `CUT_READBACKS`), as core withdraws it.
@@ -97,6 +74,15 @@ class Locale:
     instead of `pardon`: after "No." the caller hears their no was taken,
     never "Sorry, could you say that again?".
     """
+    refusals: Mapping[str, str] = field(default_factory=dict, hash=False)
+    """The caller's words for a refused value, by the error type its validator raised (`core.values`).
+
+    Formatted with the error's own context (`{grouped}`, `{day}`). The
+    model reads the validator's message; these are what the caller hears
+    about the same problem, said by code on a rendered step and suggested to
+    the model on a prose step. An application adds its own types, or words
+    them its own way, under `locale: {refusals: {...}}`.
+    """
     restated: str = ''
     """Said before a read-back is carried out because the caller answered it by saying the same value again.
 
@@ -106,11 +92,18 @@ class Locale:
     that reply is a yes, and this line tells them why the call goes on.
     """
 
+    def refusal(self, error: Mapping[str, Any]) -> str:
+        """The caller's words for one Pydantic error (`ValidationError.errors()` item), or '' when this locale has none."""
+        words = self.refusals.get(str(error.get('type', '')), '')
+        try:
+            return words.format(**(error.get('ctx') or {}))
+        except KeyError, IndexError, ValueError:
+            return words
+
 
 ENGLISH = Locale(
     stumble='Sorry, I had a problem there. Could you say that again?',
     exhausted="Sorry, I'm going round in circles there. Could you say that again?",
-    unbacked="Sorry, let me correct myself: I haven't actually made that change. Let me check where we are.",
     withheld='Sorry -- nothing has been changed yet. Let me check where we are.',
     holding=('Let me have a look.', 'One moment.'),
     unsettled="I couldn't confirm whether that went through, so I won't try it again until it's been checked.",
@@ -126,12 +119,20 @@ ENGLISH = Locale(
     pardon='Sorry, could you say that again?',
     declined="All right, I haven't changed anything.",
     restated="Yes, that's the same as I read back.",
+    refusals={
+        'phone_no_country_code': 'Which country is that phone number from?',
+        'phone_too_long': 'I have {grouped}. Which part is wrong?',
+        'phone_too_short': 'Please give me the rest of the digits.',
+        'phone_unknown_country': 'Which phone number should I use? Please say it with the country code.',
+        'phone_invalid': "That number doesn't look right. Could you say the whole number again, with the country code?",
+        'date_past': 'That day has already gone. Which other day would suit you?',
+        'not_quoted': 'Could you tell me that again in your own words?',
+    },
 )
 
 SPANISH = Locale(
     stumble='Perdona, he tenido un problema. ¿Me lo repites?',
     exhausted='Perdona, me estoy liando. ¿Me lo repites?',
-    unbacked='Perdona, me corrijo: todavía no he hecho ese cambio. Déjame ver dónde estamos.',
     withheld='Perdona, todavía no se ha cambiado nada. Déjame ver dónde estamos.',
     holding=('Déjame mirar.', 'Un momento.'),
     unsettled='No he podido confirmar si se ha hecho, así que no lo repetiré hasta comprobarlo.',
@@ -147,4 +148,13 @@ SPANISH = Locale(
     pardon='Perdona, ¿me lo repites?',
     declined='De acuerdo, no he cambiado nada.',
     restated='Sí, es lo mismo que te he leído.',
+    refusals={
+        'phone_no_country_code': '¿De qué país es ese número?',
+        'phone_too_long': 'Tengo {grouped}. ¿Qué parte está mal?',
+        'phone_too_short': 'Dime el resto de los dígitos, por favor.',
+        'phone_unknown_country': '¿Qué número uso? Dímelo con el prefijo del país, por favor.',
+        'phone_invalid': 'Ese número no parece correcto. ¿Me lo dices entero, con el prefijo del país?',
+        'date_past': 'Ese día ya ha pasado. ¿Qué otro día te viene bien?',
+        'not_quoted': '¿Me lo cuentas otra vez con tus palabras?',
+    },
 )

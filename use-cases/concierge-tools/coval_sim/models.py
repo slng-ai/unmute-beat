@@ -22,8 +22,6 @@ FINISHED = {'COMPLETED', 'FAILED', 'CANCELLED', 'ERROR'}
 FALLBACKS = {
     'STUMBLE (a turn failed)': 'problem there',
     'EXHAUSTED (a turn ran out of budget)': 'round in circles',
-    'UNBACKED (claimed a change nothing made)': 'actually made that change',
-    'WITHHELD (held back a claim)': 'nothing has been changed',
 }
 """The fixed recovery lines of `core/turn.py`, by a fragment Coval's transcription keeps."""
 
@@ -122,7 +120,7 @@ class Simulation(BaseModel):
         """The harness's own recovery lines the agent said: each one is a turn that went wrong.
 
         Matched on a fragment of each fixed line in `core/turn.py` (`STUMBLE`,
-        `EXHAUSTED`, `UNBACKED`, `WITHHELD`), because Coval's transcript is its
+        `EXHAUSTED`), because Coval's transcript is its
         own transcription of the audio and rarely matches the text word for word.
         """
         spoken = ' '.join(

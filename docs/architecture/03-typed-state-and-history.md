@@ -1,215 +1,198 @@
-# 03 — Typed state and history
+# 03 — State, memory, records and services
 
-When the assistant asks for a record number and the caller says “R-17,” where does that answer go? Into **state**: named values kept for this call. **History** is the record of the exchange, including the original words and any later correction.
+When the caller says "Friday", where does that go? Into **state**: the named facts kept for this call. What they
+said, word for word, goes into **memory**, the conversation history. Whether a read-back is waiting, and whether it
+was heard, goes into core's **runtime records**. The salon's diary is a **service**. The model never sees services.
 
-For example, after “Sorry, I meant R-18,” state should say `record_id = R-18`. History should still show that the caller first said R-17 and corrected it. The next node receives the same call, so it does not have to ask for everything again.
+These four are kept apart on purpose. This chapter shows each one in the salon from
+[chapter 02](02-a-conversation-from-start-to-finish.md).
 
-**Typed state** means each value has a declared form and rules. An identifier might be text; a revision must be a nonnegative integer. Pydantic checks those rules when core records a proposed update. It does not decide whether the caller or model is telling the truth.
-
-Continue the example from [chapter 02](02-a-conversation-from-start-to-finish.md): caller A-42 wants record R-17 marked complete. The call moves from `front` to `request`, visits `lookup`, and returns to `request` for approval. This chapter follows the data through that path, then through a correction to the record identifier.
-
-## 1. Define the facts the application needs
-
-A model here is a data definition, not the language model. Each line below names a field, gives its type and sets its initial value. For example, `record_id: str` means the identifier is text; `revision: int` means the version is a whole number. Save this as `models.py` in the application folder:
-
-```python
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class ApplicationState(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-
-    caller_id: str = Field('', description='The account identifier supplied by the caller.')
-    record_id: str = Field('', description='The record the caller wants to change.')
-    requested_change: str = Field('', description='The change the caller requested.')
-    revision: int = Field(0, ge=0)
-    status: str = ''
-```
-
-Every field has a default because a call can start before any identifiers are known. Here, an empty string means “not established,” and revision `0` means no backend version has been retrieved. These are choices made by this example, not reserved values that core requires every application to use.
-
-`BaseModel` supplies Pydantic's validation. `extra='forbid'` rejects names that the model did not declare. `Field(0, ge=0)` starts at zero and refuses negative values. These checks help catch bad inputs before an operation uses them.
-
-The model defines the shape of valid state. An application's identifier formats, allowed changes and cross-field rules belong here too. This small model only checks the field types and that revision is nonnegative; it does not establish record ownership or whether a particular change is permitted.
-
-The manifest names the model and the caller-identity field:
-
-```yaml
-state: models.py:ApplicationState
-identity: caller_id
-```
-
-`identity` associates proposals and outcomes with this caller value. Supplying an identifier does not authenticate the person on the line. The backend must still enforce its access rules.
-
-## 2. Separate facts, session records and services
-
-Core keeps the application facts together with the position in the conversation and its pending work. That whole per-call container is the **session**. Opening a call creates it:
-
-```python
-call = flow.open(ApplicationState(), services=backend)
-```
-
-Core copies and validates the initial facts. Changing the original object afterward does not change the opened call.
+## 1. The four kinds of data
 
 ```mermaid
 flowchart TD
-    Call["One FlowCall"] --> Facts["Application facts: state.facts"]
-    Call --> Position["Flow position: state.agent and pending return"]
-    Call --> Records["History, speech, proposals, intents and receipts"]
-    Call -.-> Services["Application services: backend clients"]
+    Call["One call: FlowCall"] --> Facts["Application state: state.facts (SalonState)"]
+    Call --> Position["Position: state.agent, and the step a prerequisite returns to"]
+    Call --> Memory["Conversation memory: what was said and heard"]
+    Call --> Records["Runtime records: the pending read-back, offers, intents, receipts, speech ledger"]
+    Call -.-> Services["Services: the diary and its clients"]
 ```
 
-| Part | Example | Purpose |
-|---|---|---|
-| Application facts | `record_id='R-17'`, `revision=1` | The current values used to build operation arguments |
-| Flow position | Active node `request` | Where execution resumes on the next turn |
-| Session records | Caller words, read-back, delivery evidence, pending intent | What happened and what remains unresolved |
-| Services | Database or API client | How application functions reach the backend |
-
-In code, the facts are at `call.state.facts` and the current node is at `call.state.agent`. The names of the containers are `FlowState` and `FlowCall`: the first holds position and facts; the second adds history, pending work and services. Core creates them. The author only needs to supply the application's facts model and services.
-
-There is one shared set of facts per call. A handoff changes the active node, its prompt and its available actions. It does not copy the conversation into another independent session.
-
-## 3. Decide who may write each field
-
-The state model answers whether a value is structurally valid. The manifest separately controls which values an agent may collect. This excerpt belongs on the `request` step:
-
-```yaml
-fields: [caller_id, record_id, requested_change]
-```
-
-Core builds that node's `collect` tool from these fields and their types. The agent can record the request, but cannot use this tool to set `revision` or `status`.
-
-The lookup operation assigns those two fields from a validated backend result. Its declaration includes this mapping, where the left side is a state field and the right side is a receipt field:
-
-```yaml
-assign: {revision: revision, status: status}
-```
-
-The same integer can therefore have different authority depending on its source. A caller saying “it is revision 7” does not establish revision 7. The application obtains that fact through its lookup operation.
-
-| Update path | Who uses it? | Checks |
-|---|---|---|
-| The node's `collect` tool | The agent interpreting caller input | Node-specific fields, typed values, current offers and dependencies |
-| `call.collect(...)` | The collection machinery | Flow-level collectible fields, validation and dependent-value resets |
-| `call.update(...)` | Trusted application code and receipt handling | Known fields and a valid complete replacement state |
-
-A collectible field can also hold an agent judgement rather than a caller quotation. Faro, for example, lets its examiner record a typed grade and feedback. Validating the grade limits its allowed values; it does not prove the judgement correct. Faro's application code decides what that grade means for progress, using the stored exercise and whether the learner received help. Those teaching rules do not belong to core.
-
-The direct `call.collect` method is not a substitute for the node-specific tool schema. It knows the fields collected across the flow; the generated tool narrows those to the active node's fields. `call.update` deliberately allows trusted code to assign backend-derived facts.
-
-Use these paths instead of assigning `call.state.facts.revision` directly. Direct mutation bypasses validation and the runtime's tracking.
-
-## 4. Follow a correction through the state
-
-Suppose the first lookup reports R-17 as `open` at revision 1. Before approving the change, the caller says:
-
-> Sorry, I meant R-18.
-
-The agent records `record_id='R-18'`. Core handles that update in this order:
-
-1. Combine the proposed value with the current facts and validate the candidate.
-2. Compare the validated values with the existing values to identify what actually changed.
-3. Reset facts and choices that rested on the changed input. The revision and status came from a lookup of R-17, so they cannot describe R-18.
-4. Validate and commit the replacement facts. If that candidate is invalid, it is not applied.
-
-| Point | Record | Revision | Status | What the call can rely on |
+| | What it holds | Who writes it | What a node's model sees | Lifetime |
 |---|---|---|---|---|
-| Before lookup | R-17 | 0 | Empty | The caller's request only |
-| After lookup | R-17 | 1 | `open` | Backend facts about R-17 |
-| After correction | R-18 | 0 | Empty | The corrected identifier, awaiting a fresh lookup |
-| After another successful lookup | R-18 | The backend's version | The backend's status | Facts about R-18 |
+| **Application state** | phone, customer, service, day, time, slot, booking id | the model's `update` and operation receipts, validated as one whole state | only its `context.facts` | the call |
+| **Conversation memory** | the caller's words and the delivered speech, turn by turn | the turn engine | its own recent turns | the call |
+| **Runtime records** | the pending read-back, the offers, intents, receipts, playback evidence | core only | a short status line when it matters | the call; intents and receipts also go to the backend |
+| **Services** | the diary, clients, keys | the application | never | the process |
 
-Core tracks which arguments produced receipt-assigned fields. The lookup's `revision` rests on `caller_id` and `record_id`. Changing only `requested_change` does not invalidate that lookup version. A revision assigned by a later write can have different dependencies because that operation used different arguments.
+Where they live in code:
 
-History still contains the original request for R-17 and the correction to R-18. Any old proposal for R-17 cannot authorize an operation on R-18. Approval is bound to the exact request, as [chapter 05](05-tools-approval-and-recovery.md) explains.
+- `FlowCall` (in [`steps.py`](../../core/src/core/steps.py)) is one call. It extends `CallContext` (in
+  [`state.py`](../../core/src/core/state.py)).
+- `call.state` is a `FlowState`, which is a `VoiceState` with the application's facts. `call.state.facts` is the
+  `SalonState`. `call.state.agent` is the active node.
+- `CallContext` holds the memory (`messages`), the speech ledger (`Spoken`), the pending read-back
+  (`ProposalLedger`), the intents (`Intent`) and the receipts (`Evidence`).
+- `FlowCall` adds the offers (`Offers`) and the services.
 
-Resetting local facts does not undo a backend change. If an earlier operation already changed R-17, its receipt remains in evidence and reversing it requires another application operation.
+The application writes only the state model and the services. Core creates everything else.
 
-## 5. Validate a whole candidate, then compare its meaning
+## 2. Application state is one plain Pydantic model
 
-An update replaces the facts as a whole. For example, trusted code might attempt:
+The salon's state is [`SalonState`](../../use-cases/salone-concierge-graph-new/salon/state.py). This is an excerpt:
 
 ```python
-call.update(record_id='R-18', revision=-1)
+class SalonState(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    customer_phone: core.Phone | None = None
+    customer: Customer | None = None
+    """Set only by the lookup's receipt, for the number it looked up."""
+    service: Service | None = Field(None, description='The service the caller wants: haircut, hair-color or blowout.')
+    booking_day: Annotated[date, core.NotPast] | None = Field(None, description='The date the caller asked for, ...')
+    slot: str | None = Field(None, description='The id of the time the caller picked, from the times on offer.')
+    booking_id: str | None = Field(None, description='The id of the booking they hold that they want moved or cancelled, ...')
 ```
 
-With the model above, the negative revision fails validation. Neither the new identifier nor the revision is committed. This lets application validators check relationships between fields without observing a partly updated state.
+1. **Every field has a default.** A call starts empty.
+2. **The types carry the rules.** `core.Phone` is checked with libphonenumber. `core.NotPast` refuses a date the
+   call's clock has left behind. The loader turns each `Field` description into the model's schema, so the model
+   reads the same words.
+3. **`extra='forbid'`** refuses a field the model does not declare.
 
-The guarantee applies to each validated update. A `collect` tool invocation can perform several updates while refreshing offers; it is not a database transaction that rolls back every earlier update if a later choice lookup fails. Backend transactions remain the application's responsibility.
-
-Validators can also normalize equivalent inputs before core compares them. If the application's validator stores both “complete” and “ COMPLETE ” as `complete`, recording the second spelling does not count as a changed request.
-
-Core supplies the call's `today`, `now`, previous facts as `before`, and the caller's words this turn as `heard` through Pydantic's validation context. An application can use these to interpret a relative date consistently, validate a correction against the previous state, or refuse a new value the caller never said. The whole state is validated on every change, so a check on `heard` compares with `before` and leaves an unchanged value alone. Core supplies the context; the application supplies the interpretation. It does not invoke a model to normalize values.
-
-A language field or property can also select the call's fixed phrases through `language:` and `locales:` in the manifest. Changing it affects this call's future core lines, not another caller's language, the STT model or the TTS voice. Application functions still supply their own questions and receipt wording. [Chapter 04](04-typed-flows-and-node-agents.md#8-choose-who-writes-the-spoken-answer) shows this boundary.
-
-## 6. Keep choices tied to the facts that produced them
-
-Some fields should be chosen from a current backend offer rather than accepted as free text. Suppose the application extends this example with a `reason` field and offers permitted changes and reasons:
+The manifest names the model and the field that identifies the caller:
 
 ```yaml
-choices:
-  requested_change:
-    function: functions.py:available_changes
-    after: [record_id]
-  reason:
-    function: functions.py:available_reasons
-    after: [requested_change]
+state: state.py:SalonState
+identity: customer_phone
 ```
 
-This is an optional extension to the `request` step. It needs the two choice functions, a defaulted `reason` field on the state model, and `reason` in the step's `fields` list.
+A valid number proves its format, not who is on the line. The salon's `verify` node reads it back, and the lookup
+runs only on a yes.
 
-```mermaid
-flowchart LR
-    Record["record_id"] --> Changes["Offer and pick: requested_change"]
-    Changes --> Reasons["Offer and pick: reason"]
+## 3. Who may write each field
+
+Each node declares two things separately in `agent.yaml`:
+
+```yaml
+booking:
+  fields: [service, booking_day, booking_time, slot]            # what it may change
+  context: {facts: [service, booking_day, booking_time, slot]}  # what its model sees
 ```
 
-Changing the record invalidates the old change offer and selection. That invalidation also takes away the dependent reason offer and selection. The application's functions supply fresh offers for the new facts.
+The model's `update` on each decision is built from `fields`, with the types and descriptions from `SalonState`.
+`booking` can record a day or a pick. It cannot set `customer` or `booking_id`. In manifest version 2, a field a
+node may change must also be one it sees.
 
-If the caller supplies a new record and a requested change together, core checks the change against the fresh offer for that record. A compatible pick can be retained in the same tool call; an unavailable pick is refused while other valid values can still be recorded. Dependency order determines which offers refresh first, not the order of YAML keys. Compilation rejects cycles between a step's choices.
+Receipts write the other fields. The lookup's receipt sets `customer`. The booking's receipt sets `booking_id`. A
+caller saying "I'm a known customer" establishes nothing. Only the lookup does.
 
-An explicit `after: []` gives a choice no ordinary field dependency. Omitting `after` uses changes to non-choice fields other than identity as dependencies. Separately, changing an already-known identity clears offers and picks made for the previous caller. Learning an identity for the first time is not treated as switching callers.
+| Path | Who uses it | What it checks |
+|---|---|---|
+| a decision's `update` | the node's model | that node's fields and types; picks against the offers that stand; the whole state; all or nothing |
+| a choice function's `pick` | the application, through `offers:` | that the id is on offer |
+| `call.update(...)` | receipts and trusted application code | known fields, and a valid whole state |
 
-## 7. Build the next model request from facts and history
+Never assign `call.state.facts.x` directly. That bypasses validation and the resets below.
 
-Before a model request, core supplies the node's instructions, a fresh application-state block and a view of the conversation. The state block contains current facts, offers, the question being answered, delivery information, recent outcomes and permitted destinations.
+## 4. Every change is validated whole
 
-The agent receives the call as its Pydantic AI dependency, `ctx.deps`, but service objects are not serialized into the prompt. Put facts suitable for model context in `ApplicationState`; keep credentials and private clients in services.
+An update never edits one field in place. Core builds a complete new `SalonState` from the current facts and the
+update, validates it, and commits it or changes nothing. If a decision's update is refused (a past date, a number
+that cannot be right, a pick not on offer), nothing in it is recorded. The model is told why. When the locale has
+words for that refusal, it is given those words to say to the caller.
 
-For the correction above, the next request needs both perspectives:
+A change is a change of meaning. Values are validated first and then compared. "Friday" said again, as the same
+date, is no change and resets nothing.
 
-| Current facts | Conversation history |
+Validators can read the call's context:
+
+- `today` and `now`, from the call's clock;
+- `before`, the state as it stands;
+- `heard`, the caller's words this turn;
+- `said`, everything they said on the call.
+
+`core.Quoted`, used for the salon's complaint, checks that the text is the caller's own words.
+
+## 5. A change resets what rested on it
+
+**Correction example.** The caller picked Friday at 9:00, then says "Actually, make it Saturday".
+
+1. The model records `booking_day: 2026-10-03`.
+2. The `slot` choice declares `after: [booking_id, service, booking_day, booking_time]`, so the day change takes
+   the Friday offer and the Friday pick away in the same update.
+3. `booking` has `offers: [slot]`, so code asks `find_times` again and says the Saturday times.
+
+An old yes can never book the Friday slot, because it is gone from the state.
+
+Receipt-set fields reset the same way. A corrected phone number clears `customer`, because the lookup's receipt
+rested on the old number. The caller is somebody else until the new number is looked up.
+
+`after:` may name another choice, and the reset follows the chain. `after: []` rests on nothing: the booking being
+moved stays when the new day changes. Without `after`, a choice rests on every field that is not a choice. Changing
+a known caller to another takes every offer away.
+
+A reset changes the call's facts, not the backend. A booking already made stays made. Undoing it is another
+operation, such as a cancel.
+
+## 6. Offers are records tied to state
+
+A choice's offer is a runtime record, one per choice: the ids that may be picked, and the application's words for
+them. It stands only for the state it was made for.
+
+- **Made by the choice function.** `find_times` returns the free times and "On Friday I have…". `bookings_to_move`
+  returns the bookings held.
+- **Said by code.** The node's `offers:` makes code say the words on arrival and after a `record`, with no model
+  request.
+- **Picked by the model or by the application.** The model puts an offered id in its update. When there is only
+  one, the function can return it as `pick`, and code records it.
+- **Taken away by a change it rests on,** as in section 5.
+
+## 7. Memory: what a node's model is sent
+
+Before each model request, core builds the view that node is sent. The stored history is never rewritten. The view
+is a prepared copy, a **projection**:
+
+1. the shared voice prompt and the node's own prompt;
+2. today's date and a labelled 14-day calendar (`current_datetime:`);
+3. the facts the node sees, its own offers, its pending read-back, and a short status line;
+4. its own recent caller turns, what was said and heard;
+5. only the outputs and tools this node may use.
+
+`context.history` chooses the turns. The salon uses `{scope: node, turns: 8}` for every node:
+
+| `history` | What earlier turns the node is sent |
 |---|---|
-| The record is now R-18 | The caller first said R-17, then corrected it |
-| Its revision is not yet known | A previous lookup described R-17 |
-| The desired change is still `complete` | The caller has not withdrawn the requested change |
+| `{scope: node, turns: 8}` | whole caller turns this node took part in, on any visit, the last eight |
+| `{scope: conversation, turns: 8}` | every node's caller turns, the last eight |
+| `none` | nothing earlier: this turn's words, its own tool exchange, its own pending question |
 
-Each time the model is asked to respond, it needs a coherent account of the conversation. Core builds that outgoing view from the stored records. The code calls this a **projection**: a prepared copy, rather than rewriting the original history.
+Some turns are kept past the window because the node needs them:
 
-- Tool calls and their results stay paired. Incomplete exchanges left by cancellation are removed from the outgoing view.
-- Fixed speech, such as a read-back rendered by code, appears where it was said. An old line is not repeatedly inserted as the latest assistant answer.
-- Handoffs do not repeatedly add the same caller input. Separate fragments of an interrupted turn remain represented.
-- Holding phrases are excluded so “One moment” does not become conversational content for the model to imitate.
+- the turn that asked for the node ("I'd like a haircut this Friday" reaches `booking` after `verify`);
+- its pending question and the turns after it;
+- its loaded capabilities, so the refund policy is not loaded twice.
 
-Speech delivery is tracked separately from generated text. An estimated partial spoken prefix can help conversational continuity, but it is not evidence that a complete read-back was delivered. Likewise, a history sentence claiming success cannot replace a validated receipt.
+Another node's tool calls are never sent. This keeps the context small. It does not redact anything: the caller's
+own words are sent as said, even when they name a field this node does not see.
 
-## 8. Know what survives each boundary
+Speech is recorded as it was heard. A line cut short is kept only as far as it played. Holding phrases such as
+"One moment" are left out, so the model does not copy them.
 
-| Event | What carries forward? |
+## 8. What survives each boundary
+
+| Event | What carries forward |
 |---|---|
-| The caller replies | This call's facts, history and pending work, subject to approval timing rules |
-| Another node takes over | The same call, with a new prompt and action set; prerequisite detours can use a reduced history view |
-| An old asynchronous task finishes | Completed effects remain recorded, but generation and identity checks prevent stale work from overwriting the current conversation |
-| Another caller connects | A separate `FlowCall` with copied initial facts and its own runtime records |
-| The process restarts | Nothing restores the in-memory conversation automatically; the application must persist what it needs |
-
-A backend client may be shared across calls even though their conversation state is separate. Its ownership and concurrency rules still matter. [Chapter 05](05-tools-approval-and-recovery.md) explains the narrower recovery path for unresolved operations.
+| The caller replies | the same facts, memory and pending work |
+| A hand-over | the same call: a new prompt, new outputs and a new view of the same facts |
+| A prerequisite (`verify`) | the waiting node is remembered and resumed, with the caller's original words |
+| Old work finishes late | its effect stays recorded, but it cannot overwrite the current conversation |
+| Another caller connects | a separate `FlowCall`, sharing nothing but the compiled flow and services |
+| The process restarts | nothing in memory. Unresolved intents are restored from the backend (chapter 05) |
 
 ## Check the state rules offline
 
-The repository's clinic fixture uses different fields but exercises the same state boundary. From the repository root after `uv sync --all-packages`:
+From the repository root after `uv sync --all-packages`:
 
 ```bash
 uv run --directory core python - <<'PY'
@@ -238,14 +221,19 @@ print('Invalid updates, field ownership, call isolation and corrections checked.
 PY
 ```
 
-These checks use a scripted model. They establish how core handles accepted values and recorded effects, not whether a live model extracts every value correctly.
+These checks use a scripted model. They show how core handles values it accepts, not whether a live model reads
+every value right.
 
 ## Check this against the code
 
-- [State and session implementation](../../core/src/core/steps.py): `FlowState`, `FlowCall.update`, `FlowCall.collect`, `ConversationStep._record`, `context` and `StepFlow.open`.
-- [Runtime records](../../core/src/core/state.py): `CallContext.commit`, validation context, speech, proposals and evidence.
-- [History projection](../../core/src/core/history.py): `project` and `paired` copy history for outgoing requests.
-- [Session tests](../../core/tests/test_session.py) and [history tests](../../core/tests/test_history.py): validation, isolation, stale work and retained conversation.
-- [Chained-choice fixture](../../core/tests/ticket_flow/chained.yaml) and [support-desk tests](../../core/tests/test_tickets.py): dependent offers, normalization and simultaneous parent/child corrections.
+- [Structured decisions](../../core/src/core/structured.py): `Decision`, how an update's type is built from
+  `fields`, and how it is applied whole.
+- [State and session](../../core/src/core/steps.py): `FlowState`, `FlowCall.update`, `FlowCall.collect` (the resets),
+  `Offers` and `StepFlow.open`.
+- [Runtime records](../../core/src/core/state.py): `CallContext`, the validation context, speech, proposals, intents
+  and evidence.
+- [History](../../core/src/core/history.py): `History`, `Scope` and `project`, the view a node is sent.
+- [Salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py): a corrected number clears the
+  customer, a past date is refused, and a correction during a read-back.
 
-[← Conversation walkthrough](02-a-conversation-from-start-to-finish.md) · [Reading guide](README.md) · [Next: typed flows and node agents →](04-typed-flows-and-node-agents.md)
+[← Conversation walkthrough](02-a-conversation-from-start-to-finish.md) · [Reading guide](README.md) · [Next: nodes and agent.yaml →](04-typed-flows-and-node-agents.md)

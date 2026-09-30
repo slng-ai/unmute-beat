@@ -1,6 +1,6 @@
 # 01 — Stack and boundaries
 
-Suppose someone calls and says, “Please close my support case.” A voice application needs to understand the request, find the case, ask any missing questions, make the permitted change and say what happened.
+Suppose someone calls a hair salon and says, “I need to move my appointment.” A voice application needs to understand the request, check who is calling, find the booking, offer new times, make the change only once the caller agrees, and say what happened.
 
 The **harness** is the reusable code that manages that conversation. The package is called `slng-voice-core`, and Python applications import it as `core`.
 
@@ -8,16 +8,16 @@ The **harness** is the reusable code that manages that conversation. The package
 
 | Word | Plain meaning | Example |
 |---|---|---|
-| Model / LLM | The language model that interprets words and generates a response | Understands that “please close it” refers to the case under discussion |
-| Agent | A model with instructions and a set of tools it may use | A support assistant allowed to find and close cases |
-| Tool | A function the agent can request, or a structured instruction it can return | `find_case` asks code to look up a case |
-| State | The named values remembered for this call | The case number, its current status and the requested change |
+| Model / LLM | The language model that interprets words and generates a response | Understands that “move it to Tuesday” refers to the booking under discussion |
+| Agent | A model with instructions and a set of tools it may use | A receptionist allowed to move the caller's booking |
+| Tool | A function the agent can request, or a typed decision it returns | `move_appointment` with the picked time asks code to read the move back |
+| State | The named values remembered for this call | The caller's number, the booking being moved and the new day |
 
 A **tool call** is the model asking for something to run. It is not the model reaching into a database itself. Application code performs the work and returns the result.
 
 ## How is this different from an agent with tools?
 
-It is still an agent with tools. You could give an ordinary agent a prompt saying “find the case, ask for approval, then close it.” You would also need code that remembers which change is awaiting approval, handles corrections and decides what to do if a tool's answer is lost.
+It is still an agent with tools. You could give an ordinary agent a prompt saying “find the booking, ask for approval, then move it.” You would also need code that remembers which change is awaiting approval, handles corrections and decides what to do if a tool's answer is lost.
 
 The harness provides those recurring rules so each application does not have to write them again:
 
@@ -27,19 +27,21 @@ The harness provides those recurring rules so each application does not have to 
 | Application functions | Look up information or make changes in the application's database or API |
 | Harness | Keep the call's state, check the action's requirements, track its outcome and continue the conversation |
 
-For example, the agent can interpret “yes” as agreement. Core checks which question that reply answers and whether its read-back finished playing. The application's function closes the case only after its declared requirements pass. A wrong interpretation of “yes” is still possible; the harness does not make language understanding perfect.
+For example, the agent can interpret “yes” as agreement. Core checks which question that reply answers and whether its read-back finished playing. The application's function moves the booking only after its declared requirements pass. A wrong interpretation of “yes” is still possible; the harness does not make language understanding perfect.
 
 A well-built ordinary agent can implement these rules too. The purpose of this package is to reuse their implementation across applications. It is not a claim that adding a graph automatically makes an agent faster or more accurate.
 
 ## A node is a job, not a sentence
 
-A **node** is one part of the work, such as handling a change request. It can have its own agent, instructions and tools. A code-only node can perform a known action without asking a model to choose it.
+A **node** is one job the caller wants done, such as moving a booking. It has its own agent, instructions, visible facts and tools. A code-only node can perform a known action without asking a model to choose it.
 
-One “handle request” node might ask for the case number, ask what changed, read back the proposed update and handle a correction. Those can be several conversational turns in the same node.
+The salon's `moving` node names the booking, asks for the new day, offers times, reads the move back and handles a correction. Those can be several conversational turns in the same node.
 
-A **graph** is a map of these jobs and the allowed moves between them. An **edge** is one allowed move. Core uses the map while the conversation runs. Node names have no special meaning to core: the same machinery can run a support desk, a booking assistant or a language tutor.
+Split by the caller's job. Booking, moving and cancelling are three nodes, not one: each has one operation, a small prompt, and a first line code already knows. [Chapter 04](04-typed-flows-and-node-agents.md#1-one-job-per-node) gives the design rules.
 
-You do not need a node for every tool. A lookup can be an operation inside the current conversation node, or a separate code node when that organization is useful. [Chapter 02](02-a-conversation-from-start-to-finish.md) follows both the words and the work in a concrete conversation.
+A **graph** is a map of these jobs and the allowed moves between them. An **edge** is one allowed move. Core uses the map while the conversation runs. Node names have no special meaning to core: the same machinery can run a salon, a support desk or a language tutor.
+
+You do not need a node for every tool. A lookup can be an operation inside the current node. [Chapter 02](02-a-conversation-from-start-to-finish.md) follows both the words and the work in a real salon call.
 
 ## The media framework still owns audio
 
@@ -82,12 +84,13 @@ An **application**, also called a use case, defines the actual job: what a suppo
 | Prompts — written instructions for each agent | Runs the right agent for the current node |
 | Tools and allowed next nodes | Restricts what that agent can request |
 | Functions that read or change the backend | Checks their inputs and returned results |
+| Choice functions for what may be offered | Keeps each offer tied to the facts it was made for, and says its words |
 | Questions, approval rules and result wording | Tracks the exact question and speaks the configured result |
 | Storage and a way to look up uncertain results | Recovers an operation when the backend supports it |
 
-The author connects these pieces in a configuration file, usually `agent.yaml`. That file is called the **manifest**. Chapter 04 explains how to read it; you do not need to learn YAML to follow the conversation in chapter 02.
+The author connects these pieces in a configuration file, `agent.yaml`. That file is called the **manifest**. Manifest version 2 keys the nodes by id, and each node's agent answers with one typed decision (`speech: structured`). Chapter 04 explains how to read it; you do not need to learn YAML to follow the conversation in chapter 02.
 
-The salon, support desk and Faro learning application use this same public path. Core contains no booking, ticket or grading policy. There is no shared classifier that reads the reply before the active node's agent.
+The reference application is the salon in [`use-cases/salone-concierge-graph-new`](../../use-cases/salone-concierge-graph-new/). Faro, a learning application, and the support desk in core's tests use the same public path. Core contains no booking, ticket or grading policy. The active node's own agent reads each reply.
 
 ## Where Pydantic fits
 
@@ -115,7 +118,8 @@ The public `core` import does not load credential files, create model clients, o
 |---|---|
 | [Public exports](../../core/src/core/__init__.py), [package dependencies](../../core/pyproject.toml) | The package boundary and optional integrations. |
 | [Pipecat processor](../../core/src/core/processor.py), [turn engine](../../core/src/core/turn.py) | Frames are adapted outside the conversation engine. |
-| [Public API tests](../../core/tests/test_public.py), [node tests](../../core/tests/test_nodes.py) | Public loading and node execution, including the absence of a classifier pre-pass. |
+| [Public API tests](../../core/tests/test_public.py), [structured tests](../../core/tests/test_structured.py) | Public loading, and one typed decision per model response. |
+| [Salon manifest](../../use-cases/salone-concierge-graph-new/salon/agent.yaml), [salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py) | The reference application: one job per node, every request pinned. |
 | [Reuse tests](../../core/tests/test_tickets.py), [flow-rule tests](../../core/tests/test_flow_rules.py) | Another domain and renamed fields; receipt routing, automatic operations and per-call language. |
 | [Faro manifest](../../use-cases/faro-language-learning/faro/agent.yaml), [Faro tests](../../use-cases/faro-language-learning/tests/test_faro.py) | A learning application on the same public path, with its own grading and storage rules. |
 

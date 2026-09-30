@@ -160,7 +160,7 @@ async def main() -> None:
     await one_booking_through_the_public_boundary()
     await an_unheard_read_back_books_nothing()
     what_the_application_wrote()
-    print('public ok: load, compile, open, text turns, acknowledgement, one guarded booking')
+    print('public ok: load, compile, open, text turns, acknowledgement, one confirmed booking')
 
 
 if __name__ == '__main__':

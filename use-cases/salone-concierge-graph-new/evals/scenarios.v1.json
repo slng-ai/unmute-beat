@@ -1,0 +1,60 @@
+{
+  "test_set": {
+    "name": "salone-concierge new behaviour v1",
+    "description": "Five callers who ask a question in the middle of a booking: answered locally, from the refund policy, or by the stylist, with and without a clarifying question, and one correction during a stylist detour."
+  },
+  "cases": [
+    {
+      "key": "local-price",
+      "phone": "+34671530301",
+      "input": "You want a haircut at Sage and Stone on Saturday morning. Your phone number is +34 671 530 301. Say it as \"plus three four, six seven one, five three zero, three zero one\". Give it only when the receptionist asks for it, and say yes when it is read back correctly. You are calling from a different phone, so the salon cannot see your number. Accept the first Saturday morning time offered. When the booking is read back to you, do not answer it yet: first ask \"How much is a haircut?\". After you hear the price, say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain.",
+      "expected_behaviors": [
+        "When the caller asked the price, the agent said a haircut is 28 euros.",
+        "The agent did not book the haircut before the caller said yes to a read-back that came after the price answer.",
+        "By the end of the call the agent had confirmed exactly one appointment, a haircut on Saturday morning.",
+        "The agent never said an appointment was booked before it was."
+      ]
+    },
+    {
+      "key": "refund-policy",
+      "phone": "+34671530302",
+      "input": "You are calling Sage and Stone. First ask: \"If I'm not happy with a colour, can I get my money back?\" Listen to the answer. Then say you would like a blowout on Wednesday afternoon. Your phone number is +34 671 530 302. Say it as \"plus three four, six seven one, five three zero, three zero two\". Give it only when asked, and say yes when it is read back correctly. You are calling from a different phone, so the salon cannot see your number. Accept the first Wednesday afternoon time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye. Do not complain.",
+      "expected_behaviors": [
+        "The agent's answer about money back followed the salon policy: a free redo within fourteen days comes first, and it did not promise a refund.",
+        "The agent did not claim that a refund had been approved or arranged.",
+        "By the end of the call the agent had confirmed exactly one appointment, a blowout on Wednesday afternoon."
+      ]
+    },
+    {
+      "key": "stylist-direct",
+      "phone": "+34671530303",
+      "input": "You want a hair colour at Sage and Stone on Thursday morning. It will be your first colour with this salon. Your phone number is +34 671 530 303. Say it as \"plus three four, six seven one, five three zero, three zero three\". Give it only when asked, and say yes when it is read back correctly. You are calling from a different phone, so the salon cannot see your number. Accept the first Thursday morning time offered. When the booking is read back to you, do not answer it yet: first ask \"Do I need to do anything before my first colour?\". After you hear the answer, say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye.",
+      "expected_behaviors": [
+        "The agent said a first colour needs a patch test at least 48 hours before the appointment.",
+        "The agent did not book the colour before the caller said yes to a read-back that came after that answer.",
+        "By the end of the call the agent had confirmed exactly one appointment, a hair colour on Thursday morning."
+      ]
+    },
+    {
+      "key": "stylist-clarifies",
+      "phone": "+34671530304",
+      "input": "You are calling Sage and Stone about a hair colour. First ask: \"How long would a colour take for me?\" If you are asked how long your hair is, say it is long. Then say you would like the colour on Monday afternoon. Your phone number is +34 671 530 304. Say it as \"plus three four, six seven one, five three zero, three zero four\". Give it only when asked, and say yes when it is read back correctly. You are calling from a different phone, so the salon cannot see your number. Accept the first Monday afternoon time offered and say yes clearly when the booking is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye.",
+      "expected_behaviors": [
+        "Before saying how long a colour takes, the agent asked how long the caller's hair is, or gave the time for each hair length.",
+        "The agent said a colour on long hair takes up to three hours.",
+        "By the end of the call the agent had confirmed exactly one appointment, a hair colour on Monday afternoon."
+      ]
+    },
+    {
+      "key": "detour-correction",
+      "phone": "+34671530305",
+      "input": "You want a haircut at Sage and Stone on Friday at 11 in the morning. Your hair is curly. Your phone number is +34 671 530 305. Say it as \"plus three four, six seven one, five three zero, three zero five\". Give it only when asked, and say yes when it is read back correctly. You are calling from a different phone, so the salon cannot see your number. When the booking for 11 is read back to you, do not answer it yet: first ask \"My hair is curly, how should I come in?\". After you hear the answer, say \"Actually, can we make it 12 instead of 11?\". Say yes clearly when the booking at 12 is read back. When asked if you need anything else, say \"No, that's all, thanks\" and say goodbye.",
+      "expected_behaviors": [
+        "The agent said to come with the hair clean, dry and loose, with no product.",
+        "The agent did not book the 11 o'clock appointment.",
+        "The agent read back a Friday 12 o'clock haircut before booking it, and the caller said yes to that read-back.",
+        "By the end of the call the agent had confirmed exactly one appointment, a haircut on Friday at 12:00."
+      ]
+    }
+  ]
+}

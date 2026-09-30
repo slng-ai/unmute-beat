@@ -140,10 +140,33 @@ def claim_or_refuse(ctx, actions: frozenset[str]) -> None:
     claim = ctx.deps._claim
     if ctx.tool_name in actions and claim is not None and ctx.tool_call_id != claim:
         raise ModelRetry(CONFLICT.format(other=claim))
+    if ctx.tool_name in actions and ctx.deps._reading:
+        raise ModelRetry(READING)
+
+
+READING = (
+    'Nothing was done: this reply also looks something up, and it was decided before the result came back. '
+    'Wait for that result, then decide.'
+)
+"""A structured step's answer or action beside a read in the same response (`one_action_per_reply(reads=...)`)."""
+
+PATCHED = (
+    'Nothing was recorded: another call in this reply already carries the update. '
+    'One call per reply may change what the caller asked for.'
+)
+
+
+def patch_or_refuse(ctx) -> None:
+    """Refuse an `update` on any call but the one `one_action_per_reply` chose to carry it (`_patcher`)."""
+    if ctx.deps._patcher is not None and ctx.tool_call_id != ctx.deps._patcher:
+        raise ModelRetry(PATCHED)
 
 
 def one_action_per_reply(
-    actions: frozenset[str], updates: frozenset[str] = frozenset(), into: Hooks | None = None
+    actions: frozenset[str],
+    updates: frozenset[str] = frozenset(),
+    into: Hooks | None = None,
+    reads: frozenset[str] = frozenset(),
 ) -> Hooks:
     """One flow-changing or business-mutating action per model response.
 
@@ -174,6 +197,15 @@ def one_action_per_reply(
     number's yes standing. A change emitted *after* the action in the same
     response has not run yet when the action does (`_unapplied`), so the
     action refuses with a retry and is called again once it has.
+
+    On a structured step the update travels inside the call it belongs to
+    (`update`, `core.structured`), so there is no sibling to order. Two rules
+    replace that. A response that calls one of `reads` answers and acts on
+    nothing beside it (`_reading`): its answer was written before the result
+    came back, in whatever order the calls were emitted. And only the first
+    call carrying a non-empty update may apply it (`_patcher`,
+    `patch_or_refuse`): two updates in one response are two readings of the
+    caller.
     """
     hooks = into if into is not None else Hooks()
 
@@ -186,18 +218,23 @@ def one_action_per_reply(
                 ctx.deps._claim = part.tool_call_id
                 break
         ctx.deps._unapplied = set()
+        ctx.deps._reading = any(part.tool_name in reads for part in calls)
+        ctx.deps._patcher = None
         claimed = False
         for part in calls:
             claimed = claimed or part.tool_call_id == ctx.deps._claim
             if part.tool_name in updates:
                 try:
-                    values = part.args_as_dict().get('values') or {}
+                    given = part.args_as_dict()
                 except ValueError:
-                    values = {}
+                    given = {}
+                values = given.get('values') or given.get('update') or {}
                 fields = set(values) if isinstance(values, dict) else set()
+                if fields and ctx.deps._patcher is None and 'update' in given:
+                    ctx.deps._patcher = part.tool_call_id
                 ctx.deps._changing |= fields
                 ctx.deps._tries.update(fields)
-                if claimed:
+                if claimed and part.tool_call_id != ctx.deps._claim:
                     ctx.deps._unapplied |= fields
         return response
 

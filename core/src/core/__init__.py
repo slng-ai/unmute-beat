@@ -11,7 +11,8 @@ The public boundary, in the order an application uses it:
     call.acknowledge(*(s.id for s in reply.segments))   # the reader got it: only now can it be agreed to
 
 The application supplies a plain Pydantic model for its state, its services,
-prompts and operations. Core keeps the session: where the caller is, the
+prompts and operations: typed functions, or classes (`core.Lookup`,
+`core.Write`) whose receipts are `core.Receipt` models. Core keeps the session: where the caller is, the
 turn and its generation, history, what was said and whether it was heard,
 the question waiting for an answer, the budget, and the evidence of every
 receipt. Importing this module loads no `.env`, builds no client and imports
@@ -22,6 +23,7 @@ tracing is `core.observability.setup` (the `tracing` extra). Launchers and
 tests still import those adapters, and a few engine helpers, by their module.
 """
 
+from core.actions import Lookup, Write
 from core.flowspec import FlowSpec, FlowSpecError
 from core.flowspec import load_file as load
 from core.operations import Operation, OutcomeUnknownError, Refused
@@ -30,6 +32,7 @@ from core.proposals import BaseProposal
 from core.state import Intent
 from core.steps import ConfirmedOperation, FlowCall, StepFlow
 from core.turn import TextReply, greet, text_turn
+from core.values import NotPast, Phone, Quoted, Receipt, Rejection, Subject, Version
 
 __all__ = [
     'BaseProposal',
@@ -38,12 +41,21 @@ __all__ = [
     'FlowSpec',
     'FlowSpecError',
     'Intent',
+    'Lookup',
+    'NotPast',
     'Operation',
     'OutcomeUnknownError',
+    'Phone',
+    'Quoted',
+    'Receipt',
     'Refused',
+    'Rejection',
     'StepFlow',
+    'Subject',
     'TextReply',
     'TurnBudget',
+    'Version',
+    'Write',
     'greet',
     'load',
     'text_turn',

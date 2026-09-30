@@ -1,4 +1,4 @@
-# 05 — Tools, approval and recovery
+# 05 — Operations, approval and recovery
 
 “Please do it,” “I sent the request,” and “It is done” are three different things. This chapter explains how the harness keeps them separate when an agent uses a tool.
 
@@ -6,15 +6,46 @@ There are three records to remember:
 
 | Name | Plain meaning | Example |
 |---|---|---|
-| Proposal | The exact action being asked about | “Mark record R-17 complete?” |
+| Proposal | The exact action being asked about | “Shall I book a haircut, Friday the 2nd at 9:00 AM?” |
 | Intent | A tracked attempt to perform that action, with its own identifier | Attempt I-7, which may be prepared, sent or still uncertain |
-| Receipt | The backend's answer about the attempt | R-17 was changed to `complete` at revision 2 |
+| Receipt | The backend's answer about the attempt | The diary booked BK0001, Friday at 9:00 |
 
 An intent is like a tracking number for one attempted change. If the answer is lost, core can ask what happened to that same attempt. That lookup is called **reconciliation**. It works only if the application provides a way to find the original result.
 
 For a change requiring approval, the successful path is: propose it → establish that the read-back played → interpret the reply → check approval → send the operation → validate its result → speak the result. Asking the model to say “done” is not evidence that the backend changed.
 
-Continue the example from [chapter 02](02-a-conversation-from-start-to-finish.md): caller A-42 wants record R-17 marked complete. The lookup has established that it is open at revision 1. This chapter builds the `apply_change` operation, follows its approval and receipt, then repeats the sequence with a lost backend response.
+The salon's operations are classes, one line each in `agent.yaml`. The next section shows that form. The numbered sections then use a smaller record-change backend in the long function form, because it spells out every declaration: caller A-42 wants record R-17, open at revision 1, marked complete. Both forms run through the same checks.
+
+## The salon's form: an operation class
+
+An operation class is its own argument model and its own action. From the salon's [`operations.py`](../../use-cases/salone-concierge-graph-new/salon/operations.py):
+
+```python
+class CancelAppointment(_BookingWrite):
+    """Cancel the caller's own booking: a real write with its own receipt, never an in-memory undo."""
+
+    booking_id: Picked
+    matches = ('phone', 'booking_id')
+    say = "That's cancelled for you. Anything else I can help with?"
+    recap = 'Your appointment is cancelled.'
+
+    def run(self, salon: Salon, intent: core.Intent) -> Outcome: ...
+    def reconcile(self, salon: Salon, intent: core.Intent) -> Outcome: ...
+    def readback(self, salon: Salon) -> str: ...
+```
+
+```yaml
+operations:
+  cancel_appointment: operations.py:CancelAppointment
+```
+
+1. **Arguments are fields.** They bind to state fields by name. `booking_id` comes from the state. The base class binds `phone` from `customer.customer_phone` with an `AliasPath`, so a model can never supply the number.
+2. **The kind is the base class.** `core.Write` is a change that needs a read-back. `core.Lookup` is a read. The salon's `LookupCustomer` is a lookup that is still read back, and `restated_confirms` makes the same number said back count as a yes.
+3. **`run` returns a typed outcome.** A discriminated union of receipt models. A `core.Rejection` member is an authoritative no.
+4. **`readback`, `say` and `recap`** are the application's words for the question, the result and the goodbye recap.
+5. **`reconcile`** finds what happened to the same intent when its answer was lost (section 8).
+
+The loader infers the rest from the class: arguments, subject, version, what a success looks like. It refuses a class it cannot infer. The long form below says each of those explicitly.
 
 ## 1. Define the operation's inputs and result
 
@@ -126,7 +157,7 @@ Each mapping connects one named value to another. For example, `assign: {revisio
 
 The model selects `apply_change`; it does not submit another unchecked copy of these arguments. Core takes them from validated state and validates them again as `ChangeArgs`.
 
-Approval and business effects are separate settings. By default, this operation requires approval and declares a change. The lookup instead declares both `approval: none` and `changes: false`. A read can require approval, and an application can explicitly permit a change without conversational approval. The manifest chooses that policy; types do not choose it automatically. An operation with `approval: none` can also be kept out of the model's tools entirely and carried out by code after `collect` records its input (`carries_out`, chapter 04).
+Approval and business effects are separate settings. By default, this operation requires approval and declares a change. The lookup instead declares both `approval: none` and `changes: false`. A read can require approval, and an application can explicitly permit a change without conversational approval. The manifest chooses that policy; types do not choose it automatically. An operation with `approval: none` can also be kept out of the model's tools entirely and carried out by code after a `record` records its trigger field (`carries_out`, chapter 04). A pure read, with no read-back, no change and no route, is not a guarded output at all: it is an ordinary tool that returns its result to the same agent in the same turn.
 
 ## 4. Read back one exact proposal
 
@@ -141,7 +172,7 @@ ChangeArgs(
 )
 ```
 
-The `request` agent selects `apply_change`. Core prepares an intent, records a **proposal** for those exact arguments and renders:
+The node's agent chooses `apply_change`, with any values the caller just gave in its update. Core prepares an intent, records a **proposal** for those exact arguments and renders:
 
 > Mark record R-17 complete?
 
@@ -153,7 +184,7 @@ There is one pending proposal slot per call. Another proposal replaces it. The c
 
 ## 5. Bind the reply to that proposal
 
-The caller says “Yes.” The same node agent interprets the reply and selects `apply_change` again. No separate classifier first decides whether the answer was agreement.
+The caller says “Yes.” The same node's agent interprets the reply and chooses `apply_change` again. An update that keeps the value read back is still that yes. A changed or refused value asks again.
 
 Core then checks the reading against the session:
 
@@ -162,7 +193,7 @@ Core then checks the reading against the session:
 3. The latest read-back copy has the required delivery evidence, and the reply began after it finished playing.
 4. The approving work is still current, and the answer has not already been consumed.
 
-When a configured `reads_back` rule runs after collection and finds that the application changed a pending read-back's wording for the same arguments, for example after a language switch, it puts a new copy of the question. The next answer must follow delivery of that copy. Merely changing a language field does not authorize anything.
+Code can also put the read-back itself, with no model request. That happens when a reply only records a field listed in `reads_back`, or when a choice function picks the only option and the operation then has every argument. That is the salon's cancel on arrival. When a configured `reads_back` rule runs and finds that the application changed a pending read-back's wording for the same arguments, for example after a language switch, it puts a new copy of the question. The next answer must follow delivery of that copy. Merely changing a language field does not authorize anything.
 
 A valid answer authorizes this action and is consumed. It cannot also authorize a different write in the same model reply.
 
@@ -170,7 +201,8 @@ A valid answer authorizes this action and is consumed. It cannot also authorize 
 |---|---|
 | A valid yes after the read-back was delivered | The matching operation may execute |
 | “Actually, R-18” | Changed arguments need their own proposal and approval |
-| A clear no, interpreted through `decline` | Consume the pending question without executing its operation |
+| A clear no: `reply` or `goodbye` with `decline` set | Consume the pending question without executing its operation |
+| The same value said back, on an operation that allows it (`restated: confirms`) | Code carries it out: the salon's number said back is a yes |
 | A question about the proposed change | Not automatically a rejection; the question can remain pending |
 | A reply before playback finishes, or without confirmed delivery | It cannot approve this read-back |
 | Repeated inability to confirm delivery | Bounded attempts end in withdrawal and a fallback line |
@@ -341,11 +373,12 @@ These checks use scripted models and controlled faults. They test the runtime's 
 
 ## Check this against the code
 
-- [Function binding and node tools](../../core/src/core/steps.py): `FunctionOperation`, `ConversationStep`, reconciliation and receipt presentation.
+- [Operation classes](../../core/src/core/actions.py) and the [salon's operations](../../use-cases/salone-concierge-graph-new/salon/operations.py): `core.Lookup`, `core.Write`, and what the loader infers from a class.
+- [Function binding and node tools](../../core/src/core/steps.py): `FunctionOperation`, `ConversationStep._operate`, reconciliation and receipt presentation.
 - [Operation execution](../../core/src/core/operations.py): `Operation.run`, dispatch, intent claims, outcome validation and current-version checks.
 - [Proposal ledger](../../core/src/core/proposals.py) and [session records](../../core/src/core/state.py): exact question binding, delivery, withdrawal, restoration and effective receipts.
 - [Intent tests](../../core/tests/test_intents.py) and [outcome tests](../../core/tests/test_outcomes.py): cancellation, safe retries, late effects, malformed results and recovery.
 - [Support-desk backend](../../core/tests/ticket_flow/tickets.py) and [tests](../../core/tests/test_tickets.py): durable intent records, stale revisions, process death and receipt-only repetition.
-- [Flow-rule tests](../../core/tests/test_flow_rules.py): receipt routing on immediate success and operations triggered by collection. [Faro's cleanup report](../research/reusable-core/core-cleanup.md#what-is-not-verified) records the narrower recovery and live-validation coverage of that application.
+- [Flow-rule tests](../../core/tests/test_flow_rules.py): receipt routing on immediate success and operations carried out after a record. [Faro's cleanup report](../research/reusable-core/core-cleanup.md#what-is-not-verified) records the narrower recovery and live-validation coverage of that application.
 
-[← Typed flows and node agents](04-typed-flows-and-node-agents.md) · [Reading guide](README.md)
+[← Nodes and agent.yaml](04-typed-flows-and-node-agents.md) · [Reading guide](README.md)

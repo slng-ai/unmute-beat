@@ -836,8 +836,7 @@ class PydanticAgentProcessor(FrameProcessor):
         an answer going out quickly; `turn_first_useful_text_out` leaves the
         holding line out, since a filler going out quickly is not an answer
         either. `receipt_unheard` marks a turn whose latest receipt is known
-        not to have reached the caller, repeats spent or not. `unbacked_claim` is on the span because a
-        latency table that cannot see it will reward inventing an outcome. What
+        not to have reached the caller, repeats spent or not. What
         the turn was asked and what it answered go on it in Langfuse's own keys,
         so the numbers can be read against the sentence that produced them.
 
@@ -901,8 +900,6 @@ class PydanticAgentProcessor(FrameProcessor):
                         case core.FixedSpeech(text=text, reason=reason):
                             if reason == 'error':
                                 await self.push_error(f'agent run failed: {event.text}')
-                            if reason == 'unbacked':
-                                span.set_attribute('unbacked_claim', True)
                             await self.say(text)
                         case core.TurnFinished() as done:
                             timed = [(r.ttft, r.kind) for r in self._call.requests if r.ttft is not None]

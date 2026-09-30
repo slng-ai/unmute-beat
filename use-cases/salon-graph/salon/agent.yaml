@@ -18,13 +18,6 @@ entry: concierge
 locale:
   base: english
   goodbye: Thanks for calling Sage and Stone. Have a lovely day!
-  # The salon's verbs for a claimed change, checked clause by clause on a guarded step.
-  # Moved here unchanged from core's English locale in session 4b stage B.
-  claims:
-    - "\\b(?:i|we)(?:'ve| have|'ll have| had)?\\s+(?:just\\s+)?(?:gone\\s+ahead\\s+and\\s+)?(?:cancelled|canceled|booked|moved|rebooked|recorded|logged|filed|saved|noted|written down|registered)\\b"
-    - "\\bi(?:'ve| have)\\s+(?:got\\s+)?you\\s+(?:down|booked|in)\\b"
-    - "\\byour\\s+\\w+(?:\\s+\\w+)?(?:'s| is| has been| was)\\s+(?:now\\s+|all\\s+)?(?:booked|cancelled|canceled|moved|rebooked)\\b"
-    - "\\b(?:that|it|this|your (?:complaint|booking|appointment|request))(?:'s| is| has been| was)\\s+(?:now\\s+)?(?:on record|recorded|logged|filed|saved|booked|cancelled|canceled|moved|confirmed|registered)\\b"
 model: google-cloud:gemini-3.5-flash-lite
 quote_caller: true
 includes:
@@ -117,7 +110,6 @@ steps:
     kind: conversation
     agent: robin
     prompt: prompts/concierge.md
-    guarded: true
     fields: [service, booking_day, booking_time]
     exits:
       - {to: booking, purpose: 'a new booking, or a change or cancellation of one they hold'}
@@ -169,7 +161,6 @@ steps:
     kind: conversation
     agent: robin
     prompt: prompts/complaints.md
-    guarded: true
     requires: [verified_phone]
     satisfied_by: verify
     fields: [complaint, wanted_outcome]

@@ -1,0 +1,42 @@
+# The clinic with `speech: structured` steps: one typed decision per response, reads that continue (`tests.test_structured`).
+version: 1
+id: clinic-structured
+state: structured.py:VisitState
+identity: patient
+services: structured.py:Clinic
+context: {history: {scope: node, turns: 2}}
+agents:
+  receptionist:
+    prompt: prompts/receptionist.md
+operations:
+  book: actions.py:Book
+  check_in: consult.py:CheckIn
+  quote: structured.py:Quote
+steps:
+  - id: desk
+    kind: conversation
+    agent: receptionist
+    prompt: prompts/visit.md
+    speech: structured
+    requires: [checked_in]
+    satisfied_by: front
+    fields: [service, slot, note, wheelchair, visitors, companion]
+    choices: {slot: {function: structured.py:free_times, after: [service]}}
+    operations: [book, quote]
+    consults:
+      - {to: nurse, purpose: 'a medical question about the visit'}
+  - id: front
+    kind: conversation
+    agent: receptionist
+    prompt: prompts/check_in.md
+    speech: structured
+    fields: [patient]
+    operations: [check_in]
+    consults:
+      - {to: nurse, purpose: 'a medical question'}
+  - id: nurse
+    kind: conversation
+    agent: receptionist
+    prompt: prompts/nurse.md
+    speech: structured
+    context: {facts: [service]}

@@ -662,28 +662,26 @@ async def a_consultation_keeps_the_prerequisite_apart():
 
 
 async def an_offer_on_arrival_is_code_s():
-    """`offers: {slot: [...]}`: reached from the prerequisite with what the offer rests on, code looks the times up.
+    """`offers: [slot]`: reached from the prerequisite, code asks the choice function for the first line.
 
     The clinic's `free_times` gives ids and no words, so the offer stands and
-    the agent says it in one reply, with no `options` request. Without the
-    field the offer rests on, nothing is looked up and the agent runs as usual.
-    The clinic has no exit into front, so the call starts where a hand-over to
-    desk leaves it once front is interposed: at front, desk pending, and the
-    request kept (`Checkpoint`, as `turn` records it).
+    the agent says it in one reply, with no `options` request. Closed, it
+    offers nothing, and the agent runs with nothing standing. The clinic has no
+    exit into front, so the call starts where a hand-over to desk leaves it
+    once front is interposed: at front, desk pending, and the request kept
+    (`Checkpoint`, as `turn` records it).
     """
     text = (
         (HERE / 'structured.v2.yaml')
         .read_text()
-        .replace(
-            '    operations: [book, quote]\n',
-            '    offers: {slot: [service]}\n    operations: [book, quote]\n',
-        )
+        .replace('    operations: [book, quote]\n', '    offers: [slot]\n    operations: [book, quote]\n')
     )
-    for service, expected in (('cleaning', ['cleaning']), (None, [])):
+    for closed, told in ((False, 'is on offer now'), (True, 'nothing is on offer')):
         script = Script()
         flow = core.flowspec.load(text, root=HERE).compile(model=script.model)
         clinic = Clinic()
-        call = flow.open(VisitState(service=service), services=clinic, clock=lambda: CLOCK)
+        clinic.closed = closed
+        call = flow.open(VisitState(service='cleaning'), services=clinic, clock=lambda: CLOCK)
         call.commit(agent='front', pending='desk')
         call._checkpoint = Checkpoint('desk', 'A cleaning, please.')
         said, done = await turn(
@@ -695,14 +693,11 @@ async def an_offer_on_arrival_is_code_s():
             reply('Nine or ten on Tuesday.'),
         )
         assert said == ['Thanks, I have you checked in.', 'Nine or ten on Tuesday.'], said
-        assert call.state.agent == 'desk' and done.requests == 2 and clinic.availability == expected, (
+        assert call.state.agent == 'desk' and done.requests == 2 and clinic.availability == ['cleaning'], (
             done,
             clinic.availability,
         )
-        told = script.payloads[-1].history
-        assert ('is on offer now' in told) == bool(service) and ('slot' in call._offers) == bool(service), (
-            told
-        )
+        assert told in script.payloads[-1].history and ('slot' in call._offers) == (not closed), closed
 
 
 async def partial_output_commits_nothing():

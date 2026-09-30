@@ -90,8 +90,8 @@ async def read_back(flow, call, script, reads: Reads, heard: bool = True) -> lis
         reply('On Friday I have 2:00 PM. Does that work?'),
     )
     assert said == ['On Friday I have 2:00 PM. Does that work?'] and len(script.requests) - before == 2, said
-    assert reads.availability == [f'{FRIDAY} haircut 14:00'] and reads.holdings == 1, (
-        'one availability read; the bookings held are a read of their own'
+    assert reads.availability == [f'{FRIDAY} haircut 14:00'] and reads.holdings == 0, (
+        'one availability read; a new booking reads no bookings held'
     )
     said = await turn(
         flow,
@@ -107,12 +107,12 @@ async def read_back(flow, call, script, reads: Reads, heard: bool = True) -> lis
     return said
 
 
-def seed(diary: Diary, day: str = FRIDAY, at_time: str = '09:00') -> str:
+def seed(diary: Diary, day: str = FRIDAY, at_time: str = '09:00', additional: bool = False) -> str:
     """A booking the caller already holds, made through the diary's own offer and write."""
     from datetime import date
 
     diary.find_slots(PHONE, date.fromisoformat(day), 'haircut', CLOCK, offered_to='seed', prefer=at_time)
-    return diary.save_booking(PHONE, 'book', slot(day, at_time), '', False, CLOCK, offered_to='seed')[
+    return diary.save_booking(PHONE, 'book', slot(day, at_time), '', additional, CLOCK, offered_to='seed')[
         'booking_id'
     ]
 
@@ -181,8 +181,8 @@ async def the_number_said_back_is_a_yes():
     )
 
 
-async def a_day_with_nothing_to_offer_is_the_agents():
-    """`offers: {slot: [...]}` on arrival: a closed day offers nothing, so booking's agent answers with the salon's note."""
+async def a_closed_day_is_said_by_code():
+    """`offers: [slot]` on arrival: a closed day offers nothing, and find_times' words ask for another day."""
     script, flow, call, diary = opened(customer=KNOWN)
     reads = Reads(diary)
     sunday = {'service': 'haircut', 'booking_day': '2026-10-04', 'booking_time': '10:00'}
@@ -192,12 +192,10 @@ async def a_day_with_nothing_to_offer_is_the_agents():
         script,
         'A haircut on Sunday at ten.',
         ('call', 'hand_over', {'to': 'booking', 'because': 'a haircut', 'update': sunday}),
-        reply('We are closed on Sundays. Would Saturday suit you?'),
     )
-    assert said == ['We are closed on Sundays. Would Saturday suit you?'], said
-    assert [r.step for r in script.requests] == ['concierge', 'booking'] and len(reads.availability) == 1
-    assert 'closed on Sunday' in script.requests[-1].payload.history, 'the note reaches the agent'
-    assert 'slot' not in call._offers, 'nothing stands on offer: the agent may look again'
+    assert said == ["We're closed on Sunday the 4th. Which other day would you like?"], said
+    assert [r.step for r in script.requests] == ['concierge'] and len(reads.availability) == 1
+    assert 'slot' not in call._offers, 'nothing stands on offer: the next read looks again'
 
 
 async def a_number_that_cannot_be_right_gets_the_locales_words():
@@ -272,16 +270,37 @@ async def a_past_date_is_refused():
 
 
 async def a_booking_is_moved_and_cancelled():
-    script, flow, call, diary, _ = at('booking')
+    """Moving and cancelling are steps of their own; each one's first line on arrival is code's.
+
+    Moving names the booking held and asks for the new day, with no request.
+    The move's read, with the booking it moves in its update, finds the
+    booking's own service. Cancelling, with one booking held, has no words of
+    its own: its agent goes straight to the cancel's read-back, the one question.
+    """
+    script, flow, call, diary, _ = at('concierge')
     held = seed(diary)
-    await turn(flow, call, script, 'Can I move my Friday one?', ('call', 'options'), reply('To when?'))
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Can I move my Friday one?',
+        ('call', 'hand_over', {'to': 'moving', 'because': 'a move'}),
+    )
+    assert said == [
+        'You have a haircut Friday the 2nd at 9:00 AM. Which day would you like to move it to?'
+    ], said
+    assert call.state.agent == 'moving' and len(script.requests) == 1, "the first line is code's"
     said = await turn(
         flow,
         call,
         script,
         'Tuesday at two instead.',
-        ('call', 'options', {'update': {'booking_day': TUESDAY, 'booking_time': '14:00'}}),
-        ('call', 'move_appointment', {'update': {'booking_id': held, 'slot': slot(TUESDAY, '14:00')}}),
+        (
+            'call',
+            'options',
+            {'update': {'booking_id': held, 'booking_day': TUESDAY, 'booking_time': '14:00'}},
+        ),
+        ('call', 'move_appointment', {'update': {'slot': slot(TUESDAY, '14:00')}}),
     )
     assert said[-1] == 'Shall I move your haircut from Friday the 2nd at 9:00 AM to tomorrow at 2:00 PM?', (
         said
@@ -293,11 +312,48 @@ async def a_booking_is_moved_and_cancelled():
         call,
         script,
         'Actually, cancel it.',
+        ('call', 'hand_over', {'to': 'cancelling', 'because': 'a cancellation'}),
         ('call', 'cancel_appointment', {'update': {'booking_id': held}}),
     )
-    assert said[-1] == 'Shall I cancel your haircut tomorrow at 2:00 PM?', said
+    assert (
+        said[-1] == 'Shall I cancel your haircut tomorrow at 2:00 PM?' and call.state.agent == 'cancelling'
+    ), said
     said = await turn(flow, call, script, 'Yes.', ('call', 'cancel_appointment'))
     assert booked(diary) == [] and said == ["That's cancelled for you. Anything else I can help with?"], said
+
+
+async def each_step_says_its_own_first_line():
+    """On arrival, the step's choice function says what comes first: ask the day, or which booking to cancel."""
+    script, flow, call, diary = opened()
+    said = await turn(
+        flow,
+        call,
+        script,
+        'A haircut, please.',
+        ('call', 'hand_over', {'to': 'booking', 'because': 'a haircut', 'update': {'service': 'haircut'}}),
+    )
+    said = await turn(flow, call, script, 'Yes.', ('call', 'lookup_customer'))
+    assert said == ['Thanks, I have you.', 'Which day would you like?'] and len(script.requests) == 2, said
+    assert call.state.agent == 'booking' and 'slot' not in call._offers, 'a question is no offer'
+
+    script, flow, call, diary, _ = at('concierge')
+    seed(diary)
+    seed(diary, TUESDAY, '10:00', additional=True)
+    said = await turn(
+        flow,
+        call,
+        script,
+        'I need to cancel a booking.',
+        ('call', 'hand_over', {'to': 'cancelling', 'because': 'a cancellation'}),
+    )
+    assert said == [
+        'You have a haircut tomorrow at 10:00 AM or a haircut Friday the 2nd at 9:00 AM. '
+        'Which one would you like to cancel?'
+    ], said
+    assert len(script.requests) == 1 and booked(diary) == [
+        ('haircut', TUESDAY, '10:00'),
+        ('haircut', FRIDAY, '09:00'),
+    ]
 
 
 async def a_complaint_is_read_back_in_the_callers_words():
@@ -631,12 +687,13 @@ elif __name__ == '__main__':
     asyncio.run(requests_are_pinned())
     asyncio.run(verification_reads_the_caller_id_back_and_looks_it_up())
     asyncio.run(the_number_said_back_is_a_yes())
-    asyncio.run(a_day_with_nothing_to_offer_is_the_agents())
+    asyncio.run(a_closed_day_is_said_by_code())
     asyncio.run(a_number_that_cannot_be_right_gets_the_locales_words())
     asyncio.run(a_heard_yes_books_once())
     asyncio.run(a_repeat_reads_nothing())
     asyncio.run(a_past_date_is_refused())
     asyncio.run(a_booking_is_moved_and_cancelled())
+    asyncio.run(each_step_says_its_own_first_line())
     asyncio.run(a_complaint_is_read_back_in_the_callers_words())
     asyncio.run(false_is_a_value_and_null_clears_it())
     asyncio.run(a_stylist_answers_and_the_read_back_is_asked_again())

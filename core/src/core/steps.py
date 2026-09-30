@@ -1807,11 +1807,13 @@ class ConversationStep(Step):
     open with it said "I'll connect you with someone" instead (Coval gate 1
     rerun, cBrx4NhR). Tried after `opens_with`.
     """
-    offers: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
-    """Choice -> fields it needs: offered on arrival in its choice function's words (`say`), with no model request.
+    offers: tuple[str, ...] = ()
+    """Choices whose function says the step's first line on arrival (`say`), with no model request.
 
-    On arrival by a hand-over or a completed prerequisite, when those fields
-    are set and the choice has no standing offer. Session 4, Coval runs
+    On arrival by a hand-over or a completed prerequisite, while the choice has
+    no standing offer. The function decides: an offer (ids and words), a
+    question for what it still needs (words alone), ids for the agent to word,
+    or a note for the agent. Session 4, Coval runs
     82gmB8t5 and DezcEAK4: booking reached from verify spent three requests
     (`options`, then `reply`) on the offer the request already decided, and the
     caller talked over the silence after "Thanks, I have you." A choice with
@@ -1872,34 +1874,38 @@ class ConversationStep(Step):
         return self.asks[missing] if missing else ''
 
     def _offer_first(self) -> tuple[Opening[Any], ...]:
-        return tuple(self._offer_on_arrival(name, needs) for name, needs in self.offers.items())
+        return tuple(self._offer_on_arrival(name) for name in self.offers)
 
-    def _offer_on_arrival(self, name: str, needs: tuple[str, ...]) -> Opening[Any]:
+    def _offer_on_arrival(self, name: str) -> Opening[Any]:
+        """The choice function's first line, said by code: an offer, a question for what it needs, or nothing."""
         choose = self.choices[name]
-
-        def ready(call: FlowCall[Any]) -> bool:
-            return name not in call._offers and all(
-                present(getattr(call.state.facts, f, None)) for f in needs
-            )
 
         async def offer(call: FlowCall[Any]) -> str:
             found = await _offer(call, {name: choose}, announce=True)
             problem = found.get('stale') or found.get('unavailable') or ''
-            if problem or not call._offers.get(name):
+            if problem:
                 call._offers.take(name)
-                note = found.get(name, {}).get('note', '')
-                raise ModelRetry(
-                    problem or f'nothing is on offer for {name} for what they asked. {note}'.strip()
-                )
+                raise ModelRetry(problem)
+            pickable = bool(call._offers.get(name))
             words = call._offers.announce(call.state.agent, [name], call.turn)
-            if not words:
+            if not pickable:
+                call._offers.take(name)
+            if words:
+                await call.speak_now(words, origin='ask')
+                return words
+            note = found.get(name, {}).get('note', '')
+            if pickable:
                 raise ModelRetry(
-                    f'{name} is on offer now, under "On offer": tell the caller in your own words.'
+                    f'{name} is on offer now, under "On offer": carry on from it. {note}'.strip()
                 )
-            await call.speak_now(words, origin='ask')
-            return words
+            raise ModelRetry(f'nothing is on offer for {name}. {note}'.strip())
 
-        return Opening('options', ready, offer, arrivals=frozenset({'handoff', 'completed'}))
+        return Opening(
+            'options',
+            lambda call: name not in call._offers,
+            offer,
+            arrivals=frozenset({'handoff', 'completed'}),
+        )
 
     def _ask_first(self) -> tuple[Opening[Any], ...]:
         if not self.asks:

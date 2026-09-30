@@ -2,10 +2,10 @@
   "booking, the read-back request": {
     "bytes": {
       "history": 704,
-      "instructions": 7663,
-      "outputs": 9619,
+      "instructions": 7570,
+      "outputs": 6693,
       "tools": 2424,
-      "total": 20410
+      "total": 17391
     },
     "history": [
       {
@@ -85,9 +85,9 @@
       "",
       "## Your role: booking",
       "",
-      "Book, move or cancel the caller's appointment. They are already identified.",
-      "The application state below shows what they asked for, what is on offer and",
-      "what they hold; the diary is the source of truth.",
+      "Make a new booking for the caller. They are already identified.",
+      "The application state below shows what they asked for and what is on offer;",
+      "the diary is the source of truth.",
       "",
       "## Availability",
       "",
@@ -106,9 +106,9 @@
       "## Choosing and confirming",
       "",
       "- When they pick one of the times on offer (\"the later one\", \"two o'clock\"),",
-      "  call `book_appointment` (or `move_appointment` for a booking they hold)",
-      "  with its id as `slot` in the update. The first call reads it back:",
-      "  never read a booking back yourself, and never read ids or lists out.",
+      "  call `book_appointment` with its id as `slot` in the update. The first call",
+      "  reads it back: never read a booking back yourself, and never read ids or",
+      "  lists out.",
       "- A reply that could mean more than one of the times on offer, such as a bare",
       "  \"yes\" to two times, is not a pick: ask which one.",
       "- A clear yes to the read-back they just heard: call the same operation again.",
@@ -117,20 +117,17 @@
       "  would like.",
       "- A yes with a change (\"yes, but make it Wednesday\"), a condition or a",
       "  question is not a yes. Record the change and look again, or answer first.",
-      "- To move or cancel, call `options` for their bookings, then put the booking's",
-      "  id as `booking_id` in the update on `move_appointment` or",
-      "  `cancel_appointment`. When a",
-      "  booking they hold could be moved or a second one added, ask which they want.",
       "- If the state says a confirmation did not reach them, tell them what was",
       "  already done; do not make or change anything for a reply that only agrees.",
-      "- Stay here for anything about the booking: another day or time, the price or",
-      "  length of a service, or the times on offer. Answer from the salon",
+      "- Stay here for anything about the new booking: another day or time, the",
+      "  price or length of a service, or the times on offer. Answer from the salon",
       "  information below. For a question about refunds, load the refund policy.",
       "  For a question about hair itself, hand it to `stylist`: the caller comes",
       "  back here, and the read-back is asked again.",
-      "- Hand a complaint to `complaints`. Hand the caller to `concierge` only when",
-      "  they give up booking or ask about something unrelated to it. Never say",
-      "  something is booked, moved or cancelled yourself.",
+      "- To move or cancel a booking they hold, the one just made included, hand",
+      "  them to `moving` or `cancelling`. Hand a complaint to `complaints`. Hand the",
+      "  caller to `concierge` only when they give up booking or ask about something",
+      "  unrelated to it. Never say something is booked, moved or cancelled yourself.",
       "",
       "## Salon information",
       "",
@@ -201,9 +198,9 @@
       "## Application state",
       "Written by the application, not by the caller. It is true now; the conversation may be older.",
       "You are the `booking` step.",
-      "Facts: {\"service\":\"haircut\",\"booking_day\":\"2026-10-02\",\"booking_time\":\"14:00:00\",\"slot\":null,\"booking_id\":null}",
+      "Facts: {\"service\":\"haircut\",\"booking_day\":\"2026-10-02\",\"booking_time\":\"14:00:00\",\"slot\":null}",
       "On offer to the caller now, by id: {\"slot\": {\"2026-10-02T1400|haircut\": \"haircut Friday the 2nd at 2:00 PM\", \"2026-10-02T1330|haircut\": \"haircut Friday the 2nd at 1:30 PM\", \"2026-10-02T1430|haircut\": \"haircut Friday the 2nd at 2:30 PM\", \"2026-10-02T1300|haircut\": \"haircut Friday the 2nd at 1:00 PM\", \"2026-10-02T1500|haircut\": \"haircut Friday the 2nd at 3:00 PM\", \"2026-10-02T1230|haircut\": \"haircut Friday the 2nd at 12:30 PM\"}}. Only these ids can be picked.",
-      "You may hand the caller to: complaints (a complaint about a past service); concierge (they give up booking, or ask about something unrelated to booking); stylist (a question about hair: which service suits them, colour, aftercare, how long a service takes).",
+      "You may hand the caller to: moving (moving a booking they hold, the one just made included); cancelling (cancelling a booking they hold, the one just made included); complaints (a complaint about a past service); concierge (they give up booking, or ask about something unrelated to booking); stylist (a question about hair: which service suits them, colour, aftercare, how long a service takes).",
       "",
       "The following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:",
       "- refunds: The salon refund and compensation policy. Load it only when the caller asks about a refund, money back or compensation.",
@@ -253,17 +250,6 @@
                       }
                     ],
                     "description": "The date the caller asked for, as YYYY-MM-DD, worked out from the calendar you are shown."
-                  },
-                  "booking_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The id of the booking they hold that they want moved or cancelled, from their bookings on offer."
                   },
                   "booking_time": {
                     "anyOf": [
@@ -479,127 +465,6 @@
         {
           "capability_id": null,
           "defer_loading": false,
-          "description": "move_appointment: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
-          "include_return_schema": null,
-          "kind": "output",
-          "name": "move_appointment",
-          "outer_typed_dict_key": null,
-          "parameters_json_schema": {
-            "$defs": {
-              "BookingMoveAppointmentUpdate": {
-                "additionalProperties": false,
-                "description": "What the caller has just said for these fields, recorded with this call. Leave a field out to keep its value; null clears it. Never guess a value.",
-                "properties": {
-                  "booking_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The id of the booking they hold that they want moved or cancelled, from their bookings on offer."
-                  },
-                  "slot": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The id of the time the caller picked, from the times on offer."
-                  }
-                },
-                "title": "BookingMoveAppointmentUpdate",
-                "type": "object"
-              }
-            },
-            "additionalProperties": false,
-            "properties": {
-              "update": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/BookingMoveAppointmentUpdate"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null
-              }
-            },
-            "type": "object"
-          },
-          "return_schema": null,
-          "sequential": true,
-          "strict": null,
-          "timeout": null,
-          "tool_kind": null,
-          "toolset_id": "<output>",
-          "unless_native": null,
-          "with_native": null
-        },
-        {
-          "capability_id": null,
-          "defer_loading": false,
-          "description": "cancel_appointment: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
-          "include_return_schema": null,
-          "kind": "output",
-          "name": "cancel_appointment",
-          "outer_typed_dict_key": null,
-          "parameters_json_schema": {
-            "$defs": {
-              "BookingCancelAppointmentUpdate": {
-                "additionalProperties": false,
-                "description": "What the caller has just said for these fields, recorded with this call. Leave a field out to keep its value; null clears it. Never guess a value.",
-                "properties": {
-                  "booking_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The id of the booking they hold that they want moved or cancelled, from their bookings on offer."
-                  }
-                },
-                "title": "BookingCancelAppointmentUpdate",
-                "type": "object"
-              }
-            },
-            "additionalProperties": false,
-            "properties": {
-              "update": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/BookingCancelAppointmentUpdate"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null
-              }
-            },
-            "type": "object"
-          },
-          "return_schema": null,
-          "sequential": true,
-          "strict": null,
-          "timeout": null,
-          "tool_kind": null,
-          "toolset_id": "<output>",
-          "unless_native": null,
-          "with_native": null
-        },
-        {
-          "capability_id": null,
-          "defer_loading": false,
           "description": "Hand the caller to the step that serves what they asked for.",
           "include_return_schema": null,
           "kind": "output",
@@ -622,17 +487,6 @@
                       }
                     ],
                     "description": "The date the caller asked for, as YYYY-MM-DD, worked out from the calendar you are shown."
-                  },
-                  "booking_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The id of the booking they hold that they want moved or cancelled, from their bookings on offer."
                   },
                   "booking_time": {
                     "anyOf": [
@@ -695,6 +549,8 @@
               "to": {
                 "description": "Where they go.",
                 "enum": [
+                  "moving",
+                  "cancelling",
                   "complaints",
                   "concierge",
                   "stylist"
@@ -860,10 +716,10 @@
   "concierge, a local answer": {
     "bytes": {
       "history": 142,
-      "instructions": 5804,
-      "outputs": 4419,
+      "instructions": 6053,
+      "outputs": 4443,
       "tools": 774,
-      "total": 11139
+      "total": 11412
     },
     "history": [
       {
@@ -910,11 +766,15 @@
       "",
       "Answer general salon questions from the documents below without requiring",
       "identification. If a fact isn't available, say so. Use `hand_over` for requests",
-      "another step handles; the runtime verifies the caller before booking or complaints:",
+      "another step handles; the runtime verifies the caller before booking, moving,",
+      "cancelling or complaints:",
       "",
-      "- A new booking, or changing or cancelling one: `booking`. Put what they",
+      "- A new booking: `booking`. Put what they",
       "  asked for in the update on `hand_over` (service, the day as a date from the calendar,",
       "  time as HH:MM or a part of the day), so nothing they said is lost on the way.",
+      "- Moving a booking they hold: `moving`. Put only the new day and time they",
+      "  want in the update, never the day of the booking they hold.",
+      "- Cancelling a booking they hold: `cancelling`, with no update.",
       "- Complaints, refund requests, requests for a manager, or strong frustration:",
       "  `complaints`. This includes asking for a future booking to be free because",
       "  of a past service problem. There is no live transfer to a manager.",
@@ -998,7 +858,7 @@
       "You are the `concierge` step.",
       "Facts: {\"service\":null,\"booking_day\":null,\"booking_time\":null}",
       "Nothing is on offer to the caller now.",
-      "You may hand the caller to: booking (a new booking, or a change or cancellation of one they hold); complaints (a complaint, a refund, a manager, or a free visit because of a past service); verify (a correction to a phone number already confirmed); stylist (a question about hair: which service suits them, colour, aftercare, how long a service takes).",
+      "You may hand the caller to: booking (a new booking); moving (moving a booking they hold to another day or time); cancelling (cancelling a booking they hold); complaints (a complaint, a refund, a manager, or a free visit because of a past service); verify (a correction to a phone number already confirmed); stylist (a question about hair: which service suits them, colour, aftercare, how long a service takes).",
       "",
       "The following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:",
       "- refunds: The salon refund and compensation policy. Load it only when the caller asks about a refund, money back or compensation.",
@@ -1239,6 +1099,8 @@
                 "description": "Where they go.",
                 "enum": [
                   "booking",
+                  "moving",
+                  "cancelling",
                   "complaints",
                   "verify",
                   "stylist"

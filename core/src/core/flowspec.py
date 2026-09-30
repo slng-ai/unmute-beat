@@ -782,15 +782,25 @@ class _Resolver:
     def choices(
         self, step: str, fields: list[str], refs: Mapping[str, str | ChoiceSpec]
     ) -> dict[str, Callable[..., Any]]:
+        """Each choice's function, and what its offer rests on (`after:`), the same in every step that offers it.
+
+        `after:` may name a state field another step changes: an offer is taken
+        away call-wide (`FlowCall._choice_after`), so a slot resting on the
+        booking being moved rests on it in a step that never picks one too.
+        """
         found = {}
         for name, ref in refs.items():
             if name not in fields:
                 self.fail(step, f'offers choices for {name!r}, which the step does not ask for')
             after = frozenset(ref.after) if isinstance(ref, ChoiceSpec) else None
             for field_name in sorted(after or ()):
-                if field_name == name or field_name not in fields:
+                if field_name == name:
+                    self.fail(step, f'offers {name!r} after {field_name!r}, which is the choice itself')
+                elif field_name not in fields and field_name not in self.state_type().model_fields:
                     self.fail(
-                        step, f'offers {name!r} after {field_name!r}, which is not another of its fields'
+                        step,
+                        f'offers {name!r} after {field_name!r}, which the state '
+                        f'{self.state_type().__name__} does not have',
                     )
             if self.choice_after.setdefault(name, after) != after:
                 self.fail(step, f'offers {name!r} after other fields than another step that offers it')
@@ -1094,14 +1104,14 @@ class ConversationSpec(StepSpec):
     """One of `operations`, read back by code on arrival when the state already gives its arguments."""
     asks: dict[str, str] = {}
     """Field -> words: on arrival by a hand-over, code asks for the first of these fields still empty, no model."""
-    offers: dict[str, list[str]] = {}
-    """Choice -> the fields it needs: on arrival, once those are set, code makes the offer and says its words.
+    offers: list[str] = []
+    """Choices code offers on arrival (a hand-over or a completed prerequisite), each in its function's own words.
 
-    A hand-over or a completed prerequisite. `after:` says what takes an offer
-    away; this says what code needs to make one (a time the caller may not have
-    given yet is not needed). The words are the choice function's `say`; with
-    none, or nothing to offer, the step's agent runs as usual
-    (`ConversationStep.offers`). Tried after `opens_with` and `asks`.
+    The choice function owns the step's first line: it offers, or asks for
+    what it still needs, in its `say`. Words and ids make an offer; words alone
+    are a question; ids alone stand for the agent to word; neither leaves the
+    arrival to the agent with the function's note (`ConversationStep.offers`).
+    Tried after `opens_with` and `asks`.
     """
     refusals: dict[str, str] = {}
     """Field -> `file.py:words`, `(value) -> str`: on a rendered step, what the caller hears when `collect` refused that value.
@@ -1169,13 +1179,9 @@ class ConversationSpec(StepSpec):
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         for name in sorted(set(self.asks) - set(self.fields)):
             resolve.fail(self.id, f'asks for {name!r}, which is not one of its fields')
-        for name, needs in self.offers.items():
+        for name in self.offers:
             if name not in self.choices:
                 resolve.fail(self.id, f'offers {name!r} on arrival, which is not one of its choices')
-            for field_name in sorted(set(needs) - set(self.fields)):
-                resolve.fail(
-                    self.id, f'offers {name!r} once {field_name!r} is set, which is not one of its fields'
-                )
         for name, ref in self.refusals.items():
             if name not in self.fields:
                 resolve.fail(self.id, f'words a refusal of {name!r}, which is not one of its fields')
@@ -1332,7 +1338,7 @@ class ConversationSpec(StepSpec):
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             asks=dict(self.asks),
-            offers={name: tuple(needs) for name, needs in self.offers.items()},
+            offers=tuple(self.offers),
             refusals={
                 name: found
                 for name, ref in self.refusals.items()

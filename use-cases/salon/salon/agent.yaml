@@ -1,7 +1,7 @@
 # Sage and Stone on core's simpler contract, in manifest version 2: steps keyed by id.
 #
 # Each step is one agent. Its words and the caller's update travel in one typed decision
-# (`speech: structured`, the version 2 default), so a step records what the caller said with the answer
+# (structured speech, the only kind core has), so a step records what the caller said with the answer
 # it gives. It answers through what is declared here: fields it may record, choices it may offer,
 # operations it may carry out (each read back first, and done only on the caller's yes to that
 # read-back), steps it may hand the caller to, and a stylist it may consult and get the caller back from.

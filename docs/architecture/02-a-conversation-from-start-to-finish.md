@@ -4,7 +4,7 @@ This chapter follows one real salon call before any configuration. The caller bo
 to the next day. Each turn shows what the model chose and what code said. Every turn costs one model request.
 
 The words below come from a real-model text run of the reference salon
-([`use-cases/salone-concierge-graph-new`](../../use-cases/salone-concierge-graph-new/)). A live model can still
+([`use-cases/salon`](../../use-cases/salon/)). A live model can still
 choose wrongly. The offline check at the end runs the same mechanics with a scripted model.
 
 ## 1. The nodes this call uses
@@ -138,11 +138,11 @@ lost.
 
 | File | What it gives this call |
 |---|---|
-| [`state.py`](../../use-cases/salone-concierge-graph-new/salon/state.py) | `SalonState`: the phone, customer, service, day, time, slot and booking id |
-| [`operations.py`](../../use-cases/salone-concierge-graph-new/salon/operations.py) | `LookupCustomer`, `BookAppointment` and `MoveAppointment`, each with its read-back and receipt words |
-| [`offers.py`](../../use-cases/salone-concierge-graph-new/salon/offers.py) | `find_times` and `bookings_to_move`: what is on offer, and the words for it |
-| [`prompts/`](../../use-cases/salone-concierge-graph-new/salon/prompts/) | one prompt per node, and the shared voice and diary rules |
-| [`agent.yaml`](../../use-cases/salone-concierge-graph-new/salon/agent.yaml) | the nodes, what each sees and changes, and how they connect |
+| [`state.py`](../../use-cases/salon/salon/state.py) | `SalonState`: the phone, customer, service, day, time, slot and booking id |
+| [`operations.py`](../../use-cases/salon/salon/operations.py) | `LookupCustomer`, `BookAppointment` and `MoveAppointment`, each with its read-back and receipt words |
+| [`offers.py`](../../use-cases/salon/salon/offers.py) | `find_times` and `bookings_to_move`: what is on offer, and the words for it |
+| [`prompts/`](../../use-cases/salon/salon/prompts/) | one prompt per node, and the shared voice and diary rules |
+| [`agent.yaml`](../../use-cases/salon/salon/agent.yaml) | the nodes, what each sees and changes, and how they connect |
 
 At startup the application loads and checks these files once. For each call it opens a separate state:
 
@@ -162,7 +162,7 @@ From the repository root, after `uv sync --all-packages`, run the salon's move-a
 model, so no provider request is made:
 
 ```bash
-cd use-cases/salone-concierge-graph-new
+cd use-cases/salon
 GOOGLE_API_KEY=x uv run python -c "
 import asyncio
 from tests.test_business import a_booking_is_moved_and_cancelled, the_booking_just_made_moves_to_the_day_given
@@ -185,7 +185,7 @@ execution, not live language understanding or audio.
   `record`) and `ConversationStep._operate` (read-back, then carry out on a yes).
 - [Executable graph](../../core/src/core/flow.py) and [turn engine](../../core/src/core/turn.py): prerequisites,
   hand-overs, and one caller turn from start to end.
-- [Salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py): every path above, with the
+- [Salon tests](../../use-cases/salon/tests/test_business.py): every path above, with the
   requests pinned in `golden/payloads.json`.
 
 [← Stack and boundaries](01-stack-and-boundaries.md) · [Reading guide](README.md) · [Next: state, memory, records and services →](03-typed-state-and-history.md)

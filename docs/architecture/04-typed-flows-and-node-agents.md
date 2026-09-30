@@ -76,7 +76,7 @@ and routing.
 
 ## 3. The manifest, top to bottom
 
-The header of the salon's [`agent.yaml`](../../use-cases/salone-concierge-graph-new/salon/agent.yaml), trimmed:
+The header of the salon's [`agent.yaml`](../../use-cases/salon/salon/agent.yaml), trimmed:
 
 ```yaml
 version: 2
@@ -108,7 +108,7 @@ operations:
 
 | Key | What it does |
 |---|---|
-| `version: 2` | Steps are keyed by id. A step with no `kind` is a conversation, and one with no `speech` is `structured`. |
+| `version: 2` | The only version. Steps are keyed by id. A step with no `kind` is a conversation. |
 | `state` / `identity` | The application's state model, and the field that names the caller. |
 | `entry` | The node every call starts in. |
 | `current_datetime` | The call's clock. Every node's model sees today and a labelled 14-day calendar. |
@@ -169,7 +169,7 @@ Every key is checked at load.
 ## 4. What the model can choose
 
 Each node's agent answers every request with **exactly one typed decision**. The caller's update rides on it. This
-is `speech: structured`, in [`core/structured.py`](../../core/src/core/structured.py). A booking request offers:
+is structured speech, in [`core/structured.py`](../../core/src/core/structured.py). A booking request offers:
 
 | Output | What it does | Who speaks |
 |---|---|---|
@@ -213,7 +213,7 @@ node's own, it asks the choice function, then:
    known, so `find_times` offers that day's times.
 4. If nothing has words, the node's agent answers, with the functions' notes.
 
-The choice functions are plain application code. [`offers.py`](../../use-cases/salone-concierge-graph-new/salon/offers.py):
+The choice functions are plain application code. [`offers.py`](../../use-cases/salon/salon/offers.py):
 
 ```python
 def bookings_to_cancel(salon: Salon, state: SalonState) -> Times:
@@ -250,8 +250,8 @@ flowchart TD
     Routes --> Graph["pydantic_graph: steps and routing decisions"]
 ```
 
-1. **Load.** `core.load` parses the YAML and refuses a key given twice. Version 2 is normalized into the same
-   internal steps table (`FlowSpec._normalized`), so there is one executor.
+1. **Load.** `core.load` parses the YAML and refuses a key given twice. The steps keyed by id are normalized
+   into one internal steps table (`FlowSpec._normalized`), so there is one executor.
 2. **Resolve.** Core finds the state model, operation classes, choice functions, capabilities and prompt files. It
    checks that every field, exit, choice and `after:` name exists and that operation arguments fit the state. Each
    prompt is compiled against the view its node sees, so a placeholder naming a hidden field fails here.
@@ -294,20 +294,13 @@ or TTS. Faro uses it for English and Spanish.
 `flow.greeting(call, words)` returns the greeting, then what the entry node opens with, such as a caller ID read
 back. That read-back then becomes the question the first reply answers. It still needs playback evidence.
 
-## 9. Version 1
-
-Version 1 manifests still load until the cleanup. They use a list of steps with `id` and `kind`, `prose` speech by
-default, and the `collect` tool as the model's write path. The one application still on version 1 is `salon-graph`.
-It will be retired. Write new use cases in version 2. [`core/tests/test_v2.py`](../../core/tests/test_v2.py) checks
-that each version 2 twin of a clinic fixture normalizes to its version 1 source and sends the same requests.
-
 ## Inspect a compiled graph offline
 
 From the repository root after `uv sync --all-packages`, compile the salon and print its legal moves, without any
 provider request:
 
 ```bash
-cd use-cases/salone-concierge-graph-new
+cd use-cases/salon
 GOOGLE_API_KEY=x uv run python -c "
 from core.flow import Flow
 from salon.app import FLOW
@@ -324,7 +317,7 @@ live model will choose.
 
 ## Check this against the code
 
-- [Manifest compiler](../../core/src/core/flowspec.py): `FlowSpec`, `_normalized` for version 2, and every load check.
+- [Manifest compiler](../../core/src/core/flowspec.py): `FlowSpec`, `_normalized`, and every load check.
 - [Structured decisions](../../core/src/core/structured.py): the outputs above and how an update is applied.
 - [Compiled steps](../../core/src/core/steps.py): `ConversationStep.offer`, `owes_offer`, `_operate`, and prerequisite
   returns.
@@ -332,7 +325,7 @@ live model will choose.
   `Opening`, `route`.
 - [Structured tests](../../core/tests/test_structured.py): one request per local answer, a pick read back by code,
   and a `record` that offers again.
-- [Salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py): every node's first line said by
+- [Salon tests](../../use-cases/salon/tests/test_business.py): every node's first line said by
   code, and the whole call at one request per turn.
 
 [← State, memory, records and services](03-typed-state-and-history.md) · [Reading guide](README.md) · [Next: operations, approval and recovery →](05-tools-approval-and-recovery.md)

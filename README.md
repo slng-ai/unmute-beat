@@ -303,14 +303,14 @@ Four kinds of data live in a call. They are kept apart on purpose.
 
 1. **Offline.** Drive the real flow with a scripted model, so no provider request is made. Check the end state of
    the backend, not the words. Pin each node's request in a golden file, so a prompt or schema change shows in a
-   diff. The salon's [`tests/`](use-cases/salone-concierge-graph-new/tests/) folder is the pattern to copy.
+   diff. The salon's [`tests/`](use-cases/salon/tests/) folder is the pattern to copy.
 2. **Live.** Run the calls on Coval over a real phone line, with
    [`coval_sim`](use-cases/concierge-tools/coval_sim/). Judge them by the backend's end state, the traces and
    [`load_report`](use-cases/concierge-tools/load_report.py).
 
 ## Example: the salon
 
-The reference application is [`use-cases/salone-concierge-graph-new`](use-cases/salone-concierge-graph-new/), a hair
+The reference application is [`use-cases/salon`](use-cases/salon/), a hair
 salon called Sage and Stone. Its backend is a diary of bookings.
 
 ```mermaid
@@ -375,11 +375,11 @@ The salon's files:
 
 | File | Holds |
 |---|---|
-| [`state.py`](use-cases/salone-concierge-graph-new/salon/state.py) | `SalonState`: phone, customer, service, day, time, slot, booking id, complaint |
-| [`operations.py`](use-cases/salone-concierge-graph-new/salon/operations.py) | `LookupCustomer`, `BookAppointment`, `MoveAppointment`, `CancelAppointment`, `RecordComplaint` |
-| [`offers.py`](use-cases/salone-concierge-graph-new/salon/offers.py) | `find_times`, `bookings_to_move`, `bookings_to_cancel` |
-| [`prompts/`](use-cases/salone-concierge-graph-new/salon/prompts/) | one prompt per node, `_voice.md` and `_diary.md` |
-| [`agent.yaml`](use-cases/salone-concierge-graph-new/salon/agent.yaml) | seven nodes and five operations, about 150 lines |
+| [`state.py`](use-cases/salon/salon/state.py) | `SalonState`: phone, customer, service, day, time, slot, booking id, complaint |
+| [`operations.py`](use-cases/salon/salon/operations.py) | `LookupCustomer`, `BookAppointment`, `MoveAppointment`, `CancelAppointment`, `RecordComplaint` |
+| [`offers.py`](use-cases/salon/salon/offers.py) | `find_times`, `bookings_to_move`, `bookings_to_cancel` |
+| [`prompts/`](use-cases/salon/salon/prompts/) | one prompt per node, `_voice.md` and `_diary.md` |
+| [`agent.yaml`](use-cases/salon/salon/agent.yaml) | seven nodes and five operations, about 150 lines |
 
 ### Live results
 
@@ -415,7 +415,7 @@ The workspace uses Python 3.14+ and uv. Put the provider keys in the root `.env`
 
 ```bash
 uv sync --all-packages
-cd use-cases/salone-concierge-graph-new
+cd use-cases/salon
 uv run bot.py              # voice in the browser, http://localhost:7860
 uv run python -m tests     # the offline suite, no model requests
 ```

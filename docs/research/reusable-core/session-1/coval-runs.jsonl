@@ -1,6 +1,0 @@
-{"key": "session-1|JxGgSPA55DcFcDcvbKAUQM|kQ8b6nMZ|MUFJdYAHdBHU6UbRRu4ykM|1", "at": "2026-09-25T11:05:36.532272+00:00", "name": "session-1 salon kQ8b6nMZ 10753c21", "status": "intent"}
-{"key": "session-1|JxGgSPA55DcFcDcvbKAUQM|kQ8b6nMZ|MUFJdYAHdBHU6UbRRu4ykM|1", "at": "2026-09-25T11:05:37.352191+00:00", "name": "session-1 salon kQ8b6nMZ 10753c21", "status": "launched", "run_id": "Li7JG95o4iLbw9qcwFMFri"}
-{"key": "session-1|JxGgSPA55DcFcDcvbKAUQM|kQ8b6nMZ|MUFJdYAHdBHU6UbRRu4ykM|1", "at": "2026-09-25T11:08:15.385908+00:00", "name": "session-1 salon kQ8b6nMZ 10753c21", "status": "finished", "run_id": "Li7JG95o4iLbw9qcwFMFri", "remote": "COMPLETED"}
-{"key": "session-1|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T11:09:30.110114+00:00", "name": "session-1 salon K3Xwqi7g e54f2a29", "status": "intent"}
-{"key": "session-1|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T11:09:30.909549+00:00", "name": "session-1 salon K3Xwqi7g e54f2a29", "status": "launched", "run_id": "gVoJZjyGLM4eWeuDMewL4h"}
-{"key": "session-1|JxGgSPA55DcFcDcvbKAUQM|K3Xwqi7g|VSruLZYYyz3w7fkdUaheDR|1", "at": "2026-09-25T11:14:14.528427+00:00", "name": "session-1 salon K3Xwqi7g e54f2a29", "status": "finished", "run_id": "gVoJZjyGLM4eWeuDMewL4h", "remote": "COMPLETED"}

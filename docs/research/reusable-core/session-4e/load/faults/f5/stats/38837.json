@@ -1,1 +1,0 @@
-{"pid": 38837, "active": [], "draining": true, "tasks": 3, "fds": 19, "lag": {"n": 680, "p50_ms": 1.0687289934139672, "p99_ms": 2.7238329523242983, "max_ms": 30.18204197287559}, "warmed": [{"model": "function:reading:stream", "answered": true, "input_tokens": 51, "output_tokens": 1}], "at": 1790525617.373426}

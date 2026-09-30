@@ -1,7 +1,0 @@
-fixed: a refused pick loses the new day recorded beside it
-fixed: verify waits with a whole number to read back
-fixed: a restated booking value books without a yes
-fixed: a move refused by the diary is left unknown
-fixed: a day change forgets the appointment being moved
-fixed: "day after tomorrow" names no day
-fixed: verify says a digit read-back in model words

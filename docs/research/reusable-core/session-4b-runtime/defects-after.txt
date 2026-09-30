@@ -1,3 +1,0 @@
-fixed: a write cancelled after its commit is sent again
-fixed: an invalid reconciliation answer clears the retry guard
-fixed: a lookup receipt backs a goodbye that claims a booking

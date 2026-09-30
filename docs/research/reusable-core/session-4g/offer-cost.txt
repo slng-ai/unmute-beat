@@ -1,1 +1,0 @@
-_offer, slot and appointment: median 0.51 ms, p90 0.57 ms, max 0.95 ms, n=300, load 3.20

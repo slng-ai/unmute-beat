@@ -1,2 +1,0 @@
-20:05  up 9 days, 11:24, 11 users, load averages: 1.57 1.26 1.32
-20:09  up 9 days, 11:28, 11 users, load averages: 1.14 1.24 1.30

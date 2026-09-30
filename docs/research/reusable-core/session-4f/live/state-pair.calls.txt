@@ -1,3 +1,0 @@
-call_sid|campaign|from_number|to_number|state|admitted_by|worker|stream_sid|admitted_at|started_at|ended_at|ended|media_host|served_port
-CA8f4db79bae32675be27029b013121d1a|s4f-worker|+14092355419|+447427919928|ended|71031|71031|MZcc0dbfc45c22d8c1ece1c6fc59077054|1790534372.812086|1790534373.430739|1790534444.941761|lost|wss://providence-airfare-entertaining-ultram.trycloudflare.com/ws|7870
-CA5c24944dc5c7e075b93c5820b778babe|s4f-worker|+19803906363|+447427919928|ended|71031|71037|MZ2997b09ebec1ef93351934361325520e|1790534374.048696|1790534374.906653|1790534477.3187|pipeline_end|wss://toddler-third-demonstrated-homeland.trycloudflare.com/ws|7871

@@ -137,7 +137,7 @@ async def verification_reads_the_caller_id_back_and_looks_it_up():
         ('call', 'hand_over', {'to': 'booking', 'because': 'a haircut', 'update': AT_TWO}),
     )
     assert call.state.agent == 'verify' and said[-1] == 'Is your number +34 600 11 12 22?', said
-    await turn(flow, call, script, 'Yes.', ('call', 'lookup_customer'), reply('Which time suits you?'))
+    await turn(flow, call, script, 'Yes.', ('call', 'lookup_customer'))
     assert call.state.agent == 'booking' and call.state.facts.customer == KNOWN, call.state.facts
     call.commit(agent='verify')
     await turn(
@@ -163,22 +163,41 @@ async def the_number_said_back_is_a_yes():
         script,
         'Plus three four, six hundred, eleven, twelve, twenty two.',
         ('call', 'record', {'update': {'customer_phone': '+34600111222'}}),
-        ('call', 'options'),
-        reply('On Friday I have 2:00 PM. Does that work?'),
     )
     assert (
         said
         == [
             "Yes, that's the same as I read back.",
             'Thanks, I have you.',
-            'On Friday I have 2:00 PM. Does that work?',
+            'On Friday the 2nd I have 2:00 PM. Which time works for you?',
         ]
         and call.state.facts.customer == KNOWN
     ), (said, call.state.facts.customer)
-    assert len(script.requests) - before == 3, 'record, then booking reads and answers'
+    assert len(script.requests) - before == 1, (
+        'record; then code offers the times on arrival (`offers: {slot: [...]}`)'
+    )
     assert script.requests[before].step == 'verify' and 'record' in script.requests[before].tools, (
         'verify offers `record`: a value said again confirms its read-back'
     )
+
+
+async def a_day_with_nothing_to_offer_is_the_agents():
+    """`offers: {slot: [...]}` on arrival: a closed day offers nothing, so booking's agent answers with the salon's note."""
+    script, flow, call, diary = opened(customer=KNOWN)
+    reads = Reads(diary)
+    sunday = {'service': 'haircut', 'booking_day': '2026-10-04', 'booking_time': '10:00'}
+    said = await turn(
+        flow,
+        call,
+        script,
+        'A haircut on Sunday at ten.',
+        ('call', 'hand_over', {'to': 'booking', 'because': 'a haircut', 'update': sunday}),
+        reply('We are closed on Sundays. Would Saturday suit you?'),
+    )
+    assert said == ['We are closed on Sundays. Would Saturday suit you?'], said
+    assert [r.step for r in script.requests] == ['concierge', 'booking'] and len(reads.availability) == 1
+    assert 'closed on Sunday' in script.requests[-1].payload.history, 'the note reaches the agent'
+    assert 'slot' not in call._offers, 'nothing stands on offer: the agent may look again'
 
 
 async def a_number_that_cannot_be_right_gets_the_locales_words():
@@ -469,7 +488,7 @@ WHOLE_CALL = (
 """One caller's turns, from the first words to a booking."""
 MOVES = (
     (('call', 'hand_over', {'to': 'booking', 'because': 'a haircut', 'update': AT_TWO}),),
-    (('call', 'lookup_customer'), ('call', 'options'), reply('On Friday I have 2:00 PM. Does that work?')),
+    (('call', 'lookup_customer'),),
     (('call', 'book_appointment', {'update': {'slot': slot(FRIDAY, '14:00')}}),),
     (('call', 'book_appointment'),),
 )
@@ -495,31 +514,33 @@ V1_TOOLS = re.compile(r'`(?:collect|wait)`|call `decline`')
 async def a_call_verifies_reads_and_books_once():
     """A whole call: code reads the number back, one availability read, code's read-back, one booking.
 
-    Requests per caller turn: 1, 3, 1, 1. The second turn's three are the
-    number's yes, then booking's read of the times for what the caller asked
-    before verification, then its answer: the read needs the booking step,
-    which a prerequisite interposed. No step's prompt names a tool a
-    structured step does not have.
+    Requests per caller turn: 1, 1, 1, 1. The second turn's one is the
+    number's yes. Booking, which the prerequisite interposed, is reached with
+    the service, day and time known, so code offers the times in the salon's
+    words on arrival (`offers: {slot: [...]}`) with no request: the receipt and the
+    offer are said together, with no silence between them for the caller to
+    fill. No step's prompt names a tool a structured step does not have.
     """
     sent, said, reads, diary = await whole_call()
-    assert [len(requests) for requests in sent] == [1, 3, 1, 1], [len(r) for r in sent]
+    assert [len(requests) for requests in sent] == [1, 1, 1, 1], [len(r) for r in sent]
     assert said == [
         ['Is your number +34 600 11 12 22?'],
-        ['Thanks, I have you.', 'On Friday I have 2:00 PM. Does that work?'],
+        ['Thanks, I have you.', 'On Friday the 2nd I have 2:00 PM. Which time works for you?'],
         ['Shall I book a haircut, Friday the 2nd at 2:00 PM?'],
         ["You're all set for Friday the 2nd at 2:00 PM. Anything else I can help with?"],
     ], said
     assert reads.availability == [f'{FRIDAY} haircut 14:00'] and booked(diary) == [
         ('haircut', FRIDAY, '14:00')
     ]
-    assert [r.step for r in sent[1]] == ['verify', 'booking', 'booking'], [r.step for r in sent[1]]
+    assert [r.step for r in sent[1]] == ['verify'], [r.step for r in sent[1]]
     for request in (r for turn_sent in sent for r in turn_sent):
         assert 'collect' not in request.tools, (request.step, request.tools)
     for step in SPEC.steps:
         prompt = str(SPEC.prompt(step.id))
         assert not V1_TOOLS.findall(prompt), (step.id, V1_TOOLS.findall(prompt))
-    booking = sent[1][-1].payload
+    booking = sent[2][0].payload
     assert 'A haircut Friday at two, please.' in booking.history, 'the words that asked for booking reach it'
+    assert 'Which time works for you?' in booking.history, "code's offer is booking's own line"
     assert '"customer_phone"' not in booking.instructions, 'booking does not see the number: it binds it'
 
 
@@ -610,6 +631,7 @@ elif __name__ == '__main__':
     asyncio.run(requests_are_pinned())
     asyncio.run(verification_reads_the_caller_id_back_and_looks_it_up())
     asyncio.run(the_number_said_back_is_a_yes())
+    asyncio.run(a_day_with_nothing_to_offer_is_the_agents())
     asyncio.run(a_number_that_cannot_be_right_gets_the_locales_words())
     asyncio.run(a_heard_yes_books_once())
     asyncio.run(a_repeat_reads_nothing())

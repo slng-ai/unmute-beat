@@ -38,6 +38,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 from core.history import Payload
+from core.state import Checkpoint
 from core.turn import Barge
 from tests.clinic_flow.consult import CheckedIn
 from tests.clinic_flow.structured import Clinic, VisitState
@@ -660,6 +661,50 @@ async def a_consultation_keeps_the_prerequisite_apart():
     assert call.state.agent == 'desk' and call.state.pending is None and done.requests == 2, done
 
 
+async def an_offer_on_arrival_is_code_s():
+    """`offers: {slot: [...]}`: reached from the prerequisite with what the offer rests on, code looks the times up.
+
+    The clinic's `free_times` gives ids and no words, so the offer stands and
+    the agent says it in one reply, with no `options` request. Without the
+    field the offer rests on, nothing is looked up and the agent runs as usual.
+    The clinic has no exit into front, so the call starts where a hand-over to
+    desk leaves it once front is interposed: at front, desk pending, and the
+    request kept (`Checkpoint`, as `turn` records it).
+    """
+    text = (
+        (HERE / 'structured.v2.yaml')
+        .read_text()
+        .replace(
+            '    operations: [book, quote]\n',
+            '    offers: {slot: [service]}\n    operations: [book, quote]\n',
+        )
+    )
+    for service, expected in (('cleaning', ['cleaning']), (None, [])):
+        script = Script()
+        flow = core.flowspec.load(text, root=HERE).compile(model=script.model)
+        clinic = Clinic()
+        call = flow.open(VisitState(service=service), services=clinic, clock=lambda: CLOCK)
+        call.commit(agent='front', pending='desk')
+        call._checkpoint = Checkpoint('desk', 'A cleaning, please.')
+        said, done = await turn(
+            flow,
+            call,
+            script,
+            'P-1234.',
+            ('call', 'check_in', {'update': {'patient': 'P-1234'}}),
+            reply('Nine or ten on Tuesday.'),
+        )
+        assert said == ['Thanks, I have you checked in.', 'Nine or ten on Tuesday.'], said
+        assert call.state.agent == 'desk' and done.requests == 2 and clinic.availability == expected, (
+            done,
+            clinic.availability,
+        )
+        told = script.payloads[-1].history
+        assert ('is on offer now' in told) == bool(service) and ('slot' in call._offers) == bool(service), (
+            told
+        )
+
+
 async def partial_output_commits_nothing():
     script = Script()
     flow, call, _ = opened(script)
@@ -726,6 +771,7 @@ async def each_test(manifest: str):
     await a_stale_read_back_is_not_put_again()
     await the_caller_s_words_come_back_whatever_the_summary()
     await a_consultation_keeps_the_prerequisite_apart()
+    await an_offer_on_arrival_is_code_s()
     await partial_output_commits_nothing()
     await a_committed_update_stays_when_its_words_are_cut()
     print(

@@ -97,6 +97,13 @@ def refusals_name_their_step():
         ),
         (base.replace('fields: [service, slot,', 'fields: [price, service, slot,'), "assigns 'price'"),
         (
+            base.replace(
+                '    operations: [book, quote]\n',
+                '    offers: {note: [service]}\n    operations: [book, quote]\n',
+            ),
+            "desk: offers 'note' on arrival, which is not one of its choices",
+        ),
+        (
             base.replace('prompt: prompts/nurse.md', 'prompt: prompts/call.md'),
             "nurse: prompt 'prompts/call.md'",
         ),

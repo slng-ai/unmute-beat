@@ -2,10 +2,10 @@
   "booking, the read-back request": {
     "bytes": {
       "history": 704,
-      "instructions": 7618,
+      "instructions": 7663,
       "outputs": 9619,
       "tools": 2424,
-      "total": 20365
+      "total": 20410
     },
     "history": [
       {
@@ -206,7 +206,7 @@
       "You may hand the caller to: complaints (a complaint about a past service); concierge (they give up booking, or ask about something unrelated to booking); stylist (a question about hair: which service suits them, colour, aftercare, how long a service takes).",
       "",
       "The following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:",
-      "- refunds: The salon refund and compensation policy, for a question about money back.",
+      "- refunds: The salon refund and compensation policy. Load it only when the caller asks about a refund, money back or compensation.",
       "",
       "Today is Monday 2026-09-28 and the clock reads 08:30 (Europe/Madrid). The next 14 days:",
       "- Tuesday 2026-09-29: tomorrow",
@@ -860,10 +860,10 @@
   "concierge, a local answer": {
     "bytes": {
       "history": 142,
-      "instructions": 5759,
+      "instructions": 5804,
       "outputs": 4419,
       "tools": 774,
-      "total": 11094
+      "total": 11139
     },
     "history": [
       {
@@ -1001,7 +1001,7 @@
       "You may hand the caller to: booking (a new booking, or a change or cancellation of one they hold); complaints (a complaint, a refund, a manager, or a free visit because of a past service); verify (a correction to a phone number already confirmed); stylist (a question about hair: which service suits them, colour, aftercare, how long a service takes).",
       "",
       "The following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:",
-      "- refunds: The salon refund and compensation policy, for a question about money back.",
+      "- refunds: The salon refund and compensation policy. Load it only when the caller asks about a refund, money back or compensation.",
       "",
       "Today is Monday 2026-09-28 and the clock reads 08:30 (Europe/Madrid). The next 14 days:",
       "- Tuesday 2026-09-29: tomorrow",

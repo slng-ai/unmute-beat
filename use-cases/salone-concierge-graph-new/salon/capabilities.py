@@ -12,7 +12,10 @@ from pydantic_ai.capabilities import Capability
 
 refunds = Capability(
     id='refunds',
-    description='The salon refund and compensation policy, for a question about money back.',
+    description=(
+        'The salon refund and compensation policy. Load it only when the caller asks about a refund, '
+        'money back or compensation.'
+    ),
     instructions=(Path(__file__).parent / 'prompts' / 'knowledge' / 'refunds.md').read_text(),
     defer_loading=True,
 )

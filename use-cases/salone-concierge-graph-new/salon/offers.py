@@ -90,7 +90,9 @@ def find_times(salon: Salon, state: SalonState) -> Times:
     return Times(
         options={s.slot_id: f'{spoken_service(s.service)} {s.spoken}' for s in slots},
         note=' '.join(notes),
-        say=f'{_on(day)} I have {_listed(said[:OFFER_SAID])}.' if said else '',
+        say=f'{_on(day)} I have {_listed(said[:1] if free else said[:OFFER_SAID])}. Which time works for you?'
+        if said
+        else '',
     )
 
 

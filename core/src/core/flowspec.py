@@ -1094,6 +1094,15 @@ class ConversationSpec(StepSpec):
     """One of `operations`, read back by code on arrival when the state already gives its arguments."""
     asks: dict[str, str] = {}
     """Field -> words: on arrival by a hand-over, code asks for the first of these fields still empty, no model."""
+    offers: dict[str, list[str]] = {}
+    """Choice -> the fields it needs: on arrival, once those are set, code makes the offer and says its words.
+
+    A hand-over or a completed prerequisite. `after:` says what takes an offer
+    away; this says what code needs to make one (a time the caller may not have
+    given yet is not needed). The words are the choice function's `say`; with
+    none, or nothing to offer, the step's agent runs as usual
+    (`ConversationStep.offers`). Tried after `opens_with` and `asks`.
+    """
     refusals: dict[str, str] = {}
     """Field -> `file.py:words`, `(value) -> str`: on a rendered step, what the caller hears when `collect` refused that value.
 
@@ -1160,6 +1169,13 @@ class ConversationSpec(StepSpec):
             resolve.fail(self.id, f'opens with {self.opens_with!r}, which is not one of its operations')
         for name in sorted(set(self.asks) - set(self.fields)):
             resolve.fail(self.id, f'asks for {name!r}, which is not one of its fields')
+        for name, needs in self.offers.items():
+            if name not in self.choices:
+                resolve.fail(self.id, f'offers {name!r} on arrival, which is not one of its choices')
+            for field_name in sorted(set(needs) - set(self.fields)):
+                resolve.fail(
+                    self.id, f'offers {name!r} once {field_name!r} is set, which is not one of its fields'
+                )
         for name, ref in self.refusals.items():
             if name not in self.fields:
                 resolve.fail(self.id, f'words a refusal of {name!r}, which is not one of its fields')
@@ -1316,6 +1332,7 @@ class ConversationSpec(StepSpec):
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             asks=dict(self.asks),
+            offers={name: tuple(needs) for name, needs in self.offers.items()},
             refusals={
                 name: found
                 for name, ref in self.refusals.items()

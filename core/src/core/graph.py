@@ -103,10 +103,18 @@ class Opening[C: CallContext]:
     """The action's name in traces and budgets: the tool it stands in for."""
     applies: Callable[[C], bool]
     run: Callable[[C], Awaitable[object]]
+    arrivals: frozenset[str] = frozenset({'handoff'})
+    """How the step may have been reached for this opening to answer: a hand-over, or also a completed prerequisite.
+
+    A step a prerequisite returned to usually runs its agent, which reads what
+    the caller said meanwhile. An offer the request already decides (`offers:`)
+    is the exception: the caller's words this turn answered the prerequisite,
+    whose own step recorded any change they made.
+    """
 
     def action(self, call: C) -> LocalAction | None:
         """This opening as the turn's next action, or None when it does not apply to this call now."""
-        if call.entered != 'handoff' or not self.applies(call):
+        if call.entered not in self.arrivals or not self.applies(call):
             return None
         return LocalAction(self.name, lambda: self.run(call))
 

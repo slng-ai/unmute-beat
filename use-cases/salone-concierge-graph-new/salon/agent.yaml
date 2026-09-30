@@ -80,6 +80,8 @@ steps:
       # The booking being moved or cancelled rests on no field; a time on offer rests on what was asked for.
       booking_id: {function: offers.py:held_bookings, after: []}
       slot: {function: offers.py:find_times, after: [service, booking_day, booking_time]}
+    # Reached from verify with the service and day known, code offers the times in find_times' words.
+    offers: {slot: [service, booking_day]}
     operations: [book_appointment, move_appointment, cancel_appointment]
     reads_back: {book_appointment: [slot]}
     capabilities: [capabilities.py:refunds]

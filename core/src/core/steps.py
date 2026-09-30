@@ -1618,7 +1618,10 @@ class Options(BaseModel):
 
 
 async def _offer(
-    call: FlowCall[Any], choices: Mapping[str, Callable[[Any, Any], Any]], rendered: bool = False
+    call: FlowCall[Any],
+    choices: Mapping[str, Callable[[Any, Any], Any]],
+    rendered: bool = False,
+    announce: bool = False,
 ) -> dict[str, Any]:
     """Ask each choice function for this caller's options, and record them as offered, unless the call moved on.
 
@@ -1635,9 +1638,13 @@ async def _offer(
     nothing. The words are kept with the ids (`Offers`), so whatever takes
     the offer takes its words too, and `wait` says them, in the order the
     step lists its choices, only on the step and turn that made them. The agent is still shown the ids and notes, to read
-    the caller's pick.
+    the caller's pick. `announce` keeps the words for this step and turn the
+    same way without requiring them: an offer code says on arrival
+    (`ConversationStep.offers`), which falls back to the agent when a choice
+    function has none.
     """
     version, generation, agent = call._version, call._generation, call.state.agent
+    kept = rendered or announce
     found: dict[str, Options] = {}
     for name, choose in choices.items():
         try:
@@ -1665,9 +1672,7 @@ async def _offer(
         return {'stale': 'The request changed while these were looked up. Nothing is offered; look again.'}
     result: dict[str, Any] = {}
     for name, options in found.items():
-        call._offers.put(
-            name, options.options, options.say, call.turn if rendered else 0, agent if rendered else ''
-        )
+        call._offers.put(name, options.options, options.say, call.turn if kept else 0, agent if kept else '')
         result[name] = {'options': options.options, **({'note': options.note} if options.note else {})}
     return result
 
@@ -1802,6 +1807,16 @@ class ConversationStep(Step):
     open with it said "I'll connect you with someone" instead (Coval gate 1
     rerun, cBrx4NhR). Tried after `opens_with`.
     """
+    offers: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """Choice -> fields it needs: offered on arrival in its choice function's words (`say`), with no model request.
+
+    On arrival by a hand-over or a completed prerequisite, when those fields
+    are set and the choice has no standing offer. Session 4, Coval runs
+    82gmB8t5 and DezcEAK4: booking reached from verify spent three requests
+    (`options`, then `reply`) on the offer the request already decided, and the
+    caller talked over the silence after "Thanks, I have you." A choice with
+    nothing to offer, or no words, leaves the arrival to the step's agent.
+    """
     refusals: Mapping[str, Callable[[str], str]] = field(default_factory=dict)
     """Field -> the application's words for a value `collect` refused, said by `wait` on a rendered step."""
     routes: tuple[str, ...] = ()
@@ -1835,8 +1850,8 @@ class ConversationStep(Step):
         )
 
     def opening(self) -> tuple[Opening[Any], ...]:
-        """On arrival by a hand-over: read back `opens_with` if the state gives its arguments, else ask (`asks`). No model."""
-        return (*self._read_back_first(), *self._ask_first())
+        """On arrival: read back `opens_with` if the state gives its arguments, else ask (`asks`), else offer (`offers`). No model."""
+        return (*self._read_back_first(), *self._ask_first(), *self._offer_first())
 
     def first_line(self, call: FlowCall[Any]) -> Prompted | str:
         """What this step would open with on arrival, as words to put after a greeting: the same two rules as `opening`.
@@ -1855,6 +1870,36 @@ class ConversationStep(Step):
                 return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
         missing = next((name for name in self.asks if not present(getattr(call.state.facts, name))), '')
         return self.asks[missing] if missing else ''
+
+    def _offer_first(self) -> tuple[Opening[Any], ...]:
+        return tuple(self._offer_on_arrival(name, needs) for name, needs in self.offers.items())
+
+    def _offer_on_arrival(self, name: str, needs: tuple[str, ...]) -> Opening[Any]:
+        choose = self.choices[name]
+
+        def ready(call: FlowCall[Any]) -> bool:
+            return name not in call._offers and all(
+                present(getattr(call.state.facts, f, None)) for f in needs
+            )
+
+        async def offer(call: FlowCall[Any]) -> str:
+            found = await _offer(call, {name: choose}, announce=True)
+            problem = found.get('stale') or found.get('unavailable') or ''
+            if problem or not call._offers.get(name):
+                call._offers.take(name)
+                note = found.get(name, {}).get('note', '')
+                raise ModelRetry(
+                    problem or f'nothing is on offer for {name} for what they asked. {note}'.strip()
+                )
+            words = call._offers.announce(call.state.agent, [name], call.turn)
+            if not words:
+                raise ModelRetry(
+                    f'{name} is on offer now, under "On offer": tell the caller in your own words.'
+                )
+            await call.speak_now(words, origin='ask')
+            return words
+
+        return Opening('options', ready, offer, arrivals=frozenset({'handoff', 'completed'}))
 
     def _ask_first(self) -> tuple[Opening[Any], ...]:
         if not self.asks:

@@ -17,7 +17,7 @@ target-version = "py314"
 src = ["core/src", "use-cases/*"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "B", "C4", "UP", "SIM", "RUF", "D"]
+select = ["E", "F", "W", "I", "N", "B", "C4", "UP", "SIM", "RUF", "D", "PERF", "FURB"]
 ignore = [
     "E501",          # the formatter owns wrapping
     "D1",            # a docstring where one earns its place, not on every def
@@ -27,6 +27,10 @@ ignore = [
     "D210",          # a docstring opening on a quoted phrase needs the leading space
 ]
 # `A` (flake8-builtins) is absent on purpose: `exit` is this graph's own vocabulary.
+
+[tool.ruff.lint.per-file-ignores]
+# ponytail: `core` passed PERF and FURB first; drop this once each use case has had its own pass.
+"use-cases/**" = ["PERF", "FURB"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

@@ -21,7 +21,7 @@
   four times the dispatch of one, for the same handlers.
 
 Hooks and `new_messages()` retention are checked where they are used:
-`one_action_per_reply` and budgets in salon-graph's `test_budget`, retained
+`one_action_per_reply` in `tests.test_structured`, retained
 input and results after cancellation in `tests.test_history`.
 """
 

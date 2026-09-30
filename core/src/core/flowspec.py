@@ -232,7 +232,7 @@ class Folder:
 def _on_path(parts: list[str], here: Path) -> list[str]:
     """The package's full dotted name, through any namespace packages (folders with no `__init__.py`) above it.
 
-    salon-graph's `tests` is one: `tests/slice` is imported as `tests.slice`,
+    A use case's `tests` may be one: `tests/slice` is imported as `tests.slice`,
     not `slice`. Folders are added until the one above is on `sys.path`; with
     none found, the `__init__.py` chain alone is the name, as before.
     """

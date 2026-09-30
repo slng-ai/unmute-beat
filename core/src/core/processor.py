@@ -192,7 +192,7 @@ class TwilioMarks(FrameSerializer):
 class Ceiling:
     """One call's ceiling (`MAX_CALL_SECONDS`): started when the caller connects, stopped by its owner, always.
 
-    The owner is the launcher (salon-graph's `run_bot`), which stops it in a
+    The owner is the launcher (the salon's `run_bot`), which stops it in a
     `finally` around the pipeline, so a call that ends any way at all (the agent's goodbye, the
     caller hanging up, a cancellation, an error) takes its timer with it. On a
     shared bot (`coval_sim serve`) the old timer was cancelled only on a
@@ -266,7 +266,7 @@ def playout(
     turn-taking, and approves nothing, so on such a transport no read-back is
     ever heard and no consequential write can run. `simulate=True` makes the
     estimate count, for a test or development launcher that names the mode
-    itself (salon-graph's `DELIVERY=simulated`); the call records it
+    itself (the salon's `DELIVERY=simulated`); the call records it
     (`CallContext.simulated_playout`), and so does every write audit.
     """
     from pipecat.serializers.twilio import TwilioFrameSerializer

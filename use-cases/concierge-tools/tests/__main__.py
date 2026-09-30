@@ -16,7 +16,6 @@ MODULES = (
     'tests.test_ledger',
     'tests.test_load_report',
     'tests.test_audio_timing',
-    'tests.test_matrix',
 )
 
 

@@ -213,9 +213,9 @@ def test_still_running() -> None:
 
 
 def test_use_case_folders() -> None:
-    """`salon` is salon-graph; any other agency is its own folder, and a folder with no bot.py is refused."""
+    """An agency is its own folder, and a folder with no bot.py is refused."""
     repo = Repository.find(Path(__file__).resolve().parent)
-    assert repo.use_case('salon') == repo.root / 'use-cases' / 'salon-graph'
+    assert repo.use_case('salon') == repo.root / 'use-cases' / 'salon'
     assert repo.use_case('salon-prompt') == repo.root / 'use-cases' / 'salon-prompt'
     try:
         repo.use_case('concierge-tools')
@@ -383,7 +383,7 @@ def test_named_metrics() -> None:
     assert '--order-by=-create_time' in coval.args, 'a bare -create_time is read as a flag (2026-09-26)'
 
 
-PROFILE = Repository.find(Path.cwd()).root / 'docs/research/reusable-core/session-3/speech-profile.v1.env'
+PROFILE = Path(__file__).parent / 'fixtures' / 'speech-profile.v1.env'
 
 
 def test_speech_profile() -> None:

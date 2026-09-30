@@ -1,6 +1,6 @@
 """The salon on declarative Pipecat flows, as its own voice bot.
 
-The same pipeline as salon-graph's `bot.py` (SLNG STT and TTS, Silero VAD
+The same pipeline as the salon's `bot.py` (SLNG STT and TTS, Silero VAD
 with smart turn, the same transports and tracing), with Pipecat's LLM
 service and `FlowManager` where the harness stands:
 
@@ -12,7 +12,7 @@ time. The `.env` at the repository root is found by walking up from this folder.
     uv run bot.py
 
 Then open http://localhost:7860 and talk. `--port` picks another port;
-`-t twilio -x <host>` answers phone calls, as salon-graph's `bot.py` does.
+`-t twilio -x <host>` answers phone calls, as the salon's `bot.py` does.
 """
 
 # ruff: noqa: E402
@@ -96,7 +96,7 @@ def gemini() -> VertexExpress:
 
 
 def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
-    """STT and TTS over SLNG, as salon-graph's `bot.py` sets them up: TTS by token, not by sentence."""
+    """STT and TTS over SLNG, as the salon's `bot.py` sets them up: TTS by token, not by sentence."""
     key = os.environ['SLNG_API_KEY']
     stt = SlngSTTService(
         api_key=key,
@@ -120,7 +120,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     """One call: a fresh diary, the flow, and the pipeline around it, run until the line drops.
 
     On a phone route the session is the carrier's call id, so a call and its
-    trace share one key, as in salon-graph's `bot.py`.
+    trace share one key, as in the salon's `bot.py`.
     """
     call_data = getattr(runner_args, 'call_data', None)
     session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''

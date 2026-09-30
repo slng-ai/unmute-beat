@@ -6,8 +6,8 @@ This folder is the salon built on Pipecat's own flows: a `FlowConfig` in
 application code. It imports no `core` and no Pydantic AI.
 
 The diary, receipts, phone shape, voice rules and knowledge in `salon/` are
-copies of salon-graph's, as salon-prompt keeps them. The pipeline is the same
-as salon-graph's `bot.py`. So a Coval run or a comparison with the ledger
+copies of the salon's, as salon-prompt keeps them. The pipeline is the same
+as the salon's `bot.py` (`use-cases/salon`). So a Coval run or a comparison with the ledger
 (`concierge-tools/ledger.py`) measures the conversation layer. Two things
 differ:
 
@@ -45,9 +45,9 @@ uv run python -m tests                  # offline checks, no model, no .env
 | `graph_salon/call.py` | `SalonCall`: the consent guards, the turn, the budget |
 | `graph_salon/writes.py` | `Write.run`: the only path to the diary's writes |
 | `graph_salon/speech.py` | The fixed lines, `ClaimFilter` and `EmptyReplyGuard` |
-| `salon/` | Copies of salon-graph's diary, shapes, receipts and prompts. Change both, or the builds stop being comparable |
+| `salon/` | Copies of the salon's diary, shapes, receipts and prompts. Change both, or the builds stop being comparable |
 | `utils/observability.py` | Langfuse over OpenTelemetry, salon-prompt's copy |
-| `tests/test_graph_salon.py` | The offline checks. It also reads salon-graph's fixed lines from its source, so the wording stays the same |
+| `tests/test_graph_salon.py` | The offline checks. |
 
 ## How a booking works
 

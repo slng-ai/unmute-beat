@@ -179,7 +179,7 @@ async def run_bot(
     id as the simulation's `call_sid`, and one Langfuse session is one call.
 
     A test passes its own `flow` (a scripted model) and `speech` (no
-    provider), and turns off the warm-up and tracing, as salon-graph's does.
+    provider), and turns off the warm-up and tracing, as the salon's does.
     """
     call_data = getattr(runner_args, 'call_data', None)
     session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''

@@ -1,6 +1,6 @@
 """The salon as one prompt on Pipecat's own Gemini service: the baseline the harness is measured against.
 
-`bot.py` puts this where salon-graph's `bot.py` has `PydanticAgentProcessor`.
+`bot.py` puts this where the salon's `bot.py` has `PydanticAgentProcessor`.
 Everything else in the pipeline stays the same: STT, VAD, smart-turn, TTS,
 the transport and the diary. What changes is who owns the conversation.
 Here it is the usual Pipecat agent: one system prompt holding every rule, the
@@ -41,7 +41,7 @@ from salon.models.shapes import SubmittedPhone, unsupported_region
 
 PROMPTS = Path(__file__).resolve().parent / 'prompts'
 GREETING = "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
-"""The graph build's opening line (`greeting:` in salon-graph's `flow.yaml`), word for word."""
+"""The graph build's opening line (`greeting:` in the unmute graph build's `flow.yaml`), word for word."""
 MODEL = 'gemini-3.1-flash-lite'
 """The baseline's model, thinking pinned as the harness pins it.
 

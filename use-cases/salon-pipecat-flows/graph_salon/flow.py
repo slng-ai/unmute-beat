@@ -26,7 +26,7 @@ from graph_salon.speech import GREETING
 HERE = Path(__file__).parents[1]
 """The folder: `flow.yaml` and `prompts/` sit beside the package, as in Pipecat's own YAML examples."""
 SALON_PROMPTS = HERE / 'salon' / 'prompts'
-"""The salon's own voice rules and documents: copies of salon-graph's, as salon-prompt keeps them."""
+"""The salon's own voice rules and documents: copies of the salon's, as salon-prompt keeps them."""
 
 
 def _read(path: Path) -> str:

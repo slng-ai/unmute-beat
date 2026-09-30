@@ -13,11 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 AGENT_NAME = re.compile(r'^voice-harness-(?P<agency>[a-z][a-z-]*?)-pipecat(?P<line>-twilio)?$')
 """A Coval agent this tool drives is named after the flow it calls: voice-harness-salon-pipecat.
 The name is the whole link between the repository and Coval, so nothing here holds a Coval ID.
-The agency names the folder under `use-cases/` whose `bot.py` answers (`FOLDERS`). A `-twilio`
+The agency names the folder under `use-cases/` whose `bot.py` answers. A `-twilio`
 suffix names a Coval voice agent that dials a real Twilio number (`Agent.phone_line`)."""
-FOLDERS = {'salon': 'salon-graph'}
-"""An agency whose folder has another name. `salon` is the Coval agent that existed before the
-split, and it has always called the graph build. Any other agency is its own folder's name."""
 FINISHED = {'COMPLETED', 'FAILED', 'CANCELLED', 'ERROR'}
 FALLBACKS = {
     'STUMBLE (a turn failed)': 'problem there',

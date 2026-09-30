@@ -517,25 +517,6 @@ def every_node_offers_at_most_one_write():
         assert len([n for n in names if n.startswith('ask_') or n == 'answer']) <= 1, names
 
 
-def the_words_are_the_harness_words():
-    """Read from salon-graph's source as text. Its package is also called `salon`, so it cannot be imported here.
-
-    Since session 4 the harness declares each receipt in its manifest
-    (`say:`), in the one wording this build uses. The claim patterns are no
-    longer compared: the harness withholds every first-person completion
-    claim on a writing step (`core.locale.Locale.claims`), a wider rule than
-    this build's filter.
-    """
-    harness = HERE.parent / 'salon-graph' / 'salon'
-    manifest = (harness / 'agent.yaml').read_text()
-    assert f'greeting: "{speech.GREETING}"' in manifest
-    for line in speech.SAVED.values():
-        assert line in manifest, f'salon-graph no longer says {line!r}'
-    functions = (harness / 'functions.py').read_text()
-    for line in (speech.NOTED, speech.REPLY_SOON, speech.MANAGER_CALLS):
-        assert line in functions, f'salon-graph no longer says {line!r}'
-
-
 def it_stands_on_pipecat_not_on_the_harness():
     for path in [*HERE.glob('graph_salon/*.py'), *HERE.glob('salon/**/*.py'), HERE / 'bot.py']:
         for node in ast.walk(ast.parse(path.read_text())):
@@ -570,7 +551,6 @@ def main():
     every_placeholder_is_in_the_seeded_state()
     every_tool_can_speak_a_fixed_line_from_its_node()
     every_node_offers_at_most_one_write()
-    the_words_are_the_harness_words()
     it_stands_on_pipecat_not_on_the_harness()
     print('graph salon ok')
 

@@ -192,7 +192,7 @@ async def model_clients(nodes: dict[str, Node[Any]], warm: bool = False):
     and not a turn's request, but it is a paid request: the list this yields
     gets one record per warm-up sent (model, tokens, whether it answered), so
     a launcher can count every one. A worker that owns its clients for its
-    whole life (salon-graph's `server.py`) warms once; `bot.py` warms per call.
+    whole life (the salon's `server.py`) warms once; `bot.py` warms per call.
 
     On the way out a warm-up still running is cancelled and awaited before
     the clients close, so no request is left using a closed client.

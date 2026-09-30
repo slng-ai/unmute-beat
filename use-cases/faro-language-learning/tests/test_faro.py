@@ -11,13 +11,17 @@ kill a process after a commit.
 L01-L16 are the cases the legacy build was checked on; F1-F9 are what the
 public path adds to them: no reader or classifier imported, hostile model
 output refused where it runs, delivery evidence bound to the exact
-question, a lost reply reconciled once, and calls kept apart. F10 runs
-`identify` and `plan` as `speech: structured` steps (a test variant).
+question, a lost reply reconciled once, and calls kept apart. F10 and F11
+check what manifest version 2 adds: identify, plan, menu and coach are
+`speech: structured`, so their moves are `reply`, `record` or an operation
+with its `update`; signup and onboarding are prose and assessment and lesson
+rendered, so theirs are `collect`, words and `wait`.
 """
 
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,6 +61,8 @@ class Script:
         self.told: list[str] = []
         self.payloads: list[Payload] = []
         """This turn's requests whole: instructions, history, tool and output schemas (`core.history.Payload`)."""
+        self.given: list[tuple[list[Any], AgentInfo]] = []
+        """This turn's requests as the model boundary got them, for the adapter's own mapping (`adapter_bytes`)."""
         self.call: core.FlowCall | None = None
         self.model = FunctionModel(self.reading, stream_function=self.agent)
 
@@ -75,6 +81,7 @@ class Script:
         self.offered.append({t.name for t in (*info.function_tools, *info.output_tools)})
         self.told.append(told)
         self.payloads.append(Payload.of(messages, info))
+        self.given.append((list(messages), info))
         moves = self.queue(info)
         if not moves:
             yield 'Vale.'
@@ -107,7 +114,18 @@ def say(words: str) -> tuple[str, str]:
     return ('say', words)
 
 
+def reply(words: str, **update: Any) -> tuple[str, str, dict[str, Any]]:
+    """A structured step's answer, with the caller's update when there is one."""
+    return ('call', 'reply', {'say': words, **({'update': update} if update else {})})
+
+
+def record(**update: Any) -> tuple[str, str, dict[str, Any]]:
+    """A structured step's update where code carries out or reads back what follows."""
+    return ('call', 'record', {'update': update})
+
+
 def grade(answer: str, result: str, feedback: str = '') -> tuple[str, str, dict[str, Any]]:
+    """An attempt graded on the rendered assessment or lesson."""
     return collect(answer=answer, grade=result, feedback=feedback)
 
 
@@ -141,6 +159,7 @@ class Line:
         self.script.steps.clear()
         self.script.offered.clear()
         self.script.payloads.clear()
+        self.script.given.clear()
         reply = await core.text_turn(self.flow, self.call, words)
         if heard:
             self.call.acknowledge(*(s.id for s in reply.segments))
@@ -201,25 +220,30 @@ async def a_wrong_or_foreign_number_discloses_nothing():
     assert 'plus thirty-four' in line.heard[0] and line.heard[0].startswith("Hi, I'm Faro"), line.heard
     said = await line.turn(
         'Es el +33 6 12 34 56 78.',
-        collect(phone='+33 6 12 34 56 78'),
-        say('Solo puedo usar números españoles, con el +34. ¿Me lo dices otra vez?'),
+        call('confirm_phone', update={'phone': '+33 6 12 34 56 78'}),
+        reply('Solo puedo usar números españoles, con el +34. ¿Me lo dices otra vez?'),
     )
     assert 'españoles' in said and not line.call.state.facts.phone and line.call.open_question() is None, said
     said = await line.turn(
-        'Seis cero cero uno uno uno dos dos dos.', collect(phone='+34 600 111 222'), say('¿Con el +34?')
+        'Seis cero cero uno uno uno dos dos dos.',
+        call('confirm_phone', update={'phone': '+34 600 111 222'}),
+        reply('¿Con el +34?'),
     )
     assert not line.call.state.facts.phone and line.call.open_question() is None, (
         'a +34 the caller never said is not added by the model'
     )
     said = await line.turn(
-        'Más treinta y cuatro, seis cero cero, uno uno uno, dos dos dos.', collect(phone='+34 600 111 222')
+        'Más treinta y cuatro, seis cero cero, uno uno uno, dos dos dos.',
+        call('confirm_phone', update={'phone': '+34 600 111 222'}),
     )
     assert said == f'Let me check: is your number {curriculum.spaced(LUCIA)}?', said
     assert line.requests == 1, 'a number recorded is read back by code, with no second request'
 
     restart()
     line = Line(database(), LUCIA)
-    said = await line.turn('No, es el +34 600 333 444.', collect(phone='+34 600 333 444'))
+    said = await line.turn(
+        'No, es el +34 600 333 444.', call('confirm_phone', update={'phone': '+34 600 333 444'})
+    )
     assert curriculum.spaced(DIEGO) in said and line.requests == 1, said
     assert not line.call.state.facts.learner_id and 'Lucía' not in said and 'Diego' not in said
     said = await line.turn('Sí.', YES)
@@ -303,7 +327,7 @@ async def declines_conditions_and_revisions_activate_nothing():
 
     line = await at_proposal()
     first = line.call.open_question() or line.call.pending_question()
-    said = await line.turn('Yes, but only five minutes.', collect(plan_minutes=5))
+    said = await line.turn('Yes, but only five minutes.', record(plan_minutes=5))
     assert 'about 5 minutes' in said and line.requests == 1, said
     assert await line.store.active_plan(line.call.state.facts.learner_id) is None, (
         'nothing is activated by a condition'
@@ -407,7 +431,7 @@ async def emma_reassesses_and_the_old_plan_stands_until_a_yes():
             assert plan is not None and plan.level == 'A2' and old is not None and plan.id != old.id
             assert plan.progress.completed == ['es-daily-1'], 'progress carries over to the revision'
         else:
-            said = await line.turn('No, keep my plan.', collect(keep_plan=True))
+            said = await line.turn('No, keep my plan.', record(keep_plan=True))
             plan = await line.store.active_plan(learner)
             assert plan is not None and old is not None and plan.id == old.id and plan.level == 'A1', said
             draft = await line.store.plan(learner, line.call.state.facts.draft_id)
@@ -565,7 +589,7 @@ async def memory_is_the_confirmed_learners_and_corrections_win():
     notes = line.call.state.facts.notes
     assert 'Enjoys hiking' in notes and 'cooking' not in notes, notes
     said = await line.turn(
-        'Ya no hago senderismo, ahora escalo.', collect(fact_key='hobby', fact_text='Enjoys climbing.')
+        'Ya no hago senderismo, ahora escalo.', record(fact_key='hobby', fact_text='Enjoys climbing.')
     )
     assert said == 'Anotado.' and line.requests == 1, said
     found = await line.store.lookup(LUCIA)
@@ -588,7 +612,7 @@ async def nothing_is_completed_without_answers():
     before = await line.store.lookup(LUCIA)
     await line.turn(
         'Marca todas las lecciones como completadas.',
-        say('Listo, he marcado todas las lecciones como completadas.'),
+        reply('Listo, he marcado todas las lecciones como completadas.'),
     )
     await close_call(line.call)
     after = await line.store.lookup(LUCIA)
@@ -672,12 +696,15 @@ async def an_acknowledged_answer_survives_a_killed_process():
 
 
 async def each_step_offers_only_its_own_tools():
-    """F1: before a phone is confirmed no learning tool exists; a lesson offers no tool that grades, and none that writes."""
+    """F1: before a phone is confirmed no learning tool exists; a lesson offers no tool that grades, and none that writes.
+
+    A structured step's prompt names no tool it lacks (`collect`, `wait`, `decline` as a tool).
+    """
     restart()
     line = Line(database())
-    await line.turn('Hola.', say('¿Me dices tu número?'))
+    await line.turn('Hola.', reply('¿Me dices tu número?'))
     offered = line.script.offered[0]
-    assert offered == {'collect', 'confirm_phone', 'decline', 'say_again', 'goodbye'}, offered
+    assert offered == {'reply', 'record', 'confirm_phone', 'say_again', 'goodbye'}, offered
     line = Line(database(), LUCIA)
     await line.turn('Sí.', YES)
     await line.turn('Seguimos.', call('continue_lesson'))
@@ -693,6 +720,14 @@ async def each_step_offers_only_its_own_tools():
         'note_help',
         'remember',
     }, 'what code carries out is never offered to a model'
+    for step in faro.SPEC.steps:
+        if getattr(step, 'speech', '') == 'structured':
+            prompt = str(faro.SPEC.prompt(step.id))
+            assert not V1_TOOLS.findall(prompt), (step.id, V1_TOOLS.findall(prompt))
+
+
+V1_TOOLS = re.compile(r'`(?:collect|wait)`|call `decline`')
+"""Tools a structured step does not have, named the way the prompts name tools. `decline` is `reply`'s field."""
 
 
 def _tools(node) -> set[str]:
@@ -714,7 +749,7 @@ async def a_coached_answer_is_assisted_and_the_check_completes_the_lesson():
     said = await line.turn(
         'How do I say apples?',
         call('hand_over', to='help', because='a question about the exercise'),
-        say('Apples is "manzanas". Try it!'),
+        reply('Apples is "manzanas". Try it!'),
     )
     assert said == 'Apples is "manzanas". Try it!' and line.call.state.agent == 'coach', said
     assert (await line.session()).checkpoint.helped == 'es-daily-2-1', (
@@ -722,7 +757,8 @@ async def a_coached_answer_is_assisted_and_the_check_completes_the_lesson():
     )
     assert line.script.steps == ['lesson', 'coach']
     said = await line.turn(
-        'Un kilo de manzanas, por favor.', grade('Un kilo de manzanas, por favor.', 'correct', 'Great!')
+        'Un kilo de manzanas, por favor.',
+        record(answer='Un kilo de manzanas, por favor.', grade='correct', feedback='Great!'),
     )
     plan = await line.store.active_plan(line.call.state.facts.learner_id)
     assert plan is not None and plan.progress.attempts[-1].result == 'assisted', 'help before the answer'
@@ -745,7 +781,7 @@ async def a_coached_answer_is_assisted_and_the_check_completes_the_lesson():
     line = Line(database(), EMMA)
     await line.turn('Yes.', YES)
     await line.turn("Let's carry on.", call('continue_lesson'))
-    await line.turn('Help?', call('hand_over', to='help', because='help'), say('Try "manzanas".'))
+    await line.turn('Help?', call('hand_over', to='help', because='help'), reply('Try "manzanas".'))
     await line.turn(
         'Actually, a recap.', call('hand_over', to='menu', because='recap'), call('read_progress')
     )
@@ -762,7 +798,7 @@ async def a_language_switch_keeps_the_question_answerable():
     """F3: asking to switch language puts the question waiting again in the new language, so the next yes counts."""
     restart()
     line = Line(database(), NEW)
-    said = await line.turn('¿Podemos hablar en español?', collect(asked_language='español'))
+    said = await line.turn('¿Podemos hablar en español?', record(asked_language='español'))
     assert (
         said == f'A ver si lo tengo bien: ¿tu número es {curriculum.spaced(NEW)}?' and line.requests == 1
     ), said
@@ -797,8 +833,8 @@ async def hostile_model_output_is_refused_where_it_runs():
 
     restart()
     line = Line(database())
-    await line.turn('Hola.', call('confirm_phone'), say('¿Me dices tu número?'))
-    await line.turn('Es el +34 600 111 222.', call('continue_lesson'), say('¿Perdón?'))
+    await line.turn('Hola.', call('confirm_phone'), reply('¿Me dices tu número?'))
+    await line.turn('Es el +34 600 111 222.', call('continue_lesson'), reply('¿Perdón?'))
     assert not line.call.state.facts.learner_id and not line.call.evidence, 'nothing looked up without a yes'
     before = line.call.state.facts
     for loaded in ({'learner_id': 1}, {'notes': 'Learner: Lucía.'}, {'signup_agreed': True}):
@@ -850,7 +886,10 @@ async def a_lost_reply_is_reconciled_once():
 
 
 async def calls_side_by_side_share_nothing():
-    """F7: two learners in lessons at once, on one flow and one store: their answers, facts and questions stay theirs."""
+    """F7: two learners in lessons at once, on one flow and one store: their answers, facts and questions stay theirs.
+
+    Each call's script is keyed by what its step sees: the number at identify, the learner's name after it.
+    """
     restart()
     script = Script()
     flow = faro.SPEC.compile(model=script.model)
@@ -858,12 +897,12 @@ async def calls_side_by_side_share_nothing():
     lucia, emma = Line(path, LUCIA, flow, script), Line(path, EMMA, flow, script)
     await asyncio.gather(lucia.turn('Sí.', YES, key=LUCIA), emma.turn('Yes.', YES, key=EMMA))
     await asyncio.gather(
-        lucia.turn('Seguimos.', call('continue_lesson'), key=LUCIA),
-        emma.turn("Let's carry on.", call('continue_lesson'), key=EMMA),
+        lucia.turn('Seguimos.', call('continue_lesson'), key='Lucía'),
+        emma.turn("Let's carry on.", call('continue_lesson'), key='Emma'),
     )
     await asyncio.gather(
-        lucia.turn('Two coffees, please.', grade('Two coffees, please.', 'correct'), key=LUCIA),
-        emma.turn('Un kilo de manzanas.', grade('Un kilo de manzanas.', 'wrong'), key=EMMA),
+        lucia.turn('Two coffees, please.', grade('Two coffees, please.', 'correct'), key='Lucía'),
+        emma.turn('Un kilo de manzanas.', grade('Un kilo de manzanas.', 'wrong'), key='Emma'),
     )
     first = await lucia.store.active_plan(lucia.call.state.facts.learner_id)
     second = await emma.store.active_plan(emma.call.state.facts.learner_id)
@@ -875,7 +914,7 @@ async def calls_side_by_side_share_nothing():
     assert 'Lucía' not in emma.call.state.facts.notes and 'Emma' not in lucia.call.state.facts.notes
     assert lucia.call.locale.goodbye != emma.call.locale.goodbye, 'each call is in its own language'
     again = Line(path, LUCIA, flow, script)
-    await again.turn('Sí.', YES, key=LUCIA)
+    await again.turn('Sí.', YES, reply('Ahora mismo no puedo, perdona.'), key=LUCIA)
     assert not again.call.state.facts.learner_id, 'a second call for a learner already on one is refused'
 
 
@@ -917,8 +956,8 @@ def no_reader_or_legacy_module_is_imported():
 GOLDEN = Path(__file__).parent / 'golden' / 'payloads.json'
 
 
-async def v1_requests_are_pinned():
-    """Faro's requests whole (instructions, history, tool and output schemas), pinned before the scoped view existed."""
+async def requests_are_pinned():
+    """Faro's requests whole (instructions, history, tool and output schemas), pinned."""
     restart()
     line = Line(database(), LUCIA, clock=lambda: datetime.fromisoformat('2026-09-28T08:30:00+02:00'))
     await line.turn('Sí, es ese.', YES)
@@ -939,7 +978,7 @@ async def v1_requests_are_pinned():
 
 
 async def zero_is_a_value_the_state_validates():
-    """Legacy `collect`, frozen for Session 2: 0 is not dropped as empty; the state's `ge=5` refuses it, and nothing is recorded."""
+    """`collect` on the prose onboarding: 0 is not dropped as empty; the state's `ge=5` refuses it, and nothing is recorded."""
     restart()
     line = Line(database(), NEW)
     await line.turn('Yes.', YES)
@@ -950,40 +989,24 @@ async def zero_is_a_value_the_state_validates():
     assert 'Nothing was recorded' in line.script.payloads[1].history, 'the refusal went back to the model'
 
 
-STRUCTURED_SCRIPT = Script()
-STRUCTURED_FLOW = faro.SPEC.model_copy(
-    update={
-        'steps': [
-            step.model_copy(update={'speech': 'structured'}) if step.id in ('identify', 'plan') else step
-            for step in faro.SPEC.steps
-        ]
-    }
-).compile(model=STRUCTURED_SCRIPT.model)
-"""Faro with `identify` and `plan` as `speech: structured` (`core.structured`): a test variant, the manifest unchanged."""
-
-
-def reply(words: str, **update: Any) -> tuple[str, str, dict[str, Any]]:
-    return ('call', 'reply', {'say': words, **({'update': update} if update else {})})
-
-
 async def structured_steps_record_and_code_speaks():
     """F10: an update rides its read-back, one request; `record` only where code carries out; a question is no yes."""
     restart()
-    line = Line(database(), flow=STRUCTURED_FLOW, script=STRUCTURED_SCRIPT)
+    line = Line(database())
     said = await line.turn(
         'Más treinta y cuatro, seis cero cero, uno uno uno, dos dos dos.',
         call('confirm_phone', update={'phone': '+34 600 111 222'}),
     )
     assert said == f'Let me check: is your number {curriculum.spaced(LUCIA)}?' and line.requests == 1, said
     offered = line.script.offered[0]
-    assert 'collect' not in offered and 'record' not in offered and 'reply' in offered, (
-        'the read-back goes with its own operation: no record, no collect'
+    assert 'collect' not in offered and {'record', 'reply', 'confirm_phone'} <= offered, (
+        'the number goes with its own operation; `record` for a language, which confirm_phone cannot carry'
     )
     said = await line.turn('Sí.', YES)
     assert 'Lucía' in said and line.call.state.agent == 'menu', said
 
     restart()
-    line = Line(database(), NEW, flow=STRUCTURED_FLOW, script=STRUCTURED_SCRIPT)
+    line = Line(database(), NEW)
     await to_assessment(line)
     for words in ('Hola.', 'Un café.', 'Fui a Roma.'):
         await line.turn(words, grade(words, 'partly'))
@@ -1007,9 +1030,136 @@ async def structured_steps_record_and_code_speaks():
     assert 'your plan is active' in said and await line.store.active_plan(learner) is not None, said
 
 
+TEACHING = ('Yes.', "Let's carry on.", 'How do I say apples?', 'Un kilo de manzanas, por favor.')
+"""Emma's turns from the greeting to an answer after help."""
+TEACHING_MOVES = (
+    (YES,),
+    (call('continue_lesson'),),
+    (
+        call('hand_over', to='help', because='a question about the exercise'),
+        reply('Apples is "manzanas". Try it!'),
+    ),
+    (record(answer='Un kilo de manzanas, por favor.', grade='correct', feedback='Great!'),),
+)
+"""The step agents' moves for `TEACHING`: the coach's update inside `record`."""
+
+
+async def teaching() -> tuple[Line, list[list[Payload]], list[str], list[list[tuple]]]:
+    """`TEACHING` from a fresh copy of the fixture: the line, each turn's requests and words."""
+    restart()
+    line = Line(database(), EMMA)
+    sent, said, given = [], [], []
+    for words, moves in zip(TEACHING, TEACHING_MOVES, strict=True):
+        said.append(await line.turn(words, *moves))
+        sent.append(list(line.script.payloads))
+        given.append(list(line.script.given))
+    return line, sent, said, given
+
+
+async def version_2_keeps_teaching_apart_from_planning():
+    """F11: a lesson with help: what each step sees, help, grade and receipt, routing.
+
+    Lesson (rendered, its own turns) is never sent the number read back at
+    the greeting. The coach sees the whole conversation, since the exercise
+    it helps with was said on the lesson's turn; its facts hold the
+    exercise's id, never the number. Help is the store's record before the
+    coach speaks. The coach's `record` carries the answer and the grade
+    that is its own judgement; `record_attempt`'s receipt is the store's,
+    `assisted`, said by code, and its route moves the learner back to the
+    lesson.
+    """
+    line, sent, said, _ = await teaching()
+    number = curriculum.spaced(EMMA)
+    assert [len(requests) for requests in sent] == [1, 1, 2, 1], [len(r) for r in sent]
+    assert (
+        'Shopping, first exercise. Answer in Spanish: Ask for a kilo of apples at the market.' in said[1]
+    ), said
+    assert said[2] == 'Apples is "manzanas". Try it!' and said[3].startswith(
+        'Great! Shopping, second exercise.'
+    )
+    lesson, coach = sent[2]
+    assert number not in lesson and EMMA not in lesson, 'the lesson sees its own turns: no number read back'
+    assert '"waiting":"es-daily-2-1"' in coach.instructions and EMMA not in coach.instructions, (
+        coach.instructions
+    )
+    assert 'Ask for a kilo of apples at the market.' in coach.history, 'the exercise, from the conversation'
+    assert number in coach.history, 'the conversation is sent as said: the greeting named the number'
+    assert '"confirmed"' not in coach.instructions and '"draft_' not in coach.instructions, (
+        'no account or plan'
+    )
+    assert 'collect' not in SCRIPT.offered[-1] and 'record' in SCRIPT.offered[-1]
+    plan = await line.store.active_plan(line.call.state.facts.learner_id)
+    assert plan is not None and plan.progress.attempts[-1].result == 'assisted', 'the store says assisted'
+    assert line.call.state.facts.grade == 'correct', "the grade in state is the coach's judgement"
+    assert line.call.state.agent == 'lesson', "the receipt's route: back to the lesson for the next exercise"
+    switched = await line.turn('¿Podemos hablar en español?', collect(asked_language='ES'))
+    assert (
+        switched == curriculum.exercise('ES', 'es-daily-2-2') and line.call.state.facts.explanation == 'ES'
+    ), 'the rendered lesson puts the exercise waiting again, in the new language'
+
+    restart()
+    line = Line(database(), NEW)
+    await to_assessment(line)
+    for words in ('Hola.', 'Un café.', 'Fui a Roma.'):
+        await line.turn(words, grade(words, 'partly'))
+    await line.turn('How long is each lesson?', reply('About ten minutes a day.'))
+    plan_request = line.script.payloads[-1]
+    for hidden in ('"answer"', '"grade"', '"feedback"', '"evidence"', '"phone"', '"confirmed"'):
+        assert hidden not in plan_request.instructions, (hidden, plan_request.instructions)
+    assert '"draft_minutes"' in plan_request.instructions, 'the plan sees the proposal it owns'
+
+
+async def adapter_bytes(messages: list[Any], info: AgentInfo) -> dict[str, int]:
+    """One request as the installed Gemini adapter maps it, offline, sending nothing: system, contents, tools.
+
+    The same measure as the new salon's (`GoogleModel._build_content_and_config`),
+    before the google-genai client's own HTTP encoding. Bytes, not tokens.
+    """
+    from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
+    from pydantic_ai.providers.google import GoogleProvider
+
+    model = GoogleModel('gemini-3.5-flash-lite', provider=GoogleProvider(api_key='offline'))
+    contents, config = await model._build_content_and_config(
+        messages, GoogleModelSettings(**(info.model_settings or {})), info.model_request_parameters
+    )
+
+    def size(value: Any) -> int:
+        return len(json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode())
+
+    found = {
+        'system': size(config.get('system_instruction')),
+        'contents': size(contents),
+        'tools': size([config.get('tools'), config.get('tool_config')]),
+    }
+    return found | {'total': sum(found.values())}
+
+
+async def table() -> None:
+    """`--table`: `TEACHING`, request by request, in bytes (not tokens).
+
+    The first columns are the Pydantic AI model boundary (`Payload`), the last
+    four the Gemini adapter's mapping of the same request (`adapter_bytes`).
+    """
+    print(
+        '| Turn | Req | Instructions | History | of which results | Tools | Outputs | Total |'
+        ' Adapter system | Adapter contents | Adapter tools | Adapter total |'
+    )
+    print('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
+    _, sent, _, given = await teaching()
+    for words, requests, raw in zip(TEACHING, sent, given, strict=True):
+        for number, (payload, (messages, info)) in enumerate(zip(requests, raw, strict=True), 1):
+            size, wire = payload.sizes(), await adapter_bytes(messages, info)
+            print(
+                f'| {words} | {number} | {size["instructions"]} | {size["history"]} |'
+                f' {payload.results()} | {size["tools"]} | {size["outputs"]} | {size["total"]} |'
+                f' {wire["system"]} | {wire["contents"]} | {wire["tools"]} | {wire["total"]} |'
+            )
+
+
 async def main():
-    await v1_requests_are_pinned()
+    await requests_are_pinned()
     await structured_steps_record_and_code_speaks()
+    await version_2_keeps_teaching_apart_from_planning()
     await zero_is_a_value_the_state_validates()
     await seeds_are_identified_only_after_the_yes()
     await a_wrong_or_foreign_number_discloses_nothing()
@@ -1037,8 +1187,8 @@ async def main():
     await calls_side_by_side_share_nothing()
     await approval_is_this_calls_only()
     no_reader_or_legacy_module_is_imported()
-    print('faro ok: L01-L16 and F1-F10 on the public path, a real SQLite file, no reader imported')
+    print('faro ok: L01-L16 and F1-F11 on the public path, a real SQLite file, no reader imported')
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.run(table() if '--table' in sys.argv else main())

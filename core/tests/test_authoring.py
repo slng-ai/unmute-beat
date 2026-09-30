@@ -168,7 +168,7 @@ def definitions_fail_before_any_model():
         found = problems(broken)
         assert any(expected in problem for problem in found), (expected, found)
     for broken, expected in (
-        (base.replace('version: 1', 'version: 2', 1), 'version'),
+        (base.replace('version: 1', 'version: 3', 1), 'version'),
         (base.replace('kind: confirm', 'kind: confirmation', 1), 'confirmation'),
         (base.replace('fields: [patient]}', 'fields: [patient], colour: red}'), 'colour'),
     ):

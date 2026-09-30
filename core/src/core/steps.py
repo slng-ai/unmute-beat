@@ -1083,6 +1083,43 @@ def _node(flow: StepFlow, step: Step, agent: Agent[Any, object], **node: Any) ->
     return Node(agent, exits=tuple(Exit(to) for to in flow.destinations(step)), **node)
 
 
+def _refusal_words(hooks: Hooks, tools: list[str], *, ask_always: bool = False) -> None:
+    """A value these tools' schemas refused: the same retry, with the locale's words for the caller beside it.
+
+    `collect` on a prose or rendered step (`ask_always`), and every tool or
+    output carrying a structured step's `update`: its fields keep the state's
+    own types, so the application's validators refuse in the arguments, before
+    the update runs. A function tool's arguments and an output tool's are
+    validated apart, so both hooks are registered. On a structured step only a
+    refusal the locale has words for is reworded: any other error (an argument
+    of the wrong shape) is the model's to fix, and the SDK's own retry names
+    the field.
+    """
+
+    def worded(ctx: RunContext[FlowCall[Any]], error: Any) -> Any:
+        if isinstance(error, ValidationError) and (
+            ask_always or any(ctx.deps.locale.refusal(item) for item in error.errors())
+        ):
+            raise ModelRetry(
+                f'Nothing was recorded: {ctx.deps.note_refusal(error)}. Ask the caller again.'
+            ) from None
+        raise error
+
+    @hooks.on.tool_validate_error(tools=tools)
+    async def refused(
+        ctx: RunContext[FlowCall[Any]], *, call: Any, tool_def: Any, args: Any, error: Any
+    ) -> Any:
+        worded(ctx, error)
+
+    @hooks.on.output_validate_error
+    async def refused_output(
+        ctx: RunContext[FlowCall[Any]], *, output_context: Any, output: Any, error: Any
+    ) -> Any:
+        if output_context.tool_call is not None and output_context.tool_call.tool_name in tools:
+            worded(ctx, error)
+        raise error
+
+
 def _entered(call: FlowCall[Any]) -> bool:
     return True
 
@@ -2244,18 +2281,7 @@ class ConversationStep(Step):
             one_action_per_reply(actions, frozenset({'collect'}), into=hooks)
         speak_by(SPEAK_BY, into=hooks)
         if self.fields:
-
-            @hooks.on.tool_validate_error(tools=['collect'])
-            async def refused(
-                ctx: RunContext[FlowCall[Any]], *, call: Any, tool_def: Any, args: Any, error: Any
-            ) -> Any:
-                """A value the collect schema refused: the same retry, with the locale's words for the caller beside it."""
-                if isinstance(error, ValidationError):
-                    raise ModelRetry(
-                        f'Nothing was recorded: {ctx.deps.note_refusal(error)}. Ask the caller again.'
-                    ) from None
-                raise error
-
+            _refusal_words(hooks, ['collect'], ask_always=True)
         agent = _agent(flow, self, text, outputs, hooks=hooks, tools=tools, extra=self.capabilities)
         return _node(
             flow,
@@ -2302,6 +2328,8 @@ class ConversationStep(Step):
         one_action_per_reply(built.actions, built.updates, into=hooks, reads=built.read_names)
         speak_by(SPEAK_BY, into=hooks)
         built.hooks(hooks)
+        if built.updates:
+            _refusal_words(hooks, sorted(built.updates))
         agent = _agent(flow, self, text, outputs, hooks=hooks, tools=built.tools(), extra=self.capabilities)
         return _node(
             flow,

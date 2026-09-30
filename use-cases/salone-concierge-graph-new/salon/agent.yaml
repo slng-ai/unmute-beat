@@ -1,21 +1,22 @@
-# Sage and Stone on core's simpler contract: one class per operation, core's value types, a manifest clock.
+# Sage and Stone on core's simpler contract, in manifest version 2: steps keyed by id.
 #
-# Each step is one agent. It reads the caller's replies itself and answers
-# through what is declared here: fields it may record, choices it may offer,
-# operations it may carry out (each read back first, and done only on the
-# caller's yes to that read-back), steps it may hand the caller to, and a
-# stylist it may consult and get the caller back from. Everything is checked
+# Each step is one agent. Its words and the caller's update travel in one typed decision
+# (`speech: structured`, the version 2 default), so a step records what the caller said with the answer
+# it gives. It answers through what is declared here: fields it may record, choices it may offer,
+# operations it may carry out (each read back first, and done only on the caller's yes to that
+# read-back), steps it may hand the caller to, and a stylist it may consult and get the caller back from.
+# Each step sees only the facts it lists, and its own last eight turns (`context`). Everything is checked
 # when the salon starts, never mid-call.
 
-version: 1
+version: 2
 id: sage-and-stone
-app_version: '2026.09.29-simple'
+app_version: '2026.09.30-v2'
 greeting: "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
 state: state.py:SalonState
 identity: customer_phone
 entry: concierge
 current_datetime: {timezone: Europe/Madrid, calendar_days: 14}
-context: {history: messages}
+context: {facts: none, history: {scope: node, turns: 8}}
 locale:
   base: english
   goodbye: Thanks for calling Sage and Stone. Have a lovely day!
@@ -43,11 +44,11 @@ operations:
   record_complaint: operations.py:RecordComplaint
 
 steps:
-  - id: concierge
-    kind: conversation
+  concierge:
     agent: robin
     prompt: prompts/concierge.md
     fields: [service, booking_day, booking_time]
+    context: {facts: [service, booking_day, booking_time]}
     capabilities: [capabilities.py:refunds]
     exits:
       - {to: booking, purpose: 'a new booking, or a change or cancellation of one they hold'}
@@ -56,11 +57,11 @@ steps:
     consults:
       - {to: stylist, purpose: 'a question about hair: which service suits them, colour, aftercare, how long a service takes'}
 
-  - id: verify
-    kind: conversation
+  verify:
     agent: robin
     prompt: prompts/verify.md
     fields: [customer_phone, service, booking_day, booking_time]
+    context: {facts: [customer_phone, service, booking_day, booking_time, customer]}
     operations: [lookup_customer]
     opens_with: lookup_customer
     reads_back: {lookup_customer: [customer_phone]}
@@ -68,13 +69,13 @@ steps:
     exits:
       - {to: concierge, purpose: 'the caller will not confirm a number, or asks about something else entirely'}
 
-  - id: booking
-    kind: conversation
+  booking:
     agent: robin
     prompt: prompts/booking.md
     requires: [customer]
     satisfied_by: verify
     fields: [service, booking_day, booking_time, slot, booking_id]
+    context: {facts: [service, booking_day, booking_time, slot, booking_id]}
     choices:
       # The booking being moved or cancelled rests on no field; a time on offer rests on what was asked for.
       booking_id: {function: offers.py:held_bookings, after: []}
@@ -88,21 +89,20 @@ steps:
     consults:
       - {to: stylist, purpose: 'a question about hair: which service suits them, colour, aftercare, how long a service takes'}
 
-  - id: complaints
-    kind: conversation
+  complaints:
     agent: robin
     prompt: prompts/complaints.md
     requires: [customer]
     satisfied_by: verify
     fields: [complaint, wanted_outcome, wants_refund]
+    context: {facts: [complaint, wanted_outcome, wants_refund]}
     operations: [record_complaint]
     capabilities: [capabilities.py:refunds]
     exits:
       - {to: booking, purpose: 'they want to book, move or cancel an appointment'}
       - {to: concierge, purpose: 'a separate salon question, or they abandon the complaint'}
 
-  - id: stylist
-    kind: conversation
+  stylist:
     agent: robin
     prompt: prompts/stylist.md
-    context: {history: messages, facts: [service, booking_day, booking_time]}
+    context: {facts: [service, booking_day, booking_time]}

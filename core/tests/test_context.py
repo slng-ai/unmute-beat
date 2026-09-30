@@ -324,20 +324,22 @@ def invalid_context_is_refused_at_load():
     assert refused(v1) == '', 'the same template loads in v1, which renders against the whole call'
 
 
-def automatic_sources_show_only_the_steps_view():
+def automatic_sources_show_only_the_steps_view(manifest: str = 'scoped.yaml'):
     """Canaries in every automatic source: none reaches a step that does not see them; the call keeps them all.
 
     The caller's patient number P-7777 is bound by `book` from the state and
     shown to no step but `front`; the note is written by `desk` and shown to
-    no one. The raw receipt, the offers, the read-back, the intent's
-    arguments and the recap all hold one or the other.
+    no one else. The raw receipt, the offers, the read-back, the intent's
+    arguments and the recap all hold one or the other. In version 2 (`scoped.v2.yaml`)
+    `desk` sees the note it may change; in version 1 it may change it unseen.
     """
     script = Script()
     flow, call = opened(
         script,
         DeskState(patient='P-7777', checked_in=CheckedIn(patient='P-7777'), note='CANARY-NOTE'),
-        'scoped.yaml',
+        manifest,
     )
+    sees_note = manifest == 'scoped.v2.yaml'
     call.commit(agent='desk')
     said = asyncio.run(
         turn(
@@ -347,7 +349,9 @@ def automatic_sources_show_only_the_steps_view():
     assert said[-1] == 'Shall I book Tuesday at 10:00 AM for P-7777?', said
     desk = script.payloads[-1]
     assert 'The caller is answering: "Shall I book' not in desk.instructions, 'asked after this request'
-    assert 'CANARY-NOTE' not in desk and 'P-7777' not in desk.instructions, desk.instructions
+    assert ('CANARY-NOTE' in desk.instructions) == sees_note and 'P-7777' not in desk.instructions, (
+        desk.instructions
+    )
     asyncio.run(
         turn(
             flow,
@@ -381,7 +385,7 @@ def automatic_sources_show_only_the_steps_view():
     desk = script.payloads[-1]
     assert 'Done on this call: book {"slot": "1000"} -> succeeded' in desk.instructions, desk.instructions
     assert 'your visit Tuesday at 10:00 AM' in desk.instructions, 'the owner may recap its booking'
-    for leaked in ('P-7777', 'CANARY-NOTE', 'CL001'):
+    for leaked in ('P-7777', *(() if sees_note else ('CANARY-NOTE',)), 'CL001'):
         assert leaked not in desk.instructions, (leaked, desk.instructions)
     assert 'reference CL001' in desk.history, 'the receipt the caller heard is conversation, sent as said'
     call.services.failing = True
@@ -444,12 +448,10 @@ def a_refusal_says_only_what_the_step_sees():
         assert ('P-7777' in refusal) == shows, (manifest, refusal)
 
 
-def words_said_stay_words():
+def words_said_stay_words(manifest: str = 'scoped.yaml'):
     """Scope minimises context, it does not redact: what the caller says, and what they were read, is sent as said."""
     script = Script()
-    flow, call = opened(
-        script, DeskState(patient='P-7777', checked_in=CheckedIn(patient='P-7777')), 'scoped.yaml'
-    )
+    flow, call = opened(script, DeskState(patient='P-7777', checked_in=CheckedIn(patient='P-7777')), manifest)
     call.commit(agent='desk')
     asyncio.run(
         turn(
@@ -464,16 +466,17 @@ def words_said_stay_words():
     asyncio.run(turn(flow, call, script, 'How long is it?', ('say', 'Half an hour.')))
     desk = script.payloads[-1]
     assert call.state.facts.note == 'CANARY-SAID', 'the whole mixed request was recorded, the note included'
-    assert 'CANARY-SAID' in desk.history and 'CANARY-SAID' not in desk.instructions, desk.instructions
+    assert 'CANARY-SAID' in desk.history, desk.history
+    assert ('CANARY-SAID' in desk.instructions) == (manifest == 'scoped.v2.yaml'), (
+        'a fact only where it is seen'
+    )
     assert 'for P-7777?' in desk.history, 'the read-back the caller heard names the hidden number'
 
 
-def history_is_the_nodes_own():
+def history_is_the_nodes_own(manifest: str = 'scoped.yaml'):
     """`scope: node` is by step id, across visits; a parent's tool exchange is not the consulted step's."""
     script = Script()
-    flow, call = opened(
-        script, DeskState(patient='P-7777', checked_in=CheckedIn(patient='P-7777')), 'scoped.yaml'
-    )
+    flow, call = opened(script, DeskState(patient='P-7777', checked_in=CheckedIn(patient='P-7777')), manifest)
     call.commit(agent='desk')
     asyncio.run(turn(flow, call, script, 'Tuesday at ten.', ('collect', {'slot': '1000'}), ('say', 'Noted.')))
     asyncio.run(
@@ -508,10 +511,10 @@ def history_is_the_nodes_own():
     assert 'Is it OK to eat before?' not in desk.history and 'Tuesday at ten.' not in desk.history, 'turns: 1'
 
 
-def anchors_outlive_the_window():
+def anchors_outlive_the_window(manifest: str = 'scoped.yaml'):
     """With `turns: 1`, the request that sent the caller here, the step's own question and a loaded capability stay."""
     script = Script()
-    flow, call = opened(script, DeskState(), 'scoped.yaml')
+    flow, call = opened(script, DeskState(), manifest)
     asyncio.run(
         turn(
             flow,
@@ -564,10 +567,10 @@ def anchors_outlive_the_window():
     assert len(loads) == 1 and REFUND_POLICY in desk, 'the load record is kept once, outside the window'
 
 
-def each_request_is_rebuilt_for_its_own_call():
+def each_request_is_rebuilt_for_its_own_call(manifest: str = 'scoped.yaml'):
     """Two calls on one compiled flow, interleaved: each request is built fresh from its own call, never the other."""
     script = Script()
-    flow = core.load(HERE / 'scoped.yaml').compile(model=script.model)
+    flow = core.load(HERE / manifest).compile(model=script.model)
     one = opened(script, DeskState(note='NOTE-ONE'), flow=flow)[1]
     two = opened(script, DeskState(note='NOTE-TWO'), flow=flow)[1]
     for call in (one, two):
@@ -714,10 +717,11 @@ if __name__ == '__main__':
     v1_node_context_replaces_the_flows_whole()
     scoped_members_replace_one_by_one()
     invalid_context_is_refused_at_load()
-    automatic_sources_show_only_the_steps_view()
     a_refusal_says_only_what_the_step_sees()
-    words_said_stay_words()
-    history_is_the_nodes_own()
-    anchors_outlive_the_window()
-    each_request_is_rebuilt_for_its_own_call()
+    for scoped in ('scoped.yaml', 'scoped.v2.yaml'):
+        automatic_sources_show_only_the_steps_view(scoped)
+        words_said_stay_words(scoped)
+        history_is_the_nodes_own(scoped)
+        anchors_outlive_the_window(scoped)
+        each_request_is_rebuilt_for_its_own_call(scoped)
     print('context ok: history and facts per step, a capability kept, consultations that come back')

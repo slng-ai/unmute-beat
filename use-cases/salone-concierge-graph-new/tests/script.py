@@ -1,15 +1,12 @@
 """The scripted provider every salon test drives the real flow with: each agent request takes the next move.
 
-A move is `('say', words)`, `('call', tool, args)`, `('calls', [(tool, args), ...])`
-for one response carrying several tool calls, or `('collect', values)`. Every
-request records which step asked and exactly what it was sent (messages and
-instructions), so a test can inspect the provider input. A non-streamed
-request would be a separate reading of the reply, which the node-agent core
-never sends: it fails the test (P1).
-
-Every step of this salon is prose. `('answer', words)` is the stylist's
-reply and its `done` in one response: what a consultation that answers at
-once sends.
+A move is `('call', tool, args)` or `('calls', [(tool, args), ...])` for one
+response carrying several tool calls. `('say', words)` is text, which a
+`speech: structured` step may not send: every step of `agent.yaml` is one, so
+its words travel in `reply`. Every request records which step asked and
+exactly what it was sent (messages and instructions), so a test can inspect
+the provider input. A non-streamed request would be a separate reading of the
+reply, which the node-agent core never sends: it fails the test (P1).
 
 Scripted models prove runtime properties, never language understanding.
 """
@@ -45,10 +42,8 @@ class Request:
     tools: list[str]
     payload: Payload
     """The request whole: instructions, history, tool and output schemas, at the model boundary."""
-
-
-STRUCTURED = ('concierge', 'booking', 'stylist')
-"""The steps a `structured` script runs as `speech: structured` (`core.structured`): a test variant, not the manifest."""
+    info: AgentInfo | None = None
+    """What the model boundary was given beside the messages: its request parameters, for the adapter's own mapping."""
 
 
 @dataclass
@@ -58,8 +53,6 @@ class Script:
     call: core.FlowCall | None = None
     delay: float = 0.0
     flow: core.StepFlow | None = None
-    structured: bool = False
-    """Compile the salon with `STRUCTURED` steps as `speech: structured`, from the loaded spec: the manifest is unchanged."""
 
     def __post_init__(self) -> None:
         self.model = FunctionModel(self.reading, stream_function=self.agent)
@@ -71,7 +64,7 @@ class Script:
         step = self.call.state.agent if self.call is not None else '?'
         tools = sorted(t.name for t in [*info.function_tools, *info.output_tools])
         self.requests.append(
-            Request(step, list(messages), info.instructions or '', tools, Payload.of(messages, info))
+            Request(step, list(messages), info.instructions or '', tools, Payload.of(messages, info), info)
         )
         if self.delay:
             await asyncio.sleep(self.delay)
@@ -79,13 +72,8 @@ class Script:
             yield 'Sorry, could you say that again?'
             return
         kind, *rest = self.moves.pop(0)
-        if kind in ('say', 'text'):
+        if kind == 'say':
             yield rest[0]
-        elif kind == 'answer':
-            yield rest[0]
-            yield {1: DeltaToolCall(name='done', json_args='{}')}
-        elif kind == 'collect':
-            yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': rest[0]}))}
         elif kind == 'call':
             yield {0: DeltaToolCall(name=rest[0], json_args=json.dumps(rest[1] if len(rest) > 1 else {}))}
         else:
@@ -99,17 +87,7 @@ class Script:
 def flow_for(script: Script) -> core.StepFlow:
     """The salon compiled once per script, with its model: the same manifest the bot compiles."""
     if script.flow is None:
-        spec = SPEC
-        if script.structured:
-            spec = SPEC.model_copy(
-                update={
-                    'steps': [
-                        step.model_copy(update={'speech': 'structured'}) if step.id in STRUCTURED else step
-                        for step in SPEC.steps
-                    ]
-                }
-            )
-        script.flow = spec.compile(model=script.model)
+        script.flow = SPEC.compile(model=script.model)
     return script.flow
 
 

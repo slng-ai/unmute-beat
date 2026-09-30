@@ -34,10 +34,28 @@ TO_READ_BACK = (
     ('call', 'resolve_ticket', {}),
 )
 """The scripted replies that take a call from the first words to the resolve read-back."""
+V2_TO_READ_BACK = (
+    ('call', 'hand_over', {'to': 'desk', 'because': 'resolve a ticket'}),
+    (
+        'call',
+        'hand_over',
+        {
+            'to': 'look_up',
+            'because': 'find its revision',
+            'update': {
+                'account_id': 'ACC-1234',
+                'ticket_id': 'T-101',
+                'resolution': 'la impresora ya imprime',
+            },
+        },
+    ),
+    ('call', 'resolve_ticket', {}),
+)
+"""The same, on `v2.yaml`'s structured desk: the update rides the hand-over, so no `collect`."""
 
 
-async def to_read_back(flow, call, script: Script) -> list[str]:
-    script.moves = list(TO_READ_BACK)
+async def to_read_back(flow, call, script: Script, moves: tuple = TO_READ_BACK) -> list[str]:
+    script.moves = list(moves)
     reply = await core.text_turn(
         flow, call, 'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.'
     )

@@ -275,6 +275,70 @@ Core's own lines follow that value during the call. An unmapped value falls back
 
 `flow.greeting(call, words)` returns the application's greeting followed by what the entry step opens with: its `opens_with` read-back when the state already gives the arguments, such as a caller ID, or its first `asks` line. Passed to `core.greet` and sent through the launcher's audio path, a read-back becomes the question the first reply answers. Its delivery must still be acknowledged; constructing a greeting does not prove playback.
 
+A third mode, `speech: structured`, puts the agent's words and the caller's update into one typed decision ([`core/structured.py`](../../core/src/core/structured.py)). The agent answers with `reply(say, update)`. That is one request, with no `collect`. A pure read, meaning one with no read-back, no change and no `route`, is an ordinary tool that takes the update and returns its result to the same agent. Operations, `hand_over` and a consultation's `done` take the same update. Read-backs, receipts and fixed lines are still code's words. An update keeps what it leaves out, clears only a field that may be null, and commits whole or not at all.
+
+## 9. Write the same flow in manifest version 2
+
+Version 2 is a shorter way to write the same steps table. It is not a second runtime. The loader turns it into the version 1 list, and the same spec classes check it ([`FlowSpec._normalized`](../../core/src/core/flowspec.py)). The `request` node from section 3, in version 2:
+
+```yaml
+version: 2
+id: record-changes
+state: models.py:ApplicationState
+identity: caller_id
+entry: front
+voice: prompts/assistant.md
+steps:
+  front:
+    prompt: prompts/front.md
+    exits:
+      - {to: request, purpose: changing an existing record}
+  request:
+    prompt: prompts/request.md
+    speech: rendered
+    fields: [caller_id, record_id, requested_change]
+    context: {facts: [caller_id, record_id, requested_change]}
+    operations: [apply_change]
+    exits: [lookup, front]
+  lookup: {kind: action, operation: fetch_record, returns: true, on_error: request, on_unknown: request}
+  done: {kind: end, outcome: completed, say: Goodbye.}
+```
+
+What changes, and what does not:
+
+| | Version 1 | Version 2 |
+|---|---|---|
+| Steps | a list, each with `id` and `kind` | a mapping keyed by id; an `id:` inside must equal its key |
+| A step with no `kind` | refused | `conversation` |
+| A conversation with no `speech` | `prose` | `structured` |
+| Flow `context` with no `facts` | every fact | no facts |
+| Flow `context` with no `history` | `all` | `{scope: node}`: the step's own turns, every one |
+| A step's `context` | replaces the flow's whole | replaces the flow's member by member |
+| A field in `fields` not in the step's facts | allowed | refused: a step sees what it may change |
+| A key given twice | refused (both versions) | refused |
+| Everything else | | the same keys, with the same meaning |
+
+`front` has no `agent`, so it speaks in the flow's `voice`. `request` pins `speech: rendered`, and an explicit speech or kind is always kept. The `context` lines are the one thing version 2 asks for that version 1 did not. A step that writes a field must list it, because the flow's facts default to none.
+
+Every refusal names its step. For example: `step 'request': colour: Extra inputs are not permitted`, `request: may change 'record_id' but cannot see it: add it to context.facts`, or `request: its agent 'assistant' sets spec.output_schema, which core would replace with this step's own outputs; leave it out`. The last one applies in both versions, since core builds each step's outputs itself.
+
+Version 1 files load exactly as before. [`core/tests/test_v2.py`](../../core/tests/test_v2.py) checks that each version 2 twin of a clinic fixture normalizes to its version 1 source, compiles to the same legal moves, and sends the same requests byte for byte.
+
+Both applications on core that are still maintained run version 2:
+
+- [`salone-concierge-graph-new/salon/agent.yaml`](../../use-cases/salone-concierge-graph-new/salon/agent.yaml): every step structured.
+- [`faro-language-learning/faro/agent.yaml`](../../use-cases/faro-language-learning/faro/agent.yaml): four steps structured, two prose, two rendered.
+
+Their prompts name the structured outputs. The shape is `put it in the update on book_appointment`, never `record it with collect`. salon-graph is the one application still on version 1.
+
+A structured step gets `record` when a reply that only records can be answered by code:
+
+- code carries something out (`carries_out`);
+- a restated value confirms its read-back;
+- a `reads_back` field is one the operation's update cannot carry. Faro's identify reads the number back in the learner's language, and `asked_language` is not an argument of `confirm_phone`.
+
+A value the state's own types refuse in an update's arguments comes back to the model with the locale's words for the caller, as it does for `collect`.
+
 ## Inspect a compiled graph offline
 
 The support-desk fixture implements the same structure with `faq`, `desk` and `look_up` in place of `front`, `request` and `lookup`. From the repository root after `uv sync --all-packages`, compile it and inspect the actual route table without provider requests:

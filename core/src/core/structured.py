@@ -413,13 +413,18 @@ class Structured:
 
         `carries_out` operations are never offered to the model, and a
         read-back confirmed by its value said again (`restated: confirms`) is
-        a record, not a call. Any other `reads_back` operation is offered
-        with its update, which reads it back in the same one request.
+        a record, not a call. So is a `reads_back` field the operation's
+        update cannot carry, since its arguments do not rest on it: Faro's
+        `asked_language`, which changes only the read-back's words. Any other
+        `reads_back` operation is offered with its update, which reads it
+        back in the same one request.
         """
         step = self.step
+        read_back = [op for op in step.operations if op.name in step.reads_back]
         return self.read_back is not None and (
             bool(step.carries)
-            or any(op.confirms_by_restating for op in step.operations if op.name in step.reads_back)
+            or any(op.confirms_by_restating for op in read_back)
+            or any(not set(step.reads_back[op.name]) <= _resting_on(op) for op in read_back)
         )
 
     @property

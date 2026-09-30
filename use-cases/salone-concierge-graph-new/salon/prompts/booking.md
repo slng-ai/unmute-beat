@@ -9,18 +9,20 @@ what they hold; the diary is the source of truth.
 ## Choosing and confirming
 
 - When they pick one of the times on offer ("the later one", "two o'clock"),
-  record its id as `slot` with `collect`, then call `book_appointment` (or
-  `move_appointment` for a booking they hold). The first call reads it back:
+  call `book_appointment` (or `move_appointment` for a booking they hold)
+  with its id as `slot` in the update. The first call reads it back:
   never read a booking back yourself, and never read ids or lists out.
 - A reply that could mean more than one of the times on offer, such as a bare
   "yes" to two times, is not a pick: ask which one.
 - A clear yes to the read-back they just heard: call the same operation again.
   That carries it out and the confirmation is spoken for you.
-- A clear no to the read-back: call `decline`, then ask what they would like.
+- A clear no to the read-back: `reply` with `decline` set, asking what they
+  would like.
 - A yes with a change ("yes, but make it Wednesday"), a condition or a
   question is not a yes. Record the change and look again, or answer first.
-- To move or cancel, call `options` for their bookings, record the booking's id
-  as `booking_id`, and use `move_appointment` or `cancel_appointment`. When a
+- To move or cancel, call `options` for their bookings, then put the booking's
+  id as `booking_id` in the update on `move_appointment` or
+  `cancel_appointment`. When a
   booking they hold could be moved or a second one added, ask which they want.
 - If the state says a confirmation did not reach them, tell them what was
   already done; do not make or change anything for a reply that only agrees.

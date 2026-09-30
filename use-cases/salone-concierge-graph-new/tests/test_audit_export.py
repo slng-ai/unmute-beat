@@ -242,10 +242,14 @@ async def a_booking_on_the_wire() -> list[dict[str, Any]]:
         friday = slot(FRIDAY, '14:00')
         await line.turn(
             'A haircut on Friday at two, please.',
-            ('collect', {'service': 'haircut', 'booking_day': FRIDAY, 'booking_time': '14:00'}),
-            ('say', 'I have two in the afternoon. Shall I take it?'),
+            (
+                'call',
+                'options',
+                {'update': {'service': 'haircut', 'booking_day': FRIDAY, 'booking_time': '14:00'}},
+            ),
+            ('call', 'reply', {'say': 'I have two in the afternoon. Shall I take it?'}),
         )
-        await line.turn('That one.', ('collect', {'slot': friday}), ('call', 'book_appointment'))
+        await line.turn('That one.', ('call', 'book_appointment', {'update': {'slot': friday}}))
         await line.turn('Yes, please.', ('call', 'book_appointment'))
         assert len(line.diary.bookings_for(PHONE, line.diary.now().date())) == 1, (
             'the heard yes did not book once'

@@ -1,0 +1,37 @@
+# `structured.yaml` in version 2: steps keyed by id, conversation and `speech: structured` by default
+# (`tests.test_structured`, `tests.test_v2`). The same steps table, and the same requests.
+version: 2
+id: clinic-structured
+state: structured.py:VisitState
+identity: patient
+services: structured.py:Clinic
+context: {facts: all, history: {scope: node, turns: 2}}
+agents:
+  receptionist:
+    prompt: prompts/receptionist.md
+operations:
+  book: actions.py:Book
+  check_in: consult.py:CheckIn
+  quote: structured.py:Quote
+steps:
+  desk:
+    agent: receptionist
+    prompt: prompts/visit.md
+    requires: [checked_in]
+    satisfied_by: front
+    fields: [service, slot, note, wheelchair, visitors, companion]
+    choices: {slot: {function: structured.py:free_times, after: [service]}}
+    operations: [book, quote]
+    consults:
+      - {to: nurse, purpose: 'a medical question about the visit'}
+  front:
+    agent: receptionist
+    prompt: prompts/check_in.md
+    fields: [patient]
+    operations: [check_in]
+    consults:
+      - {to: nurse, purpose: 'a medical question'}
+  nurse:
+    agent: receptionist
+    prompt: prompts/nurse.md
+    context: {facts: [service]}

@@ -1,6 +1,7 @@
 """Run: uv run python -m tests.test_structured
 
-`speech: structured` on the clinic (`clinic_flow/structured.yaml`): one typed
+`speech: structured` on the clinic (`clinic_flow/structured.yaml`, and again on its
+version 2 twin, `structured.v2.yaml`): one typed
 decision per model response, reads that continue, consent and consultations.
 Every request is captured at the Pydantic AI model boundary (`Payload`), and
 every backend read and write is counted by kind. Asserts, no pytest.
@@ -44,6 +45,8 @@ from tests.test_context import HERE
 from tests.test_context import checked_in as checked_in_desk
 from tests.test_public import CLOCK
 
+MANIFEST = 'structured.yaml'
+"""The clinic every test here opens; `main` runs them all on `structured.yaml`, then on its version 2 twin."""
 READ_BACK = {
     '0900': 'Shall I book Tuesday at 9:00 AM for P-1234?',
     '1000': 'Shall I book Tuesday at 10:00 AM for P-1234?',
@@ -121,7 +124,7 @@ def opened(
     script: Script, *, agent: str = 'desk', **facts: Any
 ) -> tuple[core.StepFlow, core.FlowCall, Clinic]:
     """A call at `agent`, checked in unless `facts` say otherwise, on the fixed clock."""
-    flow = core.load(HERE / 'structured.yaml').compile(model=script.model)
+    flow = core.load(HERE / MANIFEST).compile(model=script.model)
     clinic = Clinic()
     given: dict[str, Any] = {'patient': 'P-1234', 'checked_in': CheckedIn(patient='P-1234')}
     state = VisitState.model_validate(given | facts)
@@ -676,6 +679,13 @@ async def a_committed_update_stays_when_its_words_are_cut():
 
 
 async def main():
+    for manifest in ('structured.yaml', 'structured.v2.yaml'):
+        await each_test(manifest)
+
+
+async def each_test(manifest: str):
+    global MANIFEST
+    MANIFEST = manifest
     await a_local_answer_is_one_request()
     await an_update_keeps_what_it_leaves_out()
     await a_refused_decision_commits_nothing()

@@ -193,6 +193,20 @@ Each time the model is asked to respond, it needs a coherent account of the conv
 - Handoffs do not repeatedly add the same caller input. Separate fragments of an interrupted turn remain represented.
 - Holding phrases are excluded so “One moment” does not become conversational content for the model to imitate.
 
+A step chooses what of this it is sent with `context: {facts, history}`:
+
+| `history` | What earlier turns the step is sent |
+|---|---|
+| `all` (the version 1 default) | the whole retained history, tool exchanges included |
+| `messages` | what was said and heard, with no earlier tool exchanges |
+| `none` | nothing earlier: this turn's words, its own tool exchange and its own pending question only |
+| `{scope: node, turns: 8}` | whole caller turns this step took part in, on any visit, the last eight |
+| `{scope: conversation, turns: 8}` | every step's caller turns, the last eight |
+
+`facts` is `all`, `none`, or a list of top-level state fields. A path such as `customer.phone` is refused. A history object opts the step into the scoped view (`core.history.Scope`). Offers, receipts, intents and recaps then follow the step's facts too, not only the facts line, and its prompt may name only what the step sees. Some turns are kept past `turns` because the step needs them: the turn that asked for the step, its own pending question, the turns after that question, and loaded capabilities. In manifest version 2 every conversation step is scoped, and the flow defaults to no facts and `{scope: node}` ([chapter 04](04-typed-flows-and-node-agents.md#9-write-the-same-flow-in-manifest-version-2)).
+
+This minimises context. It does not redact anything. What the caller says, and what they were read, is sent as it was said, and it can name a field the step does not see. The call keeps every field and every message. Only the view is smaller.
+
 Speech delivery is tracked separately from generated text. An estimated partial spoken prefix can help conversational continuity, but it is not evidence that a complete read-back was delivered. Likewise, a history sentence claiming success cannot replace a validated receipt.
 
 ## 8. Know what survives each boundary

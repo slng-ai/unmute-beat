@@ -90,6 +90,15 @@ class Payload:
         }
         return found | {'total': sum(found.values())}
 
+    def results(self) -> int:
+        """Bytes (UTF-8) of the tool results inside `history`: a part of it, left out of `sizes` so pins keep."""
+        return sum(
+            len(json.dumps(part['content'], sort_keys=True, ensure_ascii=False).encode())
+            for message in json.loads(self.history)
+            for part in message['parts']
+            if part.get('part_kind') == 'tool-return'
+        )
+
     def pinned(self) -> dict[str, Any]:
         """The request as readable data, for a golden file whose diff is the review of any change."""
         return {

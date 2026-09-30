@@ -38,10 +38,17 @@ argument the state cannot supply, and an action that needs approval but can
 be reached without its confirmation. Checking needs no model and no key:
 `problems()` connects to nothing, and only `compile` builds agents.
 
-Files are read with `yaml.safe_load`, which builds only plain data, and JSON
-is valid YAML, so either format loads. Plain YAML turns an unquoted `no`,
-`yes`, `on` or `off` into a boolean and an unquoted `2026-10-01` into a date;
-a text field given one of those is refused with the step and field named.
+Files are read with a `yaml.SafeLoader` that builds only plain data and
+refuses a key given twice in one mapping (`_Manifest`), and JSON is valid
+YAML, so either format loads. Plain YAML turns an unquoted `no`, `yes`, `on`
+or `off` into a boolean and an unquoted `2026-10-01` into a date; a text
+field given one of those is refused with the step and field named.
+
+Two manifest versions compile to the same steps table. Version 1 lists its
+steps, each with its `id` and `kind`. Version 2 keys them by id and reads a
+step with no `kind` as a `conversation` with `speech: structured`, under a
+flow context of no facts and the step's own history (`FlowSpec._normalized`).
+Every other key means the same in both.
 """
 
 from __future__ import annotations
@@ -52,7 +59,7 @@ import sys
 import typing
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field, replace
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
@@ -68,8 +75,10 @@ from pydantic import (
     Field,
     PrivateAttr,
     RootModel,
+    ValidationError,
     create_model,
     field_validator,
+    model_validator,
 )
 from pydantic_ai import TemplateStr
 from pydantic_ai.agent.spec import AgentSpec as NativeSpec
@@ -1188,8 +1197,12 @@ class ConversationSpec(StepSpec):
                 )
         if self.knowledge:
             resolve.knowledge(self.id, self.knowledge)
-        for name in self.seen(resolve).shown() or ():
+        shown = self.seen(resolve).shown()
+        for name in shown or ():
             resolve.state_field(self.id, name)
+        if resolve.spec.version == 2 and shown is not None:
+            for name in sorted(set(self.fields) - set(shown)):
+                resolve.fail(self.id, f'may change {name!r} but cannot see it: add it to context.facts')
         for ref in self.capabilities:
             resolve.capability(self.id, ref)
         for consult in self.consults:
@@ -1242,8 +1255,8 @@ class ConversationSpec(StepSpec):
         return found if found is not None else ContextSpec()
 
     def scoped(self, resolve: _Resolver) -> bool:
-        """Whether this step gets the scoped view: a history object at the flow or here opts it in."""
-        return any(
+        """Whether this step gets the scoped view: always in version 2; in version 1 a history object opts it in."""
+        return resolve.spec.version == 2 or any(
             isinstance(found, ContextSpec) and found.scoped for found in (resolve.spec.context, self.context)
         )
 
@@ -1492,8 +1505,8 @@ class FlowSpec(BaseModel):
     """A whole flow file: the application's manifest, `agent.yaml`."""
 
     model_config = SPEC
-    version: Literal[1]
-    """The manifest format's version."""
+    version: Literal[1, 2]
+    """The manifest format's version: 1 lists the steps, 2 keys them by id with shorter defaults (`_normalized`)."""
     id: str
     app_version: str = ''
     """The application's own version, reported by the compiled flow."""
@@ -1534,6 +1547,44 @@ class FlowSpec(BaseModel):
     steps: list[AnyStep]
     _root: Path | None = PrivateAttr(default=None)
 
+    @model_validator(mode='before')
+    @classmethod
+    def _normalized(cls, data: Any) -> Any:
+        """Version 2 as the list version 1 compiles from: one steps table, one set of spec classes, one runtime.
+
+        A step's key is its id; an `id:` inside it that says otherwise is
+        refused, never picked between. A step with no `kind` is a
+        conversation, and a conversation with no `speech` is `structured`;
+        an explicit kind or speech is kept. The flow's context defaults to no
+        facts and each step's own history, every turn of it (`History()`);
+        members it sets are kept, and `context: none` stays none. Steps keep
+        the order they are written in, so `entry` and `then` default as in
+        version 1. Version 1 is returned as it came.
+        """
+        if not isinstance(data, dict):
+            return data
+        steps = data.get('steps')
+        if data.get('version') != 2:
+            if data.get('version') == 1 and isinstance(steps, dict):
+                raise ValueError('version 1 lists its steps (`- id: desk`); steps keyed by id are version 2')
+            return data
+        if not isinstance(steps, dict):
+            raise ValueError('version 2 keys its steps by id (`steps: {desk: {...}}`); a list is version 1')
+        listed = []
+        for key, body in steps.items():
+            if not isinstance(body, dict):
+                raise ValueError(f'step {key!r}: a step is a mapping of its keys')
+            if body.get('id', key) != key:
+                raise ValueError(f'step {key!r}: its id {body["id"]!r} differs from its key; keep one')
+            step = {'id': key, 'kind': 'conversation', **body}
+            if step['kind'] == 'conversation':
+                step.setdefault('speech', 'structured')
+            listed.append(step)
+        context = data.get('context', {})
+        if isinstance(context, dict):
+            context = {'facts': 'none', 'history': {'scope': 'node'}, **context}
+        return {**data, 'steps': listed, 'context': context}
+
     def _resolver(self, registry: Registry) -> _Resolver:
         resolve = _Resolver(self, registry)
         if self.identity:
@@ -1559,6 +1610,15 @@ class FlowSpec(BaseModel):
             if persona.spec.instructions is not None:
                 resolve.fail(
                     f'agent {name}', 'its instructions are its prompt file; leave spec.instructions out'
+                )
+        for step in self.steps:
+            name = getattr(step, 'agent', '')
+            persona = self.agents.get(name)
+            if persona is not None and persona.spec.output_schema is not None:
+                resolve.fail(
+                    step.id,
+                    f'its agent {name!r} sets spec.output_schema, which core would replace with this '
+                    "step's own outputs; leave it out",
                 )
         for name in self.operations:
             resolve.declared(name)
@@ -1798,12 +1858,58 @@ def _method(action: type[Action], method: str) -> Callable[..., Any]:
     return run
 
 
+class _Manifest(yaml.SafeLoader):
+    """`yaml.safe_load`'s loader, refusing a key given twice in one mapping: plain YAML keeps the last, silently."""
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+        seen: set[Any] = set()
+        for key_node, _ in node.value:
+            if key_node.tag == 'tag:yaml.org,2002:merge':
+                continue
+            key = self.construct_object(key_node, deep=deep)
+            if not isinstance(key, Hashable):
+                continue
+            if key in seen:
+                raise FlowSpecError(
+                    [f'line {key_node.start_mark.line + 1}: {key!r} is given twice in one mapping']
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+def _by_step(error: ValidationError, steps: Any) -> list[str]:
+    """A version 2 file's validation errors, each named by its step's key rather than a list index."""
+    names = list(steps) if isinstance(steps, dict) else []
+    found = []
+    for each in error.errors():
+        loc, said = list(each['loc']), each['msg'].removeprefix('Value error, ')
+        if loc[:1] == ['steps'] and len(loc) > 1 and isinstance(loc[1], int) and loc[1] < len(names):
+            name = names[loc[1]]
+            rest = loc[3:] if len(loc) > 2 and loc[2] == steps[name].get('kind', 'conversation') else loc[2:]
+            where = '.'.join(str(part) for part in rest)
+            found.append(f'step {name!r}: {where}: {said}' if where else f'step {name!r}: {said}')
+        else:
+            where = '.'.join(str(part) for part in loc)
+            found.append(f'{where}: {said}' if where else said)
+    return found
+
+
 def load(text: str, root: str | Path | None = None) -> FlowSpec:
-    """Read a flow file's text, YAML or JSON; `root` is its folder. Unknown kinds and fields fail here."""
-    data = yaml.safe_load(text)
+    """Read a flow file's text, YAML or JSON; `root` is its folder. Unknown kinds and fields fail here.
+
+    A repeated key fails in either version. A version 2 file's problems are
+    one `FlowSpecError`, each named by its step; version 1 raises Pydantic's
+    `ValidationError` as it always has.
+    """
+    data = yaml.load(text, Loader=_Manifest)
     if not isinstance(data, dict):
         raise FlowSpecError(['a flow file must be a mapping with version, id and steps'])
-    spec = FlowSpec.model_validate(data)
+    try:
+        spec = FlowSpec.model_validate(data)
+    except ValidationError as error:
+        if data.get('version') != 2:
+            raise
+        raise FlowSpecError(_by_step(error, data.get('steps'))) from None
     spec._root = Path(root) if root is not None else None
     return spec
 

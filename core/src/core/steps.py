@@ -120,16 +120,19 @@ class Offers(Mapping[str, Mapping[str, str]]):
     def announce(self, step: str, choices: Sequence[str], turn: int) -> str:
         """Those words, now said: the same offer is not said twice in one turn."""
         said = self.words(step, choices, turn)
-        for name, offer in self._made(step, choices, turn):
-            self._by_choice[name] = replace(offer, announced=True)
+        self._by_choice.update(
+            {name: replace(offer, announced=True) for name, offer in self._made(step, choices, turn)}
+        )
         return said
 
     def _made(self, step: str, choices: Sequence[str], turn: int) -> list[tuple[str, StandingOffer]]:
-        found = [(name, self._by_choice.get(name)) for name in choices]
         return [
             (name, o)
-            for name, o in found
-            if o is not None and o.step == step and o.turn == turn and not o.announced
+            for name in choices
+            if (o := self._by_choice.get(name)) is not None
+            and o.step == step
+            and o.turn == turn
+            and not o.announced
         ]
 
 
@@ -235,11 +238,10 @@ class FlowCall[S: BaseModel](CallContext):
         validator's message, with those words beside it as what the caller
         can be told.
         """
-        problems = []
-        for item in error.errors():
-            said = self.locale.refusal(item)
-            problems.append(item['msg'] + (f' (tell the caller: "{said}")' if said else ''))
-        return '; '.join(problems)
+        refused = [(item, self.locale.refusal(item)) for item in error.errors()]
+        return '; '.join(
+            item['msg'] + (f' (tell the caller: "{said}")' if said else '') for item, said in refused
+        )
 
     def turn_started(self, heard: str = '') -> None:
         """A piece of a caller turn starts: nothing is recorded by this reply yet."""
@@ -990,17 +992,20 @@ def context(flow: StepFlow, step: Step, call: FlowCall[Any]) -> str:
             lines.append(
                 "Another step's question is waiting for the caller's answer. It is that step's to act on, not yours."
             )
-    for intent in call.intents:
-        if intent.status == 'withdrawn' and intent.subject == call.identity():
-            if scope is not None and not scope.owns(intent.operation):
-                continue
-            args = (
-                intent.args if scope is None else json.dumps(scope.public_args(intent.operation, intent.args))
-            )
-            lines.append(
-                f'Withdrawn: {intent.operation} {args}. Its read-back could not be confirmed on this line, '
-                'and the caller was told. It is not read back or carried out again on this call: do not offer it.'
-            )
+
+    def shown(intent: Intent) -> str:
+        return intent.args if scope is None else json.dumps(scope.public_args(intent.operation, intent.args))
+
+    lines.extend(
+        (
+            f'Withdrawn: {intent.operation} {shown(intent)}. Its read-back could not be confirmed on this line, '
+            'and the caller was told. It is not read back or carried out again on this call: do not offer it.'
+        )
+        for intent in call.intents
+        if intent.status == 'withdrawn'
+        and intent.subject == call.identity()
+        and (scope is None or scope.owns(intent.operation))
+    )
     done = [
         e
         for e in call.evidence
@@ -1019,20 +1024,18 @@ def context(flow: StepFlow, step: Step, call: FlowCall[Any]) -> str:
             f'Done on this call: {filed.operation} {json.dumps(scope.public_args(filed.operation, filed.args))} '
             f'-> {result}'
         )
-    for intent in call.unresolved():
-        if scope is None or scope.owns(intent.operation):
-            args = (
-                intent.args if scope is None else json.dumps(scope.public_args(intent.operation, intent.args))
-            )
-            lines.append(
-                f'Outcome unknown: {intent.operation} {args}. Do not say it was done, or that it was not: '
-                'the application is checking, and will not send it again until it knows.'
-            )
-        else:
-            lines.append(
-                "Outcome unknown: another step's action. Do not say it was done, or that it was not: "
-                'the application is checking.'
-            )
+    lines.extend(
+        (
+            f'Outcome unknown: {intent.operation} {shown(intent)}. Do not say it was done, or that it was not: '
+            'the application is checking, and will not send it again until it knows.'
+        )
+        if scope is None or scope.owns(intent.operation)
+        else (
+            "Outcome unknown: another step's action. Do not say it was done, or that it was not: "
+            'the application is checking.'
+        )
+        for intent in call.unresolved()
+    )
     if standing := flow.recaps(call, only=scope.operations if scope is not None else None):
         lines.append(
             'Can recap on goodbye, by reference: '
@@ -1121,6 +1124,14 @@ def _args(operation: Operation, call: FlowCall[Any]) -> BaseModel:
     )
 
 
+def _args_or_none(operation: Operation, call: FlowCall[Any]) -> BaseModel | None:
+    """`_args`, or None while the state cannot give them yet."""
+    try:
+        return _args(operation, call)
+    except ValidationError:
+        return None
+
+
 def receipt_for(operation: Operation, call: FlowCall[Any]) -> Mapping[str, Any] | None:
     """The latest receipt this operation filed for the arguments the state gives now, under the current caller.
 
@@ -1128,14 +1139,17 @@ def receipt_for(operation: Operation, call: FlowCall[Any]) -> Mapping[str, Any] 
     identity makes an older receipt stop counting here, while it stays on
     record for what it did.
     """
-    try:
-        args = _args(operation, call).model_dump(mode='json')
-    except ValidationError:
+    if (given := _args_or_none(operation, call)) is None:
         return None
-    for filed in reversed(call.evidence):
-        if filed.operation == operation.name and filed.args == args and filed.identity == call.identity():
-            return filed.receipt
-    return None
+    args = given.model_dump(mode='json')
+    return next(
+        (
+            filed.receipt
+            for filed in reversed(call.evidence)
+            if filed.operation == operation.name and filed.args == args and filed.identity == call.identity()
+        ),
+        None,
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1489,14 +1503,11 @@ class ConversationStep(Step):
         this is how a caller ID read back in the greeting is the question the
         first reply answers (`StepFlow.greeting`). '' when neither applies.
         """
-        if (operation := self.opens_with) is not None:
-            try:
-                args = _args(operation, call)
-            except ValidationError:
-                args = None
-            if args is not None:
-                proposal = operation.proposal_for(call, args)
-                return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
+        if (operation := self.opens_with) is not None and (
+            args := _args_or_none(operation, call)
+        ) is not None:
+            proposal = operation.proposal_for(call, args)
+            return Prompted(about=proposal.about, spoken=proposal.spoken, value=proposal.value)
         missing = next((name for name in self.asks if not present(getattr(call.state.facts, name))), '')
         return self.asks[missing] if missing else ''
 
@@ -1555,14 +1566,11 @@ class ConversationStep(Step):
 
     def _ready(self, call: FlowCall[Any]) -> Prompted | None:
         """The read-back of this step's one operation that now has every argument and is not already asked."""
-        ready = []
-        for operation in self.operations:
-            try:
-                args = _args(operation, call)
-            except ValidationError:
-                continue
-            if operation.needs_approval:
-                ready.append((operation, args))
+        ready = [
+            (operation, args)
+            for operation in self.operations
+            if (args := _args_or_none(operation, call)) is not None and operation.needs_approval
+        ]
         if len(ready) != 1:
             return None
         operation, args = ready[0]
@@ -1591,11 +1599,11 @@ class ConversationStep(Step):
             return ()
 
         def ready(call: FlowCall[Any]) -> bool:
-            try:
-                args = _args(operation, call)
-            except ValidationError:
-                return False
-            return call.pending(operation.name, value=operation.proposal(args).value) is None
+            args = _args_or_none(operation, call)
+            return (
+                args is not None
+                and call.pending(operation.name, value=operation.proposal(args).value) is None
+            )
 
         async def read_back(call: FlowCall[Any]) -> Prompted:
             proposal = operation.proposal_for(call, _args(operation, call))
@@ -1657,9 +1665,7 @@ class ConversationStep(Step):
                 )
             if not self.reads_back:
                 return None
-            if [op for op in self.operations if possible(call, op)] != [
-                op for op in self.operations if op.name in self.reads_back and possible(call, op)
-            ]:
+            if not all(op.name in self.reads_back for op in self.operations if possible(call, op)):
                 return None
             for operation in self.operations:
                 if not call._recorded & set(self.reads_back.get(operation.name, ())):
@@ -1720,7 +1726,11 @@ class ConversationStep(Step):
         step waiting on it (`return_after`).
         """
         said, receipt = await _carry_out(call, operation, usage, limits)
-        to = str(getattr(receipt, operation.route, '')) if operation.route and isinstance(receipt, BaseModel) else ''
+        to = (
+            str(getattr(receipt, operation.route, ''))
+            if operation.route and isinstance(receipt, BaseModel)
+            else ''
+        )
         if to and to != self.id:
             if to not in self.routes:
                 raise ValueError(
@@ -2122,14 +2132,13 @@ class StepFlow:
         limits them to those operations: what a step is shown.
         """
         known = {op.name: op for op in self.operations()}
-        found = {}
-        for filed in call.effective():
-            if only is not None and filed.operation not in only:
-                continue
-            template = getattr(known.get(filed.operation), 'recap', '')
-            if filed.intent and template:
-                found[filed.intent[:RECAP_REF]] = template.format_map(_Facts(filed.receipt))
-        return found
+        return {
+            filed.intent[:RECAP_REF]: template.format_map(_Facts(filed.receipt))
+            for filed in call.effective()
+            if (only is None or filed.operation in only)
+            and filed.intent
+            and (template := getattr(known.get(filed.operation), 'recap', ''))
+        }
 
     def receipt_words(self, call: FlowCall[Any]) -> str:
         """The newest receipt that still stands for the caller on the line, in its operation's own `say` words.
@@ -2141,11 +2150,15 @@ class StepFlow:
         """
         known = {op.name: op for op in self.operations()}
         standing = call.effective()
-        for filed in reversed(call.evidence):
-            template = getattr(known.get(filed.operation), 'say', '')
-            if template and any(filed is s for s in standing):
-                return template.format_map(_Facts(filed.receipt))
-        return ''
+        return next(
+            (
+                template.format_map(_Facts(filed.receipt))
+                for filed in reversed(call.evidence)
+                if (template := getattr(known.get(filed.operation), 'say', ''))
+                and any(filed is s for s in standing)
+            ),
+            '',
+        )
 
     def goodbye_words(self, call: FlowCall[Any], recap: Sequence[str]) -> str:
         """The goodbye core says: the recaps pointed at, then `unsettled` if anything is still unknown, then the line.
@@ -2209,10 +2222,9 @@ class StepFlow:
                 else self.next_after(target, call)
             )
         order = self.sequence()
-        for later in order[order.index(step) + 1 :]:
-            if not later.done(call):
-                return later.id
-        return self.finish
+        return next(
+            (later.id for later in order[order.index(step) + 1 :] if not later.done(call)), self.finish
+        )
 
     async def record_update(
         self,

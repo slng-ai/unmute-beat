@@ -56,6 +56,7 @@ import inspect
 import sys
 import typing
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field, replace
 from graphlib import CycleError, TopologicalSorter
@@ -1444,7 +1445,7 @@ class FlowSpec(BaseModel):
         if any(isinstance(s, ActionSpec) for s in self.steps) and not self.state:
             resolve.fail('', 'a flow with action steps needs a state model (`state:`)')
         ids = [step.id for step in self.steps]
-        for repeated in sorted({i for i in ids if ids.count(i) > 1}):
+        for repeated in sorted(i for i, n in Counter(ids).items() if n > 1):
             resolve.fail('', f'step id {repeated!r} is used more than once')
         known = set(ids)
         if self.entry and self.entry not in known:
@@ -1533,7 +1534,7 @@ class FlowSpec(BaseModel):
         resolve.explicit_model = model is not None
         model = model if model is not None else self.model
         state = resolve.state_type()
-        flow = StepFlow(
+        return StepFlow(
             [step.to_step(resolve) for step in self.steps],
             model=model,
             settings=settings,
@@ -1547,7 +1548,6 @@ class FlowSpec(BaseModel):
             version=self.app_version,
             clock=self.current_datetime.build() if self.current_datetime is not None else None,
         )
-        return flow
 
 
 def _attribute(state: type[BaseModel], name: str) -> bool:
@@ -1645,14 +1645,13 @@ def _tags(member: type[BaseModel], tag: str) -> list[Any]:
 
 def _marked(won: list[type[BaseModel]]) -> tuple[str, str, str]:
     """The success receipts' `Subject` field, its resource kind, and their `Version` field: '' where unmarked."""
-    subject = kind = version = ''
-    for member in won:
-        for field_name, info in member.model_fields.items():
-            for mark in info.metadata:
-                if isinstance(mark, Subject) and not subject:
-                    subject, kind = field_name, mark.kind or field_name
-                elif isinstance(mark, Version) and not version:
-                    version = field_name
+    marks = [
+        (name, mark) for member in won for name, info in member.model_fields.items() for mark in info.metadata
+    ]
+    subject, kind = next(
+        ((name, mark.kind or name) for name, mark in marks if isinstance(mark, Subject)), ('', '')
+    )
+    version = next((name for name, mark in marks if isinstance(mark, Version)), '')
     return subject, kind, version
 
 

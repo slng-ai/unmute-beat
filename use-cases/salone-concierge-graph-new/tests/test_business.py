@@ -17,13 +17,16 @@ language understanding: that is what the Coval run measures.
 """
 
 import asyncio
+import json
+import os
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai.messages import ModelResponse, RetryPromptPart, ToolCallPart
 
 from salon.diary import Diary
 from salon.receipts import Customer
-from tests.script import CLOCK, PHONE, opened, slot, turn
+from tests.script import CLOCK, PHONE, Script, opened, slot, turn
 
 TODAY = CLOCK.date()
 FRIDAY, TUESDAY = '2026-10-02', '2026-09-29'
@@ -297,7 +300,180 @@ async def a_local_answer_is_one_request():
     assert said == ['A blowout is 22 euros.'] and len(script.requests) == 1
 
 
+class Reads:
+    """Every diary read of a call, by kind: availability (`find_slots`) apart from the bookings held (`show_holdings`)."""
+
+    def __init__(self, diary: Diary) -> None:
+        self.availability: list[str] = []
+        self.holdings = 0
+        find, show = diary.find_slots, diary.show_holdings
+
+        def find_slots(phone, day, service, at_time, offered_to='', prefer=''):
+            self.availability.append(f'{day} {service} {prefer}')
+            return find(phone, day, service, at_time, offered_to=offered_to, prefer=prefer)
+
+        def show_holdings(offered_to, phone, today):
+            self.holdings += 1
+            return show(offered_to, phone, today)
+
+        diary.find_slots, diary.show_holdings = find_slots, show_holdings  # ty: ignore[invalid-assignment]
+
+
+def structured_at(step: str, **facts: Any):
+    """A verified caller on this step of the salon compiled with `speech: structured` steps (`tests.script.STRUCTURED`)."""
+    script, flow, call, diary = opened(Script(structured=True), customer=KNOWN, **facts)
+    call.commit(agent=step)
+    return script, flow, call, diary, Reads(diary)
+
+
+def reply(say: str, **update: Any) -> tuple[str, str, dict[str, Any]]:
+    return ('call', 'reply', {'say': say, **({'update': update} if update else {})})
+
+
+async def structured_read_back(flow, call, script, reads: Reads) -> None:
+    """A haircut on Friday at two, looked up with the request it rests on, then picked: three requests in all."""
+    before = len(script.requests)
+    said = await turn(
+        flow,
+        call,
+        script,
+        'A haircut on Friday at two.',
+        (
+            'call',
+            'options',
+            {'update': {'service': 'haircut', 'booking_day': FRIDAY, 'booking_time': '14:00'}},
+        ),
+        reply('On Friday I have 2:00 PM. Does that work?'),
+    )
+    assert said == ['On Friday I have 2:00 PM. Does that work?'] and len(script.requests) - before == 2, said
+    assert reads.availability == [f'{FRIDAY} haircut 14:00'] and reads.holdings == 1, (
+        'one availability read; the bookings held are a read of their own'
+    )
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Yes, two is great.',
+        ('call', 'book_appointment', {'update': {'slot': slot(FRIDAY, '14:00')}}),
+    )
+    assert (
+        said == ['Shall I book a haircut, Friday the 2nd at 2:00 PM?'] and len(script.requests) - before == 3
+    )
+
+
+async def a_structured_booking_reads_once_and_books_once():
+    """The booking step as `speech: structured`: no `collect`, one read with the request it rests on, exact read-back."""
+    script, flow, call, diary, reads = structured_at('booking')
+    await structured_read_back(flow, call, script, reads)
+    tools = script.requests[0].tools
+    assert 'collect' not in tools and 'record' not in tools, 'the read-back rides book_appointment: no record'
+    assert {'options', 'reply', 'book_appointment'} <= set(tools), tools
+    said = await turn(flow, call, script, 'Yes please.', ('call', 'book_appointment', {}))
+    assert booked(diary) == [('haircut', FRIDAY, '14:00')], booked(diary)
+    assert said == ["You're all set for Friday the 2nd at 2:00 PM. Anything else I can help with?"], said
+    assert reads.availability == [f'{FRIDAY} haircut 14:00'], 'nothing looked up again'
+
+
+async def a_structured_repeat_reads_nothing():
+    script, flow, call, diary, reads = structured_at('booking')
+    await structured_read_back(flow, call, script, reads)
+    options = next(t for t in json.loads(script.requests[-1].payload.tools) if t['name'] == 'options')[
+        'parameters_json_schema'
+    ]
+    assert options['required'] == ['update'], 'with the offer standing, a refetch needs something new'
+    before = len(script.requests)
+    said = await turn(
+        flow,
+        call,
+        script,
+        'What else is there?',
+        ('call', 'options', {}),
+        ('call', 'options', {'update': {'booking_day': '2026-10-03'}}),
+        reply('On Saturday I have 10:00 AM.'),
+    )
+    assert len(script.requests) - before == 3 and reads.availability == [
+        f'{FRIDAY} haircut 14:00',
+        '2026-10-03 haircut 14:00',
+    ], reads.availability
+    assert any('still stands' in r for r in retries(script)), (
+        'the repeat is a labelled retry, and read nothing'
+    )
+    assert said == ['On Saturday I have 10:00 AM.'] and booked(diary) == []
+
+
+async def a_structured_stylist_hands_the_change_back():
+    """A mixed request to the stylist: its answer once, the change back to booking in the same turn, read back fresh."""
+    script, flow, call, diary, reads = structured_at('booking')
+    await structured_read_back(flow, call, script, reads)
+    before = len(script.requests)
+    said = await turn(
+        flow,
+        call,
+        script,
+        'How long does colour take? And make it three instead of two.',
+        ('call', 'hand_over', {'to': 'stylist', 'because': 'how long colour takes'}),
+        ('call', 'done', {'answer': 'Up to three hours for colour.', 'handback': 'Three instead of two.'}),
+        ('call', 'options', {'update': {'booking_time': '15:00'}}),
+        ('call', 'book_appointment', {'update': {'slot': slot(FRIDAY, '15:00')}}),
+    )
+    assert said == ['Up to three hours for colour.', 'Shall I book a haircut, Friday the 2nd at 3:00 PM?'], (
+        said
+    )
+    assert [r.step for r in script.requests[before:]] == ['booking', 'stylist', 'booking', 'booking']
+    assert 'make it three instead of two' in str(script.requests[-2].messages), (
+        "the caller's words reach booking"
+    )
+    assert len(reads.availability) == 2 and booked(diary) == [], 'one read for the new time, nothing booked'
+    await turn(flow, call, script, 'Yes.', ('call', 'book_appointment', {}))
+    assert booked(diary) == [('haircut', FRIDAY, '15:00')], booked(diary)
+
+
+GOLDEN = Path(__file__).parent / 'golden' / 'payloads.json'
+
+
+async def v1_requests_are_pinned():
+    """The salon's requests whole (instructions, history, tool and output schemas), pinned before the scoped view."""
+    requests = {}
+    script, flow, call, _ = opened(clock=lambda: CLOCK)
+    await turn(flow, call, script, 'How much is a blowout?', ('say', 'A blowout is 22 euros.'))
+    requests['concierge, a local answer'] = script.requests[-1].payload
+    script, flow, call, _ = at('booking', clock=lambda: CLOCK)
+    await read_back(flow, call, script)
+    requests['booking, the read-back request'] = script.requests[-1].payload
+    await turn(
+        flow,
+        call,
+        script,
+        'Wait, should I come with my hair washed?',
+        ('call', 'hand_over', {'to': 'stylist', 'because': 'a hair question'}),
+        ('answer', 'No need: a haircut includes a wash.'),
+    )
+    requests['stylist, consulted'] = script.requests[-1].payload
+    text = json.dumps(
+        {k: p.pinned() for k, p in requests.items()}, indent=2, sort_keys=True, ensure_ascii=False
+    )
+    if os.environ.get('BLESS_PAYLOADS'):
+        GOLDEN.parent.mkdir(exist_ok=True)
+        GOLDEN.write_text(text + '\n')
+    assert GOLDEN.exists() and GOLDEN.read_text() == text + '\n', (
+        'a request changed: review it, then BLESS_PAYLOADS=1'
+    )
+
+
+async def false_is_a_value_and_null_leaves_one():
+    """Legacy `collect`, frozen for Session 2: `false` is recorded, and an explicit `null` changes nothing."""
+    script, flow, call, _ = at('complaints')
+    await turn(
+        flow, call, script, 'No refund, no.', ('collect', {'wants_refund': False}), ('say', 'Understood.')
+    )
+    assert call.state.facts.wants_refund is False, call.state.facts.wants_refund
+    await turn(flow, call, script, 'Hmm.', ('collect', {'wants_refund': None}), ('say', 'Understood.'))
+    assert call.state.facts.wants_refund is False, 'legacy collect cannot clear: null is left out'
+
+
 if __name__ == '__main__':
+    asyncio.run(v1_requests_are_pinned())
+    asyncio.run(false_is_a_value_and_null_leaves_one())
     asyncio.run(verification_reads_the_caller_id_back_and_looks_it_up())
     asyncio.run(a_number_that_cannot_be_right_gets_the_locales_words())
     asyncio.run(a_heard_yes_books_once())
@@ -308,6 +484,10 @@ if __name__ == '__main__':
     asyncio.run(a_stylist_can_ask_first_and_a_correction_is_read_back_fresh())
     asyncio.run(the_refund_policy_is_loaded_once())
     asyncio.run(a_local_answer_is_one_request())
+    asyncio.run(a_structured_booking_reads_once_and_books_once())
+    asyncio.run(a_structured_repeat_reads_nothing())
+    asyncio.run(a_structured_stylist_hands_the_change_back())
     print(
-        'business ok: verify, book, move, cancel, complaint, refusal words, stylist detours, refunds, requests'
+        'business ok: verify, book, move, cancel, complaint, refusal words, stylist detours, refunds, requests,'
+        ' structured booking and stylist'
     )

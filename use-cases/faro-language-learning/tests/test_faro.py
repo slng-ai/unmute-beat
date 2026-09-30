@@ -11,7 +11,8 @@ kill a process after a commit.
 L01-L16 are the cases the legacy build was checked on; F1-F9 are what the
 public path adds to them: no reader or classifier imported, hostile model
 output refused where it runs, delivery evidence bound to the exact
-question, a lost reply reconciled once, and calls kept apart.
+question, a lost reply reconciled once, and calls kept apart. F10 runs
+`identify` and `plan` as `speech: structured` steps (a test variant).
 """
 
 import asyncio
@@ -20,6 +21,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -30,6 +32,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 import faro
+from core.history import Payload
 from core.locale import ENGLISH, SPANISH
 from faro import close_call, curriculum, greeting, open_call
 from faro.functions import ACTIVE
@@ -52,6 +55,8 @@ class Script:
         self.steps: list[str] = []
         self.offered: list[set[str]] = []
         self.told: list[str] = []
+        self.payloads: list[Payload] = []
+        """This turn's requests whole: instructions, history, tool and output schemas (`core.history.Payload`)."""
         self.call: core.FlowCall | None = None
         self.model = FunctionModel(self.reading, stream_function=self.agent)
 
@@ -69,6 +74,7 @@ class Script:
         )
         self.offered.append({t.name for t in (*info.function_tools, *info.output_tools)})
         self.told.append(told)
+        self.payloads.append(Payload.of(messages, info))
         moves = self.queue(info)
         if not moves:
             yield 'Vale.'
@@ -118,11 +124,12 @@ class Line:
         flow: core.StepFlow = FLOW,
         script: Script = SCRIPT,
         greeted: bool = True,
+        clock: Any = None,
     ) -> None:
         self.store = Store(path)
         self.store.open()
         self.flow, self.script = flow, script
-        self.call = open_call(flow, caller_id, learning=self.store)
+        self.call = open_call(flow, caller_id, learning=self.store, clock=clock)
         script.call = self.call
         self.heard = [core.greet(self.call, greeting(flow, self.call))]
         if greeted:
@@ -133,6 +140,7 @@ class Line:
         self.script.moves[key] = list(moves)
         self.script.steps.clear()
         self.script.offered.clear()
+        self.script.payloads.clear()
         reply = await core.text_turn(self.flow, self.call, words)
         if heard:
             self.call.acknowledge(*(s.id for s in reply.segments))
@@ -906,7 +914,103 @@ def no_reader_or_legacy_module_is_imported():
     assert result.returncode == 0 and result.stdout.strip() == '[]', (result.stdout, result.stderr[-2000:])
 
 
+GOLDEN = Path(__file__).parent / 'golden' / 'payloads.json'
+
+
+async def v1_requests_are_pinned():
+    """Faro's requests whole (instructions, history, tool and output schemas), pinned before the scoped view existed."""
+    restart()
+    line = Line(database(), LUCIA, clock=lambda: datetime.fromisoformat('2026-09-28T08:30:00+02:00'))
+    await line.turn('Sí, es ese.', YES)
+    requests = {'identify, the yes': line.script.payloads[0]}
+    await line.turn('Seguimos.', call('continue_lesson'))
+    requests['menu, carrying on'] = line.script.payloads[0]
+    await line.turn('Two coffees, please.', grade('Two coffees, please.', 'correct', '¡Muy bien!'))
+    requests['lesson, an answer graded'] = line.script.payloads[0]
+    text = json.dumps(
+        {k: p.pinned() for k, p in requests.items()}, indent=2, sort_keys=True, ensure_ascii=False
+    )
+    if os.environ.get('BLESS_PAYLOADS'):
+        GOLDEN.parent.mkdir(exist_ok=True)
+        GOLDEN.write_text(text + '\n')
+    assert GOLDEN.exists() and GOLDEN.read_text() == text + '\n', (
+        'a request changed: review it, then BLESS_PAYLOADS=1'
+    )
+
+
+async def zero_is_a_value_the_state_validates():
+    """Legacy `collect`, frozen for Session 2: 0 is not dropped as empty; the state's `ge=5` refuses it, and nothing is recorded."""
+    restart()
+    line = Line(database(), NEW)
+    await line.turn('Yes.', YES)
+    await line.turn('Yes.', call('agree_signup'))
+    await line.turn('Ana.', collect(name='Ana'))
+    await line.turn('Zero minutes.', collect(length=0), say('Between five and sixty minutes?'))
+    assert line.call.state.facts.length is None, line.call.state.facts.length
+    assert 'Nothing was recorded' in line.script.payloads[1].history, 'the refusal went back to the model'
+
+
+STRUCTURED_SCRIPT = Script()
+STRUCTURED_FLOW = faro.SPEC.model_copy(
+    update={
+        'steps': [
+            step.model_copy(update={'speech': 'structured'}) if step.id in ('identify', 'plan') else step
+            for step in faro.SPEC.steps
+        ]
+    }
+).compile(model=STRUCTURED_SCRIPT.model)
+"""Faro with `identify` and `plan` as `speech: structured` (`core.structured`): a test variant, the manifest unchanged."""
+
+
+def reply(words: str, **update: Any) -> tuple[str, str, dict[str, Any]]:
+    return ('call', 'reply', {'say': words, **({'update': update} if update else {})})
+
+
+async def structured_steps_record_and_code_speaks():
+    """F10: an update rides its read-back, one request; `record` only where code carries out; a question is no yes."""
+    restart()
+    line = Line(database(), flow=STRUCTURED_FLOW, script=STRUCTURED_SCRIPT)
+    said = await line.turn(
+        'Más treinta y cuatro, seis cero cero, uno uno uno, dos dos dos.',
+        call('confirm_phone', update={'phone': '+34 600 111 222'}),
+    )
+    assert said == f'Let me check: is your number {curriculum.spaced(LUCIA)}?' and line.requests == 1, said
+    offered = line.script.offered[0]
+    assert 'collect' not in offered and 'record' not in offered and 'reply' in offered, (
+        'the read-back goes with its own operation: no record, no collect'
+    )
+    said = await line.turn('Sí.', YES)
+    assert 'Lucía' in said and line.call.state.agent == 'menu', said
+
+    restart()
+    line = Line(database(), NEW, flow=STRUCTURED_FLOW, script=STRUCTURED_SCRIPT)
+    await to_assessment(line)
+    for words in ('Hola.', 'Un café.', 'Fui a Roma.'):
+        await line.turn(words, grade(words, 'partly'))
+    assert line.call.state.agent == 'plan', line.call.state.agent
+    proposal = line.call.open_question()
+    learner = line.call.state.facts.learner_id
+    said = await line.turn('How long is each lesson?', reply('About ten minutes a day. Shall we go ahead?'))
+    assert said == 'About ten minutes a day. Shall we go ahead?' and line.requests == 1, said
+    assert 'record' in line.script.offered[0], (
+        'plan carries out `decline_plan` by code: it keeps its silent record'
+    )
+    assert await line.store.active_plan(learner) is None
+    assert [i.status for i in line.call.intents if i.operation == 'activate_plan'] == ['prepared'], (
+        'a side question neither agrees nor declines'
+    )
+    said = await line.turn('Yes.', call('activate_plan'))
+    assert said == proposal.spoken and await line.store.active_plan(learner) is None, (
+        "a yes to the teacher's own question is no yes to the plan: it is read back again"
+    )
+    said = await line.turn('Yes.', call('activate_plan'))
+    assert 'your plan is active' in said and await line.store.active_plan(learner) is not None, said
+
+
 async def main():
+    await v1_requests_are_pinned()
+    await structured_steps_record_and_code_speaks()
+    await zero_is_a_value_the_state_validates()
     await seeds_are_identified_only_after_the_yes()
     await a_wrong_or_foreign_number_discloses_nothing()
     await an_unknown_caller_signs_up_and_agrees_a_plan()
@@ -933,7 +1037,7 @@ async def main():
     await calls_side_by_side_share_nothing()
     await approval_is_this_calls_only()
     no_reader_or_legacy_module_is_imported()
-    print('faro ok: L01-L16 and F1-F9 on the public path, a real SQLite file, no reader imported')
+    print('faro ok: L01-L16 and F1-F10 on the public path, a real SQLite file, no reader imported')
 
 
 if __name__ == '__main__':

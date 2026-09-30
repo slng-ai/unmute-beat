@@ -111,6 +111,7 @@ class Action[S](BaseModel):
             'say': cls.say,
             'recap': cls.recap,
             'changes': cls.changes,
+            'route': cls.route,
         }
 
 

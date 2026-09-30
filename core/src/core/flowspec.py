@@ -61,7 +61,16 @@ from typing import Annotated, Any, Literal, TypeAliasType, get_args, get_origin,
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
-from pydantic import AliasPath, BaseModel, ConfigDict, Field, PrivateAttr, RootModel, field_validator
+from pydantic import (
+    AliasPath,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    RootModel,
+    create_model,
+    field_validator,
+)
 from pydantic_ai import TemplateStr
 from pydantic_ai.agent.spec import AgentSpec as NativeSpec
 from pydantic_ai.capabilities import AbstractCapability
@@ -70,6 +79,7 @@ from pydantic_ai.settings import ModelSettings
 
 from core.actions import Action
 from core.clock import CallClock
+from core.history import History, Scope
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
 from core.state import CallContext, Intent
@@ -93,6 +103,35 @@ QUOTE_CALLER = (
     'Use this with the conversation above, including earlier speech fragments.\n\n> {{heard}}'
 )
 """Appended to every prompt when a flow sets `quote_caller`: the caller's words, where the model reads them last."""
+
+
+class ViewTemplate(TemplateStr):
+    """A scoped step's prompt: compiled against the step's view of the call, and rendered from that view alone.
+
+    The view is `{heard, state: {facts}}` with only the state fields the step
+    sees, so `{{state.facts.x}}` for a hidden field, `{{services...}}` or
+    anything else of the call fails when the manifest loads
+    (`TemplateSchemaError`), and nothing outside the view is ever rendered.
+    A v1 prompt keeps `TemplateStr` over the whole `FlowCall`.
+    """
+
+    __slots__ = ('_names', '_seen', '_state', '_view')
+
+    def __init__(self, source: str, *, state: type[BaseModel], facts: tuple[str, ...] | None) -> None:
+        self._names = tuple(state.model_fields) if facts is None else facts
+        self._seen = create_model(  # ty: ignore[no-matching-overload]
+            f'{state.__name__}Seen', **{n: (state.model_fields[n].annotation, None) for n in self._names}
+        )
+        self._state = create_model('SeenState', facts=(self._seen, None))
+        self._view = create_model('SeenCall', heard=(str, ''), state=(self._state, None))
+        super().__init__(source, deps_type=self._view)
+
+    def __call__(self, ctx: Any) -> str:
+        facts = ctx.deps.state.facts
+        seen = self._seen.model_construct(**{name: getattr(facts, name) for name in self._names})
+        return self.render(
+            self._view.model_construct(heard=ctx.deps.heard, state=self._state.model_construct(facts=seen))
+        )
 
 
 class FlowSpecError(ValueError):
@@ -258,10 +297,14 @@ class _Resolver:
         if name not in self.state_type().model_fields:
             self.fail(step, f'names {name!r}, which the state {self.state_type().__name__} does not have')
 
-    def prompt(self, step: str, ref: str, agent: str = '') -> TemplateStr | None:
+    def prompt(
+        self, step: str, ref: str, agent: str = '', view: ContextSpec | None = None
+    ) -> TemplateStr | None:
         """The step's prompt: its agent's shared instructions, its own file, the flow's includes and voice, compiled now.
 
-        A persona's prompt may serve many steps; a step's own prompt belongs to that step alone.
+        A persona's prompt may serve many steps; a step's own prompt belongs to
+        that step alone. `view`, a scoped step's context, compiles it against
+        what that step sees (`ViewTemplate`) instead of the whole call.
         """
         if agent and agent not in self.spec.agents:
             return None
@@ -284,11 +327,19 @@ class _Resolver:
             if self.spec.quote_caller:
                 text += QUOTE_CALLER
             try:
+                if view is not None:
+                    return ViewTemplate(text, state=self.state_type(), facts=view.shown())
                 return TemplateStr(text, deps_type=self.call_type())
             except Exception as error:
+                if view is not None:
+                    raise _ProblemError(
+                        f"prompt {ref or agent!r} reaches past this step's context (its facts and the caller's "
+                        f'words): {error}'
+                    ) from None
                 raise _ProblemError(f'prompt {ref!r} does not fit the call: {error}') from None
 
-        return self._once('prompt', f'{agent}|{ref}', step, find)
+        key = f'{agent}|{ref}' if view is None else f'{agent}|{ref}|{view.shown()}'
+        return self._once('prompt', key, step, find)
 
     def operation_type(self, step: str, ref: str) -> tuple[Callable[[], Operation], Any] | None:
         """An operation's factory and its module's `accepts`, if it has one. A declared name comes first."""
@@ -942,12 +993,39 @@ class ContextSpec(BaseModel):
     """
 
     model_config = SPEC
-    history: Literal['all', 'messages', 'none'] = 'all'
+    history: Literal['all', 'messages', 'none'] | History = 'all'
     facts: Literal['all', 'none'] | list[str] = 'all'
+
+    @field_validator('facts')
+    @classmethod
+    def _top_level(cls, facts: Any) -> Any:
+        """A fact is a whole top-level state field: a path, an index or a wildcard is refused, not guessed at."""
+        for name in facts if isinstance(facts, list) else ():
+            if not name.isidentifier():
+                raise ValueError(
+                    f'{name!r} is not a state field: facts are whole top-level fields. Select the field that '
+                    'holds it (a nested model is shown whole), or give the shareable value a field of its own'
+                )
+        return facts
 
     def shown(self) -> tuple[str, ...] | None:
         """The facts as a step holds them: None for all, () for none, else the listed fields."""
         return None if self.facts == 'all' else () if self.facts == 'none' else tuple(self.facts)
+
+    @property
+    def scoped(self) -> bool:
+        """A history object opts into the scoped view (`core.history.Scope`); the v1 strings keep their meaning."""
+        return isinstance(self.history, History)
+
+    def under(self, root: ContextSpec | None) -> ContextSpec:
+        """This step's context in scoped mode: the flow's, with each member this step sets replacing it.
+
+        `facts` replaces the flow's list, never adds to it; `history`, a string
+        or an object, replaces the flow's as a unit. What this step leaves out
+        is the flow's.
+        """
+        base = root if root is not None else ContextSpec()
+        return base.model_copy(update={name: getattr(self, name) for name in self.model_fields_set})
 
 
 NO_CONTEXT = ContextSpec(history='none', facts='none')
@@ -977,7 +1055,7 @@ class ConversationSpec(StepSpec):
     requires: list[str] = []
     """State facts this step needs before it runs; `satisfied_by` is interposed until they hold."""
     satisfied_by: str = ''
-    speech: Literal['prose', 'rendered'] = 'prose'
+    speech: Literal['prose', 'rendered', 'structured'] = 'prose'
     """Who words what the caller hears here.
 
     `prose`: the step's agent speaks in its own words. What was done is
@@ -992,6 +1070,14 @@ class ConversationSpec(StepSpec):
     receipts (`say:`), recaps and fixed lines. So nothing here can claim a
     change no valid receipt made. Its `choices` functions word their own
     offers (`say` beside `options`).
+
+    `structured` (opt-in, `core.structured`): the agent's words and the
+    caller's update travel in one typed decision. A local answer is `reply`,
+    one request, with no `collect`; a read it needs continues with the
+    update and comes back to it; operations, hand-overs and `done` take the
+    same update. Read-backs, receipts, recaps and fixed lines are still
+    code's words. A pure read (no read-back, `changes: false`, no `route`)
+    needs no `say:` here, since its answer goes back to the agent.
     """
     quoted: list[str] = []
     """Fields among `fields` that must be the caller's own words, found in what they said (a complaint)."""
@@ -1050,7 +1136,7 @@ class ConversationSpec(StepSpec):
         ]
 
     def check(self, resolve: _Resolver) -> None:
-        resolve.prompt(self.id, self.prompt, self.agent)
+        resolve.prompt(self.id, self.prompt, self.agent, self.view(resolve))
         resolve.persona(self.id, self.agent)
         for name in self.requires:
             resolve.state_field(self.id, name)
@@ -1122,21 +1208,78 @@ class ConversationSpec(StepSpec):
         for name in self.operations:
             if name not in resolve.spec.operations:
                 resolve.fail(self.id, f'carries out {name!r}, which `operations:` does not declare')
-            elif not (found := resolve.decl(name)) or not found.say:
+            elif not (found := resolve.decl(name)) or not (found.say or self._reads(found)):
                 resolve.fail(self.id, f'carries out {name!r}, which has no `say:` for its receipt')
             else:
                 resolve.declared(name)
 
+    def _reads(self, declared: Any) -> bool:
+        """A pure read on a structured step: no read-back, no change, no route. Its answer goes back to the agent."""
+        return (
+            self.speech == 'structured'
+            and declared.approval == 'none'
+            and not declared.changes
+            and not declared.route
+        )
+
     def seen(self, resolve: _Resolver) -> ContextSpec:
-        """This step's context: its own, else the flow's, else everything."""
-        found = self.context if self.context is not None else resolve.spec.context
-        return NO_CONTEXT if found == 'none' else found if isinstance(found, ContextSpec) else ContextSpec()
+        """This step's context.
+
+        v1 (no history object at either level): its own, else the flow's, else
+        everything, each replacing the other whole. A step's `{facts: [x]}`
+        therefore has history `all` even under a flow's `history: messages`.
+
+        Scoped (a history object at the flow or here): the flow's context is
+        the default and this step's members replace it one by one
+        (`ContextSpec.under`); `context: none` is no facts and no history.
+        """
+        root = resolve.spec.context
+        root = NO_CONTEXT if root == 'none' else root if isinstance(root, ContextSpec) else None
+        own = NO_CONTEXT if self.context == 'none' else self.context
+        if self.scoped(resolve):
+            return own.under(root) if own is not None else root or ContextSpec()
+        found = own if own is not None else root
+        return found if found is not None else ContextSpec()
+
+    def scoped(self, resolve: _Resolver) -> bool:
+        """Whether this step gets the scoped view: a history object at the flow or here opts it in."""
+        return any(
+            isinstance(found, ContextSpec) and found.scoped for found in (resolve.spec.context, self.context)
+        )
+
+    def view(self, resolve: _Resolver) -> ContextSpec | None:
+        """This step's context when it is scoped, else None: what its prompt compiles against."""
+        return self.seen(resolve) if self.scoped(resolve) else None
+
+    def scope(self, resolve: _Resolver) -> Scope | None:
+        """What this step's automatic context may show when it is scoped (`core.history.Scope`), else None."""
+        view = self.view(resolve)
+        if view is None:
+            return None
+        owned = [
+            found
+            for name in dict.fromkeys([*self.operations, *self.carries_out])
+            if (found := resolve.operation(name)) is not None
+        ]
+        return Scope(
+            facts=view.shown(),
+            fields=frozenset(self.fields),
+            operations=frozenset(op.name for op in owned),
+            binds={op.name: dict(getattr(op, 'binds', {}) or {}) for op in owned},
+            assign={op.name: dict(getattr(op, 'assign', {}) or {}) for op in owned},
+        )
 
     def to_step(self, resolve: _Resolver) -> Step:
-        prompt = resolve.prompt(self.id, self.prompt, self.agent)
+        view = self.view(resolve)
+        prompt = resolve.prompt(self.id, self.prompt, self.agent, view)
         if self.knowledge and prompt is not None:
             knowledge = resolve.knowledge(self.id, self.knowledge) or ''
-            prompt = TemplateStr(f'{prompt}\n\nKnowledge:\n{knowledge}', deps_type=resolve.call_type())
+            text = f'{prompt}\n\nKnowledge:\n{knowledge}'
+            prompt = (
+                ViewTemplate(text, state=resolve.state_type(), facts=view.shown())
+                if view is not None
+                else TemplateStr(text, deps_type=resolve.call_type())
+            )
         return ConversationStep(
             id=self.id,
             instructions=prompt,
@@ -1156,6 +1299,7 @@ class ConversationSpec(StepSpec):
             requires=tuple(self.requires),
             satisfied_by=self.satisfied_by,
             rendered=self.speech == 'rendered',
+            structured=self.speech == 'structured',
             quoted=tuple(self.quoted),
             opens_with=resolve.operation(self.opens_with) if self.opens_with else None,
             asks=dict(self.asks),
@@ -1182,6 +1326,7 @@ class ConversationSpec(StepSpec):
             spec=resolve.persona(self.id, self.agent),
             history=self.seen(resolve).history,
             facts=self.seen(resolve).shown(),
+            scope=self.scope(resolve),
             capabilities=tuple(
                 found for ref in self.capabilities if (found := resolve.capability(self.id, ref)) is not None
             ),

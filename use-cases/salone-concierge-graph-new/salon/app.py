@@ -9,6 +9,7 @@ stands in for the business's own backend.
 """
 
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -32,6 +33,7 @@ def open_call(
     *,
     key: str = '',
     settle: Callable[[str], bool] | None = None,
+    clock: Callable[[], datetime] | None = None,
     **facts: Any,
 ) -> core.FlowCall:
     """A new session: the carrier's number when it is a real one (core checks), the diary, this call's key.
@@ -42,4 +44,4 @@ def open_call(
     earlier calls are over, so what they still owe this caller is settled first.
     """
     salon = Salon(diary if diary is not None else Diary(), key or uuid4().hex[:12], settle)
-    return flow.open(SalonState(**facts), services=salon, caller_id=from_number)
+    return flow.open(SalonState(**facts), services=salon, caller_id=from_number, clock=clock)

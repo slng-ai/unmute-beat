@@ -55,7 +55,9 @@ def legal_moves(nodes: dict[str, Node[Any]]) -> dict[str, frozenset[str]]:
     or of the step itself (a step handing the caller back to itself before
     they are identified is interposed too); and for a satisfier, every step
     that could be waiting on it plus the first step in the table, where a
-    finished satisfier goes when nobody is.
+    finished satisfier goes when nobody is. A consulted step goes back to
+    each step that consults it: its `done` returns the caller there, and a
+    structured one may hand the rest of the turn back (`core.structured`).
     """
     home = next(iter(nodes))
     moves: dict[str, set[str]] = {}
@@ -63,6 +65,9 @@ def legal_moves(nodes: dict[str, Node[Any]]) -> dict[str, frozenset[str]]:
         reach = {exit.to for exit in node.exits} | {name}
         reach |= {nodes[to].satisfied_by for to in list(reach) if nodes[to].satisfied_by}
         moves[name] = reach
+    for name, node in nodes.items():
+        for consulted in node.consults:
+            moves[consulted].add(name)
     for name in nodes:
         if nodes[name].returns or any(other.satisfied_by == name for other in nodes.values()):
             waiting = {n for n, reach in moves.items() if name in reach and n != name}

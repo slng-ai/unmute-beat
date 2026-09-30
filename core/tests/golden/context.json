@@ -1,0 +1,1430 @@
+{
+  "desk, a local answer after a note": {
+    "bytes": {
+      "history": 2782,
+      "instructions": 1153,
+      "outputs": 2673,
+      "tools": 2737,
+      "total": 9345
+    },
+    "history": [
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nHelp the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}\nNothing is on offer to the caller now.\nYou may hand the caller to: nurse (a medical question about the appointment).\n\nThe following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:\n- refunds: The clinic refund policy, for questions about money back.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Also, I use a wheelchair.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function::agent",
+        "parts": [
+          {
+            "content": "Noted.",
+            "id": null,
+            "part_kind": "text"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 2
+        }
+      },
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nHelp the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}\nOn offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.\nYou may hand the caller to: nurse (a medical question about the appointment).\n\nThe following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:\n- refunds: The clinic refund policy, for questions about money back.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "When are you open?",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.",
+      "",
+      "",
+      "Help the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `desk` step.",
+      "Facts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}",
+      "On offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.",
+      "You may hand the caller to: nurse (a medical question about the appointment).",
+      "",
+      "The following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:",
+      "- refunds: The clinic refund policy, for questions about money back.",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00)."
+    ],
+    "outputs": {
+      "text": true,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "The caller asked to hear again what was done for them. The application says it again.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "say_again",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "book: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "book",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Hand the caller to the step that serves what they asked for.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "hand_over",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Where they go.",
+                "enum": [
+                  "nurse"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": [
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Load a listed capability whenever it is plausibly relevant to the task. Loading makes the capability instructions and any tools it provides available.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "load_capability",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "description": "Typed arguments for a `load_capability` tool call.",
+          "properties": {
+            "id": {
+              "description": "The id of the capability to load.",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "LoadCapabilityArgs",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": "capability-load",
+        "toolset_id": null,
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Record exactly what the caller has just said for any of these fields. Never guess a value.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "collect",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "$defs": {
+            "Slot": {
+              "enum": [
+                "0900",
+                "1000"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Anything else the caller mentioned."
+            },
+            "slot": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Slot"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The id of the time the caller chose, from the times offered."
+            }
+          },
+          "title": "DeskValues",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The options you may offer the caller now, by id, for what they asked. Only an offered id can be recorded. Say them in your own words.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "options",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The caller said no to the read-back they are answering. Nothing is carried out.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "decline",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      }
+    ]
+  },
+  "desk, after the prerequisite returned": {
+    "bytes": {
+      "history": 3904,
+      "instructions": 1129,
+      "outputs": 2673,
+      "tools": 2737,
+      "total": 10443
+    },
+    "history": [
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nGreet the caller and find out what they need. For an appointment, hand them to `booking` with `hand_over`. Answer anything else briefly.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `front` step.\nFacts: {\"patient\":null,\"checked_in\":null,\"slot\":null,\"reference\":\"\",\"note\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: nurse (a medical question).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "It is P-1234.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function::agent",
+        "parts": [
+          {
+            "args": "{\"values\": {\"patient\": \"P-1234\"}}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 6
+        }
+      },
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nGreet the caller and find out what they need. For an appointment, hand them to `booking` with `hand_over`. Answer anything else briefly.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `front` step.\nFacts: {\"patient\":\"P-1234\",\"checked_in\":null,\"slot\":null,\"reference\":\"\",\"note\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: nurse (a medical question).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Recorded: patient.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function::agent",
+        "parts": [
+          {
+            "content": "Thanks, I have you checked in.",
+            "id": null,
+            "part_kind": "text"
+          },
+          {
+            "args": "{}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "check_in"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 1
+        }
+      },
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nHelp the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}\nNothing is on offer to the caller now.\nDone on this call: check_in {\"patient\": \"P-1234\"} -> {\"patient\": \"P-1234\"}\nYou may hand the caller to: nurse (a medical question about the appointment).\n\nThe following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:\n- refunds: The clinic refund policy, for questions about money back.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Final result processed.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "check_in"
+          },
+          {
+            "content": "It is P-1234.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.",
+      "",
+      "",
+      "Help the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `desk` step.",
+      "Facts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}",
+      "Nothing is on offer to the caller now.",
+      "Done on this call: check_in {\"patient\": \"P-1234\"} -> {\"patient\": \"P-1234\"}",
+      "You may hand the caller to: nurse (a medical question about the appointment).",
+      "",
+      "The following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:",
+      "- refunds: The clinic refund policy, for questions about money back.",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00)."
+    ],
+    "outputs": {
+      "text": true,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "The caller asked to hear again what was done for them. The application says it again.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "say_again",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "book: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "book",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Hand the caller to the step that serves what they asked for.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "hand_over",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Where they go.",
+                "enum": [
+                  "nurse"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": [
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Load a listed capability whenever it is plausibly relevant to the task. Loading makes the capability instructions and any tools it provides available.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "load_capability",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "description": "Typed arguments for a `load_capability` tool call.",
+          "properties": {
+            "id": {
+              "description": "The id of the capability to load.",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "LoadCapabilityArgs",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": "capability-load",
+        "toolset_id": null,
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Record exactly what the caller has just said for any of these fields. Never guess a value.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "collect",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "$defs": {
+            "Slot": {
+              "enum": [
+                "0900",
+                "1000"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Anything else the caller mentioned."
+            },
+            "slot": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Slot"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The id of the time the caller chose, from the times offered."
+            }
+          },
+          "title": "DeskValues",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The options you may offer the caller now, by id, for what they asked. Only an offered id can be recorded. Say them in your own words.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "options",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The caller said no to the read-back they are answering. Nothing is carried out.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "decline",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      }
+    ]
+  },
+  "desk, the read-back request": {
+    "bytes": {
+      "history": 6203,
+      "instructions": 1155,
+      "outputs": 2673,
+      "tools": 2737,
+      "total": 12768
+    },
+    "history": [
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nHelp the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}\nNothing is on offer to the caller now.\nYou may hand the caller to: nurse (a medical question about the appointment).\n\nThe following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:\n- refunds: The clinic refund policy, for questions about money back.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Also, I use a wheelchair.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function::agent",
+        "parts": [
+          {
+            "content": "Noted.",
+            "id": null,
+            "part_kind": "text"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 2
+        }
+      },
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nHelp the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}\nOn offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.\nYou may hand the caller to: nurse (a medical question about the appointment).\n\nThe following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:\n- refunds: The clinic refund policy, for questions about money back.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "When are you open?",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function::agent",
+        "parts": [
+          {
+            "content": "Weekdays, nine to five.",
+            "id": null,
+            "part_kind": "text"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 5
+        }
+      },
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nHelp the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":null}\nOn offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.\nYou may hand the caller to: nurse (a medical question about the appointment).\n\nThe following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:\n- refunds: The clinic refund policy, for questions about money back.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Tuesday at ten, please.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function::agent",
+        "parts": [
+          {
+            "args": "{\"values\": {\"slot\": \"1000\"}}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 6
+        }
+      },
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nHelp the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":\"1000\"}\nOn offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.\nYou may hand the caller to: nurse (a medical question about the appointment).\n\nThe following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:\n- refunds: The clinic refund policy, for questions about money back.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Recorded: slot.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.",
+      "",
+      "",
+      "Help the caller book or cancel an appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree. To cancel their booking, call `cancel`.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `desk` step.",
+      "Facts: {\"checked_in\":{\"patient\":\"P-1234\"},\"slot\":\"1000\"}",
+      "On offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.",
+      "You may hand the caller to: nurse (a medical question about the appointment).",
+      "",
+      "The following capabilities are deferred and can be loaded using the `load_capability` tool. A capability's tools stay hidden until it is loaded:",
+      "- refunds: The clinic refund policy, for questions about money back.",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00)."
+    ],
+    "outputs": {
+      "text": true,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "The caller asked to hear again what was done for them. The application says it again.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "say_again",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "book: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "book",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Hand the caller to the step that serves what they asked for.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "hand_over",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Where they go.",
+                "enum": [
+                  "nurse"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": [
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Load a listed capability whenever it is plausibly relevant to the task. Loading makes the capability instructions and any tools it provides available.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "load_capability",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "description": "Typed arguments for a `load_capability` tool call.",
+          "properties": {
+            "id": {
+              "description": "The id of the capability to load.",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "LoadCapabilityArgs",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": "capability-load",
+        "toolset_id": null,
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Record exactly what the caller has just said for any of these fields. Never guess a value.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "collect",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "$defs": {
+            "Slot": {
+              "enum": [
+                "0900",
+                "1000"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Anything else the caller mentioned."
+            },
+            "slot": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Slot"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The id of the time the caller chose, from the times offered."
+            }
+          },
+          "title": "DeskValues",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The options you may offer the caller now, by id, for what they asked. Only an offered id can be recorded. Say them in your own words.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "options",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The caller said no to the read-back they are answering. Nothing is carried out.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "decline",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      }
+    ]
+  },
+  "front, the prerequisite": {
+    "bytes": {
+      "history": 759,
+      "instructions": 670,
+      "outputs": 2167,
+      "tools": 750,
+      "total": 4346
+    },
+    "history": [
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nGreet the caller and find out what they need. For an appointment, hand them to `booking` with `hand_over`. Answer anything else briefly.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `front` step.\nFacts: {\"patient\":null,\"checked_in\":null,\"slot\":null,\"reference\":\"\",\"note\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: nurse (a medical question).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "It is P-1234.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.",
+      "",
+      "",
+      "Greet the caller and find out what they need. For an appointment, hand them to `booking` with `hand_over`. Answer anything else briefly.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `front` step.",
+      "Facts: {\"patient\":null,\"checked_in\":null,\"slot\":null,\"reference\":\"\",\"note\":\"\"}",
+      "Nothing is on offer to the caller now.",
+      "You may hand the caller to: nurse (a medical question).",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00)."
+    ],
+    "outputs": {
+      "text": true,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "check_in: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "check_in",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Hand the caller to the step that serves what they asked for.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "hand_over",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Where they go.",
+                "enum": [
+                  "nurse"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": [
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Record exactly what the caller has just said for any of these fields. Never guess a value.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "collect",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "$defs": {
+            "PatientId": {
+              "pattern": "^P-\\d{4}$",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "patient": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PatientId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The patient number, like P-1234."
+            }
+          },
+          "title": "FrontValues",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      }
+    ]
+  },
+  "nurse, consulted": {
+    "bytes": {
+      "history": 842,
+      "instructions": 883,
+      "outputs": 1378,
+      "tools": 2,
+      "total": 3105
+    },
+    "history": [
+      {
+        "instructions": "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.\n\n\nYou are the nurse. Answer the medical question in one or two short sentences, ask for what you need to answer it, then call done.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `nurse` step.\nOn offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.\nThe caller is answering: \"Shall I book Tuesday at 10:00 AM for P-1234?\" (book). They heard it in full.",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Wait, can I eat before the appointment?",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "You answer the clinic's phone line. Speak in one or two short sentences. Never say something was booked or cancelled unless a tool told you it was.",
+      "",
+      "",
+      "You are the nurse. Answer the medical question in one or two short sentences, ask for what you need to answer it, then call done.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `nurse` step.",
+      "On offer to the caller now, by id: {\"slot\": {\"0900\": \"Tuesday at 9:00 AM\", \"1000\": \"Tuesday at 10:00 AM\"}}. Only these ids can be picked.",
+      "The caller is answering: \"Shall I book Tuesday at 10:00 AM for P-1234?\" (book). They heard it in full.",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00).",
+      "",
+      "Application consultation: desk asked nurse. You are now nurse: answer the caller, ask them for anything you need, and call done once you have answered."
+    ],
+    "outputs": {
+      "text": true,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "You have answered what you were asked for. The caller goes back to the step that asked you.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "done",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": []
+  }
+}

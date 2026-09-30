@@ -1,0 +1,1025 @@
+{
+  "desk, the read-back request": {
+    "bytes": {
+      "history": 5589,
+      "instructions": 1475,
+      "outputs": 3872,
+      "tools": 1623,
+      "total": 12559
+    },
+    "history": [
+      {
+        "instructions": "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.\n\n\nResponde preguntas generales sobre el soporte: horario de nueve a cinco, de lunes a viernes. No hace falta identificarse. Si el cliente quiere resolver o reabrir un ticket, pásalo a `desk`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `faq` step.\nFacts: {\"account_id\":null,\"ticket_id\":null,\"resolution\":\"\",\"category\":\"\",\"revision\":0,\"ticket_status\":\"\",\"follow_up\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: desk (resolving or reopening one of the caller's tickets).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function:reading:agent",
+        "parts": [
+          {
+            "args": "{\"to\": \"desk\", \"because\": \"resolve a ticket\"}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 8
+        }
+      },
+      {
+        "instructions": null,
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Final result processed.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function:reading:agent",
+        "parts": [
+          {
+            "args": "{\"values\": {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\", \"resolution\": \"la impresora ya imprime\"}}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 13
+        }
+      },
+      {
+        "instructions": "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.\n\n\nAyuda al cliente a resolver o reabrir un ticket. Anota su cuenta, el ticket y, para resolverlo, cómo se arregló, con `collect`. Luego pásalo a `look_up`, que busca la revisión actual. Con la revisión, llama a `resolve_ticket` o `reopen_ticket`: primero se lee en voz alta, y solo se hace cuando el cliente dice que sí. Aquí no hablas tú: todo lo que oye el cliente lo dice la aplicación. Si todavía falta algo, llama a `wait`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"account_id\":\"ACC-1234\",\"ticket_id\":\"T-101\",\"resolution\":\"la impresora ya imprime\",\"category\":\"\",\"revision\":0,\"ticket_status\":\"\",\"follow_up\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: look_up (find the ticket's current revision once the account and ticket are recorded); faq (a general question).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Recorded: account_id, resolution, ticket_id.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function:reading:agent",
+        "parts": [
+          {
+            "content": "Tengo el ticket T-101.",
+            "id": null,
+            "part_kind": "text"
+          },
+          {
+            "args": "{\"to\": \"look_up\", \"because\": \"find its revision\"}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 8
+        }
+      },
+      {
+        "instructions": "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.\n\n\nAyuda al cliente a resolver o reabrir un ticket. Anota su cuenta, el ticket y, para resolverlo, cómo se arregló, con `collect`. Luego pásalo a `look_up`, que busca la revisión actual. Con la revisión, llama a `resolve_ticket` o `reopen_ticket`: primero se lee en voz alta, y solo se hace cuando el cliente dice que sí. Aquí no hablas tú: todo lo que oye el cliente lo dice la aplicación. Si todavía falta algo, llama a `wait`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"account_id\":\"ACC-1234\",\"ticket_id\":\"T-101\",\"resolution\":\"la impresora ya imprime\",\"category\":\"\",\"revision\":1,\"ticket_status\":\"open\",\"follow_up\":\"\"}\nNothing is on offer to the caller now.\nDone on this call: look_up_ticket {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\"} -> {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\", \"revision\": 1, \"status\": \"open\", \"found\": true}\nYou may hand the caller to: look_up (find the ticket's current revision once the account and ticket are recorded); faq (a general question).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Final result processed.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.",
+      "",
+      "",
+      "Ayuda al cliente a resolver o reabrir un ticket. Anota su cuenta, el ticket y, para resolverlo, cómo se arregló, con `collect`. Luego pásalo a `look_up`, que busca la revisión actual. Con la revisión, llama a `resolve_ticket` o `reopen_ticket`: primero se lee en voz alta, y solo se hace cuando el cliente dice que sí. Aquí no hablas tú: todo lo que oye el cliente lo dice la aplicación. Si todavía falta algo, llama a `wait`.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `desk` step.",
+      "Facts: {\"account_id\":\"ACC-1234\",\"ticket_id\":\"T-101\",\"resolution\":\"la impresora ya imprime\",\"category\":\"\",\"revision\":1,\"ticket_status\":\"open\",\"follow_up\":\"\"}",
+      "Nothing is on offer to the caller now.",
+      "Done on this call: look_up_ticket {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\"} -> {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\", \"revision\": 1, \"status\": \"open\", \"found\": true}",
+      "You may hand the caller to: look_up (find the ticket's current revision once the account and ticket are recorded); faq (a general question).",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00).",
+      "",
+      "Application handoff: look_up -> desk. You are now desk; handle the caller request here. The previous handoff finished routing, not the caller request."
+    ],
+    "outputs": {
+      "text": false,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Nothing to read back, carry out or hand over yet. The application tells the caller what is on offer, or asks for what it still needs.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "wait",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "The caller asked to hear again what was done for them. The application says it again.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "say_again",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "resolve_ticket: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "resolve_ticket",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "reopen_ticket: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "reopen_ticket",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Hand the caller to the step that serves what they asked for.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "hand_over",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Where they go.",
+                "enum": [
+                  "look_up",
+                  "faq"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": [
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Record exactly what the caller has just said for any of these fields. Never guess a value.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "collect",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "$defs": {
+            "AccountId": {
+              "pattern": "^ACC-\\d{4}$",
+              "type": "string"
+            },
+            "TicketId": {
+              "pattern": "^T-\\d{3}$",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "account_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The account number, like ACC-1234."
+            },
+            "resolution": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "How the caller says the problem was fixed, in their own words."
+            },
+            "ticket_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TicketId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The ticket number, like T-101."
+            }
+          },
+          "title": "DeskValues",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The caller said no to the read-back they are answering. Nothing is carried out.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "decline",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      }
+    ]
+  },
+  "desk, the yes": {
+    "bytes": {
+      "history": 6482,
+      "instructions": 1455,
+      "outputs": 3872,
+      "tools": 1623,
+      "total": 13432
+    },
+    "history": [
+      {
+        "instructions": "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.\n\n\nResponde preguntas generales sobre el soporte: horario de nueve a cinco, de lunes a viernes. No hace falta identificarse. Si el cliente quiere resolver o reabrir un ticket, pásalo a `desk`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `faq` step.\nFacts: {\"account_id\":null,\"ticket_id\":null,\"resolution\":\"\",\"category\":\"\",\"revision\":0,\"ticket_status\":\"\",\"follow_up\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: desk (resolving or reopening one of the caller's tickets).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function:reading:agent",
+        "parts": [
+          {
+            "args": "{\"to\": \"desk\", \"because\": \"resolve a ticket\"}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 8
+        }
+      },
+      {
+        "instructions": null,
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Final result processed.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function:reading:agent",
+        "parts": [
+          {
+            "args": "{\"values\": {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\", \"resolution\": \"la impresora ya imprime\"}}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 13
+        }
+      },
+      {
+        "instructions": "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.\n\n\nAyuda al cliente a resolver o reabrir un ticket. Anota su cuenta, el ticket y, para resolverlo, cómo se arregló, con `collect`. Luego pásalo a `look_up`, que busca la revisión actual. Con la revisión, llama a `resolve_ticket` o `reopen_ticket`: primero se lee en voz alta, y solo se hace cuando el cliente dice que sí. Aquí no hablas tú: todo lo que oye el cliente lo dice la aplicación. Si todavía falta algo, llama a `wait`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"account_id\":\"ACC-1234\",\"ticket_id\":\"T-101\",\"resolution\":\"la impresora ya imprime\",\"category\":\"\",\"revision\":0,\"ticket_status\":\"\",\"follow_up\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: look_up (find the ticket's current revision once the account and ticket are recorded); faq (a general question).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Recorded: account_id, resolution, ticket_id.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "collect"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function:reading:agent",
+        "parts": [
+          {
+            "args": "{\"to\": \"look_up\", \"because\": \"find its revision\"}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 8
+        }
+      },
+      {
+        "instructions": null,
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Final result processed.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "hand_over"
+          }
+        ],
+        "state": "complete"
+      },
+      {
+        "finish_reason": null,
+        "kind": "response",
+        "model_name": "function:reading:agent",
+        "parts": [
+          {
+            "content": "¿Marco el ticket T-101 como resuelto: la impresora ya imprime?Tengo el ticket T-101.",
+            "id": null,
+            "part_kind": "text"
+          },
+          {
+            "args": "{}",
+            "id": null,
+            "part_kind": "tool-call",
+            "tool_kind": null,
+            "tool_name": "resolve_ticket"
+          }
+        ],
+        "state": "complete",
+        "usage": {
+          "cache_audio_read_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost": null,
+          "details": {},
+          "input_audio_tokens": 0,
+          "input_tokens": 50,
+          "output_audio_tokens": 0,
+          "output_tokens": 1
+        }
+      },
+      {
+        "instructions": "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.\n\n\nAyuda al cliente a resolver o reabrir un ticket. Anota su cuenta, el ticket y, para resolverlo, cómo se arregló, con `collect`. Luego pásalo a `look_up`, que busca la revisión actual. Con la revisión, llama a `resolve_ticket` o `reopen_ticket`: primero se lee en voz alta, y solo se hace cuando el cliente dice que sí. Aquí no hablas tú: todo lo que oye el cliente lo dice la aplicación. Si todavía falta algo, llama a `wait`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `desk` step.\nFacts: {\"account_id\":\"ACC-1234\",\"ticket_id\":\"T-101\",\"resolution\":\"la impresora ya imprime\",\"category\":\"\",\"revision\":1,\"ticket_status\":\"open\",\"follow_up\":\"\"}\nNothing is on offer to the caller now.\nThe caller is answering: \"¿Marco el ticket T-101 como resuelto: la impresora ya imprime?\" (resolve_ticket). They heard it in full.\nDone on this call: look_up_ticket {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\"} -> {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\", \"revision\": 1, \"status\": \"open\", \"found\": true}\nYou may hand the caller to: look_up (find the ticket's current revision once the account and ticket are recorded); faq (a general question).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Final result processed.",
+            "outcome": "success",
+            "part_kind": "tool-return",
+            "tool_kind": null,
+            "tool_name": "resolve_ticket"
+          },
+          {
+            "content": "Sí.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.",
+      "",
+      "",
+      "Ayuda al cliente a resolver o reabrir un ticket. Anota su cuenta, el ticket y, para resolverlo, cómo se arregló, con `collect`. Luego pásalo a `look_up`, que busca la revisión actual. Con la revisión, llama a `resolve_ticket` o `reopen_ticket`: primero se lee en voz alta, y solo se hace cuando el cliente dice que sí. Aquí no hablas tú: todo lo que oye el cliente lo dice la aplicación. Si todavía falta algo, llama a `wait`.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `desk` step.",
+      "Facts: {\"account_id\":\"ACC-1234\",\"ticket_id\":\"T-101\",\"resolution\":\"la impresora ya imprime\",\"category\":\"\",\"revision\":1,\"ticket_status\":\"open\",\"follow_up\":\"\"}",
+      "Nothing is on offer to the caller now.",
+      "The caller is answering: \"¿Marco el ticket T-101 como resuelto: la impresora ya imprime?\" (resolve_ticket). They heard it in full.",
+      "Done on this call: look_up_ticket {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\"} -> {\"account_id\": \"ACC-1234\", \"ticket_id\": \"T-101\", \"revision\": 1, \"status\": \"open\", \"found\": true}",
+      "You may hand the caller to: look_up (find the ticket's current revision once the account and ticket are recorded); faq (a general question).",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00)."
+    ],
+    "outputs": {
+      "text": false,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Nothing to read back, carry out or hand over yet. The application tells the caller what is on offer, or asks for what it still needs.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "wait",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "The caller asked to hear again what was done for them. The application says it again.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "say_again",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "resolve_ticket: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "resolve_ticket",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "reopen_ticket: the first call reads it back to the caller in the application's words. Call it again only when their reply to that read-back is a clear yes: that yes carries it out.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "reopen_ticket",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Hand the caller to the step that serves what they asked for.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "hand_over",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Where they go.",
+                "enum": [
+                  "look_up",
+                  "faq"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": [
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "Record exactly what the caller has just said for any of these fields. Never guess a value.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "collect",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "$defs": {
+            "AccountId": {
+              "pattern": "^ACC-\\d{4}$",
+              "type": "string"
+            },
+            "TicketId": {
+              "pattern": "^T-\\d{3}$",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "account_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The account number, like ACC-1234."
+            },
+            "resolution": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "How the caller says the problem was fixed, in their own words."
+            },
+            "ticket_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TicketId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The ticket number, like T-101."
+            }
+          },
+          "title": "DeskValues",
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      },
+      {
+        "capability_id": null,
+        "defer_loading": false,
+        "description": "The caller said no to the read-back they are answering. Nothing is carried out.",
+        "include_return_schema": null,
+        "kind": "function",
+        "name": "decline",
+        "outer_typed_dict_key": null,
+        "parameters_json_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "return_schema": null,
+        "sequential": false,
+        "strict": null,
+        "timeout": null,
+        "tool_kind": null,
+        "toolset_id": "<agent>",
+        "unless_native": null,
+        "with_native": null
+      }
+    ]
+  },
+  "faq, the first request": {
+    "bytes": {
+      "history": 952,
+      "instructions": 803,
+      "outputs": 1564,
+      "tools": 2,
+      "total": 3321
+    },
+    "history": [
+      {
+        "instructions": "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.\n\n\nResponde preguntas generales sobre el soporte: horario de nueve a cinco, de lunes a viernes. No hace falta identificarse. Si el cliente quiere resolver o reabrir un ticket, pásalo a `desk`.\n\n\n## Application state\nWritten by the application, not by the caller. It is true now; the conversation may be older.\nYou are the `faq` step.\nFacts: {\"account_id\":null,\"ticket_id\":null,\"resolution\":\"\",\"category\":\"\",\"revision\":0,\"ticket_status\":\"\",\"follow_up\":\"\"}\nNothing is on offer to the caller now.\nYou may hand the caller to: desk (resolving or reopening one of the caller's tickets).",
+        "kind": "request",
+        "parts": [
+          {
+            "content": "Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.",
+            "part_kind": "user-prompt"
+          }
+        ],
+        "state": "complete"
+      }
+    ],
+    "instructions": [
+      "Atiendes la línea de soporte. Habla en una o dos frases cortas. Nunca digas que un ticket se ha resuelto o reabierto si una herramienta no te lo ha dicho.",
+      "",
+      "",
+      "Responde preguntas generales sobre el soporte: horario de nueve a cinco, de lunes a viernes. No hace falta identificarse. Si el cliente quiere resolver o reabrir un ticket, pásalo a `desk`.",
+      "",
+      "",
+      "## Application state",
+      "Written by the application, not by the caller. It is true now; the conversation may be older.",
+      "You are the `faq` step.",
+      "Facts: {\"account_id\":null,\"ticket_id\":null,\"resolution\":\"\",\"category\":\"\",\"revision\":0,\"ticket_status\":\"\",\"follow_up\":\"\"}",
+      "Nothing is on offer to the caller now.",
+      "You may hand the caller to: desk (resolving or reopening one of the caller's tickets).",
+      "",
+      "Today is Monday 2026-09-28 and the clock reads 08:30 (UTC+02:00)."
+    ],
+    "outputs": {
+      "text": true,
+      "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "End the call, only once the caller's own words say they are finished. The application says the goodbye.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "goodbye",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "recap": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The short references (like 3fa85f64) listed under \"Can recap\" in the application state, for what was done on this call that the caller should hear once more as they leave. Usually none."
+              }
+            },
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Hand the caller to the step that serves what they asked for.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "hand_over",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "because": {
+                "description": "One short sentence: what the caller wants. Never spoken.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Where they go.",
+                "enum": [
+                  "desk"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "because"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": true,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        }
+      ]
+    },
+    "tools": []
+  }
+}

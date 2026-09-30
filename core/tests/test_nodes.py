@@ -50,6 +50,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 from core.flow import Flow
+from core.history import Payload
 from core.locale import ENGLISH
 from core.policies import TurnBudget
 from core.steps import ConversationStep, StepFlow, _offer
@@ -72,6 +73,8 @@ class Script:
         self.steps: list[str] = []
         self.told: list[str] = []
         """Everything each request was sent (instructions and messages), as text, for checks on what a step was told."""
+        self.payloads: list[Payload] = []
+        """Every request whole, tool and output schemas included (`core.history.Payload`)."""
         self.call: core.FlowCall | None = None
         self.delay = 0.0
         self.model = FunctionModel(self.reading, stream_function=self.agent)
@@ -82,6 +85,7 @@ class Script:
     async def agent(self, messages: Any, info: AgentInfo):
         self.steps.append(self.call.state.agent if self.call is not None else '?')
         self.told.append(f'{getattr(info, "instructions", "") or ""}\n{messages!r}')
+        self.payloads.append(Payload.of(messages, info))
         if self.delay:
             await asyncio.sleep(self.delay)
         if not self.moves:

@@ -21,6 +21,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from core.history import History, Scope
 from core.state import CallContext, VoiceState, present
 
 
@@ -138,7 +139,7 @@ class Node[S: VoiceState]:
     Returns the read-back (a `Question`) or None. Saves the second request
     that only called the operation for its read-back (43 in the baseline).
     """
-    history: Literal['all', 'messages', 'none'] = 'all'
+    history: Literal['all', 'messages', 'none'] | History = 'all'
     """What conversation from earlier caller turns this step is sent (`context: {history: ...}`).
 
     `all` is the whole retained history, tool exchanges included.
@@ -146,8 +147,11 @@ class Node[S: VoiceState]:
     agent's delivered speech, with earlier tool exchanges left out
     (`core.history.conversation`). `none` sends none of it: the step gets
     its own instructions, the facts it may see, and this turn's words. The
-    current caller turn always reaches the step whole.
+    current caller turn always reaches the step whole. A `History` object
+    picks whole caller turns by the step that handled them (`History.select`).
     """
+    scope: Scope | None = None
+    """The step's scoped view (`core.history.Scope`), or None for a v1 context: what its automatic context shows."""
     consults: frozenset[str] = frozenset()
     """The exits that are consultations: the caller comes back here when that step is `done`."""
     capabilities: frozenset[str] = frozenset()

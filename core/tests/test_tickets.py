@@ -33,6 +33,8 @@ its own Spanish words and its own durable backend (`ticket_flow/tickets.py`):
   wrong for it, refused.
 * R23: supplied dependent picks survive a fresh parent, regardless of YAML order; cyclic dependencies fail.
 * R22: a change asked for over a cut receipt is read in the same turn: the receipt, then its read-back.
+* R24: the desk as `speech: structured`: no `collect`, the update rides the hand-over, the Spanish read-back
+  and receipt exact, a correction read back fresh.
 
 Scripted models prove runtime properties, not language understanding.
 """
@@ -55,7 +57,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from pydantic import ValidationError
 
 import core
+from tests.test_context import pinned
 from tests.test_nodes import Script
+from tests.test_public import CLOCK
 from tests.ticket_flow.tickets import Desk, DeskState
 from tests.ticket_flow.worker import TO_READ_BACK, to_read_back
 
@@ -1390,6 +1394,66 @@ async def chained_picks_survive_a_fresh_parent(folder: Path) -> None:
         manifest.unlink(missing_ok=True)
 
 
+async def a_structured_desk_keeps_its_words(folder: Path):
+    """R24: the desk as `speech: structured`: its update rides the hand-over, and its words are the desk's, exactly.
+
+    No `collect`: the account, ticket and resolution the caller gave go with
+    the move to the look-up, so reaching the read-back costs one request
+    fewer than R2's prose path. A correction goes with the operation and is
+    read back fresh, in Spanish; only a heard yes to that exact read-back
+    resolves, once.
+    """
+    desk = desk_in(folder)
+    text = (HERE / 'agent.yaml').read_text()
+    assert text.count('    speech: rendered\n') == 1
+    spec = core.flowspec.load(text.replace('    speech: rendered\n', '    speech: structured\n'), root=HERE)
+    script = Script()
+    flow = spec.compile(model=script.model)
+    call = flow.open(DeskState(), services=desk)
+    script.call = call
+    given = {'account_id': 'ACC-1234', 'ticket_id': 'T-101', 'resolution': 'la impresora ya imprime'}
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.',
+        ('call', 'hand_over', {'to': 'desk', 'because': 'resolve a ticket'}),
+        ('call', 'hand_over', {'to': 'look_up', 'because': 'find its revision', 'update': given}),
+        ('call', 'resolve_ticket', {}),
+    )
+    assert said[-2:] == [
+        'Tengo el ticket T-101.',
+        '¿Marco el ticket T-101 como resuelto: la impresora ya imprime?',
+    ], said
+    assert script.steps == ['faq', 'desk', 'desk'], script.steps
+    tools = json.loads(script.payloads[1].tools)
+    assert 'collect' not in {t['name'] for t in tools}, 'no bookkeeping tool on a structured step'
+    said = await turn(
+        flow,
+        call,
+        script,
+        'Sí, pero pon que cambié el tóner.',
+        ('call', 'resolve_ticket', {'update': {'resolution': 'cambié el tóner'}}),
+    )
+    assert said == ['¿Marco el ticket T-101 como resuelto: cambié el tóner?'] and desk.sent() == 0, said
+    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    assert said == ['Ticket T-101 resuelto. ¿Algo más?'] and desk.sent() == 1, said
+    assert desk.ticket('T-101') == (2, 'resolved')
+
+
+async def v1_requests_are_pinned(folder: Path):
+    """The desk's requests whole (instructions, history, tool and output schemas), pinned before the scoped view."""
+    script, flow, call = opened(desk_in(folder), clock=lambda: CLOCK)
+    await to_read_back(flow, call, script)
+    requests = {
+        'faq, the first request': script.payloads[0],
+        'desk, the read-back request': script.payloads[-1],
+    }
+    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    requests['desk, the yes'] = script.payloads[-1]
+    pinned(requests, Path(__file__).parent / 'golden' / 'tickets.json', 'BLESS_PAYLOADS')
+
+
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for index, check in enumerate(
@@ -1417,6 +1481,8 @@ async def main() -> None:
                 a_pick_counts_on_the_offer_for_the_state_it_ends_in,
                 a_request_over_a_cut_receipt_is_read,
                 chained_picks_survive_a_fresh_parent,
+                a_structured_desk_keeps_its_words,
+                v1_requests_are_pinned,
             )
         ):
             folder = Path(tmp) / str(index)
@@ -1432,7 +1498,7 @@ async def main() -> None:
             ):
                 (folder / sub).mkdir(parents=True, exist_ok=True)
             await check(folder)
-    print('tickets ok: R1-R23, no phone, date, appointment or slot')
+    print('tickets ok: R1-R24, no phone, date, appointment or slot')
 
 
 if __name__ == '__main__':

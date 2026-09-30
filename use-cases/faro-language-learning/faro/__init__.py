@@ -16,6 +16,8 @@ is read, what authorises a write and what is said about it are core's.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +45,12 @@ def __getattr__(name: str) -> Any:
     return globals()['FLOW']
 
 
-def open_call(flow: core.StepFlow, caller_id: str = '', learning: Store | None = None) -> core.FlowCall:
+def open_call(
+    flow: core.StepFlow,
+    caller_id: str = '',
+    learning: Store | None = None,
+    clock: Callable[[], datetime] | None = None,
+) -> core.FlowCall:
     """A new connection. A caller ID that is not a valid Spanish number is dropped, never guessed at.
 
     The carrier's number is only the phone to read back: nothing is looked up
@@ -51,7 +58,7 @@ def open_call(flow: core.StepFlow, caller_id: str = '', learning: Store | None =
     so the words code says follow the language the call is in.
     """
     faro = Faro(learning if learning is not None else store())
-    call = flow.open(FaroState(phone=phone_in(caller_id)), services=faro)
+    call = flow.open(FaroState(phone=phone_in(caller_id)), services=faro, clock=clock)
     faro.facts = lambda: call.state.facts
     return call
 

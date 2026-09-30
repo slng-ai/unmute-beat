@@ -52,7 +52,7 @@ from pydantic_ai.usage import UsageLimitExceeded
 
 from core.flow import Answered, Flow, Moved
 from core.graph import LocalAction, Node, Restated, route
-from core.history import conversation, paired, project
+from core.history import History, conversation, paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
 from core.state import CallContext, Checkpoint, Handoff, Question, Spoken, turn_generation
@@ -581,8 +581,19 @@ class Turn:
             going_to = call.state.consulting or call.state.agent
             logger.info('consultation {} -> {} done', call.state.agent, going_to)
             self.handoffs.append(going_to)
+            specialist = call.state.agent
             call.commit(agent=going_to, consulting=None)
             call._return_status, call._entered = '', ''
+            if not output.ends_turn and not barge.hit:
+                call._detour_question = None
+                call._entered = 'returned'
+                call._return_status = (
+                    f'Application consultation return: {specialist} answered the caller and handed back to '
+                    f'you, {going_to}. It noted: "{output.because}". That is its reading; the caller\'s own '
+                    'words are above. Carry on with what they asked of you.'
+                )
+                yield _Continue(None)
+                return
             if not barge.hit and (words := call.reissue_waiting()):
                 await call.speak_now(words, origin='ask')
             return
@@ -606,6 +617,7 @@ class Turn:
                 )
         elif output.to in node.consults:
             going_to, waiting, consulting = output.to, call.state.pending, call.state.agent
+            call._arrived[going_to] = call.turn
             call._detour_question = call._proposals.asked
             call._entered = 'handoff'
             call._return_status = (
@@ -615,8 +627,10 @@ class Turn:
         else:
             going_to, waiting = route(call.state, nodes, output.to)
             consulting = None
+            call._arrived[going_to] = call.turn
             if waiting is not None and going_to != waiting and call._checkpoint is None:
                 call._checkpoint = Checkpoint(waiting, call.heard)
+                call._arrived[waiting] = call.turn
             call._entered = 'handoff'
             call._return_status = (
                 f'Application handoff: {call.state.agent} -> {going_to}. '
@@ -730,12 +744,20 @@ class Turn:
             messages = project(call, request.messages, excluded=excluded)
             if node.history == 'messages':
                 messages = conversation(call, messages, loaded=node.capabilities)
+            elif isinstance(node.history, History):
+                messages = node.history.select(
+                    call,
+                    messages,
+                    step=step,
+                    loaded=node.capabilities,
+                    owned=node.scope.operations if node.scope is not None else (),
+                )
             parameters = request.model_request_parameters
             notes = [
                 note
                 for note in (
                     call.today.instructions() if call._today_shown else '',
-                    call.spoken_over,
+                    '' if node.scope is not None and node.history == 'none' else call.spoken_over,
                     call._return_status,
                 )
                 if note
@@ -778,7 +800,9 @@ class Turn:
                 0,
             )
             retained = deepcopy(new_messages[overlap:])
+            served = {'for': call.state.consulting} if call.state.consulting else {}
             for message in retained:
+                message.metadata = (message.metadata or {}) | {'step': step, 'run': run_id} | served
                 if isinstance(message, ModelRequest) and any(
                     isinstance(p, UserPromptPart) for p in message.parts
                 ):
@@ -1025,7 +1049,10 @@ def greet(call: CallContext, line: str | Question) -> str:
         line = line.put(call)
     call.note_said('fixed', line, origin='entry')
     call.messages.append(
-        ModelResponse(parts=[TextPart(content=line)], metadata={'speech_ids': [call.spoken[-1].id]})
+        ModelResponse(
+            parts=[TextPart(content=line)],
+            metadata={'speech_ids': [call.spoken[-1].id], 'step': call.state.agent},
+        )
     )
     return line
 

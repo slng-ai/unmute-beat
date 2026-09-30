@@ -26,6 +26,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
+from core.history import Payload
 from salon.app import FLOW, SPEC
 from salon.app import open_call as open_on
 from salon.diary import TZ, Diary
@@ -42,6 +43,12 @@ class Request:
     messages: list[ModelMessage]
     instructions: str
     tools: list[str]
+    payload: Payload
+    """The request whole: instructions, history, tool and output schemas, at the model boundary."""
+
+
+STRUCTURED = ('concierge', 'booking', 'stylist')
+"""The steps a `structured` script runs as `speech: structured` (`core.structured`): a test variant, not the manifest."""
 
 
 @dataclass
@@ -51,6 +58,8 @@ class Script:
     call: core.FlowCall | None = None
     delay: float = 0.0
     flow: core.StepFlow | None = None
+    structured: bool = False
+    """Compile the salon with `STRUCTURED` steps as `speech: structured`, from the loaded spec: the manifest is unchanged."""
 
     def __post_init__(self) -> None:
         self.model = FunctionModel(self.reading, stream_function=self.agent)
@@ -61,7 +70,9 @@ class Script:
     async def agent(self, messages: list[ModelMessage], info: AgentInfo):
         step = self.call.state.agent if self.call is not None else '?'
         tools = sorted(t.name for t in [*info.function_tools, *info.output_tools])
-        self.requests.append(Request(step, list(messages), info.instructions or '', tools))
+        self.requests.append(
+            Request(step, list(messages), info.instructions or '', tools, Payload.of(messages, info))
+        )
         if self.delay:
             await asyncio.sleep(self.delay)
         if not self.moves:
@@ -88,16 +99,36 @@ class Script:
 def flow_for(script: Script) -> core.StepFlow:
     """The salon compiled once per script, with its model: the same manifest the bot compiles."""
     if script.flow is None:
-        script.flow = SPEC.compile(model=script.model)
+        spec = SPEC
+        if script.structured:
+            spec = SPEC.model_copy(
+                update={
+                    'steps': [
+                        step.model_copy(update={'speech': 'structured'}) if step.id in STRUCTURED else step
+                        for step in SPEC.steps
+                    ]
+                }
+            )
+        script.flow = spec.compile(model=script.model)
     return script.flow
 
 
-def opened(script: Script | None = None, *, phone: str = PHONE, diary: Diary | None = None, **facts: Any):
-    """A fresh call on the salon's real flow, with its own diary on the fixed clock. `phone` is the caller ID."""
+def opened(
+    script: Script | None = None,
+    *,
+    phone: str = PHONE,
+    diary: Diary | None = None,
+    clock: Any = None,
+    **facts: Any,
+):
+    """A fresh call on the salon's real flow, with its own diary on the fixed clock. `phone` is the caller ID.
+
+    `clock` pins the call's own clock too (the date its prompts are told); without it the wall's.
+    """
     script = script or Script()
     flow = flow_for(script)
     diary = diary if diary is not None else Diary(clock=CLOCK)
-    call = open_on(flow, phone, diary, **facts)
+    call = open_on(flow, phone, diary, clock=clock, **facts)
     script.call = call
     return script, flow, call, diary
 

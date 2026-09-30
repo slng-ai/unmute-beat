@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 SayFn = Callable[[str], Awaitable[None]]
 EndFn = Callable[[], Awaitable[None]]
-type Entry = Literal['', 'handoff', 'completed', 'unserved']
+type Entry = Literal['', 'handoff', 'completed', 'unserved', 'returned']
 """How a step was reached within a turn. '' means it was already running when the turn began."""
 
 turn_generation: contextvars.ContextVar[tuple[str, int] | None] = contextvars.ContextVar(
@@ -178,6 +178,8 @@ class Spoken:
     interrupted: bool = False
     """Cut down to what the caller actually heard, once the runtime says so."""
     turn: int = 0
+    step: str = ''
+    """The step the caller was with when it was said (`VoiceState.agent`): whose conversation it is part of."""
     response: str = ''
     generated: str = ''
     delivery: Literal['submitted', 'runtime-estimate'] = 'submitted'
@@ -506,6 +508,10 @@ class CallContext(BaseModel):
     """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
     _unapplied: set[str] = PrivateAttr(default_factory=set)
     """Fields the current model response changes after its action: not yet run when the action does."""
+    _reading: bool = PrivateAttr(default=False)
+    """The current model response also calls a read (`speech: structured`): no answer or action runs beside it."""
+    _patcher: str | None = PrivateAttr(default=None)
+    """The one tool call in the current model response allowed to carry an `update` (`speech: structured`)."""
     _tries: Counter[str] = PrivateAttr(default_factory=Counter)
     """How many times a model response in this caller turn tried to record each field (`one_action_per_reply`)."""
     _kept: Counter[str] = PrivateAttr(default_factory=Counter)
@@ -673,6 +679,14 @@ class CallContext(BaseModel):
     """Whether each step's model is told today's date (`current_datetime: {enabled: false}` turns it off)."""
     """The call's clock, read once (`today`): a call that crosses midnight keeps its day."""
     _spoken_over: str = PrivateAttr(default='')
+    _arrived: dict[str, int] = PrivateAttr(default_factory=dict)
+    """Each step, and the caller turn in which the caller was last sent to it: the words that asked for it.
+
+    Set on a hand-over or a consultation, and for the step a prerequisite
+    interrupted, so when it finally runs its history keeps the turn that asked
+    for it (`core.history.History.window`). A return from the prerequisite
+    leaves it as it was.
+    """
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
     """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
 
@@ -699,7 +713,7 @@ class CallContext(BaseModel):
 
     @property
     def entered(self) -> Entry:
-        """How the current step was reached in this turn: by a handoff, by a prerequisite's return, or not at all."""
+        """How the current step was reached in this turn: a handoff, a prerequisite's return, a consultation's handback, or not at all."""
         return self._entered
 
     @property
@@ -1099,7 +1113,9 @@ class CallContext(BaseModel):
         """Accept a model-free turn once, without inventing a provider exchange."""
         if self.input_retained:
             return
-        message = ModelRequest(parts=[UserPromptPart(self.fresh)], metadata={'caller_turn': self.turn})
+        message = ModelRequest(
+            parts=[UserPromptPart(self.fresh)], metadata={'caller_turn': self.turn, 'step': self.state.agent}
+        )
         self.messages.append(message)
         self._protocol.append(deepcopy(message))
         self.mark_retained()
@@ -1114,7 +1130,7 @@ class CallContext(BaseModel):
             return
         message = ModelRequest(
             parts=[SystemPromptPart(content=f'Application result {name}: {json.dumps(receipt)}')],
-            metadata={'application_action': name, 'caller_turn': self.turn},
+            metadata={'application_action': name, 'caller_turn': self.turn, 'step': self.state.agent},
         )
         self.messages.append(message)
         self._protocol.append(deepcopy(message))
@@ -1681,6 +1697,7 @@ class CallContext(BaseModel):
                 id=self.next_segment(),
                 attempt=self._attempt,
                 turn=self._turn,
+                step=self.state.agent,
                 response=self._response,
                 generated=text,
                 tool_call_id=tool_call_id,
@@ -1722,6 +1739,7 @@ class CallContext(BaseModel):
                 id=self.next_segment(),
                 attempt=self._attempt,
                 turn=self._turn,
+                step=self.state.agent,
                 response=self._response,
             )
             self._proposals.bind(self, self._open)
@@ -2029,9 +2047,13 @@ class CallContext(BaseModel):
         Recorded even with no runtime attached: the words were decided and
         handed on, and whether anyone received them is a separate fact
         (`Spoken.delivered`), unknown until a signal or an acknowledgement.
+
+        `origin='model'` is a structured step's answer: the model wrote the
+        words, and code says them only once the decision they came with is
+        valid and committed (`core.structured`). It is recorded as the model's.
         """
         self._answers += 1
-        self.note_said('fixed', text, origin=origin)
+        self.note_said('model' if origin == 'model' else 'fixed', text, origin=origin)
         if self._say is not None:
             await self._say(text)
 

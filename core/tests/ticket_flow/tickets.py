@@ -314,7 +314,7 @@ def resolutions(desk: Desk, state: DeskState) -> dict[str, str]:
 
 
 class Offer(BaseModel):
-    """A choice's options and the desk's own words for them, for a rendered step (`rendered_choices.yaml`)."""
+    """A choice's options and the desk's own words for them, said by code (`offers.yaml`)."""
 
     options: dict[str, str]
     say: str
@@ -338,11 +338,6 @@ def resolution_offer(desk: Desk, state: DeskState) -> Offer:
         if found
         else '¿El problema es de facturación o de acceso?',
     )
-
-
-def not_offered(value: str) -> str:
-    """What the desk says when the caller picks something it did not offer."""
-    return f'{value} no es una de las opciones que tengo.'
 
 
 def look_up(desk: Desk, ref: TicketRef) -> Found:

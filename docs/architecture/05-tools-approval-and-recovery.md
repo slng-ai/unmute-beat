@@ -18,7 +18,7 @@ The salon's operations are classes, one line each in `agent.yaml`. The next sect
 
 ## The salon's form: an operation class
 
-An operation class is its own argument model and its own action. From the salon's [`operations.py`](../../use-cases/salone-concierge-graph-new/salon/operations.py):
+An operation class is its own argument model and its own action. From the salon's [`operations.py`](../../use-cases/salon/salon/operations.py):
 
 ```python
 class CancelAppointment(_BookingWrite):
@@ -373,7 +373,7 @@ These checks use scripted models and controlled faults. They test the runtime's 
 
 ## Check this against the code
 
-- [Operation classes](../../core/src/core/actions.py) and the [salon's operations](../../use-cases/salone-concierge-graph-new/salon/operations.py): `core.Lookup`, `core.Write`, and what the loader infers from a class.
+- [Operation classes](../../core/src/core/actions.py) and the [salon's operations](../../use-cases/salon/salon/operations.py): `core.Lookup`, `core.Write`, and what the loader infers from a class.
 - [Function binding and node tools](../../core/src/core/steps.py): `FunctionOperation`, `ConversationStep._operate`, reconciliation and receipt presentation.
 - [Operation execution](../../core/src/core/operations.py): `Operation.run`, dispatch, intent claims, outcome validation and current-version checks.
 - [Proposal ledger](../../core/src/core/proposals.py) and [session records](../../core/src/core/state.py): exact question binding, delivery, withdrawal, restoration and effective receipts.

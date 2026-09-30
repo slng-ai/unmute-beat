@@ -6,7 +6,6 @@ value. Asserts, no pytest.
 """
 
 import asyncio
-import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -14,12 +13,12 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ValidationError
 from pydantic_ai.messages import RetryPromptPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 from core.flowspec import load as load_text
 from tests.clinic_flow import actions
 from tests.clinic_flow.clinic import Backend, ClinicState
+from tests.script import Reply, Script
 
 HERE = Path(__file__).parent / 'clinic_flow'
 
@@ -98,7 +97,7 @@ def the_manifest_sets_the_calls_clock():
     assert not hidden.open(ClinicState(), services=Backend())._today_shown
     try:
         load_text(text.replace('Europe/Madrid', 'Europe/Atlantis'), root=HERE)
-    except ValidationError as error:
+    except core.FlowSpecError as error:
         assert 'is not a timezone' in str(error), error
     else:
         raise AssertionError('an unknown timezone loaded')
@@ -106,8 +105,8 @@ def the_manifest_sets_the_calls_clock():
 
 def a_caller_id_fills_a_phone_identity_only():
     text = (
-        'version: 1\nid: caller\nstate: actions.py:CallerState\nidentity: phone\n'
-        'agents: {a: {prompt: prompts/desk.md}}\nsteps: [{id: desk, kind: conversation, agent: a}]\n'
+        'version: 2\nid: caller\nstate: actions.py:CallerState\nidentity: phone\n'
+        'agents: {a: {prompt: prompts/desk.md}}\nsteps: {desk: {agent: a}}\n'
     )
     caller = load_text(text, root=HERE).compile(model='test')
     assert caller.open(actions.CallerState(), caller_id='+34600111222').state.facts.phone == '+34600111222'
@@ -121,26 +120,6 @@ def a_caller_id_fills_a_phone_identity_only():
         raise AssertionError('a caller id filled a patient number')
 
 
-class Script:
-    def __init__(self, values: dict[str, Any]) -> None:
-        self.values = values
-        self.retries: list[str] = []
-        self.model = FunctionModel(stream_function=self.agent)
-
-    async def agent(self, messages: Any, info: AgentInfo):
-        self.retries += [
-            str(part.content)
-            for message in messages
-            for part in getattr(message, 'parts', ())
-            if isinstance(part, RetryPromptPart)
-        ]
-        if self.values:
-            values, self.values = self.values, {}
-            yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': values}))}
-            return
-        yield 'Could you give me your patient number?'
-
-
 async def a_refusal_carries_the_locales_words():
     text = (
         (HERE / 'classes.yaml')
@@ -151,12 +130,18 @@ async def a_refusal_carries_the_locales_words():
             1,
         )
     )
-    script = Script({'patient': 'P-12'})
+    script = Script(Reply('Noted.', patient='P-12'))
     flow = load_text(text, root=HERE).compile(model=script.model)
     call = flow.open(ClinicState(), services=Backend())
     await core.text_turn(flow, call, 'It is P 12.')
-    assert any('Patient numbers look like P-1234.' in retry for retry in script.retries), script.retries
-    assert call.refusal_words() == 'Patient numbers look like P-1234.', 'kept for a rendered wait to say'
+    retries = [
+        str(part.content)
+        for request in script.requests
+        for message in request.messages
+        for part in getattr(message, 'parts', ())
+        if isinstance(part, RetryPromptPart)
+    ]
+    assert any('Patient numbers look like P-1234.' in retry for retry in retries), retries
     assert call.state.facts.patient is None
 
 

@@ -177,7 +177,7 @@ def subclasses(cls):
 
 
 def nothing_overrides_a_final_method():
-    """Every subclass loaded so far keeps the base's final methods. salon-graph's `test_flow` runs this with the salon loaded."""
+    """Every subclass loaded so far keeps the base's final methods."""
     for base in (Operation,):
         final = {name for name, member in vars(base).items() if getattr(member, '__final__', False)}
         assert final, base

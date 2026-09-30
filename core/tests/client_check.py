@@ -60,6 +60,7 @@ from pipecat.transports.smallwebrtc.request_handler import (
 )
 
 from core.processor import reports_playback, serve_client
+from tests.script import Call
 from tests.test_webrtc import READBACK, Line
 from tests.ticket_flow.worker import TO_READ_BACK
 
@@ -216,7 +217,7 @@ class Checks:
             assert copy.delivered != 'delivered', ('heard with no output playing', copy)
         await asyncio.sleep(0.5)
         await line.onset()
-        line.script.moves = [('call', 'resolve_ticket', {})]
+        line.script.moves = [Call('resolve_ticket')]
         await line.node.serve('Sí.')
         assert line.desk.sent() == times, (
             'the yes resolved the ticket',

@@ -15,7 +15,9 @@
 * O7: ticket 1 and address 1 are two resources; resolve and reopen of one
   ticket still supersede each other;
 * O8: the loader checks `rejects`, `version` and `resource`;
-* O9: once a caller is known mid-call, what calls now over owe them is settled first (`take_owed`).
+* O9: once a caller is known mid-call, what calls now over owe them is settled first (`take_owed`);
+* O10: on the desk, a resolve answered `pending` stays unknown: the caller hears the unsettled line,
+  nothing stands, and asking again sends nothing and makes no new intent.
 
 Every check drives `Operation.run` or a compiled manifest through `text_turn`.
 """
@@ -31,6 +33,7 @@ import core
 from core import Intent
 from core.operations import Refused
 from core.steps import FlowCall, FlowState, FunctionOperation
+from tests.script import Call, Reply
 from tests.test_intents import Args, Store, operation, outcome, session
 from tests.test_tickets import HERE as DESK
 from tests.test_tickets import desk_in, opened, turn
@@ -193,9 +196,9 @@ async def resolved_reopened(folder: Path):
     desk = desk_in(folder)
     script, flow, call = opened(desk)
     await to_read_back(flow, call, script)
-    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
-    await turn(flow, call, script, 'Reábrelo.', ('call', 'reopen_ticket', {}))
-    await turn(flow, call, script, 'Sí.', ('call', 'reopen_ticket', {}))
+    await turn(flow, call, script, 'Sí.', Call('resolve_ticket'))
+    await turn(flow, call, script, 'Reábrelo.', Call('reopen_ticket'))
+    await turn(flow, call, script, 'Sí.', Call('reopen_ticket'))
     assert desk.ticket('T-101') == (3, 'open')
     by = {i.operation: i.model_copy(update={'status': 'dispatched'}) for i in call.intents}
     return desk, by['resolve_ticket'], by['reopen_ticket']
@@ -206,7 +209,7 @@ async def a_restore_never_resurrects(folder: Path):
     desk, resolve, reopen = await resolved_reopened(folder / 'one')
     for order in ([resolve], [reopen, resolve], [resolve, reopen], [resolve, resolve]):
         script, flow, call = opened(desk, intents=order)
-        said = await turn(flow, call, script, 'Hola.', ('say', 'Dime.'))
+        said = await turn(flow, call, script, 'Hola.', Reply('Dime.'))
         latest = {e.receipt['status'] for e in call.evidence if call.is_latest(e.kind, e.resource, e.version)}
         assert not any('resuelto' in s for s in said), (order, said)
         assert 'resolved' not in latest, (order, latest)
@@ -221,10 +224,10 @@ async def a_restore_never_resurrects(folder: Path):
 
     script, flow, call = opened(desk)
     await to_read_back(flow, call, script)
-    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    await turn(flow, call, script, 'Sí.', Call('resolve_ticket'))
     assert desk.ticket('T-101') == (4, 'resolved')
     script, flow, fresh = opened(desk, intents=[reopen])
-    said = await turn(flow, fresh, script, 'Hola.', ('say', 'Dime.'))
+    said = await turn(flow, fresh, script, 'Hola.', Reply('Dime.'))
     assert not any('reabierto' in s for s in said), ('a stale reopen was said', said)
     assert not [e for e in fresh.evidence if fresh.is_latest(e.kind, e.resource, e.version)], (
         'a stale reopen stood'
@@ -232,7 +235,7 @@ async def a_restore_never_resurrects(folder: Path):
 
     script, flow, call = opened(desk_in(folder / 'held'))
     await to_read_back(flow, call, script)
-    await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    await turn(flow, call, script, 'Sí.', Call('resolve_ticket'))
     [done] = [i for i in call.intents if i.operation == 'resolve_ticket']
     call.restore([done.model_copy(update={'status': 'dispatched'})], {})
     assert [i.status for i in call.intents if i.id == done.id] == ['succeeded'], (
@@ -347,19 +350,38 @@ async def owed_once_known(folder: Path):
         call,
         script,
         'Hola, cuenta ACC-1234, el ticket T-101.',
-        ('call', 'hand_over', {'to': 'desk', 'because': 'un ticket'}),
-        ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'ticket_id': 'T-101'}}),
-        ('call', 'wait', {}),
+        Call('hand_over', to='desk', because='un ticket'),
+        Reply('¿Qué hago con él?', account_id='ACC-1234', ticket_id='T-101'),
     )
     assert asked == ['ACC-1234'] and [i.status for i in call.intents] == ['unknown'], (asked, call.intents)
-    said = await turn(flow, call, script, '¿Se resolvió?', ('call', 'wait', {}))
+    said = await turn(flow, call, script, '¿Se resolvió?')
     assert said[0] == 'Ticket T-101 resuelto. ¿Algo más?', said
     assert desk.sent() == 1 and [i.status for i in call.intents] == ['succeeded'], 'owed was sent again'
+
+
+async def a_pending_resolve_is_never_sent_again(folder: Path):
+    """O10: the desk's resolve answered `pending`: unknown, said as unsettled, and never sent again."""
+    desk = desk_in(folder)
+    script, flow, call = opened(desk)
+    await to_read_back(flow, call, script)
+    desk.pending = True
+    said = await turn(flow, call, script, 'Sí.', Call('resolve_ticket'))
+    assert said == [call.locale.unsettled], said
+    assert [i.status for i in call.intents if i.operation == 'resolve_ticket'] == ['unknown'], call.intents
+    said = await turn(flow, call, script, '¿Entonces?', Reply('Todavía no lo sé.'))
+    assert said == ['Todavía no lo sé.'] and not call.effective(), said
+    sent = desk.sent()
+    said = await turn(flow, call, script, 'Hazlo otra vez.', Call('resolve_ticket'))
+    assert desk.sent() == sent and [i.status for i in call.intents if i.operation == 'resolve_ticket'] == [
+        'unknown'
+    ], ('a pending intent got a new intent or a success', said)
 
 
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         await owed_once_known(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        await a_pending_resolve_is_never_sent_again(Path(tmp))
     await a_pending_answer_settles_nothing()
     await a_declared_no_is_final()
     await a_retry_signal_after_dispatch_is_unknown()
@@ -372,7 +394,7 @@ async def main() -> None:
     await kinds_keep_ids_apart()
     with tempfile.TemporaryDirectory() as tmp:
         the_loader_checks_it(Path(tmp))
-    print('outcomes ok: O1-O9')
+    print('outcomes ok: O1-O10')
 
 
 if __name__ == '__main__':

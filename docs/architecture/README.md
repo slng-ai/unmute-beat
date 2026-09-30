@@ -28,7 +28,7 @@ For the four kinds of data, read [chapter 03, section 1](03-typed-state-and-hist
 
 | Term | Meaning here |
 |---|---|
-| Application / use case | A conversation definition and the business services behind it. The reference is the salon in `use-cases/salone-concierge-graph-new`. |
+| Application / use case | A conversation definition and the business services behind it. The reference is the salon in `use-cases/salon`. |
 | Manifest | The application's `agent.yaml`, loaded as a `FlowSpec`. Version 2 keys the steps by id. |
 | Node / step | One job the caller wants done, such as moving a booking. It can span several turns. A step is its declaration in the manifest. |
 | Flow | The nodes and allowed moves, built into a runnable application (`StepFlow`). |
@@ -46,8 +46,8 @@ For the four kinds of data, read [chapter 03, section 1](03-typed-state-and-hist
 
 ## Implementation status
 
-Both maintained applications on core, the salon and Faro, use manifest version 2. The salon's nodes are all
-`speech: structured`. Version 1 still loads until the cleanup, for `use-cases/salon-graph`, which will be retired.
+Both applications on core, the salon and Faro, use manifest version 2, the only version core loads. Every
+conversation node is structured: its agent answers with one typed output, and code says every receipt.
 
 The salon's results on Coval, over the real phone line, are in the [root README](../../README.md#live-results). A
 bare weekday name can still be read as the wrong week. The fix to the calendar text is planned, not made. Receipt

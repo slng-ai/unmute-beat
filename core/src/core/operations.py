@@ -264,7 +264,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         nothing is said about it until that is known.
         """
         data = receipt.model_dump(mode='json')
-        outcome = self.outcome(receipt.model_dump())
+        dumped = receipt.model_dump()
+        outcome = self.outcome(dumped)
         if outcome == 'unknown':
             self._lost(call, intent, args, audit, 'the answer is neither a success nor a declared refusal')
             audit['receipt'] = data
@@ -308,7 +309,7 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
             logger.info('{} for {} {} is history: a later change stands', self.name, kind, resource)
             return None  # ty: ignore[invalid-return-type]
         if succeeded:
-            call._unpresented[intent.id] = (self, args, receipt.model_dump())
+            call._unpresented[intent.id] = (self, args, dumped)
         try:
             output = await self._record(call, args, receipt)
         except ModelRetry:

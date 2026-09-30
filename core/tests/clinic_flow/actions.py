@@ -1,6 +1,6 @@
 """The clinic's two business actions written as classes (`classes.yaml`): the same backend and words as `clinic.py`.
 
-What `one_agent.yaml` says in keys, these say in types: the arguments are
+What `agent.yaml` says in keys, these say in types: the arguments are
 the class's fields, bound by name; `Booked | Full` is the outcome, `Full` a
 `core.Rejection`; the reference is the `core.Subject` and `version` its
 `core.Version`. `Remind` reads its number from inside the state's `contact`,

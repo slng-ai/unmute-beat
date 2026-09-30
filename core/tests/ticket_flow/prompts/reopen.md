@@ -1,1 +1,1 @@
-El ticket ya está resuelto y la aplicación ha preguntado si se reabre. Si el cliente dice que sí, llama a `reopen_ticket`. Si dice que no, llama a `decline`. Aquí no hablas tú: si falta algo, llama a `wait`.
+El ticket ya está resuelto y la aplicación ha preguntado si se reabre. Si el cliente dice que sí, llama a `reopen_ticket`. Si dice que no, contesta con `reply` y `decline`.

@@ -10,60 +10,23 @@ Pipecat salon writes for the same guarantees (N13's session 2 foundation).
 
 import ast
 import asyncio
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-
-from pydantic_ai.messages import ModelResponse
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 from tests.clinic_flow.clinic import Backend, ClinicState
+from tests.script import Call, Move, Reply, Script
 
 FLOW = Path(__file__).parent / 'clinic_flow' / 'agent.yaml'
 CLOCK = datetime.fromisoformat('2026-09-28T08:30:00+02:00')
-
-
-class Script:
-    """The scripted model: what each step's agent does next. There is nothing else to script.
-
-    Every request is a step's own agent, streamed. A non-streamed request
-    would be a separate reading of the reply, which the node-agent core never
-    sends, so it fails the test (P1).
-    """
-
-    def __init__(self) -> None:
-        self.values: dict[str, Any] = {}
-        self.label = 'unclear'
-        self.agent_requests = 0
-        self.model = FunctionModel(self.reading, stream_function=self.agent)
-
-    def reading(self, messages: Any, info: AgentInfo) -> ModelResponse:
-        raise AssertionError('a separate reading was requested; only step agents may run')
-
-    async def agent(self, messages: Any, info: AgentInfo):
-        self.agent_requests += 1
-        tools = {tool.name for tool in info.output_tools}
-        if 'collect' in tools and self.values:
-            values, self.values = self.values, {}
-            yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': values}))}
-            return
-        if 'accept' in tools and self.label == 'accept':
-            yield {0: DeltaToolCall(name='accept', json_args='{}')}
-            return
-        if 'answer' in tools:
-            yield {
-                0: DeltaToolCall(name='answer', json_args=json.dumps({'words': 'Could you say that again?'}))
-            }
-            return
-        yield 'Sorry, could you say that again?'
+OFFERED = 'I have Tuesday at 9:00 AM or Tuesday at 10:00 AM. Which works for you?'
 
 
 def opened(script: Script, backend: Backend | None = None) -> tuple[core.StepFlow, core.FlowCall, Backend]:
     flow = core.load(FLOW).compile(model=script.model)
     backend = backend or Backend()
     call = flow.open(ClinicState(), services=backend, clock=lambda: CLOCK)
+    script.call = call
     return flow, call, backend
 
 
@@ -72,9 +35,15 @@ def delivered(call: core.FlowCall, reply: core.TextReply) -> None:
     call.acknowledge(*(segment.id for segment in reply.segments))
 
 
-async def turn(flow, call, script: Script, words: str, **values: Any) -> core.TextReply:
-    script.values = values
+async def turn(flow, call, script: Script, words: str, *moves: Move) -> core.TextReply:
+    """One caller turn with these moves, not yet acknowledged."""
+    script.moves = list(moves)
     return await core.text_turn(flow, call, words)
+
+
+def offer(patient: str = 'P-1234') -> tuple[Move, Move]:
+    """The patient number recorded with the times it opens, then the times offered: two requests."""
+    return Call('options', update={'patient': patient}), Reply(OFFERED)
 
 
 async def one_booking_through_the_public_boundary():
@@ -83,30 +52,21 @@ async def one_booking_through_the_public_boundary():
     core.greet(call, 'Hello, this is the clinic.')
     call.acknowledge(call.spoken[-1].id)
 
-    reply = await turn(flow, call, script, 'My number is P-1234.', patient='P-1234')
-    assert call.state.facts.patient == 'P-1234' and call.state.agent == 'slot', call.state
-    assert reply.text == '' and reply.segments[-1].text == (
-        'I have Tuesday at 9:00 AM or Tuesday at 10:00 AM. Which works for you?'
-    ), reply
+    reply = await turn(flow, call, script, 'My number is P-1234.', *offer())
+    assert call.state.facts.patient == 'P-1234', call.state
+    assert [s.text for s in reply.segments] == [OFFERED], reply
     delivered(call, reply)
 
-    reply = await turn(flow, call, script, 'Ten, please.', slot='1000')
-    assert (
-        call.state.agent == 'confirm'
-        and reply.segments[-1].text == 'Shall I book Tuesday at 10:00 AM for P-1234?'
-    )
+    reply = await turn(flow, call, script, 'Ten, please.', Call('book', update={'slot': '1000'}))
+    assert [s.text for s in reply.segments] == ['Shall I book Tuesday at 10:00 AM for P-1234?'], reply
     assert backend.calls == 0, 'a pick is not a yes'
     delivered(call, reply)
 
-    script.label = 'accept'
-    reply = await turn(flow, call, script, 'Yes, please.')
+    reply = await turn(flow, call, script, 'Yes, please.', Call('book'))
     assert backend.bookings == {'CL001': ('P-1234', '1000')}, backend.bookings
-    assert call.state.facts.reference == 'CL001' and call.state.outcome == 'completed', call.state
-    assert [s.text for s in reply.segments] == [
-        'Booked for Tuesday at 10:00 AM, reference CL001.',
-        'Anything else?',
-    ]
-    assert script.agent_requests == 3, script.agent_requests
+    assert call.state.facts.reference == 'CL001', call.state
+    assert [s.text for s in reply.segments] == ['Booked for Tuesday at 10:00 AM, reference CL001.'], reply
+    assert len(script.requests) == 4, script.steps
     [filed] = call.evidence
     assert filed.operation == 'book' and filed.receipt['reference'] == 'CL001' and filed.identity == 'P-1234'
     assert filed.proposal and filed.segments, 'the booking names the delivered read-back it answered'
@@ -116,10 +76,9 @@ async def an_unheard_read_back_books_nothing():
     """The same call, with the read-back generated but never acknowledged: the yes answers nothing."""
     script = Script()
     flow, call, backend = opened(script)
-    delivered(call, await turn(flow, call, script, 'P-1234.', patient='P-1234'))
-    await turn(flow, call, script, 'Ten.', slot='1000')
-    script.label = 'accept'
-    await turn(flow, call, script, 'Yes.')
+    delivered(call, await turn(flow, call, script, 'P-1234.', *offer()))
+    await turn(flow, call, script, 'Ten.', Call('book', update={'slot': '1000'}))
+    await turn(flow, call, script, 'Yes.', Call('book'))
     assert backend.calls == 0 and not call.evidence, backend.bookings
 
 

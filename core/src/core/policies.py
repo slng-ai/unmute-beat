@@ -185,22 +185,18 @@ def one_action_per_reply(
     tools at all. Output tools call `claim_or_refuse` themselves on their first
     line, which is the same refusal at the same point.
 
-    `updates` names tools that change what the caller asked for (`collect`,
-    whose `values` name the fields). Every field one of them tries to set in
-    this caller turn is noted (`CallContext._changing`), from the whole
-    response and before anything runs, whether or not the change is then
-    accepted. An action whose arguments rest on one of those fields asks
-    again instead of acting on the old read-back: "yes, nine, actually make it
-    ten" is a change whatever order the two calls came in, and a change the
-    state refused is still not a yes to the old time. A change to something
-    else ("yes, that number is right, and make it Saturday") leaves the
-    number's yes standing. A change emitted *after* the action in the same
-    response has not run yet when the action does (`_unapplied`), so the
-    action refuses with a retry and is called again once it has.
+    `updates` names the tools and outputs that carry the caller's `update`
+    (`core.structured`). Every field one of them tries to set in this caller
+    turn is noted (`CallContext._changing`), from the whole response and
+    before anything runs, whether or not the change is then accepted. An
+    action whose arguments rest on a field some try changed asks again
+    instead of acting on the old read-back: "yes, nine, actually make it
+    ten" is a change, and a change the state refused is still not a yes to
+    the old time. A change to something else ("yes, that number is right,
+    and make it Saturday") leaves the number's yes standing.
 
-    On a structured step the update travels inside the call it belongs to
-    (`update`, `core.structured`), so there is no sibling to order. Two rules
-    replace that. A response that calls one of `reads` answers and acts on
+    The update travels inside the call it belongs to, so there is no sibling
+    to order. A response that calls one of `reads` answers and acts on
     nothing beside it (`_reading`): its answer was written before the result
     came back, in whatever order the calls were emitted. And only the first
     call carrying a non-empty update may apply it (`_patcher`,
@@ -213,29 +209,21 @@ def one_action_per_reply(
     async def choose(ctx, *, request_context, response):
         ctx.deps._claim = None
         calls = [part for part in response.parts if isinstance(part, ToolCallPart)]
-        for part in calls:
-            if part.tool_name in actions:
-                ctx.deps._claim = part.tool_call_id
-                break
-        ctx.deps._unapplied = set()
+        ctx.deps._claim = next((part.tool_call_id for part in calls if part.tool_name in actions), None)
         ctx.deps._reading = any(part.tool_name in reads for part in calls)
         ctx.deps._patcher = None
-        claimed = False
         for part in calls:
-            claimed = claimed or part.tool_call_id == ctx.deps._claim
             if part.tool_name in updates:
                 try:
                     given = part.args_as_dict()
                 except ValueError:
                     given = {}
-                values = given.get('values') or given.get('update') or {}
+                values = given.get('update') or {}
                 fields = set(values) if isinstance(values, dict) else set()
                 if fields and ctx.deps._patcher is None and 'update' in given:
                     ctx.deps._patcher = part.tool_call_id
                 ctx.deps._changing |= fields
                 ctx.deps._tries.update(fields)
-                if claimed and part.tool_call_id != ctx.deps._claim:
-                    ctx.deps._unapplied |= fields
         return response
 
     @hooks.on.before_tool_execute

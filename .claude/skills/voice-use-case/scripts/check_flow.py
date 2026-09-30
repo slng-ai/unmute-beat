@@ -16,19 +16,15 @@ os.environ.setdefault('PYDANTIC_AI_NO_BANNER', '1')
 
 
 def older_forms(spec) -> list[str]:
-    """What in a loaded manifest is not the version 2 contract: an older version, speech, or operation form."""
-    problems = [] if spec.version == 2 else [f'version {spec.version}: write version: 2']
-    problems += [
-        f'{step.id}: speech {step.speech}: leave speech out, so the node is structured'
-        for step in spec.steps
-        if getattr(step, 'kind', '') == 'conversation' and step.speech != 'structured'
-    ]
-    problems += [
+    """What in a loaded manifest core accepts but this skill does not write: an operation declared with keys.
+
+    An older version or a `speech:` key never gets this far: core refuses it at load.
+    """
+    return [
         f'{name}: declared with function: keys: write it as one line, operations.py:Class'
         for name, operation in spec.operations.items()
         if not isinstance(operation, str)
     ]
-    return problems
 
 
 def main(manifest: Path) -> int:

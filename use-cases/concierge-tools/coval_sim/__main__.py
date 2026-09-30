@@ -9,7 +9,7 @@
     uv run python -m coval_sim serve --agency salon  # one bot and tunnel for several jobs, until stopped
     uv run python -m coval_sim run ... --host <the host serve printed>
     uv run python -m coval_sim serve --agency salon --phone-number +447427919928 --campaign c-1 --profile ...
-        # a campaign on a real phone line: salon-graph's runner (`server.py`), and the number owned until
+        # a campaign on a real phone line: the salon's runner (`server.py`), and the number owned until
         # every call is over; each `run --host` job on it leaves the number alone
 
 A real phone line is owned by one campaign at a time (`runtime.Campaign`):
@@ -24,8 +24,7 @@ launches nothing. `run` refuses anything `plan` refuses. Nothing is chosen for
 you: no test set means no job, not every job.
 
 A Coval agent named voice-harness-<agency>-pipecat calls the use case folder
-of that agency: `salon` is salon-graph, anything else is the folder of that
-name. The agent is named by its ID and must be the agency's, so a test set
+of that agency: the folder of that name. The agent is named by its ID and must be the agency's, so a test set
 shared with the baseline's agent can never launch against the baseline by
 accident.
 
@@ -52,7 +51,7 @@ from typing import Any
 from dotenv import dotenv_values
 
 from coval_sim.coval import CovalClient, CovalError
-from coval_sim.models import FOLDERS, Agent, Persona, SpeechProfile
+from coval_sim.models import Agent, Persona, SpeechProfile
 from coval_sim.runtime import (
     Campaign,
     NotReadyError,
@@ -69,7 +68,7 @@ RUN_TIMEOUT_S = 45 * 60
 MAX_CALL_SECONDS = 180
 """The longest a simulated call may run. Coval cannot cap a call's length, so `bot.py` hangs up at it."""
 FINISH_SECONDS = 8
-"""How long salon-graph's bot lets a running turn finish after its limit; the runner allows the same."""
+"""How long the salon's bot lets a running turn finish after its limit; the runner allows the same."""
 STILL_RUNNING = 3
 """The exit code when a run had not finished by the local timeout: neither passed nor failed, and not cancelled."""
 CALLER = '+15005550006'
@@ -183,7 +182,7 @@ class Job:
     def describe(self) -> str:
         """The plan, as `plan` prints it."""
         return '\n'.join([
-            f'agency       {self.agency} (use-cases/{FOLDERS.get(self.agency, self.agency)})',
+            f'agency       {self.agency} (use-cases/{self.agency})',
             f'agent        {self.agent.id} {self.agent.display_name}',
             'line         '
             + (
@@ -296,7 +295,7 @@ class Repository:
         Raises:
             ValueError: If that folder has no bot.py.
         """
-        folder = GRAPH_BUILD if agency == GRAPH else self.root / 'use-cases' / FOLDERS.get(agency, agency)
+        folder = GRAPH_BUILD if agency == GRAPH else self.root / 'use-cases' / agency
         if not (folder / 'bot.py').exists():
             raise ValueError(f'agency {agency}: no bot.py in {folder}')
         return folder
@@ -320,7 +319,7 @@ class Repository:
 
         A bot with no call limit of its own is stopped from outside once a
         call has run `MAX_CALL_SECONDS` plus the time a running turn may take
-        to finish (`FINISH_SECONDS`), the same ceiling salon-graph's bot keeps.
+        to finish (`FINISH_SECONDS`), the same ceiling the salon's bot keeps.
         """
         bot = Process(
             'Pipecat bot',
@@ -850,7 +849,7 @@ def _parser() -> argparse.ArgumentParser:
     ):
         job = commands.add_parser(command, help=text)
         job.add_argument(
-            '--agency', required=True, help='the use case the agent calls: salon for salon-graph'
+            '--agency', required=True, help='the use case the agent calls, a folder under use-cases/'
         )
         job.add_argument('--agent', required=True, help="the Coval agent's exact ID")
         job.add_argument('--test-set', required=True, help='the one Coval test set to run')
@@ -899,7 +898,7 @@ def _parser() -> argparse.ArgumentParser:
             '--fixtures', type=Path, help='JSON: test case id to the caller phone it gives, to bind calls'
         )
     serve = commands.add_parser('serve', help='one bot and tunnel for several jobs, until stopped')
-    serve.add_argument('--agency', required=True, help='the use case to serve: salon for salon-graph')
+    serve.add_argument('--agency', required=True, help='the use case to serve, a folder under use-cases/')
     serve.add_argument('--port', type=int, default=PORT, help='the local port for the bot and tunnel')
     serve.add_argument(
         '--profile', type=Path, required=True, help='the speech profile env file the bot runs on'
@@ -921,7 +920,7 @@ def _parser() -> argparse.ArgumentParser:
         '--log', type=Path, default=Path('runs.jsonl'), help='the run log, beside the campaigns'
     )
     add = commands.add_parser('add', help="create a flow's Coval agent")
-    add.add_argument('agency', help='a use case folder under use-cases/, salon for salon-graph, or graph')
+    add.add_argument('agency', help='a use case folder under use-cases/, or graph')
     return parser
 
 

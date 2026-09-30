@@ -6,7 +6,7 @@ read. A return annotation on the service function is not validation: Python
 does not check it, and the one place a malformed response could reach the
 state is the place that trusted the annotation.
 
-A copy of salon-graph's `salon/models/receipts.py`, with `STRICT` written
+A copy of the salon's receipts module, with `STRICT` written
 out here, so this build imports no `core`.
 """
 

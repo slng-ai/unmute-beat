@@ -343,10 +343,10 @@
   "lesson, an answer graded": {
     "bytes": {
       "history": 755,
-      "instructions": 2989,
-      "outputs": 2130,
-      "tools": 2097,
-      "total": 7971
+      "instructions": 3065,
+      "outputs": 7898,
+      "tools": 2,
+      "total": 11720
     },
     "history": [
       {
@@ -415,11 +415,11 @@
       "",
       "The application put an exercise to the learner; the last thing it said is the exercise. Here you do not speak: the application says every word. You judge.",
       "",
-      "- An attempt at the exercise: record `answer` (their attempt, copied from what they said), `grade` and `feedback` with `collect`, all in one call. The application records it, gives your feedback and puts the next line. Never judge pronunciation or accent.",
+      "- An attempt at the exercise: record `answer` (their attempt, copied from what they said), `grade` and `feedback` with `record`, all in one update, and say nothing yourself. The application records it, gives your feedback and puts the next line. Never judge pronunciation or accent.",
       "- Anything else, a question, a request to explain, repeat or slow down, a hint, or hesitation: hand them to `help`. Never grade that.",
       "- They want a recap, to check their level, or to stop the lesson: hand them to `menu`.",
-      "- They ask to switch the language you explain in: record `asked_language` with `collect`; the application puts the exercise again.",
-      "- Nothing to record and nothing to hand over: call `wait`.",
+      "- They ask to switch the language you explain in: record `asked_language` with `record`; the application puts the exercise again.",
+      "- Nothing to record and nothing to hand over: `reply` in one short sentence asking them to try the exercise.",
       "",
       "",
       "## Application state",
@@ -434,6 +434,110 @@
     "outputs": {
       "text": false,
       "tools": [
+        {
+          "capability_id": null,
+          "defer_loading": false,
+          "description": "Answer the caller, with what they have just said recorded. Ends your turn.",
+          "include_return_schema": null,
+          "kind": "output",
+          "name": "reply",
+          "outer_typed_dict_key": null,
+          "parameters_json_schema": {
+            "$defs": {
+              "Grade": {
+                "enum": [
+                  "correct",
+                  "partly",
+                  "wrong",
+                  "unclear"
+                ],
+                "type": "string"
+              },
+              "Lang": {
+                "enum": [
+                  "EN",
+                  "ES"
+                ],
+                "type": "string"
+              },
+              "Language": {
+                "$ref": "#/$defs/Lang"
+              },
+              "LessonUpdate": {
+                "additionalProperties": false,
+                "description": "What the caller has just said for these fields, recorded with this call. Leave a field out to keep its value; null clears it. Never guess a value.",
+                "properties": {
+                  "answer": {
+                    "description": "The learner's attempt at the exercise or task waiting, copied from what they said.",
+                    "maxLength": 600,
+                    "type": "string"
+                  },
+                  "asked_language": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Language"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The language the caller asked you to explain things in, only when they ask to switch: English or Spanish."
+                  },
+                  "feedback": {
+                    "description": "Said to the learner before the next line, in their explanation language. correct: brief praise, one short sentence. partly or wrong: what was wrong, then the right sentence in the target language, e.g. \"Almost: the verb is voy, not vado. You say: Por la tarde voy al gimnasio.\" unclear: ask them to say it again.",
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "grade": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Grade"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Your judgement of that attempt. correct: does what was asked, in the target language, and can be understood; small slips are fine. partly: an attempt in the target language that does only part of it, or needs a real fix. wrong: does not do what was asked, or is mostly not in the target language. unclear: too cut off or garbled to judge. The words come from speech recognition: judge meaning, never spelling or pronunciation."
+                  }
+                },
+                "title": "LessonUpdate",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "say": {
+                "description": "Your words to the caller, as they will hear them.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "update": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/LessonUpdate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "What the caller has just said for your fields, to record now. Leave it out if nothing."
+              }
+            },
+            "required": [
+              "say"
+            ],
+            "type": "object"
+          },
+          "return_schema": null,
+          "sequential": false,
+          "strict": null,
+          "timeout": null,
+          "tool_kind": null,
+          "toolset_id": "<output>",
+          "unless_native": null,
+          "with_native": null
+        },
         {
           "capability_id": null,
           "defer_loading": false,
@@ -475,14 +579,69 @@
         {
           "capability_id": null,
           "defer_loading": false,
-          "description": "Nothing to read back, carry out or hand over yet. The application tells the caller what is on offer, or asks for what it still needs.",
+          "description": "Record what the caller has just said when the application answers it: it reads back or carries out what follows. Say nothing yourself.",
           "include_return_schema": null,
           "kind": "output",
-          "name": "wait",
+          "name": "record",
           "outer_typed_dict_key": null,
           "parameters_json_schema": {
+            "$defs": {
+              "Grade": {
+                "enum": [
+                  "correct",
+                  "partly",
+                  "wrong",
+                  "unclear"
+                ],
+                "type": "string"
+              },
+              "Lang": {
+                "enum": [
+                  "EN",
+                  "ES"
+                ],
+                "type": "string"
+              },
+              "Language": {
+                "$ref": "#/$defs/Lang"
+              }
+            },
             "additionalProperties": false,
-            "properties": {},
+            "properties": {
+              "answer": {
+                "description": "The learner's attempt at the exercise or task waiting, copied from what they said.",
+                "maxLength": 600,
+                "type": "string"
+              },
+              "asked_language": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Language"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The language the caller asked you to explain things in, only when they ask to switch: English or Spanish."
+              },
+              "feedback": {
+                "description": "Said to the learner before the next line, in their explanation language. correct: brief praise, one short sentence. partly or wrong: what was wrong, then the right sentence in the target language, e.g. \"Almost: the verb is voy, not vado. You say: Por la tarde voy al gimnasio.\" unclear: ask them to say it again.",
+                "maxLength": 200,
+                "type": "string"
+              },
+              "grade": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Grade"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Your judgement of that attempt. correct: does what was asked, in the target language, and can be understood; small slips are fine. partly: an attempt in the target language that does only part of it, or needs a real fix. wrong: does not do what was asked, or is mostly not in the target language. unclear: too cut off or garbled to judge. The words come from speech recognition: judge meaning, never spelling or pronunciation."
+              }
+            },
+            "title": "LessonUpdate",
             "type": "object"
           },
           "return_schema": null,
@@ -503,6 +662,67 @@
           "name": "hand_over",
           "outer_typed_dict_key": null,
           "parameters_json_schema": {
+            "$defs": {
+              "Grade": {
+                "enum": [
+                  "correct",
+                  "partly",
+                  "wrong",
+                  "unclear"
+                ],
+                "type": "string"
+              },
+              "Lang": {
+                "enum": [
+                  "EN",
+                  "ES"
+                ],
+                "type": "string"
+              },
+              "Language": {
+                "$ref": "#/$defs/Lang"
+              },
+              "LessonUpdate": {
+                "additionalProperties": false,
+                "description": "What the caller has just said for these fields, recorded with this call. Leave a field out to keep its value; null clears it. Never guess a value.",
+                "properties": {
+                  "answer": {
+                    "description": "The learner's attempt at the exercise or task waiting, copied from what they said.",
+                    "maxLength": 600,
+                    "type": "string"
+                  },
+                  "asked_language": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Language"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The language the caller asked you to explain things in, only when they ask to switch: English or Spanish."
+                  },
+                  "feedback": {
+                    "description": "Said to the learner before the next line, in their explanation language. correct: brief praise, one short sentence. partly or wrong: what was wrong, then the right sentence in the target language, e.g. \"Almost: the verb is voy, not vado. You say: Por la tarde voy al gimnasio.\" unclear: ask them to say it again.",
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "grade": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Grade"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Your judgement of that attempt. correct: does what was asked, in the target language, and can be understood; small slips are fine. partly: an attempt in the target language that does only part of it, or needs a real fix. wrong: does not do what was asked, or is mostly not in the target language. unclear: too cut off or garbled to judge. The words come from speech recognition: judge meaning, never spelling or pronunciation."
+                  }
+                },
+                "title": "LessonUpdate",
+                "type": "object"
+              }
+            },
             "additionalProperties": false,
             "properties": {
               "because": {
@@ -516,6 +736,17 @@
                   "menu"
                 ],
                 "type": "string"
+              },
+              "update": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/LessonUpdate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
               }
             },
             "required": [
@@ -535,103 +766,7 @@
         }
       ]
     },
-    "tools": [
-      {
-        "capability_id": null,
-        "defer_loading": false,
-        "description": "Record exactly what the caller has just said for any of these fields. Never guess a value.",
-        "include_return_schema": null,
-        "kind": "function",
-        "name": "collect",
-        "outer_typed_dict_key": null,
-        "parameters_json_schema": {
-          "$defs": {
-            "Grade": {
-              "enum": [
-                "correct",
-                "partly",
-                "wrong",
-                "unclear"
-              ],
-              "type": "string"
-            },
-            "Lang": {
-              "enum": [
-                "EN",
-                "ES"
-              ],
-              "type": "string"
-            },
-            "Language": {
-              "$ref": "#/$defs/Lang"
-            }
-          },
-          "additionalProperties": false,
-          "properties": {
-            "answer": {
-              "anyOf": [
-                {
-                  "maxLength": 600,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "The learner's attempt at the exercise or task waiting, copied from what they said."
-            },
-            "asked_language": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Language"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "The language the caller asked you to explain things in, only when they ask to switch: English or Spanish."
-            },
-            "feedback": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Said to the learner before the next line, in their explanation language. correct: brief praise, one short sentence. partly or wrong: what was wrong, then the right sentence in the target language, e.g. \"Almost: the verb is voy, not vado. You say: Por la tarde voy al gimnasio.\" unclear: ask them to say it again."
-            },
-            "grade": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Grade"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Your judgement of that attempt. correct: does what was asked, in the target language, and can be understood; small slips are fine. partly: an attempt in the target language that does only part of it, or needs a real fix. wrong: does not do what was asked, or is mostly not in the target language. unclear: too cut off or garbled to judge. The words come from speech recognition: judge meaning, never spelling or pronunciation."
-            }
-          },
-          "title": "LessonValues",
-          "type": "object"
-        },
-        "return_schema": null,
-        "sequential": false,
-        "strict": null,
-        "timeout": null,
-        "tool_kind": null,
-        "toolset_id": "<agent>",
-        "unless_native": null,
-        "with_native": null
-      }
-    ]
+    "tools": []
   },
   "menu, carrying on": {
     "bytes": {

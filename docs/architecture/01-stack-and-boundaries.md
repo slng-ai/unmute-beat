@@ -90,7 +90,7 @@ An **application**, also called a use case, defines the actual job: what a suppo
 
 The author connects these pieces in a configuration file, `agent.yaml`. That file is called the **manifest**. Manifest version 2 keys the nodes by id, and each node's agent answers with one typed decision (`speech: structured`). Chapter 04 explains how to read it; you do not need to learn YAML to follow the conversation in chapter 02.
 
-The reference application is the salon in [`use-cases/salone-concierge-graph-new`](../../use-cases/salone-concierge-graph-new/). Faro, a learning application, and the support desk in core's tests use the same public path. Core contains no booking, ticket or grading policy. The active node's own agent reads each reply.
+The reference application is the salon in [`use-cases/salon`](../../use-cases/salon/). Faro, a learning application, and the support desk in core's tests use the same public path. Core contains no booking, ticket or grading policy. The active node's own agent reads each reply.
 
 ## Where Pydantic fits
 
@@ -119,7 +119,7 @@ The public `core` import does not load credential files, create model clients, o
 | [Public exports](../../core/src/core/__init__.py), [package dependencies](../../core/pyproject.toml) | The package boundary and optional integrations. |
 | [Pipecat processor](../../core/src/core/processor.py), [turn engine](../../core/src/core/turn.py) | Frames are adapted outside the conversation engine. |
 | [Public API tests](../../core/tests/test_public.py), [structured tests](../../core/tests/test_structured.py) | Public loading, and one typed decision per model response. |
-| [Salon manifest](../../use-cases/salone-concierge-graph-new/salon/agent.yaml), [salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py) | The reference application: one job per node, every request pinned. |
+| [Salon manifest](../../use-cases/salon/salon/agent.yaml), [salon tests](../../use-cases/salon/tests/test_business.py) | The reference application: one job per node, every request pinned. |
 | [Reuse tests](../../core/tests/test_tickets.py), [flow-rule tests](../../core/tests/test_flow_rules.py) | Another domain and renamed fields; receipt routing, automatic operations and per-call language. |
 | [Faro manifest](../../use-cases/faro-language-learning/faro/agent.yaml), [Faro tests](../../use-cases/faro-language-learning/tests/test_faro.py) | A learning application on the same public path, with its own grading and storage rules. |
 

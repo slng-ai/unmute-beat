@@ -3,9 +3,8 @@
 #
 # The steps are the learner's journey: identify, sign up, onboard, place, agree a plan, then lessons from the
 # menu. Where a learner goes next after a save is the store's answer, in the receipt (`route: next`), never a
-# model's. A step is a `speech: structured` conversation unless it says otherwise: identify, plan, menu and
-# coach are; signup and onboarding are prose, and assessment and lesson rendered. Grading is the step's
-# agent's: it records the attempt and its grade, and code carries out `record_attempt` at once
+# model's. Every conversation step is `speech: structured`: its agent answers with one typed output, and
+# code says every receipt. Grading is the step's agent's: it records the attempt and its grade, and code carries out `record_attempt` at once
 # (`carries_out`). Only the coach may explain or hint, and reaching it goes through `help`, which marks the
 # exercise helped in the store first: an answer after help is never independent. Each step sees only the
 # facts it lists, and by default its own turns. Everything is checked when Faro starts, never mid-call.
@@ -21,9 +20,15 @@ locales:
   EN:
     base: english
     goodbye: Goodbye, and see you next time!
+    refusals:
+      greater_than_equal: A session is between five and sixty minutes. How long would you like?
+      less_than_equal: A session is between five and sixty minutes. How long would you like?
   ES:
     base: spanish
     goodbye: ¡Hasta la próxima!
+    refusals:
+      greater_than_equal: Una sesión dura entre cinco y sesenta minutos. ¿Cuánto quieres?
+      less_than_equal: Una sesión dura entre cinco y sesenta minutos. ¿Cuánto quieres?
 model: google-cloud:gemini-3.5-flash-lite
 
 agents:
@@ -190,7 +195,6 @@ steps:
   signup:
     agent: faro
     prompt: prompts/signup.md
-    speech: prose
     fields: [name, asked_language]
     context: {facts: [name, asked_language, explanation]}
     operations: [agree_signup]
@@ -201,7 +205,6 @@ steps:
   onboarding:
     agent: faro
     prompt: prompts/onboarding.md
-    speech: prose
     fields: [learn, purpose, length, asked_language]
     context: {facts: [learn, purpose, length, asked_language, explanation, learner_name]}
     carries_out: {save_onboarding: [learn, purpose, length]}
@@ -209,7 +212,6 @@ steps:
   assessment:
     agent: faro
     prompt: prompts/assessment.md
-    speech: rendered
     fields: [answer, grade, feedback, evidence, asked_language]
     quoted: [answer]
     context: {facts: [answer, grade, feedback, evidence, asked_language, explanation, waiting, learner_name, notes]}
@@ -240,7 +242,6 @@ steps:
   lesson:
     agent: faro
     prompt: prompts/lesson.md
-    speech: rendered
     fields: [answer, grade, feedback, asked_language]
     quoted: [answer]
     context: {facts: [answer, grade, feedback, asked_language, explanation, waiting, learner_name, notes]}

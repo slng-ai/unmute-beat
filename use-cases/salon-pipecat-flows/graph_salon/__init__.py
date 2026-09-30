@@ -1,7 +1,7 @@
 """The salon on declarative Pipecat flows, with the harness's guarantees written as application code.
 
 `bot.py` beside this package puts it where the harness's processor stands in
-salon-graph's `bot.py`. The pipeline around it is the same: STT, VAD,
+the salon's `bot.py`. The pipeline around it is the same: STT, VAD,
 smart-turn, TTS, the transports and the salon's diary. The conversation is
 Pipecat's own: a `FlowConfig` (`flow.yaml`)
 joined to direct functions (`handlers.py`) and run by `FlowManager`. Every

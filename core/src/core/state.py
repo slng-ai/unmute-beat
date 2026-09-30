@@ -12,11 +12,12 @@ import contextvars
 import json
 import re
 import time
-from collections import Counter
+from collections import Counter, deque
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, tzinfo
+from itertools import accumulate
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
@@ -506,27 +507,23 @@ class CallContext(BaseModel):
     """
     _changing: set[str] = PrivateAttr(default_factory=set)
     """Fields a model tried to change in this caller turn, accepted or not. See `one_action_per_reply`."""
-    _unapplied: set[str] = PrivateAttr(default_factory=set)
-    """Fields the current model response changes after its action: not yet run when the action does."""
     _reading: bool = PrivateAttr(default=False)
-    """The current model response also calls a read (`speech: structured`): no answer or action runs beside it."""
+    """The current model response also calls a read (`core.structured.Read`): no answer or action runs beside it."""
     _patcher: str | None = PrivateAttr(default=None)
-    """The one tool call in the current model response allowed to carry an `update` (`speech: structured`)."""
+    """The one tool call in the current model response allowed to carry an `update` (`core.structured`)."""
     _tries: Counter[str] = PrivateAttr(default_factory=Counter)
     """How many times a model response in this caller turn tried to record each field (`one_action_per_reply`)."""
     _kept: Counter[str] = PrivateAttr(default_factory=Counter)
-    """How many of those tries recorded the field with the value it already had (`collect`, or a structured update).
+    """How many of those tries recorded the field with the value it already had (a step's update).
 
     `_changing` also holds a field recorded again unchanged: the caller saying
     the read-back's value back. A read-back is confirmed by that
     (`core.graph.Restated`) only while every try at its fields kept the value.
-    On a structured step, an operation called again with an update that keeps
-    the value read back is still the yes the model read (`_operate`): only a
-    field some try changed, or one the state refused, blocks it as a change.
-    A prose step keeps session 4d's rule: `collect` beside the operation in
-    one reply is read back again, whatever it records.
-    A try the tool's schema refused never reaches `collect`, so it counts as
-    a try and not as kept: "half nine, well, ten then" is a change, and
+    An operation called again with an update that keeps the value read back
+    is still the yes the model read (`_operate`): only a field some try
+    changed, or one the state refused, blocks it as a change. A try the
+    schema refused never reaches `collect`, so it counts as a try and not as
+    kept: "half nine, well, ten then" is a change, and
     "ten, no, nine, no, ten" too, never a yes to ten.
     """
     _proposals: ProposalLedger[Any] = PrivateAttr(default_factory=lambda: _ledger())
@@ -626,7 +623,7 @@ class CallContext(BaseModel):
     """How many clears this call sent: part of every mark's name, so a mark from before one is told apart."""
     _marks_known: bool = PrivateAttr(default=False)
     """The transport returns marks (or writes locally): only then can speech be delivered by one."""
-    _onsets: list[float] = PrivateAttr(default_factory=list)
+    _onsets: deque[float] = PrivateAttr(default_factory=lambda: deque(maxlen=32))
     """When the caller was heard starting to speak, newest last, bounded (`note_onset`)."""
     _answer_lead: float = PrivateAttr(default=0.0)
     """How much earlier than its report caller speech may have begun (the adapter's VAD start window)."""
@@ -637,7 +634,7 @@ class CallContext(BaseModel):
     _audits: int = PrivateAttr(default=0)
     _endings: list[dict[str, Any]] = PrivateAttr(default_factory=list)
     """How the call ended, as each part of it was observed or intended, in order (`note_ending`)."""
-    _playback_log: list[dict[str, Any]] = PrivateAttr(default_factory=list)
+    _playback_log: deque[dict[str, Any]] = PrivateAttr(default_factory=lambda: deque(maxlen=256))
     """Every mark sent, returned, ignored or cleared, in order, for the write audit (`playback_for`)."""
     _return_status: str = PrivateAttr(default='')
     _entered: Entry = PrivateAttr(default='')
@@ -955,7 +952,7 @@ class CallContext(BaseModel):
 
     def note_onset(self, at: float) -> None:
         """The caller was heard starting to speak (the adapter's voice detector), on the segments' clock."""
-        self._onsets = [*self._onsets[-31:], at]
+        self._onsets.append(at)
 
     def answered_in_time(self, segment: Spoken) -> bool:
         """Whether this segment had played to its end before the caller began the reply it is being answered by.
@@ -969,10 +966,10 @@ class CallContext(BaseModel):
         """
         if segment.played_at is None:
             return False
-        onsets = [t for t in self._onsets if t >= segment.at]
-        if not onsets:
+        earliest = min((t for t in self._onsets if t >= segment.at), default=None)
+        if earliest is None:
             return not self._marks_known or segment.heard_by == 'ack'
-        return segment.played_at <= min(onsets) - self._answer_lead
+        return segment.played_at <= earliest - self._answer_lead
 
     def wall(self, at: float) -> str:
         """A time on the segments' clock (`time.perf_counter`) as UTC wall time, for a record read elsewhere.
@@ -1000,10 +997,10 @@ class CallContext(BaseModel):
             for e in self._playback_log
             if e.get('proposal') == serial and e['kind'] in kinds
         ]
-        onsets = [t for t in self._onsets if copies and t >= copies[-1].at]
-        if not marks or not onsets:
+        earliest = min((t for t in self._onsets if copies and t >= copies[-1].at), default=None)
+        if not marks or earliest is None:
             return None
-        return {'marks': marks, 'answered_at': self.wall(min(onsets) - self._answer_lead)}
+        return {'marks': marks, 'answered_at': self.wall(earliest - self._answer_lead)}
 
     def simulated_for(self, serial: int) -> list[dict[str, Any]]:
         """A question's delivery that is not a transport mark: a text acknowledgement, or audio written at real time.
@@ -1031,10 +1028,9 @@ class CallContext(BaseModel):
         segment = name.split('~', 1)[0]
         if proposal is None:
             proposal = next((s.proposal for s in self.all_spoken if s.id == segment), 0)
-        self._playback_log = [
-            *self._playback_log[-255:],
-            {'proposal': proposal, 'segment': segment, 'mark': name, 'kind': kind, 'at': at},
-        ]
+        self._playback_log.append(
+            {'proposal': proposal, 'segment': segment, 'mark': name, 'kind': kind, 'at': at}
+        )
 
     def turn_ended(self, *, interrupted: bool) -> None:
         """The run for this piece is over. `interrupted` is whether the caller cut it off by speaking again."""
@@ -1203,10 +1199,6 @@ class CallContext(BaseModel):
         self.answered()
         return True
 
-    def declined_this_turn(self) -> bool:
-        """Whether a read-back was turned down on this caller turn: a rendered step says so, not "pardon"."""
-        return self._turn in self._declined.values()
-
     def hearing(self, segment: Spoken | None) -> Hearing:
         """What the evidence says about one copy of a question, for the model's context and the audits.
 
@@ -1368,8 +1360,7 @@ class CallContext(BaseModel):
     def receipt_said_again(self) -> bool:
         """Whether this piece of the caller's turn has already said the latest receipt again: nothing more is owed.
 
-        A step's `wait` then has nothing to add, and `say_again` would say the
-        same words twice in a row (session 4g). Only the automatic repeat
+        `say_again` would then say the same words twice in a row (session 4g). Only the automatic repeat
         counts: a lookup's receipt said on the way to another step is not this.
         """
         return bool(self._told[1]) and self._told_again_at == (self.turn, len(self._pieces))
@@ -1638,14 +1629,6 @@ class CallContext(BaseModel):
             self._intents[intent.id] = intent.model_copy(update={'status': 'unknown'})
             self._unknown[intent.id] = (operation, args)
 
-    def correction(self, line: str) -> str:
-        """A fixed line that says nothing changed, unless an intent's outcome is unknown: then the unsettled line.
-
-        "Nothing has been changed" is a claim too, and a false one while a
-        write may have landed.
-        """
-        return self.locale.unsettled if self.unresolved() else line
-
     @property
     def departed(self) -> bool:
         """Whether the caller has said goodbye. After it, no new consequential intent starts."""
@@ -1810,11 +1793,11 @@ class CallContext(BaseModel):
         if updates is None or remaining:
             if not interrupted:
                 return False
-            count, updates = len(heard), []
-            for segment in selected:
-                text = segment.generated or segment.text
-                updates.append(_first_words(text, count))
-                count = max(0, count - len(_words(text)))
+            texts = [segment.generated or segment.text for segment in selected]
+            said = accumulate((len(_words(text)) for text in texts), initial=0)
+            updates = [
+                _first_words(text, max(0, len(heard) - n)) for text, n in zip(texts, said, strict=False)
+            ]
         if any(
             s.delivery == 'runtime-estimate' and not s.text.strip().startswith(text.strip())
             for s, text in zip(selected, updates, strict=True)
@@ -1928,7 +1911,7 @@ class CallContext(BaseModel):
                 updates = {name: value for name, value in updates.items() if name not in late}
             if not updates:
                 return
-        candidate = self.state.model_dump() | deepcopy(updates)
+        candidate = self.state.model_dump(exclude=set(updates)) | deepcopy(updates)
         self.state = type(self.state).model_validate(
             candidate, extra='forbid', context=self.validation_context()
         )

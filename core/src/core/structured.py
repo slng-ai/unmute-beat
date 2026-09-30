@@ -1,10 +1,9 @@
-"""Structured conversation steps (`speech: structured`): one typed terminal decision per model response.
+"""Conversation steps: one typed terminal decision per model response.
 
-A prose step records the caller's words with an ordinary `collect` tool, and
-a reply that only records them costs a second request to say something
-(session 2 of the typed-node proposal: 17 exact collect, options, speech
-chains in 20 saved calls). Here the update travels inside the decision it
-belongs to, as one validated argument:
+A step whose agent recorded the caller's words with a tool of their own paid a
+second request to say something after it (session 2 of the typed-node
+proposal: 17 record, options, speech chains in 20 saved calls). Here the
+update travels inside the decision it belongs to, as one validated argument:
 
 - `reply(say, update)` answers the caller and ends the run: one request.
 - `record(update)` records and lets code speak what follows (an operation
@@ -19,7 +18,7 @@ belongs to, as one validated argument:
 
 Every update is applied whole or not at all (`Decision.apply`): the
 application's own types, validators, whole-state rules and validation
-context, and the choice rules, through the same commit path `collect` uses.
+context, and the choice rules, through `FlowCall.collect`.
 A refusal commits nothing and says nothing. Words are said only after the
 decision they come with is committed; partial streamed arguments are never
 read. Nothing here decides consent: every operation still reads back and runs
@@ -153,7 +152,7 @@ class Decision:
 
         Only the one call in the response that carries the update may apply
         it (`patch_or_refuse`). A quoted field must be the caller's words. The
-        commit is `StepFlow.record(atomic=True)`: the application's
+        commit is `StepFlow.record_update`: the application's
         validators with the call's `before`, `heard` and clock, whole-state
         rules, the resets of what rested on a changed field, and every pick
         on an offer that stands for the state the update ends in. Any refusal
@@ -174,7 +173,7 @@ class Decision:
                 )
         before = {name: getattr(call.state.facts, name, None) for name in given}
         try:
-            refused = self.flow.record(call, deepcopy(given), self.step.choices, atomic=True)
+            refused = await self.flow.record_update(call, deepcopy(given), self.step.choices)
         except ValidationError as error:
             raise ModelRetry(f'Nothing was recorded: {call.note_refusal(error)}.') from None
         if refused:
@@ -183,7 +182,6 @@ class Decision:
                 + '; '.join(f'{given[name]!r} is not on offer for {name}' for name in refused)
                 + '. Only an id on offer can be recorded.'
             )
-        call._refusal = None
         call._kept.update(name for name in given if getattr(call.state.facts, name, None) == before[name])
         call._recorded = frozenset(given)
         return frozenset(given)
@@ -334,10 +332,9 @@ class Offering:
     def resting(self) -> set[str]:
         """The fields the step's offers rest on: each choice's `after:`, or every field but the choices without one."""
         step = self.decision.step
-        found: set[str] = set()
-        for name in step.choices:
-            found |= set(step.choice_after.get(name, set(step.fields) - set(step.choices)))
-        return found
+        return set[str]().union(
+            *(step.choice_after.get(name, set(step.fields) - set(step.choices)) for name in step.choices)
+        )
 
     async def __call__(self, ctx: RunContext[FlowCall[Any]], update: BaseModel | None) -> dict[str, Any]:
         call, choices = ctx.deps, self.decision.step.choices
@@ -379,12 +376,12 @@ class Offering:
 
 
 class Structured:
-    """The tools and outputs of one `speech: structured` step, built once at compile, shared by every call.
+    """The tools and outputs of one conversation step, built once at compile, shared by every call.
 
-    `ConversationStep.node` hands in what it built for every step kind
-    (`goodbye`, `say_again`, its operations, `hand_over`) and gets back the
-    structured set: no text output, no `collect`, no `decline` tool, and
-    every decision that may carry the caller's words takes them as `update`.
+    `ConversationStep.node` hands in what it built (`goodbye`, `say_again`,
+    its operations, `hand_over`) and gets back the step's set: no text
+    output, and every decision that may carry the caller's words takes them
+    as `update`.
     """
 
     def __init__(
@@ -468,21 +465,21 @@ class Structured:
         ]
         if self.silent and decision.patch is not None:
             found.append(ToolOutput(self._record(), name='record'))
-        for operation in self.guarded:
-            found.append(
-                ToolOutput(
-                    decision.taking(
-                        operate(operation),
-                        actions,
-                        update=decision.param(_resting_on(operation), operation.name),
-                    ),
-                    name=operation.name,
-                    description=f"{operation.name}: the first call reads it back to the caller in the application's "
-                    'words. Call it again only when their reply to that read-back is a clear yes: that yes '
-                    'carries it out.',
-                    sequential=True,
-                )
+        found.extend(
+            ToolOutput(
+                decision.taking(
+                    operate(operation),
+                    actions,
+                    update=decision.param(_resting_on(operation), operation.name),
+                ),
+                name=operation.name,
+                description=f"{operation.name}: the first call reads it back to the caller in the application's "
+                'words. Call it again only when their reply to that read-back is a clear yes: that yes '
+                'carries it out.',
+                sequential=True,
             )
+            for operation in self.guarded
+        )
         if hand_over is not None:
             found.append(
                 ToolOutput(

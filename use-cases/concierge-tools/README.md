@@ -1,6 +1,7 @@
 # Concierge tools
 
-Tools that compare the salon builds, `../salon-graph` and `../salon-prompt`.
+Tools that compare the salon builds: `../salon` on core, and the baselines
+`../salon-prompt` and `../salon-pipecat-flows`.
 Neither tool imports a build. They start a build's `bot.py`, or read its
 traces.
 
@@ -32,8 +33,8 @@ still running, not failed, not cancelled. Each simulated call is capped at 180 s
 by `bot.py` (`MAX_CALL_SECONDS`), because Coval has no call-length limit.
 
 A Coval agent named `voice-harness-<agency>-pipecat` calls the folder
-`use-cases/<agency>`. `salon` is the one exception: it calls `salon-graph`,
-because that agent existed before the split. Create the baseline's agent with
+`use-cases/<agency>`, so `voice-harness-salon-pipecat` calls `use-cases/salon`.
+Create the baseline's agent with
 `uv run python -m coval_sim add salon-prompt`.
 
 Both read the `.env` at the repository root.

@@ -1,6 +1,6 @@
-"""The salon as one prompt on Pipecat's own Gemini service: the baseline salon-graph is measured against.
+"""The salon as one prompt on Pipecat's own Gemini service: the baseline the salon on core (`use-cases/salon`) is measured against.
 
-The same pipeline as salon-graph's `bot.py`: STT, VAD, smart-turn, TTS and
+The same pipeline as the salon's `bot.py`: STT, VAD, smart-turn, TTS and
 the transport. What stands between the aggregators and TTS is Pipecat's
 `GoogleLLMService` with one system prompt and the diary's tools
 (`salon/baseline.py`), not the harness.
@@ -46,7 +46,7 @@ from salon.diary import Diary
 from utils.observability import setup
 
 NAME = 'salon call'
-"""The same trace name as salon-graph's, so the ledger reads both builds' calls alike."""
+"""The same trace name as the salon's, so the ledger reads both builds' calls alike."""
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
 DIARY = Diary()
 """One salon per process: a booking made on one call is there when the next one rings."""
@@ -66,7 +66,7 @@ transport_params = {
 
 
 def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
-    """STT and TTS over SLNG, one key for both, set up exactly as salon-graph sets them up.
+    """STT and TTS over SLNG, one key for both, set up exactly as the salon sets them up.
 
     TTS aggregates by TOKEN rather than Pipecat's default SENTENCE, which holds
     every chunk until a sentence boundary before synthesising any of it.

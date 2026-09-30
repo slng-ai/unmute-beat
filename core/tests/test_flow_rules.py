@@ -19,35 +19,20 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from pydantic_ai.models.function import AgentInfo
-
 import core
 from core.flowspec import load
-from tests.test_nodes import Script
+from tests.script import Call, Move, Record, Reply, Script
 from tests.ticket_flow.tickets import Desk, RoutedState
 
 HERE = Path(__file__).parent / 'ticket_flow'
 MANIFEST = HERE / 'routed.yaml'
 
 
-class Offered(Script):
-    """A scripted model that also records the tools and outputs each request was offered."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.offered: list[set[str]] = []
-
-    async def agent(self, messages, info: AgentInfo):
-        self.offered.append({t.name for t in (*info.function_tools, *info.output_tools)})
-        async for part in super().agent(messages, info):
-            yield part
-
-
 def opened(folder: Path, manifest: str | None = None, state: RoutedState | None = None, status: str = 'open'):
     folder.mkdir(parents=True, exist_ok=True)
     desk = Desk(folder / 'desk.db')
     desk.seed('ACC-1234', 'T-101', status=status)
-    script = Offered()
+    script = Script()
     spec = core.load(MANIFEST) if manifest is None else load(manifest, root=HERE)
     flow = spec.compile(model=script.model)
     call = flow.open(state or RoutedState(), services=desk)
@@ -56,14 +41,14 @@ def opened(folder: Path, manifest: str | None = None, state: RoutedState | None 
     return desk, script, flow, call
 
 
-async def turn(flow, call, script: Script, words: str, *moves) -> list[str]:
+async def turn(flow, call, script: Script, words: str, *moves: Move) -> list[str]:
     script.moves = list(moves)
     reply = await core.text_turn(flow, call, words)
     call.acknowledge(*(s.id for s in reply.segments))
     return [s.text for s in reply.segments if s.text]
 
 
-RECORD = ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'ticket_id': 'T-101'}})
+RECORD = Record(account_id='ACC-1234', ticket_id='T-101')
 
 
 async def the_language_is_the_calls(folder: Path):
@@ -75,8 +60,8 @@ async def the_language_is_the_calls(folder: Path):
         call,
         script,
         'Can we speak English? Bye for now.',
-        ('call', 'collect', {'values': {'idioma': 'en'}}),
-        ('call', 'goodbye', {}),
+        Record(idioma='en'),
+        Call('goodbye'),
     )
     assert call.state.facts.idioma == 'en' and said[-1] == 'Thanks for calling support. Goodbye.', said
     _, _, _, other = opened(folder / 'other')
@@ -89,17 +74,19 @@ async def a_lookup_is_carried_out_by_code_and_moves_the_caller(folder: Path):
     said = await turn(flow, call, script, 'Cuenta ACC-1234, ticket T-101.', RECORD)
     assert said == ['Tengo el ticket T-101.'], said
     assert call.state.agent == 'resolve' and script.steps == ['desk'], (call.state.agent, script.steps)
-    assert 'find_ticket' not in script.offered[0], 'a carried-out operation is never offered to the model'
+    assert 'find_ticket' not in script.requests[0].offered, (
+        'a carried-out operation is never offered to the model'
+    )
     assert call.state.facts.revision == 1 and not desk.sent()
     said = await turn(
         flow,
         call,
         script,
         'La impresora ya imprime.',
-        ('call', 'collect', {'values': {'resolution': 'la impresora ya imprime'}}),
+        Record(resolution='la impresora ya imprime'),
     )
     assert said == ['¿Marco el ticket T-101 como resuelto: la impresora ya imprime?'], said
-    said = await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
+    said = await turn(flow, call, script, 'Sí.', Call('resolve_ticket'))
     assert said == ['Ticket T-101 resuelto.'] and desk.ticket('T-101') == (2, 'resolved'), said
 
     desk, script, flow, call = opened(folder / 'resolved', status='resolved')
@@ -113,8 +100,8 @@ async def a_lookup_is_carried_out_by_code_and_moves_the_caller(folder: Path):
         call,
         script,
         'Cuenta ACC-1234, ticket T-999.',
-        ('call', 'collect', {'values': {'account_id': 'ACC-1234', 'ticket_id': 'T-999'}}),
-        ('say', 'No encuentro ese ticket. ¿Me dice el número otra vez?'),
+        Record(account_id='ACC-1234', ticket_id='T-999'),
+        Reply('No encuentro ese ticket. ¿Me dice el número otra vez?'),
     )
     assert said == ['No encuentro ese ticket. ¿Me dice el número otra vez?'] and call.state.agent == 'desk', (
         said
@@ -124,7 +111,7 @@ async def a_lookup_is_carried_out_by_code_and_moves_the_caller(folder: Path):
     )
 
     desk, script, flow, call = opened(folder / 'hostile')
-    await turn(flow, call, script, 'Hola.', ('call', 'find_ticket', {}))
+    await turn(flow, call, script, 'Hola.', Call('find_ticket'))
     assert call.state.agent == 'desk' and not call.evidence, 'a model cannot call a carried-out operation'
 
 
@@ -137,16 +124,14 @@ async def a_waiting_read_back_follows_the_language(folder: Path):
         call,
         script,
         'La impresora ya imprime.',
-        ('call', 'collect', {'values': {'resolution': 'la impresora ya imprime'}}),
+        Record(resolution='la impresora ya imprime'),
     )
     first = call.open_question()
-    said = await turn(
-        flow, call, script, 'In English, please.', ('call', 'collect', {'values': {'idioma': 'en'}})
-    )
+    said = await turn(flow, call, script, 'In English, please.', Record(idioma='en'))
     assert said == ['Shall I mark ticket T-101 as resolved: la impresora ya imprime?'], said
     again = call.open_question()
     assert again.value == first.value and again.intent == first.intent, 'the same question, a new copy'
-    said = await turn(flow, call, script, 'Yes.', ('call', 'resolve_ticket', {}))
+    said = await turn(flow, call, script, 'Yes.', Call('resolve_ticket'))
     assert desk.ticket('T-101') == (2, 'resolved') and desk.sent() == 1, said
 
 
@@ -159,7 +144,7 @@ async def a_greeting_reads_back_the_entry(folder: Path):
     assert not isinstance(line, str) and line.spoken == 'Soporte, buenos días. ¿Reabro el ticket T-101?', line
     core.greet(call, line)
     call.acknowledge(call.spoken[-1].id)
-    said = await turn(flow, call, script, 'Sí.', ('call', 'reopen_ticket', {}))
+    said = await turn(flow, call, script, 'Sí.', Call('reopen_ticket'))
     assert said == ['Ticket T-101 reabierto.'] and desk.ticket('T-101') == (2, 'open'), said
 
     _, _, flow, call = opened(folder / 'asks')
@@ -174,7 +159,7 @@ async def a_validator_reads_what_the_caller_said(folder: Path):
         call,
         script,
         'El ticket T-101.',
-        ('call', 'collect', {'values': {'account_id': 'ACC-9999', 'ticket_id': 'T-101'}}),
+        Record(account_id='ACC-9999', ticket_id='T-101'),
     )
     assert call.state.facts.account_id is None, 'an account number nobody said is not recorded'
     await turn(
@@ -182,10 +167,10 @@ async def a_validator_reads_what_the_caller_said(folder: Path):
         call,
         script,
         'Mi cuenta es ACC-1234.',
-        ('call', 'collect', {'values': {'account_id': 'ACC-1234'}}),
+        Record(account_id='ACC-1234'),
     )
     assert call.state.facts.account_id == 'ACC-1234'
-    await turn(flow, call, script, 'In English.', ('call', 'collect', {'values': {'idioma': 'en'}}))
+    await turn(flow, call, script, 'In English.', Record(idioma='en'))
     assert call.state.facts.account_id == 'ACC-1234' and call.state.facts.idioma == 'en', (
         'a value already recorded is not refused for words said later'
     )

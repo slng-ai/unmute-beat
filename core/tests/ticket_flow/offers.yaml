@@ -1,0 +1,52 @@
+# agent.yaml's desk with the ticket and the resolution picked from offers, each worded by the desk (`say`).
+# The agent reads the caller and chooses; code says the offers, the read-backs and the receipts. No booking, day or slot.
+version: 2
+id: support-desk-offers
+state: tickets.py:DeskState
+identity: account_id
+entry: desk
+locale:
+  base: spanish
+  goodbye: Gracias por llamar al soporte. Hasta pronto.
+context: {facts: all}
+agents:
+  agent:
+    prompt: prompts/agent.md
+operations:
+  look_up_ticket:
+    function: tickets.py:look_up
+    args: {account_id: account_id, ticket_id: ticket_id}
+    approval: none
+    changes: false
+    matches: {account_id: account_id, ticket_id: ticket_id}
+    succeeds: {found: true}
+    assign: {revision: revision, ticket_status: status}
+    say: 'Tengo el ticket {ticket_id}.'
+  resolve_ticket:
+    function: tickets.py:resolve
+    args: {account_id: account_id, ticket_id: ticket_id, revision: revision, resolution: resolution}
+    readback: tickets.py:resolve_words
+    reconcile: tickets.py:find_effect
+    subject: ticket_id
+    resource: ticket
+    version: now_revision
+    idempotent: true
+    matches: {account_id: account_id, ticket_id: ticket_id, revision: revision}
+    succeeds: {status: resolved}
+    rejects: {status: stale}
+    assign: {revision: now_revision, ticket_status: status}
+    say: 'Ticket {ticket_id} resuelto. ¿Algo más?'
+steps:
+  desk:
+    agent: agent
+    prompt: prompts/desk.md
+    fields: [account_id, ticket_id, category, resolution]
+    choices:
+      ticket_id: {function: tickets.py:ticket_offer, after: []}
+      resolution: {function: tickets.py:resolution_offer, after: [category]}
+    offers: [ticket_id, resolution]
+    operations: [resolve_ticket]
+    exits:
+      - {to: look_up, purpose: find the ticket's current revision once the account and ticket are recorded}
+  look_up: {kind: action, operation: look_up_ticket, returns: true, on_error: desk, on_unknown: desk}
+  done: {kind: end, outcome: completed, say: Hasta pronto.}

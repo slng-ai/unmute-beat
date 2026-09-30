@@ -1,9 +1,10 @@
-# one_agent.yaml with `reads_back`: a reply that only records the slot is read back by code, with no second request.
-version: 1
+# agent.yaml with `reads_back`: a reply that only records the slot is read back by code, with no second request.
+version: 2
 id: clinic-desk
 state: clinic.py:ClinicState
 identity: patient
 services: clinic.py:Backend
+context: {facts: all}
 agents:
   receptionist:
     prompt: prompts/receptionist.md
@@ -27,8 +28,7 @@ operations:
     succeeds: {status: cancelled}
     say: 'Booking {reference} is cancelled.'
 steps:
-  - id: desk
-    kind: conversation
+  desk:
     agent: receptionist
     prompt: prompts/desk.md
     fields: [patient, slot]

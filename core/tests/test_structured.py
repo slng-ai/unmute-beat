@@ -1,7 +1,6 @@
 """Run: uv run python -m tests.test_structured
 
-`speech: structured` on the clinic (`clinic_flow/structured.yaml`, and again on its
-version 2 twin, `structured.v2.yaml`): one typed
+`speech: structured` on the clinic (`clinic_flow/structured.yaml`): one typed
 decision per model response, reads that continue, consent and consultations.
 Every request is captured at the Pydantic AI model boundary (`Payload`), and
 every backend read and write is counted by kind. Asserts, no pytest.
@@ -34,74 +33,52 @@ from dataclasses import replace
 from typing import Any
 
 from pydantic_ai.messages import ModelRequest, RetryPromptPart, ToolReturnPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.models.function import AgentInfo
 
 import core
 from core.history import Payload
 from core.state import Checkpoint
 from core.turn import Barge
+from tests import script as scripted
 from tests.clinic_flow.consult import CheckedIn
 from tests.clinic_flow.structured import Clinic, VisitState
+from tests.script import Call, Calls, Record, Reply, Stall
 from tests.test_context import HERE
-from tests.test_context import checked_in as checked_in_desk
 from tests.test_public import CLOCK
 
 MANIFEST = 'structured.yaml'
-"""The clinic every test here opens; `main` runs them all on `structured.yaml`, then on its version 2 twin."""
+"""The clinic every test here opens."""
 READ_BACK = {
     '0900': 'Shall I book Tuesday at 9:00 AM for P-1234?',
     '1000': 'Shall I book Tuesday at 10:00 AM for P-1234?',
 }
 
 
-class Script:
-    """Each request takes the next move; every request is kept whole (`Payload`).
+class Script(scripted.Script):
+    """The shared scripted model; with `probe` set, the adaptive fake.
 
-    `('call', tool, args)` is one tool call, `('calls', [(tool, args), ...])`
-    several in one response, `('say', words)` plain text, and
-    `('stall', tool, partial_json)` streams the start of a call and then
-    never finishes it. With `probe` set, a request that is offered a
-    redundant path takes it first (`redundant`): the adaptive fake.
+    A probing request that is offered a redundant path takes it first
+    (`redundant`), before any scripted move.
     """
 
     def __init__(self, probe: bool = False) -> None:
-        self.moves: list[tuple[Any, ...]] = []
-        self.payloads: list[Payload] = []
+        super().__init__()
         self.probe = probe
         self.probed: list[str] = []
-        self.stalled = asyncio.Event()
-        self.model = FunctionModel(stream_function=self.agent)
 
-    async def agent(self, messages: Any, info: AgentInfo):
-        self.payloads.append(Payload.of(messages, info))
+    def next_move(self, messages: list[Any], info: AgentInfo) -> scripted.Move:
         if self.probe and (found := redundant(messages, info)) is not None:
-            self.probed.append(found[0])
-            yield {0: DeltaToolCall(name=found[0], json_args=json.dumps(found[1]))}
-            return
-        if not self.moves:
-            yield 'Sorry, could you say that again?'
-            return
-        kind, *rest = self.moves.pop(0)
-        if kind == 'call':
-            yield {0: DeltaToolCall(name=rest[0], json_args=json.dumps(rest[1]))}
-        elif kind == 'calls':
-            yield {i: DeltaToolCall(name=n, json_args=json.dumps(a)) for i, (n, a) in enumerate(rest[0])}
-        elif kind == 'stall':
-            yield {0: DeltaToolCall(name=rest[0], json_args=rest[1])}
-            self.stalled.set()
-            await asyncio.Event().wait()
-        else:
-            yield rest[0]
+            self.probed.append(found.tool)
+            return found
+        return super().next_move(messages, info)
 
 
-def redundant(messages: Any, info: AgentInfo) -> tuple[str, dict[str, Any]] | None:
-    """A redundant call this request is offered: a bookkeeping `collect`, a refetch with nothing new, a repeated read.
+def redundant(messages: Any, info: AgentInfo) -> Call | None:
+    """A redundant call this request is offered: a refetch with nothing new, or a repeated read.
 
     A repeat is only probed once per call of it, so the fake does not loop.
     """
     tools = {t.name: t for t in info.function_tools}
-    if 'collect' in tools:
-        return 'collect', {'values': {'note': 'probe'}}
     options = tools.get('options')
     if options is not None and 'update' not in options.parameters_json_schema.get('required', []):
         returned = [
@@ -112,12 +89,12 @@ def redundant(messages: Any, info: AgentInfo) -> tuple[str, dict[str, Any]] | No
             if isinstance(p, ToolReturnPart) and p.tool_name == 'options'
         ]
         if returned:
-            return 'options', {}
+            return Call('options')
     last = messages[-1] if messages else None
     if isinstance(last, ModelRequest):
         for part in last.parts:
             if isinstance(part, ToolReturnPart) and part.tool_name in tools and part.tool_name != 'options':
-                return part.tool_name, {}
+                return Call(part.tool_name)
     return None
 
 
@@ -144,10 +121,6 @@ async def turn(flow, call, script: Script, words: str, *moves, heard: bool = Tru
     sent = len(script.payloads) - before
     assert reply.finished.requests >= sent, 'a joined turn keeps one tally; this piece sent the rest'
     return [segment.text for segment in reply.segments], replace(reply.finished, requests=sent)
-
-
-def reply(say: str, **update: Any) -> tuple[str, str, dict[str, Any]]:
-    return ('call', 'reply', {'say': say, **({'update': update} if update else {})})
 
 
 def booking(call: core.FlowCall) -> list[str]:
@@ -183,14 +156,14 @@ async def offered(flow, call, script: Script) -> None:
         call,
         script,
         'A cleaning, please. When can I come?',
-        ('call', 'options', {'update': {'service': 'cleaning'}}),
-        reply('Nine or ten on Tuesday.'),
+        Call('options', update={'service': 'cleaning'}),
+        Reply('Nine or ten on Tuesday.'),
     )
     assert said == ['Nine or ten on Tuesday.'] and done.requests == 2, (said, done)
 
 
 async def read_back(flow, call, script: Script, slot: str = '1000') -> None:
-    said, done = await turn(flow, call, script, 'Ten, please.', ('call', 'book', {'update': {'slot': slot}}))
+    said, done = await turn(flow, call, script, 'Ten, please.', Call('book', update={'slot': slot}))
     assert said == [READ_BACK[slot]] and done.requests == 1, (said, done)
 
 
@@ -199,7 +172,7 @@ async def a_local_answer_is_one_request():
     flow, call, clinic = opened(script)
     version = call._version
     said, done = await turn(
-        flow, call, script, 'I come in a wheelchair.', reply('We will have the ramp ready.', wheelchair=True)
+        flow, call, script, 'I come in a wheelchair.', Reply('We will have the ramp ready.', wheelchair=True)
     )
     assert said == ['We will have the ramp ready.'] and done.requests == 1, (said, done)
     assert call.state.facts.wheelchair is True and call._version == version + 1, 'committed once'
@@ -223,7 +196,7 @@ async def a_local_answer_is_one_request():
     }, update['visitors']
     book = schema(script.payloads[-1], 'book')['$defs']['DeskBookUpdate']['properties']
     assert set(book) == {'slot'}, 'an action takes only the fields it rests on'
-    said, done = await turn(flow, call, script, 'Is that all set?', reply('Yes.'))
+    said, done = await turn(flow, call, script, 'Is that all set?', Reply('Yes.'))
     after = script.payloads[-1]
     assert '"wheelchair":true' in after.instructions, 'the next request sees the change'
     assert 'We will have the ramp ready.' in after.history, 'what was said is in the history, once'
@@ -236,11 +209,11 @@ async def a_local_answer_is_one_request():
 async def an_update_keeps_what_it_leaves_out():
     script = Script()
     flow, call, _ = opened(script, note='sore tooth', companion={'name': 'Ana', 'relation': 'friend'})
-    await turn(flow, call, script, 'Nobody comes with me.', reply('Noted.', visitors=0, companion=None))
+    await turn(flow, call, script, 'Nobody comes with me.', Reply('Noted.', visitors=0, companion=None))
     facts = call.state.facts
     assert facts.visitors == 0 and facts.companion is None and facts.note == 'sore tooth', facts
     await turn(
-        flow, call, script, 'No wheelchair, and forget the note.', reply('Done.', wheelchair=False, note='')
+        flow, call, script, 'No wheelchair, and forget the note.', Reply('Done.', wheelchair=False, note='')
     )
     assert call.state.facts.wheelchair is False and call.state.facts.note == '', call.state.facts
     before, version = call.state.facts, call._version
@@ -249,8 +222,8 @@ async def an_update_keeps_what_it_leaves_out():
         call,
         script,
         'Clear the note.',
-        ('call', 'reply', {'say': 'Cleared.', 'update': {'note': None}}),
-        reply('What should the note say?'),
+        Reply('Cleared.', note=None),
+        Reply('What should the note say?'),
     )
     assert said == ['What should the note say?'] and done.requests == 2, (
         'null is refused where None is no value'
@@ -260,7 +233,10 @@ async def an_update_keeps_what_it_leaves_out():
 
 
 async def a_refused_decision_commits_nothing():
-    """Whole-state rule, unknown key, receipt field, another step's field, bad nested value, off-offer pick."""
+    """Whole-state rule, unknown key, receipt field, another step's field, bad nested value, a pick no offer holds.
+
+    The last is checked on the offer for the state the update ends in: a checkup is only at ten.
+    """
     script = Script()
     flow, call, clinic = opened(script, wheelchair=True, visitors=2)
     bad = [
@@ -268,7 +244,7 @@ async def a_refused_decision_commits_nothing():
         ({'reference': 'CL999', 'note': 'x'}, 'reference'),
         ({'patient': 'P-9999', 'note': 'x'}, 'patient'),
         ({'companion': {'name': ' ', 'relation': 'boss'}, 'note': 'x'}, 'companion'),
-        ({'slot': '0900', 'note': 'x'}, 'not on offer'),
+        ({'service': 'checkup', 'slot': '0900', 'note': 'x'}, 'not on offer'),
     ]
     for update, why in bad:
         before, version = call.state.facts, call._version
@@ -277,8 +253,8 @@ async def a_refused_decision_commits_nothing():
             call,
             script,
             'Something.',
-            ('call', 'reply', {'say': 'All set for you.', 'update': update}),
-            reply('Sorry, I could not note that.'),
+            Call('reply', say='All set for you.', update=update),
+            Reply('Sorry, I could not note that.'),
         )
         assert said == ['Sorry, I could not note that.'] and done.requests == 2, (update, said)
         assert call.state.facts == before and call._version == version, f'{update} committed part of itself'
@@ -294,8 +270,8 @@ async def a_read_with_new_values_is_two_requests():
         call,
         script,
         'How much is a cleaning?',
-        ('call', 'quote', {'update': {'service': 'cleaning'}}),
-        reply('A cleaning is 40 euros.'),
+        Call('quote', update={'service': 'cleaning'}),
+        Reply('A cleaning is 40 euros.'),
     )
     assert said == ['A cleaning is 40 euros.'] and done.requests == 2, (said, done)
     assert clinic.quotes == ['cleaning'] and clinic.availability == [], (
@@ -311,8 +287,8 @@ async def a_read_with_new_values_is_two_requests():
         call,
         script,
         'And for a checkup instead?',
-        ('call', 'options', {'update': {'service': 'checkup'}}),
-        reply('Only ten, for a checkup.'),
+        Call('options', update={'service': 'checkup'}),
+        Reply('Only ten, for a checkup.'),
     )
     assert done.requests == 2 and clinic.availability == ['cleaning', 'checkup'], clinic.availability
     assert call.state.facts.price is None, 'the price quoted for a cleaning rested on the service, and went'
@@ -339,8 +315,8 @@ async def no_redundant_path_is_offered():
         call,
         script,
         'How much is it?',
-        ('call', 'quote', {}),
-        reply('A cleaning is 40 euros.'),
+        Call('quote'),
+        Reply('A cleaning is 40 euros.'),
     )
     assert script.probed == ['quote'] and clinic.quotes == ['cleaning'], 'the repeat read nothing'
     assert done.requests == 3 and said == ['A cleaning is 40 euros.'], (said, done)
@@ -351,21 +327,14 @@ async def no_redundant_path_is_offered():
         call,
         script,
         'Any other times?',
-        ('call', 'options', {}),
-        ('call', 'collect', {'values': {'note': 'x'}}),
-        reply('Those are the times.'),
+        Call('options'),
+        Call('collect', values={'note': 'x'}),
+        Reply('Those are the times.'),
     )
     assert clinic.availability == ['cleaning'], 'a hostile refetch read nothing'
     assert done.requests == 3 and call.state.facts.note == '', 'the hidden collect recorded nothing'
     told = retries(script.payloads[-1])
     assert any('still stands' in r for r in told) and any('collect' in r for r in told), told
-    v1 = Script(probe=True)
-    legacy = core.load(HERE / 'consult.yaml').compile(model=v1.model)
-    old = legacy.open(checked_in_desk(), services=Clinic(), clock=lambda: CLOCK)
-    old.commit(agent='desk')
-    v1.moves = [('say', 'Noted.')]
-    await core.text_turn(legacy, old, 'I use a wheelchair.')
-    assert v1.probed and set(v1.probed) == {'collect'}, v1.probed
 
 
 async def a_read_says_what_it_found():
@@ -377,8 +346,8 @@ async def a_read_says_what_it_found():
         call,
         script,
         'Any time for a cleaning?',
-        ('call', 'options', {'update': {'service': 'cleaning'}}),
-        reply('Nothing is free.'),
+        Call('options', update={'service': 'cleaning'}),
+        Reply('Nothing is free.'),
     )
     assert '"options": {}' in script.payloads[-1].history, 'a valid empty answer'
     await turn(
@@ -386,8 +355,8 @@ async def a_read_says_what_it_found():
         call,
         script,
         'What does a checkup cost?',
-        ('call', 'quote', {'update': {'service': 'checkup'}}),
-        reply('A checkup is priced at the visit.'),
+        Call('quote', update={'service': 'checkup'}),
+        Reply('A checkup is priced at the visit.'),
     )
     told = script.payloads[-1].history
     assert '"status": "refused"' in told and 'priced at the visit' in told, told
@@ -398,22 +367,22 @@ async def a_read_says_what_it_found():
         call,
         script,
         'And a cleaning?',
-        ('call', 'quote', {'update': {'service': 'cleaning'}}),
-        reply('The price list is not answering.'),
+        Call('quote', update={'service': 'cleaning'}),
+        Reply('The price list is not answering.'),
     )
     assert '"status": "failed"' in script.payloads[-1].history and call.state.facts.price is None
-    await turn(flow, call, script, 'Try again?', ('call', 'quote', {}), reply('A cleaning is 40 euros.'))
+    await turn(flow, call, script, 'Try again?', Call('quote'), Reply('A cleaning is 40 euros.'))
     assert clinic.quotes == ['checkup', 'cleaning', 'cleaning'], 'a read with no answer may be asked again'
     assert call.state.facts.price is not None
-    await turn(flow, call, script, 'A checkup after all.', reply('Noted.', service='checkup'))
+    await turn(flow, call, script, 'A checkup after all.', Reply('Noted.', service='checkup'))
     clinic.during_quote = lambda: call.update(patient='P-9999')
     await turn(
         flow,
         call,
         script,
         'And the cleaning price?',
-        ('call', 'quote', {'update': {'service': 'cleaning'}}),
-        reply('Who is calling?'),
+        Call('quote', update={'service': 'cleaning'}),
+        Reply('Who is calling?'),
     )
     assert '"status": "absent"' in script.payloads[-1].history, 'settled for another caller: not told'
     assert call.state.facts.price is None, 'another caller changed nothing here'
@@ -430,7 +399,7 @@ async def a_cancelled_read_assigns_nothing():
 
     clinic.during_quote = slow
     barge = Barge()
-    script.moves = [('call', 'quote', {'update': {'service': 'cleaning'}})]
+    script.moves = [Call('quote', update={'service': 'cleaning'})]
     task = asyncio.create_task(core.text_turn(flow, call, 'How much is a cleaning?', barge=barge))
     await asyncio.to_thread(started.wait, 5)
     barge.fire()
@@ -440,19 +409,19 @@ async def a_cancelled_read_assigns_nothing():
     assert call.state.facts.service == 'cleaning' and call.state.facts.price is None, call.state.facts
     assert not [s for s in done.segments if s.text], 'nothing was said'
     clinic.during_quote = None
-    _ = await turn(flow, call, script, 'How much?', ('call', 'quote', {}), reply('40 euros.'))
+    _ = await turn(flow, call, script, 'How much?', Call('quote'), Reply('40 euros.'))
     assert clinic.quotes == ['cleaning', 'cleaning'] and call.state.facts.price is not None, clinic.quotes
 
 
 async def one_decision_per_response():
     for calls in (
-        [('quote', {'update': {'service': 'cleaning'}}), ('reply', {'say': 'Forty euros.'})],
-        [('reply', {'say': 'Forty euros.'}), ('quote', {'update': {'service': 'cleaning'}})],
+        Calls(Call('quote', update={'service': 'cleaning'}), Reply('Forty euros.')),
+        Calls(Reply('Forty euros.'), Call('quote', update={'service': 'cleaning'})),
     ):
         script = Script()
         flow, call, clinic = opened(script)
         said, done = await turn(
-            flow, call, script, 'How much is a cleaning?', ('calls', calls), reply('A cleaning is 40 euros.')
+            flow, call, script, 'How much is a cleaning?', calls, Reply('A cleaning is 40 euros.')
         )
         assert said == ['A cleaning is 40 euros.'] and done.requests == 2, (calls, said)
         assert clinic.quotes == ['cleaning'], 'the read ran once'
@@ -464,11 +433,8 @@ async def one_decision_per_response():
         call,
         script,
         'A cleaning, or a checkup?',
-        (
-            'calls',
-            [('quote', {'update': {'service': 'cleaning'}}), ('options', {'update': {'service': 'checkup'}})],
-        ),
-        reply('A cleaning is 40 euros.'),
+        Calls(Call('quote', update={'service': 'cleaning'}), Call('options', update={'service': 'checkup'})),
+        Reply('A cleaning is 40 euros.'),
     )
     assert call.state.facts.service == 'cleaning' and clinic.availability == [], 'one update per response'
     assert any('already carries the update' in r for r in retries(script.payloads[-1]))
@@ -478,7 +444,7 @@ async def one_decision_per_response():
         call,
         script,
         'Ten.',
-        ('calls', [('reply', {'say': 'Booked!'}), ('book', {'update': {'slot': '1000'}})]),
+        Calls(Reply('Booked!'), Call('book', update={'slot': '1000'})),
     )
     assert said == ['Booked!'] and done.requests == 1 and call.state.facts.slot is None, (
         said,
@@ -494,28 +460,28 @@ async def consent_is_code_s():
     await read_back(flow, call, script)
     assert clinic.calls == 0 and booking(call) == ['prepared']
     said, done = await turn(
-        flow, call, script, 'Yes, but make it nine.', ('call', 'book', {'update': {'slot': '0900'}})
+        flow, call, script, 'Yes, but make it nine.', Call('book', update={'slot': '0900'})
     )
     assert said == [READ_BACK['0900']] and done.requests == 1 and clinic.calls == 0, said
-    said, _ = await turn(flow, call, script, 'How much is it?', ('call', 'quote', {}), reply('40 euros.'))
+    said, _ = await turn(flow, call, script, 'How much is it?', Call('quote'), Reply('40 euros.'))
     assert clinic.calls == 0 and booking(call) == ['prepared', 'prepared'], 'a question is not a no'
-    said, _ = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
     assert said == [READ_BACK['0900']] and clinic.calls == 0, 'the side question came between: asked afresh'
-    said, _ = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
     assert said == ['Booked for Tuesday at 9:00 AM, reference CL001.'] and clinic.calls == 1, said
     assert clinic.bookings == {'CL001': ('P-1234', '0900')}, 'only the corrected time'
     script = Script()
     flow, call, clinic = opened(script)
     await offered(flow, call, script)
-    await turn(flow, call, script, 'Ten.', reply('Shall I put you down for ten?', slot='1000'))
-    said, _ = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    await turn(flow, call, script, 'Ten.', Reply('Shall I put you down for ten?', slot='1000'))
+    said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
     assert said == [READ_BACK['1000']] and clinic.calls == 0, 'an ordinary question is not a read-back'
-    await turn(flow, call, script, 'No, not now.', ('call', 'reply', {'say': 'All right.', 'decline': True}))
-    assert call.declined_this_turn() and clinic.calls == 0
-    said, _ = await turn(flow, call, script, 'Actually yes.', ('call', 'book', {}))
+    await turn(flow, call, script, 'No, not now.', Reply('All right.', decline=True))
+    assert call.turn in call._declined.values() and clinic.calls == 0
+    said, _ = await turn(flow, call, script, 'Actually yes.', Call('book'))
     assert said == [READ_BACK['1000']] and clinic.calls == 0, 'a declined read-back is spent'
     clinic.failing = True
-    said, _ = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
     assert said == [call.locale.unsettled] and clinic.calls == 1, said
     assert booking(call)[-1] == 'unknown', 'no invented outcome'
 
@@ -532,17 +498,13 @@ async def a_yes_that_repeats_its_value_is_a_yes():
     flow, call, clinic = opened(script)
     await offered(flow, call, script)
     await read_back(flow, call, script)
-    said, _ = await turn(
-        flow, call, script, 'Yes, ten is perfect.', ('call', 'book', {'update': {'slot': '1000'}})
-    )
+    said, _ = await turn(flow, call, script, 'Yes, ten is perfect.', Call('book', update={'slot': '1000'}))
     assert said == ['Booked for Tuesday at 10:00 AM, reference CL001.'] and clinic.calls == 1, said
     script = Script()
     flow, call, clinic = opened(script)
     await offered(flow, call, script)
     await read_back(flow, call, script)
-    said, _ = await turn(
-        flow, call, script, 'Yes, nine then.', ('call', 'book', {'update': {'slot': '0900'}})
-    )
+    said, _ = await turn(flow, call, script, 'Yes, nine then.', Call('book', update={'slot': '0900'}))
     assert said == [READ_BACK['0900']] and clinic.calls == 0, 'a new value is a change: read back fresh'
 
 
@@ -557,16 +519,16 @@ async def a_consultation_answers_once():
         call,
         script,
         'Wait, can I eat before? Yes, book it.',
-        ('call', 'hand_over', {'to': 'nurse', 'because': 'food'}),
-        ('call', 'done', {'answer': '   '}),
-        ('call', 'done', {'answer': 'Yes, eat something light.'}),
+        Call('hand_over', to='nurse', because='food'),
+        Call('done', answer='   '),
+        Call('done', answer='Yes, eat something light.'),
     )
     assert said == ['Yes, eat something light.', READ_BACK['1000']], said
     assert done.requests == 3 and call.state.agent == 'desk' and clinic.calls == 0, 'the nurse books nothing'
     nurse = script.payloads[-1]
     assert 'book' not in names(nurse)[1] and 'reply' in names(nurse)[1], names(nurse)
     assert any('answer' in r for r in retries(nurse)), 'a blank answer is refused'
-    said, _ = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
     assert clinic.calls == 1 and said == ['Booked for Tuesday at 10:00 AM, reference CL001.'], said
 
 
@@ -581,17 +543,15 @@ async def a_stale_read_back_is_not_put_again():
         call,
         script,
         'Can I eat before?',
-        ('call', 'hand_over', {'to': 'nurse', 'because': 'food'}),
-        reply('Is it in the morning?'),
+        Call('hand_over', to='nurse', because='food'),
+        Reply('Is it in the morning?'),
     )
     call.update(slot='0900')
-    said, _ = await turn(
-        flow, call, script, 'Yes, the morning.', ('call', 'done', {'answer': 'Then eat lightly.'})
-    )
+    said, _ = await turn(flow, call, script, 'Yes, the morning.', Call('done', answer='Then eat lightly.'))
     assert said == ['Then eat lightly.'] and call.state.agent == 'desk', (
         "the ten o'clock read-back is not put again"
     )
-    said, _ = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
     assert said == [READ_BACK['0900']] and clinic.calls == 0, 'the new time is read back fresh first'
 
 
@@ -601,16 +561,16 @@ async def the_caller_s_words_come_back_whatever_the_summary():
         flow, call, clinic = opened(script)
         await offered(flow, call, script)
         await read_back(flow, call, script)
-        answer = ('call', 'done', {'answer': 'Yes, eat something light.', 'handback': handback})
+        answer = Call('done', answer='Yes, eat something light.', handback=handback)
         if handback:
             said, done = await turn(
                 flow,
                 call,
                 script,
                 'Can I eat before? And make it nine instead.',
-                ('call', 'hand_over', {'to': 'nurse', 'because': 'food'}),
+                Call('hand_over', to='nurse', because='food'),
                 answer,
-                ('call', 'book', {'update': {'slot': '0900'}}),
+                Call('book', update={'slot': '0900'}),
             )
             assert said == ['Yes, eat something light.', READ_BACK['0900']], (handback, said)
             assert done.requests == 3 and done.handoffs == ('nurse', 'desk'), done
@@ -622,17 +582,17 @@ async def the_caller_s_words_come_back_whatever_the_summary():
                 call,
                 script,
                 'Can I eat before? And make it nine instead.',
-                ('call', 'hand_over', {'to': 'nurse', 'because': 'food'}),
+                Call('hand_over', to='nurse', because='food'),
                 answer,
             )
             assert said == ['Yes, eat something light.', READ_BACK['1000']], (
                 'still what the state gives: asked again'
             )
-            await turn(flow, call, script, 'No, nine!', ('call', 'book', {'update': {'slot': '0900'}}))
+            await turn(flow, call, script, 'No, nine!', Call('book', update={'slot': '0900'}))
             desk = script.payloads[-1]
         assert 'make it nine instead' in desk.history, (handback, "the caller's words reach the desk")
         assert clinic.calls == 0 and call.state.agent == 'desk'
-        said, _ = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+        said, _ = await turn(flow, call, script, 'Yes.', Call('book'))
         assert clinic.bookings == {'CL001': ('P-1234', '0900')}, (handback, clinic.bookings)
 
 
@@ -645,8 +605,8 @@ async def a_consultation_keeps_the_prerequisite_apart():
         call,
         script,
         'Is it safe while pregnant?',
-        ('call', 'hand_over', {'to': 'nurse', 'because': 'safety'}),
-        ('call', 'done', {'answer': 'Yes, it is safe.'}),
+        Call('hand_over', to='nurse', because='safety'),
+        Call('done', answer='Yes, it is safe.'),
     )
     assert call.state.agent == 'front' and call.state.pending == 'desk' and call.state.consulting is None
     said, done = await turn(
@@ -654,8 +614,8 @@ async def a_consultation_keeps_the_prerequisite_apart():
         call,
         script,
         'P-1234.',
-        ('call', 'check_in', {'update': {'patient': 'P-1234'}}),
-        reply('What can I book for you?'),
+        Call('check_in', update={'patient': 'P-1234'}),
+        Reply('What can I book for you?'),
     )
     assert said == ['Thanks, I have you checked in.', 'What can I book for you?'], said
     assert call.state.agent == 'desk' and call.state.pending is None and done.requests == 2, done
@@ -672,7 +632,7 @@ async def an_offer_on_arrival_is_code_s():
     (`Checkpoint`, as `turn` records it).
     """
     text = (
-        (HERE / 'structured.v2.yaml')
+        (HERE / MANIFEST)
         .read_text()
         .replace('    operations: [book, quote]\n', '    offers: [slot]\n    operations: [book, quote]\n')
     )
@@ -689,15 +649,16 @@ async def an_offer_on_arrival_is_code_s():
             call,
             script,
             'P-1234.',
-            ('call', 'check_in', {'update': {'patient': 'P-1234'}}),
-            reply('Nine or ten on Tuesday.'),
+            Call('check_in', update={'patient': 'P-1234'}),
+            Reply('Nine or ten on Tuesday.'),
         )
         assert said == ['Thanks, I have you checked in.', 'Nine or ten on Tuesday.'], said
         assert call.state.agent == 'desk' and done.requests == 2 and clinic.availability == ['cleaning'], (
             done,
             clinic.availability,
         )
-        assert told in script.payloads[-1].history and ('slot' in call._offers) == (not closed), closed
+        assert told in script.payloads[-1], (closed, script.payloads[-1].instructions[-600:])
+        assert ('slot' in call._offers) == (not closed), closed
 
 
 async def a_pick_is_read_back_and_a_record_offers_again():
@@ -708,7 +669,7 @@ async def a_pick_is_read_back_and_a_record_offers_again():
     so code asks again, and the one time left is picked and read back.
     """
     text = (
-        (HERE / 'structured.v2.yaml')
+        (HERE / MANIFEST)
         .read_text()
         .replace('structured.py:free_times', 'structured.py:the_only_time')
         .replace('    operations: [book, quote]\n', '    offers: [slot]\n    operations: [book, quote]\n')
@@ -719,9 +680,7 @@ async def a_pick_is_read_back_and_a_record_offers_again():
     call = flow.open(VisitState(service='checkup'), services=Clinic(), clock=lambda: CLOCK)
     call.commit(agent='front', pending='desk')
     call._checkpoint = Checkpoint('desk', 'A checkup, please.')
-    said, done = await turn(
-        flow, call, script, 'P-1234.', ('call', 'check_in', {'update': {'patient': 'P-1234'}})
-    )
+    said, done = await turn(flow, call, script, 'P-1234.', Call('check_in', update={'patient': 'P-1234'}))
     assert said == ['Thanks, I have you checked in.', asked] and done.requests == 1, (said, done)
     assert call.state.facts.slot == '1000'
     script = Script()
@@ -730,9 +689,7 @@ async def a_pick_is_read_back_and_a_record_offers_again():
     known = VisitState(service='cleaning', patient='P-1234', checked_in=CheckedIn(patient='P-1234'))
     call = flow.open(known, services=clinic, clock=lambda: CLOCK)
     call.commit(agent='desk')
-    said, done = await turn(
-        flow, call, script, 'Make it a checkup.', ('call', 'record', {'update': {'service': 'checkup'}})
-    )
+    said, done = await turn(flow, call, script, 'Make it a checkup.', Record(service='checkup'))
     assert said == [asked] and done.requests == 1 and clinic.availability == ['checkup'], (said, done)
 
 
@@ -740,15 +697,16 @@ async def partial_output_commits_nothing():
     script = Script()
     flow, call, _ = opened(script)
     barge = Barge()
-    script.moves = [('stall', 'reply', '{"say": "Booked you in", "update": {"note": "vip')]
+    stall = Stall('reply', '{"say": "Booked you in", "update": {"note": "vip')
+    script.moves = [stall]
     task = asyncio.create_task(core.text_turn(flow, call, 'Note that I am a VIP.', barge=barge))
-    await script.stalled.wait()
+    await stall.started.wait()
     version = call._version
     barge.fire()
     done = await task
     assert done.finished.status == 'interrupted' and call._version == version and call.state.facts.note == ''
     assert not [s for s in call.all_spoken if 'Booked' in s.text], 'no word of an unfinished decision'
-    said, _ = await turn(flow, call, script, 'Hello?', reply('Hello, how can I help?'))
+    said, _ = await turn(flow, call, script, 'Hello?', Reply('Hello, how can I help?'))
     assert said == ['Hello, how can I help?']
 
 
@@ -766,7 +724,7 @@ async def a_committed_update_stays_when_its_words_are_cut():
         call,
         script,
         'I come in a wheelchair.',
-        reply('We will have the ramp ready.', wheelchair=True),
+        Reply('We will have the ramp ready.', wheelchair=True),
         heard=False,
         barge=barge,
     )
@@ -781,13 +739,6 @@ async def a_committed_update_stays_when_its_words_are_cut():
 
 
 async def main():
-    for manifest in ('structured.yaml', 'structured.v2.yaml'):
-        await each_test(manifest)
-
-
-async def each_test(manifest: str):
-    global MANIFEST
-    MANIFEST = manifest
     await a_local_answer_is_one_request()
     await an_update_keeps_what_it_leaves_out()
     await a_refused_decision_commits_nothing()

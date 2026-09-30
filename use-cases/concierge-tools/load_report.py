@@ -84,7 +84,7 @@ from ledger import (
 OPERATIONS = frozenset(
     {'lookup_customer', 'book_appointment', 'move_appointment', 'cancel_appointment', 'record_complaint'}
 )
-"""The salon's operations (`use-cases/salon-graph/salon/agent.yaml`): the tool calls that speak their own words."""
+"""The salon's operations (`use-cases/salon/salon/agent.yaml`): the tool calls that speak their own words."""
 BOOKINGS = frozenset({'book_appointment', 'move_appointment', 'cancel_appointment', 'save_booking'})
 """Booking writes: the harness's operations, and the native build's one tool (`use-cases/salon-pipecat-flows`).
 Only `booked_after` reads it; effects are replayed from the receipts' shape, whatever the action's name."""

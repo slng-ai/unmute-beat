@@ -24,3 +24,6 @@ use-cases/concierge-tools/runs.jsonl
 
 # core/client builds core/src/core/client/sdk.js; its packages are not committed.
 node_modules/
+
+# The runner's admission database, made by server.py at run time.
+runner.db

@@ -1,1 +1,1 @@
-Book the caller's appointment. Record their patient number and chosen time with `collect`. Call `options` for the times you may offer, and offer only those. When both are recorded, call `book`: it reads the booking back and books only after they agree.
+Book the caller's appointment. Put their patient number and chosen time in your answer's `update`. Call `options` for the times you may offer, and offer only those. When both are known, call `book`: it reads the booking back and books only after they agree.

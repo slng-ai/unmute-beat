@@ -22,7 +22,7 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 import core
 from core.graph import Node
-from core.history import paired, project
+from core.history import History, paired, project
 from core.processor import PydanticAgentProcessor
 from core.state import CallContext, Handoff, VoiceState
 from core.turn import Barge, note_spoken, take_turn
@@ -148,7 +148,9 @@ async def resets():
     assert 'First reset input.' not in text(seen[2])
     assert 'Answer 2.' not in text(seen[2])
     assert 'loop-result' in str(seen[3]) and [m for m in seen[3] if m.parts] == paired(seen[3])
-    await take_turn(call, {'owner': replace(nodes['owner'], history='messages')}, 'Normal input.')
+    await take_turn(
+        call, {'owner': replace(nodes['owner'], history=History(scope='conversation'))}, 'Normal input.'
+    )
     assert text(seen[4]).count('First reset input.') == 1
     assert text(seen[4]).count('Second reset input.') == 1
     assert 'Answer 2.' in text(seen[4]) and 'Answer 4.' in text(seen[4])
@@ -422,22 +424,28 @@ def old_speech_stays_where_it_was_said():
             assert any(isinstance(p, ToolCallPart) for p in view[at - 1].parts), 'a tool result lost its call'
 
 
-async def cancelled_then_handed_over_on_a_rendered_step():
-    """Session 4e: a rendered step with choices, a turn cancelled after its tools ran, then a hand-over and back.
+async def cancelled_then_handed_over_with_offers():
+    """Session 4e: a step with choices, a turn cancelled after its tools ran, then a hand-over and back.
 
     What the step's agent is sent next keeps the caller's words once each,
     in the order they were said, and every tool result right after the
     response that called it: no orphan from the cancelled run, and nothing
-    from the action step's detour out of place.
+    from the action step's detour out of place. The desk's offers are left
+    to its agent here (no `offers:`), so the return from `look_up` asks it.
     """
     seen: list[list] = []
     parked = asyncio.Event()
     moves = [
-        ('collect', {'values': {'account_id': 'ACC-1234', 'category': 'billing'}}),
-        ('options', {}),
+        ('options', {'update': {'category': 'billing'}}),
         ('park', None),
-        ('collect', {'values': {'ticket_id': 'T-101', 'resolution': 'refund'}}),
-        ('hand_over', {'to': 'look_up', 'because': 'find its revision'}),
+        (
+            'hand_over',
+            {
+                'to': 'look_up',
+                'because': 'find its revision',
+                'update': {'ticket_id': 'T-101', 'resolution': 'refund'},
+            },
+        ),
         ('resolve_ticket', {}),
     ]
 
@@ -451,8 +459,9 @@ async def cancelled_then_handed_over_on_a_rendered_step():
 
     with tempfile.TemporaryDirectory() as tmp:
         desk = desk_in(Path(tmp))
-        flow = core.load(HERE / 'rendered_choices.yaml').compile(model=FunctionModel(stream_function=stream))
-        call = flow.open(DeskState(), services=desk)
+        text = (HERE / 'offers.yaml').read_text().replace('    offers: [ticket_id, resolution]\n', '')
+        flow = core.flowspec.load(text, root=HERE).compile(model=FunctionModel(stream_function=stream))
+        call = flow.open(DeskState(account_id='ACC-1234'), services=desk)
         task = asyncio.create_task(core.text_turn(flow, call, 'Cuenta ACC-1234, facturación.'))
         await asyncio.wait_for(parked.wait(), 2)
         task.cancel()
@@ -486,7 +495,7 @@ async def main():
     await cancellation_before_sdk_start()
     interrupted_protocol()
     old_speech_stays_where_it_was_said()
-    await cancelled_then_handed_over_on_a_rendered_step()
+    await cancelled_then_handed_over_with_offers()
     print('ok')
 
 

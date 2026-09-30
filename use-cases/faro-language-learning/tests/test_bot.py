@@ -11,8 +11,7 @@
   read back, nothing looked up.
 
 No model and no speech provider runs: the step agents are a script that is
-never asked, and speech is a pass-through. salon-graph's `tests/test_browser`
-checks the same wiring end to end, with audio.
+never asked, and speech is a pass-through.
 """
 
 import asyncio

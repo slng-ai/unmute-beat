@@ -17,13 +17,13 @@ No pytest and no fixtures. Each module is an assert script. It prints `ok` or ra
 
 ## tests/__main__.py
 
-Copy the salon's ([`tests/__main__.py`](../../../../use-cases/salone-concierge-graph-new/tests/__main__.py)) and
+Copy the salon's ([`tests/__main__.py`](../../../../use-cases/salon/tests/__main__.py)) and
 change `MODULES`. It sets `pydantic_ai.models.ALLOW_MODEL_REQUESTS = False` before any module is imported, so a
 test that forgot the scripted model raises instead of billing.
 
 ## tests/script.py
 
-Copy the salon's ([`tests/script.py`](../../../../use-cases/salone-concierge-graph-new/tests/script.py)). Change
+Copy the salon's ([`tests/script.py`](../../../../use-cases/salon/tests/script.py)). Change
 the imports, the backend, the clock and the seed data, and the docstrings that name the salon or the diary. The
 parts that matter:
 

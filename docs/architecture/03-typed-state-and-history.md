@@ -39,7 +39,7 @@ The application writes only the state model and the services. Core creates every
 
 ## 2. Application state is one plain Pydantic model
 
-The salon's state is [`SalonState`](../../use-cases/salone-concierge-graph-new/salon/state.py). This is an excerpt:
+The salon's state is [`SalonState`](../../use-cases/salon/salon/state.py). This is an excerpt:
 
 ```python
 class SalonState(BaseModel):
@@ -204,14 +204,14 @@ models.ALLOW_MODEL_REQUESTS = False
 
 from tests.test_session import (
     invalid_updates_change_nothing,
-    the_model_writes_only_collected_fields,
+    the_model_writes_only_its_steps_fields,
     two_calls_on_one_flow_share_nothing,
     a_correction_invalidates_completion_not_the_record,
 )
 
 for check in (
     invalid_updates_change_nothing,
-    the_model_writes_only_collected_fields,
+    the_model_writes_only_its_steps_fields,
     two_calls_on_one_flow_share_nothing,
     a_correction_invalidates_completion_not_the_record,
 ):
@@ -228,12 +228,12 @@ every value right.
 
 - [Structured decisions](../../core/src/core/structured.py): `Decision`, how an update's type is built from
   `fields`, and how it is applied whole.
-- [State and session](../../core/src/core/steps.py): `FlowState`, `FlowCall.update`, `FlowCall.collect` (the resets),
+- [State and session](../../core/src/core/steps.py): `FlowState`, `FlowCall.update`, `FlowCall.collect` and `StepFlow.record_update` (the resets and picks),
   `Offers` and `StepFlow.open`.
 - [Runtime records](../../core/src/core/state.py): `CallContext`, the validation context, speech, proposals, intents
   and evidence.
 - [History](../../core/src/core/history.py): `History`, `Scope` and `project`, the view a node is sent.
-- [Salon tests](../../use-cases/salone-concierge-graph-new/tests/test_business.py): a corrected number clears the
+- [Salon tests](../../use-cases/salon/tests/test_business.py): a corrected number clears the
   customer, a past date is refused, and a correction during a read-back.
 
 [← Conversation walkthrough](02-a-conversation-from-start-to-finish.md) · [Reading guide](README.md) · [Next: nodes and agent.yaml →](04-typed-flows-and-node-agents.md)

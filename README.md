@@ -303,14 +303,14 @@ Four kinds of data live in a call. They are kept apart on purpose.
 
 1. **Offline.** Drive the real flow with a scripted model, so no provider request is made. Check the end state of
    the backend, not the words. Pin each node's request in a golden file, so a prompt or schema change shows in a
-   diff. The salon's [`tests/`](use-cases/salone-concierge-graph-new/tests/) folder is the pattern to copy.
+   diff. The salon's [`tests/`](use-cases/salon/tests/) folder is the pattern to copy.
 2. **Live.** Run the calls on Coval over a real phone line, with
    [`coval_sim`](use-cases/concierge-tools/coval_sim/). Judge them by the backend's end state, the traces and
    [`load_report`](use-cases/concierge-tools/load_report.py).
 
 ## Example: the salon
 
-The reference application is [`use-cases/salone-concierge-graph-new`](use-cases/salone-concierge-graph-new/), a hair
+The reference application is [`use-cases/salon`](use-cases/salon/), a hair
 salon called Sage and Stone. Its backend is a diary of bookings.
 
 ```mermaid
@@ -375,11 +375,11 @@ The salon's files:
 
 | File | Holds |
 |---|---|
-| [`state.py`](use-cases/salone-concierge-graph-new/salon/state.py) | `SalonState`: phone, customer, service, day, time, slot, booking id, complaint |
-| [`operations.py`](use-cases/salone-concierge-graph-new/salon/operations.py) | `LookupCustomer`, `BookAppointment`, `MoveAppointment`, `CancelAppointment`, `RecordComplaint` |
-| [`offers.py`](use-cases/salone-concierge-graph-new/salon/offers.py) | `find_times`, `bookings_to_move`, `bookings_to_cancel` |
-| [`prompts/`](use-cases/salone-concierge-graph-new/salon/prompts/) | one prompt per node, `_voice.md` and `_diary.md` |
-| [`agent.yaml`](use-cases/salone-concierge-graph-new/salon/agent.yaml) | seven nodes and five operations, about 150 lines |
+| [`state.py`](use-cases/salon/salon/state.py) | `SalonState`: phone, customer, service, day, time, slot, booking id, complaint |
+| [`operations.py`](use-cases/salon/salon/operations.py) | `LookupCustomer`, `BookAppointment`, `MoveAppointment`, `CancelAppointment`, `RecordComplaint` |
+| [`offers.py`](use-cases/salon/salon/offers.py) | `find_times`, `bookings_to_move`, `bookings_to_cancel` |
+| [`prompts/`](use-cases/salon/salon/prompts/) | one prompt per node, `_voice.md` and `_diary.md` |
+| [`agent.yaml`](use-cases/salon/salon/agent.yaml) | seven nodes and five operations, about 150 lines |
 
 ### Live results
 
@@ -390,9 +390,9 @@ explanation.
 
 | Run | Callers | Calls | Result | Requests per turn | Input tokens per call | Turn latency p50 |
 |---|---|---:|---|---:|---:|---:|
-| [Routine bookings](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/75m8jevu6ywGEkwSaUQave) | normal | 5, 5 at once | 5 of 5 pass every `load_report` check | 0.86 | 17.0k | 1.86 s |
-| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/fMHCmkqa9pBfykQjBMmcEv) | normal | 8, 8 at once | 7 of 8 right in the diary | 0.94 | 21.2k | 2.69 s |
-| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/iWbBgavGcmL7YiVZbZzgwJ) | interruptive | 8, 8 at once | 8 of 8 right in the diary | 1.06 | 31.5k | 2.50 s |
+| [Routine bookings](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/BBdQ7UVJVoNng7HuuggpTR) | normal | 5, 5 at once | 5 of 5 right in the diary and in `load_report` | 0.80 | 15.5k | 3.13 s |
+| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/FZ2Hg5smLR4e4FxQaFFBVp) | normal | 8, 8 at once | 8 of 8 right in the diary | 0.88 | 20.2k | 2.71 s |
+| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/CHbiNaE3KApGEFyqL4t3Zz) | interruptive | 8, 8 at once | 8 of 8 right in the diary | 1.00 | 32.2k | 2.50 s |
 
 The graph-paths set has eight cases:
 
@@ -405,9 +405,16 @@ The graph-paths set has eight cases:
 7. hold two bookings and cancel one;
 8. ask to move with nothing held, then book instead.
 
-In every call, each change was read back and confirmed before it happened, and nothing was booked twice. The one
-miss was a date: on a Wednesday, "Thursday" became the Thursday of next week. It was read back, and the caller
-accepted it.
+In every call, each change was read back and confirmed before it happened, and every read-back was heard in full on
+Twilio's marks. Nothing was booked twice.
+
+Two things to know about these runs:
+
+1. **One interruptive call ran out of turn budget.** The caller said "no" and then the same number again. The verify
+   node handed the caller on instead of confirming, and the flow sent them back to verify, twice in one turn. The
+   budget stopped the loop. The next turn verified the number, and the right booking was cancelled.
+2. **A bare weekday can still be read as next week's.** An earlier run booked "Thursday", said on a Wednesday, a week
+   late. It was read back and accepted. Case 2 was right this time, but the fix is separate work.
 
 ### Try it
 
@@ -415,7 +422,7 @@ The workspace uses Python 3.14+ and uv. Put the provider keys in the root `.env`
 
 ```bash
 uv sync --all-packages
-cd use-cases/salone-concierge-graph-new
+cd use-cases/salon
 uv run bot.py              # voice in the browser, http://localhost:7860
 uv run python -m tests     # the offline suite, no model requests
 ```

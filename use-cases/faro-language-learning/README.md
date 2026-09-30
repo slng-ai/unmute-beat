@@ -137,7 +137,7 @@ flowchart LR
 1. `identify` reads the caller ID back in the greeting. A yes runs `confirm_phone`, which looks up the number and opens the session. Its receipt names the step the learner goes to (`route: next`): the store's checkpoint decides, not a model.
 2. `signup` reads the sign-up offer back. A yes records consent for this call only; the name the caller gives is saved by code (`carries_out`) into a new profile.
 3. `onboarding` records the language, goal and length. Code saves each answer and asks the next question. A language other than English or Spanish is refused by the state's type.
-4. `assessment` and `lesson` are examiners: `speech: rendered`, so they say nothing themselves. The agent grades an attempt in fields (`answer`, `grade`, `feedback`), and code records it straight away with `record_attempt`. The answer must be the learner's own words (`quoted`).
+4. `assessment` and `lesson` are examiners: their prompts tell the agent to say nothing itself. The agent grades an attempt in fields (`answer`, `grade`, `feedback`), and code records it straight away with `record_attempt`. The answer must be the learner's own words (`quoted`).
 5. A question, a hint request or a hesitation goes to `help`, a code step that marks the exercise helped in the store, then to `coach`, the only step that may explain. Any later correct answer to a helped exercise, in the coach or back in the lesson, is recorded as assisted, never independent. A right answer after a miss in the same session is assisted too.
 6. `plan` reads the exact proposal back. "Yes, but only five minutes" is recorded, and code reads the changed proposal back; only a yes to that activates it. Keeping an old plan after a reassessment is recorded and carried out by code.
 7. `menu` carries on, recaps (code's words from the plan) or starts a reassessment, and keeps what the learner says about themselves.
@@ -161,7 +161,7 @@ The call's fixed lines follow the learner's language (`language:` and
 What Faro needed from core, all generic and proven on the support desk
 (`core/tests/test_flow_rules.py`): a locale per call from a state field,
 receipts that move the caller (`route:`), operations carried out by code after
-`collect` (`carries_out:`), a greeting that carries the entry step's read-back,
+`record` (`carries_out:`), a greeting that carries the entry step's read-back,
 validators that read what the caller said this turn, and a waiting read-back
 put again in a new language.
 
@@ -211,7 +211,7 @@ A voice call (trace `34e4fe68`) and the live runs found these. Each fix is kept 
 
 - The SQLite bundled with the project's Python is 3.50.4. SQLite documents a WAL-reset bug before 3.51.3 with concurrent connections. Faro keeps all database work on one thread, so it never opens two connections at once.
 - Voice is wired but not tested live: one STT and one TTS language per call, Spanish by default. Mixed English and Spanish audio is not verified. A browser client or phone line that reports no playback is refused before the greeting.
-- Grades, feedback and onboarding answers are the step agents' readings, checked for shape and for being the learner's own words, not for accuracy. The feedback is model text, said by code on a rendered step. Pronunciation is never scored.
+- Grades, feedback and onboarding answers are the step agents' readings, checked for shape and for being the learner's own words, not for accuracy. The feedback is model text, said by code inside the receipt. Pronunciation is never scored.
 - The level rule is a mean over the placement results. It proposes a starting difficulty and is no CEFR claim.
 - One active call per learner, in one process. A lost reply to a write is reconciled on the next turn; only `record_attempt` can be sent again safely, so another write whose reply was lost stays unsettled for the rest of the call.
 - The goodbye is a fixed line per language. The session summary is written to the plan when the call closes, not said.

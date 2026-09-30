@@ -18,43 +18,25 @@ pydantic_ai.models.ALLOW_MODEL_REQUESTS = False
 os.environ.setdefault('GOOGLE_API_KEY', 'offline-test-placeholder')
 
 import core  # noqa: E402
-from tests.test_nodes import Script  # noqa: E402
+from tests.script import Call, Move, Script  # noqa: E402
 from tests.ticket_flow.tickets import Desk, DeskState  # noqa: E402
 
 HERE = Path(__file__).parent
 
 TO_READ_BACK = (
-    ('call', 'hand_over', {'to': 'desk', 'because': 'resolve a ticket'}),
-    (
-        'call',
-        'collect',
-        {'values': {'account_id': 'ACC-1234', 'ticket_id': 'T-101', 'resolution': 'la impresora ya imprime'}},
-    ),
-    ('call', 'hand_over', {'to': 'look_up', 'because': 'find its revision'}),
-    ('call', 'resolve_ticket', {}),
-)
-"""The scripted replies that take a call from the first words to the resolve read-back."""
-V2_TO_READ_BACK = (
-    ('call', 'hand_over', {'to': 'desk', 'because': 'resolve a ticket'}),
-    (
-        'call',
+    Call('hand_over', to='desk', because='resolve a ticket'),
+    Call(
         'hand_over',
-        {
-            'to': 'look_up',
-            'because': 'find its revision',
-            'update': {
-                'account_id': 'ACC-1234',
-                'ticket_id': 'T-101',
-                'resolution': 'la impresora ya imprime',
-            },
-        },
+        to='look_up',
+        because='find its revision',
+        update={'account_id': 'ACC-1234', 'ticket_id': 'T-101', 'resolution': 'la impresora ya imprime'},
     ),
-    ('call', 'resolve_ticket', {}),
+    Call('resolve_ticket'),
 )
-"""The same, on `v2.yaml`'s structured desk: the update rides the hand-over, so no `collect`."""
+"""The scripted replies that take a call from the first words to the resolve read-back: the update rides the hand-over."""
 
 
-async def to_read_back(flow, call, script: Script, moves: tuple = TO_READ_BACK) -> list[str]:
+async def to_read_back(flow, call, script: Script, moves: tuple[Move, ...] = TO_READ_BACK) -> list[str]:
     script.moves = list(moves)
     reply = await core.text_turn(
         flow, call, 'Hola, la impresora del ticket T-101 ya funciona. Cuenta ACC-1234.'
@@ -71,7 +53,7 @@ async def main(path: str, mode: str) -> None:
     script.call = call
     await to_read_back(flow, call, script)
     desk.die_after_commit, desk.die_before_commit = mode == 'after', mode == 'before'
-    script.moves = [('call', 'resolve_ticket', {})]
+    script.moves = [Call('resolve_ticket')]
     await core.text_turn(flow, call, 'Sí.')
     raise SystemExit('the worker was meant to die inside the write')
 

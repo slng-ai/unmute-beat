@@ -36,7 +36,7 @@ MODULES = (
     'tests.test_actions',
     'tests.test_context',
     'tests.test_structured',
-    'tests.test_v2',
+    'tests.test_manifest',
     'tests.test_package',
     'tests.test_delivery',
     'tests.test_public',
@@ -48,7 +48,6 @@ MODULES = (
     'tests.test_tickets',
     'tests.test_flow_rules',
     'tests.test_outcomes',
-    'tests.test_speech',
     'tests.test_webrtc',
 )
 

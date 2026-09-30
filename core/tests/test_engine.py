@@ -1,4 +1,4 @@
-"""The turn engine's own promises, on the public clinic (`clinic_flow/one_agent.yaml`), with no reader or classifier.
+"""The turn engine's own promises, on the public clinic (`clinic_flow/agent.yaml`), with no reader or classifier.
 
 Ported from the legacy clinic (`tests/test_reuse.py`, retired with the
 classifier path in session 5); what they check is the engine's, not a
@@ -14,11 +14,12 @@ reading's:
 * E6: a step is told today's date and the week ahead, in the call's own time zone;
 * E7: a provider that fails gives the stumble line in the call's own language, never silence.
 
+Each stream here is written by hand, for its timing: a structured step's
+answer is its `reply` output (`tests.script.Reply`), streamed like any other.
 Scripted models prove runtime properties, not language understanding.
 """
 
 import asyncio
-import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -33,13 +34,14 @@ from core.locale import SPANISH
 from core.policies import TurnBudget
 from core.turn import Turn, take_turn
 from tests.clinic_flow.clinic import Backend, ClinicState
+from tests.script import Call, Calls, Reply
 
 HERE = Path(__file__).parent / 'clinic_flow'
 
 
 def opened(stream, clock=None):
     """The one-agent clinic on this model, and a call on it that hears every fixed line."""
-    flow = core.load(HERE / 'one_agent.yaml').compile(model=FunctionModel(stream_function=stream))
+    flow = core.load(HERE / 'agent.yaml').compile(model=FunctionModel(stream_function=stream))
     call = flow.open(ClinicState(), services=Backend(), clock=clock)
     heard: list[str] = []
 
@@ -59,7 +61,7 @@ async def a_request_that_sends_nothing_is_tried_again():
             calls.append(1)
             if len(calls) <= stalls:
                 await asyncio.sleep(10)
-            yield 'It is 40 euros.'
+            yield Reply('It is 40 euros.').delta()
 
         flow, call, _ = opened(stream)
         started = time.perf_counter()
@@ -68,7 +70,7 @@ async def a_request_that_sends_nothing_is_tried_again():
         prompts = [p for m in call.messages for p in m.parts if isinstance(p, UserPromptPart)]
         assert [p.content for p in prompts] == ['How much is it?'], prompts
         if expected:
-            assert said == expected and done.status == 'answered', (said, done)
+            assert call.spoken[-1].text == expected and done.status == 'answered', (said, done)
         else:
             assert said == call.locale.exhausted and done.status == 'exhausted', (said, done)
 
@@ -81,12 +83,15 @@ async def a_retried_request_ends_on_the_callers_words():
         sent.append(messages)
         if len(sent) == 1:
             await asyncio.sleep(10)
-        yield 'It is 40 euros.'
+        yield Reply('It is 40 euros.').delta()
 
     flow, call, heard = opened(stream)
     said, _ = await take_turn(call, flow.nodes, 'How much is it?', TurnBudget(first_part=0.2))
     last = sent[-1]
-    assert said == 'It is 40 euros.' and not set(heard) & set(call.locale.holding), (said, heard)
+    assert call.spoken[-1].text == 'It is 40 euros.' and not set(heard) & set(call.locale.holding), (
+        said,
+        heard,
+    )
     said_before = [p.content for m in last for p in m.parts if isinstance(p, TextPart)]
     assert isinstance(last[-1], ModelRequest) and not set(said_before) & set(call.locale.holding), last
     assert [p.content for p in last[-1].parts if isinstance(p, UserPromptPart)] == ['How much is it?'], last
@@ -111,18 +116,18 @@ async def a_slow_model_gets_no_holding_line():
 
     async def slow(messages, info):
         await asyncio.sleep(0.4)
-        yield 'It is 40 euros.'
+        yield Reply('It is 40 euros.').delta()
 
     async def speaks_then_pauses(messages, info):
-        yield 'Well, '
+        yield {0: DeltaToolCall(name='reply', json_args='{"say": "Well, ')}
         await asyncio.sleep(0.4)
-        yield 'it is 40 euros.'
+        yield {0: DeltaToolCall(json_args='it is 40 euros."}')}
 
     for stream in (slow, speaks_then_pauses):
         flow, call, _ = opened(stream)
         said, _ = await take_turn(call, flow.nodes, 'Hm.', budget)
         assert not any(s.origin == 'tool_filler' for s in call.spoken), call.spoken
-        assert said.endswith('40 euros.'), said
+        assert call.spoken[-1].text.endswith('40 euros.'), said
 
 
 async def a_fast_tool_needs_no_holding_line():
@@ -130,15 +135,18 @@ async def a_fast_tool_needs_no_holding_line():
 
     async def stream(messages, info):
         if not any(p.part_kind == 'tool-return' for m in messages for p in m.parts):
-            yield {0: DeltaToolCall(name='options', json_args='{}')}
+            yield Call('options').delta()
             return
         await asyncio.sleep(0.2)
-        yield 'I have Tuesday at nine.'
+        yield Reply('I have Tuesday at nine.').delta()
 
     flow, call, heard = opened(stream)
     said, _ = await take_turn(call, flow.nodes, 'Which times?', TurnBudget(hold_after=10.0))
     assert [s.origin for s in call.spoken] == ['model'], call.spoken
-    assert not set(heard) & set(call.locale.holding) and said == 'I have Tuesday at nine.', (heard, said)
+    assert not set(heard) & set(call.locale.holding) and call.spoken[-1].text == 'I have Tuesday at nine.', (
+        heard,
+        said,
+    )
 
 
 async def a_late_report_does_not_cut_what_played():
@@ -149,20 +157,14 @@ async def a_late_report_does_not_cut_what_played():
     delivery evidence, here the text reader's acknowledgement.
     """
     moves = [
-        [('options', {})],
-        [('collect', {'values': {'patient': 'P-1234', 'slot': '0900'}})],
-        [('book', {})],
-        [('book', {})],
+        Calls(Call('options', update={'patient': 'P-1234'})),
+        Calls(Call('book', update={'slot': '0900'})),
+        Calls(Call('book')),
     ]
 
     async def stream(messages, info):
-        if not moves:
-            yield 'Sorry?'
-            return
-        yield {
-            i: DeltaToolCall(name=name, json_args=json.dumps(args))
-            for i, (name, args) in enumerate(moves.pop(0))
-        }
+        async for streamed in (moves.pop(0) if moves else Reply('Sorry?')).stream():
+            yield streamed
 
     flow, call, _ = opened(stream)
     await take_turn(call, flow.nodes, 'P-1234, nine, please.')
@@ -185,7 +187,7 @@ async def the_step_is_told_the_date_in_its_own_timezone():
 
     async def stream(messages, info):
         told.append(str(info.instructions))
-        yield 'It is 40 euros.'
+        yield Reply('It is 40 euros.').delta()
 
     clock = lambda: datetime(2026, 9, 28, 9, 30, tzinfo=ZoneInfo('America/New_York'))  # noqa: E731
     flow, call, _ = opened(stream, clock=clock)
@@ -207,7 +209,7 @@ async def a_provider_error_never_silences_the_turn():
         said,
     )
 
-    text = (HERE / 'one_agent.yaml').read_text().replace('agents:', 'locale: spanish\nagents:', 1)
+    text = (HERE / 'agent.yaml').read_text().replace('agents:', 'locale: spanish\nagents:', 1)
     spanish = load(text, root=HERE).compile(model=FunctionModel(stream_function=broken))
     call = spanish.open(ClinicState(), services=Backend())
     said, done = await take_turn(call, spanish.nodes, '¿Hola?')

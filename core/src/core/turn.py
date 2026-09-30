@@ -33,11 +33,9 @@ from loguru import logger
 from pydantic_ai import (
     Agent,
     AgentRunResultEvent,
-    FunctionToolResultEvent,
     ModelRetry,
     PartDeltaEvent,
     PartStartEvent,
-    RetryPromptPart,
     RunCancelled,
     TextPart,
     TextPartDelta,
@@ -52,12 +50,12 @@ from pydantic_ai.usage import UsageLimitExceeded
 
 from core.flow import Answered, Flow, Moved
 from core.graph import LocalAction, Node, Restated, route
-from core.history import History, conversation, paired, project
+from core.history import History, paired, project
 from core.locale import ENGLISH
 from core.policies import TurnBudget, pick
 from core.state import CallContext, Checkpoint, Handoff, Question, Spoken, turn_generation
 
-STUMBLE, EXHAUSTED, WITHHELD = ENGLISH.stumble, ENGLISH.exhausted, ENGLISH.withheld
+STUMBLE, EXHAUSTED = ENGLISH.stumble, ENGLISH.exhausted
 """The English fixed lines, by their old names. What a call hears is its own locale's (`CallContext.locale`)."""
 
 
@@ -451,23 +449,6 @@ class Turn:
             action = LocalAction('reconcile', settle)
         elif self._hops_run == 1 and (told := call.unheard_receipt()):
             action = LocalAction('receipt', lambda: _say_again(call, told), answers=False)
-        if node.advance and action is None:
-            task = asyncio.ensure_future(node.advance(call, self.usage, self.limits))
-            barge.attach(task)
-            try:
-                action = await task
-            except asyncio.CancelledError:
-                if not barge.hit:
-                    raise
-                return
-            except UsageLimitExceeded, TimeoutError:
-                raise
-            except Exception as error:
-                logger.exception('advance failed on {}', call.state.agent)
-                yield _Failed(f'{type(error).__name__}: {error}')
-                return
-            finally:
-                barge.detach()
         if self._stale():
             return
         if not retained_before and call.input_retained:
@@ -672,19 +653,9 @@ class Turn:
         layer, and folding them together would let a flaky network buy extra
         attempts at getting a tool call right.
 
-        On a step whose operations speak for themselves (`Node.speaks_for`),
-        a reply's text is held until the reply shows what it calls. Beside one
-        of those operations it is dropped: the operation's read-back or
-        receipt is what the caller hears, once. Beside anything else, or
-        alone, it goes out when the reply is complete: 0.13 s after its first
-        token at the median, 0.21 s at p90, over 121 replies of the baseline.
-
-        A reply that only records fields, and records one a `reads_back` rule
-        names, ends the run there: code reads the operation back (`Node.reads_back`)
-        instead of a second request that would only have asked for it. When
-        the value recorded is the one the caller was read back and heard in
-        full, they said it again as their answer (`Restated`): code says
-        `Locale.restated` and carries the operation out, no second request.
+        A conversation step speaks only through its outputs, never provider
+        text (`Node.model_speech`); an action or end step's agent may answer in
+        words, which go out as they stream.
 
         Messages are retained across cancellation from the SDK's own
         `new_messages()` boundary after teardown, never by slicing at the
@@ -703,8 +674,6 @@ class Turn:
         agent: Agent = node.agent
         step = call.state.agent
         output = None
-        reply: list[str] = []
-        reply_text, reply_tools, recorded = False, [], 0
 
         call.attempt_started()
         caller_turn = call.turn
@@ -742,9 +711,7 @@ class Turn:
             disarm()
             stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
             messages = project(call, request.messages, excluded=excluded)
-            if node.history == 'messages':
-                messages = conversation(call, messages, loaded=node.capabilities)
-            elif isinstance(node.history, History):
+            if isinstance(node.history, History):
                 messages = node.history.select(
                     call,
                     messages,
@@ -838,58 +805,22 @@ class Turn:
                         disarm()
                         if event.index == 0:
                             streamed += 1
-                            reply_text, reply_tools, recorded = False, [], 0
                         call._response = f'{run_id}:{streamed}'
                         match event.part:
                             case TextPart():
                                 call.note_first_output('text')
-                            case ToolCallPart(tool_name=name):
+                            case ToolCallPart():
                                 call.note_first_output('tool')
-                                reply_tools.append(name)
-                                if name in node.speaks_for:
-                                    if reply:
-                                        logger.info('echo dropped beside {}: {!r}', name, ''.join(reply))
-                                    reply.clear()
-                                else:
-                                    for text in _release(call, reply):
-                                        yield TextDelta(text, step)
                     if chunk := _speech(event):
-                        if not node.model_speech:
-                            continue
-                        reply_text = True
-                        text = chunk
-                        if node.speaks_for:
-                            reply.append(text)
-                            continue
-                        for said in _release(call, [text]):
-                            yield TextDelta(said, step)
+                        if node.model_speech:
+                            call.note_model_text(chunk)
+                            call._spoke, call._covered = True, False
+                            yield TextDelta(chunk, step)
                     elif isinstance(event, ToolCallEvent):
-                        for text in _release(call, reply):
-                            yield TextDelta(text, step)
                         self._arm_hold()
                     elif isinstance(event, ToolResultEvent):
                         await self._disarm_hold()
-                        if isinstance(event, FunctionToolResultEvent) and not isinstance(
-                            event.part, RetryPromptPart
-                        ):
-                            recorded += event.part.tool_name == 'collect'
-                            if (
-                                node.reads_back is not None
-                                and event.part.tool_name == 'collect'
-                                and not reply_text
-                                and set(reply_tools) == {'collect'}
-                                and recorded == len(reply_tools)
-                                and (asked := node.reads_back(call)) is not None
-                            ):
-                                if isinstance(asked, Restated):
-                                    logger.info('{} carried out by code after collect', asked.about)
-                                else:
-                                    logger.info('read back {} by code after collect', asked.about)
-                                output = asked
-                                events.cancel()
                     elif isinstance(event, AgentRunResultEvent):
-                        for text in _release(call, reply):
-                            yield TextDelta(text, step)
                         retain(event.result.new_messages())
                         output = event.result.output
         except UsageLimitExceeded, TimeoutError:
@@ -912,9 +843,6 @@ class Turn:
                 else:
                     retain(new_messages)
             barge.detach()
-            if reply and not barge.hit:
-                for text in _release(call, reply):
-                    yield TextDelta(text, step)
             call.close_model_text()
 
         yield RunEnded(step)
@@ -947,17 +875,6 @@ async def remind(call: CallContext) -> None:
     if (asked := call.open_question()) is not None and asked.spoken:
         call.ask(asked)
         await call.speak_now(asked.spoken, origin='ask')
-
-
-def _release(call: CallContext, reply: list[str]) -> list[str]:
-    """Record held model text as said and hand it out, emptying `reply`: the text a reply keeps (`Node.speaks_for`)."""
-    out = [text for text in reply if text]
-    reply.clear()
-    for text in out:
-        call.note_model_text(text)
-        call._spoke = True
-        call._covered = False
-    return out
 
 
 def run_turn(

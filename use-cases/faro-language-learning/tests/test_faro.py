@@ -12,10 +12,8 @@ L01-L16 are the cases the legacy build was checked on; F1-F9 are what the
 public path adds to them: no reader or classifier imported, hostile model
 output refused where it runs, delivery evidence bound to the exact
 question, a lost reply reconciled once, and calls kept apart. F10 and F11
-check what manifest version 2 adds: identify, plan, menu and coach are
-`speech: structured`, so their moves are `reply`, `record` or an operation
-with its `update`; signup and onboarding are prose and assessment and lesson
-rendered, so theirs are `collect`, words and `wait`.
+check structured speech: every step's move is `reply`, `record` or an
+operation with its `update`.
 """
 
 import asyncio
@@ -84,8 +82,7 @@ class Script:
         self.given.append((list(messages), info))
         moves = self.queue(info)
         if not moves:
-            yield 'Vale.'
-            return
+            moves.append(reply('Vale.'))
         kind, *rest = moves.pop(0)
         if kind == 'say':
             yield rest[0]
@@ -102,21 +99,14 @@ SCRIPT = Script()
 FLOW = faro.SPEC.compile(model=SCRIPT.model)
 
 
-def collect(**values: Any) -> tuple[str, str, dict[str, Any]]:
-    return ('call', 'collect', {'values': values})
-
-
 def call(tool: str, **args: Any) -> tuple[str, str, dict[str, Any]]:
     return ('call', tool, args)
 
 
-def say(words: str) -> tuple[str, str]:
-    return ('say', words)
-
-
-def reply(words: str, **update: Any) -> tuple[str, str, dict[str, Any]]:
-    """A structured step's answer, with the caller's update when there is one."""
-    return ('call', 'reply', {'say': words, **({'update': update} if update else {})})
+def reply(words: str, decline: bool = False, **update: Any) -> tuple[str, str, dict[str, Any]]:
+    """A step's answer, with the caller's update when there is one, and `decline` for a no to the read-back."""
+    args: dict[str, Any] = {'say': words, **({'update': update} if update else {})}
+    return ('call', 'reply', {**args, **({'decline': True} if decline else {})})
 
 
 def record(**update: Any) -> tuple[str, str, dict[str, Any]]:
@@ -125,8 +115,8 @@ def record(**update: Any) -> tuple[str, str, dict[str, Any]]:
 
 
 def grade(answer: str, result: str, feedback: str = '') -> tuple[str, str, dict[str, Any]]:
-    """An attempt graded on the rendered assessment or lesson."""
-    return collect(answer=answer, grade=result, feedback=feedback)
+    """An attempt graded on the assessment or lesson: recorded, and code carries out `record_attempt`."""
+    return record(answer=answer, grade=result, feedback=feedback)
 
 
 class Line:
@@ -254,8 +244,8 @@ async def to_assessment(line: Line) -> None:
     """A new English speaker learning Spanish, from the greeting to the first placement task."""
     await line.turn('Yes.', YES)
     await line.turn('Yes.', call('agree_signup'))
-    await line.turn('Ana.', collect(name='Ana'))
-    await line.turn('Spanish, for travel, ten minutes.', collect(learn='ES', purpose='travel', length=10))
+    await line.turn('Ana.', record(name='Ana'))
+    await line.turn('Spanish, for travel, ten minutes.', record(learn='ES', purpose='travel', length=10))
     assert line.call.state.agent == 'assessment', line.call.state.agent
 
 
@@ -272,17 +262,17 @@ async def an_unknown_caller_signs_up_and_agrees_a_plan():
     assert (await line.store.counts())['learners'] == 3, 'confirming a number creates nothing'
     said = await line.turn('Yes, please.', call('agree_signup'))
     assert 'What would you like me to call you?' in said and line.requests == 1, said
-    said = await line.turn('Call me Nico.', collect(name='Nico'))
+    said = await line.turn('Call me Nico.', record(name='Nico'))
     assert 'Nice to meet you, Nico. Which language would you like to learn' in said, said
     assert (await line.store.counts())['learners'] == 4 and line.call.state.agent == 'onboarding'
     said = await line.turn(
-        'French.', collect(learn='French'), say('I only teach English or Spanish. Which would you like?')
+        'French.', record(learn='French'), reply('I only teach English or Spanish. Which would you like?')
     )
     assert line.call.state.facts.learn is None and 'English or Spanish' in said, said
-    said = await line.turn('Spanish.', collect(learn='Spanish'))
+    said = await line.turn('Spanish.', record(learn='Spanish'))
     assert said == curriculum.ONBOARDING['goal']['EN'] and line.requests == 1, said
-    await line.turn('For travel.', collect(purpose='travel'))
-    said = await line.turn('Ten minutes.', collect(length=10))
+    await line.turn('For travel.', record(purpose='travel'))
+    said = await line.turn('Ten minutes.', record(length=10))
     assert line.call.state.agent == 'assessment' and line.call.state.facts.waiting == 'es-intro', said
     assert 'Answer in Spanish. Tell me about yourself and why you want to learn Spanish.' in said, said
     for answer, result in (
@@ -322,7 +312,7 @@ async def declines_conditions_and_revisions_activate_nothing():
     restart()
     line = Line(database(), NEW)
     await line.turn('Yes.', YES)
-    said = await line.turn('No, thanks.', call('decline'), say('No problem, I have not created anything.'))
+    said = await line.turn('No, thanks.', reply('No problem, I have not created anything.', decline=True))
     assert (await line.store.counts())['learners'] == 3 and not line.call.state.facts.signup_agreed, said
 
     line = await at_proposal()
@@ -345,11 +335,11 @@ async def onboarding_resumes_after_a_restart():
     path = database()
     line = Line(path, NEW)
     await line.turn('Sí.', YES)
-    said = await line.turn('¿Podemos hablar en español?', collect(asked_language='español'))
+    said = await line.turn('¿Podemos hablar en español?', record(asked_language='español'))
     assert said == curriculum.signup_offer('ES') and line.call.locale.goodbye == '¡Hasta la próxima!', said
     await line.turn('Sí.', call('agree_signup'))
-    await line.turn('Ana.', collect(name='Ana'))
-    said = await line.turn('Inglés.', collect(learn='inglés'))
+    await line.turn('Ana.', record(name='Ana'))
+    said = await line.turn('Inglés.', record(learn='inglés'))
     assert said == curriculum.ONBOARDING['goal']['ES'], 'a Spanish speaker hears the questions in Spanish'
 
     restart()
@@ -358,7 +348,7 @@ async def onboarding_resumes_after_a_restart():
     said = await line.turn('Sí.', YES)
     assert 'Habíamos empezado' in said and line.call.state.agent == 'onboarding', said
     assert (await line.session()).checkpoint.target == 'EN'
-    said = await line.turn('Para el trabajo, diez minutos.', collect(purpose='work', length=10))
+    said = await line.turn('Para el trabajo, diez minutos.', record(purpose='work', length=10))
     assert 'Responde en inglés. Háblame de ti y de por qué quieres aprender inglés.' in said, said
     await line.turn('I am Ana.', grade('I am Ana.', 'partly'))
 
@@ -698,7 +688,7 @@ async def an_acknowledged_answer_survives_a_killed_process():
 async def each_step_offers_only_its_own_tools():
     """F1: before a phone is confirmed no learning tool exists; a lesson offers no tool that grades, and none that writes.
 
-    A structured step's prompt names no tool it lacks (`collect`, `wait`, `decline` as a tool).
+    No step's prompt names a tool it lacks (`collect`, `wait`, `decline` as a tool).
     """
     restart()
     line = Line(database())
@@ -708,9 +698,9 @@ async def each_step_offers_only_its_own_tools():
     line = Line(database(), LUCIA)
     await line.turn('Sí.', YES)
     await line.turn('Seguimos.', call('continue_lesson'))
-    await line.turn('Hmm.', call('wait'))
+    await line.turn('Hmm.', reply('Inténtalo.'))
     offered = line.script.offered[0]
-    assert offered == {'collect', 'goodbye', 'wait', 'hand_over'}, offered
+    assert offered == {'reply', 'record', 'goodbye', 'hand_over'}, offered
     assert line.script.steps == ['lesson']
     everywhere = {name for node in FLOW.nodes.values() for name in _tools(node)}
     assert not everywhere & {
@@ -721,12 +711,12 @@ async def each_step_offers_only_its_own_tools():
         'remember',
     }, 'what code carries out is never offered to a model'
     for step in faro.SPEC.steps:
-        if getattr(step, 'speech', '') == 'structured':
+        if step.kind == 'conversation':
             prompt = str(faro.SPEC.prompt(step.id))
-            assert not V1_TOOLS.findall(prompt), (step.id, V1_TOOLS.findall(prompt))
+            assert not RETIRED_TOOLS.findall(prompt), (step.id, RETIRED_TOOLS.findall(prompt))
 
 
-V1_TOOLS = re.compile(r'`(?:collect|wait)`|call `decline`')
+RETIRED_TOOLS = re.compile(r'`(?:collect|wait)`|call `decline`')
 """Tools a structured step does not have, named the way the prompts name tools. `decline` is `reply`'s field."""
 
 
@@ -809,7 +799,7 @@ async def a_language_switch_keeps_the_question_answerable():
     line = Line(database(), EMMA)
     await line.turn('Yes.', YES)
     await line.turn("Let's carry on.", call('continue_lesson'))
-    said = await line.turn('¿Podemos hablar en español?', collect(asked_language='ES'))
+    said = await line.turn('¿Podemos hablar en español?', record(asked_language='ES'))
     assert said == curriculum.exercise('ES', 'es-daily-2-1') and line.requests == 1, said
 
 
@@ -821,12 +811,12 @@ async def hostile_model_output_is_refused_where_it_runs():
     await line.turn('Seguimos.', call('continue_lesson'))
     learner = line.call.state.facts.learner_id
     before = await line.store.active_plan(learner)
-    await line.turn('¿Qué significa "two"?', grade('Two coffees, please.', 'correct'), call('wait'))
-    await line.turn('Hmm.', call('record_attempt'), call('wait'))
-    await line.turn('Hmm.', collect(answer='Hmm.', grade='excellent'), call('wait'))
-    await line.turn('Hmm.', collect(learner_id=2), call('wait'))
-    await line.turn('Hmm.', call('hand_over', to='plan', because='x'), call('wait'))
-    await line.turn('Hmm.', call('continue_lesson'), call('wait'))
+    await line.turn('¿Qué significa "two"?', grade('Two coffees, please.', 'correct'), reply('Inténtalo.'))
+    await line.turn('Hmm.', call('record_attempt'), reply('Inténtalo.'))
+    await line.turn('Hmm.', record(answer='Hmm.', grade='excellent'), reply('Inténtalo.'))
+    await line.turn('Hmm.', record(learner_id=2), reply('Inténtalo.'))
+    await line.turn('Hmm.', call('hand_over', to='plan', because='x'), reply('Inténtalo.'))
+    await line.turn('Hmm.', call('continue_lesson'), reply('Inténtalo.'))
     after = await line.store.active_plan(learner)
     assert after == before and line.call.state.agent == 'lesson', 'nothing recorded, nobody moved'
     assert line.call.state.facts.learner_id == learner and not line.call.unresolved()
@@ -875,7 +865,7 @@ async def a_lost_reply_is_reconciled_once():
     with patch.object(line.store, 'record_attempt', committed_then_lost):
         said = await line.turn('Two coffees, please.', grade('Two coffees, please.', 'correct'))
     assert said == SPANISH.unsettled and line.call.unresolved(), said
-    said = await line.turn('¿Hola?', call('wait'))
+    said = await line.turn('¿Hola?', reply('Inténtalo.'))
     plan = await line.store.active_plan(learner)
     assert plan is not None and [a.item_id for a in plan.progress.attempts].count('en-travel-2-2') == 1
     assert not line.call.unresolved() and 'Pide dos bebidas' in said, said
@@ -930,7 +920,7 @@ async def approval_is_this_calls_only():
     restart()
     line = Line(path, NEW)
     await line.turn('Yes.', YES)
-    await line.turn('Call me Nico.', collect(name='Nico'), say('First, shall I create a profile?'))
+    await line.turn('Call me Nico.', record(name='Nico'), reply('First, shall I create a profile?'))
     assert (await line.store.counts())['learners'] == 3 and not line.call.state.facts.signup_agreed
 
 
@@ -978,15 +968,18 @@ async def requests_are_pinned():
 
 
 async def zero_is_a_value_the_state_validates():
-    """`collect` on the prose onboarding: 0 is not dropped as empty; the state's `ge=5` refuses it, and nothing is recorded."""
+    """`record` on onboarding: 0 is not dropped as empty; the state's `ge=5` refuses it in Faro's words, and nothing is recorded."""
     restart()
     line = Line(database(), NEW)
     await line.turn('Yes.', YES)
     await line.turn('Yes.', call('agree_signup'))
-    await line.turn('Ana.', collect(name='Ana'))
-    await line.turn('Zero minutes.', collect(length=0), say('Between five and sixty minutes?'))
+    await line.turn('Ana.', record(name='Ana'))
+    await line.turn('Zero minutes.', record(length=0), reply('Between five and sixty minutes?'))
     assert line.call.state.facts.length is None, line.call.state.facts.length
-    assert 'Nothing was recorded' in line.script.payloads[1].history, 'the refusal went back to the model'
+    history = line.script.payloads[1].history
+    assert 'Nothing was recorded' in history and 'between five and sixty' in history, (
+        'the refusal lost its words'
+    )
 
 
 async def structured_steps_record_and_code_speaks():
@@ -1059,7 +1052,7 @@ async def teaching() -> tuple[Line, list[list[Payload]], list[str], list[list[tu
 async def version_2_keeps_teaching_apart_from_planning():
     """F11: a lesson with help: what each step sees, help, grade and receipt, routing.
 
-    Lesson (rendered, its own turns) is never sent the number read back at
+    Lesson (its own turns) is never sent the number read back at
     the greeting. The coach sees the whole conversation, since the exercise
     it helps with was said on the lesson's turn; its facts hold the
     exercise's id, never the number. Help is the store's record before the
@@ -1092,10 +1085,10 @@ async def version_2_keeps_teaching_apart_from_planning():
     assert plan is not None and plan.progress.attempts[-1].result == 'assisted', 'the store says assisted'
     assert line.call.state.facts.grade == 'correct', "the grade in state is the coach's judgement"
     assert line.call.state.agent == 'lesson', "the receipt's route: back to the lesson for the next exercise"
-    switched = await line.turn('¿Podemos hablar en español?', collect(asked_language='ES'))
+    switched = await line.turn('¿Podemos hablar en español?', record(asked_language='ES'))
     assert (
         switched == curriculum.exercise('ES', 'es-daily-2-2') and line.call.state.facts.explanation == 'ES'
-    ), 'the rendered lesson puts the exercise waiting again, in the new language'
+    ), 'the lesson puts the exercise waiting again, in the new language'
 
     restart()
     line = Line(database(), NEW)

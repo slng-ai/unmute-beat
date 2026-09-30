@@ -15,7 +15,7 @@ are routine saves inside a step that has already been reached, and each
 checks what the store says before it writes.
 
 Grading is the step's agent's: it records the attempt and its grade
-(`collect`), and code carries out `record_attempt` straight after
+(`record`), and code carries out `record_attempt` straight after
 (`carries_out:`). What an attempt counts as is decided here: help before
 the answer, or a miss before it in this session, makes a right answer
 assisted, never independent.

@@ -332,10 +332,9 @@ class Offering:
     def resting(self) -> set[str]:
         """The fields the step's offers rest on: each choice's `after:`, or every field but the choices without one."""
         step = self.decision.step
-        found: set[str] = set()
-        for name in step.choices:
-            found |= set(step.choice_after.get(name, set(step.fields) - set(step.choices)))
-        return found
+        return set[str]().union(
+            *(step.choice_after.get(name, set(step.fields) - set(step.choices)) for name in step.choices)
+        )
 
     async def __call__(self, ctx: RunContext[FlowCall[Any]], update: BaseModel | None) -> dict[str, Any]:
         call, choices = ctx.deps, self.decision.step.choices
@@ -466,21 +465,21 @@ class Structured:
         ]
         if self.silent and decision.patch is not None:
             found.append(ToolOutput(self._record(), name='record'))
-        for operation in self.guarded:
-            found.append(
-                ToolOutput(
-                    decision.taking(
-                        operate(operation),
-                        actions,
-                        update=decision.param(_resting_on(operation), operation.name),
-                    ),
-                    name=operation.name,
-                    description=f"{operation.name}: the first call reads it back to the caller in the application's "
-                    'words. Call it again only when their reply to that read-back is a clear yes: that yes '
-                    'carries it out.',
-                    sequential=True,
-                )
+        found.extend(
+            ToolOutput(
+                decision.taking(
+                    operate(operation),
+                    actions,
+                    update=decision.param(_resting_on(operation), operation.name),
+                ),
+                name=operation.name,
+                description=f"{operation.name}: the first call reads it back to the caller in the application's "
+                'words. Call it again only when their reply to that read-back is a clear yes: that yes '
+                'carries it out.',
+                sequential=True,
             )
+            for operation in self.guarded
+        )
         if hand_over is not None:
             found.append(
                 ToolOutput(

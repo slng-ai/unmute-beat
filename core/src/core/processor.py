@@ -303,9 +303,8 @@ async def reports_playback(wiring: list[FrameProcessor], call: CallContext) -> b
     """
     if call.simulated_playout:
         return True
-    for processor in wiring:
-        if isinstance(processor, WebRTCPlayout):
-            return await processor.capability()
+    if (browser := next((p for p in wiring if isinstance(p, WebRTCPlayout)), None)) is not None:
+        return await browser.capability()
     return call.transport == 'twilio'
 
 
@@ -920,9 +919,12 @@ class PydanticAgentProcessor(FrameProcessor):
                                     'turn_first_text_out',
                                     round(min(s.at for s in spoken) - turn_started, 3),
                                 )
-                            if useful := [s.at for s in spoken if s.text and s.origin != 'tool_filler']:
+                            useful = min(
+                                (s.at for s in spoken if s.text and s.origin != 'tool_filler'), default=None
+                            )
+                            if useful is not None:
                                 span.set_attribute(
-                                    'turn_first_useful_text_out', round(min(useful) - turn_started, 3)
+                                    'turn_first_useful_text_out', round(useful - turn_started, 3)
                                 )
                             if self._call.unheard_receipt(repeats=sys.maxsize):
                                 span.set_attribute('receipt_unheard', True)

@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date
+from itertools import batched
 from typing import Annotated, Any
 
 import phonenumbers
@@ -221,7 +222,7 @@ class Phone(str):
         mobile.
         """
         text = (raw or '').strip()
-        digits = text[1:] if text.startswith('+') else text
+        digits = text.removeprefix('+')
         if not (text.startswith('+') and digits.isascii() and digits.isdigit() and 8 <= len(digits) <= 15):
             return None
         if any(word.startswith(digits) for word in _WITHHELD):
@@ -273,14 +274,14 @@ def _digits_after_code(value: str) -> str:
 
 def _heard(value: str) -> str:
     """The digits as heard, the country code apart and the rest in threes: "+34 671 273 454 4"."""
-    digits = ''.join(c for c in value if c.isdigit())
+    digits = ''.join(filter(str.isdigit, value))
     try:
         code = str(phonenumbers.parse(value, None).country_code)
     except phonenumbers.NumberParseException:
         code = ''
     code = code if code and digits.startswith(code) else ''
     rest = digits[len(code) :]
-    return '+' + ' '.join(filter(None, [code, *(rest[i : i + 3] for i in range(0, len(rest), 3))]))
+    return '+' + ' '.join(filter(None, [code, *map(''.join, batched(rest, 3, strict=False))]))
 
 
 def grouped(value: str) -> str:

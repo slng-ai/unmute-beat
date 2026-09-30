@@ -1,10 +1,10 @@
 # The clinic desk with check-in first (`requires`), a nurse it may consult, and a refund policy loaded on demand.
-version: 1
+version: 2
 id: clinic-consult
 state: consult.py:DeskState
 identity: patient
 services: clinic.py:Backend
-context: {history: messages}
+context: {facts: all, history: {scope: conversation}}
 agents:
   receptionist:
     prompt: prompts/receptionist.md
@@ -12,8 +12,7 @@ operations:
   book: actions.py:Book
   check_in: consult.py:CheckIn
 steps:
-  - id: desk
-    kind: conversation
+  desk:
     agent: receptionist
     prompt: prompts/desk.md
     requires: [checked_in]
@@ -21,20 +20,18 @@ steps:
     fields: [slot, note]
     choices: {slot: clinic.py:free_times}
     operations: [book]
-    context: {history: messages, facts: [checked_in, slot]}
+    context: {facts: [checked_in, slot, note]}
     capabilities: [consult.py:refunds]
     consults:
       - {to: nurse, purpose: 'a medical question about the appointment'}
-  - id: front
-    kind: conversation
+  front:
     agent: receptionist
     prompt: prompts/front.md
     fields: [patient]
     operations: [check_in]
     consults:
       - {to: nurse, purpose: 'a medical question'}
-  - id: nurse
-    kind: conversation
+  nurse:
     agent: receptionist
     prompt: prompts/nurse.md
     context: none

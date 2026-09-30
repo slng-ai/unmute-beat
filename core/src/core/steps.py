@@ -447,6 +447,17 @@ class FlowCall[S: BaseModel](CallContext):
         pick refuses the whole update, so nothing is recorded and the refused
         names are returned.
         """
+        unoffered, updates, stale = self._planned(offered, fields)
+        if atomic and unoffered:
+            return unoffered
+        self.update(**updates)
+        self._offers.take(*stale)
+        return unoffered
+
+    def _planned(
+        self, offered: Collection[str], fields: Mapping[str, Any]
+    ) -> tuple[list[str], dict[str, Any], set[str]]:
+        """What `collect` would do, with nothing committed: the refused picks, the whole update, the offers it takes."""
         if refused := set(fields) - self._collectible:
             raise ValueError(f'not collected from the caller: {", ".join(sorted(refused))}')
         facts = self.state.facts
@@ -471,8 +482,6 @@ class FlowCall[S: BaseModel](CallContext):
             stale |= found
         late = [name for name in offered if name in stale and kept.get(name, default(name)) != default(name)]
         unoffered += late
-        if atomic and unoffered:
-            return unoffered
         kept = {name: value for name, value in kept.items() if name not in late}
         picks = {name: default(name) for name in stale if name not in kept}
         changed |= {name for name, value in picks.items() if getattr(facts, name) != value}
@@ -481,9 +490,7 @@ class FlowCall[S: BaseModel](CallContext):
             for name, sources in (self._derived | self._assigned_by).items()
             if sources & changed and name not in kept
         }
-        self.update(**kept, **picks, **resets)
-        self._offers.take(*stale)
-        return unoffered
+        return unoffered, kept | picks | resets, stale
 
 
 @dataclass(frozen=True)
@@ -1624,6 +1631,22 @@ class Options(BaseModel):
     """
 
 
+async def _options(choose: Callable[[Any, Any], Any], services: Any, facts: BaseModel) -> Options:
+    """One choice function's answer for these facts, as `Options`: async as it is, plain in a worker thread."""
+    if inspect.iscoroutinefunction(choose):
+        answer = await choose(services, facts)
+    else:
+        answer = await _result(await asyncio.to_thread(choose, services, facts))
+    if isinstance(answer, Mapping):
+        return Options(options=dict(answer))
+    return Options(
+        options=dict(answer.options),
+        note=getattr(answer, 'note', ''),
+        say=getattr(answer, 'say', ''),
+        pick=getattr(answer, 'pick', ''),
+    )
+
+
 async def _offer(
     call: FlowCall[Any],
     choices: Mapping[str, Callable[[Any, Any], Any]],
@@ -1655,11 +1678,8 @@ async def _offer(
     found: dict[str, Options] = {}
     for name, choose in choices.items():
         try:
-            if inspect.iscoroutinefunction(choose):
-                answer = await choose(call.services, call.state.facts)
-            else:
-                answer = await _result(await asyncio.to_thread(choose, call.services, call.state.facts))
-            if rendered and not hasattr(answer, 'say'):
+            found[name] = await _options(choose, call.services, call.state.facts)
+            if rendered and not found[name].say:
                 raise TypeError(
                     f'the choice function for {name} returned no words to say, on a rendered step'
                 )
@@ -1668,16 +1688,6 @@ async def _offer(
             return {
                 'unavailable': f'The options could not be looked up just now ({type(error).__name__}). Nothing is offered.'
             }
-        found[name] = (
-            Options(options=dict(answer))
-            if isinstance(answer, Mapping)
-            else Options(
-                options=dict(answer.options),
-                note=getattr(answer, 'note', ''),
-                say=getattr(answer, 'say', ''),
-                pick=getattr(answer, 'pick', ''),
-            )
-        )
     if call._version != version or call._generation != generation or call.state.agent != agent:
         return {'stale': 'The request changed while these were looked up. Nothing is offered; look again.'}
     result: dict[str, Any] = {}
@@ -2900,3 +2910,57 @@ class StepFlow:
         return unoffered + call.collect(
             offered, atomic=atomic, **updates, **self._resting_on(changed, set(updates))
         )
+
+    async def record_update(
+        self,
+        call: FlowCall[Any],
+        updates: Mapping[str, Any],
+        choices: Mapping[str, Callable[[Any, Any], Any]],
+    ) -> list[str]:
+        """A structured step's update, whole or not at all: each pick counts on the offer for the state it ends in.
+
+        What the caller asked for and what they picked often come in one
+        reply: "access, and unlock my account". The pick rests on what was
+        asked for, so the update takes the old offer away and the pick came
+        from an offer that no longer stands (session 4g, trace 28723e6b: a
+        time and its slot together, the slot refused, three requests). So a
+        pick refused against the offers standing now is checked again: each
+        of those choices is asked of its own function for the state the rest
+        of the update ends in, in the step's order, so a pick another pick
+        rests on counts first (a ticket, then a category, then a resolution).
+        Nothing is committed until every pick is on its new offer; then the
+        update, its resets and the new offers go in together. A stale id, one
+        offered to another call, one nobody offered, and one wrong for the new
+        request are still refused, and so is the whole update. Returns the
+        refused picks. Raises `ValidationError` for a candidate that is not a
+        valid state, with nothing changed.
+        """
+        refused = self.record(call, updates, choices, atomic=True)
+        if not refused:
+            return []
+        rest = {name: value for name, value in updates.items() if name not in refused}
+        unoffered, planned, stale = call._planned(choices, rest)
+        if unoffered:
+            return refused
+        version, generation = call._version, call._generation
+        facts = call.validated(call.state.facts.model_dump() | deepcopy(planned))
+        made: dict[str, Options] = {}
+        for name, choose in choices.items():
+            if name not in refused:
+                continue
+            try:
+                made[name] = await _options(choose, call.services, facts)
+            except Exception:
+                logger.exception('choice function for {} failed', name)
+                return refused
+            if str(updates[name]) not in made[name].options:
+                return refused
+            planned[name] = updates[name]
+            facts = call.validated(facts.model_dump() | {name: deepcopy(updates[name])})
+        if call._version != version or call._generation != generation:
+            return refused
+        call.update(**planned)
+        call._offers.take(*stale)
+        for name, options in made.items():
+            call._offers.put(name, options.options, options.say, 0, call.state.agent)
+        return []

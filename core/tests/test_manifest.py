@@ -1,19 +1,16 @@
-"""Run: uv run python -m tests.test_v2
+"""Run: uv run python -m tests.test_manifest
 
-Manifest version 2 on the clinic: steps keyed by id, compiled to the same
-steps table and runtime as version 1 (`core.flowspec.FlowSpec._normalized`).
+The manifest on the clinic: steps keyed by id (`core.flowspec.FlowSpec._normalized`).
 Asserts, no pytest.
 
 * every refusal names the step it is about: a key given twice, an id that
-  is not its key, the other version's form, an unknown version or field, a
-  path selector, a field the step may change but cannot see, a persona's own
-  output schema, a receipt field made writable, a prompt reaching past the view;
-* the defaults are short and an explicit key wins: a conversation, structured,
-  no facts and the step's own history; `rendered`, `prose`, `action`, `end`
-  and `context: none` kept; a step with no agent speaks in the root `voice`;
+  is not its key, an unknown version or field, a path selector, a field the
+  step may change but cannot see, a persona's own output schema, a receipt
+  field made writable, a prompt reaching past the view;
+* the defaults are short and an explicit key wins: a conversation, no facts
+  and the step's own history; `action`, `end` and `context: none` kept; a
+  step with no agent speaks in the root `voice`;
 * a step's context replaces the flow's member by member;
-* each version 2 twin is its version 1 source: the same spec, the same legal
-  moves, and, for `structured.v2.yaml`, the same requests byte for byte;
 * `context: none` still sends the caller's words, the step's own tool
   exchange this turn and its own pending question.
 """
@@ -24,11 +21,11 @@ import json
 import core
 from core.flowspec import ContextSpec
 from core.history import History
-from tests.clinic_flow.consult import CheckedIn
 from tests.clinic_flow.structured import Clinic, VisitState
+from tests.script import Call, Reply
 from tests.test_context import HERE, refused
 from tests.test_public import CLOCK
-from tests.test_structured import Script, reply, turn
+from tests.test_structured import Script, turn
 
 TINY = """\
 version: 2
@@ -53,7 +50,6 @@ steps:
     context: none
   front:
     id: front
-    speech: prose
     prompt: prompts/check_in.md
     exits: [done]
   done: {kind: end, outcome: completed, say: Goodbye.}
@@ -63,7 +59,7 @@ steps:
 
 def refusals_name_their_step():
     """Every refusal is found before any model runs, and says which step and key it is about."""
-    base = (HERE / 'structured.v2.yaml').read_text()
+    base = (HERE / 'structured.yaml').read_text()
     for text, expected in (
         (base.replace('  front:\n', '  front:\n    prompt: prompts/visit.md\n'), "'prompt' is given twice"),
         (base + 'id: again\n', "'id' is given twice"),
@@ -72,12 +68,7 @@ def refusals_name_their_step():
             "'function' is given",
         ),
         (base.replace('  nurse:\n', '  nurse:\n    id: doctor\n'), "step 'nurse': its id 'doctor' differs"),
-        (
-            (HERE / 'structured.yaml').read_text().replace('version: 1', 'version: 2'),
-            'version 2 keys its steps',
-        ),
-        (base.replace('version: 2', 'version: 1'), 'version 1 lists its steps'),
-        (base.replace('version: 2', 'version: 3'), 'Input should be 1 or 2'),
+        (base.replace('version: 2', 'version: 3'), 'Input should be'),
         (base.replace('  nurse:\n', '  nurse:\n    colour: red\n'), "step 'nurse': colour: Extra inputs"),
         (base.replace('  nurse:\n', '  nurse:\n    kind: chat\n'), "step 'nurse': Input tag 'chat'"),
         (
@@ -117,13 +108,13 @@ def refusals_name_their_step():
 
 
 def defaults_are_short_and_explicit_keys_win():
-    """A step is a structured conversation unless it says otherwise; the flow's context is no facts, own history."""
+    """A step is a conversation unless it says otherwise; the flow's context is no facts, own history."""
     spec = core.flowspec.load(TINY, root=HERE)
-    assert [(s.id, s.kind, getattr(s, 'speech', '')) for s in spec.steps] == [
-        ('desk', 'conversation', 'structured'),
-        ('confirm', 'conversation', 'structured'),
-        ('front', 'conversation', 'prose'),
-        ('done', 'end', ''),
+    assert [(s.id, s.kind) for s in spec.steps] == [
+        ('desk', 'conversation'),
+        ('confirm', 'conversation'),
+        ('front', 'conversation'),
+        ('done', 'end'),
     ], spec.steps
     assert spec.context == ContextSpec(history=History(), facts='none'), spec.context
     assert History() == History(scope='node', turns=None), 'every turn of its own'
@@ -134,20 +125,10 @@ def defaults_are_short_and_explicit_keys_win():
     )
     assert desk.history == History() and front.history == History() and confirm.history == 'none'
     assert str(spec.prompt('front')).startswith('You answer the clinic'), 'no agent: the root voice first'
-    for context in ('context: {history: messages}\n', 'context: none\n'):
-        plain = core.flowspec.load(TINY.replace('operations:\n', context + 'operations:\n', 1), root=HERE)
-        nodes = plain.compile(model=Script().model).nodes
-        assert all(nodes[name].scope is not None for name in ('desk', 'confirm', 'front')), (
-            'version 2 is scoped whatever history it names: a history string is not a version 1 context'
-        )
-    rendered = core.flowspec.load(
-        TINY.replace(
-            '    speech: prose\n', '    speech: rendered\n    fields: [note]\n    context: {facts: [note]}\n'
-        ),
-        root=HERE,
-    )
-    assert next(s for s in rendered.steps if s.id == 'front').speech == 'rendered', (
-        'an explicit speech is kept'
+    plain = core.flowspec.load(TINY.replace('operations:\n', 'context: none\noperations:\n', 1), root=HERE)
+    nodes = plain.compile(model=Script().model).nodes
+    assert all(nodes[name].scope is not None for name in ('desk', 'confirm', 'front')), (
+        'every conversation step is scoped, even with no context at all'
     )
     code = core.flowspec.load(
         TINY.replace(
@@ -166,7 +147,7 @@ def a_steps_context_replaces_the_flows_member_by_member():
     )
     text = text.replace('    context: {facts: [service, slot]}\n', '')
     text = text.replace('    fields: [service, slot]\n', '    fields: [service]\n')
-    text = text.replace('    speech: prose\n', '    speech: prose\n    context: {history: {scope: node}}\n')
+    text = text.replace('    id: front\n', '    id: front\n    context: {history: {scope: node}}\n')
     text = text.replace('    context: none\n', '    context: {facts: []}\n')
     nodes = core.flowspec.load(text, root=HERE).compile(model=Script().model).nodes
     assert nodes['desk'].scope.facts == ('service',), 'absent: the flow facts'
@@ -177,48 +158,6 @@ def a_steps_context_replaces_the_flows_member_by_member():
     assert nodes['front'].scope.facts == ('service',) and nodes['front'].history == History(), (
         'a history replaces the flow history as a unit: its window is not inherited'
     )
-
-
-def each_twin_is_its_source():
-    """Normalized, a version 2 twin is its version 1 file: the spec, the legal moves and the requests."""
-    for v1, v2 in (('structured.yaml', 'structured.v2.yaml'), ('scoped.yaml', 'scoped.v2.yaml')):
-        one, two = core.load(HERE / v1), core.load(HERE / v2)
-        first, second = one.model_dump(exclude={'version'}), two.model_dump(exclude={'version'})
-        if v1 == 'scoped.yaml':
-            assert first['context']['facts'] == ['slot'] and second['context']['facts'] == ['slot', 'note'], (
-                'version 2 shows desk the note it may change; version 1 let it change it unseen'
-            )
-            first['context']['facts'] = second['context']['facts']
-        assert first == second, v2
-        script = Script()
-        moves = [spec.compile(model=script.model).nodes.flow.moves for spec in (one, two)]
-        assert moves[0] == moves[1], v2
-    sent = [asyncio.run(requests_on(manifest)) for manifest in ('structured.yaml', 'structured.v2.yaml')]
-    assert len(sent[0]) == 3 and sent[0] == sent[1], 'the same requests, byte for byte'
-
-
-async def requests_on(manifest: str) -> list[dict]:
-    """A local answer, then a read with its update and the answer: every request, pinned."""
-    script = Script()
-    flow = core.load(HERE / manifest).compile(model=script.model)
-    call = flow.open(
-        VisitState(patient='P-1234', checked_in=CheckedIn(patient='P-1234')),
-        services=Clinic(),
-        clock=lambda: CLOCK,
-    )
-    call.commit(agent='desk')
-    await turn(
-        flow, call, script, 'I come in a wheelchair.', reply('We will have the ramp ready.', wheelchair=True)
-    )
-    await turn(
-        flow,
-        call,
-        script,
-        'A cleaning. What does it cost?',
-        ('call', 'quote', {'update': {'service': 'cleaning'}}),
-        reply('Forty euros.'),
-    )
-    return [payload.pinned() for payload in script.payloads]
 
 
 def no_context_keeps_the_turn_and_its_own_question():
@@ -233,17 +172,15 @@ def no_context_keeps_the_turn_and_its_own_question():
             call,
             script,
             'A cleaning at ten, please.',
-            (
-                'call',
-                'hand_over',
-                {'to': 'confirm', 'because': 'book it', 'update': {'service': 'cleaning', 'slot': '1000'}},
+            Call(
+                'hand_over', to='confirm', because='book it', update={'service': 'cleaning', 'slot': '1000'}
             ),
         )
     )
     assert call.state.agent == 'confirm' and said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', said
     before = len(script.payloads)
     said, done = asyncio.run(
-        turn(flow, call, script, 'How much is it?', ('call', 'quote', {}), reply('Forty euros.'))
+        turn(flow, call, script, 'How much is it?', Call('quote'), Reply('Forty euros.'))
     )
     assert said == ['Forty euros.'] and done.requests == 2 and clinic.quotes == ['cleaning'], (said, done)
     first, second = script.payloads[before:]
@@ -265,6 +202,5 @@ if __name__ == '__main__':
     refusals_name_their_step()
     defaults_are_short_and_explicit_keys_win()
     a_steps_context_replaces_the_flows_member_by_member()
-    each_twin_is_its_source()
     no_context_keeps_the_turn_and_its_own_question()
-    print('v2 ok: refusals by step, short defaults, member-by-member context, twins equal, context none')
+    print('manifest ok: refusals by step, short defaults, member-by-member context, context none')

@@ -13,9 +13,6 @@
 * `Agent.from_spec` with `deps_type=FlowCall[S]` builds a step's agent from
   an `AgentSpec`, and the existing graph driver (`core.flow`, a
   pydantic-graph `GraphBuilder`) runs it: session 3's composition.
-* The collect tool's schema is the state's own: an enum and a pattern reach
-  the model as the runtime will enforce them.
-
 * Each step's agent carries core's hooks on one `Hooks`, every hook on its
   own event: the SDK dispatches each capability separately, so four cost
   four times the dispatch of one, for the same handlers.
@@ -37,7 +34,7 @@ import core
 from core.graph import Node, model_clients
 from core.steps import FlowCall, FlowState
 from core.turn import take_turn
-from tests.test_public import Script, opened, turn
+from tests.script import Script
 
 
 class Unverified(BaseModel):
@@ -142,27 +139,6 @@ async def an_agent_spec_runs_on_the_existing_graph():
     raise AssertionError('a spec naming no field of the state was accepted')
 
 
-async def the_collect_schema_is_the_states_own():
-    schemas = []
-    script = Script()
-    original = script.agent
-
-    async def spy(messages, info: AgentInfo):
-        schemas.extend(t.parameters_json_schema for t in info.output_tools if t.name == 'collect')
-        async for part in original(messages, info):
-            yield part
-
-    script.model = FunctionModel(script.reading, stream_function=spy)
-    flow, call, _ = opened(script)
-    await turn(flow, call, script, 'P-1234.', patient='P-1234')
-    await core.text_turn(flow, call, 'Ten.')
-    assert schemas, 'the collect tool was never offered'
-    text = str(schemas)
-    assert "'enum': ['0900', '1000']" in text, text
-    assert "'pattern': '^P-\\\\d{4}$'" in text, text
-    assert 'reference' not in text, 'a field no collect step names was offered to the model'
-
-
 async def a_warm_up_ends_before_its_client_closes():
     """Session 4e: `model_clients` cancels a warm-up still running and waits for it before the client closes.
 
@@ -221,11 +197,8 @@ async def main() -> None:
     the_model_cannot_write_a_verified_identity()
     prompts_see_the_state_and_nothing_else()
     await an_agent_spec_runs_on_the_existing_graph()
-    await the_collect_schema_is_the_states_own()
     every_step_has_one_hooks()
-    print(
-        'sdk ok: whole candidates, owned fields, typed prompts, AgentSpec on the graph, state-derived schemas'
-    )
+    print('sdk ok: whole candidates, owned fields, typed prompts, AgentSpec on the graph, one Hooks per step')
 
 
 if __name__ == '__main__':

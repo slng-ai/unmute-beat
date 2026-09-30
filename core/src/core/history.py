@@ -114,7 +114,15 @@ class Payload:
 
 
 def paired(messages: list[ModelMessage]) -> list[ModelMessage]:
-    """Keep complete tool exchanges; never send an orphan left by cancellation."""
+    """Keep complete tool exchanges; never send an orphan left by cancellation.
+
+    Two requests in a row become one, their metadata kept, the later's
+    winning. A structured run ends on its output's return request, and the
+    next turn's caller words follow it: Pydantic AI merges the two before a
+    request and drops the metadata, so every earlier turn lost its
+    `caller_turn` and counted as the current one (a `turns:` window sent
+    everything).
+    """
     calls = {p.tool_call_id for m in messages for p in m.parts if isinstance(p, ToolCallPart)}
     results = {
         p.tool_call_id
@@ -133,7 +141,18 @@ def paired(messages: list[ModelMessage]) -> list[ModelMessage]:
             or p.tool_call_id in complete
         ]
         message = replace(message, parts=parts)
-        if message.parts:
+        if not message.parts:
+            continue
+        last = projected[-1] if projected else None
+        if isinstance(message, ModelRequest) and isinstance(last, ModelRequest):
+            message = replace(
+                message,
+                parts=[*last.parts, *message.parts],
+                instructions=message.instructions or last.instructions,
+                metadata=(last.metadata or {}) | (message.metadata or {}) or None,
+            )
+            projected[-1] = message
+        else:
             projected.append(message)
     return projected
 
@@ -181,10 +200,11 @@ def project(
         turn = meta.get('caller_turn')
         if turn is not None and isinstance(message, ModelRequest):
             sent = callers.setdefault(turn, [])
+            before = list(sent)
             kept = []
             for part in message.parts:
                 if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                    if part.content in sent or (sent and part.content == ' '.join(sent)):
+                    if part.content in before or (before and part.content == ' '.join(before)):
                         continue
                     sent.append(part.content)
                 kept.append(part)

@@ -16,13 +16,9 @@ Asserts, no pytest.
 """
 
 import asyncio
-import json
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError, create_model
-from pydantic_ai.messages import ModelResponse
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 from core.flowspec import Registry
@@ -31,49 +27,19 @@ from core.steps import _args
 from tests.clinic_flow import actions
 from tests.clinic_flow.broken_actions import Yes
 from tests.clinic_flow.clinic import Backend, ClinicState, Contact
+from tests.script import Call, Reply, Script, turn
 
 HERE = Path(__file__).parent / 'clinic_flow'
 
 
-class Script:
-    """Each step agent's request takes the next move: `('collect', values)`, `('call', tool, args)` or `('say', words)`."""
-
-    def __init__(self) -> None:
-        self.moves: list[tuple[Any, ...]] = []
-        self.agent_requests = 0
-        self.model = FunctionModel(self.reading, stream_function=self.agent)
-
-    def reading(self, messages: Any, info: AgentInfo) -> ModelResponse:
-        raise AssertionError('a separate reading was requested; only step agents may run')
-
-    async def agent(self, messages: Any, info: AgentInfo):
-        self.agent_requests += 1
-        if not self.moves:
-            yield 'Sorry, could you say that again?'
-            return
-        kind, *rest = self.moves.pop(0)
-        if kind == 'collect':
-            yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': rest[0]}))}
-        elif kind == 'call':
-            yield {0: DeltaToolCall(name=rest[0], json_args=json.dumps(rest[1]))}
-        else:
-            yield rest[0]
-
-
 def opened(script: Script, backend: Backend | None = None) -> tuple[core.StepFlow, core.FlowCall]:
     flow = core.load(HERE / 'classes.yaml').compile(model=script.model)
-    return flow, flow.open(ClinicState(), services=backend if backend is not None else Backend())
+    script.call = flow.open(ClinicState(), services=backend if backend is not None else Backend())
+    return flow, script.call
 
 
-async def turn(flow, call, script: Script, words: str, *moves: tuple[Any, ...], heard: bool = True):
-    script.moves = list(moves)
-    reply = await core.text_turn(flow, call, words)
-    if heard:
-        call.acknowledge(*(segment.id for segment in reply.segments))
-    return [segment.text for segment in reply.segments]
-
-
-FILL = (('call', 'options', {}), ('collect', {'patient': 'P-1234', 'slot': '1000'}), ('call', 'book', {}))
+FILL = (Call('options', update={'patient': 'P-1234'}), Call('book', update={'slot': '1000'}))
+"""The patient recorded as the times are offered, then the pick read back: two requests."""
 
 
 async def a_heard_yes_books_once():
@@ -82,7 +48,7 @@ async def a_heard_yes_books_once():
         flow, call = opened(script)
         said = await turn(flow, call, script, 'P-1234, Tuesday at ten.', *FILL, heard=heard)
         assert said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', said
-        said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+        said = await turn(flow, call, script, 'Yes.', Call('book'))
         if not heard:
             assert call.services.bookings == {}, 'a yes to a read-back nobody heard booked'
             continue
@@ -99,7 +65,7 @@ async def a_rejection_is_a_terminal_no():
     backend.full = True
     flow, call = opened(script, backend)
     await turn(flow, call, script, 'P-1234, ten.', *FILL)
-    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}), ('say', 'That time has gone, sorry.'))
+    said = await turn(flow, call, script, 'Yes.', Call('book'), Reply('That time has gone, sorry.'))
     assert 'Booked for' not in ' '.join(said) and call.state.facts.reference == '', said
     [intent] = call.intents
     assert intent.status == 'rejected', intent
@@ -113,9 +79,9 @@ async def an_unknown_outcome_is_reconciled_by_the_class():
     backend.failing = True
     flow, call = opened(script, backend)
     await turn(flow, call, script, 'P-1234, ten.', *FILL)
-    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}), ('say', 'Let me see.'))
+    said = await turn(flow, call, script, 'Yes.', Call('book'), Reply('Let me see.'))
     assert "couldn't confirm" in ' '.join(said) and backend.calls == 1, said
-    said = await turn(flow, call, script, 'Did it work?', ('say', 'One moment.'))
+    said = await turn(flow, call, script, 'Did it work?', Reply('One moment.'))
     assert backend.calls == 1, 'reconciled by asking, never booked a second time'
     assert call.state.facts.reference == 'CL001' and 'Booked for' in ' '.join(said), said
 

@@ -1,9 +1,7 @@
 """Importing core and checking a flow touches nothing outside it: no `.env`, no Pipecat, no Langfuse, no client.
 
 Each check runs in a fresh interpreter with the model and tracing keys
-removed, so what it sees is what an application importing `core` gets. The
-installed-wheel version of the same proof, in a project outside the
-checkout, is `docs/research/reusable-core/session-2/package-proof.sh`.
+removed, so what it sees is what an application importing `core` gets.
 """
 
 import os

@@ -1,11 +1,11 @@
 """The ordinary authoring contract, end to end, on the clinic: a manifest, models, prompts and functions, nothing else.
 
-The clinic (`tests/clinic_flow`) is written three ways from one `clinic.py`:
-a controlled flow (`agent.yaml`), one conversational agent
-(`one_agent.yaml`) and a front desk handing booking to a specialist
-(`handoff.yaml`). Each check drives the public boundary (`core.load`,
-`compile`, `open`, `text_turn`, `acknowledge`) with a scripted model where a
-provider would be, and reads the backend, the receipts and the evidence.
+The clinic (`tests/clinic_flow`) is written two ways from one `clinic.py`:
+one conversational agent (`agent.yaml`) and a front desk handing booking to
+a specialist (`handoff.yaml`). Each check drives the public boundary
+(`core.load`, `compile`, `open`, `text_turn`, `acknowledge`) with a scripted
+model where a provider would be (`tests.script`), and reads the backend,
+the receipts and the evidence.
 
 What is checked, against session 3's acceptance list:
 
@@ -15,7 +15,7 @@ What is checked, against session 3's acceptance list:
 * only an offered time can be picked;
 * a no, a change, a failed receipt or an unknown outcome completes nothing and
   claims nothing; an unknown outcome is settled, never repeated;
-* taking the booking back runs the real cancel, with its own read-back and receipt;
+* cancelling the booking runs the real cancel, with its own read-back and receipt;
 * ordinary conversation pays for no reading;
 * the manifest's entry, services factory, locale, version and persona spec
   reach the session;
@@ -24,69 +24,36 @@ What is checked, against session 3's acceptance list:
 
 import ast
 import asyncio
-import json
 from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
-from pydantic_ai.messages import ModelResponse
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 import core
 from core.flowspec import load as load_text
 from core.locale import ENGLISH
 from tests.clinic_flow import clinic
 from tests.clinic_flow.clinic import Backend, ClinicState
+from tests.script import Call, Move, Reply, Script
 
 HERE = Path(__file__).parent / 'clinic_flow'
-PATTERNS = ('agent.yaml', 'one_agent.yaml', 'handoff.yaml')
-
-
-class Script:
-    """The scripted provider: each step agent's request takes the next move. Nothing else may be asked.
-
-    A move is `('collect', values)`, `('call', tool, args)` or `('say', words)`.
-    A request with no move left says it did not catch that, as a model would;
-    at a read-back it answers through `answer`, as the step requires. A
-    non-streamed request would be a separate reading of the reply, which the
-    node-agent core never sends, so it fails the test (P1).
-    """
-
-    def __init__(self) -> None:
-        self.moves: list[tuple[Any, ...]] = []
-        self.agent_requests = 0
-        self.model = FunctionModel(self.reading, stream_function=self.agent)
-
-    def reading(self, messages: Any, info: AgentInfo) -> ModelResponse:
-        raise AssertionError('a separate reading was requested; only step agents may run')
-
-    async def agent(self, messages: Any, info: AgentInfo):
-        self.agent_requests += 1
-        if not self.moves:
-            if any(tool.name == 'answer' for tool in info.output_tools):
-                yield {0: DeltaToolCall(name='answer', json_args=json.dumps({'words': 'Sorry?'}))}
-                return
-            yield 'Sorry, could you say that again?'
-            return
-        kind, *rest = self.moves.pop(0)
-        if kind == 'collect':
-            yield {0: DeltaToolCall(name='collect', json_args=json.dumps({'values': rest[0]}))}
-        elif kind == 'call':
-            yield {0: DeltaToolCall(name=rest[0], json_args=json.dumps(rest[1]))}
-        else:
-            yield rest[0]
+PATTERNS = ('agent.yaml', 'handoff.yaml')
+FILL = (Call('options', update={'patient': 'P-1234'}), Call('book', update={'slot': '1000'}))
+"""The patient recorded as the times are offered, then the pick read back: two requests."""
+READ_BACK = 'Shall I book Tuesday at 10:00 AM for P-1234?'
 
 
 def opened(
-    manifest: str, script: Script, backend: Backend | None = None
+    manifest: str, script: Script, backend: Backend | None = None, *, text: str = ''
 ) -> tuple[core.StepFlow, core.FlowCall]:
-    flow = core.load(HERE / manifest).compile(model=script.model)
-    return flow, flow.open(ClinicState(), services=backend if backend is not None else Backend())
+    """A call on this manifest, or on `text` written as a variant of it."""
+    spec = load_text(text, root=HERE) if text else core.load(HERE / manifest)
+    flow = spec.compile(model=script.model)
+    script.call = flow.open(ClinicState(), services=backend if backend is not None else Backend())
+    return flow, script.call
 
 
-async def turn(
-    flow, call, script: Script, words: str, *moves: tuple[Any, ...], heard: bool = True
-) -> core.TextReply:
+async def turn(flow, call, script: Script, words: str, *moves: Move, heard: bool = True) -> core.TextReply:
     """One caller turn; the reader gets every segment of the reply unless `heard` is False."""
     script.moves = list(moves)
     reply = await core.text_turn(flow, call, words)
@@ -114,12 +81,12 @@ def book_of(flow: core.StepFlow) -> Any:
 def definitions_fail_before_any_model():
     """Each broken manifest is refused by `problems()` or `load`, before any agent or provider exists."""
     base = (HERE / 'agent.yaml').read_text()
+    desk = '    agent: receptionist\n    prompt: prompts/desk.md\n'
 
     def problems(text: str) -> list[str]:
         return load_text(text, root=HERE).problems()
 
     for broken, expected in (
-        (base.replace('id: slot\n', 'id: patient\n', 1), "step id 'patient' is used more than once"),
         (
             base.replace('function: clinic.py:book', 'function: nowhere.py:book'),
             "'nowhere.py' does not exist",
@@ -139,42 +106,28 @@ def definitions_fail_before_any_model():
         (base.replace('assign: {reference: reference}', 'assign: {reference: code}'), "'code', which Booked"),
         (base.replace('succeeds: {status: booked}', 'succeeds: {state: booked}'), "succeeds on 'state'"),
         (base.replace('    readback: clinic.py:booking_words\n', '', 1), 'needs a readback function'),
-        (base.replace('then: done, on_error', 'then: nowhere, on_error'), "'nowhere', which is not a step"),
-        (base.replace('prompt: prompts/slot.md', 'prompt: prompts/broken.md'), "Field 'nickname' not found"),
         (
-            base.replace('choices: {slot: clinic.py:free_times}', 'choices: {patient: clinic.py:free_times}'),
+            base.replace('operations: [book, cancel]', 'operations: [book, cancel]\n    exits: [nowhere]'),
+            "'nowhere', which is not a step",
+        ),
+        (base.replace('prompt: prompts/desk.md', 'prompt: prompts/broken.md'), "'nickname'"),
+        (
+            base.replace('choices: {slot: clinic.py:free_times}', 'choices: {notes: clinic.py:free_times}'),
             'does not ask for',
         ),
-        (
-            base.replace(
-                'agent: receptionist, prompt: prompts/patient.md', 'agent: nurse, prompt: prompts/patient.md'
-            ),
-            "'nurse'",
-        ),
-        (
-            base.replace('entry: ', 'entry: ').replace(
-                "app_version: '2026.09.25'", "app_version: '2026.09.25'\nentry: lobby"
-            ),
-            "'lobby' is not a step",
-        ),
-        (
-            base.replace(
-                '  - {id: confirm, kind: confirm, operation: book, then: book, on_reject: slot, on_revise: slot}\n',
-                '',
-            ),
-            'no confirm step for',
-        ),
+        (base.replace(desk, desk.replace('receptionist', 'nurse')), "'nurse'"),
+        (base.replace('id: clinic-desk\n', 'id: clinic-desk\nentry: lobby\n'), "'lobby' is not a step"),
     ):
         found = problems(broken)
         assert any(expected in problem for problem in found), (expected, found)
     for broken, expected in (
-        (base.replace('version: 1', 'version: 3', 1), 'version'),
-        (base.replace('kind: confirm', 'kind: confirmation', 1), 'confirmation'),
-        (base.replace('fields: [patient]}', 'fields: [patient], colour: red}'), 'colour'),
+        (base.replace('version: 2', 'version: 3', 1), 'version'),
+        (base.replace(desk, desk + '    kind: confirmation\n'), 'confirmation'),
+        (base.replace(desk, desk + '    colour: red\n'), 'colour'),
     ):
         try:
             load_text(broken, root=HERE)
-        except ValidationError as error:
+        except (ValidationError, core.FlowSpecError) as error:
             assert expected in str(error), (expected, str(error)[:300])
         else:
             raise AssertionError(f'{expected}: loaded')
@@ -187,30 +140,27 @@ def definitions_fail_before_any_model():
         raise AssertionError('compiled with no model')
 
 
-async def the_controlled_clinic_books_and_takes_back():
-    """Offer two ids, read one back, book it on a heard yes; then take it back through the real cancel."""
+async def the_clinic_books_and_cancels():
+    """Offer two ids, read one back, book it on a heard yes; then cancel it through its own read-back and receipt."""
     script = Script()
     flow, call = opened('agent.yaml', script)
     backend = call.services
-    reply = await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
-    assert said(reply) == ['I have Tuesday at 9:00 AM or Tuesday at 10:00 AM. Which works for you?'], said(
-        reply
-    )
+    await turn(flow, call, script, 'P-1234.', FILL[0], Reply('Nine or ten on Tuesday?'))
     assert call._offers == {'slot': clinic.TIMES}, call._offers
-    reply = await turn(flow, call, script, 'Ten, please.', ('collect', {'slot': '1000'}))
-    assert said(reply) == ['Shall I book Tuesday at 10:00 AM for P-1234?'] and backend.calls == 0
-    reply = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
-    assert said(reply) == ['Booked for Tuesday at 10:00 AM, reference CL001.', 'Anything else?'], said(reply)
+    reply = await turn(flow, call, script, 'Ten, please.', FILL[1])
+    assert said(reply) == [READ_BACK] and backend.calls == 0
+    reply = await turn(flow, call, script, 'Yes.', Call('book'))
+    assert said(reply) == ['Booked for Tuesday at 10:00 AM, reference CL001.'], said(reply)
     assert backend.bookings == {'CL001': ('P-1234', '1000')} and call.state.facts.reference == 'CL001'
-    assert call.state.outcome == 'completed' and [e.operation for e in call.evidence] == ['book']
+    assert [e.operation for e in call.evidence] == ['book']
 
-    reply = await turn(flow, call, script, 'Actually, cancel it.', ('call', 'take_back', {}))
+    reply = await turn(flow, call, script, 'Actually, cancel it.', Call('cancel'))
     assert said(reply) == ['Shall I cancel booking CL001?'] and backend.bookings, (
         'nothing is undone before a yes'
     )
-    reply = await turn(flow, call, script, 'Yes, cancel it.', ('call', 'accept', {}))
-    assert said(reply) == ['Booking CL001 is cancelled.', 'Nothing is booked now. Goodbye.'], said(reply)
-    assert backend.bookings == {} and call.state.outcome == 'cancelled'
+    reply = await turn(flow, call, script, 'Yes, cancel it.', Call('cancel'))
+    assert said(reply) == ['Booking CL001 is cancelled.'], said(reply)
+    assert backend.bookings == {}
     assert [e.operation for e in call.evidence] == ['book', 'cancel'], 'the booking stays on record'
 
 
@@ -220,50 +170,48 @@ async def only_an_offered_time_can_be_picked():
     backend = Backend()
     backend.bookings['CL900'] = ('P-9999', '0900')
     flow, call = opened('agent.yaml', script, backend)
-    reply = await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
-    assert said(reply) == ['I have Tuesday at 10:00 AM. Which works for you?'], said(reply)
-    await turn(flow, call, script, 'Nine.', ('collect', {'slot': '0900'}), ('say', 'Nine is taken, sorry.'))
-    assert call.state.facts.slot is None and call.state.agent == 'slot', call.state
+    await turn(flow, call, script, 'P-1234.', FILL[0], Reply('Ten on Tuesday?'))
+    assert call._offers == {'slot': {'1000': clinic.TIMES['1000']}}, call._offers
+    await turn(
+        flow, call, script, 'Nine.', Call('book', update={'slot': '0900'}), Reply('Nine is taken, sorry.')
+    )
+    assert call.state.facts.slot is None and backend.calls == 0, call.state
 
 
 async def a_no_or_a_change_books_nothing():
-    for label, question in (('decline', 'I have Tuesday'), ('change', 'I have Tuesday')):
+    """At the read-back, a no (`decline`) and a changed mind (the slot cleared) each book nothing."""
+    for answer in (
+        Reply('All right, nothing booked.', decline=True),
+        Reply('Which time instead?', slot=None),
+    ):
         script = Script()
         flow, call = opened('agent.yaml', script)
-        await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
-        await turn(flow, call, script, 'Ten.', ('collect', {'slot': '1000'}))
-        reply = await turn(flow, call, script, 'No, not that.', ('call', label, {}))
-        assert call.services.calls == 0 and call.state.agent == 'slot', (label, call.state)
-        assert said(reply)[-1].startswith(question), (label, said(reply))
-        if label == 'change':
+        await turn(flow, call, script, 'P-1234, ten.', *FILL)
+        await turn(flow, call, script, 'No, not that.', answer)
+        await turn(flow, call, script, 'Hmm.', Call('book'))
+        assert call.services.calls == 0, (answer, call.state)
+        if 'update' in answer.args:
             assert call.state.facts.slot is None, 'a revision forgets the answer it revises'
 
 
-async def a_receipt_that_says_no_completes_nothing():
-    """The diary answers "full": the receipt is filed, assigns nothing, claims nothing, and the flow fails."""
-    script = Script()
-    backend = Backend()
-    backend.full = True
-    flow, call = opened('agent.yaml', script, backend)
-    await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
-    await turn(flow, call, script, 'Ten.', ('collect', {'slot': '1000'}))
-    reply = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
-    assert said(reply) == ['Nothing was booked. Please call again.'], said(reply)
-    assert call.state.facts.reference == '' and call.state.outcome == 'failed'
-    [filed] = call.evidence
-    assert filed.receipt['status'] == 'full', 'the answer is on record, and it is not a booking'
-
-
 async def an_unknown_outcome_is_settled_not_repeated():
-    """The diary booked and then stopped answering: pending, not failed; the retry reconciles, never books again."""
+    """The diary booked and then stopped answering: unknown, not failed; settling reconciles, never books again."""
     script = Script()
     backend = Backend()
     backend.failing = True
-    flow, call = opened('agent.yaml', script, backend)
-    await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
-    await turn(flow, call, script, 'Ten.', ('collect', {'slot': '1000'}))
-    reply = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
-    assert said(reply) == ['We will check the diary and call you back.'] and call.state.outcome == 'pending'
+    text = (
+        (HERE / 'agent.yaml')
+        .read_text()
+        .replace(
+            '    readback: clinic.py:booking_words\n',
+            '    readback: clinic.py:booking_words\n    reconcile: clinic.py:find_booking\n',
+            1,
+        )
+    )
+    flow, call = opened('agent.yaml', script, backend, text=text)
+    await turn(flow, call, script, 'P-1234, ten.', *FILL)
+    reply = await turn(flow, call, script, 'Yes.', Call('book'), Reply('Let me check.'))
+    assert "couldn't confirm" in ' '.join(said(reply)), said(reply)
     assert backend.calls == 1 and not call.evidence and call.state.facts.reference == ''
     book = book_of(flow)
     receipt = await book.run(call, book.args_type(patient='P-1234', slot='1000'))
@@ -273,25 +221,18 @@ async def an_unknown_outcome_is_settled_not_repeated():
 
 
 async def every_pattern_books_once_on_a_heard_yes():
-    """The same `clinic.book`, in all three patterns: an unheard read-back books nothing, a heard one books once."""
-    fill = (('call', 'options', {}), ('collect', {'patient': 'P-1234', 'slot': '1000'}), ('call', 'book', {}))
+    """The same `clinic.book`, in both patterns: an unheard read-back books nothing, a heard one books once."""
+    handed = Call('hand_over', to='booking', because='an appointment')
     for manifest in PATTERNS:
         for heard in (False, True):
             script = Script()
             flow, call = opened(manifest, script)
             assert book_of(flow).function is clinic.book, 'one domain function, whatever the pattern'
-            if manifest == 'agent.yaml':
-                await turn(flow, call, script, 'P-1234.', ('collect', {'patient': 'P-1234'}))
-                reply = await turn(flow, call, script, 'Ten.', ('collect', {'slot': '1000'}), heard=heard)
-            elif manifest == 'one_agent.yaml':
-                reply = await turn(flow, call, script, 'P-1234, Tuesday at ten.', *fill, heard=heard)
-            else:
-                handed = ('call', 'hand_over', {'to': 'booking', 'because': 'an appointment'})
-                reply = await turn(flow, call, script, 'P-1234, Tuesday at ten.', handed, *fill, heard=heard)
-            assert said(reply)[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', (manifest, said(reply))
-            requests = script.agent_requests
-            yes = ('call', 'accept' if manifest == 'agent.yaml' else 'book', {})
-            reply = await turn(flow, call, script, 'Yes.', yes)
+            moves = FILL if manifest == 'agent.yaml' else (handed, *FILL)
+            reply = await turn(flow, call, script, 'P-1234, Tuesday at ten.', *moves, heard=heard)
+            assert said(reply)[-1] == READ_BACK, (manifest, said(reply))
+            requests = len(script.requests)
+            reply = await turn(flow, call, script, 'Yes.', Call('book'))
             booked = call.services.bookings
             if not heard:
                 assert booked == {}, (manifest, 'a yes to a read-back nobody heard booked')
@@ -301,7 +242,7 @@ async def every_pattern_books_once_on_a_heard_yes():
                 manifest,
                 said(reply),
             )
-            assert script.agent_requests == requests + 1, (
+            assert len(script.requests) == requests + 1, (
                 manifest,
                 'the yes is the step agent reading it, once',
             )
@@ -309,59 +250,58 @@ async def every_pattern_books_once_on_a_heard_yes():
 
 async def the_model_path_refuses_what_the_direct_path_refuses():
     """One agent: the model calling `book` again cannot skip the read-back; a full diary claims nothing; unknown is said as unknown."""
-    fill = (('call', 'options', {}), ('collect', {'patient': 'P-1234', 'slot': '1000'}), ('call', 'book', {}))
     script = Script()
-    flow, call = opened('one_agent.yaml', script)
-    await turn(flow, call, script, 'P-1234, ten.', *fill, heard=False)
-    reply = await turn(flow, call, script, 'Go on, book it.', ('call', 'book', {}))
+    flow, call = opened('agent.yaml', script)
+    await turn(flow, call, script, 'P-1234, ten.', *FILL, heard=False)
+    reply = await turn(flow, call, script, 'Go on, book it.', Call('book'))
     assert call.services.calls == 0 and said(reply)[-1].startswith('Shall I book'), said(reply)
 
     for trouble in ('full', 'failing'):
         script = Script()
         backend = Backend()
         setattr(backend, trouble, True)
-        flow, call = opened('one_agent.yaml', script, backend)
-        await turn(flow, call, script, 'P-1234, ten.', *fill)
-        reply = await turn(
-            flow, call, script, 'Yes.', ('call', 'book', {}), ('say', 'Let me see what happened there.')
-        )
+        flow, call = opened('agent.yaml', script, backend)
+        await turn(flow, call, script, 'P-1234, ten.', *FILL)
+        reply = await turn(flow, call, script, 'Yes.', Call('book'), Reply('Let me see what happened there.'))
         words = ' '.join(said(reply))
         assert 'Booked for' not in words and call.state.facts.reference == '', (trouble, words)
-        if trouble == 'failing':
+        if trouble == 'full':
+            [filed] = call.evidence
+            assert filed.receipt['status'] == 'full', 'the answer is on record, and it is not a booking'
+        else:
             assert "couldn't confirm" in words, words
-            await turn(flow, call, script, 'Yes, book it.', ('call', 'book', {}), ('say', 'I cannot yet.'))
+            await turn(flow, call, script, 'Yes, book it.', Call('book'), Reply('I cannot yet.'))
             assert backend.calls == 1, 'an unknown outcome with nothing to settle it is not retried'
 
 
 async def ordinary_conversation_reads_nothing():
     """One question, one request: the step's own agent. (`Script.reading` fails any other kind.)"""
     script = Script()
-    flow, call = opened('one_agent.yaml', script)
-    reply = await turn(flow, call, script, 'When are you open?', ('say', 'Weekdays, nine to five.'))
-    assert said(reply) == ['Weekdays, nine to five.'] and script.agent_requests == 1, script.agent_requests
+    flow, call = opened('agent.yaml', script)
+    reply = await turn(flow, call, script, 'When are you open?', Reply('Weekdays, nine to five.'))
+    assert said(reply) == ['Weekdays, nine to five.'] and len(script.requests) == 1, script.steps
 
 
 def the_manifest_reaches_the_session():
     """Entry, services factory, locale, version and the persona's native spec, as the manifest says."""
     script = Script()
-    spec = core.load(HERE / 'agent.yaml')
-    flow = spec.compile(model=script.model)
-    call = flow.open(ClinicState())
-    assert isinstance(call.services, Backend) and call.services is not flow.open(ClinicState()).services
-    assert flow.entry == 'patient' and flow.version == '2026.09.25' and call.locale is ENGLISH
     text = (
         (HERE / 'agent.yaml')
         .read_text()
+        .replace('id: clinic-desk\n', "id: clinic-desk\napp_version: '2026.09.25'\n")
         .replace(
             '    prompt: prompts/receptionist.md\n',
             '    prompt: prompts/receptionist.md\n    spec: {model: "openai:gpt-9", model_settings: {temperature: 0.1}}\n',
         )
     )
-    tuned = load_text(text, root=HERE).compile(model=script.model)
-    agent = tuned.nodes['patient'].agent
+    flow = load_text(text, root=HERE).compile(model=script.model)
+    call = flow.open(ClinicState())
+    assert isinstance(call.services, Backend) and call.services is not flow.open(ClinicState()).services
+    assert flow.entry == 'desk' and flow.version == '2026.09.25' and call.locale is ENGLISH
+    agent = flow.nodes['desk'].agent
     assert agent.model is script.model, 'an explicit model wins over the persona'
     assert (agent.model_settings or {}).get('temperature') == 0.1, agent.model_settings
-    instructions = str(load_text(text, root=HERE).prompt('slot'))
+    instructions = str(load_text(text, root=HERE).prompt('desk'))
     assert instructions.startswith("You answer the clinic's phone line."), 'the persona comes first'
 
 
@@ -369,7 +309,7 @@ def what_the_application_wrote():
     """N13: the clinic's authored files, by kind, next to what the native salon writes for the same guarantees.
 
     Domain is models, the service and its functions; configuration is the
-    three manifests; prompts are prompts. Orchestration (consent, delivery,
+    two manifests; prompts are prompts. Orchestration (consent, delivery,
     speech, budgets, reconciliation) is none: no class of the clinic's
     derives from core, and it imports nothing of core but the one exception
     its service raises.
@@ -382,7 +322,7 @@ def what_the_application_wrote():
     lines = lambda path: sum(1 for line in path.read_text().splitlines() if line.strip())  # noqa: E731
     inventory = {
         'domain (clinic.py)': lines(HERE / 'clinic.py'),
-        'configuration (3 manifests)': sum(lines(HERE / m) for m in PATTERNS),
+        f'configuration ({len(PATTERNS)} manifests)': sum(lines(HERE / m) for m in PATTERNS),
         'prompts': sum(lines(p) for p in (HERE / 'prompts').glob('*.md') if p.name != 'broken.md'),
         'orchestration': 0,
     }
@@ -396,17 +336,16 @@ def what_the_application_wrote():
 
 async def main() -> None:
     definitions_fail_before_any_model()
-    await the_controlled_clinic_books_and_takes_back()
+    await the_clinic_books_and_cancels()
     await only_an_offered_time_can_be_picked()
     await a_no_or_a_change_books_nothing()
-    await a_receipt_that_says_no_completes_nothing()
     await an_unknown_outcome_is_settled_not_repeated()
     await every_pattern_books_once_on_a_heard_yes()
     await the_model_path_refuses_what_the_direct_path_refuses()
     await ordinary_conversation_reads_nothing()
     the_manifest_reaches_the_session()
     what_the_application_wrote()
-    print('authoring ok: manifest, operations, choices, take-back, three patterns, early diagnostics')
+    print('authoring ok: manifest, operations, choices, cancel, two patterns, early diagnostics')
 
 
 if __name__ == '__main__':

@@ -118,13 +118,13 @@ def lookup_receipt_backs_a_booking_goodbye() -> bool:
 
     The salon's `verify` step carries out `lookup_customer` itself and then
     says goodbye. Here the clinic's front desk does the same: its own lookup
-    (no approval) files a receipt, and the model's goodbye then says an
-    appointment was booked. No booking was made, so the caller must never
-    hear that sentence.
+    (no approval) files a receipt, and the goodbye then points at a recap
+    saying an appointment was booked. No booking was made, so the caller
+    must never hear that sentence.
     """
     import core
     from tests.clinic_flow.clinic import Backend, ClinicState
-    from tests.test_nodes import Script
+    from tests.script import Call, Script
 
     claim = 'Your appointment is booked for Tuesday at ten. Goodbye!'
     manifest = HERE / '_defect_lookup_goodbye.yaml'
@@ -133,7 +133,7 @@ def lookup_receipt_backs_a_booking_goodbye() -> bool:
         .read_text()
         .replace(
             "    exits:\n      - {to: look_up, purpose: find the caller's booking once their patient number is recorded}\n"
-            '  - {id: look_up, kind: action, operation: look_up, returns: true, on_error: front, on_unknown: front}\n',
+            '  look_up: {kind: action, operation: look_up, returns: true, on_error: front, on_unknown: front}\n',
             '    operations: [look_up]\n',
         )
     )
@@ -145,14 +145,11 @@ def lookup_receipt_backs_a_booking_goodbye() -> bool:
         flow = core.load(manifest).compile(model=script.model)
         call = flow.open(ClinicState(), services=backend)
         script.call = call
-        script.moves = [
-            ('call', 'collect', {'values': {'patient': 'P-1234'}}),
-            ('call', 'look_up', {}),
-        ]
+        script.moves = [Call('look_up', update={'patient': 'P-1234'})]
         reply = await core.text_turn(flow, call, 'P-1234, where is my booking?')
         call.acknowledge(*(s.id for s in reply.segments))
         assert [e.operation for e in call.evidence] == ['look_up'], call.evidence
-        script.moves = [('call', 'goodbye', {'words': claim}), ('call', 'goodbye', {'words': claim})]
+        script.moves = [Call('goodbye', recap=[claim]), Call('goodbye', recap=[claim])]
         await core.text_turn(flow, call, 'Thanks, bye.')
         return any('booked for Tuesday' in s.text for s in call.all_spoken)
 
@@ -228,21 +225,22 @@ def restore_resurrects_a_superseded_effect() -> bool:
     """
     import tempfile
 
+    from tests.script import Call, Reply
     from tests.test_tickets import turn
     from tests.ticket_flow.worker import to_read_back
 
     async def check(folder: Path) -> bool:
         desk, script, flow, call = _desk(folder)
         await to_read_back(flow, call, script)
-        await turn(flow, call, script, 'Sí.', ('call', 'resolve_ticket', {}))
-        await turn(flow, call, script, 'Reábrelo.', ('call', 'reopen_ticket', {}))
-        await turn(flow, call, script, 'Sí.', ('call', 'reopen_ticket', {}))
+        await turn(flow, call, script, 'Sí.', Call('resolve_ticket'))
+        await turn(flow, call, script, 'Reábrelo.', Call('reopen_ticket'))
+        await turn(flow, call, script, 'Sí.', Call('reopen_ticket'))
         [resolve] = [i for i in call.intents if i.operation == 'resolve_ticket']
         assert desk.ticket('T-101') == (3, 'open')
         from tests.test_tickets import opened
 
         script, flow, fresh = opened(desk, intents=[resolve.model_copy(update={'status': 'dispatched'})])
-        said = await turn(flow, fresh, script, 'Hola.', ('say', 'Dime.'))
+        said = await turn(flow, fresh, script, 'Hola.', Reply('Dime.'))
         stands = [e.receipt.get('status') for e in fresh.effective()]
         return 'resolved' in stands or any('resuelto' in s for s in said)
 
@@ -309,56 +307,6 @@ def estimated_playback_authorises() -> bool:
     return call.pending(READBACK.about, value=READBACK.value) is not None
 
 
-def a_paraphrased_claim_after_a_lookup_is_said() -> bool:
-    """Stage B review finding 6: after a lookup alone, the desk step says the ticket is solved.
-
-    The desk's claim words miss the paraphrase, so the parent said it with
-    zero writes and the ticket still open.
-    """
-    import tempfile
-
-    from tests.test_tickets import turn
-    from tests.ticket_flow.worker import TO_READ_BACK
-
-    claim = 'El ticket T-101 ha quedado solucionado definitivamente.'
-
-    async def check(folder: Path) -> bool:
-        desk, script, flow, call = _desk(folder)
-        said = await turn(
-            flow, call, script, 'Ticket T-101, cuenta ACC-1234.', *TO_READ_BACK[:3], ('say', claim)
-        )
-        assert desk.ticket('T-101') == (1, 'open') and not call.effective()
-        return claim in ' '.join(said)
-
-    with tempfile.TemporaryDirectory() as tmp:
-        return asyncio.run(check(Path(tmp)))
-
-
-def a_prose_step_can_still_claim() -> bool:
-    """A known limit, kept visible: a `prose` step speaks the model's own words, and a paraphrase can claim anything.
-
-    Stage C closes the route on `rendered` steps and on every code route. The
-    desk's informational `faq` step stays prose, so its model can still say
-    the ticket is solved when nothing was done. Truthful completion is not
-    claimed for prose steps. Since the claim patterns were retired
-    (simpler-authoring session), no word list stands in front of prose at
-    all: a claim like this is an evaluation failure, measured on live calls.
-    """
-    import tempfile
-
-    from tests.test_tickets import turn
-
-    claim = 'El ticket T-101 ha quedado solucionado definitivamente.'
-
-    async def check(folder: Path) -> bool:
-        desk, script, flow, call = _desk(folder)
-        said = await turn(flow, call, script, '¿Cómo va el T-101?', ('say', claim))
-        return claim in ' '.join(said) and desk.ticket('T-101') == (1, 'open')
-
-    with tempfile.TemporaryDirectory() as tmp:
-        return asyncio.run(check(Path(tmp)))
-
-
 def a_restated_value_books() -> bool:
     """Session 4d, defect 1: the caller refuses a heard booking read-back, and the model records the slot again.
 
@@ -366,23 +314,109 @@ def a_restated_value_books() -> bool:
     recorded slot with the pending read-back, called the equal value a yes,
     and booked, saying "Yes, that's the same as I read back."
     """
-    from tests.test_nodes import FILL, Script, opened, turn
+    import core
+    from tests.clinic_flow.clinic import Backend, ClinicState
+    from tests.script import Call, Reply, Script, turn
 
     async def check() -> bool:
         script = Script()
-        flow, call = opened('reads_back.yaml', script)
-        await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+        flow = core.load(HERE / 'reads_back.yaml').compile(model=script.model)
+        call = flow.open(ClinicState(), services=Backend())
+        script.call = call
+        asked = await turn(
+            flow,
+            call,
+            script,
+            'P-1234 at ten.',
+            Call('options', update={'patient': 'P-1234'}),
+            Call('book', update={'slot': '1000'}),
+        )
+        assert asked[-1].startswith('Shall I book Tuesday at 10:00'), ('the booking was not read back', asked)
         said = await turn(
             flow,
             call,
             script,
             'No, do not book ten. I am only checking if it is free.',
-            ('call', 'collect', {'values': {'slot': '1000'}}),
-            ('say', 'Ten is free. Nothing is booked.'),
+            Reply('Ten is free. Nothing is booked.', slot='1000'),
         )
         return bool(call.services.bookings) or call.locale.restated in said
 
     return asyncio.run(check())
+
+
+def a_pick_for_the_new_state_is_refused() -> bool:
+    """R21 on a structured step: a category and the resolution right for it, in one update, are refused.
+
+    "Es de acceso: que me desbloqueen la cuenta", with billing's resolutions
+    on offer. The resolution rests on the category, and this update changes
+    it, so the offer it could come from is access's. The prose `collect`
+    path had the choice function make that offer first
+    (`ConversationStep._record`); `StepFlow.record(atomic=True)` checks the
+    pick against the offer standing now, billing's, and refuses the whole
+    update. The caller is asked again for what they already said.
+    """
+    import tempfile
+
+    from tests.script import Call, Reply
+    from tests.test_tickets import HERE as DESK
+    from tests.test_tickets import turn
+
+    async def check(folder: Path) -> bool:
+        _, script, flow, call = _desk(folder, manifest=DESK / 'choices.yaml')
+        await turn(flow, call, script, 'Cuenta ACC-1234.', Reply('Vale.', account_id='ACC-1234'))
+        await turn(flow, call, script, '¿Qué tickets tengo?', Call('options'), Reply('¿Cuál?'))
+        await turn(flow, call, script, 'El T-101.', Reply('Vale.', ticket_id='T-101'))
+        await turn(
+            flow,
+            call,
+            script,
+            'Facturación.',
+            Call('options', update={'category': 'billing'}),
+            Reply('¿Cuál?'),
+        )
+        await turn(
+            flow,
+            call,
+            script,
+            'No, es de acceso: que me desbloqueen la cuenta.',
+            Reply('Vale.', category='access', resolution='unlock'),
+        )
+        facts = call.state.facts
+        return (facts.category, facts.resolution) != ('access', 'unlock')
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return asyncio.run(check(Path(tmp)))
+
+
+def chained_picks_in_one_update_are_refused() -> bool:
+    """R23 on a structured step: a ticket, its category and the category's resolution, supplied in one update.
+
+    The prose `collect` path offered each child for its fresh parent, in
+    dependency order, and kept every pick the new offers held
+    (`ConversationStep._record`). `StepFlow.record(atomic=True)` checks each
+    pick against the offers standing before the update, where there are
+    none yet, and refuses the whole update.
+    """
+    import tempfile
+
+    from tests.script import Reply
+    from tests.test_tickets import HERE as DESK
+    from tests.test_tickets import turn
+
+    async def check(folder: Path) -> bool:
+        _, script, flow, call = _desk(folder, manifest=DESK / 'chained.yaml')
+        await turn(
+            flow,
+            call,
+            script,
+            'Cuenta ACC-1234, T-101, facturación, un reembolso.',
+            Reply('Vale.', account_id='ACC-1234', ticket_id='T-101', category='billing', resolution='refund'),
+        )
+        facts = call.state.facts
+        return (facts.ticket_id, facts.category, facts.resolution) != ('T-101', 'billing', 'refund')
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return asyncio.run(check(Path(tmp)))
 
 
 class _Versioned(BaseModel):
@@ -470,16 +504,11 @@ DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
         a_cancel_during_the_version_check_sends_again,
         '4d defect 2',
     ),
-    'a prose step can still say an unbacked claim (known limit)': (
-        a_prose_step_can_still_claim,
-        'Stage D decision',
-    ),
     'a pending receipt becomes an authoritative refusal': (pending_receipt_becomes_a_refusal, '4c C0.1'),
     'two concurrent runs of one intent both dispatch': (concurrent_runs_dispatch_twice, '4c C0.2'),
     'a restored intent resurrects a superseded effect': (restore_resurrects_a_superseded_effect, '4c C0.3'),
     'resources of two kinds with one id collide': (resources_of_two_kinds_collide, '4c C0.4'),
     'estimated local playback authorises a write': (estimated_playback_authorises, '4c C0.5'),
-    'a paraphrased claim after a lookup is said': (a_paraphrased_claim_after_a_lookup_is_said, '4c C0.6'),
     'a write cancelled after its commit is sent again': (cancelled_after_commit_is_sent_again, '4b stage B1'),
     'an invalid reconciliation answer clears the retry guard': (
         invalid_reconciliation_clears_the_guard,
@@ -488,6 +517,14 @@ DEFECTS: dict[str, tuple[Callable[[], bool], str]] = {
     'a lookup receipt backs a goodbye that claims a booking': (
         lookup_receipt_backs_a_booking_goodbye,
         '4b stage B2',
+    ),
+    'a pick right for the state an update ends in is refused on a structured step': (
+        a_pick_for_the_new_state_is_refused,
+        'v2-only cleanup',
+    ),
+    'chained picks supplied in one update are refused on a structured step': (
+        chained_picks_in_one_update_are_refused,
+        'v2-only cleanup',
     ),
 }
 """Each defect, its check (True while the defect is present) and the session that owns the repair.

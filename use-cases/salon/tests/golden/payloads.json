@@ -1257,48 +1257,13 @@
   },
   "stylist, consulted": {
     "bytes": {
-      "history": 725,
+      "history": 160,
       "instructions": 4181,
       "outputs": 2415,
       "tools": 2,
-      "total": 7323
+      "total": 6758
     },
     "history": [
-      {
-        "instructions": null,
-        "kind": "request",
-        "parts": [
-          {
-            "content": "Yes, two is great.",
-            "part_kind": "user-prompt"
-          }
-        ],
-        "state": "complete"
-      },
-      {
-        "finish_reason": null,
-        "kind": "response",
-        "model_name": "function:reading:agent",
-        "parts": [
-          {
-            "content": "Shall I book a haircut, Friday the 2nd at 2:00 PM?",
-            "id": null,
-            "part_kind": "text"
-          }
-        ],
-        "state": "complete",
-        "usage": {
-          "cache_audio_read_tokens": 0,
-          "cache_read_tokens": 0,
-          "cache_write_tokens": 0,
-          "cost": null,
-          "details": {},
-          "input_audio_tokens": 0,
-          "input_tokens": 50,
-          "output_audio_tokens": 0,
-          "output_tokens": 6
-        }
-      },
       {
         "instructions": null,
         "kind": "request",

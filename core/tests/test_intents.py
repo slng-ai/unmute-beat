@@ -485,7 +485,10 @@ def manifest_checks_the_intent_parameter():
     for change, expected in (
         (('    subject: reference\n', '    subject: nowhere\n'), "subject 'nowhere'"),
         (
-            ('reconcile: clinic.py:find_booking', 'reconcile: clinic.py:find_booking\n    idempotent: true'),
+            (
+                '    readback: clinic.py:booking_words\n',
+                '    readback: clinic.py:booking_words\n    reconcile: clinic.py:find_booking\n    idempotent: true\n',
+            ),
             'Intent',
         ),
     ):

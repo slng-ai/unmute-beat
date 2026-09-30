@@ -70,6 +70,7 @@ from core.processor import (
 )
 from core.proposals import BaseProposal
 from core.state import CUT_OFF_WINDOW
+from tests.script import Call
 from tests.test_tickets import desk_in, opened
 from tests.ticket_flow.worker import TO_READ_BACK
 
@@ -403,10 +404,10 @@ async def a_heard_yes_resolves_once(folder: Path):
         await line.until(lambda: readback.delivered == 'delivered')
         await asyncio.sleep(0.5)
         await line.onset()
-        line.script.moves = [('call', 'resolve_ticket', {})]
+        line.script.moves = [Call('resolve_ticket')]
         await line.node.serve('Sí.')
         assert line.desk.sent() == 1 and line.desk.ticket('T-101') == (2, 'resolved'), line.desk.sent()
-        line.script.moves = [('call', 'resolve_ticket', {})]
+        line.script.moves = [Call('resolve_ticket')]
         await line.node.serve('Sí, sí.')
         assert line.desk.sent() == 1, 'a second yes sent it again'
 

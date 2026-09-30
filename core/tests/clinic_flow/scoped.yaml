@@ -1,10 +1,10 @@
-# The consult clinic in the scoped view: a history object at the root opts every step in (`tests.test_context`).
-version: 1
+# The clinic with a scoped view per step: flow facts and history members each step may replace (`tests.test_context`).
+version: 2
 id: clinic-scoped
 state: consult.py:DeskState
 identity: patient
 services: clinic.py:Backend
-context: {facts: [slot], history: {scope: node, turns: 1}}
+context: {facts: [slot, note], history: {scope: node, turns: 1}}
 agents:
   receptionist:
     prompt: prompts/receptionist.md
@@ -12,14 +12,12 @@ operations:
   book: scoped.py:RecappedBook
   check_in: consult.py:CheckIn
 steps:
-  - id: lobby
-    kind: conversation
+  lobby:
     agent: receptionist
     prompt: prompts/lobby.md
     exits: [desk]
     context: {facts: none}
-  - id: desk
-    kind: conversation
+  desk:
     agent: receptionist
     prompt: prompts/desk.md
     requires: [checked_in]
@@ -30,16 +28,14 @@ steps:
     capabilities: [consult.py:refunds]
     consults:
       - {to: nurse, purpose: 'a medical question about the appointment'}
-  - id: front
-    kind: conversation
+  front:
     agent: receptionist
     prompt: prompts/front.md
     fields: [patient]
     operations: [check_in]
     capabilities: [scoped.py:notes]
     context: {facts: [patient]}
-  - id: nurse
-    kind: conversation
+  nurse:
     agent: receptionist
     prompt: prompts/nurse.md
     context: {facts: none}

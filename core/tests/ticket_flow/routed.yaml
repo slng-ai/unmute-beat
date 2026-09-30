@@ -1,7 +1,7 @@
 # The support desk with code moving the caller: a lookup carried out by code once the ticket is recorded,
 # whose receipt names the step for the ticket (`route:`), and a desk that answers in the caller's language.
 # Nothing here is Faro's: the flow rules session 5 added, proven on a business with no learner in it.
-version: 1
+version: 2
 id: support-desk-routed
 state: tickets.py:RoutedState
 identity: account_id
@@ -10,6 +10,7 @@ language: idioma
 locales:
   es: {base: spanish, goodbye: Gracias por llamar al soporte. Hasta pronto.}
   en: {base: english, goodbye: Thanks for calling support. Goodbye.}
+context: {facts: all}
 agents:
   agent:
     prompt: prompts/agent.md
@@ -53,26 +54,21 @@ operations:
     assign: {revision: now_revision, ticket_status: status}
     say: 'Ticket {ticket_id} reabierto.'
 steps:
-  - id: desk
-    kind: conversation
+  desk:
     agent: agent
     prompt: prompts/faq.md
     fields: [account_id, ticket_id, idioma]
     asks: {ticket_id: '¿Qué ticket es?'}
     carries_out: {find_ticket: [ticket_id]}
-  - id: resolve
-    kind: conversation
+  resolve:
     agent: agent
     prompt: prompts/desk.md
-    speech: rendered
     fields: [resolution, idioma]
     operations: [resolve_ticket]
     reads_back: {resolve_ticket: [resolution, idioma]}
-  - id: reopen
-    kind: conversation
+  reopen:
     agent: agent
     prompt: prompts/reopen.md
-    speech: rendered
     fields: [idioma]
     operations: [reopen_ticket]
     opens_with: reopen_ticket

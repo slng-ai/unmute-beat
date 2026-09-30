@@ -153,7 +153,7 @@ class Decision:
 
         Only the one call in the response that carries the update may apply
         it (`patch_or_refuse`). A quoted field must be the caller's words. The
-        commit is `StepFlow.record(atomic=True)`: the application's
+        commit is `StepFlow.record_update`: the application's
         validators with the call's `before`, `heard` and clock, whole-state
         rules, the resets of what rested on a changed field, and every pick
         on an offer that stands for the state the update ends in. Any refusal
@@ -174,7 +174,7 @@ class Decision:
                 )
         before = {name: getattr(call.state.facts, name, None) for name in given}
         try:
-            refused = self.flow.record(call, deepcopy(given), self.step.choices, atomic=True)
+            refused = await self.flow.record_update(call, deepcopy(given), self.step.choices)
         except ValidationError as error:
             raise ModelRetry(f'Nothing was recorded: {call.note_refusal(error)}.') from None
         if refused:

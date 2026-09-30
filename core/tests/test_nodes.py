@@ -4,12 +4,12 @@ Session 4 took the classifiers out of the public path: a step's own agent
 reads the caller's reply and answers through its outputs; code binds a yes to
 the exact question, runs the operation and checks every move. What is checked:
 
-* P1: every legacy reading entry point raises, and all three clinic patterns
-  still book, decline, revise and take back; `import core` never loads them;
+* P1: every legacy reading entry point raises, and both clinic patterns
+  still book; `import core` never loads them;
 * P3/P9: an invented destination, a hidden tool, an unheard read-back and a
   protected field are all refused when the model tries them anyway;
-* P5: a reply that changes the request and accepts the old read-back spends
-  nothing, in either order of the two calls;
+* P5: a reply that changes the request beside the old read-back spends
+  nothing: the change is read back fresh;
 * P10: the holding line covers running work, never a model slow to say goodbye;
 * P16: a manifest code node runs with no model request, applies its receipt
   once, returns to the agent node that handed in, and takes its declared
@@ -17,15 +17,13 @@ the exact question, runs the operation and checks every move. What is checked:
 * P18: options looked up for a request the caller has since changed, or in a
   step they have since left, offer nothing;
 * P2/P7: an unheard receipt is said again with no model request and no write;
-* F3: words the model writes beside an operation call are not said: the
-  operation says its own, once;
 * F4: `reads_back`: a reply that only records an operation's field is read
   back by code, with no second request, and only a heard yes still books;
 * F5: a reply that records the same value the caller was just read back, and
   heard in full, is their yes: code says so and carries it out, with no
   second request. A different value is read back again; the same value after
   a read-back nobody heard carries out nothing;
-* P19 (session 4f): on a prose step too, a question asked in reply to a
+* P19 (session 4f): on the clinic too, a question asked in reply to a
   read-back leaves it waiting, and a goodbye says so; only the agent's
   `decline` turns it down (core's desk R16, on the clinic);
 * silence: a caller quiet after a read-back is asked if they are still there
@@ -38,72 +36,22 @@ Scripted models prove runtime properties, not language understanding.
 import asyncio
 import contextlib
 import importlib.util
-import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from pydantic_ai.messages import ModelResponse
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
 import core
 from core.flow import Flow
-from core.history import Payload
 from core.locale import ENGLISH
 from core.policies import TurnBudget
 from core.steps import ConversationStep, StepFlow, _offer
 from core.turn import REMINDERS, remind, take_turn
 from tests.clinic_flow.clinic import Backend, ClinicState
+from tests.script import Call, Calls, Record, Reply, Script, turn
 
 HERE = Path(__file__).parent / 'clinic_flow'
-
-
-class Script:
-    """Each step agent's request takes the next move, and records which step asked. Nothing else may run.
-
-    A move is `('say', words)`, `('call', tool, args)`, `('calls', [(tool, args), ...])`
-    for one response carrying several tool calls in that order, or `('say+call', words, tool, args)`
-    for one response that speaks and then calls a tool.
-    """
-
-    def __init__(self) -> None:
-        self.moves: list[tuple[Any, ...]] = []
-        self.steps: list[str] = []
-        self.told: list[str] = []
-        """Everything each request was sent (instructions and messages), as text, for checks on what a step was told."""
-        self.payloads: list[Payload] = []
-        """Every request whole, tool and output schemas included (`core.history.Payload`)."""
-        self.call: core.FlowCall | None = None
-        self.delay = 0.0
-        self.model = FunctionModel(self.reading, stream_function=self.agent)
-
-    def reading(self, messages: Any, info: AgentInfo) -> ModelResponse:
-        raise AssertionError('a separate reading was requested; only step agents may run')
-
-    async def agent(self, messages: Any, info: AgentInfo):
-        self.steps.append(self.call.state.agent if self.call is not None else '?')
-        self.told.append(f'{getattr(info, "instructions", "") or ""}\n{messages!r}')
-        self.payloads.append(Payload.of(messages, info))
-        if self.delay:
-            await asyncio.sleep(self.delay)
-        if not self.moves:
-            yield 'Sorry?'
-            return
-        kind, *rest = self.moves.pop(0)
-        if kind == 'say':
-            yield rest[0]
-        elif kind == 'call':
-            yield {0: DeltaToolCall(name=rest[0], json_args=json.dumps(rest[1]))}
-        elif kind == 'say+call':
-            yield rest[0]
-            yield {1: DeltaToolCall(name=rest[1], json_args=json.dumps(rest[2]))}
-        else:
-            yield {
-                i: DeltaToolCall(name=name, json_args=json.dumps(args))
-                for i, (name, args) in enumerate(rest[0])
-            }
 
 
 def opened(manifest: str, script: Script, backend: Backend | None = None):
@@ -113,15 +61,10 @@ def opened(manifest: str, script: Script, backend: Backend | None = None):
     return flow, call
 
 
-async def turn(flow, call, script: Script, words: str, *moves, heard: bool = True) -> list[str]:
-    script.moves = list(moves)
-    reply = await core.text_turn(flow, call, words)
-    if heard:
-        call.acknowledge(*(segment.id for segment in reply.segments))
-    return [segment.text for segment in reply.segments]
-
-
-FILL = (('call', 'options', {}), ('call', 'collect', {'values': {'patient': 'P-1234', 'slot': '1000'}}))
+FILL = (Call('options'),)
+"""The times on offer, looked up first: a time can be picked only from an offer that stands."""
+BOOK_TEN = Call('book', update={'patient': 'P-1234', 'slot': '1000'})
+"""P-1234 at ten, carried on the booking's own call: code reads it back."""
 
 
 RETIRED = (
@@ -136,27 +79,17 @@ RETIRED = (
 
 
 async def no_reader_runs_in_any_pattern():
-    """P1: the three patterns work, and the retired reader modules are gone: nothing can run before a step."""
+    """P1: both patterns work, and the retired reader modules are gone: nothing can run before a step."""
     assert not any(importlib.util.find_spec(name) for name in RETIRED), 'a retired reader module came back'
-    script = Script()
-    flow, call = opened('agent.yaml', script)
-    await turn(flow, call, script, 'P-1234.', ('call', 'collect', {'values': {'patient': 'P-1234'}}))
-    await turn(flow, call, script, 'Ten.', ('call', 'collect', {'values': {'slot': '1000'}}))
-    said = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
-    assert said[0].startswith('Booked for') and call.services.calls == 1, said
-    said = await turn(flow, call, script, 'Cancel it.', ('call', 'take_back', {}))
-    said = await turn(flow, call, script, 'Yes.', ('call', 'accept', {}))
-    assert call.services.bookings == {} and call.state.outcome == 'cancelled', said
-
     for manifest, first in (
-        ('one_agent.yaml', ()),
-        ('handoff.yaml', (('call', 'hand_over', {'to': 'booking', 'because': 'a booking'}),)),
+        ('agent.yaml', ()),
+        ('handoff.yaml', (Call('hand_over', to='booking', because='a booking'),)),
     ):
         script = Script()
         flow, call = opened(manifest, script)
-        said = await turn(flow, call, script, 'P-1234 at ten.', *first, *FILL, ('call', 'book', {}))
+        said = await turn(flow, call, script, 'P-1234 at ten.', *first, *FILL, BOOK_TEN)
         assert said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', (manifest, said)
-        said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+        said = await turn(flow, call, script, 'Yes.', Call('book'))
         assert call.services.bookings == {'CL001': ('P-1234', '1000')}, (manifest, said)
         assert set(script.steps) <= {'desk', 'front', 'booking'}, script.steps
 
@@ -183,17 +116,17 @@ async def hostile_calls_are_refused():
         call,
         script,
         'Hi.',
-        ('call', 'hand_over', {'to': 'billing', 'because': 'invented'}),
-        ('say', 'How can I help?'),
+        Call('hand_over', to='billing', because='invented'),
+        Reply('How can I help?'),
     )
     assert call.state.agent == 'front', 'an invented destination moved the caller'
-    await turn(flow, call, script, 'Book me.', ('call', 'book', {}), ('say', 'Let me hand you over.'))
+    await turn(flow, call, script, 'Book me.', Call('book'), Reply('Let me hand you over.'))
     assert call.state.agent == 'front' and call.services.calls == 0, 'a tool the front desk does not have ran'
 
     script = Script()
-    flow, call = opened('one_agent.yaml', script)
-    await turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}), heard=False)
-    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    flow, call = opened('agent.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN, heard=False)
+    said = await turn(flow, call, script, 'Yes.', Call('book'))
     assert call.services.calls == 0 and said[-1].startswith('Shall I book'), (
         'a yes to an unheard read-back booked'
     )
@@ -202,37 +135,40 @@ async def hostile_calls_are_refused():
         call,
         script,
         'Ref CL999.',
-        ('call', 'collect', {'values': {'reference': 'CL999'}}),
-        ('say', 'Noted.'),
+        Call('reply', say='Noted.', update={'reference': 'CL999'}),
+        Reply('Noted.'),
     )
     assert call.state.facts.reference == '', 'a model wrote a field only a receipt may set'
 
 
 async def a_change_in_the_same_reply_spends_no_yes():
-    """P5: "yes, but at nine" as `collect` + `book` in one response, in both orders: nothing is booked.
+    """P5: "yes, but at nine" beside the ten o'clock read-back: nothing is booked, and nine is read back fresh.
 
-    Collect first: the change lands, and nine is read back for a fresh yes.
-    Book first: the SDK runs the output before the change, so `book` refuses
-    with a retry, the change runs, and the model's next `book` reads nine
-    back. Either way no approval is spent on arguments the same reply moved
-    away from, and the caller hears the time they asked for.
+    On the booking's own call, the update moves the arguments, so the call
+    is a new question, not the yes. As a reply with the update and the
+    booking after it in one response, the reply is the one decision and the
+    booking does nothing. Either way no approval is spent on arguments the
+    same reply moved away from, and the caller hears the time they asked for.
     """
-    for order in ('collect_first', 'book_first'):
+    for order in ('on_the_booking', 'reply_first'):
         script = Script()
-        flow, call = opened('one_agent.yaml', script)
-        said = await turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}))
+        flow, call = opened('agent.yaml', script)
+        said = await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN)
         assert said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?'
-        change = ('collect', {'values': {'slot': '0900'}})
-        calls = [change, ('book', {})] if order == 'collect_first' else [('book', {}), change]
-        said = await turn(
-            flow, call, script, 'Yes, but make it nine.', ('calls', calls), ('call', 'book', {})
+        change = (
+            Call('book', update={'slot': '0900'})
+            if order == 'on_the_booking'
+            else Calls(Reply('Nine, then.', slot='0900'), Call('book'))
         )
+        said = await turn(flow, call, script, 'Yes, but make it nine.', change)
         assert call.services.calls == 0, (order, 'booked on a read-back the same reply changed')
-        slot, when = '0900', '9:00'
-        assert call.state.facts.slot == slot, (order, call.state.facts)
-        assert said[-1] == f'Shall I book Tuesday at {when} AM for P-1234?', (order, said)
-        said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
-        assert call.services.bookings == {'CL001': ('P-1234', slot)}, (
+        assert call.state.facts.slot == '0900', (order, call.state.facts)
+        if order == 'reply_first':
+            assert said == ['Nine, then.'], (order, said)
+            said = await turn(flow, call, script, 'Yes, nine.', Call('book'))
+        assert said[-1] == 'Shall I book Tuesday at 9:00 AM for P-1234?', (order, said)
+        said = await turn(flow, call, script, 'Yes.', Call('book'))
+        assert call.services.bookings == {'CL001': ('P-1234', '0900')}, (
             order,
             'the fresh read-back and yes book once',
         )
@@ -246,16 +182,21 @@ async def holding_covers_work_not_thinking():
         return {'0900': 'Tuesday at 9:00 AM'}
 
     for slow, moves, expected in (
-        ('tool', (('call', 'options', {}), ('say', 'I have Tuesday at nine.')), 1),
-        ('model', (('call', 'goodbye', {}),), 0),
+        ('tool', (Call('options'), Reply('I have Tuesday at nine.')), 1),
+        ('model', (Call('goodbye'),), 0),
     ):
         script = Script()
         step = ConversationStep(
-            id='desk', instructions='Help.', fields=('patient', 'slot'), choices={'slot': slow_times}
+            id='desk',
+            instructions='Help.',
+            fields=('patient', 'slot'),
+            choices={'slot': slow_times},
+            structured=True,
         )
         flow = StepFlow([step], model=script.model, state_type=ClinicState)
         call = flow.open(ClinicState(), services=Backend())
-        script.call, script.moves = call, list(moves)
+        script.call = call
+        script.moves = list(moves)
         script.delay = 0.2 if slow == 'model' else 0.0
 
         async def voice(text: str) -> None:
@@ -280,11 +221,16 @@ async def a_cut_off_tool_leaves_no_timer():
 
     script = Script()
     step = ConversationStep(
-        id='desk', instructions='Help.', fields=('patient', 'slot'), choices={'slot': hanging_times}
+        id='desk',
+        instructions='Help.',
+        fields=('patient', 'slot'),
+        choices={'slot': hanging_times},
+        structured=True,
     )
     flow = StepFlow([step], model=script.model, state_type=ClinicState)
     call = flow.open(ClinicState(), services=Backend())
-    script.call, script.moves = call, [('call', 'options', {})]
+    script.call = call
+    script.moves = [Call('options')]
     barge = core.turn.Barge()
     running = asyncio.create_task(
         take_turn(call, flow.nodes, 'Which times?', TurnBudget(hold_after=5.0), barge)
@@ -316,12 +262,11 @@ async def a_code_node_returns_with_no_model():
         call,
         script,
         'P-1234, where is my booking?',
-        ('call', 'collect', {'values': {'patient': 'P-1234'}}),
-        ('call', 'hand_over', {'to': 'look_up', 'because': 'find the booking'}),
-        ('say', 'You are booked for Tuesday at ten.'),
+        Call('hand_over', to='look_up', because='find the booking', update={'patient': 'P-1234'}),
+        Reply('You are booked for Tuesday at ten.'),
     )
     assert said == ['I found booking CL007.', 'You are booked for Tuesday at ten.'], said
-    assert script.steps == ['front', 'front', 'front'], ('the code node made a request', script.steps)
+    assert script.steps == ['front', 'front'], ('the code node made a request', script.steps)
     assert (
         call.state.agent == 'front' and call.state.pending is None and call.state.facts.reference == 'CL007'
     )
@@ -337,12 +282,11 @@ async def a_code_node_returns_with_no_model():
             call,
             script,
             'P-1234.',
-            ('call', 'collect', {'values': {'patient': 'P-1234'}}),
-            ('call', 'hand_over', {'to': 'look_up', 'because': 'find the booking'}),
-            ('say', 'I could not find it.'),
+            Call('hand_over', to='look_up', because='find the booking', update={'patient': 'P-1234'}),
+            Reply('I could not find it.'),
         )
         assert call.state.agent == 'front' and call.state.facts.reference == '', (trouble, call.state)
-        assert script.steps == ['front', 'front', 'front'], (trouble, script.steps)
+        assert script.steps == ['front', 'front'], (trouble, script.steps)
 
 
 async def late_options_offer_nothing():
@@ -368,7 +312,7 @@ async def late_options_offer_nothing():
         looking = asyncio.create_task(_offer(call, step.choices))
         await asyncio.sleep(0)
         if moved_on == 'request':
-            call.collect(patient='P-4321')
+            call.update(patient='P-4321')
             call._offers.put('slot', {'1000': 'Tuesday at 10:00 AM'})
         else:
             call.commit(agent='elsewhere')
@@ -393,20 +337,17 @@ async def an_unheard_receipt_is_said_again():
     for rule in (True, False):
         script = Script()
         flow, call = opened('agent.yaml', script)
-        await turn(flow, call, script, 'P-1234.', ('call', 'collect', {'values': {'patient': 'P-1234'}}))
-        await turn(flow, call, script, 'Ten.', ('call', 'collect', {'values': {'slot': '1000'}}))
-        script.moves = [('call', 'accept', {})]
+        await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN)
+        script.moves = [Call('book')]
         reply = await core.text_turn(flow, call, 'Yes.')
         receipt = next(s for s in reply.segments if s.text.startswith('Booked'))
         call.acknowledge(receipt.id, heard='')
         requests = len(script.steps)
         if rule:
-            said = await turn(flow, call, script, 'Yes, Tuesday at ten, great.', ('say', 'See you then.'))
+            said = await turn(flow, call, script, 'Yes, Tuesday at ten, great.', Reply('See you then.'))
         else:
             with patch.object(type(call), 'unheard_receipt', lambda self: ''):
-                said = await turn(
-                    flow, call, script, 'Yes, Tuesday at ten, great.', ('say', 'Anything else?')
-                )
+                said = await turn(flow, call, script, 'Yes, Tuesday at ten, great.', Reply('Anything else?'))
         assert call.services.calls == 1 and len(call.evidence) == 1, 'the booking was made again'
         assert len(script.steps) == requests + 1, 'the words said over the receipt were not read'
         if rule:
@@ -419,70 +360,45 @@ async def an_unheard_receipt_is_said_again():
             assert said == ['Anything else?'], 'without the rule the receipt was still said'
 
 
-async def model_words_beside_an_operation_are_not_said():
-    """F3: text in the same reply as an operation call is dropped; the operation says its own words, once.
-
-    Coval runs jCBGSipW and StET3kNN: in 4 of 11 calls the model wrote the
-    read-back itself beside `book_appointment`, and the caller heard it twice.
-    Text beside any other tool (`collect`), or alone, is said as before.
-    """
-    script = Script()
-    flow, call = opened('one_agent.yaml', script)
-    said = await turn(
-        flow, call, script, 'P-1234 at ten.', *FILL, ('say+call', 'One moment. Shall I book ten?', 'book', {})
-    )
-    assert said == ['Shall I book Tuesday at 10:00 AM for P-1234?'], said
-    assert not any('One moment' in s.text for s in call.all_spoken), 'dropped words were recorded as said'
-    said = await turn(
-        flow,
-        call,
-        script,
-        'Actually nine.',
-        ('say+call', 'Nine it is.', 'collect', {'values': {'slot': '0900'}}),
-        ('call', 'book', {}),
-    )
-    assert said == ['Nine it is.', 'Shall I book Tuesday at 9:00 AM for P-1234?'], said
-    said = await turn(flow, call, script, 'How long is it?', ('say', 'Thirty minutes.'))
-    assert said == ['Thirty minutes.'], said
-
-
 async def a_recorded_pick_is_read_back_by_code():
-    """F4: `reads_back`: a reply that only records the slot gets its read-back from code, one request fewer.
+    """F4: the booking's own update reads it back in the request that picked it: no second request, no `record`.
 
     Coval runs jCBGSipW and StET3kNN: 21 turns spent a second request only to
-    have `book_appointment` read back after `collect`. A reply with words of
-    its own is left to the model, and only a heard yes still books.
+    have `book_appointment` read back after the pick was recorded. A booking
+    carries the slot itself, so `reads_back: {book: [slot]}` needs no
+    `record`: it is offered only for a field the operation's update cannot
+    carry. A reply with words of its own is left to the model, and only a
+    heard yes still books.
     """
     script = Script()
     flow, call = opened('reads_back.yaml', script)
-    said = await turn(flow, call, script, 'P-1234 at ten.', *FILL)
+    said = await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN)
     assert said == ['Shall I book Tuesday at 10:00 AM for P-1234?'], said
-    assert script.steps == ['desk', 'desk'], (
-        'options, then collect: the read-back asked no model',
-        script.steps,
-    )
-    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    assert script.steps == ['desk', 'desk'], ('options, then the booking read back by code', script.steps)
+    assert 'record' not in script.requests[-1].offered, script.requests[-1].offered
+    said = await turn(flow, call, script, 'Yes.', Call('book'))
     assert call.services.bookings == {'CL001': ('P-1234', '1000')}, said
 
     script = Script()
     flow, call = opened('reads_back.yaml', script)
-    pick = {'values': {'patient': 'P-1234', 'slot': '1000'}}
     said = await turn(
         flow,
         call,
         script,
         'P-1234 at ten. How long is it?',
-        ('call', 'options', {}),
-        ('say+call', 'Thirty minutes.', 'collect', pick),
-        ('call', 'book', {}),
+        *FILL,
+        Reply('Thirty minutes.', patient='P-1234', slot='1000'),
     )
-    assert said == ['Thirty minutes.', 'Shall I book Tuesday at 10:00 AM for P-1234?'], said
-    assert len(script.steps) == 3, ('words beside the pick: the model reads back', script.steps)
+    assert said == ['Thirty minutes.'] and len(script.steps) == 2, (
+        'words beside the pick: the model answers, and code reads nothing back',
+        said,
+    )
+    assert call.state.facts.slot == '1000' and call.pending_question() is None
 
     script = Script()
     flow, call = opened('reads_back.yaml', script)
-    await turn(flow, call, script, 'P-1234 at ten.', *FILL, heard=False)
-    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN, heard=False)
+    said = await turn(flow, call, script, 'Yes.', Call('book'))
     assert call.services.calls == 0 and said[-1].startswith('Shall I book'), (
         'a yes to an unheard read-back booked'
     )
@@ -494,31 +410,30 @@ async def the_same_value_said_again_is_a_yes():
     The caller's words decide nothing here: the scripted agent only records
     what it heard, and code compares the value with the read-back. Code
     carries it out only where the application's policy says the same value
-    is a yes (`restated: confirms`, a lookup). For a booking, recording the
-    same slot is only a record (session 4d, defect 1): the step's own agent
+    is a yes (`restated: confirms`, a lookup). For a booking, the same slot
+    in a reply is only a record (session 4d, defect 1): the step's own agent
     reads the reply, and "No, do not book ten" books nothing.
     """
-    patient = {'values': {'patient': 'P-1234'}}
+    patient = Record(patient='P-1234')
     script = Script()
     flow, call = opened('restated.yaml', script)
-    said = await turn(flow, call, script, 'P-1234.', ('call', 'collect', patient))
+    said = await turn(flow, call, script, 'P-1234.', patient)
     assert said == ['Is your patient number P-1234?'], said
     before = len(script.steps)
-    said = await turn(flow, call, script, 'No, it is P 1 2 3 4.', ('call', 'collect', patient))
+    said = await turn(flow, call, script, 'No, it is P 1 2 3 4.', patient)
     assert said[:2] == [call.locale.restated, 'Thanks, P-1234.'], said
     assert len(script.steps) - before == 1, ('the restated value asked no second request', script.steps)
 
     script = Script()
     flow, call = opened('restated.yaml', script)
-    await turn(flow, call, script, 'P-1234.', ('call', 'collect', patient), heard=False)
-    said = await turn(flow, call, script, 'No, it is P 1 2 3 4.', ('call', 'collect', patient))
+    await turn(flow, call, script, 'P-1234.', patient, heard=False)
+    said = await turn(flow, call, script, 'No, it is P 1 2 3 4.', patient)
     assert call.locale.restated not in said and said == ['Is your patient number P-1234?'], (
         'the same value after an unheard read-back carried it out',
         said,
     )
 
-    ten = {'values': {'slot': '1000'}}
-    for words, reply in (
+    for words, answer in (
         ('No, do not book ten. I am only checking if it is free.', 'Ten is free. Nothing is booked.'),
         ('Is ten free?', 'Ten is free.'),
         ('Only if ten is still free.', 'It is.'),
@@ -526,43 +441,30 @@ async def the_same_value_said_again_is_a_yes():
     ):
         script = Script()
         flow, call = opened('reads_back.yaml', script)
-        await turn(flow, call, script, 'P-1234 at ten.', *FILL)
-        said = await turn(flow, call, script, words, ('call', 'collect', ten), ('say', reply))
+        await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN)
+        said = await turn(flow, call, script, words, Reply(answer, slot='1000'))
         assert call.services.calls == 0 and call.locale.restated not in said, (
             words,
             'a value said again booked',
         )
-        assert said == [reply], (words, said)
+        assert said == [answer], (words, said)
 
     script = Script()
     flow, call = opened('reads_back.yaml', script)
-    await turn(flow, call, script, 'P-1234 at ten.', *FILL)
-    said = await turn(
-        flow, call, script, 'Yes, ten.', ('calls', [('collect', ten), ('book', {})]), ('call', 'book', {})
-    )
-    assert call.services.calls == 0 and said[-1] == 'Shall I book Tuesday at 10:00 AM for P-1234?', (
-        'a yes beside a recorded value is read back again, never approved in the same reply',
-        said,
-    )
-    said = await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
-    assert call.services.bookings == {'CL001': ('P-1234', '1000')}, said
-
-    script = Script()
-    flow, call = opened('reads_back.yaml', script)
-    await turn(flow, call, script, 'P-1234 at ten.', *FILL)
-    said = await turn(flow, call, script, 'No, nine.', ('call', 'collect', {'values': {'slot': '0900'}}))
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN)
+    said = await turn(flow, call, script, 'No, nine.', Call('book', update={'slot': '0900'}))
     assert call.services.calls == 0 and said == ['Shall I book Tuesday at 9:00 AM for P-1234?'], said
 
     script = Script()
     flow, call = opened('restated.yaml', script)
-    await turn(flow, call, script, 'P-1234.', ('call', 'collect', patient))
+    await turn(flow, call, script, 'P-1234.', patient)
     said = await turn(
         flow,
         call,
         script,
         'No, P-56. Well, P-1234 then.',
-        ('call', 'collect', {'values': {'patient': 'P-56'}}),
-        ('call', 'collect', patient),
+        Record(patient='P-56'),
+        patient,
     )
     assert call.locale.restated not in said and not call.evidence, (
         'a refused change, then the old value, was taken as a yes',
@@ -614,8 +516,8 @@ async def silence_gets_a_reminder_then_a_goodbye():
     line closes. Speaking resets the count.
     """
     script = Script()
-    flow, call = opened('one_agent.yaml', script)
-    await turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}))
+    flow, call = opened('agent.yaml', script)
+    await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN)
     closed = []
 
     async def hang_up() -> None:
@@ -631,7 +533,7 @@ async def silence_gets_a_reminder_then_a_goodbye():
     ], [s.text for s in reminded]
     assert len(script.steps) == requests, 'a reminder asked a model'
     call.acknowledge(*(s.id for s in reminded))
-    await turn(flow, call, script, 'Yes.', ('call', 'book', {}))
+    await turn(flow, call, script, 'Yes.', Call('book'))
     assert call.services.bookings == {'CL001': ('P-1234', '1000')}, 'the yes to the repeated read-back books'
 
     for _ in range(REMINDERS):
@@ -644,18 +546,16 @@ async def silence_gets_a_reminder_then_a_goodbye():
 
 
 async def a_question_is_not_a_no_on_the_clinic():
-    """P19: the decline rule outside the desk: a prose step with two operations and no hand-over."""
+    """P19: the decline rule outside the desk: a step with two operations and no hand-over."""
     for declined in (False, True):
         script = Script()
-        flow, call = opened('one_agent.yaml', script)
-        await turn(flow, call, script, 'P-1234 at ten.', *FILL, ('call', 'book', {}))
+        flow, call = opened('agent.yaml', script)
+        await turn(flow, call, script, 'P-1234 at ten.', *FILL, BOOK_TEN)
         if declined:
-            said = await turn(
-                flow, call, script, 'No, leave it. Bye.', ('calls', [('decline', {}), ('goodbye', {})])
-            )
+            said = await turn(flow, call, script, 'No, leave it. Bye.', Call('goodbye', decline=True))
         else:
-            await turn(flow, call, script, 'Before I say, do you take walk-ins?', ('say', 'We do, mornings.'))
-            said = await turn(flow, call, script, 'Bye.', ('call', 'goodbye', {}))
+            await turn(flow, call, script, 'Before I say, do you take walk-ins?', Reply('We do, mornings.'))
+            said = await turn(flow, call, script, 'Bye.', Call('goodbye'))
         assert call.services.calls == 0, said
         assert (ENGLISH.left_undone in ' '.join(said)) is not declined, (declined, said)
 
@@ -670,7 +570,6 @@ async def main() -> None:
     await a_code_node_returns_with_no_model()
     await late_options_offer_nothing()
     await an_unheard_receipt_is_said_again()
-    await model_words_beside_an_operation_are_not_said()
     await a_recorded_pick_is_read_back_by_code()
     await the_same_value_said_again_is_a_yes()
     reads_back_is_checked_at_load()
@@ -678,7 +577,7 @@ async def main() -> None:
     await a_question_is_not_a_no_on_the_clinic()
     print(
         'nodes ok: no reader, hostile calls, mixed reply, holding, code node, late options, unheard receipt, '
-        'no echo, code read-back, a question is not a no'
+        'code read-back, a question is not a no'
     )
 
 

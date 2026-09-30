@@ -58,10 +58,11 @@ import inspect
 import sys
 import typing
 from abc import ABC, abstractmethod
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field, replace
 from graphlib import CycleError, TopologicalSorter
+from itertools import pairwise
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Literal, TypeAliasType, get_args, get_origin, get_type_hints
@@ -1622,7 +1623,7 @@ class FlowSpec(BaseModel):
         if business and not self.state:
             resolve.fail('', 'a flow with collect, confirm or action steps needs a state model (`state:`)')
         ids = [step.id for step in self.steps]
-        for repeated in sorted({i for i in ids if ids.count(i) > 1}):
+        for repeated in sorted(i for i, n in Counter(ids).items() if n > 1):
             resolve.fail('', f'step id {repeated!r} is used more than once')
         known = set(ids)
         if self.entry and self.entry not in known:
@@ -1676,9 +1677,9 @@ class FlowSpec(BaseModel):
         """An action that needs approval must be unreachable except through a confirm step for that operation."""
         business = [s for s in self.steps if not isinstance(s, EndSpec)]
         edges: dict[str, set[str]] = {s.id: set(s.destinations()) for s in self.steps}
-        for index, step in enumerate(business):
-            if not step.then and index + 1 < len(business):
-                edges[step.id].add(business[index + 1].id)
+        for step, following in pairwise(business):
+            if not step.then:
+                edges[step.id].add(following.id)
         for action in [s for s in self.steps if isinstance(s, ActionSpec)]:
             found = resolve._cache.get(('operation', action.uses))
             operation_type = found[0] if found else None
@@ -1739,7 +1740,7 @@ class FlowSpec(BaseModel):
         resolve.explicit_model = model is not None
         model = model if model is not None else self.model
         state = resolve.state_type()
-        flow = StepFlow(
+        return StepFlow(
             [step.to_step(resolve) for step in self.steps],
             model=model,
             settings=settings,
@@ -1753,7 +1754,6 @@ class FlowSpec(BaseModel):
             version=self.app_version,
             clock=self.current_datetime.build() if self.current_datetime is not None else None,
         )
-        return flow
 
 
 def _attribute(state: type[BaseModel], name: str) -> bool:
@@ -1851,14 +1851,13 @@ def _tags(member: type[BaseModel], tag: str) -> list[Any]:
 
 def _marked(won: list[type[BaseModel]]) -> tuple[str, str, str]:
     """The success receipts' `Subject` field, its resource kind, and their `Version` field: '' where unmarked."""
-    subject = kind = version = ''
-    for member in won:
-        for field_name, info in member.model_fields.items():
-            for mark in info.metadata:
-                if isinstance(mark, Subject) and not subject:
-                    subject, kind = field_name, mark.kind or field_name
-                elif isinstance(mark, Version) and not version:
-                    version = field_name
+    marks = [
+        (name, mark) for member in won for name, info in member.model_fields.items() for mark in info.metadata
+    ]
+    subject, kind = next(
+        ((name, mark.kind or name) for name, mark in marks if isinstance(mark, Subject)), ('', '')
+    )
+    version = next((name for name, mark in marks if isinstance(mark, Version)), '')
     return subject, kind, version
 
 

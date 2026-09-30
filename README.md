@@ -390,9 +390,9 @@ explanation.
 
 | Run | Callers | Calls | Result | Requests per turn | Input tokens per call | Turn latency p50 |
 |---|---|---:|---|---:|---:|---:|
-| [Routine bookings](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/75m8jevu6ywGEkwSaUQave) | normal | 5, 5 at once | 5 of 5 pass every `load_report` check | 0.86 | 17.0k | 1.86 s |
-| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/fMHCmkqa9pBfykQjBMmcEv) | normal | 8, 8 at once | 7 of 8 right in the diary | 0.94 | 21.2k | 2.69 s |
-| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/iWbBgavGcmL7YiVZbZzgwJ) | interruptive | 8, 8 at once | 8 of 8 right in the diary | 1.06 | 31.5k | 2.50 s |
+| [Routine bookings](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/BBdQ7UVJVoNng7HuuggpTR) | normal | 5, 5 at once | 5 of 5 right in the diary and in `load_report` | 0.80 | 15.5k | 3.13 s |
+| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/FZ2Hg5smLR4e4FxQaFFBVp) | normal | 8, 8 at once | 8 of 8 right in the diary | 0.88 | 20.2k | 2.71 s |
+| [Graph paths](https://app.coval.dev/slng-ltd-1787040174713992753/workspace/01M09YA4S1SC1Q8AHKHP2R9A0E/simulated/runs/CHbiNaE3KApGEFyqL4t3Zz) | interruptive | 8, 8 at once | 8 of 8 right in the diary | 1.00 | 32.2k | 2.50 s |
 
 The graph-paths set has eight cases:
 
@@ -405,9 +405,16 @@ The graph-paths set has eight cases:
 7. hold two bookings and cancel one;
 8. ask to move with nothing held, then book instead.
 
-In every call, each change was read back and confirmed before it happened, and nothing was booked twice. The one
-miss was a date: on a Wednesday, "Thursday" became the Thursday of next week. It was read back, and the caller
-accepted it.
+In every call, each change was read back and confirmed before it happened, and every read-back was heard in full on
+Twilio's marks. Nothing was booked twice.
+
+Two things to know about these runs:
+
+1. **One interruptive call ran out of turn budget.** The caller said "no" and then the same number again. The verify
+   node handed the caller on instead of confirming, and the flow sent them back to verify, twice in one turn. The
+   budget stopped the loop. The next turn verified the number, and the right booking was cancelled.
+2. **A bare weekday can still be read as next week's.** An earlier run booked "Thursday", said on a Wednesday, a week
+   late. It was read back and accepted. Case 2 was right this time, but the fix is separate work.
 
 ### Try it
 

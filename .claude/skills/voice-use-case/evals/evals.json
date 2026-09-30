@@ -1,0 +1,26 @@
+{
+  "skill_name": "voice-use-case",
+  "evals": [
+    {
+      "id": 1,
+      "name": "dental-clinic-bookings",
+      "prompt": "I want a voice agent for Bright Smile, a dental clinic in Barcelona. Callers book a check-up or a cleaning, or cancel an appointment they already hold. We know patients by their phone number: read the caller ID back to them. Slots are 30 minutes, Monday to Friday, 9:00 to 17:00. There is no backend yet, so write a small in-memory one. English only.",
+      "expected_output": "Level 3 typed nodes: a router, verify with caller ID read back, a booking node with a slot choice function and offers, a separate cancelling node; Write operations with readback and receipts; compiles; offline tests prove a heard yes books once and an unheard read-back books nothing.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "museum-info-line",
+      "prompt": "Build a phone info line for the Museo del Mar in Valencia. People call to ask about opening hours, ticket prices, how to get there, and which exhibitions are on. No bookings, no payments, nothing is saved. There is a long accessibility policy that few callers ask about. Callers speak English or Spanish.",
+      "expected_output": "Level 1 one node (no operations), the accessibility policy as a deferred capability, English and Spanish locales via language/locales; compiles; a small offline test.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "bike-shop-mixed",
+      "prompt": "Our bike shop, Pedal Works, wants a phone agent that can do three things: tell a caller the status of their repair from its ticket number (only a lookup), book a slot to drop a bike off for repair, and answer questions about which bike or frame size suits them. For those bike questions we want a 'mechanic' to answer and then hand the caller back to where they were. Write a stub backend. English.",
+      "expected_output": "Front node routing to a repair-status node and a drop-off booking node (level 3 for the write), a consulted mechanic node that ends with done; the status lookup needs no read-back; compiles; tests cover the booking consent and the consultation return.",
+      "files": []
+    }
+  ]
+}

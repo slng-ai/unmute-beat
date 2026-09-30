@@ -1,7 +1,7 @@
 # Writing the files
 
 The salon is the working version of every file here:
-[`use-cases/salone-concierge-graph-new/salon/`](../../../../use-cases/salone-concierge-graph-new/salon/). Open the
+[`use-cases/salon/salon/`](../../../../use-cases/salon/salon/). Open the
 matching salon file before you write each one, and copy its shape.
 
 ```text

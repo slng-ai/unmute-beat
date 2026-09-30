@@ -117,7 +117,7 @@ steps:
 
 ## Level 3: typed nodes (recommended)
 
-The salon ([`use-cases/salone-concierge-graph-new/salon/agent.yaml`](../../../../use-cases/salone-concierge-graph-new/salon/agent.yaml))
+The salon ([`use-cases/salon/salon/agent.yaml`](../../../../use-cases/salon/salon/agent.yaml))
 is the full example. The rules:
 
 1. **One job, one operation.** Split by what the caller wants. Booking, moving and cancelling are three nodes.
@@ -186,15 +186,13 @@ Each one combines with any level. Suggest one only when the interview calls for 
 ## The contract: version 2 only
 
 Every use case this skill builds follows the version 2 contract, the one the salon
-([`use-cases/salone-concierge-graph-new`](../../../../use-cases/salone-concierge-graph-new/)) runs:
+([`use-cases/salon`](../../../../use-cases/salon/)) runs:
 
 1. `version: 2`, with steps keyed by id.
-2. Every conversation node is `speech: structured`, the default. Leave `speech:` out. Do not use `prose` or
-   `rendered`.
+2. Every conversation node is structured, the only kind core has. There is no `speech:` key.
 3. Every operation is one line, `name: operations.py:Class`, a `core.Lookup` or `core.Write`. Do not use the
    older `function:` form with `args:`, `readback:` and `succeeds:` keys.
 4. The model changes state only through a decision's `update`. There is no `collect` tool.
 
-Other manifests in the repo still use older forms: `salon-graph`, the version 1 fixtures under `core/tests/`, and
-parts of Faro (its operations use the `function:` form, and some of its steps are `prose` or `rendered`). Do not
-copy from them. `scripts/check_flow.py` refuses a manifest that breaks any rule above.
+Faro's operations still use the `function:` form. Do not copy that from it. Core refuses a manifest that breaks
+rules 1, 2 or 4 at load, and `scripts/check_flow.py` also refuses the `function:` form.

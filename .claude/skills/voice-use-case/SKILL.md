@@ -24,7 +24,7 @@ Read these before you build. They are short and they are the ground truth for th
 
 - [`README.md`](../../../README.md): the authoring contract, with a shop example.
 - [`docs/architecture/04-typed-flows-and-node-agents.md`](../../../docs/architecture/04-typed-flows-and-node-agents.md): nodes, offers, prerequisites.
-- The reference build: [`use-cases/salone-concierge-graph-new/`](../../../use-cases/salone-concierge-graph-new/).
+- The reference build: [`use-cases/salon/`](../../../use-cases/salon/).
   Copy its patterns. Do not import from it.
 
 Then read the reference file for the part you are on:

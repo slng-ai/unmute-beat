@@ -7,6 +7,7 @@ members = [
     "concierge-tools",
     "faro-language-learning",
     "faro-tools",
+    "nosh",
     "salon",
     "salon-pipecat-flows",
     "salon-prompt",
@@ -1499,6 +1500,41 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e0/e6/fe51d2bb1a3b446f59c5c8165999a9fee208bc346af90a7cbf7657bc0d75/nltk-3.10.3.tar.gz", hash = "sha256:bb9327a461c3811c2fa4900e03840401f2126adfb30c0072827c433bd2444ea4", size = 5137152, upload-time = "2026-08-12T23:46:37.258Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/6d/ebd2af4640b12168fdf0cb74b6118df2f32a2f62ec7e0c06fbfd80706639/nltk-3.10.3-py3-none-any.whl", hash = "sha256:ff9598a8e20518ee0d557745890cc4435b9578489e2dcbc69c4f81fa060caf7c", size = 1798643, upload-time = "2026-08-12T23:44:13.478Z" },
+]
+
+[[package]]
+name = "nosh"
+version = "0.1.0"
+source = { virtual = "use-cases/nosh" }
+dependencies = [
+    { name = "pipecat-ai", extra = ["google", "runner", "webrtc"] },
+    { name = "pipecat-slng" },
+    { name = "pydantic-ai-slim", extra = ["google", "openai"] },
+    { name = "python-dotenv" },
+    { name = "slng-voice-core", extra = ["tracing", "voice"] },
+    { name = "websockets" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pipecat-ai", extras = ["google", "runner", "silero", "webrtc"], specifier = ">=1.11.0" },
+    { name = "pipecat-slng", specifier = ">=0.5.2" },
+    { name = "pydantic-ai-slim", extras = ["google", "openai"], specifier = ">=2.46.0" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "slng-voice-core", extras = ["voice", "tracing"], editable = "core" },
+    { name = "websockets", specifier = ">=16.1.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
 ]
 
 [[package]]

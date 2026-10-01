@@ -1,0 +1,45 @@
+# Nosh on core, manifest version 2: one step that finds a place to eat or drink.
+#
+# Nosh changes nothing anywhere, so nothing is read back for a yes. What it says it knows is code's:
+# the location it found for the caller's words, the places there, and a picked place's details
+# (price, today's hours), each from the place tools on Render. The model reads the caller and
+# records what they said; code speaks next (`offers:` and `carries_out:`).
+
+version: 2
+id: nosh
+app_version: '2026.10.01-v1'
+greeting: "Hey, it's Nosh! You wanted a hand finding somewhere good."
+state: state.py:NoshState
+entry: finding
+current_datetime: {timezone: Europe/Madrid, calendar_days: 7}
+context: {facts: none, history: {scope: node, turns: 8}}
+locale:
+  base: english
+  goodbye: Enjoy your meal! Bye for now.
+model: google-cloud:gemini-3.5-flash-lite
+quote_caller: true
+
+agents:
+  nosh:
+    prompt: prompts/_voice.md
+    spec:
+      model_settings:
+        service_tier: priority
+        google_thinking_config: {thinking_level: MINIMAL}
+
+operations:
+  place_details: operations.py:PlaceDetails
+
+steps:
+  finding:
+    agent: nosh
+    prompt: prompts/finding.md
+    fields: [area, at_address, craving, spot, place]
+    context: {facts: [area, at_address, craving, spot, place, details]}
+    asks: {area: 'Whereabouts are you looking? An address or an area is fine.'}
+    choices:
+      # A new area takes the location away, and a new location or craving takes the places away.
+      spot: {function: offers.py:resolve_area, after: [area, at_address]}
+      place: {function: offers.py:find_places, after: [spot, craving]}
+    offers: [spot, place]
+    carries_out: {place_details: [place]}

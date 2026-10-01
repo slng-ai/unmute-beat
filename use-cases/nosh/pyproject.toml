@@ -1,0 +1,29 @@
+[project]
+name = "nosh"
+version = "0.1.0"
+description = "Nosh on core: an outbound guide to restaurants and bars, on the Render place tools."
+requires-python = ">=3.14"
+dependencies = [
+    "slng-voice-core[voice,tracing]",
+    # The model this application picks; core names no provider.
+    "pydantic-ai-slim[google,openai]>=2.46.0",
+    "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",
+    "pipecat-slng>=0.5.2",
+    "python-dotenv>=1.2.3",
+    "websockets>=16.1.1",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14", "ty>=0.0.82"]
+
+[tool.uv.sources]
+slng-voice-core = { workspace = true }
+
+[[tool.ty.overrides]]
+# Scripted tests pass `None` for a model and a usage they never read.
+include = ["tests/**"]
+
+[tool.ty.overrides.rules]
+call-non-callable = "ignore"
+unresolved-attribute = "ignore"
+not-subscriptable = "ignore"

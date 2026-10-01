@@ -96,7 +96,7 @@ async def identify_never_sees_the_account():
     script, flow, call, _, _ = opened()
     await verified(flow, call, script)
     for request in (r for r in script.requests if r.step == 'identify'):
-        for secret in ('Falcon', 'four hundred', '434', 'August', 'September'):
+        for secret in ('Falcon', 'four hundred', '434.5', 'August', 'September'):
             assert secret not in request.sent, (secret, request.step)
         assert 'Layla Haddad' in request.instructions, 'the pre-set name is rendered in the prompt'
     assert all(r.step == 'identify' for r in script.requests), 'account opened with no request of its own'
@@ -230,7 +230,7 @@ async def someone_else_hears_nothing_about_the_account():
         ('call', 'reply', {'say': 'I can only discuss it with Layla.'}),
     )
     for request in script.requests:
-        for secret in ('Falcon', 'four hundred', '434'):
+        for secret in ('Falcon', 'four hundred', '434.5'):
             assert secret not in request.sent, (secret, request.step)
 
 

@@ -1,0 +1,93 @@
+# Wasla on core, manifest version 2: an outbound reminder about an overdue payment.
+#
+# The ledger fills `holder` and `account` when the call opens, and the prompts render them
+# (`{{state.facts.holder.first_name}}`). `identify` sees the holder but not the account, so nothing about
+# the account can be said before the date of birth check, whose receipt is the only way to `verified`.
+# `account` requires it. Every write is read back and runs only on a heard yes.
+
+version: 2
+id: wasla
+app_version: '2026.10.01-v1'
+greeting: 'Hello, this is Lina calling from Wasla.'
+state: state.py:WaslaState
+identity: account_id
+entry: identify
+current_datetime: {timezone: Asia/Dubai, calendar_days: 14}
+context: {facts: none, history: {scope: node, turns: 8}}
+locale:
+  base: english
+  goodbye: Thank you for your time. Have a good day.
+  refusals:
+    after_deadline: 'I can only note a day up to {deadline_spoken}. Which day by then works for you?'
+model: google-cloud:gemini-3.5-flash-lite
+quote_caller: true
+
+agents:
+  lina:
+    prompt: prompts/_voice.md
+    spec:
+      model_settings:
+        service_tier: priority
+        google_thinking_config: {thinking_level: MINIMAL}
+
+operations:
+  verify_holder: operations.py:VerifyHolder
+  open_account: operations.py:OpenAccount
+  record_promise: operations.py:RecordPromise
+  schedule_callback: operations.py:ScheduleCallback
+  mark_wrong_number: operations.py:MarkWrongNumber
+  record_concern: operations.py:RecordConcern
+
+steps:
+  identify:
+    agent: lina
+    prompt: prompts/identify.md
+    fields: [birth_date]
+    context: {facts: [holder, birth_date, verified]}
+    operations: [verify_holder]
+    reads_back: {verify_holder: [birth_date]}
+    exits:
+      - {to: callback, purpose: 'someone other than the account holder answered'}
+      - {to: wrong_number, purpose: 'nobody of that name can be reached at this number'}
+
+  account:
+    agent: lina
+    prompt: prompts/account.md
+    requires: [verified]
+    satisfied_by: identify
+    fields: [good_time, promise_day]
+    context: {facts: [holder, account, good_time, promise_day]}
+    asks: {good_time: 'Is now a good time to talk about your Wasla account?'}
+    carries_out: {open_account: [good_time]}
+    operations: [record_promise]
+    reads_back: {record_promise: [promise_day]}
+    capabilities: [capabilities.py:payment_policy]
+    exits:
+      - {to: concern, purpose: 'hardship, a legal matter, a dispute about the purchase, or a final no to paying'}
+      - {to: callback, purpose: 'they want to talk another time'}
+
+  callback:
+    agent: lina
+    prompt: prompts/callback.md
+    fields: [callback_day, callback_time]
+    context: {facts: [holder, callback_day, callback_time]}
+    asks: {callback_day: 'When would be a good day and time to call back?'}
+    operations: [schedule_callback]
+
+  wrong_number:
+    agent: lina
+    prompt: prompts/wrong_number.md
+    operations: [mark_wrong_number]
+    opens_with: mark_wrong_number
+
+  concern:
+    agent: lina
+    prompt: prompts/concern.md
+    requires: [verified]
+    satisfied_by: identify
+    fields: [concern_kind, concern_note]
+    context: {facts: [holder, concern_kind, concern_note]}
+    operations: [record_concern]
+    capabilities: [capabilities.py:payment_policy]
+    exits:
+      - {to: account, purpose: 'they decide to promise a payment after all'}

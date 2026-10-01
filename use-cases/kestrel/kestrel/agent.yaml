@@ -1,0 +1,61 @@
+# Kestrel Insurance on core, manifest version 2: an inbound line that takes a first report of a motor claim.
+#
+# `verify` finds the policy by its number and the holder's date of birth, read back for a yes; the
+# lookup's receipt moves the caller on. `incident` asks every question by code, one at a time, in a
+# fixed order (`offers.py:next_question`), then reads the whole claim back and files it once on a yes.
+
+version: 2
+id: kestrel
+app_version: '2026.10.01-v1'
+greeting: "Thanks for calling Kestrel Insurance claims, this is Sam."
+state: state.py:ClaimState
+identity: policy_number
+entry: verify
+current_datetime: {timezone: Europe/London, calendar_days: 14}
+context: {facts: none, history: {scope: node, turns: 8}}
+locale:
+  base: english
+  goodbye: Thanks for calling Kestrel. Take care, and drive safely.
+  refusals:
+    date_future: "That day hasn't happened yet. On which day did it happen?"
+model: google-cloud:gemini-3.5-flash-lite
+quote_caller: true
+
+agents:
+  sam:
+    prompt: prompts/_voice.md
+    spec:
+      model_settings:
+        service_tier: priority
+        google_thinking_config: {thinking_level: MINIMAL}
+
+operations:
+  lookup_policy: operations.py:LookupPolicy
+  file_claim: operations.py:FileClaim
+
+steps:
+  verify:
+    agent: sam
+    prompt: prompts/verify.md
+    fields: [policy_number, birth_date]
+    context: {facts: [policy_number, birth_date, policy]}
+    asks: {policy_number: 'Can I take your policy number, please?'}
+    operations: [lookup_policy]
+    reads_back: {lookup_policy: [policy_number, birth_date]}
+
+  incident:
+    agent: sam
+    prompt: prompts/incident.md
+    requires: [policy]
+    satisfied_by: verify
+    fields: [incident_day, incident_time, place, what_happened, injuries, police_report, other_party, vehicle_drivable, vehicle]
+    context:
+      facts: [incident_day, incident_time, place, what_happened, injuries, police_report, other_party, vehicle_drivable, vehicle]
+    choices:
+      # Rests on no field: it is asked again after every record while a fact is missing.
+      vehicle: {function: offers.py:next_question, after: []}
+    offers: [vehicle]
+    operations: [file_claim]
+    reads_back:
+      file_claim: [incident_day, incident_time, place, what_happened, injuries, police_report, other_party, vehicle_drivable, vehicle]
+    capabilities: [capabilities.py:coverage]

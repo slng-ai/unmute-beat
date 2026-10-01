@@ -13,8 +13,11 @@ refused and nothing is revealed. K10 every prompt names only its own outputs.
 
 import asyncio
 
+from pydantic import ValidationError
+
 from core.flow import Flow
 from kestrel.offers import SAFETY
+from kestrel.state import ClaimState
 from tests.script import FACTS, PRIYA, SPEC, found, opened, told, turn
 
 READ_BACK = (
@@ -191,6 +194,18 @@ async def prompts_name_only_their_own_outputs():
     assert set(FACTS) <= set(SPEC.steps[1].fields)
 
 
+async def a_policy_number_is_kp_and_six_digits():
+    """K11: checked with no regex; spoken lower case, it is kept upper case."""
+    assert ClaimState(policy_number=' kp482913 ').policy_number == 'KP482913'
+    for wrong in ('KP48291', 'KP4829133', 'KX482913', 'KP48291A'):
+        try:
+            ClaimState(policy_number=wrong)
+        except ValidationError as error:
+            assert error.errors()[0]['type'] == 'policy_number', error
+        else:
+            raise AssertionError(f'{wrong} was accepted')
+
+
 async def main() -> None:
     for case in (
         the_greeting_asks_for_the_policy_number,
@@ -203,6 +218,7 @@ async def main() -> None:
         a_lost_answer_is_found_not_filed_twice,
         a_policy_that_does_not_match_is_refused,
         prompts_name_only_their_own_outputs,
+        a_policy_number_is_kp_and_six_digits,
     ):
         await case()
         print(f'ok  {case.__name__}')

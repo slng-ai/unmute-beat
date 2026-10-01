@@ -10,7 +10,7 @@ the model cannot invent one.
 from datetime import date, time
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, ValidationInfo
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationInfo
 from pydantic_core import PydanticCustomError
 
 import core
@@ -29,7 +29,19 @@ def _not_future(value: date, info: ValidationInfo) -> date:
     return value
 
 
-PolicyNumber = Annotated[str, StringConstraints(pattern=r'^KP\d{6}$')]
+def _policy_number(value: str) -> str:
+    """KP and six digits, upper case: "KP482913". No regex: two plain string checks."""
+    value = value.strip().upper()
+    if len(value) != 8 or not value.startswith('KP') or not value[2:].isdigit():
+        raise PydanticCustomError(
+            'policy_number',
+            '{value} is not a policy number: it is KP and six digits, like KP482913. Ask for it again.',
+            {'value': value},
+        )
+    return value
+
+
+PolicyNumber = Annotated[str, AfterValidator(_policy_number)]
 WhenInDay = time | Literal['morning', 'afternoon', 'evening', 'night']
 
 

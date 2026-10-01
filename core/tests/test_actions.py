@@ -8,9 +8,12 @@ operation, and the same guarantees as the long form.
   calling `book` again is not a yes;
 * a `core.Rejection` member is a terminal no: nothing assigned, nothing claimed;
 * an unknown outcome is settled by the class's `reconcile`, never sent twice;
+* a union return still moves the caller by its receipt's `route`, and its
+  `core.Rejection` member moves no one;
 * an argument from inside a nested state field (`AliasPath`) is missing when
   that field is, and never taken from a same-named field;
-* what cannot be inferred is refused at load, before any model.
+* what cannot be inferred is refused at load, before any model: a success
+  member without the route field among them.
 
 Asserts, no pytest.
 """
@@ -86,6 +89,21 @@ async def an_unknown_outcome_is_reconciled_by_the_class():
     assert call.state.facts.reference == 'CL001' and 'Booked for' in ' '.join(said), said
 
 
+async def a_union_receipt_routes_on_success_only():
+    text = (HERE / 'classes.yaml').read_text().replace('actions.py:Book\n', 'actions.py:RoutedBook\n')
+    text += '  done: {kind: end, outcome: completed, say: Goodbye.}\n'
+    for full in (False, True):
+        script = Script()
+        backend = Backend()
+        backend.full = full
+        flow = load_text(text, root=HERE).compile(model=script.model)
+        call = script.call = flow.open(ClinicState(), services=backend)
+        await turn(flow, call, script, 'P-1234, ten.', *FILL)
+        no = (Reply('That time has gone, sorry.'),) if full else ()
+        said = await turn(flow, call, script, 'Yes.', Call('book'), *no)
+        assert call.state.agent == ('desk' if full else 'done'), (full, call.state.agent, said)
+
+
 def a_nested_argument_comes_from_its_own_path():
     spec = core.load(HERE / 'classes.yaml')
     flow = spec.compile(model='test')
@@ -124,6 +142,7 @@ def what_cannot_be_inferred_is_refused_at_load():
     assert 'needs a readback method' in problems('broken_actions.py:Unread')
     assert 'is not a core.Receipt' in problems('broken_actions.py:PlainReceipt')
     assert 'needs a core.Version field' in problems('broken_actions.py:Unversioned')
+    assert "routes by 'next', which Yes does not have" in problems('broken_actions.py:HalfRouted')
     resolve = load_text(base, root=HERE)._resolver(Registry())
     held = create_model('Held', first=(Yes | None, None), second=(Yes | None, None)).model_fields
     assert (
@@ -137,6 +156,7 @@ if __name__ == '__main__':
     asyncio.run(a_heard_yes_books_once())
     asyncio.run(a_rejection_is_a_terminal_no())
     asyncio.run(an_unknown_outcome_is_reconciled_by_the_class())
+    asyncio.run(a_union_receipt_routes_on_success_only())
     a_nested_argument_comes_from_its_own_path()
     what_cannot_be_inferred_is_refused_at_load()
     print(

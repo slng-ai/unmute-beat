@@ -52,7 +52,7 @@ from typing import Any, ClassVar, Literal, final
 
 from loguru import logger
 from opentelemetry import trace
-from pydantic import BaseModel
+from pydantic import BaseModel, RootModel
 from pydantic_ai import ModelRetry
 from pydantic_ai.usage import RunUsage, UsageLimits
 
@@ -214,7 +214,7 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
                 call.note_business_attempt()
                 try:
                     raw = await self._execute(call, checked, grant)
-                    receipt: ReceiptT = self.receipt_type.model_validate(raw)  # ty: ignore[invalid-assignment]
+                    receipt: ReceiptT = self._receipt(raw)  # ty: ignore[invalid-assignment]
                 except Refused:
                     call.set_intent(intent.id, status='rejected')
                     audit.update(status='failed', outcome='rejected')
@@ -328,7 +328,7 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         owed = next(
             (i for i, (op, held, _) in call._unpresented.items() if op is self and held == args), None
         )
-        output = await self._record(call, args, self.receipt_type.model_validate(receipt))  # ty: ignore[invalid-argument-type]
+        output = await self._record(call, args, self._receipt(receipt))  # ty: ignore[invalid-argument-type]
         if owed is not None:
             call._unpresented.pop(owed, None)
         return output
@@ -397,6 +397,16 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
             result = note(intent)
             if asyncio.iscoroutine(result):
                 await result
+
+    def _receipt(self, raw: Any) -> BaseModel:
+        """`raw` validated as this operation's receipt: a union's `RootModel` gives back the receipt it holds.
+
+        The loader types a union return as `RootModel[A | B]`. Unwrapped here,
+        once, every reader gets the real receipt: its `route` field, and
+        `isinstance(receipt, Rejection)`.
+        """
+        receipt = self.receipt_type.model_validate(raw)
+        return receipt.root if isinstance(receipt, RootModel) else receipt
 
     def succeeded(self, receipt: Mapping[str, Any]) -> bool:
         """Whether a validated receipt says the action worked. Base: any validated receipt."""

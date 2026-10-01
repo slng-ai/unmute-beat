@@ -67,6 +67,8 @@ from kestrel.claims import Claims
 
 NAME = 'kestrel call'
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
+TTS_HOST = os.getenv('SLNG_TTS_BASE_URL', 'eu-west.api.slng.ai')
+"""Fish Audio is served from eu-west, in Germany. STT stays on `SLNG_HOST`."""
 CLAIMS = Claims()
 """The fake claims desk, shared by every call of this process."""
 FINISH_SECONDS = 8.0
@@ -152,9 +154,9 @@ def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
     )
     tts = SlngTTSService(
         api_key=key,
-        base_url=SLNG_HOST,
-        model=os.getenv('SLNG_TTS_MODEL', 'cartesia/sonic:3.5'),
-        voice=os.getenv('SLNG_TTS_VOICE', '62ae83ad-4f6a-430b-af41-a9bede9286ca'),
+        base_url=TTS_HOST,
+        model=os.getenv('SLNG_TTS_MODEL', 'slng/fish/tts:s2.1-pro'),
+        voice=os.getenv('SLNG_TTS_VOICE', '1258154bb41540c7b9dc0d10cd6704bf'),
         language=Language(TTS_LANGUAGE),
         warm_standby_enabled=True,
         text_aggregation_mode=TextAggregationMode.TOKEN,

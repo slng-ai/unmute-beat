@@ -53,6 +53,8 @@ from utils.observability import setup
 MODEL = 'gemini-3.1-flash-lite'
 """Not the harness's 3.5 flash lite: Pipecat's Gemini service has problems with it."""
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
+TTS_HOST = os.getenv('SLNG_TTS_BASE_URL', 'eu-west.api.slng.ai')
+"""Fish Audio is served from eu-west, in Germany. STT stays on `SLNG_HOST`."""
 TRACE_NAME = 'salon call'
 """The harness's trace name, so the ledger (`concierge-tools/ledger.py`) and Langfuse filters find these calls the same way."""
 TURN_STOP_SECS = 1.5
@@ -106,9 +108,9 @@ def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
     )
     tts = SlngTTSService(
         api_key=key,
-        base_url=SLNG_HOST,
-        model=os.getenv('SLNG_TTS_MODEL', 'cartesia/sonic:3.5'),
-        voice=os.getenv('SLNG_TTS_VOICE', '62ae83ad-4f6a-430b-af41-a9bede9286ca'),
+        base_url=TTS_HOST,
+        model=os.getenv('SLNG_TTS_MODEL', 'slng/fish/tts:s2.1-pro'),
+        voice=os.getenv('SLNG_TTS_VOICE', '1258154bb41540c7b9dc0d10cd6704bf'),
         language=Language('en'),
         warm_standby_enabled=True,
         text_aggregation_mode=TextAggregationMode.TOKEN,

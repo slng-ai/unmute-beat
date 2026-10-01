@@ -659,7 +659,7 @@ class _Resolver:
                 'restated_confirms is only for a read-back of a lookup: a value said again is never a yes to a change',
             )
         if action.route and won:
-            self.routes[name] = self._route(where, won[0], action.route)
+            self.routes[name] = frozenset().union(*(self._route(where, m, action.route) for m in won))
         self.assigned[name] = set(assign)
         receipt_type: type[BaseModel] = (
             members[0] if len(members) == 1 else RootModel[returned] if members else NoFacts

@@ -77,9 +77,9 @@ class LookupPolicy(core.Lookup[Kestrel]):
     def run(self, kestrel: Kestrel, intent: core.Intent) -> PolicyFound:
         """One receipt type, and a mismatch as `core.Refused`.
 
-        ponytail: a union return would be the natural shape, but core reads the
-        `route` field off the union's wrapper, not the receipt, so the caller
-        would never move on. Go back to a union once core reads the inner one.
+        ponytail: `core.Refused` carries what the model must do next, in words a
+        typed no would not. A union with a `core.Rejection` (`PolicyFound |
+        NoPolicy`) now routes as well; switch to it only after a live check.
         """
         found = kestrel.claims.policy(self.policy_number, self.birth_date)
         if found is None:

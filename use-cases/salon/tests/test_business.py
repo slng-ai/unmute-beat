@@ -12,6 +12,8 @@ understanding: that is what the Coval run measures.
   caller's number said back is a yes;
 * booking, moving and cancelling: one availability read with the request it
   rests on, read back, then done once on a heard yes; a repeat reads nothing;
+* a booking the diary refuses after the yes: nothing booked, and the model
+  told the diary's reason with the retry;
 * a complaint in the caller's own words, read back in the same request;
 * the locale's words for a number that cannot be right, and a past date;
 * a stylist consulted mid-booking: it answers, the caller comes back, the
@@ -34,7 +36,7 @@ from typing import Any
 from pydantic_ai.messages import ModelResponse, RetryPromptPart, ToolCallPart
 
 from salon.app import SPEC
-from salon.diary import Diary
+from salon.diary import Diary, RefusedError
 from salon.receipts import Customer
 from tests.script import CLOCK, PHONE, opened, slot, turn
 
@@ -254,6 +256,27 @@ async def a_repeat_reads_nothing():
         'the repeat is a labelled retry, and read nothing'
     )
     assert said == ['On Saturday I have 10:00 AM.'] and booked(diary) == []
+
+
+async def a_refused_booking_tells_the_model_why():
+    """The diary's no after a heard yes: `Declined` is a `core.Rejection`, so its `reason` reaches the model."""
+    script, flow, call, diary, reads = at('booking')
+    await read_back(flow, call, script, reads)
+    why = 'Somebody has just taken that time. Read the diary again and offer what is left.'
+
+    def taken(*args: Any, **kwargs: Any) -> dict:
+        raise RefusedError(why)
+
+    diary.save_booking = taken
+    said = await turn(
+        flow, call, script, 'Yes.', ('call', 'book_appointment'), reply('That time has just gone.')
+    )
+    assert said == ['That time has just gone.'] and booked(diary) == [], said
+    assert [i.status for i in call.intents] == ['rejected'], call.intents
+    assert retries(script)[-1] == (
+        f"Nothing was done: the book_appointment service answered {{'reason': {why!r}}}. Do not say it was "
+        'done. slot is no longer on offer: get a fresh offer (`options`), and record what the caller picks.'
+    ), retries(script)[-1]
 
 
 async def a_past_date_is_refused():
@@ -717,6 +740,7 @@ elif __name__ == '__main__':
     asyncio.run(a_number_that_cannot_be_right_gets_the_locales_words())
     asyncio.run(a_heard_yes_books_once())
     asyncio.run(a_repeat_reads_nothing())
+    asyncio.run(a_refused_booking_tells_the_model_why())
     asyncio.run(a_past_date_is_refused())
     asyncio.run(a_booking_is_moved_and_cancelled())
     asyncio.run(the_booking_just_made_moves_to_the_day_given())

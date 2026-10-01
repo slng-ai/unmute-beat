@@ -60,3 +60,19 @@ class Unversioned(core.Write[Backend]):
 
     def readback(self, clinic: Backend) -> str:
         return 'Shall I?'
+
+
+class Routed(core.Receipt):
+    status: Literal['routed']
+    next: Literal['desk']
+
+
+class HalfRouted(core.Lookup[Backend]):
+    """Two success receipts, only one with the route field: the other could never move the caller."""
+
+    route = 'next'
+
+    def run(
+        self, clinic: Backend, intent: core.Intent
+    ) -> Annotated[Routed | Yes, Field(discriminator='status')]:
+        return Yes(status='yes')

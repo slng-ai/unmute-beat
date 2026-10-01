@@ -784,7 +784,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
                     )
                 data = found.model_dump() if isinstance(found, BaseModel) else found
                 try:
-                    receipt = self.receipt_type.model_validate(data)
+                    receipt = self._receipt(data)
                 except ValidationError as error:
                     raise OutcomeUnknownError(
                         f'{self.name}: reconciliation answered in a shape that is not the receipt'

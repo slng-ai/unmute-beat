@@ -82,6 +82,26 @@ class Book(core.Write[Backend]):
         return None
 
 
+class BookedOn(Booked):
+    """A booking that sends the patient on to `done` (`RoutedBook`)."""
+
+    next: Literal['done'] = 'done'
+
+
+class RoutedBook(Book):
+    """`Book` whose success moves the caller (`route`): a union return must still be routed by its receipt."""
+
+    route = 'next'
+
+    def run(
+        self, clinic: Backend, intent: core.Intent
+    ) -> Annotated[BookedOn | Full, Field(discriminator='status')]:
+        answer = clinic.book(self.patient, self.slot)
+        return (
+            BookedOn.model_validate(answer) if answer['status'] == 'booked' else Full.model_validate(answer)
+        )
+
+
 class Cancel(core.Write[Backend]):
     reference: str = Field(min_length=1)
     say = 'Booking {reference} is cancelled.'

@@ -65,11 +65,10 @@ class VerifyHolder(core.Lookup[Wasla]):
     def run(self, wasla: Wasla, intent: core.Intent) -> Verified:
         """One receipt type, and a wrong date as `core.Refused`: the check changes nothing but its try count.
 
-        ponytail: a union return (`Verified | NotVerified`) is the natural
-        shape, but core reads the `route` field off the union's wrapper
-        (a `RootModel`), not off the receipt inside it, so the caller would
-        never move to `account`. Go back to the union once core reads the
-        route off the inner receipt.
+        ponytail: `core.Refused` carries what the model must do next (ask
+        again, or give the support line and leave), in words a typed no would
+        not. A union with a `core.Rejection` (`Verified | NotVerified`) now
+        routes as well; switch to it only after a live check of the refusals.
         """
         answer = wasla.ledger.verify(self.account_id, self.birth_date)
         if answer['status'] == 'mismatch':

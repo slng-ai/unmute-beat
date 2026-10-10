@@ -15,7 +15,7 @@ Where each number comes from:
     stt, tts         Pipecat's `stt` and `tts` spans: `metrics.ttfb` (seconds), the model and provider
     llm              Pipecat's `llm` spans with `metrics.ttfb`, or Pydantic AI's model requests
                      (`gen_ai.operation.name` = `chat`) with their duration and, when they streamed, the
-                     time to first chunk core writes on them (`slng.llm.first_chunk_seconds`)
+                     time to first chunk Pydantic AI writes on them (`gen_ai.client.operation.time_to_first_chunk`)
 
 A request belongs to the turn span it descends from, or else to the turn whose time it falls in.
 
@@ -26,11 +26,12 @@ agent.
 
 import json
 import statistics
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -161,8 +162,8 @@ def tags(span: dict[str, Any]) -> dict[str, Any]:
     return {tag['key']: tag.get('value') for tag in span.get('tags', [])}
 
 
-FIRST_CHUNK = 'slng.llm.first_chunk_seconds'
-"""What `core.observability` writes on a Pydantic AI model request that streamed: its time to first chunk."""
+FIRST_CHUNK = 'gen_ai.client.operation.time_to_first_chunk'
+"""What Pydantic AI writes on a model request span that streamed: its time to first chunk, in seconds."""
 
 
 def _kind(span: dict[str, Any], tag: dict[str, Any]) -> Kind | None:
@@ -403,8 +404,89 @@ type Fetch = Callable[[str], dict[str, Any]]
 
 
 def fetch_json(url: str) -> dict[str, Any]:
-    with urllib.request.urlopen(url, timeout=5) as response:
-        return json.load(response)
+    """One Jaeger API v3 answer, whole: a streamed answer is several JSON objects, merged into one `result`.
+
+    Jaeger says "no traces found" as a 404; that is an empty answer here, not an error.
+    """
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            text = response.read().decode()
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return {'result': {'resourceSpans': []}}
+        raise
+    decoder, at, spans = json.JSONDecoder(), 0, []
+    while at < len(text):
+        while at < len(text) and text[at].isspace():
+            at += 1
+        if at >= len(text):
+            break
+        found, at = decoder.raw_decode(text, at)
+        spans += (found.get('result') or {}).get('resourceSpans') or []
+    return {'result': {'resourceSpans': spans}}
+
+
+def _value(value: dict[str, Any]) -> Any:
+    """An OTLP attribute value as a plain one: ints arrive as strings in OTLP JSON."""
+    for key, found in value.items():
+        if key == 'intValue':
+            return int(found)
+        if key == 'arrayValue':
+            return [_value(v) for v in found.get('values', [])]
+        if key == 'kvlistValue':
+            return {kv['key']: _value(kv['value']) for kv in found.get('values', [])}
+        return found
+    return None
+
+
+def traces_of(answer: dict[str, Any]) -> list[dict[str, Any]]:
+    """Jaeger API v3's OTLP JSON as traces of spans: id, name, start and duration in microseconds, parent, tags."""
+    traces: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for resource in (answer.get('result') or {}).get('resourceSpans') or []:
+        for scope in resource.get('scopeSpans') or []:
+            for span in scope.get('spans') or []:
+                tag = [{'key': a['key'], 'value': _value(a['value'])} for a in span.get('attributes') or []]
+                if (span.get('status') or {}).get('code') in (2, 'STATUS_CODE_ERROR'):
+                    tag.append({'key': 'otel.status_code', 'value': 'ERROR'})
+                start, end = int(span['startTimeUnixNano']), int(span['endTimeUnixNano'])
+                parent = span.get('parentSpanId')
+                traces[span['traceId']].append(
+                    {
+                        'spanID': span['spanId'],
+                        'operationName': span.get('name', ''),
+                        'startTime': start // 1000,
+                        'duration': (end - start) // 1000,
+                        'references': [{'refType': 'CHILD_OF', 'spanID': parent}] if parent else [],
+                        'tags': tag,
+                    }
+                )
+    return [{'traceID': trace, 'spans': spans} for trace, spans in traces.items()]
+
+
+_UNITS = {'m': 60, 'h': 3600, 'd': 86400}
+
+
+def _window(lookback: str) -> tuple[str, str]:
+    """`1h`, `24h`, `7d` as the start and end times API v3 asks for."""
+    seconds = int(lookback[:-1]) * _UNITS[lookback[-1]] if lookback[-1:] in _UNITS else 3600
+    now = datetime.now(UTC)
+    return (
+        (now - timedelta(seconds=seconds)).isoformat(timespec='seconds').replace('+00:00', 'Z'),
+        now.isoformat(timespec='seconds').replace('+00:00', 'Z'),
+    )
+
+
+def _search(jaeger: str, service: str, lookback: str, limit: int, attributes: dict[str, str]) -> str:
+    start, end = _window(lookback)
+    query = {
+        'query.service_name': service,
+        'query.start_time_min': start,
+        'query.start_time_max': end,
+        'query.num_traces': limit,
+    }
+    if attributes:
+        query['query.attributes'] = json.dumps(attributes)
+    return f'{jaeger}/api/v3/traces?{urllib.parse.urlencode(query)}'
 
 
 def _read(
@@ -437,24 +519,23 @@ def collect(
 ) -> Metrics:
     """The overview: recent traces of `service` in Jaeger, for one agent or all, as turns, per-model stats and a summary.
 
-    One agent is asked of Jaeger itself (`tags={"slng.agent.id": agent}`), so a busy runner's other
-    agents never crowd the chosen one out of `limit`. Raises `urllib.error.URLError` (or what
-    `fetch` raises) when Jaeger does not answer.
+    One agent is asked of Jaeger itself (API v3's `query.attributes={"slng.agent.id": agent}`), so a
+    busy runner's other agents never crowd the chosen one out of `limit`. Raises
+    `urllib.error.URLError` (or what `fetch` raises) when Jaeger does not answer.
     """
     limits = limits or Limits()
-    query = {'service': service, 'lookback': lookback, 'limit': limit}
-    if agent:
-        query['tags'] = json.dumps({'slng.agent.id': agent})
-    found = fetch(f'{jaeger}/api/traces?{urllib.parse.urlencode(query)}')
-    return _read(jaeger, 'overview', agent, found.get('data') or [], limits)
+    found = fetch(_search(jaeger, service, lookback, limit, {'slng.agent.id': agent} if agent else {}))
+    return _read(jaeger, 'overview', agent, traces_of(found), limits)
 
 
 def collect_run(
     jaeger: str, trace: str, *, limits: Limits | None = None, fetch: Fetch = fetch_json
 ) -> Metrics:
     """One run's view: its trace alone, which names its own agent. Raises as `collect` does."""
-    found = fetch(f'{jaeger}/api/traces/{urllib.parse.quote(trace)}')
-    return _read(jaeger, 'run', '', found.get('data') or [], limits or Limits())
+    found = traces_of(fetch(f'{jaeger}/api/v3/traces/{urllib.parse.quote(trace)}'))
+    if not found:
+        raise LookupError(f'Jaeger has no trace {trace!r}')
+    return _read(jaeger, 'run', '', found, limits or Limits())
 
 
 def trace_of_run(
@@ -466,6 +547,5 @@ def trace_of_run(
     fetch: Fetch = fetch_json,
 ) -> str:
     """The trace id of a studio run (`slng.run.id`), or '' when Jaeger has none for it yet."""
-    query = {'service': service, 'lookback': lookback, 'limit': 1, 'tags': json.dumps({'slng.run.id': run})}
-    found = fetch(f'{jaeger}/api/traces?{urllib.parse.urlencode(query)}').get('data') or []
-    return str(found[0].get('traceID', '')) if found else ''
+    found = traces_of(fetch(_search(jaeger, service, lookback, 1, {'slng.run.id': run})))
+    return str(found[0]['traceID']) if found else ''

@@ -42,7 +42,7 @@ def call(
             span('s2', 'stt', 4210, 130, None, gen_ai__request__model='slng-stt', gen_ai__provider__name='slng', metrics__ttfb=0.45),
             span('c2', 'chat gemini-3.5-flash-lite', 4340, 1640, 't2', gen_ai__operation__name='chat', **model),
             span('c3', 'chat gemini-3.5-flash-lite', 6000, 400, 't2', gen_ai__operation__name='chat', otel__status_code='ERROR', **model),
-            span('c4', 'chat gemini-3.5-flash-lite', 6500, 900, 't2', gen_ai__operation__name='chat', slng__llm__first_chunk_seconds=0.31, **model),
+            span('c4', 'chat gemini-3.5-flash-lite', 6500, 900, 't2', gen_ai__operation__name='chat', gen_ai__client__operation__time_to_first_chunk=0.31, **model),
         ],
     }  # fmt: skip
     for one in found['spans']:
@@ -103,30 +103,82 @@ def a_swapped_model_is_two_rows():
     assert metrics.summary(before + after).mixed == ['llm']
 
 
+def otlp(*traces: dict) -> dict:
+    """Traces written as Jaeger's API v3 answers them: OTLP JSON, nanosecond strings, typed attribute values."""
+
+    def value(v: object) -> dict:
+        if isinstance(v, bool):
+            return {'boolValue': v}
+        if isinstance(v, int):
+            return {'intValue': str(v)}
+        if isinstance(v, float):
+            return {'doubleValue': v}
+        return {'stringValue': str(v)}
+
+    spans = [
+        {
+            'traceId': trace['traceID'],
+            'spanId': s['spanID'],
+            'parentSpanId': s['references'][0]['spanID'] if s['references'] else '',
+            'name': s['operationName'],
+            'startTimeUnixNano': str(s['startTime'] * 1000),
+            'endTimeUnixNano': str((s['startTime'] + s['duration']) * 1000),
+            'attributes': [
+                {'key': t['key'], 'value': value(t['value'])}
+                for t in s['tags']
+                if t['key'] != 'otel.status_code'
+            ],
+            'status': {'code': 2} if any(t['key'] == 'otel.status_code' for t in s['tags']) else {},
+        }
+        for trace in traces
+        for s in trace['spans']
+    ]
+    return {
+        'result': {
+            'resourceSpans': [
+                {'resource': {'attributes': []}, 'scopeSpans': [{'scope': {'name': 'x'}, 'spans': spans}]}
+            ]
+        }
+    }
+
+
+def api_v3_becomes_the_same_spans():
+    """Jaeger 2's query API (v3, OTLP JSON) read back into the same traces the timing code reads."""
+    [back] = metrics.traces_of(otlp(call()))
+    original = call()
+    assert back['traceID'] == 'tr1' and len(back['spans']) == len(original['spans'])
+    assert metrics.turns(back, metrics.Limits()) == metrics.turns(original, metrics.Limits()), (
+        'the same turns'
+    )
+
+
 def collect_reads_jaegers_query_api():
     asked: list[str] = []
 
     def fetch(url: str) -> dict:
         asked.append(url)
-        return {'data': [call(), call('tr2', agent='faro')]}
+        return otlp(call(), call('tr2', agent='faro'))
 
     found = metrics.collect('http://127.0.0.1:16686', fetch=fetch)
-    assert asked == ['http://127.0.0.1:16686/api/traces?service=slng-voice-harness&lookback=1h&limit=50'], (
-        asked
-    )
+    assert asked[0].startswith(
+        'http://127.0.0.1:16686/api/v3/traces?query.service_name=slng-voice-harness&'
+    ), asked
+    assert 'query.num_traces=50' in asked[0] and 'query.attributes' not in asked[0], asked
     assert found.scope == 'overview' and found.summary.runs == 2 and found.summary.turns == 4
     assert {r.agent for r in found.runs} == {'sage-and-stone', 'faro'}
 
     asked.clear()
     metrics.collect('http://127.0.0.1:16686', agent='faro', fetch=fetch)
-    assert 'tags=%7B%22slng.agent.id%22%3A+%22faro%22%7D' in asked[0], 'one agent is asked of Jaeger itself'
+    assert 'query.attributes=%7B%22slng.agent.id%22%3A+%22faro%22%7D' in asked[0], (
+        'one agent is asked of Jaeger itself'
+    )
 
     def one(url: str) -> dict:
         asked.append(url)
-        return {'data': [call('tr9', agent='faro')]}
+        return otlp(call('tr9', agent='faro'))
 
     run = metrics.collect_run('http://127.0.0.1:16686', 'tr9', fetch=one)
-    assert asked[-1] == 'http://127.0.0.1:16686/api/traces/tr9'
+    assert asked[-1] == 'http://127.0.0.1:16686/api/v3/traces/tr9'
     assert run.scope == 'run' and run.agent == '' and [r.agent for r in run.runs] == ['faro'], (
         "a run's view has no filter: it names its own agent"
     )
@@ -136,5 +188,6 @@ if __name__ == '__main__':
     a_turn_holds_its_own_requests_and_flags()
     per_model_and_summary()
     a_swapped_model_is_two_rows()
+    api_v3_becomes_the_same_spans()
     collect_reads_jaegers_query_api()
     print('metrics ok: turns from spans, flags over limits, p90s, per model and swaps, one agent, one run')

@@ -89,7 +89,14 @@ async def every_event_in_order():
     ended = heard.of(ev.ModelEnded)
     assert all(e.first_ms is not None and e.ms >= e.first_ms for e in ended), ended
     snapshots = heard.of(ev.TurnSnapshotted)
-    assert [s.turn for s in snapshots] == [1, 2], 'one snapshot per turn'
+    assert [s.turn for s in snapshots] == [1, 1, 2], 'one per turn, and turn 1 again as turn 2 starts'
+    last_line = snapshots[1].snapshot['speech'][-1]
+    assert last_line['text'] == 'Nine or ten on Tuesday.' and last_line['played'], (
+        'saved again once the reader acknowledged it: a resumed call knows the caller heard it'
+    )
+    assert not snapshots[0].snapshot['speech'][-1]['played'], (
+        'at the end of the turn it was not acknowledged yet'
+    )
     assert types.index('turn.finished') < types.index('turn.snapshot'), 'the snapshot follows the turn'
     intents = heard.of(ev.IntentChanged)
     assert [(i.operation, i.status) for i in intents if i.operation == 'book'] == [('book', 'prepared')]

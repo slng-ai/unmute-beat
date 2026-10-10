@@ -63,7 +63,7 @@ export function Boot() {
   const sentence = boot?.failed
     ? 'Start-up stopped. The failed step says what to do.'
     : boot?.ready
-      ? 'Pick an agent to see its runs, or start a call.'
+      ? 'Pick an agent, change its config, and start a call.'
       : unreachable
         ? 'Waiting for the engine…'
         : SENTENCES[line % SENTENCES.length];
@@ -120,7 +120,7 @@ export function Boot() {
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{boot.agents.length} agents found.</div>
                 <div className="mono" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{boot.agents.join(' · ')}</div>
               </div>
-              <a className="btn btn-y" href={href({ page: 'runs' })}>Open studio →</a>
+              <a className="btn btn-y" href={href({ page: 'agents' })}>Open studio →</a>
             </div>
           )}
           <p className="mono" style={{ margin: 0, fontSize: 11, color: 'var(--faint)' }}>

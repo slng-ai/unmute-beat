@@ -9,6 +9,9 @@ export default defineConfig({
   server: {
     port: 7802,
     strictPort: true,
-    proxy: { '/api': process.env.STUDIO_ENGINE ?? 'http://127.0.0.1:7800' },
+    proxy: {
+      '/api': { target: process.env.STUDIO_ENGINE ?? 'http://127.0.0.1:7800', ws: true },
+      '/voice-sdk': process.env.STUDIO_ENGINE ?? 'http://127.0.0.1:7800',
+    },
   },
 });

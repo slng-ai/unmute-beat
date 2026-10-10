@@ -60,7 +60,7 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pydantic import BaseModel, ValidationError
 
 import core
-from core.events import Event
+from core.events import Event, RunEnded
 from core.graph import model_clients
 from core.launch import run_call, transport_params
 from core.snapshot import TurnSnapshot
@@ -142,12 +142,15 @@ class Carried:
     """A text call's root span: its turns hang from it, so one run is one trace."""
     step: str = ''
     outcome: str = ''
+    last_seq: int = -1
+    ended_sent: bool = False
 
     def note(self, event: Event) -> None:
+        self.last_seq = max(self.last_seq, event.seq)
         if event.type == 'step.entered':
             self.step = event.step
         elif event.type == 'run.ended':
-            self.outcome = event.outcome
+            self.outcome, self.ended_sent = event.outcome, True
 
 
 class Runner:
@@ -251,8 +254,21 @@ class Runner:
         for carried in list(self.calls.values()):
             if carried.status == 'waiting' and now - carried.created > ADMIT_SECONDS:
                 carried.status, carried.outcome = 'ended', 'stopped'
+                self.ended(carried, 'stopped', f'the browser sent no offer in {ADMIT_SECONDS:.0f} s')
             if carried.status == 'ended' and now - carried.created > 3600:
                 del self.calls[carried.id]
+
+    def ended(self, carried: Carried, outcome: Literal['stopped', 'failed'], detail: str) -> None:
+        """Tell the studio a call is over when the call itself never could: it never opened, or failed before its end."""
+        if carried.ended_sent:
+            return
+        carried.ended_sent = True
+        turn = carried.call.turn if carried.call is not None else 0
+        self.link.send(
+            RunEnded(
+                run=carried.id, seq=carried.last_seq + 1, turn=turn, t_ms=0, outcome=outcome, detail=detail
+            )
+        )
 
     def check_resume(self, ask: CallRequest) -> None:
         """Open and resume a call that is then dropped: an edit the application refuses is refused now, not after the offer."""
@@ -312,6 +328,7 @@ class Runner:
             ):
                 reply = await core.text_turn(flow, call, words)
             call.acknowledge(*(s.id for s in reply.segments))
+            call.turn_snapshot()
             finished = reply.finished
             ended = bool(call.ended)
             if ended:
@@ -365,17 +382,23 @@ class Runner:
                 simulate=ask.delivery == 'simulated',
                 opened=opened,
             )
-        except Exception:
+        except Exception as error:
             logger.exception('call {} failed; the runner goes on', carried.id)
             carried.outcome = carried.outcome or 'failed'
+            self.ended(carried, 'failed', f'{type(error).__name__}: {error}')
         finally:
             carried.status = 'ended'
 
     async def sample_lag(self) -> None:
+        """How late the loop wakes, every `LAG_EVERY`; and every few seconds, the calls that never connected."""
+        ticks = 0
         while True:
             started = time.perf_counter()
             await asyncio.sleep(LAG_EVERY)
             self.lag.append(time.perf_counter() - started - LAG_EVERY)
+            ticks += 1
+            if ticks % 100 == 0:
+                self.reap()
 
     async def drain(self) -> None:
         """Take no new calls, and wait for these to end, at most `drain_seconds`."""

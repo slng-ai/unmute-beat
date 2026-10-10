@@ -21,7 +21,6 @@ import os
 import sys
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
 
 from opentelemetry import trace
 from pydantic_ai import Agent
@@ -58,23 +57,6 @@ once: `setup` runs at the top of each call's own task, every task the call
 starts inherits it, and `_Speech` binds it to the span's trace when the span
 starts. A process-wide dict gave every span the session of whichever call
 started last.
-"""
-FIRST_CHUNK = 'slng.llm.first_chunk_seconds'
-"""The attribute a model request span gets for its time to first chunk, in seconds, when it streamed."""
-
-try:
-    from pydantic_ai._instrumentation import time_to_first_chunk_ctx as _first_chunk
-except ImportError:
-    _first_chunk = None
-"""Where Pydantic AI keeps a streamed request's time to first chunk while its span is still open.
-
-Pydantic AI records it as a metric, `gen_ai.client.operation.time_to_first_chunk`, never on the
-span, so a trace alone could not say when a core agent's first token came. Its streaming handler
-sets this context variable in the task that then ends the request span, so `_Speech.on_end` reads it
-there and writes it on the span (`FIRST_CHUNK`).
-
-ponytail: a private module of pydantic-ai 2.46. If it moves, the import fails quietly and requests
-carry their duration only, as before; the upgrade is Pydantic AI writing the value on the span.
 """
 _PROVIDER: list[TracerProvider] = []
 """The one tracer provider, built by the first `setup`. OpenTelemetry refuses a second registration."""
@@ -313,9 +295,7 @@ def _agent_words(span) -> dict:
             words['langfuse.observation.input'] = _prompt(system, json.dumps(history[:index] + asked))
         return words
     if operation == 'chat':
-        words: dict[str, Any] = usage.words() if (usage := _Usage.of(attributes)) is not None else {}
-        if _first_chunk is not None and (first := _first_chunk.get()) is not None:
-            words[FIRST_CHUNK] = float(first)
+        words = usage.words() if (usage := _Usage.of(attributes)) is not None else {}
         if said := _said(str(attributes.get('gen_ai.output.messages') or '')):
             words['langfuse.observation.output'] = said
         if given := attributes.get('gen_ai.input.messages'):

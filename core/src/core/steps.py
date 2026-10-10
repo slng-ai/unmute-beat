@@ -258,7 +258,14 @@ class FlowCall[S: BaseModel](CallContext):
         )
 
     def turn_started(self, heard: str = '') -> None:
-        """A piece of a caller turn starts: nothing is recorded by this reply yet."""
+        """A piece of a caller turn starts: nothing is recorded by this reply yet.
+
+        With a listener, the turn just over is saved again first: what the caller heard of its
+        speech is known only now (a playback report, a reader's acknowledgement), and a snapshot
+        that kept a heard line as unheard would make a resumed call think the caller missed it.
+        """
+        if self._events is not None and self._turn > 0:
+            self.turn_snapshot()
         super().turn_started(heard)
         self._recorded = frozenset()
 

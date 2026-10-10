@@ -194,7 +194,7 @@ class Boot:
                 self._set(
                     'traces',
                     'healthy',
-                    f'collecting at {self.settings.otlp_endpoint}: start a bot with `slng studio bot <use case>`',
+                    f'collecting at {self.settings.otlp_endpoint}: every run from the Agents page sends its timings here',
                 )
                 return
             await asyncio.sleep(0.5)

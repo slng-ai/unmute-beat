@@ -434,6 +434,7 @@ async def run_call(
         call.note_ending('pipeline_end', 'the pipeline stopped', observed=True)
         record_ending(call)
         if events is not None:
+            call.turn_snapshot()
             events.ended(call.turn, _outcome(call))
             await events.close()
 

@@ -89,21 +89,29 @@ interface EventBase {
   t_ms: number;
 }
 
+export type IntentStatus = 'prepared' | 'dispatched' | 'unknown' | 'succeeded' | 'rejected' | 'withdrawn';
+
+/** core.events, as the runner sends them and the store keeps them; plus the studio's own two markers. */
 export type RunEvent = EventBase &
   (
     | { type: 'run.started'; agent: string; config: string; channel: 'voice' | 'text' | 'twilio'; entry: string; state: Record<string, unknown>; forked_from: string | null; forked_turn: number | null }
     | { type: 'caller.speech'; phase: 'started' | 'partial' | 'final' | 'stopped'; text: string; continues_turn: boolean }
-    | { type: 'step.entered'; step: string; source: string | null; via: 'entry' | 'exit' | 'consult' | 'handback' | 'prerequisite' | 'return' | 'route' | 'then' }
+    | { type: 'step.entered'; step: string; source: string | null; via: string }
     | { type: 'model.request'; step: string; request: number; budget: number }
-    | { type: 'model.delta'; step: string; text: string }
-    | { type: 'model.decision'; step: string; output: 'reply' | 'record' | 'operation' | 'hand_over' | 'goodbye' | 'done' | 'read' | 'options'; name: string; args: Record<string, unknown>; refused: string }
-    | { type: 'model.ended'; step: string; tokens_in: number; tokens_out: number; ms: number }
-    | { type: 'state.committed'; state: Record<string, unknown>; changed: string[]; reset: string[] }
-    | { type: 'intent.changed'; intent: string; operation: string; status: 'prepared' | 'dispatched' | 'unknown' | 'succeeded' | 'rejected' | 'withdrawn'; args: Record<string, unknown>; receipt: Record<string, unknown> | null }
-    | { type: 'bot.speech'; segment: string; phase: 'queued' | 'playing' | 'delivered' | 'cut' | 'cleared'; text: string; source: 'model' | 'code'; reason: string; evidence: string }
+    | { type: 'model.delta'; step: string; kind: 'text' | 'args'; name: string; text: string }
+    | { type: 'model.decision'; step: string; name: string; args: Record<string, unknown>; refused: string }
+    | { type: 'model.ended'; step: string; model: string; tokens_in: number; tokens_out: number; ms: number; first_ms: number | null }
+    | { type: 'state.committed'; state: Record<string, unknown>; changed: string[] }
+    | { type: 'intent.changed'; intent: string; operation: string; status: IntentStatus; args: Record<string, unknown> }
+    | { type: 'receipt'; operation: string; intent: string; receipt: Record<string, unknown>; succeeded: boolean }
+    | { type: 'bot.speech'; segment: string; phase: 'queued' | 'delivered' | 'cut'; text: string; source: 'model' | 'code'; reason: string; evidence: string }
     | { type: 'turn.finished'; status: 'answered' | 'interrupted' | 'exhausted' | 'failed'; step: string; handoffs: string[]; requests: number; detail: string }
-    | { type: 'run.ended'; outcome: 'goodbye' | 'hangup' | 'ceiling' | 'failed' | 'stopped'; detail: string }
+    | { type: 'turn.snapshot' }
+    | { type: 'run.ended'; outcome: 'goodbye' | 'hangup' | 'ceiling' | 'failed' | 'stopped'; detail: string; dropped: number }
   );
+
+/** Sent by the studio on the live socket, never stored: the replay is done, or the run is unknown. */
+export type StudioMarker = { type: 'studio.replayed' | 'studio.missing'; run: string };
 
 export type Level = 'ok' | 'slow' | 'bad';
 
@@ -121,8 +129,10 @@ export interface Limits {
   requests_per_turn: Limit;
 }
 
+export type Kind = 'stt' | 'llm' | 'tts';
+
 export interface TimedRequest {
-  kind: 'stt' | 'llm' | 'tts';
+  kind: Kind;
   model: string;
   provider: string;
   duration_ms: number;
@@ -130,6 +140,8 @@ export interface TimedRequest {
   error: boolean;
   span: string;
   level: Level;
+  at: number;
+  trace: string;
 }
 
 export interface Flag {
@@ -142,6 +154,8 @@ export interface Flag {
 
 export interface TurnTiming {
   trace: string;
+  run: string;
+  agent: string;
   turn: number;
   voice_to_voice_ms: number | null;
   interrupted: boolean;
@@ -151,20 +165,217 @@ export interface TurnTiming {
 }
 
 export interface ModelStats {
-  kind: 'stt' | 'llm' | 'tts';
+  kind: Kind;
   model: string;
   provider: string;
-  calls: number;
-  p50_ms: number;
-  p95_ms: number;
+  requests: number;
+  runs: number;
+  first_byte_p90_ms: number | null;
+  total_p90_ms: number;
   errors: number;
   over_limit: number;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface Summary {
+  turns: number;
+  runs: number;
+  voice_to_voice_p90_ms: number | null;
+  llm_first_token_p90_ms: number | null;
+  tts_first_audio_p90_ms: number | null;
+  stt_first_byte_p90_ms: number | null;
+  over_limit: number;
+  errors: number;
+  mixed: Kind[];
+}
+
+export interface TraceRun {
+  trace: string;
+  run: string;
+  agent: string;
+  started: string;
+  turns: number;
 }
 
 export interface Metrics {
   source: string;
+  scope: 'overview' | 'run';
+  agent: string;
   limits: Limits;
-  summary: { turns: number; voice_to_voice_avg_ms: number | null; voice_to_voice_p95_ms: number | null; over_limit: number; errors: number };
+  summary: Summary;
+  runs: TraceRun[];
   turns: TurnTiming[];
   models: ModelStats[];
+}
+
+export interface RunRow {
+  id: string;
+  agent: string;
+  config: string;
+  channel: 'voice' | 'text' | 'twilio';
+  started_at: string;
+  ended_at: string | null;
+  outcome: string | null;
+  forked_from: string | null;
+  forked_turn: number | null;
+  runner: string;
+  turns: number;
+  step: string;
+}
+
+export interface RunDetail {
+  run: RunRow;
+  live: boolean;
+  turns: number[];
+}
+
+export interface RunnerInfo {
+  runner: string;
+  url: string;
+  pid: number;
+  max_calls: number;
+  agents: string[];
+  frameworks: string[];
+  ready: boolean;
+  warming: boolean;
+  stopping: boolean;
+  active: number;
+  calls: { id: string; agent: string; channel: string; status: string; step: string }[];
+  lag_p50_ms: number | null;
+  connected: boolean;
+}
+
+export interface StartRequest {
+  agent: string;
+  channel: 'voice' | 'text';
+  caller_id?: string;
+  resume_from?: { run: string; turn: number };
+  facts?: Record<string, unknown>;
+  delivery?: 'marks' | 'simulated';
+}
+
+export interface StartResult {
+  run: string;
+  agent: string;
+  channel: 'voice' | 'text';
+  config: string;
+  runner: string;
+  said: string[];
+  step: string;
+  turn: number;
+  offer?: string;
+}
+
+export interface TurnResult {
+  said: string[];
+  status: string;
+  step: string;
+  turn: number;
+  requests: number;
+  ended: boolean;
+}
+
+export interface SaidLine {
+  turn: number;
+  who: 'caller' | 'bot';
+  text: string;
+  heard?: boolean;
+}
+
+export interface GoBack {
+  run: RunRow;
+  turn: number;
+  step: string;
+  pending: string | null;
+  consulting: string | null;
+  facts: Record<string, unknown>;
+  said: SaidLine[];
+  intents: { id: string; operation: string; status: IntentStatus; args: string }[];
+  receipts: Record<string, unknown>[];
+  done_after: { turn: number; operation: string; receipt: Record<string, unknown> }[];
+  turns: number[];
+}
+
+export interface StateSchema {
+  state: { properties?: Record<string, { type?: string; description?: string; anyOf?: unknown[]; enum?: unknown[]; format?: string; title?: string }>; $defs?: Record<string, unknown> };
+  steps: string[];
+  start: string;
+}
+
+export interface Refusal {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+}
+
+export interface EditorOperation {
+  name: string;
+  say: string;
+  recap: string;
+  changes: boolean;
+  approval: string;
+  fields: string[];
+  form: 'class' | 'function';
+  route: string;
+}
+
+export interface EditorStep {
+  id: string;
+  kind: 'conversation' | 'action' | 'end';
+  prompt: string;
+  agent: string;
+  fields: string[];
+  operations: string[];
+  operation: string;
+  then: string;
+  on_error: string;
+  on_unknown: string;
+  returns: boolean;
+}
+
+export interface Problem {
+  where: string;
+  what: string;
+  level: 'error' | 'warning';
+}
+
+export interface EditorConfig {
+  agent: string;
+  path: string;
+  version: string;
+  manifest: string;
+  files: Record<string, string>;
+  steps: EditorStep[];
+  operations: EditorOperation[];
+  problems: Problem[];
+}
+
+export interface ConfigEdit {
+  base?: string;
+  manifest?: string | null;
+  files?: Record<string, string>;
+  closing?: Record<string, { say?: string | null; recap?: string | null }>;
+  actions?: Record<string, { then?: string | null; on_error?: string | null; on_unknown?: string | null; returns?: boolean | null }>;
+}
+
+export interface Checked {
+  ok: boolean;
+  version: string;
+  problems: Problem[];
+  operations: EditorOperation[];
+  changed: string[];
+}
+
+export interface Saved extends Checked {
+  saved: boolean;
+  config: ConfigVersion | null;
+}
+
+export interface ConfigVersion {
+  agent: string;
+  version: string;
+  path: string;
+  parent: string | null;
+  created_at: string | null;
 }

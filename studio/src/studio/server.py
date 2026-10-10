@@ -166,6 +166,20 @@ def create_app(
             await holder['store'].save_config(saved.config)
         return saved
 
+    @app.get('/api/agents/{agent_id}/receipts')
+    async def last_receipts(agent_id: str) -> dict[str, dict[str, Any]]:
+        """Each operation's latest successful receipt in this agent's recent runs: what the editor fills a closing line from."""
+        found: dict[str, dict[str, Any]] = {}
+        for row in (await hub.runs(agent_id))[:30]:
+            for event in reversed(await holder['store'].events(row.id)):
+                if (
+                    event.get('type') == 'receipt'
+                    and event.get('succeeded')
+                    and event['operation'] not in found
+                ):
+                    found[event['operation']] = event['receipt']
+        return found
+
     @app.get('/api/agents/{agent_id}/configs')
     async def versions(agent_id: str) -> list[ConfigRow]:
         return await holder['store'].configs(agent_id)
@@ -286,10 +300,8 @@ def create_app(
         """One run's view: its own trace, so it names its agent and needs no filter."""
         try:
             return metrics.collect_run(settings.jaeger_url, trace, fetch=fetch)
-        except urllib.error.HTTPError as error:
-            if error.code == 404:
-                raise HTTPException(404, f'Jaeger has no trace {trace!r}') from error
-            raise jaeger_down(error) from error
+        except LookupError as error:
+            raise HTTPException(404, str(error)) from error
         except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
             raise jaeger_down(error) from error
 

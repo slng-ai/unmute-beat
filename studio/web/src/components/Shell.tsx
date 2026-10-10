@@ -3,7 +3,7 @@ import { href, type Route } from '../router';
 
 type Who = 'caller' | 'engine' | 'bot' | null;
 
-/** The top bar every page shares: the mark, the three pages, the page's own cells, and who is active. */
+/** The top bar every page shares: the mark, the three places (Agents, Runs, Metrics), the page's own cells, and who is active. */
 export function Shell({ route, agent, who, children, actions, body }: {
   route: Route;
   agent?: string;
@@ -13,22 +13,22 @@ export function Shell({ route, agent, who, children, actions, body }: {
   body: ReactNode;
 }) {
   const pages = [
-    { page: 'runs', label: 'Runs' },
-    { page: 'live', label: 'Live' },
-    { page: 'metrics', label: 'Metrics' },
-    { page: 'config', label: 'Config' },
+    { page: 'agents', label: 'Agents', to: href({ page: 'agents', agent }) },
+    { page: 'runs', label: 'Runs', to: href({ page: 'runs' }) },
+    { page: 'metrics', label: 'Metrics', to: href({ page: 'metrics' }) },
   ] as const;
+  const here = route.page === 'run' || route.page === 'back' ? 'runs' : route.page;
   return (
     <div className="app">
       <header className="bar">
-        <a className="brand" href={href({ page: 'runs', agent })}>
+        <a className="brand" href={href({ page: 'agents', agent })}>
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">SLNG</span>
           <span className="mono dim" style={{ fontSize: 13 }}>/ studio</span>
         </a>
         <nav className="nav" aria-label="Studio">
           {pages.map((p) => (
-            <a key={p.page} href={href({ page: p.page, agent })} aria-current={route.page === p.page ? 'page' : undefined}>
+            <a key={p.page} href={p.to} aria-current={here === p.page ? 'page' : undefined}>
               {p.label}
             </a>
           ))}

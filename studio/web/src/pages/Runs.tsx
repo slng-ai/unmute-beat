@@ -1,95 +1,114 @@
+import { useState } from 'react';
 import { api } from '../api/client';
-import type { Agent } from '../api/types';
+import type { RunRow } from '../api/types';
 import { useApi } from '../api/useApi';
 import { Shell } from '../components/Shell';
-import { href, type Route } from '../router';
+import { href, go, type Route } from '../router';
 
-export function Runs({ route }: { route: Extract<Route, { page: 'runs' }> }) {
-  const agents = useApi(api.agents, 'agents');
-  const runs = useApi(api.runs, `runs-${route.agent ?? ''}`);
-  const list = agents.state === 'ok' ? agents.data : [];
-  const agent = list.find((a) => a.id === route.agent) ?? list[0];
+function when(iso: string): string {
+  const at = new Date(iso);
+  return `${at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+}
 
+/** Runs, newest first: every agent's, or one agent's when `agent` is given (an agent's own page passes it). */
+export function RunsTable({ agent = '', channel = '', outcome = '' }: { agent?: string; channel?: string; outcome?: string }) {
+  const [tick, setTick] = useState(0);
+  const runs = useApi(() => api.runs(agent), `runs-${agent}-${tick}`);
+  if (runs.state === 'loading') return <p className="empty">Loading runs…</p>;
+  if (runs.state === 'error') return <p className="error-box">{runs.message}</p>;
+  const rows = runs.data.filter((r) => (!channel || r.channel === channel) && (!outcome || (outcome === 'live' ? r.outcome === null : r.outcome === outcome)));
   return (
-    <Shell
-      route={route}
-      agent={agent?.id}
-      body={
-        <>
-          <nav className="side" aria-label="Agents">
-            <div className="side-head">
-              <span className="lbl">Agents in this repo</span>
-              <span style={{ flex: '1 1 auto' }} />
-              <span className="mono dim" style={{ fontSize: 11 }}>{list.length}</span>
-            </div>
-            {agents.state === 'loading' && <p className="empty" style={{ padding: 16 }}>Reading every agent.yaml…</p>}
-            {agents.state === 'error' && <p className="error-box" style={{ margin: 16 }}>{agents.message}</p>}
-            {list.map((a) => (
-              <a key={a.id} href={href({ page: 'runs', agent: a.id })} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <span className="side-item" aria-pressed={a.id === agent?.id}>
-                  <span style={{ display: 'flex', width: '100%' }}>
-                    <span className="mono" style={{ fontSize: 14, fontWeight: 500 }}>{a.id}</span>
-                    <span style={{ flex: '1 1 auto' }} />
-                    <span className="mono" style={{ fontSize: 10, color: a.status === 'error' ? 'var(--bad)' : 'var(--ok)' }}>
-                      {a.status === 'error' ? '✕ error' : '■ compiled'}
-                    </span>
-                  </span>
-                  <span className="mono dim" style={{ fontSize: 11 }}>{a.path}</span>
-                </span>
-              </a>
-            ))}
-            <p className="empty" style={{ padding: 16, color: 'var(--faint)' }}>
-              Found by scanning use-cases/*/*/agent.yaml. Add a folder with an agent.yaml and it shows up here.
-            </p>
-          </nav>
-          <main className="main">{agent ? <AgentHeader agent={agent} /> : agents.state === 'ok' && <p className="empty" style={{ padding: 24 }}>No agent.yaml found.</p>}
-            <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="lbl">Runs</span>
-            </div>
-            <div style={{ borderTop: '1px solid var(--rule-soft)', padding: '32px 24px' }}>
-              {runs.state === 'loading' && <p className="empty">Loading runs…</p>}
-              {runs.state === 'error' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ fontSize: 18, fontWeight: 600 }}>{runs.status === 501 ? 'Runs are not recorded yet.' : 'Runs could not be loaded.'}</div>
-                  <p className="empty" style={{ margin: 0 }}>
-                    {runs.status === 501
-                      ? 'The engine reads agents and draws their graphs today. Recording runs is the next phase: docs/studio/README.md.'
-                      : runs.message}
-                  </p>
-                </div>
-              )}
-              {runs.state === 'ok' && runs.data.length === 0 && <p className="empty">No runs yet. Start a text run, or a call.</p>}
-            </div>
-          </main>
-        </>
-      }
-    />
+    <div className="scroll-x">
+      <table className="table" aria-label="Runs">
+        <thead>
+          <tr>
+            <th>Run</th>
+            {!agent && <th>Agent</th>}
+            <th>Talk by</th>
+            <th>Started</th>
+            <th>Turns</th>
+            <th>Outcome</th>
+            <th>Config</th>
+            <th>Carried on from</th>
+            <th>
+              <button type="button" className="btn btn-q" style={{ height: 26 }} onClick={() => setTick((t) => t + 1)}>Refresh</button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r: RunRow) => (
+            <tr key={r.id} className="click" onClick={() => go({ page: 'run', run: r.id })}>
+              <td className="mono"><a href={href({ page: 'run', run: r.id })} onClick={(e) => e.stopPropagation()}>{r.id}</a></td>
+              {!agent && <td className="mono">{r.agent}</td>}
+              <td className="mono dim">{r.channel === 'voice' ? 'voice · browser' : r.channel}</td>
+              <td className="mono dim">{when(r.started_at)}</td>
+              <td className="mono">{r.turns}</td>
+              <td>{r.outcome === null ? <span className="tag tag-y">live{r.step ? ` · ${r.step}` : ''}</span> : <span className={`tag ${r.outcome === 'failed' ? 'tag-bad' : 'tag-ok'}`}>{r.outcome}</span>}</td>
+              <td className="mono dim">{r.config || '—'}</td>
+              <td className="mono dim">{r.forked_from ? `${r.forked_from} · T${r.forked_turn}` : '—'}</td>
+              <td>{r.turns > 0 && <a className="mono" style={{ fontSize: 12 }} href={href({ page: 'back', run: r.id, turn: r.turns })} onClick={(e) => e.stopPropagation()}>go back</a>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length === 0 && <p className="empty" style={{ padding: 16 }}>No runs{agent ? ` of ${agent}` : ''} yet. Start one from an agent's page.</p>}
+    </div>
   );
 }
 
-function AgentHeader({ agent }: { agent: Agent }) {
+/**
+ * Every run of every agent, filterable by agent, by how it was talked to, and by how it ended. An
+ * agent's own page shows the same table filtered to it; a run opens its full view, live or read back.
+ */
+export function Runs({ route }: { route: Extract<Route, { page: 'runs' }> }) {
+  const agents = useApi(api.agents, 'agents');
+  const runners = useApi(api.runners, 'runners');
+  const [channel, setChannel] = useState('');
+  const [outcome, setOutcome] = useState('');
+  const list = agents.state === 'ok' ? agents.data : [];
   return (
-    <div style={{ padding: '24px 24px 20px', borderBottom: '1px solid var(--rule-soft)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
-        <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-          <div className="lbl" style={{ marginBottom: 8 }}>{agent.path}</div>
-          <h1 style={{ margin: 0, fontSize: 36, lineHeight: 1.1, fontWeight: 800 }}>{agent.id}</h1>
-          {agent.status === 'compiled' && (
-            <div className="mono" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              <span>app_version {agent.app_version || '—'}</span>
-              <span>{agent.steps} steps · {agent.operations} operations</span>
-              <span>entry {agent.entry}</span>
-              <span>{agent.model}</span>
+    <Shell
+      route={route}
+      agent={route.agent}
+      actions={<a className="btn btn-y" href={href({ page: 'agents', agent: route.agent })}>Start a call</a>}
+      body={
+        <main className="main">
+          <div className="metrics-head">
+            <div style={{ flex: '1 1 360px' }}>
+              <div className="lbl" style={{ marginBottom: 8 }}>every agent · newest first</div>
+              <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800 }}>Runs</h1>
             </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <a className="btn btn-q" href={href({ page: 'config', agent: agent.id })}>Open config</a>
-          <a className="btn" href={href({ page: 'live', agent: agent.id })}>Open graph</a>
-          <button className="btn btn-y" type="button" disabled title="The engine does not run calls in this build">Start a call</button>
-        </div>
-      </div>
-      {agent.status === 'error' && <div className="error-box">{agent.error}</div>}
-    </div>
+            {runners.state === 'ok' && (
+              <span className="mono dim" style={{ fontSize: 12 }}>
+                {runners.data.filter((r) => r.connected).length} runner(s) linked · {runners.data.reduce((n, r) => n + r.active, 0)} call(s) live
+              </span>
+            )}
+          </div>
+          <div className="toolbar" role="group" aria-label="Filter">
+            <div className="segs" aria-label="Agent">
+              <a className={`seg ${!route.agent ? 'seg-on' : ''}`} href={href({ page: 'runs' })} style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>All agents</a>
+              {list.map((a) => (
+                <a key={a.id} className={`seg ${route.agent === a.id ? 'seg-on' : ''}`} href={href({ page: 'runs', agent: a.id })} style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>{a.id}</a>
+              ))}
+            </div>
+            <select className="select" style={{ width: 'auto' }} aria-label="Talk by" value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="">any channel</option>
+              <option value="text">text</option>
+              <option value="voice">voice</option>
+            </select>
+            <select className="select" style={{ width: 'auto' }} aria-label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+              <option value="">any outcome</option>
+              <option value="live">live</option>
+              <option value="goodbye">goodbye</option>
+              <option value="hangup">hangup</option>
+              <option value="failed">failed</option>
+            </select>
+          </div>
+          <div style={{ padding: 16 }}>
+            <RunsTable agent={route.agent} channel={channel} outcome={outcome} />
+          </div>
+        </main>
+      }
+    />
   );
 }

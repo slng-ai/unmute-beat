@@ -1,8 +1,9 @@
+import { AgentsPage } from './pages/Agents';
 import { Boot } from './pages/Boot';
-import { Config } from './pages/Config';
-import { Live } from './pages/Live';
+import { GoBack } from './pages/GoBack';
 import { MetricsPage } from './pages/Metrics';
 import { Runs } from './pages/Runs';
+import { RunView } from './pages/RunView';
 import { useRoute } from './router';
 
 export function App() {
@@ -10,12 +11,14 @@ export function App() {
   switch (route.page) {
     case 'boot':
       return <Boot />;
-    case 'live':
-      return <Live route={route} />;
-    case 'config':
-      return <Config route={route} />;
+    case 'agents':
+      return <AgentsPage key={route.agent ?? ''} route={route} />;
     case 'runs':
       return <Runs route={route} />;
+    case 'run':
+      return <RunView key={route.run} route={route} />;
+    case 'back':
+      return <GoBack route={route} />;
     case 'metrics':
       return <MetricsPage route={route} />;
   }

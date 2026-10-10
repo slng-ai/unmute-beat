@@ -23,8 +23,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Only `core.processor` imports Pipecat: the frames it reads and writes.
-voice = ["pipecat-ai>=1.11.0"]
+# Only `core.processor` (the frames it reads and writes) and `core.launch` (one call's whole pipeline:
+# Silero VAD, smart-turn, SLNG's STT and TTS) import Pipecat.
+voice = ["pipecat-ai[silero]>=1.11.0", "pipecat-slng>=0.5.2"]
 # Only `core.observability` imports Langfuse, the OpenTelemetry SDK and its OTLP exporter (a local collector).
 tracing = ["langfuse>=4.15.4", "opentelemetry-sdk>=1.44.0", "opentelemetry-exporter-otlp-proto-http>=1.44.0"]
 

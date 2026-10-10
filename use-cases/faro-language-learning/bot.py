@@ -1,260 +1,36 @@
 """Faro, the language-learning companion, as a Pydantic AI agency in the LLM node of a Pipecat pipeline.
 
-Pipecat owns the transport, VAD, turn taking, STT and TTS. The agents own the
-conversation: prompts, tools, typed state and which step is running. This file
-only wires the pipeline; the seam between the two is one frame processor,
-`PydanticAgentProcessor`.
+Pipecat owns the transport, VAD, turn taking, STT and TTS; the agents own the conversation: prompts,
+tools, typed state and which step is running. The pipeline is core's (`core.launch.run_call`), the same
+for every use case; what is Faro's own is in `faro/entry.py`.
 
-Load .env before importing the services and agents: they construct clients
-at import time, and those clients must see the configured credentials. The
-`.env` at the repository root is found by walking up from this folder.
+Faro reads the caller ID back in its greeting, closes the learner's session when the line drops, and
+keeps its own speech languages (`SLNG_STT_LANGUAGE`, `SLNG_TTS_LANGUAGE` override them).
+
+Load .env before importing the agents: they construct clients at import time, and those clients must
+see the configured credentials. The `.env` at the repository root is found by walking up from here.
 
     uv run bot.py
 
 Then open http://localhost:7860 and talk.
 """
 
-from __future__ import annotations
-
 # ruff: noqa: E402
-import os
-
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from collections.abc import Callable
-
-from loguru import logger
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import LLMFullResponseStartFrame
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import (
-    LLMContextAggregatorPair,
-    LLMUserAggregatorParams,
-)
-from pipecat.processors.frame_processor import FrameProcessor
-from pipecat.runner.types import RunnerArguments, WebSocketRunnerArguments
+from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
-from pipecat.services.tts_service import TextAggregationMode
-from pipecat.transcriptions.language import Language
-from pipecat.transports.base_transport import BaseTransport, TransportParams
-from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
-from pipecat.workers.runner import WorkerRunner
-from pipecat_slng import SlngSTTService, SlngTTSService
+from pipecat.transports.base_transport import BaseTransport
 
-import faro
-from core import StepFlow
-from core.graph import model_clients
-from core.observability import setup
-from core.processor import PydanticAgentProcessor, playout, record_ending, reports_playback, serve_client
-from faro import STT_LANGUAGE, TTS_LANGUAGE, close_call, greeting, open_call
-
-NAME = 'faro call'
-SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
-TTS_HOST = os.getenv('SLNG_TTS_BASE_URL', 'eu-west.api.slng.ai')
-"""Fish Audio is served from eu-west, in Germany. STT stays on `SLNG_HOST`."""
-FINISH_SECONDS = 8.0
-"""How long a turn already running may go on after the caller hangs up: a reading and a write fit in it.
-
-ponytail: a fixed bound. Take it from the turn budget's own deadline if a
-slower model or tool ever needs longer.
-"""
-STT_LANGUAGE = os.getenv('SLNG_STT_LANGUAGE') or STT_LANGUAGE
-TTS_LANGUAGE = os.getenv('SLNG_TTS_LANGUAGE') or TTS_LANGUAGE
-"""One language per call for each speech service: Faro's own, unless the environment says otherwise."""
-
-transport_params = {
-    'webrtc': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
-    'daily': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
-    'twilio': lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
-}
-"""`twilio` is the phone route; the runner adds the serializer."""
+from core.launch import run_call, serve, transport_params
+from faro.entry import ENTRY
 
 
-def speech_services() -> tuple[SlngSTTService, SlngTTSService]:
-    """STT and TTS over SLNG, one key for both.
-
-    TTS aggregates by TOKEN rather than Pipecat's default SENTENCE, which holds
-    every chunk until a sentence boundary before synthesising any of it: two to
-    three hundred milliseconds by its own docstring, paid on the first word of
-    every turn. The model streams tokens and SLNG accepts them, so there is
-    nothing to buffer for.
-    """
-    key = os.environ['SLNG_API_KEY']
-    stt = SlngSTTService(
-        api_key=key,
-        base_url=SLNG_HOST,
-        model=os.getenv('SLNG_STT_MODEL', 'soniox/speech-ai:rt-v5'),
-        language=Language(STT_LANGUAGE),
-    )
-    tts = SlngTTSService(
-        api_key=key,
-        base_url=TTS_HOST,
-        model=os.getenv('SLNG_TTS_MODEL', 'slng/fish/tts:s2.1-pro'),
-        voice=os.getenv('SLNG_TTS_VOICE', '1258154bb41540c7b9dc0d10cd6704bf'),
-        language=Language(TTS_LANGUAGE),
-        warm_standby_enabled=True,
-        text_aggregation_mode=TextAggregationMode.TOKEN,
-    )
-    return stt, tts
-
-
-def aggregators(context: LLMContext) -> LLMContextAggregatorPair:
-    """The pair that decides when the caller has finished and records what the bot said.
-
-    Pipecat's recommended turn taking, unchanged: Silero VAD, and its default
-    strategies, which end a turn with the smart-turn v3 model on its default
-    parameters. When the caller goes on after a turn ended, the harness joins
-    the pieces (`CallContext.continues_turn`); how the turn ends is Pipecat's.
-
-    ponytail: the defaults are what Pipecat measured. Tune end-of-turn timing
-    later, in the stop strategy as Pipecat recommends, from traces.
-    """
-    return LLMContextAggregatorPair(
-        context, user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer())
-    )
-
-
-def pipeline_worker(pipeline: Pipeline, session_id: str) -> PipelineWorker:
-    """The worker, with tracing on.
-
-    `enable_tracing` is what makes Pipecat open the conversation and turn spans
-    the agents' own spans hang from; without it the only spans in Langfuse are
-    Pydantic AI's, one loose trace per agent run. The session and the trace name
-    are `setup()`'s to place, because Pipecat would put them on the root span
-    alone and Langfuse v4 queries observations.
-    """
-    return PipelineWorker(
-        pipeline,
-        params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
-        conversation_id=session_id or None,
-        enable_tracing=True,
-        enable_turn_tracking=True,
-    )
-
-
-def playback(agents: PydanticAgentProcessor, assistant_aggregator) -> None:
-    """Tell the harness what the caller actually heard: which run each response came from, and where it was cut."""
-    playback_run: tuple[int, int] | None = None
-
-    @assistant_aggregator.event_handler('on_before_process_frame')
-    async def before_assistant_frame(aggregator, frame):
-        """Remember which agency run a response frame belongs to, for the playback callback."""
-        nonlocal playback_run
-        if isinstance(frame, LLMFullResponseStartFrame):
-            playback_run = frame.metadata.get('voice_run')
-
-    @assistant_aggregator.event_handler('on_assistant_turn_started')
-    async def on_assistant_turn_started(aggregator):
-        """Bind the speech about to play to the run that produced it."""
-        nonlocal playback_run
-        agents.playback_started(aggregator._assistant_turn_start_timestamp, run=playback_run)
-        playback_run = None
-
-    @assistant_aggregator.event_handler('on_assistant_turn_stopped')
-    async def on_assistant_turn_stopped(aggregator, message):
-        """Cut the agents' record down to what the caller actually heard."""
-        agents.note_spoken(message.content, message.interrupted, timestamp=message.timestamp)
-
-
-async def run_bot(
-    transport: BaseTransport,
-    runner_args: RunnerArguments,
-    *,
-    flow: StepFlow | None = None,
-    speech: Callable[[], tuple[FrameProcessor, FrameProcessor]] | None = None,
-    warm: bool = True,
-    trace: bool = True,
-) -> None:
-    """One call: build the pipeline around the agency and run it until the line drops.
-
-    Pipecat's `LLMContext` is kept even though no model reads it: the
-    aggregators use it to work out the caller's turn and, on a barge-in, what
-    the bot managed to say. `note_spoken` is its only consumer. The caller ID
-    is the carrier's on a phone route and a guess until the caller agrees.
-
-    On a phone route the session is the carrier's call id (Twilio's
-    `callSid`), so a call and its trace share one key: Coval records the same
-    id as the simulation's `call_sid`, and one Langfuse session is one call.
-
-    A test passes its own `flow` (a scripted model) and `speech` (no
-    provider), and turns off the warm-up and tracing, as the salon's does.
-    """
-    call_data = getattr(runner_args, 'call_data', None)
-    session_id = (call_data.call_id if call_data else '') or runner_args.session_id or ''
-    if trace:
-        setup(session=session_id, trace_name=NAME)
-    stt, tts = (speech or speech_services)()
-    flow = flow or faro.FLOW
-    call = open_call(flow, os.getenv('CALLER_ID', ''))
-    context, node = LLMContext(), PydanticAgentProcessor(call, flow.nodes)
-    user_aggregator, assistant_aggregator = aggregators(context)
-    wiring = playout(transport, call, simulate=os.getenv('DELIVERY') == 'simulated')
-    pipeline = Pipeline(
-        [
-            transport.input(),
-            stt,
-            user_aggregator,
-            node,
-            tts,
-            transport.output(),
-            *wiring,
-            assistant_aggregator,
-        ]
-    )
-    worker = pipeline_worker(pipeline, session_id)
-    playback(node, assistant_aggregator)
-
-    async def greet() -> None:
-        """The opening line, written for this call, or, on a line that can never confirm anything, the refusal.
-
-        With a caller ID the greeting is a read-back the caller can answer.
-        A line with no playback evidence (a browser client that reports none,
-        a phone far end that returns no marks, outside simulation) could never
-        confirm a read-back, so no number, sign-up or plan could ever be
-        agreed on it: saying so first means nobody gives details for nothing.
-        """
-        if flow.confirms and not await reports_playback(wiring, call):
-            logger.error(
-                f'this {call.transport} line reports no playback: open the page core serves at /voice/'
-            )
-            call.note_ending('unconfirmable', 'the line reports no playback', observed=True)
-            await node.greet(call.locale.unconfirmable)
-            await node.hang_up()
-            return
-        await node.greet(greeting(flow, call))
-
-    @worker.rtvi.event_handler('on_client_ready')
-    async def on_client_ready(rtvi):
-        await greet()
-
-    @transport.event_handler('on_client_connected')
-    async def on_client_connected(transport, client):
-        """A phone websocket has no RTVI client to say it is ready, so the greeting goes out here."""
-        logger.info('client connected')
-        if isinstance(runner_args, WebSocketRunnerArguments):
-            await greet()
-
-    @transport.event_handler('on_client_disconnected')
-    async def on_client_disconnected(transport, client):
-        """Let a turn already running finish its write, then close the session, before the line is torn down."""
-        logger.info('client disconnected')
-        call.note_ending('media_disconnect', 'the media websocket closed', observed=True)
-        await node.finish_turn(FINISH_SECONDS)
-        await close_call(call)
-        await worker.cancel()
-
-    runner = WorkerRunner(handle_sigint=False)
-    await runner.add_workers(worker)
-    try:
-        async with model_clients(flow.nodes, warm=warm):
-            await runner.run()
-    finally:
-        call.note_ending('pipeline_end', 'the pipeline stopped', observed=True)
-        record_ending(call)
+async def run_bot(transport: BaseTransport, runner_args: RunnerArguments, **options) -> None:
+    """One call, until the line drops (`core.launch.run_call`); a test passes its own `flow` and `speech`."""
+    await run_call(ENTRY, transport, runner_args, **options)
 
 
 async def bot(runner_args: RunnerArguments) -> None:
@@ -263,8 +39,4 @@ async def bot(runner_args: RunnerArguments) -> None:
 
 
 if __name__ == '__main__':
-    from pipecat.runner.run import app, main
-
-    serve_client(app)
-
-    main()
+    serve()

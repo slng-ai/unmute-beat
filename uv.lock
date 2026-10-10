@@ -2701,6 +2701,7 @@ tracing = [
 ]
 voice = [
     { name = "pipecat-ai" },
+    { name = "pipecat-slng" },
 ]
 
 [package.dev-dependencies]
@@ -2718,7 +2719,8 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'tracing'", specifier = ">=1.44.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.44.0" },
     { name = "phonenumbers", specifier = ">=9.0.39" },
-    { name = "pipecat-ai", marker = "extra == 'voice'", specifier = ">=1.11.0" },
+    { name = "pipecat-ai", extras = ["silero"], marker = "extra == 'voice'", specifier = ">=1.11.0" },
+    { name = "pipecat-slng", marker = "extra == 'voice'", specifier = ">=0.5.2" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-ai-slim", extras = ["spec"], specifier = ">=2.46.0" },
     { name = "pydantic-extra-types", specifier = ">=2.11.1" },

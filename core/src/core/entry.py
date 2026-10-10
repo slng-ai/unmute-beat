@@ -1,0 +1,63 @@
+"""What a use case tells a launcher about itself: its flow, how to open a call, what to say first.
+
+Every launcher (a use case's `bot.py`, the studio's runner, a test) runs the same call
+(`core.launch.run_call` for voice, `core.text_turn` for text) and needs the same five or six facts
+about the application. Each use case says them once, in its package's `entry.py`:
+
+    ENTRY = core.Entry(
+        id=SPEC.id,                                   # the agent's id: on every span, in the studio
+        name='salon call',                            # what its traces are listed by
+        flow=lambda: app.FLOW,                        # compiled on first use
+        open=lambda flow, opening: app.open_call(flow, opening.caller_id, diary=DIARY, key=opening.key),
+        greeting=lambda flow, call: GREETING,
+    )
+
+Imports no Pipecat: a text launcher reads it too.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from core.state import Question
+    from core.steps import FlowCall, StepFlow
+
+
+@dataclass(frozen=True)
+class Opening:
+    """What a launcher knows about a call as it opens it."""
+
+    caller_id: str = ''
+    """The number the carrier (or the tester) gives: core fills a `core.Phone` identity with it."""
+    key: str = ''
+    """The call's own key: its session, a carrier's CallSid, or the studio's run id."""
+    settle: Callable[[str], bool] | None = None
+    """Which earlier calls are over (by key), for an application that settles what they still owe."""
+
+
+@dataclass(frozen=True)
+class Entry:
+    """One use case, as a launcher needs it. Nothing here runs at import: `flow` compiles when first asked."""
+
+    id: str
+    """The agent's id, the manifest's own `id`: stamped on every span (`slng.agent.id`), named in the studio."""
+    name: str
+    """What its calls' traces are listed by: `salon call`."""
+    flow: Callable[[], StepFlow]
+    open: Callable[[StepFlow, Opening], FlowCall[Any]]
+    greeting: Callable[[StepFlow, FlowCall[Any]], str | Question]
+    """The opening line for this call, said by code: a string, or a question its first reply answers."""
+    close: Callable[[FlowCall[Any]], Awaitable[object]] | None = None
+    """Run once the line has dropped and the last turn finished: Faro closes its session here."""
+    started: Callable[[], None] | None = None
+    """Run in a thread of its own as each call opens: Nosh wakes its place tools here."""
+    stt_language: str = 'en'
+    tts_language: str = 'en'
+    """Each speech service's language, unless `SLNG_STT_LANGUAGE` / `SLNG_TTS_LANGUAGE` say otherwise."""
+    turn_taking: Literal['tuned', 'pipecat'] = 'tuned'
+    """`tuned`: the salon's measured end-of-turn settings. `pipecat`: Pipecat's own defaults, unchanged (Faro)."""
+    reminders: bool = True
+    """Whether a silent caller is asked if they are still there (`core.turn.remind`)."""

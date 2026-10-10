@@ -37,8 +37,10 @@ uv run --directory studio slng studio up        # http://localhost:7800, ctrl+c 
   on the right. Start a text run or a browser call, talk, watch each request stream and what the model
   decided, the state, the business actions and their receipts. Save, and the change is checked on a copy
   first; the next run uses it. A run on an older config offers to carry on from its last turn on the new
-  one. **Operations**: every operation's closing line (said after it works, filled from its receipt) and
-  goodbye line, with the receipt's fields to insert and the line filled from its last real receipt.
+  one. **Operations**: every operation's closing line (said after it runs, filled from its receipt) and
+  goodbye line, with the fields to insert and the line filled from a real receipt. A closing line can be
+  one line or a line per result (**by result**): one when the customer is found, another when they are
+  new, another when the service says no. Each line offers only the fields its own result has.
   **Graph**, **Its runs**, **Its metrics**, **Full config** (the whole manifest, checked by the loader).
 - **Runs.** Every run of every agent, newest first, filterable by agent, channel and outcome. A run opens
   its full view: live while it goes on, read back from the store once it is over.
@@ -68,7 +70,7 @@ runners' logs and the use cases' business data (the salon's diary, Faro's learne
 | `src/studio/settings.py` | ports, paths and URLs from the environment |
 | `src/studio/boot.py` | the start-up sequence `/api/boot` reports and the loading screen draws: Docker, the services, the store, the agents, the runner |
 | `src/studio/discovery.py` | every `agent.yaml`: `core.load` for its steps, `studio.check` for the loader's verdict and the engine's own moves, groups for the map |
-| `src/studio/check.py` | in a process of its own, with the use case importable: `FlowSpec.problems()`, `Flow.moves` and each operation's closing lines and receipt fields (compiled on `TestModel`, no provider called) |
+| `src/studio/check.py` | in a process of its own, with the use case importable: `FlowSpec.problems()`, `Flow.moves` and each operation's closing lines, with the fields and closed values of a success and of a refusal (compiled on `TestModel`, no provider called) |
 | `src/studio/runs.py` | the hub: runners link in (hello, stats, events), each run placed on the least busy ready runner, offers and text turns passed on, every event stored and streamed to the pages watching; `RunnerProcess` |
 | `src/studio/store.py` | `ServiceStore` (Redis for 7 days, Postgres behind, written in order by a task of its own) and `MemoryStore` (`--no-services`, tests) |
 | `src/studio/configs.py` | an agent's config as files, and its version (a hash of them) |

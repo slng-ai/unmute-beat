@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import os
 import signal
 import statistics
@@ -171,7 +172,11 @@ class Runner:
         self.lag: deque[float] = deque(maxlen=1200)
         self.started = time.time()
         self.loaded: dict[str, str] = {}
-        """The config version each agent's flow was compiled from, as the studio named it."""
+        """The config version each agent's flow was last asked for, as the studio named it."""
+        self.compiled: dict[str, str] = {
+            agent: _fingerprint(entry.manifest) for agent, entry in self.entries.items() if entry.manifest
+        }
+        """What each agent's config files held when its flow was compiled: a save since means compile again."""
         self.stack: AsyncExitStack | None = None
         self.link = Link(settings.studio, self.hello, self.stats)
         ice = [IceServer(**server) for server in settings.ice_servers]
@@ -217,21 +222,25 @@ class Runner:
     async def flow_for(self, agent: str, config: str) -> core.StepFlow:
         """The agent's flow for a call on this config version: compiled again when the studio saved a new one.
 
-        The first version a runner hears of is the one it compiled at start (it read the files then).
-        A later, different one is compiled from the manifest on disk; calls already running keep the
-        flow they started on. Only config is read again, never the application's code.
+        Whether the config changed is read from the files themselves, not from the version a call
+        names: a save between this runner's start and its first call is a new config too, though it
+        is the first version the runner hears of. A changed one is compiled from the manifest on
+        disk; calls already running keep the flow they started on. Only config is read again, never
+        the application's code.
 
         ponytail: each recompiled flow's model clients stay open for the process's life. Close the
         old flow's clients once its last call ends if editors ever save hundreds of times a day.
         """
-        known = self.loaded.setdefault(agent, config)
         entry = self.entries[agent]
-        if config and known != config and entry.manifest is not None:
-            flow = await asyncio.to_thread(entry.recompile)
-            if self.stack is not None:
-                await self.stack.enter_async_context(model_clients(flow.nodes))
-            self.flows[agent], self.loaded[agent] = flow, config
-            logger.info('agent {} compiled again for config {}', agent, config)
+        if config and self.loaded.get(agent) != config and entry.manifest is not None:
+            now = _fingerprint(entry.manifest)
+            if now != self.compiled.get(agent):
+                flow = await asyncio.to_thread(entry.recompile)
+                if self.stack is not None:
+                    await self.stack.enter_async_context(model_clients(flow.nodes))
+                self.flows[agent], self.compiled[agent] = flow, now
+                logger.info('agent {} compiled again for config {}', agent, config)
+            self.loaded[agent] = config
         return self.flows[agent]
 
     async def warm(self, stack: AsyncExitStack) -> None:
@@ -640,3 +649,16 @@ def data_defaults(root: Path) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault('DIARY_PATH', str(folder / 'salon-diary.sqlite3'))
     os.environ.setdefault('LEARNING_DB_PATH', str(folder / 'faro.sqlite3'))
+
+
+CONFIG_FILES = {'.yaml', '.yml', '.md', '.json', '.txt', '.hbs'}
+"""The files an agent's config is made of beside its manifest, as the studio versions them (`studio.configs`)."""
+
+
+def _fingerprint(manifest: Path) -> str:
+    """A digest of the agent's config files as they are on disk now: the manifest and the text files beside it."""
+    digest = hashlib.sha256()
+    for path in sorted(manifest.parent.rglob('*')):
+        if path.is_file() and path.suffix in CONFIG_FILES and '__pycache__' not in path.parts:
+            digest.update(str(path.relative_to(manifest.parent)).encode() + b'\0' + path.read_bytes() + b'\0')
+    return digest.hexdigest()

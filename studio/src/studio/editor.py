@@ -3,7 +3,8 @@
 What can be changed, and how each change reaches the files:
 
     a prompt              its file, rewritten whole
-    a closing line        the operation's `say:` (said after it works, filled from its receipt) and
+    a closing line        the operation's `say:` (said after it works, filled from its receipt; or lines by
+                          result, each case's `when` naming receipt values or `refused`) and
                           `recap:` (what a goodbye says of it later). A long-form operation's keys are
                           set in place; a class operation becomes `{class: file.py:Class, say: ...}`, so
                           the line is config and the class's code is never touched (`core.flowspec`)
@@ -42,14 +43,31 @@ from studio import configs
 from studio.store import ConfigRow
 
 
+class Case(BaseModel):
+    """One closing line and the result it is for, as `core.closing.Case` reads it."""
+
+    line: str
+    when: dict[str, Any] | Literal['refused'] | None = None
+
+
+type Words = str | list[Case]
+"""A closing line: one line, or lines by result."""
+
+
 class Operation(BaseModel):
     name: str
-    say: str = ''
-    recap: str = ''
+    say: Words = ''
+    recap: Words = ''
     changes: bool = True
     approval: str = 'readback'
     fields: list[str] = []
-    """Every field its receipts can have: what `{field}` in a closing line may name."""
+    """The fields a success has: what `{field}` in a success line may name."""
+    refused_fields: list[str] = []
+    """The fields a refusal has: what a `when: refused` line may name. Empty: it is never refused with fields."""
+    values: dict[str, list[Any]] = {}
+    """Each field of a success with a closed set of values, and those values: what a `when:` can pick."""
+    refused_values: dict[str, list[Any]] = {}
+    """The same for a refusal."""
     form: Literal['class', 'function'] = 'class'
     """Where its closing line lives: the manifest (`function`, or a class's override) or its class's code."""
     route: str = ''
@@ -88,8 +106,8 @@ class Config(BaseModel):
 
 
 class Closing(BaseModel):
-    say: str | None = None
-    recap: str | None = None
+    say: Words | None = None
+    recap: Words | None = None
 
 
 class ActionRoutes(BaseModel):
@@ -218,24 +236,93 @@ def _closing_problems(operations: list[Operation]) -> list[Problem]:
     problems = []
     for op in operations:
         for key in ('say', 'recap'):
-            line = getattr(op, key)
-            if not line:
-                continue
-            where = f'operation {op.name} · {key}'
-            try:
-                named = placeholders(line)
-            except ValueError as error:
-                problems.append(Problem(where=where, what=f'{error}: the line could not be said'))
-                continue
-            if missing := [name for name in named if op.fields and name not in op.fields]:
-                problems.append(
-                    Problem(
-                        where=where,
-                        what=f'names {", ".join("{" + m + "}" for m in missing)}, which its receipt does not have '
-                        f'({", ".join(op.fields)}): it would be said as a gap',
-                    )
+            words = getattr(op, key)
+            cases = [Case(line=words)] if isinstance(words, str) else words
+            for n, case in enumerate(cases):
+                if not case.line and isinstance(words, str):
+                    continue
+                where = f'operation {op.name} · {key}' + (
+                    f' · case {n + 1}' if isinstance(words, list) else ''
                 )
+                problems += _case_problems(op, key, case, where)
     return problems
+
+
+def _case_problems(op: Operation, key: str, case: Case, where: str) -> list[Problem]:
+    """What is wrong with one closing line: a result it can never meet, or a field its result does not have."""
+    problems = []
+    succeeded, refused = op.fields, op.refused_fields
+    if case.when == 'refused':
+        if key == 'recap':
+            return [
+                Problem(where=where, what='a goodbye recaps only what stands: a refusal is never recapped')
+            ]
+        if not refused:
+            problems.append(
+                Problem(
+                    where=where,
+                    what='this operation is never refused with a receipt, so this line is never said',
+                    level='warning',
+                )
+            )
+        allowed, result = refused, 'a refusal'
+    elif case.when is None:
+        allowed, result = succeeded, 'a success'
+    else:
+        named = set(case.when)
+        sides = [('a success', op.fields, op.values), ('a refusal', op.refused_fields, op.refused_values)]
+        fits = [
+            (label, fields)
+            for label, fields, values in sides
+            if fields
+            and named <= set(fields)
+            and all(
+                not values.get(name) or any(_among(v, values[name]) for v in _options(wanted))
+                for name, wanted in case.when.items()
+            )
+        ]
+        if not fits and (succeeded or refused):
+            unknown = sorted(named - set(succeeded) - set(refused))
+            closed = {**op.refused_values, **op.values}
+            odd = [
+                f'{name} is never {", ".join(map(str, _options(wanted)))} (it is one of '
+                f'{", ".join(map(str, closed[name]))})'
+                for name, wanted in case.when.items()
+                if closed.get(name) and not any(_among(v, closed[name]) for v in _options(wanted))
+            ]
+            what = (
+                f'`when` names {", ".join(unknown)}, which its receipt does not have'
+                if unknown
+                else '; '.join(odd)
+                if odd
+                else '`when` mixes values of a success and of a refusal: no one receipt has them all'
+            )
+            return [Problem(where=where, what=f'{what}: this line is never said')]
+        allowed = sorted({name for _, fields in fits for name in fields})
+        result = fits[0][0] if len({label for label, _ in fits}) == 1 else 'its receipt'
+    try:
+        named = placeholders(case.line)
+    except ValueError as error:
+        return [*problems, Problem(where=where, what=f'{error}: the line could not be said')]
+    if missing := [name for name in named if (succeeded or refused) and name not in allowed]:
+        problems.append(
+            Problem(
+                where=where,
+                what=f'names {", ".join("{" + m + "}" for m in missing)}, which {result} does not have '
+                f'({", ".join(allowed) or "no fields"}): it would be said as a gap',
+            )
+        )
+    return problems
+
+
+def _options(wanted: Any) -> list[Any]:
+    """A `when` value as the values it accepts: a list is any of them."""
+    return wanted if isinstance(wanted, list) else [wanted]
+
+
+def _among(value: Any, closed: list[Any]) -> bool:
+    """Whether a `when` value is one a closed field can hold, compared as core compares them (`core.closing`)."""
+    return any(value == c or str(value).lower() == str(c).lower() for c in closed)
 
 
 def _checked(manifest: Path) -> dict[str, Any]:
@@ -334,7 +421,11 @@ def _apply(name: str, current: dict[str, str], edit: Edit) -> dict[str, str]:
 
 def set_closing(text: str, op: str, closing: Closing) -> str:
     """The manifest with this operation's closing lines set; '' removes one. A one-line class gets its override form."""
-    changes = closing.model_dump(exclude_none=True)
+    changes = {
+        key: [case.model_dump(exclude_none=True) for case in value] if isinstance(value, list) else value
+        for key, value in ((key, getattr(closing, key)) for key in ('say', 'recap'))
+        if value is not None
+    }
     return set_keys(text, 'operations', op, {k: (v or None) for k, v in changes.items()}, one_line='class')
 
 
@@ -410,6 +501,17 @@ def set_keys(text: str, section: str, name: str, changes: dict[str, Any], one_li
                 ),
                 None,
             )
+            if found is not None:
+                held = next(
+                    (
+                        i
+                        for i in range(found + 1, block_end)
+                        if lines[i].strip() and len(_indent(lines[i])) <= len(child)
+                    ),
+                    block_end,
+                )
+                del lines[found + 1 : held]
+                block_end -= held - found - 1
             if v is None:
                 if found is not None:
                     del lines[found]
@@ -435,7 +537,12 @@ def _indent(line: str) -> str:
 
 
 def _scalar(value: Any) -> str:
-    """A YAML scalar that reads back as exactly this value: booleans bare, every string double-quoted."""
+    """A YAML value on one line that reads back as exactly this value: booleans bare, strings double-quoted.
+
+    A list or mapping (closing lines by result) is written as JSON, which YAML reads as a flow collection.
+    """
+    if isinstance(value, list | dict):
+        return json.dumps(value, ensure_ascii=False)
     if isinstance(value, bool):
         return 'true' if value else 'false'
     if isinstance(value, int | float):

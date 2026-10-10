@@ -170,17 +170,19 @@ def create_app(
         return saved
 
     @app.get('/api/agents/{agent_id}/receipts')
-    async def last_receipts(agent_id: str) -> dict[str, dict[str, Any]]:
-        """Each operation's latest successful receipt in this agent's recent runs: what the editor fills a closing line from."""
-        found: dict[str, dict[str, Any]] = {}
+    async def last_receipts(agent_id: str) -> dict[str, dict[str, dict[str, Any]]]:
+        """Each operation's latest receipt of each result in this agent's recent runs: what the editor fills a
+        closing line from, a success line from a success and a refusal line from a refusal.
+
+            {"lookup_customer": {"done": {...}, "refused": {...}}}
+        """
+        found: dict[str, dict[str, dict[str, Any]]] = {}
         for row in (await hub.runs(agent_id))[:30]:
             for event in reversed(await holder['store'].events(row.id)):
-                if (
-                    event.get('type') == 'receipt'
-                    and event.get('succeeded')
-                    and event['operation'] not in found
-                ):
-                    found[event['operation']] = event['receipt']
+                if event.get('type') != 'receipt':
+                    continue
+                result = 'done' if event.get('succeeded') else 'refused'
+                found.setdefault(event['operation'], {}).setdefault(result, event['receipt'])
         return found
 
     @app.get('/api/agents/{agent_id}/configs')

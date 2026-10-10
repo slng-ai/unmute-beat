@@ -1,7 +1,8 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import type { Agent, ConfigEdit, EditorConfig, EditorOperation, EditorStep, Problem } from '../api/types';
+import type { Agent, ConfigEdit, EditorConfig, EditorStep, Problem } from '../api/types';
 import { useApi } from '../api/useApi';
+import { ClosingEditor } from '../components/ClosingEditor';
 import { FocusView } from '../components/FocusView';
 import { MovesTable } from '../components/MovesTable';
 import { Shell } from '../components/Shell';
@@ -185,7 +186,7 @@ function StepEditor({ config, step, draft, setDraft, agent }: { config: EditorCo
         </header>
         <p style={{ margin: 0, color: 'var(--soft)', fontSize: 14, lineHeight: 1.5 }}>
           Runs <span className="mono">{step.operation}</span> with its arguments from the state, says its closing line filled from the receipt, and moves on.
-          A refusal says nothing; an unknown outcome says the locale's unsettled line.
+          A refusal says nothing unless a line by result names it; an unknown outcome says the locale's unsettled line.
         </p>
         {op && <ClosingEditor op={op} draft={draft} setDraft={setDraft} agent={agent} />}
         <div className="panel">
@@ -258,84 +259,6 @@ function StepEditor({ config, step, draft, setDraft, agent }: { config: EditorCo
   );
 }
 
-/** `str.format_map` as core says a closing line: each `{field}` from the receipt, a missing one as nothing. */
-export function fill(line: string, receipt: Record<string, unknown> | undefined): string {
-  return line.replace(/\{\{|\}\}|\{([^{}]*)\}/g, (match, name: string | undefined) => {
-    if (match === '{{') return '{';
-    if (match === '}}') return '}';
-    const key = (name ?? '').split(/[.[]/)[0] ?? '';
-    const value = receipt?.[key];
-    return value === undefined || value === null ? '' : String(value);
-  });
-}
-
-/** What is wrong with a closing line before the server says so: an unclosed brace, a field the receipt does not have. */
-export function lint(line: string, fields: string[]): string[] {
-  const problems: string[] = [];
-  const stripped = line.replace(/\{\{|\}\}/g, '');
-  if ((stripped.match(/\{/g)?.length ?? 0) !== (stripped.match(/\}/g)?.length ?? 0) || /\{[^}]*\{/.test(stripped)) problems.push('a brace is not closed');
-  const named = [...stripped.matchAll(/\{([^{}]*)\}/g)].map((m) => (m[1] ?? '').split(/[.[]/)[0] ?? '');
-  const missing = named.filter((n) => n && fields.length && !fields.includes(n));
-  if (missing.length) problems.push(`its receipt has no ${missing.map((m) => `{${m}}`).join(', ')}: it would be said as a gap`);
-  return problems;
-}
-
-function ClosingEditor({ op, draft, setDraft, agent }: { op: EditorOperation; draft: ConfigEdit; setDraft: (d: ConfigEdit) => void; agent: string }) {
-  const receipts = useApi(() => api.receipts(agent), `receipts-${agent}`);
-  const edited = draft.closing?.[op.name];
-  const say = edited?.say ?? op.say;
-  const recap = edited?.recap ?? op.recap;
-  const sample = receipts.state === 'ok' ? receipts.data[op.name] : undefined;
-  const set = (key: 'say' | 'recap', value: string) => setDraft({ ...draft, closing: { ...draft.closing, [op.name]: { ...draft.closing?.[op.name], [key]: value } } });
-  const insert = (key: 'say' | 'recap', field: string) => set(key, `${key === 'say' ? say : recap}{${field}}`);
-  return (
-    <div className="panel" data-operation={op.name}>
-      <div className="panel-h">
-        <span className="mono" style={{ fontSize: 14 }}>{op.name}</span>
-        <span className="tag">{op.changes ? 'changes' : 'reads'}</span>
-        <span className="tag">{op.approval === 'readback' ? 'read back first' : 'no read-back'}</span>
-        <span style={{ flex: '1 1 auto' }} />
-        <span className="hint">{op.form === 'class' ? 'a class: the line is saved as config beside it' : 'declared in the manifest'}</span>
-      </div>
-      <div className="panel-b">
-        {(['say', 'recap'] as const).map((key) => {
-          const value = key === 'say' ? say : recap;
-          const problems = lint(value, op.fields);
-          const disabled = key === 'recap' && !op.changes;
-          return (
-            <div key={key} className="field">
-              <label htmlFor={`${op.name}-${key}`}>{key === 'say' ? 'Closing line · said after it works' : 'Goodbye line · what a goodbye says of it'}</label>
-              <input
-                id={`${op.name}-${key}`}
-                className={`input mono ${problems.length ? 'input-bad' : ''}`}
-                value={value}
-                disabled={disabled}
-                placeholder={disabled ? 'a read changes nothing: a goodbye has nothing of it to say' : key === 'say' ? 'empty: it says nothing' : 'empty: a goodbye cannot recap it'}
-                onChange={(e) => set(key, e.target.value)}
-              />
-              {problems.map((p) => <div key={p} className="problem">{p}</div>)}
-              {value && !problems.length && (
-                <div className="hint">
-                  Sounds like: <span style={{ color: 'var(--bot)' }}>“{fill(value, sample) || '(nothing)'}”</span>
-                  {sample ? ' · from its last real receipt' : ' · no real receipt yet: fields read as gaps'}
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {op.fields.length > 0 && (
-          <div className="chips" aria-label="Receipt fields">
-            <span className="hint" style={{ alignSelf: 'center' }}>receipt fields:</span>
-            {op.fields.map((f) => (
-              <button key={f} type="button" className="fieldchip" onClick={() => insert('say', f)} title={`add {${f}} to the closing line`}>{`{${f}}`}</button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function Operations({ config, draft, setDraft, agent }: { config: EditorConfig; draft: ConfigEdit; setDraft: (d: ConfigEdit) => void; agent: string }) {
   const actionSteps = config.steps.filter((s) => s.kind === 'action');
   return (
@@ -343,8 +266,9 @@ function Operations({ config, draft, setDraft, agent }: { config: EditorConfig; 
       <div>
         <h2 style={{ margin: 0, fontSize: 24 }}>Every operation's closing lines</h2>
         <p style={{ color: 'var(--soft)', fontSize: 14, lineHeight: 1.5, maxWidth: 760 }}>
-          Code says these, never the model: the closing line right after an operation works, filled from its receipt, and the goodbye line when the caller leaves.
-          Core does not check a line's fields when it loads; the studio checks each against its receipt before it saves.
+          Code says these, never the model: the closing line right after an operation runs, filled from its receipt, and the goodbye line when the caller leaves.
+          A closing line can depend on the result (by result): one line when the customer is found, another when they are new, another when the service says no.
+          Core does not check a line's fields when it loads; the studio checks each against the fields of its own result before it saves.
           {actionSteps.length > 0 && <> Action steps here: {actionSteps.map((s) => s.id).join(', ')}.</>}
         </p>
       </div>

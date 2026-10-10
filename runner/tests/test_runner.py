@@ -235,7 +235,10 @@ async def scenario(api: httpx.AsyncClient, runners: list[Any]) -> None:
 
 
 async def a_saved_config_reaches_the_next_call():
-    """A run naming a new config version is carried on the manifest as saved; one already running keeps its flow."""
+    """A run naming a new config version is carried on the manifest as saved; one already running keeps its flow.
+
+    A save between a runner's start and its first call counts too: the files, not the version heard, say so.
+    """
     import shutil
     import tempfile
 
@@ -266,6 +269,15 @@ async def a_saved_config_reaches_the_next_call():
     book = next(op for op in second.operations() if op.name == 'book_appointment')
     assert second is not first and book.say == 'Booked: {spoken}.', book.say
     assert next(op for op in first.operations() if op.name == 'book_appointment').say != book.say
+
+    late = Runner(RunnerSettings(warm=False), [Found(folder.parent, 'salon', entry)])
+    late.flows[entry.id] = started = entry.recompile()
+    manifest.write_text(manifest.read_text().replace('say: "Booked: {spoken}."', 'say: "All set: {spoken}."'))
+    heard = await late.flow_for(entry.id, 'v3')
+    book = next(op for op in heard.operations() if op.name == 'book_appointment')
+    assert heard is not started and book.say == 'All set: {spoken}.', (
+        'saved after the runner started, before its first call: the first version it hears is new too'
+    )
 
 
 if __name__ == '__main__':

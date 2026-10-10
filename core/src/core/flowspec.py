@@ -86,6 +86,7 @@ from pydantic_ai.settings import ModelSettings
 
 from core.actions import Action
 from core.clock import CallClock
+from core.closing import Closing, closing
 from core.history import History, Scope
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
@@ -651,8 +652,15 @@ class _Resolver:
                 self.fail(where, f'assigns from {source!r}, which a success receipt does not have')
         if action.changes and subject and not version:
             self.fail(where, 'names a subject it changes, so its receipt needs a core.Version field')
-        closing = {'say': action.say, 'recap': action.recap} | _closing(self.spec.operations.get(name))
-        if closing['recap'] and not action.changes:
+        try:
+            own = {'say': closing(action.say), 'recap': closing(action.recap)}
+        except ValidationError as error:
+            self.fail(
+                where, f'{action.__name__} has closing lines that do not read: {error.errors()[0]["msg"]}'
+            )
+            own = {'say': '', 'recap': ''}
+        closing_lines = own | _closing(self.spec.operations.get(name))
+        if closing_lines['recap'] and not action.changes:
             self.fail(where, 'changes nothing, so a goodbye has nothing of it to recap (recap)')
         if action.needs_approval() and not action.defines('readback'):
             self.fail(where, f'needs approval, so {action.__name__} needs a readback method')
@@ -674,11 +682,11 @@ class _Resolver:
             'assign': assign,
             'succeeds': succeeds,
             'rejects': rejects,
-            'say': closing['say'],
+            'say': closing_lines['say'],
             'needs_approval': action.needs_approval(),
             'matches': {field_name: field_name for field_name in action.matches},
             'changes': action.changes,
-            'recap': closing['recap'],
+            'recap': closing_lines['recap'],
             'subject': subject,
             'resource': kind,
             'version': version,
@@ -1272,9 +1280,13 @@ class OperationSpec(BaseModel):
     """`file.py:words`, taking the arguments, returning the sentence the caller agrees to."""
     reconcile: str = ''
     """`file.py:find`, `(services, args[, intent]) -> receipt | None`: what happened to an intent whose outcome is unknown."""
-    say: str = ''
-    """The receipt's speech, formatted from its fields: `Booked, reference {reference}.`"""
-    recap: str = ''
+    say: str | Closing = ''
+    """The receipt's speech, formatted from its fields: `Booked, reference {reference}.`
+
+    Or lines by result (`core.closing`): a list of `{when: {field: value}, line: ...}` cases, tried in order,
+    with `when: refused` for a refusal said by code and a case with no `when` for any other success.
+    """
+    recap: str | Closing = ''
     """What a goodbye may say about it later, formatted from the receipt: `You're booked for {spoken}.`
 
     Said only when the model points the goodbye at this receipt and the
@@ -1315,8 +1327,8 @@ class ClassOperationSpec(BaseModel):
     model_config = SPEC
     class_: str = Field(alias='class')
     """`file.py:Class`, as the one-line form names it."""
-    say: str | None = None
-    recap: str | None = None
+    say: str | Closing | None = None
+    recap: str | Closing | None = None
 
 
 def _class_ref(entry: object) -> str | None:
@@ -1326,7 +1338,7 @@ def _class_ref(entry: object) -> str | None:
     return entry.class_ if isinstance(entry, ClassOperationSpec) else None
 
 
-def _closing(entry: object) -> dict[str, str]:
+def _closing(entry: object) -> dict[str, str | Closing]:
     """The closing lines a class operation's manifest entry sets, over the class's own."""
     if not isinstance(entry, ClassOperationSpec):
         return {}

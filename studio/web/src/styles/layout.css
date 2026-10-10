@@ -59,6 +59,14 @@
 .textarea { font-family: var(--mono); font-size: 13px; line-height: 1.55; resize: vertical; min-height: 120px; }
 .input-bad { border-color: var(--bad); }
 .hint { font-family: var(--mono); font-size: 11px; color: var(--dim); line-height: 1.5; }
+.problem, .warn, .good, .intent, .hint, .side-item { overflow-wrap: anywhere; min-width: 0; }
+.case { border: 1px solid var(--rule-soft); background: var(--sunk); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.case-when { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.case-when .select, .case-when .input { width: auto; max-width: 100%; padding: 6px 8px; font-size: 13px; }
+.case-when .btn { height: 30px; font-size: 12px; }
+.fields { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 2px 10px; margin: 4px 0 0; font-family: var(--mono); font-size: 11px; }
+.fields dt { color: var(--muted); overflow-wrap: anywhere; }
+.fields dd { margin: 0; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
 .problem { font-family: var(--mono); font-size: 12px; color: var(--bad); border-left: 2px solid var(--bad); padding: 4px 10px; background: #2a1714; }
 .warn { font-family: var(--mono); font-size: 12px; color: var(--yellow); border-left: 2px solid var(--yellow); padding: 4px 10px; background: #221f14; }
 .good { font-family: var(--mono); font-size: 12px; color: var(--ok); border-left: 2px solid var(--ok-rule); padding: 4px 10px; }

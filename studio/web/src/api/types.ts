@@ -309,13 +309,34 @@ export interface Refusal {
   type: string;
 }
 
+/** One closing line and the result it is for: receipt values, `refused`, or none (any other success). */
+export interface Case {
+  line: string;
+  when?: Record<string, unknown> | 'refused' | null;
+}
+
+/** A closing line: one line, or lines by result tried in order (`core.closing`). */
+export type Words = string | Case[];
+
+/** An operation's latest receipt of each result, from recent runs. */
+export interface LastReceipts {
+  done?: Record<string, unknown>;
+  refused?: Record<string, unknown>;
+}
+
 export interface EditorOperation {
   name: string;
-  say: string;
-  recap: string;
+  say: Words;
+  recap: Words;
   changes: boolean;
   approval: string;
   fields: string[];
+  /** The fields a refusal has; empty when it is never refused with a receipt. */
+  refused_fields: string[];
+  /** Each field of a success with a closed set of values, and those values. */
+  values: Record<string, unknown[]>;
+  /** The same for a refusal. */
+  refused_values: Record<string, unknown[]>;
   form: 'class' | 'function';
   route: string;
 }
@@ -355,7 +376,7 @@ export interface ConfigEdit {
   base?: string;
   manifest?: string | null;
   files?: Record<string, string>;
-  closing?: Record<string, { say?: string | null; recap?: string | null }>;
+  closing?: Record<string, { say?: Words | null; recap?: Words | null }>;
   actions?: Record<string, { then?: string | null; on_error?: string | null; on_unknown?: string | null; returns?: boolean | null }>;
 }
 

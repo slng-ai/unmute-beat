@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import type { GoBack as GoBackData, Refusal, StateSchema } from '../api/types';
 import { useApi } from '../api/useApi';
 import { Shell } from '../components/Shell';
+import { Fields } from '../live/panels';
 import { href, go, type Route } from '../router';
 
 type Draft = Record<string, string | boolean>;
@@ -205,7 +206,10 @@ function Consequences({ data }: { data: GoBackData }) {
             <span className="hint">Nothing: no business change was made after this turn.</span>
           ) : (
             data.done_after.map((d, i) => (
-              <div key={i} className="warn">T{d.turn} · {d.operation} · {JSON.stringify(d.receipt)}</div>
+              <div key={i} className="warn">
+                T{d.turn} · {d.operation}
+                <Fields value={d.receipt} />
+              </div>
             ))
           )}
           <span className="hint">Going back does not undo the business. The replay may meet these.</span>

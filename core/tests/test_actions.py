@@ -13,7 +13,10 @@ operation, and the same guarantees as the long form.
 * an argument from inside a nested state field (`AliasPath`) is missing when
   that field is, and never taken from a same-named field;
 * what cannot be inferred is refused at load, before any model: a success
-  member without the route field among them.
+  member without the route field among them;
+* closing lines by result (`core.closing`): the case the receipt fits is said,
+  a refusal is said by code only when a case names it, and lines that could
+  never be reached are refused at load.
 
 Asserts, no pytest.
 """
@@ -147,6 +150,66 @@ async def the_manifest_can_set_a_class_s_closing_lines():
     assert 'nothing of it to recap' in ' | '.join(load_text(refused, root=HERE).problems())
 
 
+CASES = """  book:
+    class: actions.py:Book
+    say:
+      - when: {slot: '0900'}
+        line: Early one, {when}.
+      - when: {status: full}
+        line: Sorry, {when} has just gone.
+      - line: Booked {when}.
+"""
+
+
+async def closing_lines_follow_the_result():
+    """Each result has its own line: a matching case, the default, and a refusal said by code, not the agent."""
+    base = (HERE / 'classes.yaml').read_text()
+    text = base.replace('  book: actions.py:Book\n', CASES)
+    for slot, full, expected in (
+        ('0900', False, 'Early one, Tuesday at 9:00 AM.'),
+        ('1000', False, 'Booked Tuesday at 10:00 AM.'),
+        ('1000', True, 'Sorry, Tuesday at 10:00 AM has just gone.'),
+    ):
+        script = Script()
+        backend = Backend()
+        backend.full = full
+        flow = load_text(text, root=HERE).compile(model=script.model)
+        call = script.call = flow.open(ClinicState(), services=backend)
+        fill = (FILL[0], Call('book', update={'slot': slot}))
+        await turn(flow, call, script, 'P-1234, Tuesday.', *fill)
+        then = (Reply('Shall I look for another time?'),) if full else ()
+        said = await turn(flow, call, script, 'Yes.', Call('book'), *then)
+        assert said[0] == expected, (slot, full, said)
+        if full:
+            assert said[1:] == ['Shall I look for another time?'], said
+            assert 'The caller has just been told' in script.requests[-1].told, 'the agent knows it was said'
+            assert call.intents[0].status == 'rejected' and call.state.facts.reference == ''
+    silent = base.replace(
+        '  book: actions.py:Book\n',
+        CASES.replace('      - when: {status: full}\n        line: Sorry, {when} has just gone.\n', ''),
+    )
+    script = Script()
+    backend = Backend()
+    backend.full = True
+    flow = load_text(silent, root=HERE).compile(model=script.model)
+    call = script.call = flow.open(ClinicState(), services=backend)
+    await turn(flow, call, script, 'P-1234, ten.', *FILL)
+    said = await turn(flow, call, script, 'Yes.', Call('book'), Reply('That time has gone, sorry.'))
+    assert said == ['That time has gone, sorry.'], 'no case names the refusal: the agent says it, as before'
+    hidden = base.replace(
+        '  book: actions.py:Book\n',
+        CASES.replace('      - line: Booked {when}.\n', '').replace(
+            '    say:\n', '    say:\n      - line: Booked {when}.\n'
+        ),
+    )
+    try:
+        load_text(hidden, root=HERE)
+    except core.FlowSpecError as error:
+        assert 'put it last' in str(error), error
+    else:
+        raise AssertionError('a default line hiding the cases after it was loaded')
+
+
 def what_cannot_be_inferred_is_refused_at_load():
     base = (HERE / 'classes.yaml').read_text()
 
@@ -178,6 +241,7 @@ if __name__ == '__main__':
     asyncio.run(an_unknown_outcome_is_reconciled_by_the_class())
     asyncio.run(a_union_receipt_routes_on_success_only())
     asyncio.run(the_manifest_can_set_a_class_s_closing_lines())
+    asyncio.run(closing_lines_follow_the_result())
     a_nested_argument_comes_from_its_own_path()
     what_cannot_be_inferred_is_refused_at_load()
     print(

@@ -144,7 +144,12 @@ class Hub:
         ]
 
     def place(self, agent: str) -> RunnerInfo:
-        """The least busy runner that is ready and carries this agent, or a 503 that says what to do."""
+        """The least busy runner that is ready and carries this agent, or a 503 that says what to do.
+
+        The call placed counts against its runner at once: runners report their load every 2 s, so
+        calls started faster than that would otherwise all go to the one that looked idle. The next
+        report replaces the count with the runner's own.
+        """
         now = time.monotonic()
         ready = [
             r
@@ -163,7 +168,9 @@ class Hub:
                 )
             )
             raise HTTPException(503, why)
-        return min(ready, key=lambda r: (r.active / max(r.max_calls, 1), r.runner))
+        chosen = min(ready, key=lambda r: (r.active / max(r.max_calls, 1), r.runner))
+        chosen.active += 1
+        return chosen
 
     # runs
 

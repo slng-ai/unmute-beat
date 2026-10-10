@@ -44,6 +44,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from core import events as ev
 from core import snapshot as snapshot_module
 from core.clock import CallClock
+from core.closing import Words, refused_words
 from core.completion import ReceiptMatched
 from core.flow import Nodes
 from core.graph import Exit, Node, Opening, Restated, holds
@@ -653,7 +654,8 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
     readback: ClassVar[Callable[[Any], str] | None] = None
     reconcile: ClassVar[Callable[..., Any] | None] = None
     """`(services, args) -> receipt | None`: what the service did with an attempt whose outcome was unknown."""
-    say: ClassVar[str] = ''
+    say: ClassVar[Words] = ''
+    """The receipt's speech: one line, or lines by result (`core.closing`), a refusal's among them."""
 
     readback_uses_services: ClassVar[bool] = False
     """The readback is `(services, args) -> str`: the words need a lookup, like a slot's spoken time."""
@@ -848,6 +850,11 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         cancelled booking is not offered back. Other choices, the
         alternatives, need a fresh search.
 
+        A refusal is said by code only when the operation's closing lines
+        name it (`core.closing`: `when: refused`, or a case on the refusal's
+        own fields, "That date of birth does not match"); the agent is told
+        the caller heard it, and still chooses what comes next.
+
         ponytail: every choice the operation binds is taken back. Per-choice
         refusal reasons belong here if a flow needs to keep the others.
         """
@@ -868,8 +875,13 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             answered = data if scope is None else scope.public_receipt(self.name, data)
             if scope is not None and isinstance(receipt, Rejection) and receipt.reason:
                 answered |= {'reason': receipt.reason}
+            told = ''
+            if words := refused_words(self.say, _Facts(data)):
+                await call.speak_now(words, origin='confirmation')
+                told = f' The caller has just been told: "{words}". Do not say it again; say only what comes next.'
             raise ModelRetry(
-                f'Nothing was done: the {self.name} service answered {answered}. Do not say it was done.{again}'
+                f'Nothing was done: the {self.name} service answered {answered}. Do not say it was done.'
+                f'{told}{again}'
             )
         if self.assign:
             call.update(

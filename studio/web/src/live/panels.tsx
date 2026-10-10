@@ -33,6 +33,23 @@ export function Transcript({ lines, thinking }: { lines: Line[]; thinking?: bool
   );
 }
 
+/** A receipt or arguments as their fields, one per row, every value wrapped inside the box. */
+export function Fields({ value, tone }: { value: unknown; tone?: string }) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return <div className="mono" style={{ fontSize: 11, overflowWrap: 'anywhere', color: tone }}>{short(value)}</div>;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (!entries.length) return null;
+  return (
+    <dl className="fields">
+      {entries.map(([key, v]) => (
+        <div key={key} style={{ display: 'contents' }}>
+          <dt>{key}</dt>
+          <dd style={{ color: tone }}>{v === null || v === '' ? <span className="dim">—</span> : typeof v === 'object' ? short(v) : String(v)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function short(value: unknown): string {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   return text.length > 220 ? `${text.slice(0, 220)}…` : text;
@@ -84,7 +101,7 @@ export function StatePanel({ state, changed }: { state: Record<string, unknown>;
       {entries.map(([key, value]) => (
         <div key={key} style={changed.includes(key) ? { background: '#221f14' } : undefined}>
           <span style={changed.includes(key) ? { color: 'var(--yellow)' } : undefined}>{key}</span>
-          <span>{value === null ? <span className="dim">—</span> : typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+          <span>{value === null ? <span className="dim">—</span> : typeof value === 'object' ? <Fields value={value} /> : String(value)}</span>
         </div>
       ))}
     </div>
@@ -106,8 +123,13 @@ export function IntentsPanel({ intents }: { intents: Intent[] }) {
             <span style={{ flex: '1 1 auto' }} />
             <span className="mono dim" style={{ fontSize: 10 }}>T{i.turn}</span>
           </div>
-          {Object.keys(i.args).length > 0 && <div className="mono dim" style={{ fontSize: 11 }}>{short(i.args)}</div>}
-          {i.receipt && <div className="mono" style={{ fontSize: 11, color: 'var(--ok)' }}>receipt {short(i.receipt)}</div>}
+          {Object.keys(i.args).length > 0 && <Fields value={i.args} tone="var(--soft)" />}
+          {i.receipt && (
+            <>
+              <span className="lbl" style={{ marginTop: 4 }}>receipt</span>
+              <Fields value={i.receipt} tone="var(--ok)" />
+            </>
+          )}
         </div>
       ))}
     </div>

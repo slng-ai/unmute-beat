@@ -8,6 +8,7 @@ try again from there, and change an agent's prompts and wiring from the page.
   its first page, and five ways to draw a graph compared on its "Graph options" page. It is private until
   someone shares it from the canvas's Share menu.
 - **Code:** [`studio/`](../../studio/README.md).
+- **Plan:** [what comes next, and the decisions behind it](plan.md).
 
 This page says what each screen shows, where in core each thing on it comes from, and the order to build
 the rest in. Read the [architecture guide](../architecture/README.md) first if a word here is new: step,
@@ -135,7 +136,10 @@ option A, was the one left out).
 ELK is the large one: the map's chunk is about 1.6 MB (0.5 MB gzipped), so it loads when the map first
 opens, and the page itself stays about 220 KB.
 
-## 4. Going back a turn while you talk (proposal)
+## 4. Going back a turn while you talk
+
+Agreed on 2026-10-10. How it is built on Pydantic, what a snapshot holds and the order a call is
+restored in are in [the plan](plan.md), section 5.
 
 The person testing an agent talks to it through their microphone. When it goes wrong at turn 4, they want to
 go back to turn 2 and try again, by voice, in about the time it takes to click. This section proposes how;
@@ -237,20 +241,14 @@ else down.
 
 ## 7. Build order
 
-| Phase | Delivers | Done when |
-|---|---|---|
-| 1 (this PR) | The design. `slng studio up`, compose, schema, start-up sequence, discovery with the loader's checks and the engine's own moves, the event format, the API, the web app with real agents in the four graph views and a working mic check | `python -m tests` in `studio/` passes, the page shows every agent in every view |
-| 2 | The observer hook in core. Text runs from the page: the worker, events to Redis and Postgres, the live view and the runs table filled from them | A text run on the salon shows every event in the table above, and its replay matches the live view |
-| 3 | Voice runs in the browser (core's own page and playout reports), caller and bot lanes, heard marks | A browser call shows who spoke when and which lines were heard, from core's evidence only |
-| 4 | Turn snapshots in Redis and Postgres, going back a turn by voice (section 4) | Going back to turn N of a salon call keeps the mic open, continues from turn N's state, and a write made before N is not sent again |
-| 5 | Config editing: forms, checks before save, versions, the "unmeasured" mark on changed prompts | A broken edit cannot be saved, and every run links to the version it used |
+The first PR delivered the design, `slng studio up`, discovery, the event format, the graph views and
+the Metrics page. What comes next, in order, with the decisions taken on 2026-10-10, is in
+[the plan](plan.md): metrics per agent, the listener hook in core, one run function for every use
+case, the runner service, stored runs and the Agents page, going back a turn, and the editor.
 
-## 8. Decisions waiting on you
+## 8. Decisions
 
-- **Postgres and Redis clients.** Phases 2 and 4 need a Python client for each (for example `asyncpg` and
-  `redis`). Neither is in the lock today, and the repository asks before adding a dependency.
-- **The Redis layer** in section 4 is a proposal: key names, the 7-day window and write-behind to Postgres.
-- **The Saans font.** It is licensed and not committed; `npm --prefix studio/web run fonts` copies it from a
-  `slng-ai/frontend` checkout. Bundling it in this repository is your call.
-- **Twilio runs.** The design lists them as a channel. Whether the studio should place or watch phone calls,
-  or only browser and text runs, decides how much of `server.py` it reuses.
+All of the decisions this section used to list were taken on 2026-10-10 and are recorded in
+[the plan](plan.md), section 1: a runner service, a listener hook in core, the studio as the only
+writer to Redis (`redis`) and Postgres (`asyncpg`), the Redis plan as proposed, going back in core,
+business data left as it is, browser calls only, and the Saans font left out.

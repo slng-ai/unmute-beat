@@ -194,7 +194,11 @@ def labels(trace: dict[str, Any]) -> tuple[str, str]:
 
 
 def turns(trace: dict[str, Any], limits: Limits) -> list[TurnTiming]:
-    """Every caller turn in one Jaeger trace, with its requests and flags, in turn order."""
+    """Every caller turn in one Jaeger trace, with its requests and flags, in turn order.
+
+    A request is judged on its first byte (first token); an LLM request with none, on its duration.
+    An STT or TTS request with no first byte has nothing to judge: its length is the audio's, not a wait.
+    """
     spans = {span['spanID']: span for span in trace.get('spans', [])}
     run, agent = labels(trace)
     trace_id = trace.get('traceID', '')
@@ -240,6 +244,7 @@ def turns(trace: dict[str, Any], limits: Limits) -> list[TurnTiming]:
             'llm': limits.llm_first_token if first is not None else limits.llm_request,
         }[kind]
         error = _error(tag)
+        measured = first if first is not None else duration if kind == 'llm' else None
         requests[turn].append(
             Request(
                 kind=kind,
@@ -249,7 +254,7 @@ def turns(trace: dict[str, Any], limits: Limits) -> list[TurnTiming]:
                 first_byte_ms=first,
                 error=error,
                 span=sid,
-                level='bad' if error else limit.level(first if first is not None else duration),
+                level='bad' if error else 'ok' if measured is None else limit.level(measured),
                 at=int(span.get('startTime', 0)),
                 trace=trace_id,
             )
@@ -489,10 +494,34 @@ def _search(jaeger: str, service: str, lookback: str, limit: int, attributes: di
     return f'{jaeger}/api/v3/traces?{urllib.parse.urlencode(query)}'
 
 
+def by_run(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Traces of one studio run made one: a call writes its ending (`call.ending`) as a trace of its own.
+
+    Merged under the trace that holds the conversation, so a run is one row and its turns one list.
+    A trace naming no run stays as it is.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    kept: list[dict[str, Any]] = []
+    for trace in traces:
+        run, _ = labels(trace)
+        if not run:
+            kept.append(trace)
+            continue
+        if run not in merged:
+            merged[run] = {'traceID': trace.get('traceID', ''), 'spans': list(trace.get('spans', []))}
+            kept.append(merged[run])
+            continue
+        held = merged[run]
+        held['spans'] += trace.get('spans', [])
+        if any(span.get('operationName') == 'conversation' for span in trace.get('spans', [])):
+            held['traceID'] = trace.get('traceID', '')
+    return kept
+
+
 def _read(
     source: str, scope: Literal['overview', 'run'], agent: str, traces: list[dict[str, Any]], limits: Limits
 ) -> Metrics:
-    per_trace = [(trace, turns(trace, limits)) for trace in traces]
+    per_trace = [(trace, turns(trace, limits)) for trace in by_run(traces)]
     timings = [t for _, found in per_trace for t in found]
     runs = sorted((run_of(trace, found) for trace, found in per_trace), key=lambda r: r.started, reverse=True)
     return Metrics(
@@ -511,6 +540,7 @@ def collect(
     jaeger: str,
     *,
     agent: str = '',
+    run: str = '',
     service: str = 'slng-voice-harness',
     lookback: str = '1h',
     limit: int = 50,
@@ -519,11 +549,15 @@ def collect(
 ) -> Metrics:
     """The overview: recent traces of `service` in Jaeger, for one agent or all, as turns, per-model stats and a summary.
 
+    `run` names one studio run instead: its view, every trace it wrote merged into one (`by_run`).
     One agent is asked of Jaeger itself (API v3's `query.attributes={"slng.agent.id": agent}`), so a
     busy runner's other agents never crowd the chosen one out of `limit`. Raises
     `urllib.error.URLError` (or what `fetch` raises) when Jaeger does not answer.
     """
     limits = limits or Limits()
+    if run:
+        found = fetch(_search(jaeger, service, lookback, limit, {'slng.run.id': run}))
+        return _read(jaeger, 'run', '', traces_of(found), limits)
     found = fetch(_search(jaeger, service, lookback, limit, {'slng.agent.id': agent} if agent else {}))
     return _read(jaeger, 'overview', agent, traces_of(found), limits)
 
@@ -547,5 +581,5 @@ def trace_of_run(
     fetch: Fetch = fetch_json,
 ) -> str:
     """The trace id of a studio run (`slng.run.id`), or '' when Jaeger has none for it yet."""
-    found = traces_of(fetch(_search(jaeger, service, lookback, 1, {'slng.run.id': run})))
+    found = by_run(traces_of(fetch(_search(jaeger, service, lookback, 20, {'slng.run.id': run}))))
     return str(found[0]['traceID']) if found else ''

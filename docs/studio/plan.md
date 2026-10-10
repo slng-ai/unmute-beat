@@ -1,8 +1,9 @@
 # SLNG Studio: the plan for runs, going back, and per-agent metrics
 
 This is the plan for what comes after the first studio PR. It records the decisions taken on
-2026-10-10, says how each piece will work, and gives the order to build them in. Nothing here is
-built yet, apart from what [the studio README](../../studio/README.md) lists.
+2026-10-10, says how each piece works, and the order they were built in. **All seven steps are built**
+(section 9 says where the build differs from what was planned, and what was checked live); the
+[studio README](../../studio/README.md) says how to run it.
 
 The screens are on the [design canvas](https://claude.ai/artifact/RcRy8iV6yEFohokqe2GUzp): boards
 00 (agent: build and try), 06 (metrics), 07 (start a call), 08 (go back and carry on), 09 (how a call
@@ -54,12 +55,12 @@ asyncio loop. The studio never carries audio.
 | `GET /ready` | 503 while warming, stopping, or full. What a load balancer or autoscaler reads |
 | `GET /stats` | Active calls, capacity, loop lag, stopping or not |
 
-**One run function, not five bots.** Today each use case's `bot.py` repeats the same pipeline and
-differs in about five places (the greeting, the services object, an on-open and on-close hook, the
-speech languages). The plan moves the shared body into core, as `core.processor.run_call(entry,
-transport, ...)`, and gives each use case a small `entry.py` naming its flow, how to open a call, its
-greeting and its hooks. Each `bot.py` shrinks to a few lines and keeps working on its own. The runner
-imports the five `entry` modules by package name.
+**One run function, not five bots.** Each use case's `bot.py` repeated the same pipeline and
+differed in about five places (the greeting, the services object, an on-open and on-close hook, the
+speech languages). The shared body is now in core, as `core.launch.run_call(entry, transport, ...)`,
+and each use case has a small `<package>/entry.py` naming its flow, how to open a call, its greeting and
+its hooks (`core.Entry`). Each `bot.py` is a few lines and still runs on its own. The runner imports the
+five `entry` modules by package name.
 
 **Scaling.** Copies of the runner sit behind a load balancer. One that is full or stopping says so on
 `/ready` and gets no new calls; on SIGTERM it finishes the calls it has (the salon's `server.py`
@@ -186,10 +187,10 @@ was done after N, so the tester knows the replay may meet it.
   the share over the limit. Each span names its model (`gen_ai.request.model`), so a model swapped
   between runs shows as two rows, with the runs and dates each covers, and the overview says when the
   period mixes models. One run's view is always one set of models.
-- **Known gap.** Pydantic AI's model requests record a duration but no first token, and core's agents
-  make no Pipecat `llm` span (only the two baselines do). Until core's listener reports the first
-  delta (step 2), a core agent's LLM row shows its total and leaves first token empty, rather than
-  passing the total off as a first token.
+- **First token.** Pydantic AI 2.46 writes each streamed model request's time to first chunk on its
+  span (`gen_ai.client.operation.time_to_first_chunk`), so a core agent's LLM row has its first token
+  from the trace alone. A request that did not stream leaves the cell empty rather than passing its
+  total off as a first token.
 
 ## 7. Closing lines
 
@@ -222,4 +223,25 @@ this plan.
 | 6 | Going back: `StepFlow.open(resume=, facts=)`, the go-back screen, an edited state checked before it opens | Going back to turn N of a salon call carries on from N's state, an edit the app refuses opens nothing, and nothing sent before N is sent again |
 | 7 | The editor: closing lines, action steps, checks, save to `agent.yaml`, versions | A broken closing line is caught before save, and every run names the version it ran on |
 
-Each step is its own PR, with `ruff`, `ty` and `python -m tests` clean in every member it touches.
+Each step was planned as its own PR; they were built on one branch, in order, with `ruff`, `ty` and
+`python -m tests` clean in every member each touched.
+
+## 9. As built
+
+| Step | Built | Where it differs from the plan |
+|---|---|---|
+| 1 | `setup(agent=, run=)`; `studio.metrics` on Jaeger's API v3; p90 tiles; latency by model with the period each row covers | Jaeger 2.21 serves only its API v3 (OTLP JSON): the old `/api/traces` the first PR read is gone, so the studio reads v3 and asks for one agent with `query.attributes`. A run's traces (its conversation, and its `call.ending` record) are merged into one. |
+| 2 | `core.events` (the run format moved from the studio), `CallContext.listen`, `FlowCall.snapshot()` | A turn's snapshot is taken again when the next turn starts and after a text reply is acknowledged: at the end of the turn its last line is not yet known to be heard, and a resumed call would think the caller missed it. Receipts are an event of their own (`receipt`). |
+| 3 | `core.launch.run_call`, `core.Entry`, `entry.py` per use case | In `core.launch`, not `core.processor`: the processor stays the frame adapter. The `voice` extra names `pipecat-slng` and Silero, which every voice use case already installed. |
+| 4 | `runner/` (`voice_runner`): the endpoints above, admission, warm-up once, drain on SIGTERM, a link to the studio | A runner compiles an agent again when a run names a config version other than the one it holds (`Entry.recompile`: YAML and prompts, never code). A voice call whose browser never sends its offer is ended after 30 s and said so. |
+| 5 | The hub (`studio.runs`), the store (`studio.store`), the Agents, Runs and run pages | Runs a stopped studio left live are marked stopped when the next one starts. |
+| 6 | `StepFlow.open(resume=, facts=)` and `StepFlow.resume`, the go-back page | The first limit of section 5 is fixed (a withdrawn read-back stays withdrawn); the second (a settled action's `route:` is not followed) is still core's known limit. A resumed voice call says nothing first: the conversation is under way. |
+| 7 | `studio.editor`: closing lines, action routes, prompts, the whole manifest; versions with parents | A class operation's closing line is saved in the manifest (`{class: file.py:Class, say: ...}`, which core now reads), so its code is never touched. |
+
+Checked live, on the real keys, from the browser (Playwright, headless Chromium): a salon text run to a
+booking; the run's view showing why the model stumbled (times it offered without asking for them, a pick
+core sent back); going back to turn 6 with a past day (refused in the salon's own words, nothing opened)
+and then with another service (carried on); a closing line with a field its receipt lacks caught before
+save, a good one saved and said in the very next run; a browser voice call with a synthetic caller, where
+the read-back was reported played and the spoken yes accepted; that call's voice-to-voice, STT, LLM and TTS
+timings on Metrics, filtered to the salon; and a text turn on each of the five agents through the runner.

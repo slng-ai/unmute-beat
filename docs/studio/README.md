@@ -1,14 +1,15 @@
 # SLNG Studio: design and plan
 
 A local studio for slng-voice-core. One command starts it. It finds every agent in the repository, draws
-its step graph, and (once the later phases land) lets you follow a call live, go back to an earlier turn and
-try again from there, and change an agent's prompts and wiring from the page.
+its step graph, and lets you try an agent in a real run by text or by voice from the browser, follow every
+run live, go back to an earlier turn and carry on from there with the state changed, change an agent's
+prompts, closing lines and action routes from the page, and read its timings per agent and per run.
 
 - **Design:** [SLNG Voice Studio canvas](https://claude.ai/artifact/RcRy8iV6yEFohokqe2GUzp): the screens on
   its first page, and five ways to draw a graph compared on its "Graph options" page. It is private until
   someone shares it from the canvas's Share menu.
 - **Code:** [`studio/`](../../studio/README.md).
-- **Plan:** [what comes next, and the decisions behind it](plan.md).
+- **Plan:** [the decisions behind the second phase, how each piece works, and what was built](plan.md).
 
 This page says what each screen shows, where in core each thing on it comes from, and the order to build
 the rest in. Read the [architecture guide](../architecture/README.md) first if a word here is new: step,
@@ -22,14 +23,21 @@ thing: yellow is the engine and the next move, blue is the caller, orange is the
 a healthy service, red is a failure or a write whose result is unknown. The tokens board in the design and
 `studio/web/src/styles/tokens.css` hold the same values.
 
+Three places at the top: **Agents**, **Runs**, **Metrics**. The boards are on the design canvas; the
+pages are what was built from them.
+
 | Board | Page | Shows |
 |---|---|---|
-| 01 Start up | `#/boot` | `slng studio up` coming up: Docker, Postgres, Redis, the engine, every agent read, the web app. A segmented bar, a line that changes every few seconds (each one a real thing start-up does), and a failed step that says what to do. |
-| 02 Live run | `#/live/<agent>/<step>` | Built for someone testing an agent with their microphone. The mic first: its level, its device, start and end the call. Then the graph, in one of two views (section 3): **Focus**, the step the call is in, where the caller came from and every move from here, back moves included; or **Map**, the whole agent. Under it, the **path over turns**: one row per step, one column per turn, so going back up the graph shows as the line climbing. Picking a turn shows the state, chat and graph as they were after it, with "Go back to T*n* and keep talking". The inspector on the right. |
-| 03 Agents and runs | `#/runs/<agent>` | Every agent the engine found, compiled or not (with the loader's own error), and that agent's runs: channel, config version, turns, writes, the path through the steps, how it ended. |
-| 04 Agent config | `#/config/<agent>/<step>` | One step at a time: prompt, fields, facts, operations, history window, exits and their purposes. A **Moves** tab: every move as a table, rows from and columns to. Live checks (the loader's), the diff against the saved version, and what to do after saving: new runs only, or fork a run with the new config. |
+| 01 Start up | `#/boot` | `slng studio up` coming up: Docker, Postgres, Redis, Jaeger, the store, every agent read, a runner, the web app. A segmented bar, a line that changes every few seconds (each one a real thing start-up does), and a failed step that says what to do. |
+| 00 Agent: build and try | `#/agents/<agent>/build/<step>` | One agent. The steps on the left (the live run's step marked), the step's config in the middle (its prompt, the closing line of each operation it carries out, an action step's routes), and **Try it** on the right: a text run or a browser call on the config as saved, the conversation with what was heard, what the model is doing request by request, the state, the business actions. Save and Check in the bar; a run on an older config offers to carry on from its last turn on the new one. Tabs: **Operations** (every closing and goodbye line, with the receipt's fields and the line filled from its last real receipt), **Graph** (focus, map, moves), **Its runs**, **Its metrics**, **Full config**. |
+| 02 Live run | `#/run/<run>` | One run, whole, live or read back: the conversation, every model request as it streamed and what it decided (and what core sent back), where the caller is, the state, the business actions, each finished turn with "go back here", and the path over turns. |
+| 03 Runs | `#/runs` | Every run of every agent, newest first: agent, channel, start, turns, outcome, config version, the run it carried on from. Filters: agent (all first), channel, outcome. |
+| 07 Start a call | Try it, on the agent's page | Text or voice from the browser; from the start, or from a saved turn of one of its last runs. The runner it lands on is the studio's choice. |
+| 08 Go back and carry on | `#/back/<run>/<turn>` | A saved turn: what was said up to it, the state to carry on with (edited and checked by the agent's own types), what comes along, what starts fresh, and what the business still holds from after it. Carry on by text or by voice. |
+| 04 Agent config | the Agents page | As board 00's middle column and its Operations and Full config tabs: closing lines with their receipt fields, action routes, prompts, the whole manifest, checked on a copy before saving. |
 | 05 Tokens and parts | none | Colours, type, controls, step nodes in each state, edge styles. |
-| 06 Trace and metrics | `#/metrics` | Where to find what is slow. This run: every turn's voice-to-voice time and its endpointing, STT, LLM and TTS times, anything over its limit in red, and the selected turn's spans as a waterfall. Across runs: each model's calls, p50, p95, errors and share over the limit, and the slowest turns. Section 5. |
+| 06 Trace and metrics | `#/metrics` | Where to find what is slow. The overview, filterable by agent, or one run, which names its agent: voice to voice, LLM first token and TTS first audio at p90, errors, every turn's requests with anything over its limit flagged, and latency by model (a model swapped between runs is two rows). Section 5. |
+| 09 How a call runs | section 6 | Browser, studio, runners, Redis then Postgres, Jaeger. |
 
 The inspector starts with the conversation and the state open, and expands to the model and the step. Each
 section opens and closes on its own.
@@ -71,29 +79,29 @@ Steps that all hand over to one another (exits both ways, three or more, the ent
 The salon's booking, moving, cancelling and complaints are one: 12 moves between them that the map draws as
 one label, "any to any".
 
-### Events (format built in this PR; publishing is phase 2)
+### Events (built: `core.events`)
 
-`studio/src/studio/events.py` is the one format. Every event carries its run, a number (`seq`, from 0, no
-gaps), its caller turn and the time since the run started.
+`core/src/core/events.py` is the one format; the studio names it (`studio.events`). Every event carries
+its run, a number (`seq`, from 0), its caller turn and the time since the listener was attached. A call's
+listener (`CallContext.listen`) gets them off the turn's path, through a bounded queue: a slow listener
+never slows a turn, and with no listener nothing is built.
 
-| Event | What it says | Where in core | Today |
-|---|---|---|---|
-| `run.started` | agent, config version, channel, entry step, first state | `StepFlow.open` | the engine knows it |
-| `caller.speech` | started, partial, final, stopped; whether it joins the turn | Pipecat VAD and STT frames; `CallContext.continues_turn` | frames exist; needs the processor to forward them |
-| `step.entered` | step, where from, how (exit, consult, prerequisite, return, route) | the graph walk in `core.flow` | needs an observer |
-| `model.request` | step, request number, budget | `core.turn.RunStarted`, `TurnBudget` | event exists |
-| `model.delta` | the decision's words as they stream | `core.turn.TextDelta` | event exists |
-| `model.decision` | output (`reply`, `record`, an operation, `hand_over`, `goodbye`, `done`, a read), its arguments, a refusal | `core.structured` | needs an observer |
-| `model.ended` | tokens in and out, milliseconds | `core.turn.RunEnded`, Pydantic AI usage | event exists, usage needs adding |
-| `state.committed` | the whole state, what changed, what was reset | `FlowCall.update` / `collect` | needs an observer |
-| `intent.changed` | intent, operation, status, arguments, receipt | `core.state.Intent`, `Operation.run` | needs an observer |
-| `bot.speech` | segment, queued, playing, delivered, cut, cleared; source and reason; the evidence | `CallContext` speech ledger, `SegmentMark`, playout reports | ledger exists; needs an observer |
-| `turn.finished` | answered, interrupted, exhausted, failed | `core.turn.TurnFinished` | event exists |
-| `run.ended` | goodbye, hang-up, ceiling, failed, stopped | `record_ending` | the launcher knows it |
-
-"Needs an observer" means one small hook in core: a `CallContext` attribute holding a callable that core
-calls at each of those points, `None` by default, never awaited in a way that can slow a turn, and never
-able to change what happens. That is the only change to core the plan needs, and it is phase 2's first step.
+| Event | What it says | Where in core |
+|---|---|---|
+| `run.started` | agent, config version, channel, entry step, first state, the run it carries on from | the opener (`Events.started`): `core.launch.run_call`, the runner's text calls |
+| `caller.speech` | the words a turn (or a piece that joins it) gets | `CallContext.turn_started` |
+| `step.entered` | step, where from, how where core knows (exit, consult, handback, resume) | `CallContext.commit`; the studio labels the rest from the engine's own moves |
+| `model.request` | step, request number, budget | the turn engine's `before_model_request` hook |
+| `model.delta` | speech, or a tool call's arguments, as they stream | the run's own stream (`core.turn`) |
+| `model.decision` | each tool or output the model called, and each one core sent back, with why | the run's messages (`core.turn`) |
+| `model.ended` | model, tokens in and out, milliseconds, time to first part | the `after_model_request` hook |
+| `state.committed` | the whole state, what changed | `CallContext.commit` |
+| `intent.changed` | intent, operation, status, arguments | `intent_for`, `set_intent`, `restore` |
+| `receipt` | a validated receipt, as filed | `CallContext.note_evidence` |
+| `bot.speech` | segment, queued, delivered (with its evidence), cut; source and reason | the speech ledger: `note_said`, the closing of a streamed segment, marks, playout reports, acknowledgements |
+| `turn.finished` | answered, interrupted, exhausted, failed | `core.turn.Turn.events` |
+| `turn.snapshot` | what going back to the end of the turn needs (`core.snapshot.TurnSnapshot`) | after each turn, and again once its speech is known heard |
+| `run.ended` | goodbye, hang-up, ceiling, failed, stopped; events dropped | the opener (`Events.ended`) |
 
 ### Going back a turn
 
@@ -174,9 +182,9 @@ conversation, not the world. Intents settled before T2 come along as settled; an
 unknown and are reconciled before anything else is sent, as core already does for a fresh process
 (`StepFlow.open(intents=...)`). The page says so where the tester decides.
 
-**What core needs for it.** Opening a call at a given step with a given history (beside `StepFlow.open`,
-which already takes a state and unresolved intents), and the observer hook from phase 2 to know when a turn
-ended. Python clients for Redis and Postgres are new dependencies to agree on (section 8).
+**What core does for it** (built): `FlowCall.snapshot()` at the end of every turn, and
+`StepFlow.open(resume=snapshot, facts=edited)` to carry on: the history and the speech ledger first, then
+the state validated whole. The plan's section 5 has the details; the go-back page is the studio's.
 
 ## 5. Timing and traces: finding what is slow
 
@@ -191,21 +199,24 @@ collected locally, so nothing is estimated and nothing needs a cloud account.
 | Voice to voice (you stopped, the bot's first sound) | Pipecat `turn` | `turn.user_bot_latency_seconds` |
 | Turn number, interrupted | Pipecat `turn` | `turn.number`, `turn.was_interrupted` |
 | STT first byte, TTS first audio | Pipecat `stt`, `tts` | `metrics.ttfb` (seconds), `gen_ai.request.model`, `gen_ai.provider.name` |
-| LLM first token | Pipecat `llm` | `metrics.ttfb` |
+| LLM first token | Pydantic AI model request, or Pipecat `llm` (the baselines) | `gen_ai.client.operation.time_to_first_chunk`, or `metrics.ttfb` |
 | LLM request duration, tokens | Pydantic AI model request | `gen_ai.operation.name` = `chat`, the span's duration |
+| Agent, run | every span of a run | `slng.agent.id`, `slng.run.id` (`core.observability.setup`) |
 | Errors | any of them | `otel.status_code` = `ERROR` |
 
-The span names and attributes were checked against `pipecat.utils.tracing`. The salon's agents run on
-Pydantic AI, not Pipecat's LLM service, so their requests carry a duration but no first-token time: they
-are judged on duration (the "LLM request" limit) until the engine's own `model.request` and first
-`model.delta` events give the first token (phase 2).
+The span names and attributes were checked against `pipecat.utils.tracing` and a live call. Pydantic AI
+writes each streamed request's time to first chunk on its span, so a core agent's LLM first token comes from
+the trace; a request that did not stream is judged on its duration (the "LLM request" limit). An STT or TTS
+request with no first byte is not judged: its length is the audio's.
 
 **How it gets there.** `slng studio up` starts Jaeger beside Postgres and Redis (127.0.0.1 only: OTLP in
-on 4318, its UI on 16686, traces kept in memory). `slng studio bot salon` (any use case on core) starts that use case's
-`bot.py` with `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318` already set, so nothing is typed by hand:
-`core.observability.setup` adds an OTLP exporter for it, with or without Langfuse, batching spans off the
-turn's path. Once calls run in the studio (phase 2), the Live page's mic bar starts them the same way. `studio.metrics` reads Jaeger's query
-API, puts each request in the turn it belongs to, and flags it against its limit.
+on 4318, its UI on 16686, traces kept in memory) and starts its runner with
+`OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`, so every run from the Agents page sends its spans
+there: `core.observability.setup` adds an OTLP exporter for it, with or without Langfuse, batching spans
+off the turn's path. A text run has a `conversation` span and a `turn` span per turn of the runner's own,
+so its requests group the same way. `slng studio bot salon` does the same for a use case's own `bot.py`.
+`studio.metrics` reads Jaeger 2.21's query API v3 (the older JSON API is gone), asks for one agent or one
+run by attribute, puts each request in the turn it belongs to, and flags it against its limit.
 
 **What counts as slow** (defaults for every agent; per agent with the config page later):
 
@@ -218,33 +229,38 @@ API, puts each request in the turn it belongs to, and flags it against its limit
 | TTS first audio | > 300 ms | > 400 ms |
 | LLM requests in one turn | > 1 | > 2 |
 
-**Built now:** Jaeger in compose and in the start-up sequence, core's OTLP export, `studio.metrics` with
-its tests, `/api/metrics` and `/api/metrics/limits`, and the Metrics page reading them. Not yet: the live
-page's Timing section with real turns (it needs runs from the engine, phase 2), the endpointing time as its
-own number (Pipecat records it inside the turn, not as an attribute), and per-agent limits.
+**Built:** Jaeger in compose and in the start-up sequence, core's OTLP export with the agent and run on
+every span, `studio.metrics` with its tests, `/api/metrics` (`?agent=`), `/api/metrics/run/<run>`, and the
+Metrics page: the overview with its agent filter, one run's view, p90 tiles, latency by model. Not yet:
+the endpointing time as its own number (Pipecat records it inside the turn, not as an attribute), and
+per-agent limits.
 
 ## 6. How it runs
 
 ```
 slng studio up
-  └─ engine (uvicorn, :7800)           serves /api and the built web app
-       ├─ boot: docker compose up --wait postgres redis, then every agent.yaml
+  └─ engine (uvicorn, :7800)           serves /api, core's voice page (/voice-sdk) and the built web app
+       ├─ boot: docker compose up --wait postgres redis jaeger, the store, every agent.yaml, a runner
        ├─ discovery: core.load + studio.check per agent (own process)
-       └─ runs (phase 2+): one worker per run, in the use case's own environment
-            └─ the use case's flow, with core's observer publishing events → Redis → page
-                                                                         └→ Postgres (kept)
+       └─ runners (voice_runner, :7810 and up): every use case's core.Entry, loaded once
+            ├─ text turns and WebRTC calls (the browser's audio goes straight here)
+            ├─ each call's events → one websocket per runner → the studio → Redis (7 days) → the page
+            │                                                                 └→ Postgres (kept)
+            └─ spans → Jaeger (OTLP), read back for Metrics
 ```
 
-A run's worker runs in the use case's own environment (`uv run --directory use-cases/<agent>`), as its
-`bot.py` does, so the studio never needs an application's dependencies, and a crashing call takes nothing
-else down.
+The runners import the use cases (the workspace has one environment), so the engine itself never does:
+it reads agents through `studio.check`, in a process of its own. A runner that fails takes its own calls
+with it and nothing else. More runners carry more calls at once (`slng studio runner`); the studio places
+each new run on the least busy one that is ready.
 
 ## 7. Build order
 
 The first PR delivered the design, `slng studio up`, discovery, the event format, the graph views and
-the Metrics page. What comes next, in order, with the decisions taken on 2026-10-10, is in
+the Metrics page. The second phase, in order, with the decisions taken on 2026-10-10, is in
 [the plan](plan.md): metrics per agent, the listener hook in core, one run function for every use
-case, the runner service, stored runs and the Agents page, going back a turn, and the editor.
+case, the runner service, stored runs and the Agents page, going back a turn, and the editor. All of
+it is built; the plan's section 9 says where the build differs and what was checked live.
 
 ## 8. Decisions
 

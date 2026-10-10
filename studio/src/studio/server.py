@@ -310,16 +310,16 @@ def create_app(
 
     @app.get('/api/metrics/run/{run}')
     def by_run(run: str) -> metrics.Metrics:
-        """A studio run's timings, found in Jaeger by its run id (`slng.run.id`)."""
+        """A studio run's timings, found in Jaeger by its run id (`slng.run.id`): every trace it wrote, as one."""
         try:
-            trace = metrics.trace_of_run(settings.jaeger_url, run, fetch=fetch)
+            found = metrics.collect(settings.jaeger_url, run=run, lookback='168h', fetch=fetch)
         except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
             raise jaeger_down(error) from error
-        if not trace:
+        if not found.runs:
             raise HTTPException(
                 404, f'Jaeger has no trace for {run} yet: spans arrive a few seconds after a turn'
             )
-        return one_trace(trace)
+        return found
 
     @app.get('/api/events/schema')
     def event_schema() -> dict[str, Any]:

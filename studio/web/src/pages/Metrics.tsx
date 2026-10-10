@@ -179,7 +179,7 @@ function Loaded({ m }: { m: Metrics }) {
                     <tr key={`${t.trace}-${t.turn}`}>
                       <th className="mono">T{t.turn}{t.interrupted ? ' ⤺' : ''}</th>
                       {m.scope === 'overview' && <td className="mono" style={{ fontSize: 11, textAlign: 'left', padding: '0 8px' }}>{t.run ? <a href={href({ page: 'run', run: t.run })}>{t.run}</a> : t.trace.slice(0, 8)}<div className="dim">{t.agent}</div></td>}
-                      <td style={{ color: LEVEL_COLOR[v2v] }}>{t.voice_to_voice_ms === null ? <span className="dim">text</span> : ms(t.voice_to_voice_ms)}</td>
+                      <td style={{ color: LEVEL_COLOR[v2v] }}>{t.voice_to_voice_ms === null ? <span className="dim" title="no voice-to-voice time: a text turn, or a turn that ended before the bot spoke">—</span> : ms(t.voice_to_voice_ms)}</td>
                       <td>{cell('stt')}</td>
                       <td>{cell('llm')}</td>
                       <td>{cell('tts')}</td>

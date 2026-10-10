@@ -1,12 +1,14 @@
 # slng-voice-studio
 
-A local studio for slng-voice-core: every agent in the repository, its step graph, and (as the later phases
-land) its runs live, forks from an earlier turn, and config editing. Design and plan:
-[docs/studio](../docs/studio/README.md).
+A local studio for slng-voice-core. Pick an agent from the repository, change its config, and try it in a
+real run, by text or by voice from the browser. Every run is kept: follow it live, read it back, go back to
+any turn, change the state and carry on. Timings per agent and per run come from the run's own traces.
+Design and plan: [docs/studio](../docs/studio/README.md).
 
 ## Run it
 
-Needs Docker with compose v2 and Node 22. From the repository root:
+Needs Docker with compose v2, Node 22, and the model and speech keys in the root `.env` (`GOOGLE_API_KEY`,
+`SLNG_API_KEY`), as every `bot.py` does. From the repository root:
 
 ```bash
 uv sync --all-packages                          # once
@@ -18,50 +20,75 @@ uv run --directory studio slng studio up        # http://localhost:7800, ctrl+c 
 
 | Command | Does |
 |---|---|
-| `slng studio up` | Starts the engine, which serves the page at once and brings up Postgres and Redis behind it (the loading screen follows along). Ctrl+c stops the containers; the data stays. |
+| `slng studio up` | Starts the engine, which serves the page at once and brings up Postgres, Redis and Jaeger behind it, opens the store, reads every agent and starts one runner (the loading screen follows along). Ctrl+c stops the runner after its calls, then the containers; the data stays. |
 | `slng studio up --dev` | Also runs Vite with hot reload on :7802, sending `/api` to the engine. |
-| `slng studio up --no-services` | Leaves Docker alone. Agents and graphs still work; nothing is stored and no timings are collected. |
+| `slng studio up --no-services` | Leaves Docker alone. Runs are kept in memory until the studio stops, and no timings are collected. |
+| `slng studio up --no-runner` | Starts no runner; start them yourself with `slng studio runner`. |
+| `slng studio runner [--port N] [--max-calls N]` | One more runner, linked to the studio that is up: more calls at once. |
 | `slng studio down [--volumes]` | Removes the containers, and with `--volumes` every stored run. |
 | `slng studio status` | The containers and the engine. |
 | `slng studio agents` | Every `agent.yaml` and whether the loader accepts it, offline. Exit 1 if any does not. |
-| `slng studio bot <use case>` | Runs that use case's `bot.py` with its traces sent to the studio. |
+| `slng studio bot <use case>` | Runs that use case's `bot.py` with its traces sent to the studio: for a transport the page does not own (`-t twilio`). |
 
-To see timings, start a bot from a second terminal, make a call, then open Metrics:
+## What it does
 
-```bash
-uv run --directory studio slng studio bot salon    # any use case on core; extra words go to bot.py (-t twilio)
-```
+- **Agents.** One agent at a time. **Build and try**: the steps on the left, the step's config in the
+  middle (its prompt, the closing line of each operation it carries out, an action step's routes), a run
+  on the right. Start a text run or a browser call, talk, watch each request stream and what the model
+  decided, the state, the business actions and their receipts. Save, and the change is checked on a copy
+  first; the next run uses it. A run on an older config offers to carry on from its last turn on the new
+  one. **Operations**: every operation's closing line (said after it works, filled from its receipt) and
+  goodbye line, with the receipt's fields to insert and the line filled from its last real receipt.
+  **Graph**, **Its runs**, **Its metrics**, **Full config** (the whole manifest, checked by the loader).
+- **Runs.** Every run of every agent, newest first, filterable by agent, channel and outcome. A run opens
+  its full view: live while it goes on, read back from the store once it is over.
+- **Going back.** Any turn of a run: what was said up to it, the state to carry on with (edit it; the
+  agent's own types check it, and a refused edit opens nothing), what comes along, what starts fresh, and
+  what the business still holds from after that turn. Carry on by text or by voice.
+- **Metrics.** The overview of recent runs, filterable by agent; one run's view, which names its agent.
+  Voice to voice, LLM first token and TTS first audio at p90, errors, every turn's requests, and latency by
+  model: one row per STT, LLM and TTS model, so a model swapped between runs is two rows.
 
-It runs `use-cases/salon/bot.py` with its spans already pointed at the studio's Jaeger
-(`OTEL_EXPORTER_OTLP_ENDPOINT`), and warns when the studio is not up, when the root `.env` names another
-collector, or when the use case is a baseline with no core tracing.
+Calls run on **runners** (`runner/`, `voice_runner`): each loads every use case's `core.Entry` once and
+carries text and WebRTC calls. The browser's audio goes straight to the runner that holds the call; the
+studio only places calls and passes the offer on. Browser calls work on this machine and its network:
+another network needs a STUN or TURN server (`PIPECAT_ICE_SERVERS`).
 
-Settings come from the environment: `STUDIO_PORT` (7800), `STUDIO_PG_PORT` (5432), `STUDIO_REDIS_PORT`
-(6379), `STUDIO_OTLP_PORT` (4318), `STUDIO_JAEGER_PORT` (16686), `STUDIO_AGENTS` (`use-cases/*/*/agent.yaml`), `STUDIO_ROOT` (the repository). Every port binds to
-127.0.0.1 only.
+Settings come from the environment: `STUDIO_PORT` (7800), `STUDIO_RUNNER_PORT` (7810), `STUDIO_PG_PORT`
+(5432), `STUDIO_REDIS_PORT` (6379), `STUDIO_OTLP_PORT` (4318), `STUDIO_JAEGER_PORT` (16686), `STUDIO_AGENTS`
+(`use-cases/*/*/agent.yaml`), `STUDIO_ROOT` (the repository). Every port binds to 127.0.0.1 only. The
+runners' logs and the use cases' business data (the salon's diary, Faro's learners) live in `data/studio/`.
 
 ## Layout
 
 | Path | Owns |
 |---|---|
-| `compose.yaml` | Postgres 16 and Redis 7 (health-checked) and Jaeger 2.21 (OTLP in, traces in memory), local ports only, the `slng-studio_pg` volume |
+| `compose.yaml` | Postgres 16 and Redis 7 (health-checked) and Jaeger 2.21 (OTLP in, traces in memory, query API v3), local ports only, the `slng-studio_pg` volume |
 | `src/studio/cli.py` | the `slng` command |
 | `src/studio/settings.py` | ports, paths and URLs from the environment |
-| `src/studio/boot.py` | the start-up sequence `/api/boot` reports and the loading screen draws |
+| `src/studio/boot.py` | the start-up sequence `/api/boot` reports and the loading screen draws: Docker, the services, the store, the agents, the runner |
 | `src/studio/discovery.py` | every `agent.yaml`: `core.load` for its steps, `studio.check` for the loader's verdict and the engine's own moves, groups for the map |
-| `src/studio/check.py` | `FlowSpec.problems()` and `Flow.moves` (compiled on `TestModel`, no provider called) in a process of its own, with the use case importable |
-| `src/studio/events.py` | the run format: twelve events, one discriminated union |
-| `src/studio/metrics.py` | timings per turn and per model request from Jaeger's traces (Pipecat's `turn`, `stt`, `tts` spans; Pydantic AI's model requests), flagged against `Limits` |
-| `src/studio/server.py` | the FastAPI app: `/api/health`, `/api/boot`, `/api/agents[/id]`, `/api/runs` (501 until phase 2), `/api/metrics` (503 when Jaeger does not answer), `/api/metrics/limits`, `/api/events/schema`, the built page |
-| `src/studio/schema.sql` | the store: configs, runs, events, snapshots |
-| `tests/` | asserts, no pytest: discovery on the `desk` fixture and every use case, events, metrics on a Jaeger-shaped trace, boot on a scripted runner, the API, the CLI |
-| `web/` | Vite, React, TypeScript; React Flow and ELK for the map, loaded only when it opens. `src/styles/tokens.css` is the design's tokens board; `src/pages/` one file per page; `src/components/` the graph's four views (focus, map, path over turns, moves table) and the mic check |
+| `src/studio/check.py` | in a process of its own, with the use case importable: `FlowSpec.problems()`, `Flow.moves` and each operation's closing lines and receipt fields (compiled on `TestModel`, no provider called) |
+| `src/studio/runs.py` | the hub: runners link in (hello, stats, events), each run placed on the least busy ready runner, offers and text turns passed on, every event stored and streamed to the pages watching; `RunnerProcess` |
+| `src/studio/store.py` | `ServiceStore` (Redis for 7 days, Postgres behind, written in order by a task of its own) and `MemoryStore` (`--no-services`, tests) |
+| `src/studio/configs.py` | an agent's config as files, and its version (a hash of them) |
+| `src/studio/editor.py` | the editor: closing lines, action routes and prompts edited line by line and proved, checked on a copy, saved with a version that names its parent |
+| `src/studio/events.py` | the run format, which is core's (`core.events`) |
+| `src/studio/metrics.py` | timings from Jaeger's API v3: each turn's STT, LLM and TTS requests, flagged against `Limits`; per agent, per run (its traces merged), per model |
+| `src/studio/server.py` | the FastAPI app: agents, config and its check, runners, runs (start, live socket, offer, turns, hang up, events, a turn to go back to), metrics, core's voice page at `/voice-sdk/`, the built page |
+| `src/studio/schema.sql` | the store: configs, runs, events, snapshots; applied on every start |
+| `tests/` | asserts, no pytest: discovery, events, metrics on API v3 answers, boot, the API, the CLI, the editor on copies of the salon and Faro, the store (Redis and Postgres too when they are up) |
+| `web/` | Vite, React, TypeScript; React Flow and ELK for the map, loaded only when it opens. `src/pages/` one file per place (Agents, Runs, a run, going back, Metrics); `src/live/` the live socket (`useRun`), the try panel, browser calls on core's own client (`voice.ts`) |
+
+The runner service and the studio together are tested in `runner/tests/test_runner.py`: two runners, runs
+placed and stored, going back with an edit, a runner stopping, a saved config.
 
 ## Check it
 
 ```bash
 uv run --directory studio python -m tests
-uv run ruff format studio && uv run ruff check studio
-uv run --directory studio ty check .
+uv run --directory runner python -m tests
+uv run ruff format studio runner && uv run ruff check studio runner
+uv run --directory studio ty check . && uv run --directory runner ty check .
 npm --prefix studio/web run build
 ```

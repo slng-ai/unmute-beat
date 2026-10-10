@@ -43,6 +43,7 @@ def call(
             span('c2', 'chat gemini-3.5-flash-lite', 4340, 1640, 't2', gen_ai__operation__name='chat', **model),
             span('c3', 'chat gemini-3.5-flash-lite', 6000, 400, 't2', gen_ai__operation__name='chat', otel__status_code='ERROR', **model),
             span('c4', 'chat gemini-3.5-flash-lite', 6500, 900, 't2', gen_ai__operation__name='chat', gen_ai__client__operation__time_to_first_chunk=0.31, **model),
+            span('v2', 'tts', 6600, 3000, 't2', gen_ai__request__model='s2.1-pro', gen_ai__provider__name='fish'),
         ],
     }  # fmt: skip
     for one in found['spans']:
@@ -62,10 +63,13 @@ def a_turn_holds_its_own_requests_and_flags():
     assert tts.first_byte_ms == 270
 
     assert second.interrupted and second.level == 'bad'
-    assert [r.span for r in second.requests] == ['s2', 'c2', 'c3', 'c4'], (
+    assert [r.span for r in second.requests] == ['s2', 'c2', 'c3', 'c4', 'v2'], (
         'an stt span with no parent joins the turn it falls in'
     )
-    assert second.requests[-1].first_byte_ms == 310, 'a streamed model request has its first chunk from core'
+    assert second.requests[-2].first_byte_ms == 310, 'a streamed model request has its first chunk'
+    assert second.requests[-1].level == 'ok' and not any('3000' in f.what for f in second.flags), (
+        'a TTS request with no first byte is not judged on the length of its audio'
+    )
     assert (first.run, first.agent) == ('run_tr1', 'sage-and-stone'), 'each turn names its run and agent'
 
     said = [f.what for f in second.flags]

@@ -47,6 +47,7 @@ export async function startVoice(run: string, audio: HTMLAudioElement, on: Voice
       onBotStartedSpeaking: () => on.onStatus('bot speaking'),
       onBotStoppedSpeaking: () => on.onStatus('listening'),
       onUserStartedSpeaking: () => on.onStatus('you are speaking'),
+      onUserStoppedSpeaking: () => on.onStatus('listening'),
       onDisconnected: () => {
         on.onStatus('call ended');
         on.onEnded();

@@ -61,6 +61,7 @@ def a_local_collector_gets_the_spans_without_langfuse():
 def a_missing_extra_says_which_to_install():
     for module, extra, blocked in (
         ('core.processor', 'voice', 'pipecat'),
+        ('core.launch', 'voice', 'pipecat'),
         ('core.observability', 'tracing', 'langfuse'),
     ):
         said = fresh(

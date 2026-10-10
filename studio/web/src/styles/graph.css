@@ -1,0 +1,26 @@
+/* Step nodes and their edges. Kind in the header, state by border: active, a legal next move, visited. */
+
+.graph-wrap { flex: 1 1 auto; overflow: auto; min-height: 420px; padding: 24px; }
+.graph { position: relative; }
+.graph svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+
+.node { position: absolute; width: 200px; height: 96px; background: var(--panel); border: 1px solid var(--rule-strong); text-align: left; padding: 0; cursor: pointer; display: flex; flex-direction: column; border-radius: 0; }
+.node:hover { border-color: var(--dim); }
+.node-h { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-bottom: 1px solid #2a2824; font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.node-t { font-family: var(--mono); font-size: 15px; font-weight: 500; padding: 10px 10px 4px; }
+.node-m { font-family: var(--mono); font-size: 11px; color: var(--dim); padding: 0 10px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node.consulted { border-style: dashed; }
+.node.virtual { width: 88px; height: 28px; justify-content: center; align-items: center; color: var(--yellow); border-color: var(--yellow-dim); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; }
+.node.active { border: 2px solid var(--yellow); }
+.node.active .node-h { background: var(--yellow); color: var(--ground); border-bottom-color: var(--yellow); }
+.node.next { border-color: var(--yellow-dim); }
+.node.next .node-h { color: var(--yellow); }
+.node.selected { outline: 1px dashed var(--text); outline-offset: 4px; }
+
+.edge { fill: none; stroke: #3a3732; stroke-width: 1.5; }
+.edge.consult { stroke-dasharray: 4 4; stroke: var(--muted); }
+.edge.prerequisite { stroke-dasharray: 2 4; stroke: var(--yellow-dim); }
+.edge.goodbye { stroke: #26241f; }
+.edge.lit { stroke: var(--yellow); }
+.legend { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--rule-soft); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }

@@ -432,4 +432,5 @@ uv run python -m tests     # the offline suite, no model requests
 - The [architecture guide](docs/architecture/README.md) follows one salon call through nodes, state, operations and
   recovery, with the code behind each step.
 - [CLAUDE.md](CLAUDE.md) has the workspace layout, every module's job and the development commands.
+- The [studio](studio/README.md) draws every agent's step graph locally (`slng studio up`); its design and build plan are in [docs/studio](docs/studio/README.md).
 - Faro, a language-learning companion, runs on the same core ([`use-cases/faro-language-learning`](use-cases/faro-language-learning/)).

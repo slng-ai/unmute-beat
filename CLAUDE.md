@@ -105,6 +105,18 @@ that member's folder.
 | `concierge-tools/audio_timing.py` | who spoke when in a two-channel Coval recording: response latency, overlaps, barge-in stop latency |
 | `faro-tools/bench.py` | Faro's benchmark cases live: scripted text calls on the real model, each call in its own process, one Langfuse session per call. Billable |
 
+**`studio/`**, the package `slng-voice-studio`: a local studio over core (`docs/studio/README.md`; the design is a private canvas linked there). It imports `core` and no use case: it reads every `agent.yaml` from disk and checks each in a process of its own.
+
+| Path | Owns |
+|---|---|
+| `src/studio/cli.py` | `slng studio up` (`--dev`, `--no-services`, `--port`), `down [--volumes]`, `status`, `agents` (offline, exit 1 if any manifest is refused) |
+| `src/studio/boot.py`, `server.py` | the start-up sequence the loading screen polls (`/api/boot`: Docker, then `docker compose up --wait` on Postgres and Redis, then the agents), and the FastAPI app serving `/api` and the built page; `/api/runs` is a 501 until runs are recorded |
+| `src/studio/discovery.py`, `check.py` | each agent: `core.load` for its graph (exits, consults, prerequisites, `then`, failure paths, `take_back`, one added `$end` for goodbyes; `route:` not yet), `FlowSpec.problems()` in a subprocess with the use case importable for its verdict, cached per folder state |
+| `src/studio/events.py` | the run format the live view, the store and a replay share: twelve events, one discriminated union, each mapped to its source in core in the design doc |
+| `compose.yaml`, `src/studio/schema.sql` | Postgres 16 and Redis 7 on 127.0.0.1 only; configs, runs, events, snapshots |
+| `web/` | Vite, React, TypeScript, nothing else at run time: `styles/tokens.css` (the design's tokens), one page per route (`#/boot`, `#/runs`, `#/live`, `#/config`), `graph/layout.ts`; Saans is copied in by `npm run fonts`, never committed |
+| `tests/` | `test_discovery` (the `desk` fixture, every use case compiles), `test_events`, `test_boot` (a scripted runner, no Docker), `test_server`, `test_cli` |
+
 **The split that matters:** `core.turn` runs a turn and knows nothing about
 how it reaches a person; `core.processor` is the Pipecat adapter over it.
 Anything about *running* a turn goes in `turn`, anything about frames goes in
@@ -144,7 +156,9 @@ uv sync --all-packages                                   # the whole workspace, 
 cd use-cases/salon && uv run bot.py                      # voice, http://localhost:7860
 uv run python -m tests                                   # this folder's modules, offline, no .env
 uv run ruff format . && uv run ruff check .              # from the root: every member
-for d in core use-cases/*; do uv run --directory $d ty check .; done
+for d in core studio use-cases/*; do uv run --directory $d ty check .; done
+uv run --directory studio slng studio up                 # the studio, http://localhost:7800 (build studio/web first)
+npm --prefix studio/web ci && npm --prefix studio/web run build   # the studio's page
 cd use-cases/concierge-tools && uv run python -m coval_sim plan --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session> --profile <speech-profile.env>   # then `run`, billable
 cd use-cases/concierge-tools && uv run python -m coval_sim serve --agency salon --profile <speech-profile.env>   # one bot and tunnel for several jobs
 cd use-cases/concierge-tools && uv run python -m coval_sim run --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session> --host <serve's host> --profile <same file>   # a job against that bot, billable

@@ -1,0 +1,39 @@
+# The studio's local services. `uv run slng studio up` starts them as the project `slng-studio`.
+#
+# Every port binds to 127.0.0.1 only: the studio is a local tool and these hold call transcripts.
+# Postgres keeps runs, turns, events, state snapshots and config versions (schema.sql runs on first start).
+# Redis carries each live run's event stream from the engine to the web page.
+
+name: slng-studio
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: studio
+      POSTGRES_PASSWORD: studio
+      POSTGRES_DB: studio
+    ports:
+      - "127.0.0.1:${STUDIO_PG_PORT:-5432}:5432"
+    volumes:
+      - pg:/var/lib/postgresql/data
+      - ./src/studio/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studio -d studio"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${STUDIO_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pg:

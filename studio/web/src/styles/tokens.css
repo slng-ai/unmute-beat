@@ -1,0 +1,39 @@
+/* The studio's tokens: the design's "Tokens and parts" board, one to one.
+   Dark ground, one yellow, square corners, 1 px rules. Each signal colour means one thing. */
+
+@font-face { font-family: 'Saans'; src: url('/fonts/Saans-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Saans'; src: url('/fonts/Saans-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Saans'; src: url('/fonts/Saans-Heavy.woff2') format('woff2'); font-weight: 800; font-display: swap; }
+
+:root {
+  --sunk: #0f0d0a;
+  --ground: #15120d;      /* brand ink */
+  --aside: #17150f;
+  --panel: #1a1814;
+  --hover: #1e1c18;
+  --raised: #252320;
+  --rule-soft: #26241f;
+  --rule: #333230;
+  --rule-strong: #3a3833;
+  --faint: #6e6c66;
+  --dim: #8a8882;
+  --muted: #a0a09b;
+  --soft: #d9d7d1;
+  --text: #f5f4f1;
+
+  --yellow: #fbe566;      /* brand yellow: active step, engine thinking, the next move */
+  --yellow-hover: #fff1a3;
+  --yellow-dim: #7a6f35;
+  --caller: #5aa9f0;      /* the caller's words and voice */
+  --bot: #f0a36e;         /* what the bot said or is saying */
+  --ok: #9bd39b;          /* receipt, healthy, played */
+  --ok-rule: #5e8f5e;
+  --bad: #f07b6e;         /* failed, unknown write, check failing */
+  --bad-rule: #8f4a42;
+
+  --sans: 'Saans', system-ui, -apple-system, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --bar: 56px;            /* top bar height */
+  --control: 40px;        /* button height */
+}

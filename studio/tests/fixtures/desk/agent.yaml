@@ -1,0 +1,34 @@
+# The studio's own fixture: a help desk small enough to read, with every edge kind discovery draws.
+version: 2
+id: desk
+state: state.py:DeskState
+identity: caller
+agents:
+  ana:
+    prompt: prompts/voice.md
+steps:
+  front:
+    agent: ana
+    prompt: prompts/front.md
+    fields: [topic]
+    context: {facts: [topic]}
+    exits:
+      - {to: account, purpose: 'a question about their account'}
+    consults:
+      - {to: expert, purpose: 'a technical question'}
+  verify:
+    agent: ana
+    prompt: prompts/verify.md
+    fields: [caller]
+    context: {facts: [caller]}
+    exits: [front]
+  account:
+    agent: ana
+    prompt: prompts/account.md
+    requires: [caller]
+    satisfied_by: verify
+    exits:
+      - {to: front, purpose: 'anything else'}
+  expert:
+    agent: ana
+    prompt: prompts/expert.md

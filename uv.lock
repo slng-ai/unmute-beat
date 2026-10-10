@@ -13,6 +13,7 @@ members = [
     "salon-pipecat-flows",
     "salon-prompt",
     "slng-voice-core",
+    "slng-voice-studio",
     "wasla",
 ]
 
@@ -2723,6 +2724,37 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
 ]
 provides-extras = ["voice", "tracing"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.82" },
+]
+
+[[package]]
+name = "slng-voice-studio"
+version = "0.1.0"
+source = { editable = "studio" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pyyaml" },
+    { name = "slng-voice-core" },
+    { name = "uvicorn" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "slng-voice-core", editable = "core" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
 
 [package.metadata.requires-dev]
 dev = [

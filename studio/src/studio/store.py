@@ -74,6 +74,14 @@ class Store(Protocol):
     async def snapshot_turns(self, run: str) -> list[int]: ...
     async def configs(self, agent: str) -> list[ConfigRow]: ...
     async def config(self, agent: str, version: str) -> ConfigRow | None: ...
+    async def close_unfinished(self) -> int: ...
+
+
+async def _close_rows(store: Store, rows: list[RunRow]) -> int:
+    now = datetime.now(UTC)
+    for row in rows:
+        await store.save_run(row.model_copy(update={'outcome': 'stopped', 'ended_at': now}))
+    return len(rows)
 
 
 class MemoryStore:
@@ -128,6 +136,10 @@ class MemoryStore:
 
     async def config(self, agent: str, version: str) -> ConfigRow | None:
         return self._configs.get((agent, version))
+
+    async def close_unfinished(self) -> int:
+        """Runs a studio that stopped left live: no runner it started still carries them."""
+        return await _close_rows(self, [r for r in self._runs.values() if r.outcome is None])
 
 
 class ServiceStore:
@@ -315,6 +327,13 @@ class ServiceStore:
                 'SELECT * FROM agent_configs WHERE agent_id = $1 ORDER BY created_at DESC', agent
             )
         return [_config(r) for r in records]
+
+    async def close_unfinished(self) -> int:
+        """Runs a studio that stopped left live, in Redis and in Postgres: no runner it started still carries them."""
+        closed = await _close_rows(self, [r for r in await self.runs(limit=10_000) if r.outcome is None])
+        async with self.pool.acquire() as db:
+            await db.execute("UPDATE runs SET outcome = 'stopped', ended_at = now() WHERE outcome IS NULL")
+        return closed
 
     async def config(self, agent: str, version: str) -> ConfigRow | None:
         async with self.pool.acquire() as db:

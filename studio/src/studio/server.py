@@ -72,7 +72,10 @@ def create_app(
                 f'Redis or Postgres did not answer ({error}): runs are kept in memory until the studio stops',
             )
         holder['store'] = hub.store = found
-        return 'healthy', 'Redis for 7 days, Postgres behind it'
+        closed = await found.close_unfinished()
+        return 'healthy', 'Redis for 7 days, Postgres behind it' + (
+            f' · {closed} run(s) left live by the last studio marked stopped' if closed else ''
+        )
 
     async def start_runner() -> tuple[Status, str]:
         if not RunnerProcess.available():

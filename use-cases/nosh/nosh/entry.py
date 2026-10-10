@@ -1,5 +1,7 @@
 """Nosh, as every launcher needs it (`core.Entry`): its flow, its place tools, how a call opens, what it says first."""
 
+from pathlib import Path
+
 from loguru import logger
 
 import core
@@ -29,4 +31,5 @@ ENTRY = core.Entry(
     open=lambda flow, opening: app.open_call(flow, TOOLS),
     greeting=app.greeting,
     started=wake,
+    manifest=Path(app.__file__).with_name('agent.yaml'),
 )

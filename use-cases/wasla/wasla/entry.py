@@ -5,6 +5,7 @@ Wasla rings the holder, so the bot speaks first.
 """
 
 import os
+from pathlib import Path
 
 import core
 from wasla import app
@@ -21,4 +22,5 @@ ENTRY = core.Entry(
     flow=lambda: app.FLOW,
     open=lambda flow, opening: app.open_call(flow, ACCOUNT_ID, LEDGER),
     greeting=app.greeting,
+    manifest=Path(app.__file__).with_name('agent.yaml'),
 )

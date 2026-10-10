@@ -5,6 +5,7 @@
 
 import os
 from datetime import datetime
+from pathlib import Path
 
 import core
 from salon import app
@@ -30,4 +31,5 @@ ENTRY = core.Entry(
     flow=lambda: app.FLOW,
     open=open_call,
     greeting=lambda flow, call: app.GREETING,
+    manifest=Path(app.__file__).with_name('agent.yaml'),
 )

@@ -4,6 +4,8 @@ Faro keeps Pipecat's own turn taking and asks no silent learner if they are stil
 the learner's session once the line drops (`faro.close_call`).
 """
 
+from pathlib import Path
+
 import core
 import faro
 
@@ -18,4 +20,5 @@ ENTRY = core.Entry(
     tts_language=faro.TTS_LANGUAGE,
     turn_taking='pipecat',
     reminders=False,
+    manifest=Path(faro.__file__).with_name('agent.yaml'),
 )

@@ -234,6 +234,43 @@ async def scenario(api: httpx.AsyncClient, runners: list[Any]) -> None:
     await until(ended, 'the run ended as a hang-up')
 
 
+async def a_saved_config_reaches_the_next_call():
+    """A run naming a new config version is carried on the manifest as saved; one already running keeps its flow."""
+    import shutil
+    import tempfile
+
+    from voice_runner.app import Runner
+
+    folder = Path(tempfile.mkdtemp()) / 'salon'
+    shutil.copytree(
+        ROOT / 'use-cases' / 'salon' / 'salon', folder, ignore=shutil.ignore_patterns('__pycache__')
+    )
+    model = FunctionModel(stream_function=scripted)
+    entry = replace(
+        salon_entry(), manifest=folder / 'agent.yaml', compile=lambda spec: spec.compile(model=model)
+    )
+    runner = Runner(RunnerSettings(warm=False), [Found(folder.parent, 'salon', entry)])
+    runner.flows[entry.id] = first = entry.recompile()
+    assert await runner.flow_for(entry.id, 'v1') is first, (
+        'the first version heard of is the one compiled at start'
+    )
+    manifest = folder / 'agent.yaml'
+    manifest.write_text(
+        manifest.read_text().replace(
+            '  book_appointment: operations.py:BookAppointment\n',
+            '  book_appointment: {class: "operations.py:BookAppointment", say: "Booked: {spoken}."}\n',
+        )
+    )
+    assert await runner.flow_for(entry.id, 'v1') is first, 'the same version is not compiled again'
+    second = await runner.flow_for(entry.id, 'v2')
+    book = next(op for op in second.operations() if op.name == 'book_appointment')
+    assert second is not first and book.say == 'Booked: {spoken}.', book.say
+    assert next(op for op in first.operations() if op.name == 'book_appointment').say != book.say
+
+
 if __name__ == '__main__':
     asyncio.run(main())
-    print('runner ok: two runners linked, runs placed and stored, gone back with an edit, a runner stopping')
+    asyncio.run(a_saved_config_reaches_the_next_call())
+    print(
+        'runner ok: two runners linked, runs placed and stored, gone back with an edit, a runner stopping, a saved config'
+    )

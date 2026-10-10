@@ -281,7 +281,10 @@ class Hub:
         run = str(event.get('run', ''))
         live = self.live.get(run)
         if live is None:
-            live = self.live[run] = Live(self._row_from(event), '')
+            known = await self.store.run(run)
+            if known is not None and event.get('type') != 'run.ended':
+                known = known.model_copy(update={'outcome': None, 'ended_at': None})
+            live = self.live[run] = Live(known or self._row_from(event), '')
             await self.store.save_run(live.row)
         kind = event.get('type')
         if kind == 'turn.snapshot':

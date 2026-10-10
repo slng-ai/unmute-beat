@@ -140,6 +140,8 @@ class Carried:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     conversation: Any = None
     """A text call's root span: its turns hang from it, so one run is one trace."""
+    flow: Any = None
+    """The flow this call runs on, kept for its whole life even if the agent is compiled again."""
     step: str = ''
     outcome: str = ''
     last_seq: int = -1
@@ -168,6 +170,9 @@ class Runner:
         self.warmed: list[dict[str, Any]] = []
         self.lag: deque[float] = deque(maxlen=1200)
         self.started = time.time()
+        self.loaded: dict[str, str] = {}
+        """The config version each agent's flow was compiled from, as the studio named it."""
+        self.stack: AsyncExitStack | None = None
         self.link = Link(settings.studio, self.hello, self.stats)
         ice = [IceServer(**server) for server in settings.ice_servers]
         self.webrtc = SmallWebRTCRequestHandler(ice_servers=ice or None)
@@ -209,8 +214,29 @@ class Runner:
             'uptime_s': round(time.time() - self.started, 1),
         }
 
+    async def flow_for(self, agent: str, config: str) -> core.StepFlow:
+        """The agent's flow for a call on this config version: compiled again when the studio saved a new one.
+
+        The first version a runner hears of is the one it compiled at start (it read the files then).
+        A later, different one is compiled from the manifest on disk; calls already running keep the
+        flow they started on. Only config is read again, never the application's code.
+
+        ponytail: each recompiled flow's model clients stay open for the process's life. Close the
+        old flow's clients once its last call ends if editors ever save hundreds of times a day.
+        """
+        known = self.loaded.setdefault(agent, config)
+        entry = self.entries[agent]
+        if config and known != config and entry.manifest is not None:
+            flow = await asyncio.to_thread(entry.recompile)
+            if self.stack is not None:
+                await self.stack.enter_async_context(model_clients(flow.nodes))
+            self.flows[agent], self.loaded[agent] = flow, config
+            logger.info('agent {} compiled again for config {}', agent, config)
+        return self.flows[agent]
+
     async def warm(self, stack: AsyncExitStack) -> None:
         """Compile every flow and, when asked, open and warm its model clients once, for the process's life."""
+        self.stack = stack
         for agent, entry in self.entries.items():
             try:
                 flow = await asyncio.to_thread(entry.flow)
@@ -281,7 +307,9 @@ class Runner:
 
     async def open_text(self, carried: Carried) -> dict[str, Any]:
         """Open a text call: its state, its listener, and what it says first (nothing, when it carries on)."""
-        entry, flow, ask = self.entries[carried.agent], self.flows[carried.agent], carried.request
+        entry, ask = self.entries[carried.agent], carried.request
+        flow = await self.flow_for(carried.agent, ask.config)
+        carried.flow = flow
         self._trace(carried)
         call = entry.open(flow, core.Opening(caller_id=ask.caller_id, key=carried.id))
         events = call.listen(self.listener(carried), run=carried.id)
@@ -317,7 +345,7 @@ class Runner:
         )
 
     async def text_turn(self, carried: Carried, words: str) -> dict[str, Any]:
-        flow, call = self.flows[carried.agent], carried.call
+        flow, call = carried.flow, carried.call
         async with carried.lock:
             if carried.status != 'active':
                 raise HTTPException(409, f'the call is {carried.status}')
@@ -367,11 +395,12 @@ class Runner:
             carried.call, carried.step = call, call.state.agent
 
         try:
+            carried.flow = await self.flow_for(carried.agent, ask.config)
             await run_call(
                 self.entries[carried.agent],
                 transport,
                 arguments,
-                flow=self.flows[carried.agent],
+                flow=carried.flow,
                 warm=False,
                 caller_id=ask.caller_id,
                 listener=self.listener(carried),

@@ -19,9 +19,11 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from core.flowspec import FlowSpec
     from core.state import Question
     from core.steps import FlowCall, StepFlow
 
@@ -61,3 +63,19 @@ class Entry:
     """`tuned`: the salon's measured end-of-turn settings. `pipecat`: Pipecat's own defaults, unchanged (Faro)."""
     reminders: bool = True
     """Whether a silent caller is asked if they are still there (`core.turn.remind`)."""
+    manifest: Path | None = None
+    """Its `agent.yaml`: a long-lived launcher compiles it again when the config changes (`recompile`)."""
+    compile: Callable[[FlowSpec], StepFlow] | None = None
+    """How its manifest is compiled, when not `spec.compile()` as it stands."""
+
+    def recompile(self) -> StepFlow:
+        """The flow compiled again from the manifest as it is on disk now: its prompts and YAML, not its code.
+
+        Raises `ValueError` for an entry that names no manifest.
+        """
+        from core.flowspec import load_file
+
+        if self.manifest is None:
+            raise ValueError(f'{self.id} names no manifest to compile again')
+        spec = load_file(self.manifest)
+        return self.compile(spec) if self.compile is not None else spec.compile()

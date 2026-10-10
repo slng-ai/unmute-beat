@@ -41,6 +41,12 @@ def the_desk_is_drawn_as_declared():
     assert ('front', 'expert', 'consult') in edges
     assert ('account', 'verify', 'prerequisite') in edges
     assert ('verify', 'front', 'exit') in edges
+    assert ('front', 'verify', 'prerequisite') in edges, (
+        'an exit whose target requires a caller interposes verify'
+    )
+    assert ('verify', 'account', 'return') in edges, 'the satisfier returns to the step that was waiting'
+    assert ('expert', 'front', 'handback') in edges, 'the consulted step hands the caller back'
+    assert not graph.groups, 'no three steps hand over to one another'
     goodbyes = {source for source, target, kind in edges if kind == 'goodbye'}
     assert goodbyes == {'front', 'verify', 'account'}, 'a consulted step hands back; it does not say goodbye'
     purpose = next(edge.purpose for edge in graph.edges if edge.kind == 'prerequisite')
@@ -80,6 +86,15 @@ def every_use_case_in_the_repository_compiles():
     assert salon is not None and salon.entry == 'concierge'
     stylist = next(node for node in salon.nodes if node.id == 'stylist')
     assert stylist.roles == ['consulted'], stylist.roles
+    moves = {(edge.source, edge.target, edge.kind) for edge in salon.edges}
+    assert ('verify', 'booking', 'return') in moves and ('stylist', 'booking', 'handback') in moves, (
+        "the moves back are the engine's, not only what the YAML declares"
+    )
+    assert [group.steps for group in salon.groups] == [['booking', 'cancelling', 'complaints', 'moving']]
+    faro = found['faro'].graph
+    assert faro is not None and any(edge.kind == 'route' for edge in faro.edges), (
+        'receipts that move the learner'
+    )
 
 
 if __name__ == '__main__':

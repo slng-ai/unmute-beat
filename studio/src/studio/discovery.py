@@ -1,30 +1,32 @@
 """Every agent in the repository, read into the step graph the studio draws.
 
-Each `agent.yaml` is read twice, both with core's own loader and no model. `core.load` reads its
-shape (the graph comes from it); `FlowSpec.problems()` then checks every step, exit, field,
-operation and prompt against the application's code, in a process of its own (`studio.check`).
-So an agent the studio shows as compiled is one a launcher can open, and one it shows as broken
-carries the loader's own words, naming the step. Each result is kept until a file in the
-manifest's folder changes.
+Each `agent.yaml` is read with core's own loader and no model key. `core.load` reads its shape
+(the steps and what each declares); `studio.check`, in a process of its own, runs
+`FlowSpec.problems()` against the application's code and, when there are none, compiles the flow
+on a test model and returns `Flow.moves`: every move the engine allows. So an agent the studio
+shows as compiled is one a launcher can open, a broken one carries the loader's own words, and
+the lines on the page are the engine's, never a reading of the YAML that could miss one. Each
+result is kept until a file in the manifest's folder changes.
 
-The graph is the manifest's declared moves, nothing inferred:
+Each move is labelled by why the engine allows it, from the manifest:
 
     exit           a conversation step's `exits` (the model's `hand_over`)
-    consult        a step's `consults`; the specialist hands the caller back on `done`
-    prerequisite   `satisfied_by`: the graph puts that step in front when `requires` is unmet
+    consult        a step's `consults`
+    handback       a consulted step back to a step that consults it (`done`)
+    prerequisite   to the step that satisfies a `requires`, interposed by the graph
+    return         a satisfier back to a step that was waiting on it, or to the first step
+    route          an operation's receipt naming the next step (`route:`)
     then           an action step's next step; `error` and `unknown` its failure paths
     take_back      an end step's undo
     goodbye        every conversation step's `goodbye`, to the one end node the studio adds
 
-ponytail: an operation's `route:` (a receipt naming the next step) is a Literal on the receipt
-class, which only resolving the operation reads. It is left out until the engine reports it,
-which needs the application's packages importable; upgrade by resolving through `FlowSpec`.
+Steps that all hand over to one another (`exit` both ways, three or more, the entry aside) form a
+group (`Group`): the map view draws the group once instead of every line inside it.
 """
 
 import json
 import subprocess
 import sys
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal
 
@@ -37,7 +39,19 @@ from core.flowspec import ActionSpec, ContextSpec, ConversationSpec, EndSpec
 END = '$end'
 """The end node the studio adds: where every `goodbye` goes. A manifest's own end steps keep their ids."""
 
-type EdgeKind = Literal['exit', 'consult', 'prerequisite', 'then', 'error', 'unknown', 'take_back', 'goodbye']
+type EdgeKind = Literal[
+    'exit',
+    'consult',
+    'handback',
+    'prerequisite',
+    'return',
+    'route',
+    'then',
+    'error',
+    'unknown',
+    'take_back',
+    'goodbye',
+]
 type StepKind = Literal['conversation', 'action', 'end']
 type Role = Literal['entry', 'gate', 'consulted']
 
@@ -70,10 +84,18 @@ class Node(BaseModel):
     """True only for the end node the studio adds."""
 
 
+class Group(BaseModel):
+    """Steps that can all hand the caller to one another: drawn once, with the moves inside it implied."""
+
+    id: str
+    steps: list[str]
+
+
 class Graph(BaseModel):
     entry: str
     nodes: list[Node]
     edges: list[Edge]
+    groups: list[Group] = []
 
 
 class Agent(BaseModel):
@@ -97,8 +119,15 @@ def find(root: Path, pattern: str = 'use-cases/*/*/agent.yaml') -> list[Agent]:
     return [read(path, root) for path in sorted(root.glob(pattern))]
 
 
-_checked: dict[tuple[Path, float], list[str]] = {}
-"""Each manifest's problems, by its folder's newest change: a save anywhere in it checks again."""
+class Checked(BaseModel):
+    """What `studio.check` found: the loader's problems, and the engine's moves when there are none."""
+
+    problems: list[str]
+    moves: dict[str, list[str]]
+
+
+_checked: dict[tuple[Path, float], Checked] = {}
+"""Each manifest's check, by its folder's newest change: a save anywhere in it checks again."""
 
 
 def read(path: Path, root: Path) -> Agent:
@@ -107,9 +136,11 @@ def read(path: Path, root: Path) -> Agent:
         spec = core.load(path)
     except (core.FlowSpecError, yaml.YAMLError, OSError, ValueError) as error:
         return Agent(id=_id_or_folder(path), path=shown, status='error', error=str(error))
-    found = problems(path)
-    if found:
-        return Agent(id=spec.id or path.parent.name, path=shown, status='error', error='\n'.join(found))
+    found = checked(path)
+    if found.problems:
+        return Agent(
+            id=spec.id or path.parent.name, path=shown, status='error', error='\n'.join(found.problems)
+        )
     return Agent(
         id=spec.id or path.parent.name,
         path=shown,
@@ -119,12 +150,12 @@ def read(path: Path, root: Path) -> Agent:
         model=spec.model or '',
         steps=len(spec.steps),
         operations=len(spec.operations),
-        graph=graph(spec),
+        graph=graph(spec, found.moves),
     )
 
 
-def problems(path: Path) -> list[str]:
-    """`FlowSpec.problems()` for this manifest, from `studio.check` in its own process; cached per folder state."""
+def checked(path: Path) -> Checked:
+    """`studio.check` on this manifest, in its own process; cached per folder state."""
     key = (path.resolve(), _newest(path.parent))
     if key not in _checked:
         try:
@@ -136,11 +167,13 @@ def problems(path: Path) -> list[str]:
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            return ['the check did not finish in 60 s: an import in the application hangs']
+            return Checked(
+                problems=['the check did not finish in 60 s: an import in the application hangs'], moves={}
+            )
         if done.returncode != 0:
             last = done.stderr.strip().splitlines()[-1:] or [f'exit {done.returncode}']
-            return [f'the check crashed: {last[0]}']
-        _checked[key] = json.loads(done.stdout)
+            return Checked(problems=[f'the check crashed: {last[0]}'], moves={})
+        _checked[key] = Checked.model_validate(json.loads(done.stdout))
     return _checked[key]
 
 
@@ -148,46 +181,84 @@ def _newest(folder: Path) -> float:
     return max((f.stat().st_mtime for f in folder.rglob('*') if '__pycache__' not in f.parts), default=0.0)
 
 
-def graph(spec: core.FlowSpec) -> Graph:
-    steps = spec.steps
-    entry = spec.entry or steps[0].id
-    edges = list(_edges(steps))
+def graph(spec: core.FlowSpec, moves: dict[str, list[str]]) -> Graph:
+    steps = {step.id: step for step in spec.steps}
+    entry = spec.entry or spec.steps[0].id
+    edges = [_edge(steps, source, target) for source, targets in moves.items() for target in targets]
+    consulted = {c.to for step in steps.values() if isinstance(step, ConversationSpec) for c in step.consults}
+    edges += [
+        Edge(source=step.id, target=END, kind='goodbye')
+        for step in steps.values()
+        if isinstance(step, ConversationSpec) and step.id not in consulted
+    ]
     gates = {edge.target for edge in edges if edge.kind == 'prerequisite'}
-    consulted = {edge.target for edge in edges if edge.kind == 'consult'}
-    nodes = [_node(step, entry, gates, consulted) for step in steps]
+    nodes = [_node(step, entry, gates, consulted) for step in steps.values()]
     if any(edge.target == END for edge in edges):
         nodes.append(Node(id=END, kind='end', virtual=True))
-    return Graph(entry=entry, nodes=nodes, edges=edges)
+    return Graph(entry=entry, nodes=nodes, edges=edges, groups=groups(edges, exclude={entry, *consulted}))
 
 
-def _edges(steps: Iterable[ConversationSpec | ActionSpec | EndSpec]) -> Iterable[Edge]:
-    consulted = {c.to for step in steps if isinstance(step, ConversationSpec) for c in step.consults}
-    for step in steps:
-        if step.then:
-            yield Edge(source=step.id, target=step.then, kind='then')
-        match step:
-            case ConversationSpec():
-                for exit in step.exits:
-                    yield Edge(source=step.id, target=exit.to, kind='exit', purpose=exit.purpose)
-                for consult in step.consults:
-                    yield Edge(source=step.id, target=consult.to, kind='consult', purpose=consult.purpose)
-                if step.satisfied_by:
-                    yield Edge(
-                        source=step.id,
-                        target=step.satisfied_by,
-                        kind='prerequisite',
-                        purpose='requires ' + ', '.join(step.requires),
-                    )
-                if step.id not in consulted:
-                    yield Edge(source=step.id, target=END, kind='goodbye')
-            case ActionSpec():
-                if step.on_error:
-                    yield Edge(source=step.id, target=step.on_error, kind='error')
-                if step.on_unknown:
-                    yield Edge(source=step.id, target=step.on_unknown, kind='unknown')
-            case EndSpec():
-                if step.take_back:
-                    yield Edge(source=step.id, target=step.take_back, kind='take_back')
+def _edge(steps: dict[str, ConversationSpec | ActionSpec | EndSpec], source: str, target: str) -> Edge:
+    """One engine move, labelled with the manifest's reason for it, checked in the order the engine adds them."""
+    step = steps[source]
+
+    def edge(kind: EdgeKind, purpose: str = '') -> Edge:
+        return Edge(source=source, target=target, kind=kind, purpose=purpose)
+
+    if isinstance(step, ConversationSpec):
+        for exit in step.exits:
+            if exit.to == target:
+                return edge('exit', exit.purpose)
+        for consult in step.consults:
+            if consult.to == target:
+                return edge('consult', consult.purpose)
+        needed = [step, *(steps[exit.to] for exit in step.exits if exit.to in steps)]
+        for other in needed:
+            if isinstance(other, ConversationSpec) and other.satisfied_by == target:
+                return edge('prerequisite', 'requires ' + ', '.join(other.requires))
+    other = steps.get(target)
+    if isinstance(other, ConversationSpec) and any(c.to == source for c in other.consults):
+        return edge('handback', 'back to the step that consulted it')
+    if isinstance(step, ActionSpec):
+        for kind, to in (('then', step.then), ('error', step.on_error), ('unknown', step.on_unknown)):
+            if to == target:
+                return edge(kind)
+    if isinstance(step, EndSpec) and step.take_back == target:
+        return edge('take_back')
+    satisfier = any(getattr(s, 'satisfied_by', '') == source for s in steps.values())
+    if satisfier or (isinstance(step, ActionSpec) and step.returns):
+        return edge('return', 'back to the step that was waiting')
+    return edge('route', "an operation's receipt names it")
+
+
+def groups(edges: list[Edge], exclude: set[str]) -> list[Group]:
+    """Largest sets of three or more steps that all hand over to one another, none shared, biggest first.
+
+    Bron-Kerbosch on the graph of two-way exits; flows have tens of steps, so the plain form is enough.
+    """
+    exits = {(e.source, e.target) for e in edges if e.kind == 'exit'}
+    near: dict[str, set[str]] = {}
+    for a, b in exits:
+        if (b, a) in exits and a not in exclude and b not in exclude:
+            near.setdefault(a, set()).add(b)
+    cliques: list[set[str]] = []
+
+    def grow(r: set[str], p: set[str], x: set[str]) -> None:
+        if not p and not x:
+            cliques.append(r)
+        for v in sorted(p):
+            grow(r | {v}, p & near[v], x & near[v])
+            p = p - {v}
+            x = x | {v}
+
+    grow(set(), set(near), set())
+    taken: set[str] = set()
+    found: list[Group] = []
+    for clique in sorted(cliques, key=lambda c: (-len(c), sorted(c))):
+        if len(clique) >= 3 and not clique & taken:
+            taken |= clique
+            found.append(Group(id=f'group-{len(found) + 1}', steps=sorted(clique)))
+    return found
 
 
 def _node(

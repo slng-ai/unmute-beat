@@ -3,7 +3,18 @@
 
 export type StepKind = 'conversation' | 'action' | 'end';
 export type Role = 'entry' | 'gate' | 'consulted';
-export type EdgeKind = 'exit' | 'consult' | 'prerequisite' | 'then' | 'error' | 'unknown' | 'take_back' | 'goodbye';
+export type EdgeKind =
+  | 'exit'
+  | 'consult'
+  | 'handback'
+  | 'prerequisite'
+  | 'return'
+  | 'route'
+  | 'then'
+  | 'error'
+  | 'unknown'
+  | 'take_back'
+  | 'goodbye';
 
 export interface GraphNode {
   id: string;
@@ -29,10 +40,16 @@ export interface GraphEdge {
   purpose: string;
 }
 
+export interface Group {
+  id: string;
+  steps: string[];
+}
+
 export interface Graph {
   entry: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  groups: Group[];
 }
 
 export interface Agent {

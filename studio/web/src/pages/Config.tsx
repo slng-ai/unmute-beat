@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { api } from '../api/client';
 import { useApi } from '../api/useApi';
 import { Shell } from '../components/Shell';
+import { MovesTable } from '../components/MovesTable';
 import { StepDetail } from '../components/StepDetail';
 import { href, type Route } from '../router';
 
@@ -16,6 +18,8 @@ export function Config({ route }: { route: Extract<Route, { page: 'config' }> })
   const graph = data?.graph ?? undefined;
   const steps = graph?.nodes.filter((n) => !n.virtual) ?? [];
   const step = steps.find((n) => n.id === route.step) ?? steps[0];
+  const [tab, setTab] = useState<'step' | 'moves'>('step');
+  const pick = (to: string) => (window.location.hash = href({ page: 'config', agent: id, step: to }));
 
   return (
     <Shell
@@ -50,14 +54,27 @@ export function Config({ route }: { route: Extract<Route, { page: 'config' }> })
             )}
             {graph && step && (
               <>
-                <div>
-                  <div className="lbl" style={{ marginBottom: 6 }}>{data?.path}</div>
-                  <h1 className="mono" style={{ margin: 0, fontSize: 30, fontWeight: 500 }}>{step.id}</h1>
+                <div className="segs" role="tablist" aria-label="Config view">
+                  <button type="button" role="tab" aria-selected={tab === 'step'} className={`seg ${tab === 'step' ? 'seg-on' : ''}`} onClick={() => setTab('step')}>Step</button>
+                  <button type="button" role="tab" aria-selected={tab === 'moves'} className={`seg ${tab === 'moves' ? 'seg-on' : ''}`} onClick={() => setTab('moves')}>Moves</button>
                 </div>
-                <div style={{ border: '1px solid var(--yellow-dim)', padding: '10px 14px', fontSize: 14, color: 'var(--soft)' }}>
-                  Read only for now. Editing the prompt, fields, exits and context, checked by the loader before saving, comes next.
-                </div>
-                <StepDetail graph={graph} node={step} />
+                {tab === 'step' ? (
+                  <>
+                    <div>
+                      <div className="lbl" style={{ marginBottom: 6 }}>{data?.path}</div>
+                      <h1 className="mono" style={{ margin: 0, fontSize: 30, fontWeight: 500 }}>{step.id}</h1>
+                    </div>
+                    <div style={{ border: '1px solid var(--yellow-dim)', padding: '10px 14px', fontSize: 14, color: 'var(--soft)' }}>
+                      Read only for now. Editing the prompt, fields, exits and context, checked by the loader before saving, comes next.
+                    </div>
+                    <StepDetail graph={graph} node={step} />
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 14, color: 'var(--muted)' }}>Every move the engine allows, read from its compiled graph. Rows: from. Columns: to.</div>
+                    <MovesTable graph={graph} focus={step.id} onPick={pick} />
+                  </>
+                )}
               </>
             )}
           </main>

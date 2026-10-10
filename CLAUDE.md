@@ -111,10 +111,10 @@ that member's folder.
 |---|---|
 | `src/studio/cli.py` | `slng studio up` (`--dev`, `--no-services`, `--port`), `down [--volumes]`, `status`, `agents` (offline, exit 1 if any manifest is refused) |
 | `src/studio/boot.py`, `server.py` | the start-up sequence the loading screen polls (`/api/boot`: Docker, then `docker compose up --wait` on Postgres and Redis, then the agents), and the FastAPI app serving `/api` and the built page; `/api/runs` is a 501 until runs are recorded |
-| `src/studio/discovery.py`, `check.py` | each agent: `core.load` for its graph (exits, consults, prerequisites, `then`, failure paths, `take_back`, one added `$end` for goodbyes; `route:` not yet), `FlowSpec.problems()` in a subprocess with the use case importable for its verdict, cached per folder state |
+| `src/studio/discovery.py`, `check.py` | each agent: `core.load` for its steps; `studio.check` in a subprocess with the use case importable runs `FlowSpec.problems()` and, when clean, compiles on `TestModel` and returns `Flow.moves`, so every line is the engine's own move, labelled by why (exit, consult, handback, prerequisite, return, route, then, error, unknown, take_back), plus one added `$end` for goodbyes; groups of steps that all hand over to one another; cached per folder state |
 | `src/studio/events.py` | the run format the live view, the store and a replay share: twelve events, one discriminated union, each mapped to its source in core in the design doc |
 | `compose.yaml`, `src/studio/schema.sql` | Postgres 16 and Redis 7 on 127.0.0.1 only; configs, runs, events, snapshots |
-| `web/` | Vite, React, TypeScript, nothing else at run time: `styles/tokens.css` (the design's tokens), one page per route (`#/boot`, `#/runs`, `#/live`, `#/config`), `graph/layout.ts`; Saans is copied in by `npm run fonts`, never committed |
+| `web/` | Vite, React, TypeScript, React Flow and ELK (the map only, loaded when opened): `styles/tokens.css` (the design's tokens), one page per route (`#/boot`, `#/runs`, `#/live`, `#/config`); the live view's mic check (`CallBar`), `FocusView`, `MapView` (`graph/collapse.ts`, `graph/elk.ts`), `PathStrip`, and the config page's `MovesTable`; Saans is copied in by `npm run fonts`, never committed |
 | `tests/` | `test_discovery` (the `desk` fixture, every use case compiles), `test_events`, `test_boot` (a scripted runner, no Docker), `test_server`, `test_cli` |
 
 **The split that matters:** `core.turn` runs a turn and knows nothing about

@@ -37,13 +37,13 @@ Settings come from the environment: `STUDIO_PORT` (7800), `STUDIO_PG_PORT` (5432
 | `src/studio/cli.py` | the `slng` command |
 | `src/studio/settings.py` | ports, paths and URLs from the environment |
 | `src/studio/boot.py` | the start-up sequence `/api/boot` reports and the loading screen draws |
-| `src/studio/discovery.py` | every `agent.yaml`: `core.load` for the graph, `studio.check` for the loader's full verdict |
-| `src/studio/check.py` | `FlowSpec.problems()` in a process of its own, with the use case importable |
+| `src/studio/discovery.py` | every `agent.yaml`: `core.load` for its steps, `studio.check` for the loader's verdict and the engine's own moves, groups for the map |
+| `src/studio/check.py` | `FlowSpec.problems()` and `Flow.moves` (compiled on `TestModel`, no provider called) in a process of its own, with the use case importable |
 | `src/studio/events.py` | the run format: twelve events, one discriminated union |
 | `src/studio/server.py` | the FastAPI app: `/api/health`, `/api/boot`, `/api/agents[/id]`, `/api/runs` (501 until phase 2), `/api/events/schema`, the built page |
 | `src/studio/schema.sql` | the store: configs, runs, events, snapshots |
 | `tests/` | asserts, no pytest: discovery on the `desk` fixture and every use case, events, boot on a scripted runner, the API, the CLI |
-| `web/` | Vite, React, TypeScript, no other runtime dependency. `src/styles/tokens.css` is the design's tokens board; `src/pages/` one file per page; `src/graph/layout.ts` places the steps |
+| `web/` | Vite, React, TypeScript; React Flow and ELK for the map, loaded only when it opens. `src/styles/tokens.css` is the design's tokens board; `src/pages/` one file per page; `src/components/` the graph's four views (focus, map, path over turns, moves table) and the mic check |
 
 ## Check it
 

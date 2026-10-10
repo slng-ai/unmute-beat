@@ -2737,6 +2737,7 @@ version = "0.1.0"
 source = { editable = "studio" }
 dependencies = [
     { name = "fastapi" },
+    { name = "pydantic-ai-slim" },
     { name = "pyyaml" },
     { name = "slng-voice-core" },
     { name = "uvicorn" },
@@ -2751,6 +2752,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "pydantic-ai-slim", specifier = ">=2.46.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "slng-voice-core", editable = "core" },
     { name = "uvicorn", specifier = ">=0.30" },

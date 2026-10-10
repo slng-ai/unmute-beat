@@ -3,6 +3,10 @@
 # Every port binds to 127.0.0.1 only: the studio is a local tool and these hold call transcripts.
 # Postgres keeps runs, turns, events, state snapshots and config versions (schema.sql runs on first start).
 # Redis carries each live run's event stream from the engine to the web page.
+# Jaeger collects every span a bot or the engine sends over OTLP (core.observability, with
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318): Pipecat's turn, stt and tts spans with their
+# timings, and Pydantic AI's model requests. The studio reads them back to flag slow turns and requests.
+# It keeps traces in memory: they last until the container stops, which a local tool can live with.
 
 name: slng-studio
 
@@ -34,6 +38,13 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    ports:
+      - "127.0.0.1:${STUDIO_OTLP_PORT:-4318}:4318"
+      - "127.0.0.1:${STUDIO_JAEGER_PORT:-16686}:16686"
+    # No health check here: the image has no shell. `studio.boot` asks its UI port from the host instead.
 
 volumes:
   pg:

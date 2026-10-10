@@ -84,3 +84,14 @@
 .moves-key { display: flex; gap: 18px; flex-wrap: wrap; font-size: 11px; color: var(--dim); padding: 10px 0; }
 .map .react-flow__node-cluster { background: transparent; border: 0; padding: 0; }
 .map-label { position: absolute; pointer-events: none; font-family: var(--mono); font-size: 10px; color: var(--yellow); background: #121009; padding: 1px 4px; white-space: nowrap; }
+
+/* Metrics. */
+.metrics-head { padding: 20px 24px 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; border-bottom: 1px solid var(--rule-soft); }
+.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 1px solid var(--rule-soft); }
+@media (max-width: 800px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tile { padding: 14px 18px; border-right: 1px solid var(--rule-soft); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.metrics-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0; }
+.metrics-body td div { line-height: 1.5; }
+.rules { flex: 1 1 320px; max-width: 100%; margin: 14px 16px; border: 1px solid var(--rule-soft); background: var(--aside); }
+.rule { display: grid; grid-template-columns: minmax(0, 1fr) 70px 70px; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #211f1b; align-items: baseline; font-size: 13px; color: var(--soft); }
+.rule .mono { font-size: 11px; text-align: right; }

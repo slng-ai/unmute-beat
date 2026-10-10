@@ -15,6 +15,7 @@ export function Shell({ route, agent, who, children, actions, body }: {
   const pages = [
     { page: 'runs', label: 'Runs' },
     { page: 'live', label: 'Live' },
+    { page: 'metrics', label: 'Metrics' },
     { page: 'config', label: 'Config' },
   ] as const;
   return (

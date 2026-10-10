@@ -29,6 +29,10 @@ class Settings:
     """Vite's dev server, when `up --dev` runs it beside the engine; it sends /api on to `port`."""
     pg_port: int = 5432
     redis_port: int = 6379
+    otlp_port: int = 4318
+    """Where bots and the engine send their spans: OTLP over HTTP, into Jaeger."""
+    jaeger_port: int = 16686
+    """Jaeger's UI and the query API the studio reads traces from."""
     project: str = 'slng-studio'
     """The compose project name, so `down` finds what `up` started."""
 
@@ -49,9 +53,24 @@ class Settings:
         return f'redis://127.0.0.1:{self.redis_port}/0'
 
     @property
+    def otlp_endpoint(self) -> str:
+        """The value a bot sets as `OTEL_EXPORTER_OTLP_ENDPOINT` to send its spans here."""
+        return f'http://127.0.0.1:{self.otlp_port}'
+
+    @property
+    def jaeger_url(self) -> str:
+        return f'http://127.0.0.1:{self.jaeger_port}'
+
+    @property
     def compose_env(self) -> dict[str, str]:
         """What compose.yaml reads, so a changed port reaches the containers too."""
-        return {**os.environ, 'STUDIO_PG_PORT': str(self.pg_port), 'STUDIO_REDIS_PORT': str(self.redis_port)}
+        return {
+            **os.environ,
+            'STUDIO_PG_PORT': str(self.pg_port),
+            'STUDIO_REDIS_PORT': str(self.redis_port),
+            'STUDIO_OTLP_PORT': str(self.otlp_port),
+            'STUDIO_JAEGER_PORT': str(self.jaeger_port),
+        }
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -64,4 +83,6 @@ class Settings:
             web_dev_port=int(env('STUDIO_WEB_DEV_PORT', str(cls.web_dev_port))),
             pg_port=int(env('STUDIO_PG_PORT', str(cls.pg_port))),
             redis_port=int(env('STUDIO_REDIS_PORT', str(cls.redis_port))),
+            otlp_port=int(env('STUDIO_OTLP_PORT', str(cls.otlp_port))),
+            jaeger_port=int(env('STUDIO_JAEGER_PORT', str(cls.jaeger_port))),
         )

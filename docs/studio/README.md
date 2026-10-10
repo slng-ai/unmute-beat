@@ -28,12 +28,14 @@ a healthy service, red is a failure or a write whose result is unknown. The toke
 | 03 Agents and runs | `#/runs/<agent>` | Every agent the engine found, compiled or not (with the loader's own error), and that agent's runs: channel, config version, turns, writes, the path through the steps, how it ended. |
 | 04 Agent config | `#/config/<agent>/<step>` | One step at a time: prompt, fields, facts, operations, history window, exits and their purposes. A **Moves** tab: every move as a table, rows from and columns to. Live checks (the loader's), the diff against the saved version, and what to do after saving: new runs only, or fork a run with the new config. |
 | 05 Tokens and parts | none | Colours, type, controls, step nodes in each state, edge styles. |
+| 06 Trace and metrics | `#/metrics` | Where to find what is slow. This run: every turn's voice-to-voice time and its endpointing, STT, LLM and TTS times, anything over its limit in red, and the selected turn's spans as a waterfall. Across runs: each model's calls, p50, p95, errors and share over the limit, and the slowest turns. Section 5. |
 
 The inspector starts with the conversation and the state open, and expands to the model and the step. Each
 section opens and closes on its own.
 
 | Inspector section | Shows |
 |---|---|
+| Timing | The selected turn as a waterfall, from the moment you stopped speaking: endpointing, STT final, LLM first token and done, TTS first audio; its voice-to-voice time against the 1.0 s target; and what was over its limit, with the span to open. The same time sits under each turn in the path, coloured. |
 | Conversation | Caller and bot lines in order, each bot line tagged with where its words came from (model, or code: greeting, read-back, offer, receipt, goodbye) and whether it was heard. Engine moves in between: a record, a hand-over, a receipt. |
 | State | The application state after the turn, field by field, with what changed marked. Then the intents (prepared, dispatched, unknown, succeeded, rejected, withdrawn) and receipts. |
 | Model | The active step's request: number in the turn's budget, tokens, the decision streaming in, and the outputs this step may choose. |
@@ -170,9 +172,53 @@ unknown and are reconciled before anything else is sent, as core already does fo
 
 **What core needs for it.** Opening a call at a given step with a given history (beside `StepFlow.open`,
 which already takes a state and unresolved intents), and the observer hook from phase 2 to know when a turn
-ended. Python clients for Redis and Postgres are new dependencies to agree on (section 7).
+ended. Python clients for Redis and Postgres are new dependencies to agree on (section 8).
 
-## 5. How it runs
+## 5. Timing and traces: finding what is slow
+
+A person testing an agent needs to see, turn by turn, why a reply took long: the endpointing, the
+transcription, the model, or the voice. The numbers come from OpenTelemetry spans the call already makes,
+collected locally, so nothing is estimated and nothing needs a cloud account.
+
+**What is collected, and from where.**
+
+| Number | Span | Attribute |
+|---|---|---|
+| Voice to voice (you stopped, the bot's first sound) | Pipecat `turn` | `turn.user_bot_latency_seconds` |
+| Turn number, interrupted | Pipecat `turn` | `turn.number`, `turn.was_interrupted` |
+| STT first byte, TTS first audio | Pipecat `stt`, `tts` | `metrics.ttfb` (seconds), `gen_ai.request.model`, `gen_ai.provider.name` |
+| LLM first token | Pipecat `llm` | `metrics.ttfb` |
+| LLM request duration, tokens | Pydantic AI model request | `gen_ai.operation.name` = `chat`, the span's duration |
+| Errors | any of them | `otel.status_code` = `ERROR` |
+
+The span names and attributes were checked against `pipecat.utils.tracing`. The salon's agents run on
+Pydantic AI, not Pipecat's LLM service, so their requests carry a duration but no first-token time: they
+are judged on duration (the "LLM request" limit) until the engine's own `model.request` and first
+`model.delta` events give the first token (phase 2).
+
+**How it gets there.** `slng studio up` starts Jaeger beside Postgres and Redis (127.0.0.1 only: OTLP in
+on 4318, its UI on 16686, traces kept in memory). A bot sends its spans there when started with
+`OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`: `core.observability.setup` adds an OTLP exporter for
+it, with or without Langfuse, batching spans off the turn's path. `studio.metrics` reads Jaeger's query
+API, puts each request in the turn it belongs to, and flags it against its limit.
+
+**What counts as slow** (defaults for every agent; per agent with the config page later):
+
+| | Slow | Over the limit |
+|---|---|---|
+| Voice to voice | > 1.0 s | > 1.5 s |
+| STT first byte | > 250 ms | > 400 ms |
+| LLM first token | > 600 ms | > 700 ms |
+| LLM request, with no first-token time | > 1.0 s | > 1.5 s |
+| TTS first audio | > 300 ms | > 400 ms |
+| LLM requests in one turn | > 1 | > 2 |
+
+**Built now:** Jaeger in compose and in the start-up sequence, core's OTLP export, `studio.metrics` with
+its tests, `/api/metrics` and `/api/metrics/limits`, and the Metrics page reading them. Not yet: the live
+page's Timing section with real turns (it needs runs from the engine, phase 2), the endpointing time as its
+own number (Pipecat records it inside the turn, not as an attribute), and per-agent limits.
+
+## 6. How it runs
 
 ```
 slng studio up
@@ -188,7 +234,7 @@ A run's worker runs in the use case's own environment (`uv run --directory use-c
 `bot.py` does, so the studio never needs an application's dependencies, and a crashing call takes nothing
 else down.
 
-## 6. Build order
+## 7. Build order
 
 | Phase | Delivers | Done when |
 |---|---|---|
@@ -198,7 +244,7 @@ else down.
 | 4 | Turn snapshots in Redis and Postgres, going back a turn by voice (section 4) | Going back to turn N of a salon call keeps the mic open, continues from turn N's state, and a write made before N is not sent again |
 | 5 | Config editing: forms, checks before save, versions, the "unmeasured" mark on changed prompts | A broken edit cannot be saved, and every run links to the version it used |
 
-## 7. Decisions waiting on you
+## 8. Decisions waiting on you
 
 - **Postgres and Redis clients.** Phases 2 and 4 need a Python client for each (for example `asyncpg` and
   `redis`). Neither is in the lock today, and the repository asks before adding a dependency.

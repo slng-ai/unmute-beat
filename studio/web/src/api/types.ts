@@ -104,3 +104,67 @@ export type RunEvent = EventBase &
     | { type: 'turn.finished'; status: 'answered' | 'interrupted' | 'exhausted' | 'failed'; step: string; handoffs: string[]; requests: number; detail: string }
     | { type: 'run.ended'; outcome: 'goodbye' | 'hangup' | 'ceiling' | 'failed' | 'stopped'; detail: string }
   );
+
+export type Level = 'ok' | 'slow' | 'bad';
+
+export interface Limit {
+  slow: number;
+  bad: number;
+}
+
+export interface Limits {
+  voice_to_voice: Limit;
+  stt_first_byte: Limit;
+  llm_first_token: Limit;
+  llm_request: Limit;
+  tts_first_byte: Limit;
+  requests_per_turn: Limit;
+}
+
+export interface TimedRequest {
+  kind: 'stt' | 'llm' | 'tts';
+  model: string;
+  provider: string;
+  duration_ms: number;
+  first_byte_ms: number | null;
+  error: boolean;
+  span: string;
+  level: Level;
+}
+
+export interface Flag {
+  level: 'slow' | 'bad';
+  what: string;
+  value: number;
+  limit: number;
+  span: string;
+}
+
+export interface TurnTiming {
+  trace: string;
+  turn: number;
+  voice_to_voice_ms: number | null;
+  interrupted: boolean;
+  requests: TimedRequest[];
+  flags: Flag[];
+  level: Level;
+}
+
+export interface ModelStats {
+  kind: 'stt' | 'llm' | 'tts';
+  model: string;
+  provider: string;
+  calls: number;
+  p50_ms: number;
+  p95_ms: number;
+  errors: number;
+  over_limit: number;
+}
+
+export interface Metrics {
+  source: string;
+  limits: Limits;
+  summary: { turns: number; voice_to_voice_avg_ms: number | null; voice_to_voice_p95_ms: number | null; over_limit: number; errors: number };
+  turns: TurnTiming[];
+  models: ModelStats[];
+}

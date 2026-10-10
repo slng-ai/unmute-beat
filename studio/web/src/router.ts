@@ -5,7 +5,8 @@ export type Route =
   | { page: 'boot' }
   | { page: 'runs'; agent?: string }
   | { page: 'live'; agent?: string; step?: string }
-  | { page: 'config'; agent?: string; step?: string };
+  | { page: 'config'; agent?: string; step?: string }
+  | { page: 'metrics'; agent?: string };
 
 export function parse(hash: string): Route {
   const [page = '', agent, step] = hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
@@ -16,6 +17,8 @@ export function parse(hash: string): Route {
       return { page: 'live', agent, step };
     case 'config':
       return { page: 'config', agent, step };
+    case 'metrics':
+      return { page: 'metrics', agent };
     default:
       return { page: 'runs', agent: page === 'runs' ? agent : undefined };
   }

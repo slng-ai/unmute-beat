@@ -1,4 +1,4 @@
-import type { Agent, BootState } from './types';
+import type { Agent, BootState, Metrics } from './types';
 
 /** A failed request, with the engine's own `detail` when it sent one. */
 export class ApiError extends Error {
@@ -24,4 +24,5 @@ export const api = {
   agents: () => get<Agent[]>('/api/agents'),
   agent: (id: string) => get<Agent>(`/api/agents/${encodeURIComponent(id)}`),
   runs: () => get<unknown[]>('/api/runs'),
+  metrics: (lookback = '1h') => get<Metrics>(`/api/metrics?lookback=${encodeURIComponent(lookback)}`),
 };

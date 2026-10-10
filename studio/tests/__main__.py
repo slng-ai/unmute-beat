@@ -9,6 +9,7 @@ import runpy
 MODULES = (
     'tests.test_discovery',
     'tests.test_events',
+    'tests.test_metrics',
     'tests.test_boot',
     'tests.test_server',
     'tests.test_cli',

@@ -2,10 +2,12 @@
 
 Agents are read from disk on every request, so a manifest saved in an editor shows at once.
 Runs are not recorded yet: `/api/runs` says so with a 501 the page shows, rather than an empty
-list that would read as "no calls happened".
+list that would read as "no calls happened". Timings come from the local Jaeger (`studio.metrics`);
+when it does not answer, `/api/metrics` says so with a 503 rather than showing no slow turns.
 """
 
 import asyncio
+import urllib.error
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -13,13 +15,15 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from studio import discovery
+from studio import discovery, metrics
 from studio.boot import Boot, BootState
 from studio.events import EVENT
 from studio.settings import Settings
 
 
-def create_app(settings: Settings, boot: Boot | None = None) -> FastAPI:
+def create_app(
+    settings: Settings, boot: Boot | None = None, fetch: metrics.Fetch = metrics.fetch_json
+) -> FastAPI:
     boot = boot or Boot(settings)
     tasks: set[asyncio.Task[BootState]] = set()
 
@@ -54,6 +58,21 @@ def create_app(settings: Settings, boot: Boot | None = None) -> FastAPI:
     @app.get('/api/runs')
     def runs() -> None:
         raise HTTPException(501, 'Runs are not recorded yet: the engine does not run calls in this build.')
+
+    @app.get('/api/metrics/limits')
+    def limits() -> metrics.Limits:
+        return metrics.Limits()
+
+    @app.get('/api/metrics')
+    def recent(lookback: str = '1h') -> metrics.Metrics:
+        try:
+            return metrics.collect(settings.jaeger_url, lookback=lookback, fetch=fetch)
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
+            raise HTTPException(
+                503,
+                f'Jaeger did not answer at {settings.jaeger_url} ({error}). Start the studio with its services, '
+                f'and run a bot with OTEL_EXPORTER_OTLP_ENDPOINT={settings.otlp_endpoint}.',
+            ) from error
 
     @app.get('/api/events/schema')
     def event_schema() -> dict[str, Any]:

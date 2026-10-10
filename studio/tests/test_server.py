@@ -4,6 +4,7 @@ The API the web page reads, on the desk fixture, with Docker left alone (`servic
 """
 
 import time
+import urllib.error
 from dataclasses import replace
 from pathlib import Path
 
@@ -16,8 +17,12 @@ from studio.settings import Settings
 SETTINGS = replace(Settings.from_env(), root=Path(__file__).parent / 'fixtures', agents='*/agent.yaml')
 
 
+def unreachable(url: str) -> dict:
+    raise urllib.error.URLError('connection refused')
+
+
 def the_api_serves_agents_and_says_what_is_missing():
-    app = create_app(SETTINGS, Boot(SETTINGS, services=False))
+    app = create_app(SETTINGS, Boot(SETTINGS, services=False), fetch=unreachable)
     with TestClient(app) as client:
         assert client.get('/api/health').json() == {'engine': 'ok'}
 
@@ -32,6 +37,13 @@ def the_api_serves_agents_and_says_what_is_missing():
 
         runs = client.get('/api/runs')
         assert runs.status_code == 501 and 'not recorded yet' in runs.json()['detail'], 'never an empty list'
+
+        limits = client.get('/api/metrics/limits').json()
+        assert limits['voice_to_voice'] == {'slow': 1000, 'bad': 1500}, limits
+        silent = client.get('/api/metrics')
+        assert silent.status_code == 503 and 'OTEL_EXPORTER_OTLP_ENDPOINT' in silent.json()['detail'], (
+            'no Jaeger is said, never shown as no slow turns'
+        )
 
         schema = client.get('/api/events/schema').json()
         assert 'discriminator' in schema, schema.keys()

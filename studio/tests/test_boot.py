@@ -34,17 +34,22 @@ def statuses(boot: Boot) -> dict[str, str]:
 
 def a_healthy_start_reads_the_agents():
     runner, seen = scripted({'--short': (0, '2.29.7')})
-    boot = Boot(SETTINGS, runner=runner)
+    boot = Boot(SETTINGS, runner=runner, probe=lambda url: url == SETTINGS.jaeger_url)
     assert not boot.state().ready and statuses(boot)['docker'] == 'waiting'
     state = asyncio.run(boot.start())
     assert statuses(boot) == {
-        'docker': 'healthy', 'postgres': 'healthy', 'redis': 'healthy', 'engine': 'healthy', 'agents': 'healthy',
+        'docker': 'healthy', 'postgres': 'healthy', 'redis': 'healthy', 'traces': 'healthy', 'engine': 'healthy',
+        'agents': 'healthy',
         'web': statuses(boot)['web'],
     }  # fmt: skip
     assert state.ready == (statuses(boot)['web'] in ('healthy', 'skipped')) and not state.failed
     assert state.agents == ['desk']
     up = seen[1]
-    assert up[-5:] == ['up', '--detach', '--wait', 'postgres', 'redis'] and SETTINGS.project in up, up
+    assert (
+        up[-6:] == ['up', '--detach', '--wait', 'postgres', 'redis', 'jaeger'] and SETTINGS.project in up
+    ), up
+    traces = next(step for step in state.steps if step.id == 'traces')
+    assert SETTINGS.otlp_endpoint in traces.message, 'the step says what to point a bot at'
 
 
 def no_docker_stops_with_what_to_install():
@@ -58,22 +63,33 @@ def no_docker_stops_with_what_to_install():
 
 
 def a_container_that_never_turns_healthy_says_why():
-    runner, _ = scripted({'redis': (1, 'pulling\ncontainer slng-studio-postgres-1 is unhealthy')})
+    runner, _ = scripted({'jaeger': (1, 'pulling\ncontainer slng-studio-postgres-1 is unhealthy')})
     state = asyncio.run(Boot(SETTINGS, runner=runner).start())
     postgres = next(step for step in state.steps if step.id == 'postgres')
     assert state.failed and postgres.status == 'failed' and 'unhealthy' in postgres.message, postgres
+
+
+def silent_jaeger_is_skipped_not_fatal():
+    """Traces are worth having, not worth stopping for: the studio still comes up, and says what is missing."""
+    runner, _ = scripted({'--short': (0, '2.29.7')})
+    state = asyncio.run(Boot(SETTINGS, runner=runner, probe=lambda url: False, patience=2).start())
+    traces = next(step for step in state.steps if step.id == 'traces')
+    assert traces.status == 'skipped' and 'timings will be missing' in traces.message, traces
+    assert not state.failed and 'desk' in state.agents
 
 
 def no_services_leaves_docker_alone():
     runner, seen = scripted({})
     boot = Boot(SETTINGS, services=False, runner=runner)
     asyncio.run(boot.start())
-    assert seen == [] and statuses(boot)['postgres'] == 'skipped' and statuses(boot)['agents'] == 'healthy'
+    assert seen == [] and statuses(boot)['postgres'] == 'skipped' and statuses(boot)['traces'] == 'skipped'
+    assert statuses(boot)['agents'] == 'healthy'
 
 
 if __name__ == '__main__':
     a_healthy_start_reads_the_agents()
     no_docker_stops_with_what_to_install()
     a_container_that_never_turns_healthy_says_why()
+    silent_jaeger_is_skipped_not_fatal()
     no_services_leaves_docker_alone()
-    print('boot ok: healthy start, no docker, unhealthy container, no services')
+    print('boot ok: healthy start, no docker, unhealthy container, silent jaeger, no services')

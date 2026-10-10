@@ -1,6 +1,7 @@
 import { Boot } from './pages/Boot';
 import { Config } from './pages/Config';
 import { Live } from './pages/Live';
+import { MetricsPage } from './pages/Metrics';
 import { Runs } from './pages/Runs';
 import { useRoute } from './router';
 
@@ -15,5 +16,7 @@ export function App() {
       return <Config route={route} />;
     case 'runs':
       return <Runs route={route} />;
+    case 'metrics':
+      return <MetricsPage route={route} />;
   }
 }

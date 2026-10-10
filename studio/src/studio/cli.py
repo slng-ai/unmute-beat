@@ -96,6 +96,12 @@ def up(settings: Settings, *, dev: bool, services: bool) -> int:
         )
     url = f'http://localhost:{settings.web_dev_port if dev else settings.port}'
     print(f'\n  slng studio  →  {url}\n  ctrl+c stops everything\n', flush=True)
+    if services:
+        print(
+            f'  timings: run a bot with OTEL_EXPORTER_OTLP_ENDPOINT={settings.otlp_endpoint}\n'
+            f'  traces in Jaeger at http://localhost:{settings.jaeger_port}\n',
+            flush=True,
+        )
     try:
         uvicorn.run(app, host=settings.host, port=settings.port, log_level='warning')
     finally:

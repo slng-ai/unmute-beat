@@ -2696,6 +2696,7 @@ dependencies = [
 [package.optional-dependencies]
 tracing = [
     { name = "langfuse" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
 ]
 voice = [
@@ -2714,6 +2715,7 @@ requires-dist = [
     { name = "langfuse", marker = "extra == 'tracing'", specifier = ">=4.15.4" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "opentelemetry-api", specifier = ">=1.44.0" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'tracing'", specifier = ">=1.44.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.44.0" },
     { name = "phonenumbers", specifier = ">=9.0.39" },
     { name = "pipecat-ai", marker = "extra == 'voice'", specifier = ">=1.11.0" },

@@ -31,11 +31,14 @@ def compose_targets_the_studio_project():
 
 
 def every_port_stays_on_this_machine():
-    """The containers hold transcripts: nothing binds beyond 127.0.0.1, and both have a health check."""
+    """The containers hold transcripts: nothing binds beyond 127.0.0.1. Postgres and Redis have health checks;
+    Jaeger's image has no shell, so `studio.boot` asks it over HTTP instead.
+    """
     compose = yaml.safe_load((STUDIO / 'compose.yaml').read_text())
+    assert set(compose['services']) == {'postgres', 'redis', 'jaeger'}, compose['services'].keys()
     for name, service in compose['services'].items():
         assert all(port.startswith('127.0.0.1:') for port in service['ports']), (name, service['ports'])
-        assert 'healthcheck' in service, name
+        assert ('healthcheck' in service) == (name != 'jaeger'), name
     mounts = compose['services']['postgres']['volumes']
     schema = next(mount for mount in mounts if 'schema.sql' in mount).split(':')[0]
     assert (STUDIO / schema).exists(), schema

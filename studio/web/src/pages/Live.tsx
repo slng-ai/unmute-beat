@@ -74,7 +74,14 @@ export function Live({ route }: { route: Extract<Route, { page: 'live' }> }) {
               <Section title="Conversation" note={<span className="tag">no run</span>}>
                 <p className="empty">What you and the bot say, line by line, and whether each line was heard.</p>
               </Section>
-              <Section title="State" note={<span className="tag">no run</span>}>
+              <Section title="Timing" note={<span className="tag">no run</span>}>
+                <p className="empty">
+                  Each turn's voice-to-voice time and its STT, LLM and TTS requests, with anything over its limit flagged.
+                  Until calls run here, a bot run with OTEL_EXPORTER_OTLP_ENDPOINT pointed at the studio shows its turns on the Metrics page.
+                </p>
+                <a className="btn btn-q" href={href({ page: 'metrics', agent: id })} style={{ alignSelf: 'flex-start' }}>Open metrics</a>
+              </Section>
+              <Section title="State" note={<span className="tag">no run</span>} open={false}>
                 <p className="empty">The state after each turn, with what changed marked. Saved per turn, so going back is instant.</p>
               </Section>
               <Section title="Model" note={<span className="tag">idle</span>} open={false}>

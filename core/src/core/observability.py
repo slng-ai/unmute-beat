@@ -1,4 +1,4 @@
-"""Langfuse over OpenTelemetry. Call `setup()` once, before any agent is built.
+"""Langfuse over OpenTelemetry, and any local OTLP collector. Call `setup()` once, before any agent is built.
 
 Pydantic AI emits OTel spans and Langfuse collects them. Four things have to be
 true for a call to read as one call: Langfuse must export the non-GenAI spans
@@ -7,7 +7,9 @@ attribute keys Langfuse renders, the session and trace name must be on every
 span rather than the root alone, and what each agent run and model request
 produced must be readable at a glance rather than a dump of parts. Credentials
 come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`,
-which the application's launcher loads (each `bot.py` reads `.env` first). Importing
+which the application's launcher loads (each `bot.py` reads `.env` first). The same spans also
+go to any OTLP collector named by OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` (the studio's
+local Jaeger, `http://127.0.0.1:4318`), with or without Langfuse. Importing
 this module reads no file and sets nothing up: every offline run that imported core
 used to pick up the checkout's `.env` and export its spans.
 
@@ -25,8 +27,10 @@ from pydantic_ai import Agent
 
 try:
     from langfuse import Langfuse
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
 except ImportError as missing:
     raise ImportError(
         f'core.observability needs the tracing extra: install slng-voice-core[tracing] ({missing})'
@@ -396,7 +400,9 @@ def setup(session: str = '', trace_name: str = '') -> None:
     names are set every time.
 
     Langfuse drops spans silently when unconfigured, so the absence of a key
-    is said once on stderr rather than pretended away. Its default filter keeps
+    is said once on stderr rather than pretended away, unless a local collector
+    (`OTEL_EXPORTER_OTLP_ENDPOINT`) takes the spans instead: then the provider is
+    built for it alone, and every span goes there in batches, off the turn's path. Its default filter keeps
     only GenAI spans, which would throw away the conversation span everything
     else hangs from, so everything is exported. The environment goes on the
     resource under OpenTelemetry's own key, which is what Langfuse reads off a
@@ -416,7 +422,9 @@ def setup(session: str = '', trace_name: str = '') -> None:
     _CALL.set(call)
     if _PROVIDER:
         return
-    if not os.getenv('LANGFUSE_PUBLIC_KEY'):
+    langfuse = bool(os.getenv('LANGFUSE_PUBLIC_KEY'))
+    collector = bool(os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT'))
+    if not langfuse and not collector:
         print('warning: LANGFUSE_PUBLIC_KEY unset, traces are going nowhere', file=sys.stderr)
         return
 
@@ -425,6 +433,9 @@ def setup(session: str = '', trace_name: str = '') -> None:
         attributes['deployment.environment'] = environment
     provider = TracerProvider(resource=Resource.create(attributes))
     provider.add_span_processor(_Speech())
+    if collector:
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(provider)
     _PROVIDER.append(provider)
-    Langfuse(should_export_span=lambda _span: True)
+    if langfuse:
+        Langfuse(should_export_span=lambda _span: True)

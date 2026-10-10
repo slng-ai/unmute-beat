@@ -1,13 +1,13 @@
 """Run: uv run python -m tests
 
 Every studio module, offline: no Docker, no model, no network. Each one also runs on its own,
-`python -m tests.test_discovery`. Asserts, no pytest; one failing module hides no other.
+`python -m tests.test_catalog`. Asserts, no pytest; one failing module hides no other.
 """
 
 import runpy
 
 MODULES = (
-    'tests.test_discovery',
+    'tests.test_catalog',
     'tests.test_events',
     'tests.test_metrics',
     'tests.test_boot',

@@ -1,5 +1,6 @@
 import { api } from '../api/client';
 import { useApi } from '../api/useApi';
+import { useSchemas } from '../api/useSchemas';
 import { PathStrip } from '../components/PathStrip';
 import { Section } from '../components/Section';
 import { Shell } from '../components/Shell';
@@ -17,6 +18,7 @@ export function RunView({ route }: { route: Extract<Route, { page: 'run' }> }) {
   const detail = useApi(() => api.run(route.run), `run-${route.run}-${view.status}-${view.turns.length}`);
   const saved = detail.state === 'ok' ? detail.data.turns : view.snapshots;
   const tag = statusTag(view);
+  const schemas = useSchemas(view.agent);
   const turns = view.turns.map((t) => ({ turn: t.turn, step: t.step, live: view.status === 'live' && t.turn === view.turns.at(-1)?.turn }));
   return (
     <Shell
@@ -62,10 +64,10 @@ export function RunView({ route }: { route: Extract<Route, { page: 'run' }> }) {
                 </div>
               </Section>
               <Section title="State" note={view.changed.length ? <span className="tag tag-y">changed {view.changed.join(', ')}</span> : undefined}>
-                <StatePanel state={view.state} changed={view.changed} />
+                <StatePanel state={view.state} changed={view.changed} schema={schemas.state} />
               </Section>
               <Section title="Business actions" note={<span className="tag">{view.intents.length}</span>}>
-                <IntentsPanel intents={view.intents} />
+                <IntentsPanel intents={view.intents} receipts={schemas.receipts} />
               </Section>
               <Section title="Turns" note={<span className="tag">{view.turns.length}</span>}>
                 {view.turns.length === 0 && <p className="empty">No finished turn yet.</p>}

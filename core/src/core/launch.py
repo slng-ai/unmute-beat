@@ -12,6 +12,9 @@ one frame processor (`core.processor.PydanticAgentProcessor`). What each setting
 its function: the speech services, turn taking, the worker, playback, the call ceiling. Settings come
 from the environment the launcher loaded (each `bot.py` reads `.env` first), read when a call starts.
 
+`transport_params` gives each transport's audio settings; `twilio` is the route Coval's simulated
+calls take (`concierge-tools/coval_sim`), and Pipecat's runner adds its serializer.
+
 The second module of core that imports Pipecat, with `core.processor` (the `voice` extra).
 """
 
@@ -59,20 +62,23 @@ from core.processor import Ceiling, PydanticAgentProcessor, playout, record_endi
 from core.snapshot import TurnSnapshot
 from core.steps import StepFlow
 
-FINISH_SECONDS = 8.0
-"""How long a turn already running may go on after the caller hangs up: a reading and a write fit in it.
 
-ponytail: a fixed bound. Take it from the turn budget's own deadline if a
-slower model or tool ever needs longer.
-"""
-IDLE_SECONDS = 20.0
-"""Silence after the bot's last words before the caller is asked if they are still there (`core.turn.remind`).
+class CallTiming:
+    """The two waits a call is built with.
 
-At 8 s it talked over Coval's simulated callers, who often answer 9 to 13 s
-after a read-back: the reminder said the read-back again, their yes cut into
-that copy, so it was asked again, up to five times (gate 1, BWqBhyLj). The
-calls that really stalled were silent for 70 to 150 s.
-"""
+    `FINISH_SECONDS` is how long a turn already running may go on after the caller hangs up: a reading
+    and a write fit in it. ponytail: a fixed bound; take it from the turn budget's own deadline if a
+    slower model or tool ever needs longer.
+
+    `IDLE_SECONDS` is the silence after the bot's last words before the caller is asked if they are
+    still there (`core.turn.remind`). At 8 s it talked over Coval's simulated callers, who often answer
+    9 to 13 s after a read-back: the reminder said the read-back again, their yes cut into that copy,
+    so it was asked again, up to five times (gate 1, BWqBhyLj). The calls that really stalled were
+    silent for 70 to 150 s.
+    """
+
+    FINISH_SECONDS = 8.0
+    IDLE_SECONDS = 20.0
 
 
 def max_call_seconds() -> float:
@@ -83,7 +89,7 @@ def max_call_seconds() -> float:
     that places the audio. `coval_sim` sets it for every simulated call.
 
     ponytail: the call is torn down the way a hang-up is, turn finished first,
-    so it may run up to `FINISH_SECONDS` longer.
+    so it may run up to `CallTiming.FINISH_SECONDS` longer.
     """
     return float(os.getenv('MAX_CALL_SECONDS') or 0)
 
@@ -131,7 +137,6 @@ transport_params = {
     'daily': lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
     'twilio': lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
 }
-"""`twilio` is the route Coval's simulated calls take (`concierge-tools/coval_sim`); Pipecat's runner adds the serializer."""
 
 
 def speech_services(entry: Entry) -> tuple[SlngSTTService, SlngTTSService]:
@@ -188,7 +193,7 @@ def aggregators(
     return LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            user_idle_timeout=IDLE_SECONDS,
+            user_idle_timeout=CallTiming.IDLE_SECONDS,
             vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_seconds())),
             user_turn_strategies=UserTurnStrategies(
                 stop=[
@@ -231,6 +236,7 @@ def latency_log() -> UserBotLatencyObserver:
 
     @observer.event_handler('on_latency_breakdown')
     async def breakdown(_observer, breakdown):
+        """Log each turn's latency breakdown, line by line."""
         for line in breakdown.turn_contribution_lines():
             logger.info('latency breakdown: {}', line)
 
@@ -262,6 +268,7 @@ def playback(agents: PydanticAgentProcessor, assistant_aggregator) -> None:
 
 
 def _outcome(call: Any) -> Literal['goodbye', 'hangup', 'ceiling', 'failed', 'stopped']:
+    """How a call ended, from what it recorded: the ceiling first, then a goodbye, a failure, else a hang-up."""
     kinds = {ending.get('kind') for ending in call.endings}
     if 'ceiling' in kinds:
         return 'ceiling'
@@ -349,6 +356,7 @@ async def run_call(
 
         @user_aggregator.event_handler('on_user_turn_idle')
         async def on_user_turn_idle(aggregator):
+            """Ask a silent caller whether they are still there."""
             await node.remind()
 
     simulated = delivery() == 'simulated' if simulate is None else simulate
@@ -400,7 +408,7 @@ async def run_call(
         """The call ceiling (`MAX_CALL_SECONDS`) was reached: hang up as the caller would."""
         logger.warning(f'call ceiling of {ceiling_seconds:.0f}s reached: hanging up')
         call.note_ending('ceiling', f'{ceiling_seconds:.0f}s call ceiling', observed=False)
-        await node.finish_turn(FINISH_SECONDS)
+        await node.finish_turn(CallTiming.FINISH_SECONDS)
         await worker.cancel()
 
     ceiling = Ceiling(ceiling_seconds, hang_up)
@@ -419,7 +427,7 @@ async def run_call(
         logger.info('client disconnected')
         call.note_ending('media_disconnect', 'the media websocket closed', observed=True)
         await ceiling.stop()
-        await node.finish_turn(FINISH_SECONDS)
+        await node.finish_turn(CallTiming.FINISH_SECONDS)
         if entry.close is not None:
             await entry.close(call)
         await worker.cancel()

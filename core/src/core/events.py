@@ -28,6 +28,9 @@ Where each comes from:
     turn.finished    the end of every turn, as `core.turn.TurnFinished` says it
     turn.snapshot    after every turn of a flow call: `core.snapshot.TurnSnapshot`, as JSON
     run.ended        the opener (`Events.ended`), or `Events.close`
+
+`EVENT.validate_json(line)` reads one event back; `EVENT.json_schema()` is what a web page's types
+mirror. A listener may fall behind by `Events.QUEUE` events before new ones are dropped, and counted.
 """
 
 from __future__ import annotations
@@ -39,92 +42,122 @@ from typing import Annotated, Any, Literal, Protocol
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-QUEUE = 2048
-"""Events a listener may fall behind by before new ones are dropped (and counted)."""
-
 
 class _Event(BaseModel):
+    """_Event.
+
+    Attributes:
+        turn: The caller turn, from 1; 0 is before the caller first speaks (the greeting).
+        t_ms: Milliseconds since the listener was attached, on the process's monotonic clock.
+    """
+
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     run: str
     seq: int = Field(ge=0)
     turn: int = Field(ge=0)
-    """The caller turn, from 1; 0 is before the caller first speaks (the greeting)."""
     t_ms: float = Field(ge=0)
-    """Milliseconds since the listener was attached, on the process's monotonic clock."""
 
 
 class RunStarted(_Event):
+    """RunStarted.
+
+    Attributes:
+        config: The config version it runs on: the studio's hash of the manifest and its files.
+        forked_from: The run this one carries on from, when it went back to a turn of it
+            (`core.snapshot`).
+    """
+
     type: Literal['run.started'] = 'run.started'
     agent: str
     config: str = ''
-    """The config version it runs on: the studio's hash of the manifest and its files."""
     channel: Literal['voice', 'text', 'twilio']
     entry: str
     state: dict[str, Any]
     forked_from: str | None = None
-    """The run this one carries on from, when it went back to a turn of it (`core.snapshot`)."""
     forked_turn: int | None = None
 
 
 class CallerSpeech(_Event):
-    """The words a caller turn gets: a new turn, or a piece that joins the one not yet answered."""
+    """The words a caller turn gets: a new turn, or a piece that joins the one not yet answered.
+
+    Attributes:
+        continues_turn: The caller cut in before an answer played out: these words join the same
+            turn (`CallContext.continues_turn`).
+    """
 
     type: Literal['caller.speech'] = 'caller.speech'
     phase: Literal['started', 'partial', 'final', 'stopped'] = 'final'
     text: str = ''
     continues_turn: bool = False
-    """The caller cut in before an answer played out: these words join the same turn (`CallContext.continues_turn`)."""
 
 
 class StepEntered(_Event):
+    """StepEntered.
+
+    Attributes:
+        source: The step the caller came from; None on entry.
+        via: Why, where core knows it on the spot (`exit`, `consult`, `handback`, `resume`); ''
+            otherwise. The studio labels the rest from the engine's own moves (`studio.agents.catalog`),
+            by source and step.
+    """
+
     type: Literal['step.entered'] = 'step.entered'
     step: str
     source: str | None
-    """The step the caller came from; None on entry."""
     via: str = ''
-    """Why, where core knows it on the spot (`exit`, `consult`, `handback`, `resume`); '' otherwise.
-
-    The studio labels the rest from the engine's own moves (`studio.discovery`), by source and step.
-    """
 
 
 class ModelRequest(_Event):
-    """One provider request is about to go out, with its place in the turn's budget."""
+    """One provider request is about to go out, with its place in the turn's budget.
+
+    Attributes:
+        request: This turn's request number.
+        budget: The turn's request limit; 0 when it has none.
+    """
 
     type: Literal['model.request'] = 'model.request'
     step: str
     request: int = Field(ge=1)
-    """This turn's request number."""
     budget: int = Field(ge=0)
-    """The turn's request limit; 0 when it has none."""
 
 
 class ModelDelta(_Event):
-    """A streamed piece of a response: speech, or a tool call's arguments as the model writes them."""
+    """A streamed piece of a response: speech, or a tool call's arguments as the model writes them.
+
+    Attributes:
+        name: The tool or output being called, for `args`.
+    """
 
     type: Literal['model.delta'] = 'model.delta'
     step: str
     kind: Literal['text', 'args'] = 'text'
     name: str = ''
-    """The tool or output being called, for `args`."""
     text: str
 
 
 class ModelDecision(_Event):
-    """One tool or output the model called, as it called it; or core's refusal of one, which the model then retries."""
+    """One tool or output the model called, as it called it; or core's refusal of one, which the model then retries.
+
+    Attributes:
+        name: The tool or output: `reply`, `record`, an operation, `hand_over`, `goodbye`, `done`, a
+            read, `options`.
+        refused: Why core sent it back, when it did.
+    """
 
     type: Literal['model.decision'] = 'model.decision'
     step: str
     name: str
-    """The tool or output: `reply`, `record`, an operation, `hand_over`, `goodbye`, `done`, a read, `options`."""
     args: dict[str, Any] = {}
     refused: str = ''
-    """Why core sent it back, when it did."""
 
 
 class ModelEnded(_Event):
-    """That request is over, however it went: its tokens, how long it took, and when its first part came."""
+    """That request is over, however it went: its tokens, how long it took, and when its first part came.
+
+    Attributes:
+        first_ms: From the request going out to its first part arriving; None when no part came.
+    """
 
     type: Literal['model.ended'] = 'model.ended'
     step: str
@@ -133,7 +166,6 @@ class ModelEnded(_Event):
     tokens_out: int = 0
     ms: float = 0
     first_ms: float | None = None
-    """From the request going out to its first part arriving; None when no part came."""
 
 
 class StateCommitted(_Event):
@@ -165,7 +197,14 @@ class ReceiptFiled(_Event):
 
 
 class BotSpeech(_Event):
-    """One spoken segment and what is known about whether it was heard (`core.state.Spoken`)."""
+    """One spoken segment and what is known about whether it was heard (`core.state.Spoken`).
+
+    Attributes:
+        reason: The segment's origin as core records it: `entry`, `model`, `ask`, `confirmation`,
+            `tool_filler`, ...
+        evidence: What proved delivery, when it is `delivered`: `mark` (a transport's own report),
+            `ack` (a text reader), `local`.
+    """
 
     type: Literal['bot.speech'] = 'bot.speech'
     segment: str
@@ -173,9 +212,7 @@ class BotSpeech(_Event):
     text: str = ''
     source: Literal['model', 'code'] = 'model'
     reason: str = ''
-    """The segment's origin as core records it: `entry`, `model`, `ask`, `confirmation`, `tool_filler`, ..."""
     evidence: str = ''
-    """What proved delivery, when it is `delivered`: `mark` (a transport's own report), `ack` (a text reader), `local`."""
 
 
 class TurnFinished(_Event):
@@ -197,11 +234,16 @@ class TurnSnapshotted(_Event):
 
 
 class RunEnded(_Event):
+    """RunEnded.
+
+    Attributes:
+        dropped: Events dropped because the listener fell behind (`Events.QUEUE`).
+    """
+
     type: Literal['run.ended'] = 'run.ended'
     outcome: Literal['goodbye', 'hangup', 'ceiling', 'failed', 'stopped']
     detail: str = ''
     dropped: int = 0
-    """Events dropped because the listener fell behind (`QUEUE`)."""
 
 
 type Event = Annotated[
@@ -223,13 +265,13 @@ type Event = Annotated[
 ]
 
 EVENT: TypeAdapter[Event] = TypeAdapter(Event)
-"""`EVENT.validate_json(line)` reads one event back; `EVENT.json_schema()` is what a web page's types mirror."""
 
 
 class CallListener(Protocol):
     """Whoever wants a call's events. Awaited off the turn's path, one event at a time, in order."""
 
-    async def event(self, event: Event) -> None: ...
+    async def event(self, event: Event) -> None:
+        """One event of the call, in order."""
 
 
 class Events:
@@ -239,6 +281,8 @@ class Events:
     draining task on first use (so a call opened outside a loop can still get a listener). A listener
     that raises is logged, and the next event goes on. `close` delivers what is queued, within a bound.
     """
+
+    QUEUE = 2048
 
     def __init__(self, listener: CallListener, run: str, *, size: int = QUEUE) -> None:
         self.listener = listener
@@ -290,9 +334,11 @@ class Events:
         outcome: Literal['goodbye', 'hangup', 'ceiling', 'failed', 'stopped'],
         detail: str = '',
     ) -> None:
+        """The call's last event: how it ended, and how many events its listener missed."""
         self.emit(RunEnded, turn, outcome=outcome, detail=detail, dropped=self.dropped)
 
     def _start(self) -> None:
+        """Start the task that drains the queue, once, when there is a loop to run it on."""
         if self._task is not None:
             return
         try:
@@ -301,6 +347,7 @@ class Events:
             return
 
     async def _drain(self) -> None:
+        """Hand each event to the listener in order; a listener that fails on one is logged and given the next."""
         while (event := await self._queue.get()) is not None:
             try:
                 await self.listener.event(event)  # ty: ignore[invalid-argument-type]

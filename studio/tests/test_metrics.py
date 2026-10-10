@@ -6,7 +6,7 @@ and attributes Pipecat and Pydantic AI write (checked against pipecat.utils.trac
 model request (`gen_ai.operation.name` = `chat`) with a duration and no first token.
 """
 
-from studio import metrics
+from studio.metrics import Jaeger, Limits, MetricsReader, Report, Traces, TraceTimings
 
 US = 1000
 """Jaeger times are microseconds; these spans are written in milliseconds times this."""
@@ -52,7 +52,7 @@ def call(
 
 
 def a_turn_holds_its_own_requests_and_flags():
-    first, second = metrics.turns(call(), metrics.Limits())
+    first, second = TraceTimings(call(), Limits()).turns()
     assert (first.turn, first.voice_to_voice_ms, first.level, first.flags) == (1, 910, 'ok', []), first
     assert [r.kind for r in first.requests] == ['stt', 'llm', 'tts'], 'the agent run span is no request'
     stt, llm, tts = first.requests
@@ -82,16 +82,18 @@ def a_turn_holds_its_own_requests_and_flags():
 
 
 def per_model_and_summary():
-    timings = metrics.turns(call(), metrics.Limits())
-    stats = {(s.kind, s.model): s for s in metrics.models(timings)}
+    timings = TraceTimings(call(), Limits()).turns()
+    stats = {(s.kind, s.model): s for s in Report('', 'overview', '', Limits()).models(timings)}
     llm = stats[('llm', 'gemini-3.5-flash-lite')]
     assert (llm.requests, llm.runs, llm.errors, round(llm.over_limit, 2)) == (4, 1, 1, 0.5), llm
     assert llm.first_byte_p90_ms == 310, (
         'only requests that streamed have a first token: no total passed off as one'
     )
     assert stats[('stt', 'slng-stt')].first_byte_p90_ms == 417, stats[('stt', 'slng-stt')]
-    assert [s.kind for s in metrics.models(timings)] == ['stt', 'llm', 'tts'], 'STT, LLM, TTS in that order'
-    whole = metrics.summary(timings)
+    assert [s.kind for s in Report('', 'overview', '', Limits()).models(timings)] == ['stt', 'llm', 'tts'], (
+        'STT, LLM, TTS in that order'
+    )
+    whole = Report('', 'overview', '', Limits()).summary(timings)
     assert (whole.turns, whole.runs, whole.over_limit, whole.errors, whole.mixed) == (2, 1, 0.5, 1, []), whole
     assert whole.voice_to_voice_p90_ms == 1549, whole
     assert (whole.llm_first_token_p90_ms, whole.tts_first_audio_p90_ms) == (310, 270), whole
@@ -99,12 +101,12 @@ def per_model_and_summary():
 
 def a_swapped_model_is_two_rows():
     """The LLM changed between two runs: the table keeps them apart, and the overview says the period mixes them."""
-    before = metrics.turns(call('tr1', llm='gemini-3.1-flash-lite'), metrics.Limits())
-    after = metrics.turns(call('tr2', llm='gemini-3.5-flash-lite', at=86_400_000), metrics.Limits())
-    rows = [s for s in metrics.models(before + after) if s.kind == 'llm']
+    before = TraceTimings(call('tr1', llm='gemini-3.1-flash-lite'), Limits()).turns()
+    after = TraceTimings(call('tr2', llm='gemini-3.5-flash-lite', at=86_400_000), Limits()).turns()
+    rows = [s for s in Report('', 'overview', '', Limits()).models(before + after) if s.kind == 'llm']
     assert [r.model for r in rows] == ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'], 'oldest first'
     assert rows[0].last_seen < rows[1].first_seen and all(r.runs == 1 for r in rows), rows
-    assert metrics.summary(before + after).mixed == ['llm']
+    assert Report('', 'overview', '', Limits()).summary(before + after).mixed == ['llm']
 
 
 def otlp(*traces: dict) -> dict:
@@ -148,12 +150,10 @@ def otlp(*traces: dict) -> dict:
 
 def api_v3_becomes_the_same_spans():
     """Jaeger 2's query API (v3, OTLP JSON) read back into the same traces the timing code reads."""
-    [back] = metrics.traces_of(otlp(call()))
+    [back] = Traces.of(otlp(call()))
     original = call()
     assert back['traceID'] == 'tr1' and len(back['spans']) == len(original['spans'])
-    assert metrics.turns(back, metrics.Limits()) == metrics.turns(original, metrics.Limits()), (
-        'the same turns'
-    )
+    assert TraceTimings(back, Limits()).turns() == TraceTimings(original, Limits()).turns(), 'the same turns'
 
 
 def collect_reads_jaegers_query_api():
@@ -163,7 +163,7 @@ def collect_reads_jaegers_query_api():
         asked.append(url)
         return otlp(call(), call('tr2', agent='faro'))
 
-    found = metrics.collect('http://127.0.0.1:16686', fetch=fetch)
+    found = MetricsReader(Jaeger('http://127.0.0.1:16686', fetch)).collect()
     assert asked[0].startswith(
         'http://127.0.0.1:16686/api/v3/traces?query.service_name=slng-voice-harness&'
     ), asked
@@ -172,7 +172,7 @@ def collect_reads_jaegers_query_api():
     assert {r.agent for r in found.runs} == {'sage-and-stone', 'faro'}
 
     asked.clear()
-    metrics.collect('http://127.0.0.1:16686', agent='faro', fetch=fetch)
+    MetricsReader(Jaeger('http://127.0.0.1:16686', fetch)).collect(agent='faro')
     assert 'query.attributes=%7B%22slng.agent.id%22%3A+%22faro%22%7D' in asked[0], (
         'one agent is asked of Jaeger itself'
     )
@@ -181,7 +181,7 @@ def collect_reads_jaegers_query_api():
         asked.append(url)
         return otlp(call('tr9', agent='faro'))
 
-    run = metrics.collect_run('http://127.0.0.1:16686', 'tr9', fetch=one)
+    run = MetricsReader(Jaeger('http://127.0.0.1:16686', one)).collect_run('tr9')
     assert asked[-1] == 'http://127.0.0.1:16686/api/v3/traces/tr9'
     assert run.scope == 'run' and run.agent == '' and [r.agent for r in run.runs] == ['faro'], (
         "a run's view has no filter: it names its own agent"

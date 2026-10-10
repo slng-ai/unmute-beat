@@ -86,7 +86,7 @@ from pydantic_ai.settings import ModelSettings
 
 from core.actions import Action
 from core.clock import CallClock
-from core.closing import Closing, closing
+from core.closing import Closing
 from core.history import History, Scope
 from core.locale import ENGLISH, SPANISH, Locale
 from core.operations import Operation
@@ -653,7 +653,7 @@ class _Resolver:
         if action.changes and subject and not version:
             self.fail(where, 'names a subject it changes, so its receipt needs a core.Version field')
         try:
-            own = {'say': closing(action.say), 'recap': closing(action.recap)}
+            own = {'say': Closing.declared(action.say), 'recap': Closing.declared(action.recap)}
         except ValidationError as error:
             self.fail(
                 where, f'{action.__name__} has closing lines that do not read: {error.errors()[0]["msg"]}'

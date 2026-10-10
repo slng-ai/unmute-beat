@@ -1,27 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import type { GoBack as GoBackData, Refusal, StateSchema } from '../api/types';
+import type { GoBack as GoBackData, Refusal } from '../api/types';
 import { useApi } from '../api/useApi';
+import { useSchemas } from '../api/useSchemas';
 import { Shell } from '../components/Shell';
-import { Fields } from '../live/panels';
+import { ModelForm, ModelView, pathKey, type Schema } from '../model';
 import { href, go, type Route } from '../router';
-
-type Draft = Record<string, string | boolean>;
-
-function shown(value: unknown): string | boolean {
-  if (typeof value === 'boolean') return value;
-  if (value === null || value === undefined) return '';
-  return typeof value === 'object' ? JSON.stringify(value) : String(value);
-}
-
-/** The edited text back into the value the state holds: JSON for objects and lists, a number for a number, '' for none. */
-function parsed(text: string | boolean, before: unknown): unknown {
-  if (typeof text === 'boolean') return text;
-  if (text.trim() === '') return null;
-  if (before !== null && typeof before === 'object') return JSON.parse(text);
-  if (typeof before === 'number') return Number(text);
-  return text;
-}
 
 /**
  * Going back to the end of a turn and carrying on from there, with the state edited first if you like.
@@ -36,15 +20,15 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
   const turn = route.turn ?? turns.at(-1);
   const found = useApi(() => (turn !== undefined ? api.goBack(route.run, turn) : Promise.reject(new Error('no saved turn'))), `back-${route.run}-${turn}`);
   const agent = run.state === 'ok' ? run.data.run.agent : '';
-  const schema = useApi(() => (agent ? api.schema(agent) : Promise.reject(new Error('no agent'))), `schema-${agent}`);
+  const schemas = useSchemas(agent);
   const data = found.state === 'ok' ? found.data : undefined;
-  const [draft, setDraft] = useState<Draft>({});
+  const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [refused, setRefused] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (data) setDraft(Object.fromEntries(Object.entries(data.facts).map(([k, v]) => [k, shown(v)])));
+    if (data) setDraft(structuredClone(data.facts));
     setRefused({});
     setError('');
   }, [data]);
@@ -54,22 +38,14 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
     setBusy(true);
     setError('');
     setRefused({});
-    let facts: Record<string, unknown>;
+    const edited = JSON.stringify(draft) !== JSON.stringify(data.facts);
     try {
-      facts = Object.fromEntries(Object.entries(draft).map(([k, v]) => [k, parsed(v, data.facts[k])]));
-    } catch (failure) {
-      setError(`A field is not valid JSON: ${String(failure)}`);
-      setBusy(false);
-      return;
-    }
-    const edited = Object.keys(facts).some((k) => JSON.stringify(facts[k]) !== JSON.stringify(data.facts[k]));
-    try {
-      const started = await api.start({ agent, channel, resume_from: { run: route.run, turn }, ...(edited ? { facts } : {}) });
+      const started = await api.start({ agent, channel, resume_from: { run: route.run, turn }, ...(edited ? { facts: draft } : {}) });
       go({ page: 'agents', agent, tab: 'build', run: started.run });
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 422) {
         const detail = failure.detail as { refused?: Refusal[] } | undefined;
-        const by = Object.fromEntries((detail?.refused ?? []).map((r) => [String(r.loc[0] ?? 'state'), r.msg]));
+        const by = Object.fromEntries((detail?.refused ?? []).map((r) => [pathKey(r.loc), r.msg]));
         setRefused(by);
         setError('The agent refused this state: nothing was opened. Fix the marked fields.');
       } else {
@@ -125,7 +101,15 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
                     ))}
                   </div>
                 </div>
-                <StateForm facts={data.facts} draft={draft} setDraft={setDraft} refused={refused} schema={schema.state === 'ok' ? schema.data : undefined} />
+                <div className="panel">
+                  <div className="panel-h">
+                    <span className="lbl">The state to carry on with</span>
+                    <span className="hint">drawn from the agent's state model; checked whole by its own types before anything opens</span>
+                  </div>
+                  <div className="panel-b">
+                    <ModelForm schema={schemas.state} value={draft} onChange={setDraft} errors={refused} />
+                  </div>
+                </div>
                 {error && <div className="problem">{error}</div>}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-y" disabled={busy} onClick={() => void carryOn('text')}>Carry on by text</button>
@@ -135,50 +119,15 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
               </>
             )}
           </main>
-          {data && <Consequences data={data} />}
+          {data && <Consequences data={data} receipts={schemas.receipts} />}
         </div>
       }
     />
   );
 }
 
-function StateForm({ facts, draft, setDraft, refused, schema }: { facts: Record<string, unknown>; draft: Draft; setDraft: (d: Draft) => void; refused: Record<string, string>; schema?: StateSchema }) {
-  const props = schema?.state.properties ?? {};
-  return (
-    <div className="panel">
-      <div className="panel-h">
-        <span className="lbl">The state to carry on with</span>
-        <span className="hint">checked whole by the agent's own types before anything opens</span>
-      </div>
-      <div className="panel-b" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
-        {Object.keys(facts).map((key) => {
-          const value = draft[key] ?? '';
-          const before = facts[key];
-          const about = props[key]?.description;
-          return (
-            <div key={key} className="field" style={typeof before === 'object' && before !== null ? { gridColumn: '1 / -1' } : undefined}>
-              <label htmlFor={`fact-${key}`}>{key}</label>
-              {typeof value === 'boolean' ? (
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input id={`fact-${key}`} type="checkbox" checked={value} onChange={(e) => setDraft({ ...draft, [key]: e.target.checked })} />
-                  <span className="mono" style={{ fontSize: 13 }}>{String(value)}</span>
-                </label>
-              ) : typeof before === 'object' && before !== null ? (
-                <textarea id={`fact-${key}`} className={`textarea ${refused[key] ? 'input-bad' : ''}`} rows={3} value={value} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} spellCheck={false} />
-              ) : (
-                <input id={`fact-${key}`} className={`input mono ${refused[key] ? 'input-bad' : ''}`} value={value} placeholder="none" onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
-              )}
-              {refused[key] && <div className="problem">{refused[key]}</div>}
-              {about && <span className="hint">{about}</span>}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function Consequences({ data }: { data: GoBackData }) {
+/** What carrying on brings along, what starts fresh, and what the business still holds from after the turn. */
+function Consequences({ data, receipts }: { data: GoBackData; receipts: Record<string, Schema> }) {
   return (
     <aside className="col-try" aria-label="What carrying on means">
       <div className="panel-h"><span className="lbl">What carrying on means</span></div>
@@ -208,7 +157,7 @@ function Consequences({ data }: { data: GoBackData }) {
             data.done_after.map((d, i) => (
               <div key={i} className="warn">
                 T{d.turn} · {d.operation}
-                <Fields value={d.receipt} />
+                <ModelView value={d.receipt} schema={receipts[d.operation]} />
               </div>
             ))
           )}

@@ -28,28 +28,38 @@ class Found:
     error: str = ''
 
 
-def find(root: Path, pattern: str = 'use-cases/*/*/entry.py') -> list[Found]:
-    """Every `entry.py` under `root`, imported. A use case whose package name another one already took is refused."""
-    found: list[Found] = []
-    taken: set[str] = set()
-    for path in sorted(root.glob(pattern)):
-        folder, package = path.parent.parent, path.parent.name
-        if package in taken:
-            found.append(
-                Found(folder, package, None, f'the package name {package!r} is taken by another use case')
-            )
-            continue
-        taken.add(package)
+class EntryFinder:
+    """Every `entry.py` under the repository, imported. A use case whose package name another one already took is refused."""
+
+    def __init__(self, root: Path, pattern: str = 'use-cases/*/*/entry.py') -> None:
+        self.root = root
+        self.pattern = pattern
+
+    def find(self) -> list[Found]:
+        """Each entry found, or why it could not be imported, in path order."""
+        taken: set[str] = set()
+        found: list[Found] = []
+        for path in sorted(self.root.glob(self.pattern)):
+            folder, package = path.parent.parent, path.parent.name
+            if package in taken:
+                found.append(
+                    Found(folder, package, None, f'the package name {package!r} is taken by another use case')
+                )
+                continue
+            taken.add(package)
+            found.append(self._load(folder, package))
+        return found
+
+    @staticmethod
+    def _load(folder: Path, package: str) -> Found:
+        """Import one use case's `<package>.entry`, its folder first on the path."""
         if str(folder) not in sys.path:
             sys.path.insert(0, str(folder))
         try:
-            module = importlib.import_module(f'{package}.entry')
-            entry = module.ENTRY
+            entry = importlib.import_module(f'{package}.entry').ENTRY
             if not isinstance(entry, core.Entry):
                 raise TypeError(f'{package}.entry.ENTRY is a {type(entry).__name__}, not a core.Entry')
         except Exception as error:
             logger.exception('the entry of {} did not load', folder.name)
-            found.append(Found(folder, package, None, f'{type(error).__name__}: {error}'))
-            continue
-        found.append(Found(folder, package, entry))
-    return found
+            return Found(folder, package, None, f'{type(error).__name__}: {error}')
+        return Found(folder, package, entry)

@@ -1,4 +1,8 @@
-"""Nosh, as every launcher needs it (`core.Entry`): its flow, its place tools, how a call opens, what it says first."""
+"""Nosh, as every launcher needs it (`core.Entry`): its flow, its place tools, how a call opens, what it says first.
+
+`TOOLS`: The place tools on Render, shared by every call of this process: a client holds no call's
+state.
+"""
 
 from pathlib import Path
 
@@ -9,7 +13,6 @@ from nosh import app
 from nosh.tools import Tools
 
 TOOLS = Tools()
-"""The place tools on Render, shared by every call of this process: a client holds no call's state."""
 
 
 def wake() -> None:

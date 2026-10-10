@@ -34,6 +34,7 @@ MODULES = (
     'tests.test_clock',
     'tests.test_values',
     'tests.test_actions',
+    'tests.test_closing',
     'tests.test_context',
     'tests.test_structured',
     'tests.test_events',

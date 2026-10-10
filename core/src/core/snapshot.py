@@ -31,6 +31,8 @@ What going back cannot undo is the business: a booking made after the turn stays
 ponytail: which receipt set a state field (`FlowCall._assigned_by`) is not saved, so a field a
 receipt set before the snapshot is not reset when what it rested on changes after it. Rebuild it
 from `evidence` if a resumed call ever needs that reset.
+
+`SCHEMA` is bumped when a field changes meaning: a snapshot of another schema is refused on restore.
 """
 
 from __future__ import annotations
@@ -49,11 +51,14 @@ if TYPE_CHECKING:
     from core.steps import FlowCall, StepFlow
 
 SCHEMA = 1
-"""Bumped when a field changes meaning: a snapshot of another schema is refused on restore."""
 
 
 class SpokenRecord(BaseModel):
-    """One segment of the speech ledger, without the in-process clock values: on restore it is all in the past."""
+    """One segment of the speech ledger, without the in-process clock values: on restore it is all in the past.
+
+    Attributes:
+        played: It had played when the snapshot was taken (`Spoken.played_at` was set).
+    """
 
     kind: Literal['fixed', 'model']
     text: str
@@ -71,12 +76,12 @@ class SpokenRecord(BaseModel):
     simulated: bool = False
     proposal: int = 0
     played: bool = False
-    """It had played when the snapshot was taken (`Spoken.played_at` was set)."""
     cleared: bool = False
     lost: Literal['', 'cleared', 'silent', 'failed'] = ''
 
     @classmethod
     def of(cls, segment: Spoken) -> SpokenRecord:
+        """A spoken segment as plain data, its clock values left out."""
         return cls(
             kind=segment.kind,
             text=segment.text,
@@ -143,14 +148,24 @@ class EvidenceRecord(BaseModel):
 
     @classmethod
     def of(cls, evidence: Evidence) -> EvidenceRecord:
+        """A filed receipt as plain data."""
         return cls.model_validate(evidence, from_attributes=True)
 
     def evidence(self) -> Evidence:
+        """The filed receipt again."""
         return Evidence(**self.model_dump())
 
 
 class TurnSnapshot(BaseModel):
-    """Everything going back to the end of one turn needs, saved by whoever listens (`turn.snapshot`)."""
+    """Everything going back to the end of one turn needs, saved by whoever listens (`turn.snapshot`).
+
+    Attributes:
+        call_now: The call's clock when the snapshot was taken: a resumed call's clock moves on from
+            it.
+        facts: The application's facts as JSON, validated against the flow's state type on restore.
+        segments: Segments said so far: a resumed call's segment ids carry on from it, so none is
+            reused.
+    """
 
     model_config = ConfigDict(ser_json_bytes='base64', val_json_bytes='base64')
 
@@ -159,12 +174,10 @@ class TurnSnapshot(BaseModel):
     turn: int = Field(ge=0)
     app_version: str = ''
     call_now: datetime
-    """The call's clock when the snapshot was taken: a resumed call's clock moves on from it."""
     agent: str
     pending: str | None = None
     consulting: str | None = None
     facts: dict[str, Any]
-    """The application's facts as JSON, validated against the flow's state type on restore."""
     messages: list[ModelMessage]
     speech: list[SpokenRecord]
     evidence: list[EvidenceRecord] = []
@@ -172,7 +185,6 @@ class TurnSnapshot(BaseModel):
     arrived: dict[str, int] = {}
     inputs: dict[int, str] = {}
     segments: int = 0
-    """Segments said so far: a resumed call's segment ids carry on from it, so none is reused."""
 
     def said(self) -> list[dict[str, Any]]:
         """The conversation up to this turn, in order: the caller's words and each bot line, for a page."""

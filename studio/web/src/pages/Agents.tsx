@@ -2,7 +2,7 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { Agent, ConfigEdit, EditorConfig, EditorStep, Problem } from '../api/types';
 import { useApi } from '../api/useApi';
-import { ClosingEditor } from '../components/ClosingEditor';
+import { ClosingEditor } from '../closing/ClosingEditor';
 import { FocusView } from '../components/FocusView';
 import { MovesTable } from '../components/MovesTable';
 import { Shell } from '../components/Shell';

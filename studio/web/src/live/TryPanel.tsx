@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { RunRow } from '../api/types';
 import { useApi } from '../api/useApi';
+import { useSchemas } from '../api/useSchemas';
 import { href, go } from '../router';
 import { IntentsPanel, ModelPanel, StatePanel, statusTag, Transcript } from './panels';
 import type { RunView } from './useRun';
@@ -26,6 +27,7 @@ export function TryPanel({ agent, version, run, onRun, view }: {
   const [error, setError] = useState('');
   const [voice, setVoice] = useState<{ status: string; reports: number; call?: VoiceCall; capable?: boolean }>({ status: '', reports: 0 });
   const audio = useRef<HTMLAudioElement>(null);
+  const schemas = useSchemas(agent);
   const recent = useApi(() => api.runs(agent), `try-runs-${agent}-${run ?? ''}-${view.status}-${view.turns.length}`);
   const row = useApi(() => (run ? api.run(run) : Promise.reject(new Error('no run'))), `try-row-${run ?? ''}-${view.status}`);
   const waitingForVoice = row.state === 'ok' && row.data.run.channel === 'voice' && row.data.run.outcome === null && view.status !== 'live' && !voice.call;
@@ -165,11 +167,11 @@ export function TryPanel({ agent, version, run, onRun, view }: {
             </details>
             <details>
               <summary className="lbl" style={{ cursor: 'pointer' }}>State</summary>
-              <div style={{ marginTop: 8 }}><StatePanel state={view.state} changed={view.changed} /></div>
+              <div style={{ marginTop: 8 }}><StatePanel state={view.state} changed={view.changed} schema={schemas.state} /></div>
             </details>
             <details>
               <summary className="lbl" style={{ cursor: 'pointer' }}>Business actions</summary>
-              <div style={{ marginTop: 8 }}><IntentsPanel intents={view.intents} /></div>
+              <div style={{ marginTop: 8 }}><IntentsPanel intents={view.intents} receipts={schemas.receipts} /></div>
             </details>
           </>
         )}

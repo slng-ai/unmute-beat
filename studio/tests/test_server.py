@@ -10,10 +10,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from studio.api.app import Studio
 from studio.boot import Boot
-from studio.server import create_app
+from studio.runs.store import MemoryStore
 from studio.settings import Settings
-from studio.store import MemoryStore
 
 SETTINGS = replace(Settings.from_env(), root=Path(__file__).parent / 'fixtures', agents='*/agent.yaml')
 
@@ -23,7 +23,7 @@ def unreachable(url: str) -> dict:
 
 
 def the_api_serves_agents_and_says_what_is_missing():
-    app = create_app(SETTINGS, Boot(SETTINGS, services=False), fetch=unreachable, store=MemoryStore())
+    app = Studio(SETTINGS, Boot(SETTINGS, services=False), fetch=unreachable, store=MemoryStore()).app()
     with TestClient(app) as client:
         assert client.get('/api/health').json() == {'engine': 'ok', 'store': 'memory'}
 

@@ -1,5 +1,4 @@
-// Mirrors of the engine's models. Keep in step with studio/src/studio/{discovery,boot,events}.py;
-// `/api/events/schema` is the events' JSON schema, for generating these once the format settles.
+import type { JsonSchema } from '../model';
 
 export type StepKind = 'conversation' | 'action' | 'end';
 export type Role = 'entry' | 'gate' | 'consulted';
@@ -298,7 +297,7 @@ export interface GoBack {
 }
 
 export interface StateSchema {
-  state: { properties?: Record<string, { type?: string; description?: string; anyOf?: unknown[]; enum?: unknown[]; format?: string; title?: string }>; $defs?: Record<string, unknown> };
+  state: JsonSchema;
   steps: string[];
   start: string;
 }
@@ -324,6 +323,10 @@ export interface LastReceipts {
   refused?: Record<string, unknown>;
 }
 
+/**
+ * One operation as the editor shows it: its closing lines, the field paths a success and a refusal have
+ * (`customer.name` inside a nested model), each closed field's values, and the receipt's JSON schema.
+ */
 export interface EditorOperation {
   name: string;
   say: Words;
@@ -331,12 +334,10 @@ export interface EditorOperation {
   changes: boolean;
   approval: string;
   fields: string[];
-  /** The fields a refusal has; empty when it is never refused with a receipt. */
   refused_fields: string[];
-  /** Each field of a success with a closed set of values, and those values. */
   values: Record<string, unknown[]>;
-  /** The same for a refusal. */
   refused_values: Record<string, unknown[]>;
+  schema: JsonSchema;
   form: 'class' | 'function';
   route: string;
 }

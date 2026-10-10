@@ -44,7 +44,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from core import events as ev
 from core import snapshot as snapshot_module
 from core.clock import CallClock
-from core.closing import Words, refused_words
+from core.closing import Closing, Template, Words
 from core.completion import ReceiptMatched
 from core.flow import Nodes
 from core.graph import Exit, Node, Opening, Restated, holds
@@ -876,7 +876,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             if scope is not None and isinstance(receipt, Rejection) and receipt.reason:
                 answered |= {'reason': receipt.reason}
             told = ''
-            if words := refused_words(self.say, _Facts(data)):
+            if words := Closing.of(self.say).refused(data):
                 await call.speak_now(words, origin='confirmation')
                 told = f' The caller has just been told: "{words}". Do not say it again; say only what comes next.'
             raise ModelRetry(
@@ -891,7 +891,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         call._offers.take(*self.binds.values())
         if self.changes and (named := call._resource_choices.get(self.resource or self.subject)):
             await _offer(call, named)
-        if words := self.say.format_map(_Facts(data)).strip():
+        if words := Closing.of(self.say).said(data):
             given = args.model_dump(mode='json')
             filed = next(
                 (e for e in reversed(call.evidence) if e.operation == self.name and e.args == given), None
@@ -1418,7 +1418,7 @@ async def _carry_out(
     if not isinstance(receipt, BaseModel):
         return None, None
     say = getattr(operation, 'say', '')
-    return (say.format_map(_Facts(receipt.model_dump())) if say else None), receipt
+    return (Closing.of(say).said(receipt.model_dump()) if say else None), receipt
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1927,7 +1927,7 @@ class End(Step):
         return (self.take_back,) if self.take_back else ()
 
     def said(self, call: FlowCall[Any]) -> str:
-        return self.say.format_map(_Facts(call.state.facts.model_dump()))
+        return Template(self.say).fill(call.state.facts.model_dump())
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def close(call: FlowCall[Any]) -> str:
@@ -1948,13 +1948,6 @@ class End(Step):
             flow, self, 'The request is finished. Answer briefly; do not start a new one.', outputs
         )
         return _node(flow, self, agent, openings=(Opening('close', _entered, close),))
-
-
-class _Facts(dict):
-    """Facts for `str.format_map`, with nested receipts reachable as `{step[field]}` and a blank for anything missing."""
-
-    def __missing__(self, key: str) -> str:
-        return ''
 
 
 class StepFlow:
@@ -2189,7 +2182,7 @@ class StepFlow:
         """
         known = {op.name: op for op in self.operations()}
         return {
-            filed.intent[:RECAP_REF]: template.format_map(_Facts(filed.receipt))
+            filed.intent[:RECAP_REF]: Closing.of(template).said(filed.receipt)
             for filed in call.effective()
             if (only is None or filed.operation in only)
             and filed.intent
@@ -2208,7 +2201,7 @@ class StepFlow:
         standing = call.effective()
         return next(
             (
-                template.format_map(_Facts(filed.receipt))
+                Closing.of(template).said(filed.receipt)
                 for filed in reversed(call.evidence)
                 if (template := getattr(known.get(filed.operation), 'say', ''))
                 and any(filed is s for s in standing)

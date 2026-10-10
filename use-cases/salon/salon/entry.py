@@ -1,6 +1,10 @@
 """The salon, as every launcher needs it (`core.Entry`): its flow, its diary, how a call opens, what it says first.
 
 `bot.py`, the bounded `server.py` and the studio's runner all run a call from this one entry.
+
+`DIARY`: The salon: one SQLite file (`DIARY_PATH`) every worker process shares, so calls on two workers
+contend for one chair. Unset: a private file for this process only, for development. `DIARY_CLOCK` pins
+the salon's clock, for a load run whose days must not move.
 """
 
 import os
@@ -15,9 +19,6 @@ DIARY = Diary(
     path=os.getenv('DIARY_PATH') or None,
     clock=datetime.fromisoformat(os.environ['DIARY_CLOCK']) if os.getenv('DIARY_CLOCK') else None,
 )
-"""The salon: one SQLite file (`DIARY_PATH`) every worker process shares, so calls on two workers
-contend for one chair. Unset: a private file for this process only, for development. `DIARY_CLOCK`
-pins the salon's clock, for a load run whose days must not move."""
 
 
 def open_call(flow: core.StepFlow, opening: core.Opening) -> core.FlowCall:

@@ -66,21 +66,17 @@ runners' logs and the use cases' business data (the salon's diary, Faro's learne
 | Path | Owns |
 |---|---|
 | `compose.yaml` | Postgres 16 and Redis 7 (health-checked) and Jaeger 2.21 (OTLP in, traces in memory, query API v3), local ports only, the `slng-studio_pg` volume |
-| `src/studio/cli.py` | the `slng` command |
+| `src/studio/cli.py` | `Cli`: the `slng` command |
 | `src/studio/settings.py` | ports, paths and URLs from the environment |
 | `src/studio/boot.py` | the start-up sequence `/api/boot` reports and the loading screen draws: Docker, the services, the store, the agents, the runner |
-| `src/studio/discovery.py` | every `agent.yaml`: `core.load` for its steps, `studio.check` for the loader's verdict and the engine's own moves, groups for the map |
-| `src/studio/check.py` | in a process of its own, with the use case importable: `FlowSpec.problems()`, `Flow.moves` and each operation's closing lines, with the fields and closed values of a success and of a refusal (compiled on `TestModel`, no provider called) |
-| `src/studio/runs.py` | the hub: runners link in (hello, stats, events), each run placed on the least busy ready runner, offers and text turns passed on, every event stored and streamed to the pages watching; `RunnerProcess` |
-| `src/studio/store.py` | `ServiceStore` (Redis for 7 days, Postgres behind, written in order by a task of its own) and `MemoryStore` (`--no-services`, tests) |
-| `src/studio/configs.py` | an agent's config as files, and its version (a hash of them) |
-| `src/studio/editor.py` | the editor: closing lines, action routes and prompts edited line by line and proved, checked on a copy, saved with a version that names its parent |
+| `src/studio/agents/` | every `agent.yaml` (`catalog`: the loader's verdict and the engine's own moves, groups for the map); the check that runs in a process of its own (`check`: `FlowSpec.problems()`, `Flow.moves`, each operation's closing lines and its receipt the way the state is described: JSON schema, fields by path for a success and a refusal, closed values); the config's files and version (`configs`); the editor (`editor`, `manifest_text`, `closing_review`, `models`) |
+| `src/studio/runs/` | the hub (`hub`: runners link in, each run placed on the least busy ready runner, every event stored and streamed to the pages watching); the store (`store`: Redis for 7 days, Postgres behind, or memory); a runner the studio starts (`process`) |
+| `src/studio/metrics/` | timings from Jaeger's API v3 (`jaeger`), each turn's STT, LLM and TTS requests flagged against `Limits` and the page's report (`timings`) |
+| `src/studio/api/` | `Studio` and its routes: agents, runs, metrics, core's voice page at `/voice-sdk/`, the built page |
 | `src/studio/events.py` | the run format, which is core's (`core.events`) |
-| `src/studio/metrics.py` | timings from Jaeger's API v3: each turn's STT, LLM and TTS requests, flagged against `Limits`; per agent, per run (its traces merged), per model |
-| `src/studio/server.py` | the FastAPI app: agents, config and its check, runners, runs (start, live socket, offer, turns, hang up, events, a turn to go back to), metrics, core's voice page at `/voice-sdk/`, the built page |
 | `src/studio/schema.sql` | the store: configs, runs, events, snapshots; applied on every start |
-| `tests/` | asserts, no pytest: discovery, events, metrics on API v3 answers, boot, the API, the CLI, the editor on copies of the salon and Faro, the store (Redis and Postgres too when they are up) |
-| `web/` | Vite, React, TypeScript; React Flow and ELK for the map, loaded only when it opens. `src/pages/` one file per place (Agents, Runs, a run, going back, Metrics); `src/live/` the live socket (`useRun`), the try panel, browser calls on core's own client (`voice.ts`) |
+| `tests/` | asserts, no pytest: the catalog, events, metrics on API v3 answers, boot, the API, the CLI, the editor on copies of the salon and Faro, the store (Redis and Postgres too when they are up) |
+| `web/` | Vite, React, TypeScript; React Flow and ELK for the map, loaded only when it opens. `src/pages/` one file per place (Agents, Runs, a run, going back, Metrics); `src/live/` the live socket (`useRun`), the try panel, browser calls on core's own client (`voice.ts`); `src/model/` a state and a receipt drawn and edited from their models' JSON schema, nested models included; `src/closing/` the closing-line editor |
 
 The runner service and the studio together are tested in `runner/tests/test_runner.py`: two runners, runs
 placed and stored, going back with an edit, a runner stopping, a saved config.

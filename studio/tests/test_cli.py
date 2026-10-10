@@ -12,26 +12,26 @@ from pathlib import Path
 
 import yaml
 
-from studio import cli
+from studio.cli import Cli
 from studio.settings import STUDIO, Settings
 
 
 def the_commands_parse():
-    up = cli.parser().parse_args(['studio', 'up', '--dev', '--no-services', '--port', '7900'])
+    up = Cli.parser().parse_args(['studio', 'up', '--dev', '--no-services', '--port', '7900'])
     assert (up.command, up.dev, up.no_services, up.port) == ('up', True, True, 7900)
-    assert cli.parser().parse_args(['studio', 'down', '--volumes']).volumes
-    assert cli.parser().parse_args(['studio', 'agents']).command == 'agents'
-    bot = cli.parser().parse_args(['studio', 'bot', 'salon', '-t', 'twilio'])
+    assert Cli.parser().parse_args(['studio', 'down', '--volumes']).volumes
+    assert Cli.parser().parse_args(['studio', 'agents']).command == 'agents'
+    bot = Cli.parser().parse_args(['studio', 'bot', 'salon', '-t', 'twilio'])
     assert (bot.command, bot.use_case, bot.bot_args) == ('bot', 'salon', ['-t', 'twilio'])
-    assert not up.no_runner and cli.parser().parse_args(['studio', 'up', '--no-runner']).no_runner
-    more = cli.parser().parse_args(['studio', 'runner', '--port', '7820', '--max-calls', '2'])
+    assert not up.no_runner and Cli.parser().parse_args(['studio', 'up', '--no-runner']).no_runner
+    more = Cli.parser().parse_args(['studio', 'runner', '--port', '7820', '--max-calls', '2'])
     assert (more.command, more.runner_port, more.max_calls) == ('runner', 7820, 2)
 
 
 def a_runner_links_to_the_studio():
     seen: list[tuple[list[str], Path, dict[str, str]]] = []
     settings = Settings.from_env()
-    code = cli.runner(settings, 7820, 2, run=lambda argv, cwd, env: seen.append((argv, cwd, env)) or 0)
+    code = Cli(settings, run=lambda argv, cwd, env: seen.append((argv, cwd, env)) or 0).runner(7820, 2)
     [(argv, cwd, env)] = seen
     assert code == 0 and argv[1:3] == ['-m', 'voice_runner'] and cwd == settings.root
     assert argv[argv.index('--studio') + 1] == f'ws://{settings.host}:{settings.port}/api/runners/link'
@@ -42,7 +42,7 @@ def a_runner_links_to_the_studio():
 
 
 def compose_targets_the_studio_project():
-    argv = cli.compose_argv(Settings.from_env(), 'stop')
+    argv = Cli(Settings.from_env()).compose_argv('stop')
     assert argv[:2] == ['docker', 'compose'] and argv[-1] == 'stop'
     assert (
         Path(argv[argv.index('-f') + 1]) == STUDIO / 'compose.yaml'
@@ -70,7 +70,7 @@ def agents_lists_and_exits_on_errors():
     try:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = cli.main(['studio', 'agents'])
+            code = Cli.main(['studio', 'agents'])
     finally:
         del os.environ['STUDIO_ROOT'], os.environ['STUDIO_AGENTS']
     assert code == 0 and 'desk' in out.getvalue() and '4 steps' in out.getvalue(), out.getvalue()
@@ -93,8 +93,8 @@ def bot_points_the_use_case_at_the_studio():
 
         err = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
-            assert cli.bot(settings, 'desk', ['-t', 'twilio'], run=run) == 0
-            assert cli.bot(settings, 'nowhere', [], run=run) == 2
+            assert Cli(settings, run=run).bot('desk', ['-t', 'twilio']) == 0
+            assert Cli(settings, run=run).bot('nowhere', []) == 2
         argv, cwd, env = seen[0]
         assert len(seen) == 1 and argv == ['uv', 'run', 'bot.py', '-t', 'twilio'], seen
         assert (

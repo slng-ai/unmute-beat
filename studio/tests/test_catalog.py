@@ -1,4 +1,4 @@
-"""Run: uv run python -m tests.test_discovery
+"""Run: uv run python -m tests.test_catalog
 
 Every agent.yaml is read with `core.load` and drawn as its declared moves, nothing inferred.
 The desk fixture (`tests/fixtures/desk`) has one of each edge kind a conversation step makes;
@@ -9,7 +9,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from studio import discovery
+from studio.agents.catalog import Catalog, GraphBuilder
 from studio.settings import Settings
 
 HERE = Path(__file__).parent
@@ -17,7 +17,7 @@ DESK = HERE / 'fixtures' / 'desk'
 
 
 def the_desk_is_drawn_as_declared():
-    agent = discovery.read(DESK / 'agent.yaml', HERE)
+    agent = Catalog(HERE).read(DESK / 'agent.yaml')
     assert agent.status == 'compiled', agent.error
     assert (agent.id, agent.entry, agent.steps, agent.path) == (
         'desk',
@@ -28,13 +28,13 @@ def the_desk_is_drawn_as_declared():
     graph = agent.graph
     assert graph is not None
     nodes = {node.id: node for node in graph.nodes}
-    assert list(nodes) == ['front', 'verify', 'account', 'expert', discovery.END], list(nodes)
+    assert list(nodes) == ['front', 'verify', 'account', 'expert', GraphBuilder.END], list(nodes)
     assert (
         nodes['front'].roles == ['entry']
         and nodes['verify'].roles == ['gate']
         and nodes['expert'].roles == ['consulted']
     )
-    assert nodes[discovery.END].virtual and nodes[discovery.END].kind == 'end'
+    assert nodes[GraphBuilder.END].virtual and nodes[GraphBuilder.END].kind == 'end'
     assert nodes['front'].facts == ['topic'] and nodes['account'].facts is None, 'None is the flow default'
     edges = {(edge.source, edge.target, edge.kind) for edge in graph.edges}
     assert ('front', 'account', 'exit') in edges
@@ -60,7 +60,7 @@ def a_broken_manifest_carries_the_loaders_error():
         shutil.copytree(DESK, folder)
         manifest = folder / 'agent.yaml'
         manifest.write_text(manifest.read_text().replace('{to: account,', '{to: acount,'))
-        agent = discovery.read(manifest, Path(tmp))
+        agent = Catalog(Path(tmp)).read(manifest)
     assert agent.status == 'error' and agent.graph is None
     assert agent.id == 'desk', 'the id is read from YAML even when the flow does not compile'
     assert 'front' in agent.error and 'acount' in agent.error, agent.error
@@ -72,13 +72,13 @@ def one_broken_file_hides_no_other():
         shutil.copytree(DESK, root / 'a' / 'desk')
         (root / 'b' / 'mess').mkdir(parents=True)
         (root / 'b' / 'mess' / 'agent.yaml').write_text('steps: [unclosed')
-        found = discovery.find(root, '*/*/agent.yaml')
+        found = Catalog(root, '*/*/agent.yaml').agents()
     assert [(agent.id, agent.status) for agent in found] == [('desk', 'compiled'), ('mess', 'error')], found
 
 
 def every_use_case_in_the_repository_compiles():
     settings = Settings.from_env()
-    found = {agent.id: agent for agent in discovery.find(settings.root, settings.agents)}
+    found = {agent.id: agent for agent in Catalog(settings.root, settings.agents).agents()}
     assert {'sage-and-stone', 'faro', 'nosh', 'wasla', 'kestrel'} <= set(found), sorted(found)
     broken = {agent.id: agent.error for agent in found.values() if agent.status == 'error'}
     assert not broken, broken
@@ -102,4 +102,4 @@ if __name__ == '__main__':
     a_broken_manifest_carries_the_loaders_error()
     one_broken_file_hides_no_other()
     every_use_case_in_the_repository_compiles()
-    print('discovery ok: declared moves, loader errors, one file at a time, every use case')
+    print('catalog ok: declared moves, loader errors, one file at a time, every use case')

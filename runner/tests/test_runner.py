@@ -33,13 +33,14 @@ os.environ.setdefault('GOOGLE_API_KEY', 'offline-test-placeholder')
 sys.path.insert(0, str(ROOT / 'use-cases' / 'salon'))
 
 import core  # noqa: E402
+from studio.api.app import Studio  # noqa: E402
 from studio.boot import Boot  # noqa: E402
-from studio.server import create_app as studio_app  # noqa: E402
+from studio.runs.store import MemoryStore  # noqa: E402
 from studio.settings import Settings  # noqa: E402
-from studio.store import MemoryStore  # noqa: E402
 from voice_runner.agents import Found  # noqa: E402
-from voice_runner.app import Settings as RunnerSettings  # noqa: E402
-from voice_runner.app import create_app as runner_app  # noqa: E402
+from voice_runner.app import RunnerApp  # noqa: E402
+from voice_runner.runner import Runner  # noqa: E402
+from voice_runner.settings import Settings as RunnerSettings  # noqa: E402
 
 MOVES: list[dict[str, Any]] = []
 """What the scripted model answers next, one reply each; 'Sure.' once they run out."""
@@ -88,7 +89,7 @@ async def main() -> None:
     settings = replace(
         Settings.from_env(), root=ROOT, agents='use-cases/salon/salon/agent.yaml', port=studio_port
     )
-    studio = studio_app(settings, Boot(settings, services=False), store=MemoryStore())
+    studio = Studio(settings, Boot(settings, services=False), store=MemoryStore()).app()
     servers = [await serve(studio, studio_port)]
     entry = salon_entry()
     runners = []
@@ -102,7 +103,7 @@ async def main() -> None:
             warm=False,
             runner_id=name,
         )
-        app = runner_app(rs, found, signals=False)
+        app = RunnerApp(rs, found, signals=False).app()
         runners.append(app.state.runner)
         servers.append(await serve(app, port))
     api = httpx.AsyncClient(base_url=f'http://127.0.0.1:{studio_port}', timeout=30)
@@ -241,8 +242,6 @@ async def a_saved_config_reaches_the_next_call():
     """
     import shutil
     import tempfile
-
-    from voice_runner.app import Runner
 
     folder = Path(tempfile.mkdtemp()) / 'salon'
     shutil.copytree(

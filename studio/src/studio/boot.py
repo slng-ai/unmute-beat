@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from studio import discovery
+from studio.agents.catalog import Agent, Catalog
 from studio.settings import Settings
 
 type Status = Literal['waiting', 'starting', 'healthy', 'failed', 'skipped']
@@ -26,6 +26,8 @@ type Hook = Callable[[], Awaitable[tuple[Status, str]]]
 
 
 class BootStep(BaseModel):
+    """One step of the start-up, as the loading screen draws it."""
+
     id: str
     label: str
     detail: str
@@ -34,37 +36,45 @@ class BootStep(BaseModel):
 
 
 class BootState(BaseModel):
+    """Every step, whether the studio is ready, whether a step failed, and the agents read."""
+
     steps: list[BootStep]
     ready: bool
     failed: bool
     agents: list[str] = []
 
 
-async def run(argv: Sequence[str], env: dict[str, str]) -> tuple[int, str]:
-    """One command, its exit code and its combined output. A missing program is exit 127, as a shell says."""
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *argv, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
-        )
-    except FileNotFoundError:
-        return 127, f'{argv[0]}: not found'
-    out, _ = await process.communicate()
-    return process.returncode or 0, out.decode(errors='replace').strip()
+class Shell:
+    """Commands and probes the start-up runs; tests pass their own."""
 
+    @staticmethod
+    async def run(argv: Sequence[str], env: dict[str, str]) -> tuple[int, str]:
+        """One command, its exit code and its combined output. A missing program is exit 127, as a shell says."""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *argv, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+            )
+        except FileNotFoundError:
+            return 127, f'{argv[0]}: not found'
+        out, _ = await process.communicate()
+        return process.returncode or 0, out.decode(errors='replace').strip()
 
-def answers(url: str) -> bool:
-    """Whether anything answers 2xx or 3xx at `url` within a second."""
-    try:
-        with urllib.request.urlopen(url, timeout=1) as response:
-            return response.status < 400
-    except urllib.error.URLError, TimeoutError, ConnectionError:
-        return False
+    @staticmethod
+    def answers(url: str) -> bool:
+        """Whether anything answers 2xx or 3xx at `url` within a second."""
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                return response.status < 400
+        except urllib.error.URLError, TimeoutError, ConnectionError:
+            return False
 
 
 class Boot:
     """One start-up, run once. `services=False` leaves Docker alone (`up --no-services`).
 
     `probe` asks Jaeger whether it is up, `patience` times with half a second between; tests pass both.
+    `store` opens the store once the services are up and says how it went (`studio.api.app`); `runners`
+    starts the studio's own runner once the agents are read, and waits for it to link.
     """
 
     def __init__(
@@ -72,8 +82,8 @@ class Boot:
         settings: Settings,
         *,
         services: bool = True,
-        runner: Runner = run,
-        probe: Probe = answers,
+        runner: Runner = Shell.run,
+        probe: Probe = Shell.answers,
         patience: int = 40,
         store: Hook | None = None,
         runners: Hook | None = None,
@@ -84,9 +94,7 @@ class Boot:
         self.probe = probe
         self.patience = patience
         self.store = store
-        """Opens the store once the services are up; says how it went (`studio.server`)."""
         self.runners = runners
-        """Starts the studio's own runner once the agents are read, and waits for it to link."""
         pg, redis = settings.pg_port, settings.redis_port
         self.steps = {
             step.id: step
@@ -120,9 +128,10 @@ class Boot:
                 BootStep(id='web', label='web', detail=f':{settings.port} · this page'),
             )
         }
-        self.agents: list[discovery.Agent] = []
+        self.agents: list[Agent] = []
 
     def state(self) -> BootState:
+        """Every step as it stands, and whether the studio is ready or a step failed."""
         steps = list(self.steps.values())
         return BootState(
             steps=steps,
@@ -132,9 +141,11 @@ class Boot:
         )
 
     def _set(self, step: str, status: Status, message: str = '') -> None:
+        """Move one step to a status, with what to say about it."""
         self.steps[step] = self.steps[step].model_copy(update={'status': status, 'message': message})
 
     async def start(self) -> BootState:
+        """Run the sequence once: the engine and the page, the services, the store, the agents, the runner."""
         self._set('engine', 'healthy', 'serving')
         self._set('web', *self._web())
         if self.services and not await self._containers():
@@ -148,6 +159,7 @@ class Boot:
         return self.state()
 
     async def _hook(self, step: str, hook: Hook | None, otherwise: str) -> None:
+        """Run a step the studio supplies, or mark it skipped with why."""
         if hook is None:
             self._set(step, 'skipped', otherwise)
             return
@@ -155,11 +167,13 @@ class Boot:
         self._set(step, *await hook())
 
     def _web(self) -> tuple[Status, str]:
+        """Whether the web app is built."""
         if (self.settings.web_dist / 'index.html').exists():
             return 'healthy', 'built'
         return 'skipped', 'not built: npm --prefix studio/web run build, or slng studio up --dev'
 
     async def _containers(self) -> bool:
+        """Docker, then Postgres, Redis and Jaeger; False when the studio cannot go on without them."""
         self._set('docker', 'starting')
         env = self.settings.compose_env
         code, out = await self.runner(['docker', 'compose', 'version', '--short'], env)
@@ -188,6 +202,7 @@ class Boot:
         return True
 
     async def _traces(self) -> None:
+        """Wait for Jaeger to answer; skip it, not fail, when it stays silent."""
         url = self.settings.jaeger_url
         for _ in range(self.patience):
             if await asyncio.to_thread(self.probe, url):
@@ -203,8 +218,9 @@ class Boot:
         )
 
     async def _agents(self) -> None:
+        """Read every agent, and say how many compiled."""
         self._set('agents', 'starting')
-        self.agents = await asyncio.to_thread(discovery.find, self.settings.root, self.settings.agents)
+        self.agents = await asyncio.to_thread(Catalog(self.settings.root, self.settings.agents).agents)
         broken = [agent.id for agent in self.agents if agent.status == 'error']
         compiled = len(self.agents) - len(broken)
         message = f'{compiled} compiled' + (

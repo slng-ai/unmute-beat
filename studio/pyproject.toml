@@ -9,7 +9,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "pyyaml>=6.0",
-    # `studio.check` compiles each flow on `TestModel`, so its moves are the engine's; no provider is called.
+    # `studio.agents.check` compiles each flow on `TestModel`, so its moves are the engine's; no provider is called.
     "pydantic-ai-slim>=2.46.0",
     # The store (decision 4 of docs/studio/plan.md): every event and snapshot in Redis for a week,
     # copied to Postgres behind it. Only the studio writes either.

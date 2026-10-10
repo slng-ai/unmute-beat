@@ -22,13 +22,17 @@ from loguru import logger
 
 from core.events import _Event
 
-BUFFER = 20_000
-"""Events kept while the studio is unreachable; past it the oldest go first."""
-STATS_EVERY = 2.0
-RETRY_SECONDS = 1.0
-
 
 class Link:
+    """One websocket to the studio, kept up on its own, with events buffered while it is down.
+
+    `BUFFER` events are kept while the studio is unreachable; past it the oldest go first and are counted.
+    """
+
+    BUFFER = 20_000
+    STATS_EVERY = 2.0
+    RETRY_SECONDS = 1.0
+
     def __init__(
         self, url: str, hello: Callable[[], dict[str, Any]], stats: Callable[[], dict[str, Any]]
     ) -> None:
@@ -42,6 +46,7 @@ class Link:
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
+        """Start linking, when there is a studio to link to."""
         if self.url and self._task is None:
             self._task = asyncio.create_task(self._run())
 
@@ -60,13 +65,14 @@ class Link:
         """Queue one event for the studio. Never waits."""
         if not self.url:
             return
-        if len(self._buffer) >= BUFFER:
+        if len(self._buffer) >= self.BUFFER:
             self._buffer.popleft()
             self.dropped += 1
         self._buffer.append(json.dumps({'event': event.model_dump(mode='json')}))
         self._ready.set()
 
     async def _run(self) -> None:
+        """Link, say hello, pump; on a drop, say so once and try again."""
         said_down = False
         while True:
             try:
@@ -81,15 +87,16 @@ class Link:
                     said_down = True
             finally:
                 self.connected = False
-            await asyncio.sleep(RETRY_SECONDS)
+            await asyncio.sleep(self.RETRY_SECONDS)
 
     async def _pump(self, socket: Any) -> None:
+        """Stats every `STATS_EVERY` seconds, and every buffered event as soon as it comes."""
         loop = asyncio.get_running_loop()
         next_stats = 0.0
         while True:
             if loop.time() >= next_stats:
                 await socket.send(json.dumps({'stats': self.stats() | {'dropped': self.dropped}}))
-                next_stats = loop.time() + STATS_EVERY
+                next_stats = loop.time() + self.STATS_EVERY
             while self._buffer:
                 await socket.send(self._buffer[0])
                 self._buffer.popleft()

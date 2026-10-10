@@ -2,6 +2,12 @@
 
 Each call is about one account of the fake ledger, `ACCOUNT_ID` (default `WA-1001`, Layla Haddad):
 Wasla rings the holder, so the bot speaks first.
+
+`LEDGER`: The fake ledger, shared by every call of this process: what one call records, the next one
+sees.
+
+`ACCOUNT_ID`: The account each call is about. ponytail: one per process; a dialer would pass it per
+call.
 """
 
 import os
@@ -12,9 +18,7 @@ from wasla import app
 from wasla.ledger import Ledger
 
 LEDGER = Ledger()
-"""The fake ledger, shared by every call of this process: what one call records, the next one sees."""
 ACCOUNT_ID = os.getenv('ACCOUNT_ID', 'WA-1001')
-"""The account each call is about. ponytail: one per process; a dialer would pass it per call."""
 
 ENTRY = core.Entry(
     id=app.SPEC.id or 'wasla',

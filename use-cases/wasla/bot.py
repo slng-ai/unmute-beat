@@ -34,6 +34,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments, **opti
 
 
 async def bot(runner_args: RunnerArguments) -> None:
+    """Pipecat's runner entry point: the transport it was started with, then one call."""
     transport = await create_transport(runner_args, transport_params)  # ty: ignore[invalid-argument-type]
     await run_bot(transport, runner_args)
 

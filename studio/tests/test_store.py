@@ -15,8 +15,8 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from studio.runs.store import ConfigRow, MemoryStore, RunRow, ServiceStore, Store
 from studio.settings import Settings
-from studio.store import ConfigRow, MemoryStore, RunRow, ServiceStore, Store
 
 
 async def row(store: Store, run: str) -> RunRow:

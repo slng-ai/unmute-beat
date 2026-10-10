@@ -30,43 +30,57 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Opening:
-    """What a launcher knows about a call as it opens it."""
+    """What a launcher knows about a call as it opens it.
+
+    Attributes:
+        caller_id: The number the carrier (or the tester) gives: core fills a `core.Phone` identity
+            with it.
+        key: The call's own key: its session, a carrier's CallSid, or the studio's run id.
+        settle: Which earlier calls are over (by key), for an application that settles what they
+            still owe.
+    """
 
     caller_id: str = ''
-    """The number the carrier (or the tester) gives: core fills a `core.Phone` identity with it."""
     key: str = ''
-    """The call's own key: its session, a carrier's CallSid, or the studio's run id."""
     settle: Callable[[str], bool] | None = None
-    """Which earlier calls are over (by key), for an application that settles what they still owe."""
 
 
 @dataclass(frozen=True)
 class Entry:
-    """One use case, as a launcher needs it. Nothing here runs at import: `flow` compiles when first asked."""
+    """One use case, as a launcher needs it. Nothing here runs at import: `flow` compiles when first asked.
+
+    Attributes:
+        id: The agent's id, the manifest's own `id`: stamped on every span (`slng.agent.id`), named
+            in the studio.
+        name: What its calls' traces are listed by: `salon call`.
+        greeting: The opening line for this call, said by code: a string, or a question its first
+            reply answers.
+        close: Run once the line has dropped and the last turn finished: Faro closes its session
+            here.
+        started: Run in a thread of its own as each call opens: Nosh wakes its place tools here.
+        tts_language: Each speech service's language, unless `SLNG_STT_LANGUAGE` /
+            `SLNG_TTS_LANGUAGE` say otherwise.
+        turn_taking: `tuned`: the salon's measured end-of-turn settings. `pipecat`: Pipecat's own
+            defaults, unchanged (Faro).
+        reminders: Whether a silent caller is asked if they are still there (`core.turn.remind`).
+        manifest: Its `agent.yaml`: a long-lived launcher compiles it again when the config changes
+            (`recompile`).
+        compile: How its manifest is compiled, when not `spec.compile()` as it stands.
+    """
 
     id: str
-    """The agent's id, the manifest's own `id`: stamped on every span (`slng.agent.id`), named in the studio."""
     name: str
-    """What its calls' traces are listed by: `salon call`."""
     flow: Callable[[], StepFlow]
     open: Callable[[StepFlow, Opening], FlowCall[Any]]
     greeting: Callable[[StepFlow, FlowCall[Any]], str | Question]
-    """The opening line for this call, said by code: a string, or a question its first reply answers."""
     close: Callable[[FlowCall[Any]], Awaitable[object]] | None = None
-    """Run once the line has dropped and the last turn finished: Faro closes its session here."""
     started: Callable[[], None] | None = None
-    """Run in a thread of its own as each call opens: Nosh wakes its place tools here."""
     stt_language: str = 'en'
     tts_language: str = 'en'
-    """Each speech service's language, unless `SLNG_STT_LANGUAGE` / `SLNG_TTS_LANGUAGE` say otherwise."""
     turn_taking: Literal['tuned', 'pipecat'] = 'tuned'
-    """`tuned`: the salon's measured end-of-turn settings. `pipecat`: Pipecat's own defaults, unchanged (Faro)."""
     reminders: bool = True
-    """Whether a silent caller is asked if they are still there (`core.turn.remind`)."""
     manifest: Path | None = None
-    """Its `agent.yaml`: a long-lived launcher compiles it again when the config changes (`recompile`)."""
     compile: Callable[[FlowSpec], StepFlow] | None = None
-    """How its manifest is compiled, when not `spec.compile()` as it stands."""
 
     def recompile(self) -> StepFlow:
         """The flow compiled again from the manifest as it is on disk now: its prompts and YAML, not its code.

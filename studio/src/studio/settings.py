@@ -2,56 +2,61 @@
 
 Nothing here reads `.env`. The studio needs no model key to start: agents are read with
 `core.load`, which builds no client. A run that calls a model is the launcher's business.
+`PACKAGE` is `studio/src/studio` (schema.sql lives there) and `STUDIO` is `studio/` (compose.yaml and
+the web app).
 """
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 PACKAGE = Path(__file__).resolve().parent
-"""`studio/src/studio`: schema.sql lives here."""
 STUDIO = PACKAGE.parents[1]
-"""`studio/`: compose.yaml and the web app live here."""
 
 
 @dataclass(frozen=True)
 class Settings:
-    """One studio's ports, paths and service URLs."""
+    """One studio's ports, paths and service URLs.
+
+    `root` is the repository, which agent paths are shown relative to, and `agents` the glob from it that
+    finds every manifest. `port` serves the API under /api and the built web app at /; `web_dev_port` is
+    Vite's dev server under `up --dev`, which sends /api on to `port`. Bots and the engine send their
+    spans to `otlp_port` (OTLP over HTTP, into Jaeger), and the studio reads traces from Jaeger's query
+    API on `jaeger_port`. `runner_port` is the runner `up` starts; more take the next ports. `project` is
+    the compose project name, so `down` finds what `up` started.
+    """
 
     root: Path
-    """The repository root: agent paths are shown relative to it."""
     agents: str = 'use-cases/*/*/agent.yaml'
-    """The glob, from `root`, that finds every manifest."""
     host: str = '127.0.0.1'
     port: int = 7800
-    """The engine: API under /api, the built web app at /."""
     web_dev_port: int = 7802
-    """Vite's dev server, when `up --dev` runs it beside the engine; it sends /api on to `port`."""
     pg_port: int = 5432
     redis_port: int = 6379
     otlp_port: int = 4318
-    """Where bots and the engine send their spans: OTLP over HTTP, into Jaeger."""
     jaeger_port: int = 16686
-    """Jaeger's UI and the query API the studio reads traces from."""
     runner_port: int = 7810
-    """The runner `up` starts; more runners take the next ports (`slng studio runner --port`)."""
     project: str = 'slng-studio'
-    """The compose project name, so `down` finds what `up` started."""
 
     @property
     def compose_file(self) -> Path:
+        """The compose file of the studio's services."""
         return STUDIO / 'compose.yaml'
 
     @property
     def web_dist(self) -> Path:
+        """The built web app."""
         return STUDIO / 'web' / 'dist'
 
     @property
     def database_url(self) -> str:
+        """Postgres, as asyncpg takes it."""
         return f'postgresql://studio:studio@127.0.0.1:{self.pg_port}/studio'
 
     @property
     def redis_url(self) -> str:
+        """Redis, as redis-py takes it."""
         return f'redis://127.0.0.1:{self.redis_port}/0'
 
     @property
@@ -61,6 +66,7 @@ class Settings:
 
     @property
     def jaeger_url(self) -> str:
+        """Jaeger's UI and query API."""
         return f'http://127.0.0.1:{self.jaeger_port}'
 
     @property
@@ -80,17 +86,23 @@ class Settings:
         }
 
     @classmethod
-    def from_env(cls) -> Settings:
+    def from_env(cls) -> Self:
+        """Every setting from its `STUDIO_*` variable, or its default."""
         env = os.environ.get
+
+        def number(name: str) -> int:
+            """A port from `STUDIO_<NAME>`, or its default."""
+            return int(env(f'STUDIO_{name.upper()}', str(getattr(cls, name))))
+
         return cls(
             root=Path(env('STUDIO_ROOT') or STUDIO.parent).resolve(),
             agents=env('STUDIO_AGENTS', cls.agents),
             host=env('STUDIO_HOST', cls.host),
-            port=int(env('STUDIO_PORT', str(cls.port))),
-            web_dev_port=int(env('STUDIO_WEB_DEV_PORT', str(cls.web_dev_port))),
-            pg_port=int(env('STUDIO_PG_PORT', str(cls.pg_port))),
-            redis_port=int(env('STUDIO_REDIS_PORT', str(cls.redis_port))),
-            otlp_port=int(env('STUDIO_OTLP_PORT', str(cls.otlp_port))),
-            jaeger_port=int(env('STUDIO_JAEGER_PORT', str(cls.jaeger_port))),
-            runner_port=int(env('STUDIO_RUNNER_PORT', str(cls.runner_port))),
+            port=number('port'),
+            web_dev_port=number('web_dev_port'),
+            pg_port=number('pg_port'),
+            redis_port=number('redis_port'),
+            otlp_port=number('otlp_port'),
+            jaeger_port=number('jaeger_port'),
+            runner_port=number('runner_port'),
         )

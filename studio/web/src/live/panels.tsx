@@ -1,3 +1,4 @@
+import { ModelView, type Schema } from '../model';
 import type { Intent, Line, Request, RunView } from './useRun';
 
 const TALK = { caller: 'var(--caller)', bot: 'var(--bot)' };
@@ -30,23 +31,6 @@ export function Transcript({ lines, thinking }: { lines: Line[]; thinking?: bool
         </div>
       )}
     </div>
-  );
-}
-
-/** A receipt or arguments as their fields, one per row, every value wrapped inside the box. */
-export function Fields({ value, tone }: { value: unknown; tone?: string }) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return <div className="mono" style={{ fontSize: 11, overflowWrap: 'anywhere', color: tone }}>{short(value)}</div>;
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (!entries.length) return null;
-  return (
-    <dl className="fields">
-      {entries.map(([key, v]) => (
-        <div key={key} style={{ display: 'contents' }}>
-          <dt>{key}</dt>
-          <dd style={{ color: tone }}>{v === null || v === '' ? <span className="dim">—</span> : typeof v === 'object' ? short(v) : String(v)}</dd>
-        </div>
-      ))}
-    </dl>
   );
 }
 
@@ -92,26 +76,16 @@ export function ModelPanel({ requests, last = 6 }: { requests: Request[]; last?:
   );
 }
 
-/** The application's state as it stands, with what the last change touched marked. */
-export function StatePanel({ state, changed }: { state: Record<string, unknown>; changed: string[] }) {
-  const entries = Object.entries(state);
-  if (!entries.length) return <p className="empty">No state yet.</p>;
-  return (
-    <div className="kv">
-      {entries.map(([key, value]) => (
-        <div key={key} style={changed.includes(key) ? { background: '#221f14' } : undefined}>
-          <span style={changed.includes(key) ? { color: 'var(--yellow)' } : undefined}>{key}</span>
-          <span>{value === null ? <span className="dim">—</span> : typeof value === 'object' ? <Fields value={value} /> : String(value)}</span>
-        </div>
-      ))}
-    </div>
-  );
+/** The application's state as it stands, drawn from its model's schema, with what the last change touched marked. */
+export function StatePanel({ state, changed, schema }: { state: Record<string, unknown>; changed: string[]; schema?: Schema }) {
+  if (!Object.keys(state).length) return <p className="empty">No state yet.</p>;
+  return <ModelView value={state} schema={schema} changed={changed} />;
 }
 
 const STATUS_TAG: Record<string, string> = { succeeded: 'tag-ok', rejected: 'tag-bad', unknown: 'tag-bad', withdrawn: '', prepared: 'tag-y', dispatched: 'tag-y' };
 
 /** Every business action: read back (prepared), sent, and how it settled, with its receipt. */
-export function IntentsPanel({ intents }: { intents: Intent[] }) {
+export function IntentsPanel({ intents, receipts = {} }: { intents: Intent[]; receipts?: Record<string, Schema> }) {
   if (!intents.length) return <p className="empty">No business action yet.</p>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -123,11 +97,11 @@ export function IntentsPanel({ intents }: { intents: Intent[] }) {
             <span style={{ flex: '1 1 auto' }} />
             <span className="mono dim" style={{ fontSize: 10 }}>T{i.turn}</span>
           </div>
-          {Object.keys(i.args).length > 0 && <Fields value={i.args} tone="var(--soft)" />}
+          {Object.keys(i.args).length > 0 && <ModelView value={i.args} tone="var(--soft)" />}
           {i.receipt && (
             <>
               <span className="lbl" style={{ marginTop: 4 }}>receipt</span>
-              <Fields value={i.receipt} tone="var(--ok)" />
+              <ModelView value={i.receipt} schema={receipts[i.operation]} tone="var(--ok)" />
             </>
           )}
         </div>

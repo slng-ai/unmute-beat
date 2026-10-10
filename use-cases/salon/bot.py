@@ -10,6 +10,9 @@ see the configured credentials. The `.env` at the repository root is found by wa
     uv run bot.py
 
 Then open http://localhost:7860 and talk.
+
+`FLOW`: The compiled flow every call of this process shares (`salon.app.FLOW`): `server.py` reads it
+here.
 """
 
 # ruff: noqa: E402
@@ -25,7 +28,6 @@ from core.launch import run_call, serve, transport_params
 from salon.entry import DIARY, ENTRY
 
 FLOW = ENTRY.flow()
-"""The compiled flow every call of this process shares (`salon.app.FLOW`): `server.py` reads it here."""
 
 
 async def run_bot(
@@ -43,6 +45,7 @@ __all__ = ['DIARY', 'ENTRY', 'FLOW', 'bot', 'run_bot', 'transport_params']
 
 
 async def bot(runner_args: RunnerArguments) -> None:
+    """Pipecat's runner entry point: the transport it was started with, then one call."""
     transport = await create_transport(runner_args, transport_params)  # ty: ignore[invalid-argument-type]
     await run_bot(transport, runner_args)
 

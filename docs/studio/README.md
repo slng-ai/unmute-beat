@@ -62,10 +62,10 @@ Two rules keep the studio honest:
 
 ### Agents and graphs (built)
 
-`studio.discovery` reads each `agent.yaml` with core's own loader and no model key:
+`studio.agents.catalog` reads each `agent.yaml` with core's own loader and no model key:
 
 - `core.load` reads the shape: the steps and what each declares.
-- `studio.check`, in a process of its own with the use case's folder as its import root, runs
+- `studio.agents.check`, in a process of its own with the use case's folder as its import root, runs
   `FlowSpec.problems()` against the application's code. When there are none it compiles the flow on Pydantic
   AI's `TestModel` (no provider is called) and returns `Flow.moves`: every move the engine allows. Results are
   cached until a file in the folder changes.
@@ -115,7 +115,7 @@ mic stopping.
 The file on disk is the source of truth; every form on the config page edits it. Saving:
 
 1. writes the change to a scratch copy of the agent's folder,
-2. runs `studio.check` on it, and refuses the save unless it comes back empty (the same check a launcher's
+2. runs `studio.agents.check` on it, and refuses the save unless it comes back empty (the same check a launcher's
    compile makes),
 3. writes the files, and stores the new version (a hash of `agent.yaml` and every file it names) in
    `agent_configs`.
@@ -241,7 +241,7 @@ per-agent limits.
 slng studio up
   └─ engine (uvicorn, :7800)           serves /api, core's voice page (/voice-sdk) and the built web app
        ├─ boot: docker compose up --wait postgres redis jaeger, the store, every agent.yaml, a runner
-       ├─ discovery: core.load + studio.check per agent (own process)
+       ├─ catalog: core.load + studio.agents.check per agent (own process)
        └─ runners (voice_runner, :7810 and up): every use case's core.Entry, loaded once
             ├─ text turns and WebRTC calls (the browser's audio goes straight here)
             ├─ each call's events → one websocket per runner → the studio → Redis (7 days) → the page
@@ -250,7 +250,7 @@ slng studio up
 ```
 
 The runners import the use cases (the workspace has one environment), so the engine itself never does:
-it reads agents through `studio.check`, in a process of its own. A runner that fails takes its own calls
+it reads agents through `studio.agents.check`, in a process of its own. A runner that fails takes its own calls
 with it and nothing else. More runners carry more calls at once (`slng studio runner`); the studio places
 each new run on the least busy one that is ready.
 

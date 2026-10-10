@@ -1,4 +1,7 @@
-"""Kestrel, as every launcher needs it (`core.Entry`): its flow, its claims desk, what it says first."""
+"""Kestrel, as every launcher needs it (`core.Entry`): its flow, its claims desk, what it says first.
+
+`CLAIMS`: The fake claims desk, shared by every call of this process.
+"""
 
 from pathlib import Path
 
@@ -7,7 +10,6 @@ from kestrel import app
 from kestrel.claims import Claims
 
 CLAIMS = Claims()
-"""The fake claims desk, shared by every call of this process."""
 
 ENTRY = core.Entry(
     id=app.SPEC.id or 'kestrel',

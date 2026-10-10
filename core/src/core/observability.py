@@ -21,6 +21,7 @@ import os
 import sys
 from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Any
 
 from opentelemetry import trace
 from pydantic_ai import Agent
@@ -40,7 +41,10 @@ _SPEECH = {'stt': ('output', 'user'), 'tts': ('input', 'assistant')}
 """STT turns audio into text and TTS the reverse, so the one string each span carries belongs on the opposite side, and to the opposite speaker in the transcript."""
 
 _CALL: ContextVar[dict[str, str] | None] = ContextVar('langfuse_call', default=None)
-"""The call the code running now belongs to, in Langfuse's own keys minus the prefix.
+"""The call the code running now belongs to, as the attributes stamped on each of its spans.
+
+`langfuse.session.id` and `langfuse.trace.name` for Langfuse; `slng.agent.id` and `slng.run.id` for
+the studio, which asks Jaeger for one agent's traces, or one run's, by them (`studio.metrics`).
 
 Langfuse v4 queries observations, not traces, so anything needed to filter or
 aggregate has to be on every span rather than only the root. Left on the root
@@ -54,6 +58,23 @@ once: `setup` runs at the top of each call's own task, every task the call
 starts inherits it, and `_Speech` binds it to the span's trace when the span
 starts. A process-wide dict gave every span the session of whichever call
 started last.
+"""
+FIRST_CHUNK = 'slng.llm.first_chunk_seconds'
+"""The attribute a model request span gets for its time to first chunk, in seconds, when it streamed."""
+
+try:
+    from pydantic_ai._instrumentation import time_to_first_chunk_ctx as _first_chunk
+except ImportError:
+    _first_chunk = None
+"""Where Pydantic AI keeps a streamed request's time to first chunk while its span is still open.
+
+Pydantic AI records it as a metric, `gen_ai.client.operation.time_to_first_chunk`, never on the
+span, so a trace alone could not say when a core agent's first token came. Its streaming handler
+sets this context variable in the task that then ends the request span, so `_Speech.on_end` reads it
+there and writes it on the span (`FIRST_CHUNK`).
+
+ponytail: a private module of pydantic-ai 2.46. If it moves, the import fails quietly and requests
+carry their duration only, as before; the upgrade is Pydantic AI writing the value on the span.
 """
 _PROVIDER: list[TracerProvider] = []
 """The one tracer provider, built by the first `setup`. OpenTelemetry refuses a second registration."""
@@ -292,7 +313,9 @@ def _agent_words(span) -> dict:
             words['langfuse.observation.input'] = _prompt(system, json.dumps(history[:index] + asked))
         return words
     if operation == 'chat':
-        words = usage.words() if (usage := _Usage.of(attributes)) is not None else {}
+        words: dict[str, Any] = usage.words() if (usage := _Usage.of(attributes)) is not None else {}
+        if _first_chunk is not None and (first := _first_chunk.get()) is not None:
+            words[FIRST_CHUNK] = float(first)
         if said := _said(str(attributes.get('gen_ai.output.messages') or '')):
             words['langfuse.observation.output'] = said
         if given := attributes.get('gen_ai.input.messages'):
@@ -332,8 +355,7 @@ class _Speech(SpanProcessor):
 
     def on_end(self, span) -> None:
         trace_id = span.context.trace_id
-        call = self._calls.get(trace_id) or _CALL.get() or {}
-        words = {f'langfuse.{key}': value for key, value in call.items()}
+        words = dict(self._calls.get(trace_id) or _CALL.get() or {})
         scope = span.instrumentation_scope
         if scope is not None and scope.name.startswith('pipecat'):
             words |= _langfuse_words(span) | self._transcript(span, trace_id)
@@ -390,12 +412,15 @@ class _Speech(SpanProcessor):
         return {}
 
 
-def setup(session: str = '', trace_name: str = '') -> None:
+def setup(session: str = '', trace_name: str = '', *, agent: str = '', run: str = '') -> None:
     """Name the call this task is running, and on first use point the process's tracer at Langfuse.
 
     `session` groups the call's observations and `trace_name` is what its trace
     is listed by; both are stamped on every span rather than the root alone, for
-    the reason `_CALL` gives. Call it at the top of each call's own task, before
+    the reason `_CALL` gives. `agent` (the agent's id, its folder's name) and
+    `run` (the studio's run id) are stamped the same way, as `slng.agent.id`
+    and `slng.run.id`: one runner process carries every agent, so the agent is
+    a span's attribute, never the process's `service.name`. Call it at the top of each call's own task, before
     anything that call traces starts: the provider is built once, the call's
     names are set every time.
 
@@ -414,12 +439,13 @@ def setup(session: str = '', trace_name: str = '') -> None:
     gets instrumented. No atexit flush of our own: Langfuse registers one.
     """
     Agent.instrument_all()
-    call = {}
-    if session:
-        call['session.id'] = session
-    if trace_name:
-        call['trace.name'] = trace_name
-    _CALL.set(call)
+    names = {
+        'langfuse.session.id': session,
+        'langfuse.trace.name': trace_name,
+        'slng.agent.id': agent,
+        'slng.run.id': run,
+    }
+    _CALL.set({key: value for key, value in names.items() if value})
     if _PROVIDER:
         return
     langfuse = bool(os.getenv('LANGFUSE_PUBLIC_KEY'))

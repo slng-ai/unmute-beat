@@ -28,7 +28,7 @@ def an_event_comes_back_as_it_went():
             run='run_1', seq=3, turn=2, t_ms=1500, intent='i_1', operation='book', status='prepared'
         ),
         BotSpeech(
-            run='run_1', seq=4, turn=2, t_ms=1600, segment='s_1', phase='delivered', evidence='twilio mark'
+            run='run_1', seq=4, turn=2, t_ms=1600, segment='s_1', phase='delivered', evidence='mark'
         ),
     ]
     for event in sent:
@@ -55,7 +55,8 @@ def the_schema_names_every_event():
     }
     expected = {
         'run.started', 'caller.speech', 'step.entered', 'model.request', 'model.delta', 'model.decision',
-        'model.ended', 'state.committed', 'intent.changed', 'bot.speech', 'turn.finished', 'run.ended',
+        'model.ended', 'state.committed', 'intent.changed', 'receipt', 'bot.speech', 'turn.finished',
+        'turn.snapshot', 'run.ended',
     }  # fmt: skip
     assert types == expected, types ^ expected
 

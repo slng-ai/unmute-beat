@@ -63,16 +63,32 @@ def create_app(
     def limits() -> metrics.Limits:
         return metrics.Limits()
 
+    def jaeger_down(error: Exception) -> HTTPException:
+        return HTTPException(
+            503,
+            f'Jaeger did not answer at {settings.jaeger_url} ({error}). Start the studio with its services, '
+            f'then start a bot with `slng studio bot <use case>`, which sends its spans to {settings.otlp_endpoint}.',
+        )
+
     @app.get('/api/metrics')
-    def recent(lookback: str = '1h') -> metrics.Metrics:
+    def recent(lookback: str = '1h', agent: str = '') -> metrics.Metrics:
+        """The overview, for every agent or the one named: the agent filter lives here and only here."""
         try:
-            return metrics.collect(settings.jaeger_url, lookback=lookback, fetch=fetch)
+            return metrics.collect(settings.jaeger_url, agent=agent, lookback=lookback, fetch=fetch)
         except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
-            raise HTTPException(
-                503,
-                f'Jaeger did not answer at {settings.jaeger_url} ({error}). Start the studio with its services, '
-                f'then start a bot with `slng studio bot <use case>`, which sends its spans to {settings.otlp_endpoint}.',
-            ) from error
+            raise jaeger_down(error) from error
+
+    @app.get('/api/metrics/runs/{trace}')
+    def one_run(trace: str) -> metrics.Metrics:
+        """One run's view: its own trace, so it names its agent and needs no filter."""
+        try:
+            return metrics.collect_run(settings.jaeger_url, trace, fetch=fetch)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                raise HTTPException(404, f'Jaeger has no trace {trace!r}') from error
+            raise jaeger_down(error) from error
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
+            raise jaeger_down(error) from error
 
     @app.get('/api/events/schema')
     def event_schema() -> dict[str, Any]:

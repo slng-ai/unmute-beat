@@ -23,13 +23,16 @@ def span(sid: str, name: str, start: int, duration: int, parent: str | None = No
     }
 
 
-def call() -> dict:
+def call(
+    trace: str = 'tr1', agent: str = 'sage-and-stone', llm: str = 'gemini-3.5-flash-lite', at: int = 0
+) -> dict:
     """Two turns: a quick one, and one whose LLM request and voice-to-voice are both over their limits."""
-    model = {'gen_ai__request__model': 'gemini-3.5-flash-lite', 'gen_ai__system': 'google'}
-    return {
-        'traceID': 'tr1',
+    model = {'gen_ai__request__model': llm, 'gen_ai__system': 'google'}
+    names = {'slng__agent__id': agent, 'slng__run__id': f'run_{trace}'}
+    found = {
+        'traceID': trace,
         'spans': [
-            span('conv', 'conversation', 0, 20000),
+            span('conv', 'conversation', 0, 20000, **names),
             span('t1', 'turn', 0, 3000, 'conv', turn__number=1, turn__user_bot_latency_seconds=0.91),
             span('s1', 'stt', 180, 120, 't1', gen_ai__request__model='slng-stt', gen_ai__provider__name='slng', metrics__ttfb=0.12),
             span('a1', 'invoke_agent concierge', 300, 560, 't1'),
@@ -39,8 +42,12 @@ def call() -> dict:
             span('s2', 'stt', 4210, 130, None, gen_ai__request__model='slng-stt', gen_ai__provider__name='slng', metrics__ttfb=0.45),
             span('c2', 'chat gemini-3.5-flash-lite', 4340, 1640, 't2', gen_ai__operation__name='chat', **model),
             span('c3', 'chat gemini-3.5-flash-lite', 6000, 400, 't2', gen_ai__operation__name='chat', otel__status_code='ERROR', **model),
+            span('c4', 'chat gemini-3.5-flash-lite', 6500, 900, 't2', gen_ai__operation__name='chat', slng__llm__first_chunk_seconds=0.31, **model),
         ],
     }  # fmt: skip
+    for one in found['spans']:
+        one['startTime'] += at * US
+    return found
 
 
 def a_turn_holds_its_own_requests_and_flags():
@@ -55,15 +62,18 @@ def a_turn_holds_its_own_requests_and_flags():
     assert tts.first_byte_ms == 270
 
     assert second.interrupted and second.level == 'bad'
-    assert [r.span for r in second.requests] == ['s2', 'c2', 'c3'], (
+    assert [r.span for r in second.requests] == ['s2', 'c2', 'c3', 'c4'], (
         'an stt span with no parent joins the turn it falls in'
     )
+    assert second.requests[-1].first_byte_ms == 310, 'a streamed model request has its first chunk from core'
+    assert (first.run, first.agent) == ('run_tr1', 'sage-and-stone'), 'each turn names its run and agent'
+
     said = [f.what for f in second.flags]
     assert said[0] == 'voice to voice 1620 ms', said
     assert (
         'STT first byte 450 ms · slng-stt' in said and 'LLM request 1640 ms · gemini-3.5-flash-lite' in said
     ), said
-    assert 'LLM error · gemini-3.5-flash-lite' in said and '2 LLM requests in one turn' in said, said
+    assert 'LLM error · gemini-3.5-flash-lite' in said and '3 LLM requests in one turn' in said, said
     assert all(f.level == 'bad' for f in second.flags if 'requests in one turn' not in f.what)
 
 
@@ -71,12 +81,26 @@ def per_model_and_summary():
     timings = metrics.turns(call(), metrics.Limits())
     stats = {(s.kind, s.model): s for s in metrics.models(timings)}
     llm = stats[('llm', 'gemini-3.5-flash-lite')]
-    assert (llm.calls, llm.errors, round(llm.over_limit, 2)) == (3, 1, 0.67), llm
-    assert stats[('stt', 'slng-stt')].p50_ms == 285, stats[('stt', 'slng-stt')]
-    whole = metrics.summary(timings)
-    assert (whole.turns, whole.voice_to_voice_avg_ms, whole.over_limit, whole.errors) == (2, 1265, 0.5, 1), (
-        whole
+    assert (llm.requests, llm.runs, llm.errors, round(llm.over_limit, 2)) == (4, 1, 1, 0.5), llm
+    assert llm.first_byte_p90_ms == 310, (
+        'only requests that streamed have a first token: no total passed off as one'
     )
+    assert stats[('stt', 'slng-stt')].first_byte_p90_ms == 417, stats[('stt', 'slng-stt')]
+    assert [s.kind for s in metrics.models(timings)] == ['stt', 'llm', 'tts'], 'STT, LLM, TTS in that order'
+    whole = metrics.summary(timings)
+    assert (whole.turns, whole.runs, whole.over_limit, whole.errors, whole.mixed) == (2, 1, 0.5, 1, []), whole
+    assert whole.voice_to_voice_p90_ms == 1549, whole
+    assert (whole.llm_first_token_p90_ms, whole.tts_first_audio_p90_ms) == (310, 270), whole
+
+
+def a_swapped_model_is_two_rows():
+    """The LLM changed between two runs: the table keeps them apart, and the overview says the period mixes them."""
+    before = metrics.turns(call('tr1', llm='gemini-3.1-flash-lite'), metrics.Limits())
+    after = metrics.turns(call('tr2', llm='gemini-3.5-flash-lite', at=86_400_000), metrics.Limits())
+    rows = [s for s in metrics.models(before + after) if s.kind == 'llm']
+    assert [r.model for r in rows] == ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'], 'oldest first'
+    assert rows[0].last_seen < rows[1].first_seen and all(r.runs == 1 for r in rows), rows
+    assert metrics.summary(before + after).mixed == ['llm']
 
 
 def collect_reads_jaegers_query_api():
@@ -84,19 +108,33 @@ def collect_reads_jaegers_query_api():
 
     def fetch(url: str) -> dict:
         asked.append(url)
-        return {'data': [call()]}
+        return {'data': [call(), call('tr2', agent='faro')]}
 
     found = metrics.collect('http://127.0.0.1:16686', fetch=fetch)
     assert asked == ['http://127.0.0.1:16686/api/traces?service=slng-voice-harness&lookback=1h&limit=50'], (
         asked
     )
-    assert found.summary.turns == 2 and found.models[0].p95_ms >= found.models[-1].p95_ms, (
-        'slowest model first'
+    assert found.scope == 'overview' and found.summary.runs == 2 and found.summary.turns == 4
+    assert {r.agent for r in found.runs} == {'sage-and-stone', 'faro'}
+
+    asked.clear()
+    metrics.collect('http://127.0.0.1:16686', agent='faro', fetch=fetch)
+    assert 'tags=%7B%22slng.agent.id%22%3A+%22faro%22%7D' in asked[0], 'one agent is asked of Jaeger itself'
+
+    def one(url: str) -> dict:
+        asked.append(url)
+        return {'data': [call('tr9', agent='faro')]}
+
+    run = metrics.collect_run('http://127.0.0.1:16686', 'tr9', fetch=one)
+    assert asked[-1] == 'http://127.0.0.1:16686/api/traces/tr9'
+    assert run.scope == 'run' and run.agent == '' and [r.agent for r in run.runs] == ['faro'], (
+        "a run's view has no filter: it names its own agent"
     )
 
 
 if __name__ == '__main__':
     a_turn_holds_its_own_requests_and_flags()
     per_model_and_summary()
+    a_swapped_model_is_two_rows()
     collect_reads_jaegers_query_api()
-    print('metrics ok: turns from spans, flags over limits, per model, summary, the query')
+    print('metrics ok: turns from spans, flags over limits, p90s, per model and swaps, one agent, one run')

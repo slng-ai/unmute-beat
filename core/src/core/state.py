@@ -26,6 +26,7 @@ from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
 
+from core import events as ev
 from core.clock import Today
 from core.locale import ENGLISH, Locale
 
@@ -682,6 +683,10 @@ class CallContext(BaseModel):
     """The call's clock, read once (`today`): a call that crosses midnight keeps its day."""
     _spoken_over: str = PrivateAttr(default='')
     _arrived: dict[str, int] = PrivateAttr(default_factory=dict)
+    _events: ev.Events | None = PrivateAttr(default=None)
+    _via: str = PrivateAttr(default='')
+    """Why the next step change happens, when the code making it knows (`exit`, `consult`, `handback`)."""
+    """This call's listener and its queue (`listen`); None, the default, emits nothing at all."""
     """Each step, and the caller turn in which the caller was last sent to it: the words that asked for it.
 
     Set on a hand-over or a consultation, and for the step a prerequisite
@@ -691,6 +696,58 @@ class CallContext(BaseModel):
     """
     """What the caller missed of the last turn's speech, said as a fact for this turn's runs. See `spoken_over`."""
     """Whether the runtime reports playback (`note_reached`). Without it, speech handed to TTS counts as heard."""
+
+    def listen(self, listener: ev.CallListener, *, run: str = '') -> ev.Events:
+        """Send this call's events to `listener` from now on (`core.events`), under `run` (the call's id by default).
+
+        Returns the queue, whose `started`, `ended` and `close` the opener calls. One listener per call:
+        a second replaces the first.
+        """
+        self._events = ev.Events(listener, run or self._id)
+        return self._events
+
+    @property
+    def events(self) -> ev.Events | None:
+        """The listener's queue, or None when nobody listens."""
+        return self._events
+
+    def emit(self, kind: type[ev._Event], /, **fields: Any) -> None:
+        """One event for the listener, stamped with this turn. Nothing at all when nobody listens."""
+        if self._events is not None:
+            self._events.emit(kind, self._turn, **fields)
+
+    def turn_snapshot(self) -> None:
+        """At the end of a turn, hand the listener what going back to it needs. A plain call has nothing to save."""
+
+    def _emit_intent(self, intent: Intent) -> None:
+        if self._events is None:
+            return
+        try:
+            args = json.loads(intent.args) if intent.args else {}
+        except ValueError:
+            args = {'raw': intent.args}
+        self.emit(
+            ev.IntentChanged,
+            intent=intent.id,
+            operation=intent.operation,
+            status=intent.status,
+            args=args if isinstance(args, dict) else {'value': args},
+        )
+
+    def _emit_speech(
+        self, segment: Spoken, phase: Literal['queued', 'delivered', 'cut'], evidence: str = ''
+    ) -> None:
+        if self._events is None or not (segment.text or phase == 'cut'):
+            return
+        self.emit(
+            ev.BotSpeech,
+            segment=segment.id,
+            phase=phase,
+            text=segment.text,
+            source='model' if segment.kind == 'model' else 'code',
+            reason=segment.origin,
+            evidence=evidence,
+        )
 
     @property
     def locale(self) -> Locale:
@@ -842,6 +899,9 @@ class CallContext(BaseModel):
         for segment in (by_id[i] for i in segment_ids):
             if not segment.interrupted:
                 segment.playback, segment.heard_by, segment.played_at = 'played', 'ack', now
+                self._emit_speech(segment, 'delivered', 'ack')
+            else:
+                self._emit_speech(segment, 'cut')
         return True
 
     def mark_for(self, segment_id: str) -> str:
@@ -903,6 +963,7 @@ class CallContext(BaseModel):
         segment.playback, segment.heard_by, segment.played_at = 'played', 'local' if local else 'mark', at
         segment.simulated = local and self._simulated_playout
         self._log_playback('written' if local else 'played', name, at, segment.proposal)
+        self._emit_speech(segment, 'delivered', 'local' if local else 'mark')
         return True
 
     def note_transport(self, name: str) -> None:
@@ -1454,6 +1515,7 @@ class CallContext(BaseModel):
                 version,
             )
         )
+        self.emit(ev.ReceiptFiled, operation=operation, intent=intent, receipt=receipt, succeeded=succeeded)
 
     def note_version(self, kind: str, resource: str, version: int) -> None:
         """The application says this resource is at `version` (or later): anything filed below it is history."""
@@ -1578,6 +1640,7 @@ class CallContext(BaseModel):
             return held
         made = Intent(id=uuid4().hex, operation=operation, args=args, subject=self.identity())
         self._intents[made.id] = made
+        self._emit_intent(made)
         return made
 
     def set_intent(self, intent_id: str, **changes: Any) -> Intent:
@@ -1587,6 +1650,8 @@ class CallContext(BaseModel):
             raise ValueError(f'intent {intent_id} is {current.status}; it does not change status again')
         updated = Intent.model_validate(current.model_dump() | changes)
         self._intents[intent_id] = updated
+        if updated.status != current.status:
+            self._emit_intent(updated)
         return updated
 
     @property
@@ -1628,6 +1693,7 @@ class CallContext(BaseModel):
             args = args_type.model_validate_json(intent.args)
             self._intents[intent.id] = intent.model_copy(update={'status': 'unknown'})
             self._unknown[intent.id] = (operation, args)
+            self._emit_intent(self._intents[intent.id])
 
     @property
     def departed(self) -> bool:
@@ -1692,6 +1758,7 @@ class CallContext(BaseModel):
             )
             self._proposals.bind(self, segment)
             self._spoken.append(segment)
+            self._emit_speech(segment, 'queued')
 
     def next_segment(self) -> str:
         """One id for the next stretch of speech, stable within this call."""
@@ -1738,6 +1805,7 @@ class CallContext(BaseModel):
         """End the model segment now streaming, if there is one."""
         if self._open is not None and self._open.text:
             self._spoken.append(self._open)
+            self._emit_speech(self._open, 'queued')
         self._open = None
 
     def note_heard(
@@ -1811,6 +1879,8 @@ class CallContext(BaseModel):
             segment.text = text
             segment.interrupted = segment.interrupted or text != segment.generated
             segment.delivery = 'runtime-estimate'
+            if segment.interrupted:
+                self._emit_speech(segment, 'cut')
         return True
 
     def settlement(self) -> Callable[[], Awaitable[object]] | None:
@@ -1912,9 +1982,25 @@ class CallContext(BaseModel):
             if not updates:
                 return
         candidate = self.state.model_dump(exclude=set(updates)) | deepcopy(updates)
+        before = self.state
         self.state = type(self.state).model_validate(
             candidate, extra='forbid', context=self.validation_context()
         )
+        if self._events is not None:
+            self._emit_commit(before)
+
+    def _emit_commit(self, before: VoiceState) -> None:
+        """What a commit changed, for the listener: the step, and the application's facts whole."""
+        if before.agent != self.state.agent:
+            self.emit(ev.StepEntered, step=self.state.agent, source=before.agent, via=self._via)
+        self._via = ''
+        old, new = getattr(before, 'facts', None), getattr(self.state, 'facts', None)
+        if isinstance(new, BaseModel) and old is not new:
+            changed = [
+                name for name in type(new).model_fields if getattr(old, name, None) != getattr(new, name)
+            ]
+            if changed:
+                self.emit(ev.StateCommitted, state=new.model_dump(mode='json'), changed=changed)
 
     def validation_context(self) -> dict[str, Any]:
         """What an application's validators may read (`ValidationInfo.context`) whenever core validates its state.
@@ -2015,6 +2101,8 @@ class CallContext(BaseModel):
         self._spoken_over = missed
         self.heard = ' '.join(p for p in self._pieces if p)
         self._inputs[self._turn] = self.heard
+        if heard:
+            self.emit(ev.CallerSpeech, text=heard, continues_turn=continuing)
         self._interrupted = False
         self._reached = False
         self._leaving = False

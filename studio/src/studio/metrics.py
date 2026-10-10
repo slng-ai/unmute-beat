@@ -4,7 +4,9 @@ A bot that runs with `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at the studio (`core.
 sends its spans to Jaeger. This module reads them back over Jaeger's query API and turns them into
 the numbers a person testing an agent needs to find what is slow: per caller turn, the voice-to-voice
 time and each STT, LLM and TTS request inside it; per model, its p50 and p95 and how often it was over
-its limit. Every number comes from a span; nothing is estimated.
+its limit. Every number comes from a span; nothing is estimated. The overview can be narrowed to one
+agent (`slng.agent.id` on every span, `core.observability.setup(agent=)`); one run's view is its
+own trace, which names its agent. The tiles are p90s; a model swapped between runs is two rows.
 
 Where each number comes from:
 
@@ -12,14 +14,14 @@ Where each number comes from:
                      (voice to voice: the caller stopped, the bot's first audio), `turn.was_interrupted`
     stt, tts         Pipecat's `stt` and `tts` spans: `metrics.ttfb` (seconds), the model and provider
     llm              Pipecat's `llm` spans with `metrics.ttfb`, or Pydantic AI's model requests
-                     (`gen_ai.operation.name` = `chat`), whose spans carry a duration but no first token
+                     (`gen_ai.operation.name` = `chat`) with their duration and, when they streamed, the
+                     time to first chunk core writes on them (`slng.llm.first_chunk_seconds`)
 
 A request belongs to the turn span it descends from, or else to the turn whose time it falls in.
 
-ponytail: the LLM's first token is measured only where Pipecat runs the LLM. The salon's agents run on
-Pydantic AI, so their requests are judged on duration until the engine's own `model.request` and first
-`model.delta` events (studio.events) give the first token. Limits are defaults for every agent; per
-agent limits come with the config page.
+ponytail: a model request that did not stream (no first chunk) is judged on its duration and leaves
+its first-token cell empty rather than passing the total off as one. Limits are defaults for every
+agent.
 """
 
 import json
@@ -28,6 +30,7 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from collections.abc import Callable, Iterable
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -79,10 +82,15 @@ class Request(BaseModel):
     error: bool
     span: str
     level: Level
+    at: int = 0
+    """When it started, in microseconds since the epoch (Jaeger's own unit)."""
+    trace: str = ''
 
 
 class TurnTiming(BaseModel):
     trace: str
+    run: str = ''
+    agent: str = ''
     turn: int
     voice_to_voice_ms: float | None
     interrupted: bool
@@ -92,36 +100,69 @@ class TurnTiming(BaseModel):
 
 
 class ModelStats(BaseModel):
+    """One model's requests, keyed by kind, model and provider: a model swapped between runs is two rows."""
+
     kind: Kind
     model: str
     provider: str
-    calls: int
-    p50_ms: float
-    p95_ms: float
+    requests: int
+    runs: int
+    """How many runs (traces) it served in."""
+    first_byte_p90_ms: float | None
+    """Time to first byte (STT, TTS) or first token (LLM) at p90; None when no request of it says."""
+    total_p90_ms: float
     errors: int
     over_limit: float
     """The share of its requests over the limit, 0 to 1."""
+    first_seen: str
+    last_seen: str
+    """ISO times of its first and last request in the period."""
 
 
 class Summary(BaseModel):
     turns: int
-    voice_to_voice_avg_ms: float | None
-    voice_to_voice_p95_ms: float | None
+    runs: int
+    voice_to_voice_p90_ms: float | None
+    llm_first_token_p90_ms: float | None
+    tts_first_audio_p90_ms: float | None
+    stt_first_byte_p90_ms: float | None
     over_limit: float
     """The share of turns with a flag over its limit, 0 to 1."""
     errors: int
+    mixed: list[Kind] = []
+    """The kinds served by more than one model in the period: their numbers mix models, the table splits them."""
+
+
+class Run(BaseModel):
+    """One run, as Jaeger holds it: one trace, from its conversation span."""
+
+    trace: str
+    run: str
+    """The studio's run id (`slng.run.id`); '' for a bot started outside the studio's runner."""
+    agent: str
+    """`slng.agent.id`; '' for a bot whose launcher did not name its agent."""
+    started: str
+    turns: int
 
 
 class Metrics(BaseModel):
     source: str
+    scope: Literal['overview', 'run']
+    agent: str = ''
+    """The agent the overview is filtered to; '' for every agent. A run's view names its own agent in `runs`."""
     limits: Limits
     summary: Summary
+    runs: list[Run]
     turns: list[TurnTiming]
     models: list[ModelStats]
 
 
 def tags(span: dict[str, Any]) -> dict[str, Any]:
     return {tag['key']: tag.get('value') for tag in span.get('tags', [])}
+
+
+FIRST_CHUNK = 'slng.llm.first_chunk_seconds'
+"""What `core.observability` writes on a Pydantic AI model request that streamed: its time to first chunk."""
 
 
 def _kind(span: dict[str, Any], tag: dict[str, Any]) -> Kind | None:
@@ -135,9 +176,27 @@ def _error(tag: dict[str, Any]) -> bool:
     return tag.get('error') in (True, 'true') or tag.get('otel.status_code') == 'ERROR'
 
 
+def _seconds(value: Any) -> float | None:
+    return float(value) * 1000 if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def labels(trace: dict[str, Any]) -> tuple[str, str]:
+    """The run and agent a trace belongs to: the first span carrying each (every span of a studio run does)."""
+    run = agent = ''
+    for span in trace.get('spans', []):
+        tag = tags(span)
+        run = run or str(tag.get('slng.run.id') or '')
+        agent = agent or str(tag.get('slng.agent.id') or '')
+        if run and agent:
+            break
+    return run, agent
+
+
 def turns(trace: dict[str, Any], limits: Limits) -> list[TurnTiming]:
     """Every caller turn in one Jaeger trace, with its requests and flags, in turn order."""
     spans = {span['spanID']: span for span in trace.get('spans', [])}
+    run, agent = labels(trace)
+    trace_id = trace.get('traceID', '')
     parent = {
         sid: next(
             (ref['spanID'] for ref in span.get('references', []) if ref.get('refType') == 'CHILD_OF'), None
@@ -170,8 +229,9 @@ def turns(trace: dict[str, Any], limits: Limits) -> list[TurnTiming]:
         kind = _kind(span, tag)
         if kind is None or (turn := owner(sid)) is None:
             continue
-        ttfb = tag.get('metrics.ttfb')
-        first = float(ttfb) * 1000 if isinstance(ttfb, int | float) else None
+        first = _seconds(tag.get('metrics.ttfb'))
+        if first is None and kind == 'llm':
+            first = _seconds(tag.get(FIRST_CHUNK))
         duration = span.get('duration', 0) / 1000
         limit = {
             'stt': limits.stt_first_byte,
@@ -189,20 +249,23 @@ def turns(trace: dict[str, Any], limits: Limits) -> list[TurnTiming]:
                 error=error,
                 span=sid,
                 level='bad' if error else limit.level(first if first is not None else duration),
+                at=int(span.get('startTime', 0)),
+                trace=trace_id,
             )
         )
 
     found = []
     for tid, span in turn_spans.items():
         tag = tags(span)
-        latency = tag.get('turn.user_bot_latency_seconds')
-        v2v = float(latency) * 1000 if isinstance(latency, int | float) else None
-        mine = sorted(requests[tid], key=lambda r: spans[r.span].get('startTime', 0))
+        v2v = _seconds(tag.get('turn.user_bot_latency_seconds'))
+        mine = sorted(requests[tid], key=lambda r: r.at)
         flags = _flags(v2v, mine, limits)
         levels = [f.level for f in flags]
         found.append(
             TurnTiming(
-                trace=trace.get('traceID', ''),
+                trace=trace_id,
+                run=run,
+                agent=agent,
                 turn=int(tag.get('turn.number') or 0),
                 voice_to_voice_ms=v2v,
                 interrupted=bool(tag.get('turn.was_interrupted')),
@@ -257,44 +320,82 @@ def _flags(v2v: float | None, requests: list[Request], limits: Limits) -> list[F
     return flags
 
 
-def _p(values: list[float], q: float) -> float:
+def p90(values: list[float]) -> float | None:
+    """The 90th percentile, inclusive, or None for no values: the number a tile shows."""
+    if not values:
+        return None
     if len(values) == 1:
         return values[0]
-    return statistics.quantiles(values, n=100, method='inclusive')[round(q * 100) - 1]
+    return statistics.quantiles(values, n=10, method='inclusive')[8]
+
+
+def _iso(microseconds: int) -> str:
+    return datetime.fromtimestamp(microseconds / 1e6, UTC).isoformat(timespec='seconds')
 
 
 def models(timings: Iterable[TurnTiming]) -> list[ModelStats]:
-    """Per kind and model: calls, p50 and p95 (first byte where known, else duration), errors, share over limit."""
+    """Per kind, model and provider: requests, runs, first byte and total at p90, errors, share over limit.
+
+    Keyed by the model each span names, so swapping a model between runs gives two rows, each with
+    the period it covers (`first_seen`, `last_seen`), rather than one number mixing the two.
+    """
     grouped: dict[tuple[Kind, str, str], list[Request]] = defaultdict(list)
     for t in timings:
         for r in t.requests:
             grouped[(r.kind, r.model, r.provider)].append(r)
     stats = []
     for (kind, model, provider), rs in grouped.items():
-        values = [r.first_byte_ms if r.first_byte_ms is not None else r.duration_ms for r in rs]
+        firsts = [r.first_byte_ms for r in rs if r.first_byte_ms is not None]
         stats.append(
             ModelStats(
                 kind=kind,
                 model=model,
                 provider=provider,
-                calls=len(rs),
-                p50_ms=_p(values, 0.5),
-                p95_ms=_p(values, 0.95),
+                requests=len(rs),
+                runs=len({r.trace for r in rs}),
+                first_byte_p90_ms=p90(firsts),
+                total_p90_ms=p90([r.duration_ms for r in rs]) or 0,
                 errors=sum(r.error for r in rs),
                 over_limit=sum(r.level == 'bad' for r in rs) / len(rs),
+                first_seen=_iso(min(r.at for r in rs)),
+                last_seen=_iso(max(r.at for r in rs)),
             )
         )
-    return sorted(stats, key=lambda s: -s.p95_ms)
+    order = {'stt': 0, 'llm': 1, 'tts': 2}
+    return sorted(stats, key=lambda s: (order[s.kind], s.first_seen))
 
 
 def summary(timings: list[TurnTiming]) -> Summary:
-    v2v = [t.voice_to_voice_ms for t in timings if t.voice_to_voice_ms is not None]
+    requests = [r for t in timings for r in t.requests]
+
+    def first(kind: Kind) -> float | None:
+        return p90([r.first_byte_ms for r in requests if r.kind == kind and r.first_byte_ms is not None])
+
+    served: dict[Kind, set[str]] = defaultdict(set)
+    for r in requests:
+        served[r.kind].add(r.model)
     return Summary(
         turns=len(timings),
-        voice_to_voice_avg_ms=statistics.fmean(v2v) if v2v else None,
-        voice_to_voice_p95_ms=_p(v2v, 0.95) if v2v else None,
+        runs=len({t.trace for t in timings}),
+        voice_to_voice_p90_ms=p90([t.voice_to_voice_ms for t in timings if t.voice_to_voice_ms is not None]),
+        llm_first_token_p90_ms=first('llm'),
+        tts_first_audio_p90_ms=first('tts'),
+        stt_first_byte_p90_ms=first('stt'),
         over_limit=sum(t.level == 'bad' for t in timings) / len(timings) if timings else 0,
-        errors=sum(r.error for t in timings for r in t.requests),
+        errors=sum(r.error for r in requests),
+        mixed=[kind for kind in ('stt', 'llm', 'tts') if len(served[kind]) > 1],
+    )
+
+
+def run_of(trace: dict[str, Any], timings: list[TurnTiming]) -> Run:
+    run, agent = labels(trace)
+    started = min((span.get('startTime', 0) for span in trace.get('spans', [])), default=0)
+    return Run(
+        trace=trace.get('traceID', ''),
+        run=run,
+        agent=agent,
+        started=_iso(started),
+        turns=len(timings),
     )
 
 
@@ -306,23 +407,65 @@ def fetch_json(url: str) -> dict[str, Any]:
         return json.load(response)
 
 
+def _read(
+    source: str, scope: Literal['overview', 'run'], agent: str, traces: list[dict[str, Any]], limits: Limits
+) -> Metrics:
+    per_trace = [(trace, turns(trace, limits)) for trace in traces]
+    timings = [t for _, found in per_trace for t in found]
+    runs = sorted((run_of(trace, found) for trace, found in per_trace), key=lambda r: r.started, reverse=True)
+    return Metrics(
+        source=source,
+        scope=scope,
+        agent=agent,
+        limits=limits,
+        summary=summary(timings),
+        runs=runs,
+        turns=timings,
+        models=models(timings),
+    )
+
+
 def collect(
     jaeger: str,
     *,
+    agent: str = '',
     service: str = 'slng-voice-harness',
     lookback: str = '1h',
     limit: int = 50,
     limits: Limits | None = None,
     fetch: Fetch = fetch_json,
 ) -> Metrics:
-    """The recent traces of `service` in Jaeger, as turns, per-model stats and a summary.
+    """The overview: recent traces of `service` in Jaeger, for one agent or all, as turns, per-model stats and a summary.
 
-    Raises `urllib.error.URLError` (or what `fetch` raises) when Jaeger does not answer.
+    One agent is asked of Jaeger itself (`tags={"slng.agent.id": agent}`), so a busy runner's other
+    agents never crowd the chosen one out of `limit`. Raises `urllib.error.URLError` (or what
+    `fetch` raises) when Jaeger does not answer.
     """
     limits = limits or Limits()
-    query = urllib.parse.urlencode({'service': service, 'lookback': lookback, 'limit': limit})
-    found = fetch(f'{jaeger}/api/traces?{query}')
-    timings = [t for trace in found.get('data') or [] for t in turns(trace, limits)]
-    return Metrics(
-        source=jaeger, limits=limits, summary=summary(timings), turns=timings, models=models(timings)
-    )
+    query = {'service': service, 'lookback': lookback, 'limit': limit}
+    if agent:
+        query['tags'] = json.dumps({'slng.agent.id': agent})
+    found = fetch(f'{jaeger}/api/traces?{urllib.parse.urlencode(query)}')
+    return _read(jaeger, 'overview', agent, found.get('data') or [], limits)
+
+
+def collect_run(
+    jaeger: str, trace: str, *, limits: Limits | None = None, fetch: Fetch = fetch_json
+) -> Metrics:
+    """One run's view: its trace alone, which names its own agent. Raises as `collect` does."""
+    found = fetch(f'{jaeger}/api/traces/{urllib.parse.quote(trace)}')
+    return _read(jaeger, 'run', '', found.get('data') or [], limits or Limits())
+
+
+def trace_of_run(
+    jaeger: str,
+    run: str,
+    *,
+    service: str = 'slng-voice-harness',
+    lookback: str = '24h',
+    fetch: Fetch = fetch_json,
+) -> str:
+    """The trace id of a studio run (`slng.run.id`), or '' when Jaeger has none for it yet."""
+    query = {'service': service, 'lookback': lookback, 'limit': 1, 'tags': json.dumps({'slng.run.id': run})}
+    found = fetch(f'{jaeger}/api/traces?{urllib.parse.urlencode(query)}').get('data') or []
+    return str(found[0].get('traceID', '')) if found else ''

@@ -71,7 +71,7 @@ def create_app(
             raise HTTPException(
                 503,
                 f'Jaeger did not answer at {settings.jaeger_url} ({error}). Start the studio with its services, '
-                f'and run a bot with OTEL_EXPORTER_OTLP_ENDPOINT={settings.otlp_endpoint}.',
+                f'then start a bot with `slng studio bot <use case>`, which sends its spans to {settings.otlp_endpoint}.',
             ) from error
 
     @app.get('/api/events/schema')

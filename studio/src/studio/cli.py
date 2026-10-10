@@ -4,20 +4,28 @@
     slng studio down [--volumes]                         stop and remove the containers (and the data)
     slng studio status                                   what is running
     slng studio agents                                   every agent.yaml and whether it compiles, offline
+    slng studio bot <use case> [bot.py args]             run that use case's bot, its traces sent to the studio
 
 `up` starts the engine first and lets it bring the rest up, so the browser shows the loading
 screen from the first second (`studio.boot`). Containers are stopped, not removed, on ctrl+c:
 the runs stay in the `slng-studio_pg` volume until `down --volumes`.
+
+`bot` is how a call's timings reach the studio with nothing to set by hand: it runs the use case's
+own `bot.py` with `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at the studio's collector, which
+`core.observability.setup` reads. Once the studio runs calls itself (phase 2), the Live page's mic
+bar does the same, and this command stays for transports the page does not own (`-t twilio`).
 """
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import urllib.error
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
+from pathlib import Path
 
 from studio import discovery
 from studio.settings import STUDIO, Settings
@@ -39,6 +47,10 @@ def parser() -> argparse.ArgumentParser:
 
     commands.add_parser('status', help='what is running')
     commands.add_parser('agents', help='every agent.yaml and whether it compiles')
+
+    bot = commands.add_parser('bot', help="run a use case's bot with its traces sent to the studio")
+    bot.add_argument('use_case', help='a folder under use-cases/ with a bot.py, e.g. salon')
+    bot.add_argument('bot_args', nargs=argparse.REMAINDER, help='passed on to bot.py, e.g. -t twilio')
     return top
 
 
@@ -56,6 +68,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return status(settings)
         case 'agents':
             return agents(settings)
+        case 'bot':
+            return bot(settings, args.use_case, args.bot_args)
     return 2
 
 
@@ -98,7 +112,7 @@ def up(settings: Settings, *, dev: bool, services: bool) -> int:
     print(f'\n  slng studio  →  {url}\n  ctrl+c stops everything\n', flush=True)
     if services:
         print(
-            f'  timings: run a bot with OTEL_EXPORTER_OTLP_ENDPOINT={settings.otlp_endpoint}\n'
+            f'  timings: start a bot with `slng studio bot salon` (any use case), then open Metrics\n'
             f'  traces in Jaeger at http://localhost:{settings.jaeger_port}\n',
             flush=True,
         )
@@ -138,6 +152,55 @@ def agents(settings: Settings) -> int:
     if not found:
         print(f'no agent.yaml under {settings.root} matching {settings.agents}')
     return 1 if any(agent.status == 'error' for agent in found) else 0
+
+
+Run = Callable[[list[str], Path, dict[str, str]], int]
+"""Runs one command in a folder with an environment and returns its exit code; tests pass their own."""
+
+
+def _run(argv: list[str], cwd: Path, env: dict[str, str]) -> int:
+    """The child shares the terminal, so ctrl+c reaches it too; this waits for it to finish stopping."""
+    child = subprocess.Popen(argv, cwd=cwd, env=env)
+    try:
+        return child.wait()
+    except KeyboardInterrupt:
+        return child.wait()
+
+
+def bot(settings: Settings, use_case: str, bot_args: Sequence[str], run: Run = _run) -> int:
+    """Start `use-cases/<use_case>/bot.py` with its spans going to the studio's collector.
+
+    A collector named in the root `.env` still wins, since every `bot.py` loads it with
+    `override=True`; that is said rather than hidden. So is a bot not built on core (the two
+    baselines), whose own tracing sends nothing to a local collector. A studio that is not up does
+    not stop the bot: the call works, and the warning says its timings will be missing.
+    """
+    from studio.boot import answers
+
+    folders = settings.root / 'use-cases'
+    folder = folders / use_case
+    if not (folder / 'bot.py').exists():
+        known = sorted(path.parent.name for path in folders.glob('*/bot.py'))
+        print(f'no bot.py in {folder}. Use cases with one: {", ".join(known) or "none"}', file=sys.stderr)
+        return 2
+    if not any(folder.glob('*/agent.yaml')):
+        print(
+            f'warning: {use_case} is not built on core, so it sends no traces to the studio.', file=sys.stderr
+        )
+    dotenv = settings.root / '.env'
+    if dotenv.exists() and any(
+        line.strip().startswith('OTEL_EXPORTER_OTLP_ENDPOINT=') for line in dotenv.read_text().splitlines()
+    ):
+        print(f'warning: {dotenv} sets OTEL_EXPORTER_OTLP_ENDPOINT, and bot.py lets it win.', file=sys.stderr)
+    if not answers(settings.jaeger_url):
+        print(
+            f'warning: the studio is not collecting traces (nothing at {settings.jaeger_url}). '
+            "Start it with `slng studio up`, or this call's timings will be missing.",
+            file=sys.stderr,
+        )
+    print(f'  {use_case}: traces to {settings.otlp_endpoint}, timings on the Metrics page\n', flush=True)
+    env = {**os.environ, 'OTEL_EXPORTER_OTLP_ENDPOINT': settings.otlp_endpoint}
+    return run(['uv', 'run', 'bot.py', *bot_args], folder, env)
 
 
 def _count(n: int, word: str) -> str:

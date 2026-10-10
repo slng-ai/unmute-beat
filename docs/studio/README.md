@@ -197,9 +197,10 @@ are judged on duration (the "LLM request" limit) until the engine's own `model.r
 `model.delta` events give the first token (phase 2).
 
 **How it gets there.** `slng studio up` starts Jaeger beside Postgres and Redis (127.0.0.1 only: OTLP in
-on 4318, its UI on 16686, traces kept in memory). A bot sends its spans there when started with
-`OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`: `core.observability.setup` adds an OTLP exporter for
-it, with or without Langfuse, batching spans off the turn's path. `studio.metrics` reads Jaeger's query
+on 4318, its UI on 16686, traces kept in memory). `slng studio bot salon` (any use case on core) starts that use case's
+`bot.py` with `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318` already set, so nothing is typed by hand:
+`core.observability.setup` adds an OTLP exporter for it, with or without Langfuse, batching spans off the
+turn's path. Once calls run in the studio (phase 2), the Live page's mic bar starts them the same way. `studio.metrics` reads Jaeger's query
 API, puts each request in the turn it belongs to, and flags it against its limit.
 
 **What counts as slow** (defaults for every agent; per agent with the config page later):

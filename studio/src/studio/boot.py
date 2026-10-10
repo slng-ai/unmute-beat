@@ -168,7 +168,7 @@ class Boot:
                 self._set(
                     'traces',
                     'healthy',
-                    f'send spans with OTEL_EXPORTER_OTLP_ENDPOINT={self.settings.otlp_endpoint}',
+                    f'collecting at {self.settings.otlp_endpoint}: start a bot with `slng studio bot <use case>`',
                 )
                 return
             await asyncio.sleep(0.5)

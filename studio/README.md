@@ -24,12 +24,17 @@ uv run --directory studio slng studio up        # http://localhost:7800, ctrl+c 
 | `slng studio down [--volumes]` | Removes the containers, and with `--volumes` every stored run. |
 | `slng studio status` | The containers and the engine. |
 | `slng studio agents` | Every `agent.yaml` and whether the loader accepts it, offline. Exit 1 if any does not. |
+| `slng studio bot <use case>` | Runs that use case's `bot.py` with its traces sent to the studio. |
 
-To see timings, run any bot with its spans sent to the studio's Jaeger, then open Metrics:
+To see timings, start a bot from a second terminal, make a call, then open Metrics:
 
 ```bash
-cd use-cases/salon && OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 uv run bot.py
+uv run --directory studio slng studio bot salon    # any use case on core; extra words go to bot.py (-t twilio)
 ```
+
+It runs `use-cases/salon/bot.py` with its spans already pointed at the studio's Jaeger
+(`OTEL_EXPORTER_OTLP_ENDPOINT`), and warns when the studio is not up, when the root `.env` names another
+collector, or when the use case is a baseline with no core tracing.
 
 Settings come from the environment: `STUDIO_PORT` (7800), `STUDIO_PG_PORT` (5432), `STUDIO_REDIS_PORT`
 (6379), `STUDIO_OTLP_PORT` (4318), `STUDIO_JAEGER_PORT` (16686), `STUDIO_AGENTS` (`use-cases/*/*/agent.yaml`), `STUDIO_ROOT` (the repository). Every port binds to

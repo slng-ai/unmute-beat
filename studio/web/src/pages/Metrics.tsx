@@ -75,7 +75,7 @@ function Loaded({ m }: { m: Metrics }) {
       </div>
       {s.turns === 0 && (
         <p className="empty" style={{ padding: 24 }}>
-          Jaeger answers but has no turns from the last hour. Run a bot with OTEL_EXPORTER_OTLP_ENDPOINT set to the studio's collector (printed by slng studio up).
+          Jaeger answers but has no turns from the last hour. Start a bot with slng studio bot salon (any use case), make a call, and its turns show here.
         </p>
       )}
       <div className="metrics-body">

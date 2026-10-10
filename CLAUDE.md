@@ -109,7 +109,7 @@ that member's folder.
 
 | Path | Owns |
 |---|---|
-| `src/studio/cli.py` | `slng studio up` (`--dev`, `--no-services`, `--port`), `down [--volumes]`, `status`, `agents` (offline, exit 1 if any manifest is refused) |
+| `src/studio/cli.py` | `slng studio up` (`--dev`, `--no-services`, `--port`), `down [--volumes]`, `status`, `agents` (offline, exit 1 if any manifest is refused), `bot <use case>` (its `bot.py` with `OTEL_EXPORTER_OTLP_ENDPOINT` at the studio) |
 | `src/studio/boot.py`, `server.py` | the start-up sequence the loading screen polls (`/api/boot`: Docker, then `docker compose up --wait` on Postgres, Redis and Jaeger, Jaeger asked over HTTP and skipped, not fatal, when silent, then the agents), and the FastAPI app serving `/api` and the built page; `/api/runs` is a 501 until runs are recorded, `/api/metrics` a 503 when Jaeger does not answer |
 | `src/studio/metrics.py` | timings from Jaeger's query API: each Pipecat `turn` span (`turn.user_bot_latency_seconds`) with the `stt`, `tts`, `llm` spans (`metrics.ttfb`) and Pydantic AI model requests (`gen_ai.operation.name` = `chat`, duration only) under or during it; `Limits` (voice to voice 1.0 / 1.5 s and so on) flag what is slow; per-model p50, p95, errors |
 | `src/studio/discovery.py`, `check.py` | each agent: `core.load` for its steps; `studio.check` in a subprocess with the use case importable runs `FlowSpec.problems()` and, when clean, compiles on `TestModel` and returns `Flow.moves`, so every line is the engine's own move, labelled by why (exit, consult, handback, prerequisite, return, route, then, error, unknown, take_back), plus one added `$end` for goodbyes; groups of steps that all hand over to one another; cached per folder state |
@@ -159,6 +159,7 @@ uv run python -m tests                                   # this folder's modules
 uv run ruff format . && uv run ruff check .              # from the root: every member
 for d in core studio use-cases/*; do uv run --directory $d ty check .; done
 uv run --directory studio slng studio up                 # the studio, http://localhost:7800 (build studio/web first)
+uv run --directory studio slng studio bot salon          # a bot whose timings show on the studio's Metrics page
 npm --prefix studio/web ci && npm --prefix studio/web run build   # the studio's page
 cd use-cases/concierge-tools && uv run python -m coval_sim plan --agency salon --agent <ID> --test-set <ID> --persona <ID> --max-simulations 1 --label <session> --profile <speech-profile.env>   # then `run`, billable
 cd use-cases/concierge-tools && uv run python -m coval_sim serve --agency salon --profile <speech-profile.env>   # one bot and tunnel for several jobs

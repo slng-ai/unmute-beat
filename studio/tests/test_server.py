@@ -41,7 +41,7 @@ def the_api_serves_agents_and_says_what_is_missing():
         limits = client.get('/api/metrics/limits').json()
         assert limits['voice_to_voice'] == {'slow': 1000, 'bad': 1500}, limits
         silent = client.get('/api/metrics')
-        assert silent.status_code == 503 and 'OTEL_EXPORTER_OTLP_ENDPOINT' in silent.json()['detail'], (
+        assert silent.status_code == 503 and 'slng studio bot' in silent.json()['detail'], (
             'no Jaeger is said, never shown as no slow turns'
         )
 

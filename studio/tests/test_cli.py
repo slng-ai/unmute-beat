@@ -23,6 +23,22 @@ def the_commands_parse():
     assert cli.parser().parse_args(['studio', 'agents']).command == 'agents'
     bot = cli.parser().parse_args(['studio', 'bot', 'salon', '-t', 'twilio'])
     assert (bot.command, bot.use_case, bot.bot_args) == ('bot', 'salon', ['-t', 'twilio'])
+    assert not up.no_runner and cli.parser().parse_args(['studio', 'up', '--no-runner']).no_runner
+    more = cli.parser().parse_args(['studio', 'runner', '--port', '7820', '--max-calls', '2'])
+    assert (more.command, more.runner_port, more.max_calls) == ('runner', 7820, 2)
+
+
+def a_runner_links_to_the_studio():
+    seen: list[tuple[list[str], Path, dict[str, str]]] = []
+    settings = Settings.from_env()
+    code = cli.runner(settings, 7820, 2, run=lambda argv, cwd, env: seen.append((argv, cwd, env)) or 0)
+    [(argv, cwd, env)] = seen
+    assert code == 0 and argv[1:3] == ['-m', 'voice_runner'] and cwd == settings.root
+    assert argv[argv.index('--studio') + 1] == f'ws://{settings.host}:{settings.port}/api/runners/link'
+    assert (
+        argv[argv.index('--port') + 1] == '7820'
+        and env['OTEL_EXPORTER_OTLP_ENDPOINT'] == settings.otlp_endpoint
+    )
 
 
 def compose_targets_the_studio_project():
@@ -91,6 +107,7 @@ def bot_points_the_use_case_at_the_studio():
 
 if __name__ == '__main__':
     the_commands_parse()
+    a_runner_links_to_the_studio()
     compose_targets_the_studio_project()
     every_port_stays_on_this_machine()
     agents_lists_and_exits_on_errors()

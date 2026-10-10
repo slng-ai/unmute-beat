@@ -27,9 +27,7 @@ def an_event_comes_back_as_it_went():
         IntentChanged(
             run='run_1', seq=3, turn=2, t_ms=1500, intent='i_1', operation='book', status='prepared'
         ),
-        BotSpeech(
-            run='run_1', seq=4, turn=2, t_ms=1600, segment='s_1', phase='delivered', evidence='mark'
-        ),
+        BotSpeech(run='run_1', seq=4, turn=2, t_ms=1600, segment='s_1', phase='delivered', evidence='mark'),
     ]
     for event in sent:
         back = EVENT.validate_json(event.model_dump_json())

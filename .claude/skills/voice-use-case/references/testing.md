@@ -41,6 +41,7 @@ class Script:
         """Each request takes the next move: ('call', tool, args) or ('calls', [(tool, args), ...])."""
         ...
 
+
 async def turn(flow, call, script, words, *moves, heard=True) -> list[str]:
     """One caller turn. Every segment reaches the caller unless `heard` is False."""
     script.moves = list(moves)
@@ -62,8 +63,8 @@ A move is the decision the model makes. On a structured node:
 ```python
 ('call', 'reply', {'say': 'We open at nine.', 'update': {'item': 'mug'}})
 ('call', 'record', {'update': {'delivery_day': '2026-10-02'}})
-('call', 'place_order', {'update': {'item': 'mug'}})     # first call: code reads it back
-('call', 'place_order')                                    # on a heard yes: it runs
+('call', 'place_order', {'update': {'item': 'mug'}})  # first call: code reads it back
+('call', 'place_order')  # on a heard yes: it runs
 ('call', 'hand_over', {'to': 'returns', 'because': 'a return'})
 ('call', 'reply', {'say': 'What would you like instead?', 'decline': True})
 ('call', 'done', {'answer': 'Cotton, machine wash at 30.'})

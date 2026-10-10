@@ -13,6 +13,7 @@ MODULES = (
     'tests.test_boot',
     'tests.test_server',
     'tests.test_cli',
+    'tests.test_editor',
 )
 
 

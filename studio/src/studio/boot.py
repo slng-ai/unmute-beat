@@ -22,6 +22,7 @@ from studio.settings import Settings
 type Status = Literal['waiting', 'starting', 'healthy', 'failed', 'skipped']
 type Runner = Callable[[Sequence[str], dict[str, str]], Awaitable[tuple[int, str]]]
 type Probe = Callable[[str], bool]
+type Hook = Callable[[], Awaitable[tuple[Status, str]]]
 
 
 class BootStep(BaseModel):
@@ -74,12 +75,18 @@ class Boot:
         runner: Runner = run,
         probe: Probe = answers,
         patience: int = 40,
+        store: Hook | None = None,
+        runners: Hook | None = None,
     ) -> None:
         self.settings = settings
         self.services = services
         self.runner = runner
         self.probe = probe
         self.patience = patience
+        self.store = store
+        """Opens the store once the services are up; says how it went (`studio.server`)."""
+        self.runners = runners
+        """Starts the studio's own runner once the agents are read, and waits for it to link."""
         pg, redis = settings.pg_port, settings.redis_port
         self.steps = {
             step.id: step
@@ -99,7 +106,17 @@ class Boot:
                     label='engine',
                     detail=f':{settings.port}/api · runs turns on slng-voice-core',
                 ),
+                BootStep(
+                    id='store',
+                    label='store',
+                    detail='every event and snapshot: Redis for 7 days, Postgres behind',
+                ),
                 BootStep(id='agents', label='agents', detail=f'{settings.agents} · core.load, no model'),
+                BootStep(
+                    id='runner',
+                    label='runner',
+                    detail=f':{settings.runner_port} · carries calls: every agent, voice and text',
+                ),
                 BootStep(id='web', label='web', detail=f':{settings.port} · this page'),
             )
         }
@@ -125,8 +142,17 @@ class Boot:
         if not self.services:
             for step in ('docker', 'postgres', 'redis', 'traces'):
                 self._set(step, 'skipped', 'started with --no-services')
+        await self._hook('store', self.store, 'runs are kept in memory until the studio stops')
         await self._agents()
+        await self._hook('runner', self.runners, 'no runner started: `slng studio runner` starts one')
         return self.state()
+
+    async def _hook(self, step: str, hook: Hook | None, otherwise: str) -> None:
+        if hook is None:
+            self._set(step, 'skipped', otherwise)
+            return
+        self._set(step, 'starting')
+        self._set(step, *await hook())
 
     def _web(self) -> tuple[Status, str]:
         if (self.settings.web_dist / 'index.html').exists():

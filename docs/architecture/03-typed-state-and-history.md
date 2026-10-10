@@ -48,10 +48,18 @@ class SalonState(BaseModel):
     customer_phone: core.Phone | None = None
     customer: Customer | None = None
     """Set only by the lookup's receipt, for the number it looked up."""
-    service: Service | None = Field(None, description='The service the caller wants: haircut, hair-color or blowout.')
-    booking_day: Annotated[date, core.NotPast] | None = Field(None, description='The date the caller asked for, ...')
-    slot: str | None = Field(None, description='The id of the time the caller picked, from the times on offer.')
-    booking_id: str | None = Field(None, description='The id of the booking they hold that they want moved or cancelled, ...')
+    service: Service | None = Field(
+        None, description='The service the caller wants: haircut, hair-color or blowout.'
+    )
+    booking_day: Annotated[date, core.NotPast] | None = Field(
+        None, description='The date the caller asked for, ...'
+    )
+    slot: str | None = Field(
+        None, description='The id of the time the caller picked, from the times on offer.'
+    )
+    booking_id: str | None = Field(
+        None, description='The id of the booking they hold that they want moved or cancelled, ...'
+    )
 ```
 
 1. **Every field has a default.** A call starts empty.

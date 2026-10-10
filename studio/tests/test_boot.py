@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from studio.boot import Boot
+from studio.boot import Boot, Status
 from studio.settings import Settings
 
 DESK = Path(__file__).parent / 'fixtures'
@@ -34,14 +34,29 @@ def statuses(boot: Boot) -> dict[str, str]:
 
 def a_healthy_start_reads_the_agents():
     runner, seen = scripted({'--short': (0, '2.29.7')})
-    boot = Boot(SETTINGS, runner=runner, probe=lambda url: url == SETTINGS.jaeger_url)
+    order: list[str] = []
+
+    async def store() -> tuple[Status, str]:
+        order.append('store')
+        return 'healthy', 'Redis for 7 days, Postgres behind it'
+
+    async def runners() -> tuple[Status, str]:
+        order.append('runner')
+        return 'healthy', 'runner-1 · 5 agents'
+
+    boot = Boot(
+        SETTINGS, runner=runner, probe=lambda url: url == SETTINGS.jaeger_url, store=store, runners=runners
+    )
     assert not boot.state().ready and statuses(boot)['docker'] == 'waiting'
     state = asyncio.run(boot.start())
     assert statuses(boot) == {
         'docker': 'healthy', 'postgres': 'healthy', 'redis': 'healthy', 'traces': 'healthy', 'engine': 'healthy',
-        'agents': 'healthy',
+        'store': 'healthy', 'agents': 'healthy', 'runner': 'healthy',
         'web': statuses(boot)['web'],
     }  # fmt: skip
+    assert order == ['store', 'runner'], (
+        'the store opens once the services are up, the runner once agents are read'
+    )
     assert state.ready == (statuses(boot)['web'] in ('healthy', 'skipped')) and not state.failed
     assert state.agents == ['desk']
     up = seen[1]
@@ -84,6 +99,9 @@ def no_services_leaves_docker_alone():
     asyncio.run(boot.start())
     assert seen == [] and statuses(boot)['postgres'] == 'skipped' and statuses(boot)['traces'] == 'skipped'
     assert statuses(boot)['agents'] == 'healthy'
+    assert statuses(boot)['store'] == 'skipped' and statuses(boot)['runner'] == 'skipped', (
+        'no hook: said, not hidden'
+    )
 
 
 if __name__ == '__main__':

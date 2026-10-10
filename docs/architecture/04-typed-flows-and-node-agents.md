@@ -224,7 +224,9 @@ def bookings_to_cancel(salon: Salon, state: SalonState) -> Times:
     if len(held) == 1:
         [booking] = held
         return Times(options=held, pick=booking)
-    return Times(options=held, say=f'You have {_listed(list(held.values()))}. Which one would you like to cancel?')
+    return Times(
+        options=held, say=f'You have {_listed(list(held.values()))}. Which one would you like to cancel?'
+    )
 ```
 
 A pick is still only an offered id, and it changes nothing by itself. The operation's read-back names the booking,
@@ -236,7 +238,7 @@ and the caller's yes is still required.
 salon does it at import (`salon/app.py`):
 
 ```python
-FLOW = SPEC.compile()                 # SPEC = core.load(Path(__file__).with_name('agent.yaml'))
+FLOW = SPEC.compile()  # SPEC = core.load(Path(__file__).with_name('agent.yaml'))
 call = FLOW.open(SalonState(), services=salon, caller_id=from_number, clock=clock)
 ```
 

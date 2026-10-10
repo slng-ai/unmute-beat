@@ -441,8 +441,8 @@ class _Resolver:
 
     def action(self, name: str) -> type[Action] | None:
         """The class a declared operation names (`name: file.py:Class`), or None for the long form or a broken ref."""
-        ref = self.spec.operations.get(name)
-        if not isinstance(ref, str):
+        ref = _class_ref(self.spec.operations.get(name))
+        if ref is None:
             return None
 
         def find() -> type[Action]:
@@ -456,10 +456,12 @@ class _Resolver:
     def decl(self, name: str) -> OperationSpec | None:
         """A declared operation in its long form, as the step checks read it; a class says the same keys itself."""
         declared = self.spec.operations.get(name)
-        if not isinstance(declared, str):
-            return declared
+        ref = _class_ref(declared)
+        if ref is None:
+            return declared if isinstance(declared, OperationSpec) else None
         action = self.action(name)
-        return OperationSpec(function=declared, **(action.spoken() if action is not None else {}))
+        spoken = action.spoken() if action is not None else {}
+        return OperationSpec.model_validate({'function': ref, **spoken, **_closing(declared)})
 
     def declared(self, name: str) -> type[FunctionOperation]:
         """A declared operation, as one `FunctionOperation` subclass: every problem with it is kept, none raised.
@@ -471,7 +473,7 @@ class _Resolver:
         """
         if (cached := self._cache.get(('declared', name))) is not None:
             return cached
-        if isinstance(self.spec.operations[name], str):
+        if _class_ref(self.spec.operations[name]) is not None:
             found = self._declared_class(name)
             self._cache['declared', name] = found
             return found
@@ -649,7 +651,8 @@ class _Resolver:
                 self.fail(where, f'assigns from {source!r}, which a success receipt does not have')
         if action.changes and subject and not version:
             self.fail(where, 'names a subject it changes, so its receipt needs a core.Version field')
-        if action.recap and not action.changes:
+        closing = {'say': action.say, 'recap': action.recap} | _closing(self.spec.operations.get(name))
+        if closing['recap'] and not action.changes:
             self.fail(where, 'changes nothing, so a goodbye has nothing of it to recap (recap)')
         if action.needs_approval() and not action.defines('readback'):
             self.fail(where, f'needs approval, so {action.__name__} needs a readback method')
@@ -671,11 +674,11 @@ class _Resolver:
             'assign': assign,
             'succeeds': succeeds,
             'rejects': rejects,
-            'say': action.say,
+            'say': closing['say'],
             'needs_approval': action.needs_approval(),
             'matches': {field_name: field_name for field_name in action.matches},
             'changes': action.changes,
-            'recap': action.recap,
+            'recap': closing['recap'],
             'subject': subject,
             'resource': kind,
             'version': version,
@@ -1300,6 +1303,36 @@ class OperationSpec(BaseModel):
     """
 
 
+class ClassOperationSpec(BaseModel):
+    """A class operation (`core.Lookup`, `core.Write`) with its closing lines set here rather than on the class.
+
+        book_appointment: {class: operations.py:BookAppointment, say: "You're all set for {spoken}."}
+
+    `say` and `recap` replace the class's own when given, so a studio can change what is said after an
+    operation works without touching its code; everything else is still read from the class.
+    """
+
+    model_config = SPEC
+    class_: str = Field(alias='class')
+    """`file.py:Class`, as the one-line form names it."""
+    say: str | None = None
+    recap: str | None = None
+
+
+def _class_ref(entry: object) -> str | None:
+    """The class a declared operation names, in either of its forms; None for a long-form function."""
+    if isinstance(entry, str):
+        return entry
+    return entry.class_ if isinstance(entry, ClassOperationSpec) else None
+
+
+def _closing(entry: object) -> dict[str, str]:
+    """The closing lines a class operation's manifest entry sets, over the class's own."""
+    if not isinstance(entry, ClassOperationSpec):
+        return {}
+    return {key: value for key, value in (('say', entry.say), ('recap', entry.recap)) if value is not None}
+
+
 class PersonaSpec(BaseModel):
     """A reusable agent: shared instructions, and the SDK's own agent spec for its model and settings."""
 
@@ -1387,7 +1420,7 @@ class FlowSpec(BaseModel):
     locales: dict[str, Literal['english', 'spanish'] | LocaleSpec] = {}
     """The fixed lines for each value of `language`, chosen per call as that value changes. `locale` is the fallback."""
     agents: dict[str, PersonaSpec] = {}
-    operations: dict[str, OperationSpec | str] = {}
+    operations: dict[str, OperationSpec | ClassOperationSpec | str] = {}
     """Each business action: the long form, or `file.py:Class`, a `core.Lookup` or `core.Write` that says it all itself."""
     greeting: str = ''
     """The first thing a caller hears."""

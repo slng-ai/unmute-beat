@@ -127,6 +127,26 @@ def a_nested_argument_comes_from_its_own_path():
         raise AssertionError('the alias was accepted as a second name')
 
 
+async def the_manifest_can_set_a_class_s_closing_lines():
+    """`{class: ..., say: ...}`: the closing line is config, the rest is still the class's; a recap on a read is refused."""
+    base = (HERE / 'classes.yaml').read_text()
+    text = base.replace(
+        '  book: actions.py:Book\n',
+        '  book: {class: actions.py:Book, say: "All set for {when}, ref {reference}.", recap: "Booked {when}."}\n',
+    )
+    script = Script()
+    flow = load_text(text, root=HERE).compile(model=script.model)
+    call = script.call = flow.open(ClinicState(), services=Backend())
+    await turn(flow, call, script, 'P-1234, Tuesday at ten.', *FILL)
+    said = await turn(flow, call, script, 'Yes.', Call('book'))
+    assert said[0] == 'All set for Tuesday at 10:00 AM, ref CL001.', said
+    assert flow.recaps(call) and next(iter(flow.recaps(call).values())) == 'Booked Tuesday at 10:00 AM.'
+    refused = base.replace(
+        '  remind: actions.py:Remind\n', '  remind: {class: actions.py:Remind, recap: "Noted."}\n'
+    )
+    assert 'nothing of it to recap' in ' | '.join(load_text(refused, root=HERE).problems())
+
+
 def what_cannot_be_inferred_is_refused_at_load():
     base = (HERE / 'classes.yaml').read_text()
 
@@ -157,6 +177,7 @@ if __name__ == '__main__':
     asyncio.run(a_rejection_is_a_terminal_no())
     asyncio.run(an_unknown_outcome_is_reconciled_by_the_class())
     asyncio.run(a_union_receipt_routes_on_success_only())
+    asyncio.run(the_manifest_can_set_a_class_s_closing_lines())
     a_nested_argument_comes_from_its_own_path()
     what_cannot_be_inferred_is_refused_at_load()
     print(

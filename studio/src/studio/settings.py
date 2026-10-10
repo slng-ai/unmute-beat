@@ -33,6 +33,8 @@ class Settings:
     """Where bots and the engine send their spans: OTLP over HTTP, into Jaeger."""
     jaeger_port: int = 16686
     """Jaeger's UI and the query API the studio reads traces from."""
+    runner_port: int = 7810
+    """The runner `up` starts; more runners take the next ports (`slng studio runner --port`)."""
     project: str = 'slng-studio'
     """The compose project name, so `down` finds what `up` started."""
 
@@ -62,6 +64,11 @@ class Settings:
         return f'http://127.0.0.1:{self.jaeger_port}'
 
     @property
+    def data(self) -> Path:
+        """Where the studio's runners keep their logs and the use cases their business data: `data/studio`, ignored by git."""
+        return self.root / 'data' / 'studio'
+
+    @property
     def compose_env(self) -> dict[str, str]:
         """What compose.yaml reads, so a changed port reaches the containers too."""
         return {
@@ -85,4 +92,5 @@ class Settings:
             redis_port=int(env('STUDIO_REDIS_PORT', str(cls.redis_port))),
             otlp_port=int(env('STUDIO_OTLP_PORT', str(cls.otlp_port))),
             jaeger_port=int(env('STUDIO_JAEGER_PORT', str(cls.jaeger_port))),
+            runner_port=int(env('STUDIO_RUNNER_PORT', str(cls.runner_port))),
         )

@@ -1,6 +1,8 @@
 """The `slng` command. `slng studio up` is the one a person types.
 
-    slng studio up [--dev] [--no-services] [--port N]   containers, engine, web; ctrl+c stops them all
+    slng studio up [--dev] [--no-services] [--no-runner] [--port N]
+                                                         containers, engine, a runner, web; ctrl+c stops them all
+    slng studio runner [--port N] [--max-calls N]        one more runner, linked to the studio that is up
     slng studio down [--volumes]                         stop and remove the containers (and the data)
     slng studio status                                   what is running
     slng studio agents                                   every agent.yaml and whether it compiles, offline
@@ -10,10 +12,13 @@
 screen from the first second (`studio.boot`). Containers are stopped, not removed, on ctrl+c:
 the runs stay in the `slng-studio_pg` volume until `down --volumes`.
 
-`bot` is how a call's timings reach the studio with nothing to set by hand: it runs the use case's
-own `bot.py` with `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at the studio's collector, which
-`core.observability.setup` reads. Once the studio runs calls itself (phase 2), the Live page's mic
-bar does the same, and this command stays for transports the page does not own (`-t twilio`).
+`up` also starts one runner (`voice_runner`): the process that carries calls, by voice from the
+browser or by text, for every agent in the repository. `runner` starts another, on the next port, to
+carry more calls at once; each links to the studio, which places every new run on the least busy one.
+
+`bot` runs a use case's own `bot.py` with `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at the studio's
+collector, which `core.observability.setup` reads: for transports the studio's page does not own
+(`-t twilio`). A call from the Agents page needs none of it: its runner already sends its spans.
 """
 
 import argparse
@@ -41,6 +46,15 @@ def parser() -> argparse.ArgumentParser:
     up.add_argument('--port', type=int, help='the engine and web port (default 7800, or STUDIO_PORT)')
     up.add_argument('--dev', action='store_true', help="also run Vite's dev server, with hot reload")
     up.add_argument('--no-services', action='store_true', help='leave Docker alone: no Postgres, no Redis')
+    up.add_argument(
+        '--no-runner', action='store_true', help='start no runner: add one with `slng studio runner`'
+    )
+
+    runner = commands.add_parser('runner', help='start one more runner, linked to the studio')
+    runner.add_argument(
+        '--port', dest='runner_port', type=int, help='its port (default: the next free from 7811)'
+    )
+    runner.add_argument('--max-calls', type=int, default=4, help='calls it carries at once (default 4)')
 
     down = commands.add_parser('down', help='stop and remove the containers')
     down.add_argument('--volumes', action='store_true', help='also delete the stored runs')
@@ -61,7 +75,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         settings = replace(settings, port=args.port)
     match args.command:
         case 'up':
-            return up(settings, dev=args.dev, services=not args.no_services)
+            return up(settings, dev=args.dev, services=not args.no_services, runner=not args.no_runner)
+        case 'runner':
+            return runner(settings, args.runner_port, args.max_calls)
         case 'down':
             return compose(settings, 'down', *(['--volumes'] if args.volumes else []))
         case 'status':
@@ -85,14 +101,14 @@ def compose(settings: Settings, *args: str) -> int:
         return 127
 
 
-def up(settings: Settings, *, dev: bool, services: bool) -> int:
+def up(settings: Settings, *, dev: bool, services: bool, runner: bool = True) -> int:
     """Serve until ctrl+c, then stop what was started. Imports uvicorn here so `agents` stays light."""
     import uvicorn
 
     from studio.boot import Boot
     from studio.server import create_app
 
-    app = create_app(settings, Boot(settings, services=services))
+    app = create_app(settings, Boot(settings, services=services), runner=runner)
     web = None
     if dev:
         web = subprocess.Popen(
@@ -110,12 +126,13 @@ def up(settings: Settings, *, dev: bool, services: bool) -> int:
         )
     url = f'http://localhost:{settings.web_dev_port if dev else settings.port}'
     print(f'\n  slng studio  →  {url}\n  ctrl+c stops everything\n', flush=True)
-    if services:
+    if runner:
         print(
-            f'  timings: start a bot with `slng studio bot salon` (any use case), then open Metrics\n'
-            f'  traces in Jaeger at http://localhost:{settings.jaeger_port}\n',
+            f'  runner on :{settings.runner_port}: start a call from Agents; `slng studio runner` adds one\n',
             flush=True,
         )
+    if services:
+        print(f'  traces in Jaeger at http://localhost:{settings.jaeger_port}\n', flush=True)
     try:
         uvicorn.run(app, host=settings.host, port=settings.port, log_level='warning')
     finally:
@@ -124,6 +141,29 @@ def up(settings: Settings, *, dev: bool, services: bool) -> int:
         if services:
             compose(settings, 'stop')
     return 0
+
+
+def runner(settings: Settings, port: int | None, max_calls: int, run: Run | None = None) -> int:
+    """One more runner (`python -m voice_runner`), linked to the studio on `settings.port`, until ctrl+c."""
+    import socket
+
+    if port is None:
+        port = settings.runner_port + 1
+        while True:
+            with socket.socket() as probe:
+                if probe.connect_ex((settings.host, port)) != 0:
+                    break
+            port += 1
+    env = {**os.environ, 'OTEL_EXPORTER_OTLP_ENDPOINT': settings.otlp_endpoint, 'PYDANTIC_AI_NO_BANNER': '1'}
+    argv = [
+        sys.executable, '-m', 'voice_runner', '--port', str(port), '--max-calls', str(max_calls),
+        '--studio', f'ws://{settings.host}:{settings.port}/api/runners/link', '--root', str(settings.root),
+    ]  # fmt: skip
+    print(
+        f'  runner on :{port}, linked to the studio on :{settings.port}; ctrl+c stops it after its calls\n',
+        flush=True,
+    )
+    return (run or _run)(argv, settings.root, env)
 
 
 def status(settings: Settings) -> int:

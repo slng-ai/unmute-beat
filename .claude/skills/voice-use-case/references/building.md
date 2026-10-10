@@ -38,9 +38,7 @@ class ShopState(BaseModel):
     customer_phone: core.Phone | None = None
     customer: Customer | None = None
     """Set only by the lookup's receipt. Ordering requires it."""
-    item: str | None = Field(
-        None, description='The id of the item the caller picked, from the items on offer.'
-    )
+    item: str | None = Field(None, description='The id of the item the caller picked, from the items on offer.')
     delivery_day: Annotated[date, core.NotPast] | None = Field(
         None, description='The day they want it, as YYYY-MM-DD, worked out from the calendar you are shown.'
     )
@@ -69,7 +67,6 @@ class Placed(core.Receipt):
     spoken: str
     revision: Annotated[int, core.Version()] = 1
 
-
 class OutOfStock(core.Rejection):
     status: Literal['out_of_stock']
     phone: core.Phone
@@ -95,9 +92,7 @@ class Shop:
     backend: Backend
     call: str
 
-
 Outcome = Annotated[Placed | OutOfStock, Field(discriminator='status')]
-
 
 class PlaceOrder(core.Write[Shop]):
     """Place the order for the item picked. Run only on the caller's yes to the read-back."""
@@ -156,7 +151,6 @@ class Offer(BaseModel):
     note: str = ''
     say: str = ''
     pick: str = ''
-
 
 def items_in_stock(shop: Shop, state: ShopState) -> Offer:
     """What the caller may pick, and the words for it."""
@@ -236,10 +230,7 @@ SPEC = core.load(Path(__file__).with_name('agent.yaml'))
 GREETING = SPEC.greeting
 FLOW = SPEC.compile()
 
-
-def open_call(
-    flow: core.StepFlow, from_number: str = '', backend: Backend | None = None, **facts
-) -> core.FlowCall:
+def open_call(flow: core.StepFlow, from_number: str = '', backend: Backend | None = None, **facts) -> core.FlowCall:
     shop = Shop(backend if backend is not None else Backend(), uuid4().hex[:12])
     return flow.open(ShopState(**facts), services=shop, caller_id=from_number)
 ```

@@ -73,12 +73,8 @@ class ShopState(BaseModel):
 
     customer_phone: core.Phone | None = None
     customer: Customer | None = None
-    item: str | None = Field(
-        None, description='The id of the item the caller picked, from the items on offer.'
-    )
-    delivery_day: Annotated[date, core.NotPast] | None = Field(
-        None, description='The day they want it, as YYYY-MM-DD.'
-    )
+    item: str | None = Field(None, description='The id of the item the caller picked, from the items on offer.')
+    delivery_day: Annotated[date, core.NotPast] | None = Field(None, description='The day they want it, as YYYY-MM-DD.')
 ```
 
 1. **Every field has a default.** A call starts empty.
@@ -103,7 +99,6 @@ class PlaceOrder(core.Write[Shop]):
     def run(self, shop: Shop, intent: core.Intent) -> Placed | Refused: ...
     def readback(self, shop: Shop) -> str:
         return f'Shall I order {shop.name_of(self.item)}?'
-
     def reconcile(self, shop: Shop, intent: core.Intent) -> Placed | Refused: ...
 ```
 
@@ -130,7 +125,6 @@ class Offer(BaseModel):
     say: str = ''
     note: str = ''
     pick: str = ''
-
 
 def items_in_stock(shop: Shop, state: ShopState) -> Offer:
     items = shop.in_stock()
@@ -250,7 +244,6 @@ startup, never mid-call.
 ```python
 SPEC = core.load(Path(__file__).with_name('agent.yaml'))
 FLOW = SPEC.compile()
-
 
 def open_call(flow: core.StepFlow, from_number: str, backend: Backend) -> core.FlowCall:
     return flow.open(ShopState(), services=Shop(backend), caller_id=from_number)

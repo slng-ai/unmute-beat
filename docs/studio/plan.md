@@ -127,12 +127,12 @@ class TurnSnapshot(BaseModel):
     run_id: str
     turn: int
     app_version: str
-    manifest_hash: str  # a resume onto a changed flow is refused, or confirmed by the tester
-    call_now: datetime  # the call's clock, so "Thursday" means the same day
+    manifest_hash: str          # a resume onto a changed flow is refused, or confirmed by the tester
+    call_now: datetime          # the call's clock, so "Thursday" means the same day
     agent: str
     pending: str | None
     consulting: str | None
-    facts: dict[str, Any]  # validated against the flow's state type on restore
+    facts: dict[str, Any]       # validated against the flow's state type on restore
     messages: list[ModelMessage]
     speech: list[SpokenRecord]
     evidence: list[EvidenceRecord]

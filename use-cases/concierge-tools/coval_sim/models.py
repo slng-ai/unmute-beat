@@ -10,11 +10,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-AGENT_NAME = re.compile(r'^voice-harness-(?P<agency>[a-z][a-z-]*?)-pipecat(?P<line>-twilio)?$')
+AGENT_NAME = re.compile(
+    r'^voice-harness-(?P<agency>[a-z][a-z-]*?)-(?:pipecat(?P<line>-twilio)?|(?P<livekit>livekit))$'
+)
 """A Coval agent this tool drives is named after the flow it calls: voice-harness-salon-pipecat.
 The name is the whole link between the repository and Coval, so nothing here holds a Coval ID.
 The agency names the folder under `use-cases/` whose `bot.py` answers. A `-twilio`
-suffix names a Coval voice agent that dials a real Twilio number (`Agent.phone_line`)."""
+suffix names a Coval voice agent that dials a real Twilio number (`Agent.phone_line`).
+A name ending `-livekit` instead of `-pipecat` names a Coval LiveKit agent, which calls the same
+folder's `bot.py` running as a LiveKit worker (`Agent.livekit`); a phone line never applies to it."""
 FINISHED = {'COMPLETED', 'FAILED', 'CANCELLED', 'ERROR'}
 FALLBACKS = {
     'STUMBLE (a turn failed)': 'problem there',
@@ -47,15 +51,25 @@ class Agent(BaseModel):
         return bool(match and match['line']) and self.phone_number.startswith('+')
 
     @property
+    def livekit(self) -> bool:
+        """Whether Coval reaches the bot as a LiveKit agent: it joins a room and the worker is dispatched to it.
+
+        Said by the name alone, as the agency is. Coval's own type for the agent
+        (`model_type`) is checked against it by `plan`.
+        """
+        match = AGENT_NAME.match(self.display_name)
+        return bool(match and match['livekit'])
+
+    @property
     def agency(self) -> str | None:
         """The flow this agent calls, or None if it is not ours."""
         match = AGENT_NAME.match(self.display_name)
         return match['agency'] if match else None
 
     @staticmethod
-    def name_for(agency: str) -> str:
-        """The Coval agent name for a flow."""
-        return f'voice-harness-{agency}-pipecat'
+    def name_for(agency: str, framework: str = 'pipecat') -> str:
+        """The Coval agent name for a flow, on `pipecat` (Coval plays Twilio) or `livekit` (Coval joins a room)."""
+        return f'voice-harness-{agency}-{framework}'
 
 
 class Persona(BaseModel):

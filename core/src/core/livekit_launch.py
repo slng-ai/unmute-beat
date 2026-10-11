@@ -18,7 +18,9 @@ mark-less Twilio route does (`core.livekit.reports_playback`).
 
 `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` say which server; `LIVEKIT_AGENT_NAME`, when
 set, makes the worker take only rooms dispatched to that name; `LIVEKIT_IDLE_PROCESSES` sets how many
-call processes a worker keeps ready (LiveKit's default: none in `dev`, one per CPU in `start`).
+call processes a worker keeps ready (LiveKit's default: none in `dev`, one per CPU in `start`), and
+`LIVEKIT_HTTP_PORT` the port of its health check (LiveKit's default in `start`: 8081, so a second
+worker on one machine needs another, or `0` for any free one).
 
 Imports LiveKit (the `livekit` extra), with `core.livekit`.
 """
@@ -448,10 +450,11 @@ async def entrypoint(where: str, ctx: JobContext) -> None:
 def serve(entry: Entry) -> None:
     """`uv run bot.py livekit <dev|start|console|connect ...>`: this entry as a LiveKit agent server."""
     where = locate(entry)
-    idle = os.getenv('LIVEKIT_IDLE_PROCESSES')
+    idle, port = os.getenv('LIVEKIT_IDLE_PROCESSES'), os.getenv('LIVEKIT_HTTP_PORT')
     server = AgentServer(
         initialize_process_timeout=READY_SECONDS,
         **({'num_idle_processes': int(idle)} if idle else {}),
+        **({'port': int(port)} if port else {}),
     )
     server.setup_fnc = functools.partial(prewarm, where=where)
     server.rtc_session(functools.partial(entrypoint, where), agent_name=os.getenv('LIVEKIT_AGENT_NAME', ''))

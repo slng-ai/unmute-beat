@@ -7,7 +7,7 @@ traces.
 
 | Path | What it does |
 |---|---|
-| `coval_sim/` | starts a use case's `bot.py -t twilio` behind a cloudflared tunnel, and lets Coval call it. Needs network and keys, never runs in CI |
+| `coval_sim/` | starts a use case's `bot.py -t twilio` behind a cloudflared tunnel, or `bot.py livekit start` with a token endpoint behind one, and lets Coval call it. Needs network and keys, never runs in CI |
 | `ledger.py` | reads any build's Langfuse traces into one ledger: requests, tokens counted once, calls in a row, latency, and each write with the question it answered |
 
 ## How to run them
@@ -36,6 +36,35 @@ A Coval agent named `voice-harness-<agency>-pipecat` calls the folder
 `use-cases/<agency>`, so `voice-harness-salon-pipecat` calls `use-cases/salon`.
 Create the baseline's agent with
 `uv run python -m coval_sim add salon-prompt`.
+
+### On LiveKit
+
+A Coval agent named `voice-harness-<agency>-livekit` calls the same use case
+running as a LiveKit worker. Only a use case on core can (salon,
+faro-language-learning, nosh, wasla, kestrel); salon-prompt,
+salon-pipecat-flows and graph are Pipecat only.
+
+```bash
+uv run python -m coval_sim add salon --livekit     # creates voice-harness-salon-livekit (type livekit)
+uv run python -m coval_sim plan --agency salon --agent <its ID> --test-set <ID> --persona <ID> \
+    --max-simulations 1 --label session-1 --profile <speech-profile.env>
+uv run python -m coval_sim run  ...the same arguments...    # billable
+```
+
+It needs `LIVEKIT_URL` (wss://), `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`
+in the environment or `.env`, and `.env` must not set `DELIVERY`,
+`LIVEKIT_AGENT_NAME` or `LIVEKIT_IDLE_PROCESSES`: the job sets them. `run`
+starts `bot.py livekit start` under a worker name of its own
+(`DELIVERY=simulated`, since LiveKit cannot report the caller's playback),
+waits for LiveKit's `registered worker` line, then serves `POST /token` behind
+a cloudflared tunnel and points the Coval agent at it. Each token dispatches
+that worker into Coval's room. Every token request is recorded with the
+simulation ID Coval sends (`<agency>-tokens.jsonl` in the job's log folder),
+and after the run each simulation is printed with its room, which is the
+call's Langfuse session: pass it on as `load_report.py --call SIMULATION=ROOM`.
+A simulation whose request carried no ID is printed as unknown, never guessed.
+`serve` and `run --host` are Pipecat only. Each LiveKit job's worker takes
+a free health port (`LIVEKIT_HTTP_PORT=0`), so jobs can run side by side.
 
 Both read the `.env` at the repository root.
 

@@ -68,7 +68,7 @@ class CovalClient:
         return TypeAdapter(list[Agent]).validate_python(self._call('agents', 'list') or [])
 
     def create_agent(self, name: str, kind: str, metadata: dict[str, Any]) -> Agent:
-        """Create an agent of a Coval type (websocket) with its connection."""
+        """Create an agent of a Coval type (websocket, livekit) with its connection."""
         return Agent.model_validate(
             self._call('agents', 'create', '--name', name, '--type', kind, '--metadata', json.dumps(metadata))
         )

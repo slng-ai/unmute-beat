@@ -252,6 +252,7 @@ export interface StartRequest {
   resume_from?: { run: string; turn: number };
   facts?: Record<string, unknown>;
   delivery?: 'marks' | 'simulated';
+  framework?: 'pipecat' | 'livekit';
 }
 
 export interface StartResult {
@@ -264,6 +265,7 @@ export interface StartResult {
   step: string;
   turn: number;
   offer?: string;
+  livekit?: { url: string; room: string; token: string };
 }
 
 export interface TurnResult {

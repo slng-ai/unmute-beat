@@ -228,6 +228,56 @@ def reads_livekit_the_same_way():
     assert write.status == 'unknown' and write.said_before == 'Shall I book it?' and call.tasks == 1
 
 
+def reads_the_harness_on_livekit_the_same_way():
+    """The harness on LiveKit: unmute-core's `turn` with LiveKit's own latency, the greeting a turn of its own."""
+    call = read_call(
+        'harness-livekit',
+        [
+            Obs('conv', None, 'SPAN', 'conversation', at(0), at(30), attrs={'runtime': 'livekit'}),
+            Obs('t1', 'conv', 'SPAN', 'turn', at(0), at(2), output='Hola, ¿en qué te ayudo?'),
+            Obs(
+                't2',
+                'conv',
+                'SPAN',
+                'turn',
+                at(3),
+                at(9),
+                input='Book me in.',
+                attrs={'turn.e2e_seconds': 1.2},
+            ),
+            Obs('ses', 'conv', 'SPAN', 'agent_session', at(0), at(30)),
+            Obs(
+                'u',
+                'ses',
+                'GENERATION',
+                'user_turn',
+                at(3),
+                at(4),
+                'slng',
+                'Book me',
+                attrs={'lk.end_of_turn_delay': 0.3},
+            ),
+            Obs('u2', 'ses', 'GENERATION', 'user_turn', at(4.2), at(5), 'slng', 'in.'),
+            Obs(
+                'a',
+                't2',
+                'AGENT',
+                'booking',
+                at(5.0),
+                at(6.0),
+                attrs={'turn_pieces': '2', 'runtime': 'livekit'},
+            ),
+            gen('c', 'a', 5.01, 5.8, {'input': 900, 'output': 20}),
+            Obs('s', 't2', 'GENERATION', 'tts', at(6.1), at(6.5), 'slng', 'Which day?'),
+        ],
+    )
+    assert call.caller_turns == 1, 'two LiveKit commits joined into one caller turn, and the greeting is none'
+    greeting, booked = call.turns
+    assert greeting.latency is None and not greeting.estimated
+    assert booked.latency == 1.2 and not booked.estimated and booked.shape == 'S', booked
+    assert call.input_tokens == 900
+
+
 def splits_latency_into_turn_taking_and_answer():
     """The same split for both builds: from the work that answered to the first speech.
 
@@ -391,6 +441,7 @@ def main():
     pages_every_trace_of_a_session()
     a_saved_observation_reads_back_the_same()
     reads_livekit_the_same_way()
+    reads_the_harness_on_livekit_the_same_way()
     splits_latency_into_turn_taking_and_answer()
     reports_what_it_cannot_measure()
     print('ledger ok')

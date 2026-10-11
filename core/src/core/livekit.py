@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import sys
 import time
 from collections import deque
@@ -68,6 +69,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from loguru import logger
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 
 try:
@@ -79,6 +81,7 @@ try:
     from livekit.agents.voice.agent_activity import _SpeechHandleContextVar
     from livekit.agents.voice.events import (
         AgentStateChangedEvent,
+        ConversationItemAddedEvent,
         SpeechCreatedEvent,
         UserInputTranscribedEvent,
         UserStateChangedEvent,
@@ -94,6 +97,7 @@ from core import turn as core
 from core.graph import Node
 from core.policies import TurnBudget
 from core.state import CallContext, Question
+from core.voice import outcome
 
 _tracer = trace.get_tracer('slng-voice-harness')
 
@@ -378,6 +382,200 @@ class SegmentText(lkio.TextOutput):
             self.next_in_chain.flush()
 
 
+def _seconds(value: object) -> float | None:
+    """A latency in seconds as LiveKit reported it, or None when it is missing, negative or not a number."""
+    if isinstance(value, int | float) and not isinstance(value, bool) and 0 <= value < float('inf'):
+        return float(value)
+    return None
+
+
+class CallTrace:
+    """The call's spans on LiveKit, in the shape unmute-core's adapters write on both frameworks.
+
+    unmute-core's span contract (its `docs/TELEMETRY.md`): `conversation` is the call, the root of a
+    trace of its own; a `turn` is one caller turn and everything the agent does until the next; `stt`
+    is one caller message and `tts` one piece of speech. Here a turn is one caller turn as core counts
+    it: a caller who goes on before any answer played continues it (`CallContext.continues_turn`), and
+    the agent speaking with no turn open (the greeting) opens one with no caller words. The model
+    requests are Pydantic AI's own `chat` spans, under the span of the step that answered, under the
+    turn.
+
+    Every number is one LiveKit measured and put on its messages, never estimated here: a turn's
+    `turn.e2e_seconds` (the caller stopped, the agent's first audio played), `turn.stt_final_seconds`,
+    `turn.eou_seconds` (how long end of turn waited), `turn.llm_ttft_seconds` (the node's first words,
+    every model request before them included) and `turn.tts_ttfb_seconds`; an `stt` span's
+    `metrics.ttfb` (the caller stopped, the final transcript) and a `tts` span's (its first text, its
+    first audio). A missing one is left out, never sent as 0. The studio's Metrics page and the
+    ledger read these as they read Pipecat's own `turn`, `stt` and `tts` spans.
+    """
+
+    def __init__(self, call: CallContext) -> None:
+        self.call = call
+        self.root: trace.Span | None = None
+        self.turn: trace.Span | None = None
+        self._number = 0
+        self._seen: set[str] = set()
+        self._callers: list[llm.ChatMessage] = []
+        self._replies: list[llm.ChatMessage] = []
+        self._lines: list[str] = []
+        self._transcript: list[dict[str, str]] = []
+
+    def start(self) -> None:
+        """Open the call's root span, `conversation`, in a new trace. A second call does nothing."""
+        if self.root is None:
+            self.root = _tracer.start_span(
+                'conversation',
+                context=otel_context.Context(),
+                attributes={'gen_ai.operation.name': 'invoke_workflow', 'runtime': 'livekit'},
+            )
+
+    def current(self) -> contextlib.AbstractContextManager[Any]:
+        """The call's span made current, so what LiveKit's session starts inside it (its own spans) is in the call's trace."""
+        if self.root is None:
+            return contextlib.nullcontext()
+        return trace.use_span(self.root, end_on_exit=False)
+
+    def context(self) -> otel_context.Context:
+        """Where a span about the turn now running goes: under the open turn, or the call."""
+        parent = self.turn or self.root
+        return trace.set_span_in_context(parent) if parent is not None else otel_context.Context()
+
+    def caller(self, messages: list[llm.ChatMessage], *, continues: bool) -> None:
+        """A caller turn starts (or goes on, `continues`) with these messages: each one is an `stt` span.
+
+        A message already recorded is not recorded again, and a typed one (no speech timings) has none.
+        """
+        if self.root is None:
+            return
+        if self.turn is None or not continues:
+            self._open()
+        for message in messages:
+            if message.id in self._seen:
+                continue
+            self._seen.add(message.id)
+            self._callers.append(message)
+            self._stt(message)
+
+    def agent_line(self, message: llm.ChatMessage) -> None:
+        """A line LiveKit added to the agent's history, with its timings: it belongs to the open turn."""
+        if self.root is None or not message.text_content:
+            return
+        if self.turn is None:
+            self._open()
+        self._replies.append(message)
+        self._lines.append(message.text_content)
+
+    def start_tts(self, tts: Any) -> trace.Span | None:
+        """Open a `tts` span for one piece of speech by `tts` (the session's plugin), under the open turn."""
+        if self.root is None:
+            return None
+        if self.turn is None:
+            self._open()
+        voice = getattr(getattr(tts, '_opts', None), 'voice', None)
+        attributes = {
+            'langfuse.observation.type': 'generation',
+            'gen_ai.operation.name': 'tts',
+            'gen_ai.output.type': 'speech',
+            'gen_ai.provider.name': str(getattr(tts, 'provider', 'unknown') or 'unknown').lower(),
+            'gen_ai.request.model': str(getattr(tts, 'model', 'unknown') or 'unknown'),
+        }
+        if voice:
+            attributes['tts.voice'] = str(voice)
+        return _tracer.start_span('tts', context=self.context(), attributes=attributes)
+
+    @staticmethod
+    def end_tts(span: trace.Span, text: str, ttfb: float | None, *, interrupted: bool) -> None:
+        """Close a `tts` span with what it was given to say and how long its first audio took."""
+        attributes: dict[str, Any] = {
+            'input.value': text,
+            'metrics.character_count': len(text),
+            'tts.interrupted': interrupted,
+        }
+        if (first := _seconds(ttfb)) is not None:
+            attributes['metrics.ttfb'] = first
+        span.set_attributes(attributes)
+        span.end()
+
+    def _open(self) -> None:
+        self._end_turn()
+        self._number += 1
+        self.turn = _tracer.start_span(
+            'turn',
+            context=trace.set_span_in_context(self.root) if self.root is not None else None,
+            attributes={'turn.number': self._number, 'gen_ai.operation.name': 'invoke_agent'},
+        )
+
+    def _stt(self, message: llm.ChatMessage) -> None:
+        metrics = message.metrics
+        started, heard = metrics.get('started_speaking_at'), metrics.get('stt_metadata')
+        if started is None or heard is None:
+            return
+        attributes: dict[str, Any] = {
+            'langfuse.observation.type': 'generation',
+            'gen_ai.operation.name': 'stt',
+            'gen_ai.provider.name': str(heard.get('model_provider') or 'unknown').lower(),
+            'gen_ai.request.model': str(heard.get('model_name') or 'unknown'),
+        }
+        span = _tracer.start_span(
+            'stt', context=self.context(), attributes=attributes, start_time=int(started * 1e9)
+        )
+        ended: dict[str, Any] = {'output.value': message.text_content or ''}
+        if (delay := _seconds(metrics.get('transcription_delay'))) is not None:
+            ended['metrics.ttfb'] = delay
+        span.set_attributes(ended)
+        span.end()
+
+    def _end_turn(self) -> None:
+        turn = self.turn
+        if turn is None:
+            return
+
+        def first(messages: list[llm.ChatMessage], name: str) -> float | None:
+            return next(
+                (found for m in messages if (found := _seconds(m.metrics.get(name))) is not None), None
+            )
+
+        heard = ' '.join(m.text_content or '' for m in self._callers).strip()
+        if heard:
+            self._transcript.append({'role': 'user', 'content': heard})
+        self._transcript += [{'role': 'assistant', 'content': line} for line in self._lines]
+        attributes: dict[str, Any] = {
+            'turn.interrupted': any(m.interrupted for m in self._replies),
+            'slng.turn': self.call.turn,
+        }
+        if heard:
+            attributes['input.value'] = heard
+        if self._lines:
+            attributes['output.value'] = ' '.join(self._lines)
+        latencies = {
+            'turn.e2e_seconds': first(self._replies, 'e2e_latency'),
+            'turn.stt_final_seconds': first(self._callers, 'transcription_delay'),
+            'turn.eou_seconds': first(self._callers, 'end_of_turn_delay'),
+            'turn.llm_ttft_seconds': first(self._replies, 'llm_node_ttft'),
+            'turn.tts_ttfb_seconds': first(self._replies, 'tts_node_ttfb'),
+        }
+        attributes |= {key: value for key, value in latencies.items() if value is not None}
+        turn.set_attributes(attributes)
+        turn.end()
+        self.turn = None
+        self._callers, self._replies, self._lines = [], [], []
+
+    def close(self, ending: str) -> None:
+        """End the open turn and the call, with its transcript and how it ended. A second call does nothing."""
+        if self.root is None:
+            return
+        self._end_turn()
+        root, self.root = self.root, None
+        root.set_attributes(
+            {
+                'input.value': json.dumps(self._transcript, ensure_ascii=False),
+                'output.value': json.dumps({'end_reason': ending}),
+                'unmute.call.end_reason': ending,
+            }
+        )
+        root.end()
+
+
 class FlowAgent(Agent):
     """A compiled flow as a LiveKit `Agent`: one caller turn per `llm_node`, the speech it said bound to playback.
 
@@ -429,6 +627,8 @@ class FlowAgent(Agent):
         """When each stretch of the caller's speech began, held until one proves to be a reply (`_commit_onset`)."""
         self._wordless: list[float] = []
         """Starts LiveKit found no words for in time (`_on_no_words`): used only if words come later after all."""
+        self.trace = CallTrace(call)
+        """The call's spans: `conversation`, a `turn` per caller turn, `stt` and `tts` (`CallTrace`)."""
         call._say = self.say
         call._end = self.hang_up
         call._dispatch_gate = self._authorized
@@ -437,6 +637,7 @@ class FlowAgent(Agent):
     def attach(self, session: AgentSession) -> None:
         """Wire this agent into its started session: the audio (or text) tap, and the events a turn needs."""
         self._session = session
+        self.trace.start()
         if session.output.audio is not None:
             self.playout = SegmentPlayout(self, session.output.audio)
             session.output.audio = self.playout
@@ -448,6 +649,7 @@ class FlowAgent(Agent):
         session.on('agent_state_changed', self._on_agent_state)
         session.on('user_input_transcribed', self._on_transcribed)
         session.on('user_transcription_timeout', self._on_no_words)
+        session.on('conversation_item_added', self._on_item)
         session.on('close', lambda _event: self._cancel_quiet())
 
     @property
@@ -557,7 +759,7 @@ class FlowAgent(Agent):
             await asyncio.wait({self._turn})
         reply = self._reply = _Reply(handle)
         self._cancel_quiet()
-        self._turn = asyncio.create_task(self.serve(prompt, reply))
+        self._turn = asyncio.create_task(self.serve(prompt, reply, users))
         self._served.update(item.id for item in users)
         return self._relay(reply, self._turn)
 
@@ -585,17 +787,22 @@ class FlowAgent(Agent):
             if self._reply is reply:
                 self._reply = None
 
-    async def serve(self, prompt: str | None, reply: _Reply | None = None) -> None:
-        """One caller turn, marked as running until it is over, so a dropped line can let it finish."""
+    async def serve(
+        self, prompt: str | None, reply: _Reply | None = None, heard: list[llm.ChatMessage] | None = None
+    ) -> None:
+        """One caller turn, marked as running until it is over, so a dropped line can let it finish.
+
+        `heard` is LiveKit's messages the turn is made of, with the timings it measured on them (`CallTrace`).
+        """
         self._idle.clear()
         try:
-            await self._run(prompt, reply or _Reply(None))
+            await self._run(prompt, reply or _Reply(None), heard or [])
         finally:
             self._idle.set()
             if reply is not None:
                 reply.stream.put_nowait(None)
 
-    async def _run(self, prompt: str | None, reply: _Reply) -> None:
+    async def _run(self, prompt: str | None, reply: _Reply, heard: list[llm.ChatMessage]) -> None:
         """One caller turn, translated from the engine's events into LiveKit segments.
 
         The same bookkeeping as `core.processor.PydanticAgentProcessor._turn`:
@@ -604,11 +811,14 @@ class FlowAgent(Agent):
         the step that answered, a turn that unwinds without a `TurnFinished` is
         given one, and a cancellation that was not a barge-in is the transport.
         """
+        continues = self.call.continues_turn()
         if self._carried:
-            if not self.call.continues_turn():
+            if not continues:
                 prompt = f'{self._carried} {prompt}'.strip() if prompt else self._carried
             self._carried = ''
-        with _tracer.start_as_current_span(self.call.state.agent) as span:
+        if heard or self.trace.turn is None:
+            self.trace.caller(heard, continues=continues)
+        with _tracer.start_as_current_span(self.call.state.agent, context=self.trace.context()) as span:
             if prompt:
                 span.set_attribute('langfuse.observation.input', prompt)
             span.set_attribute('runtime', 'livekit')
@@ -760,7 +970,7 @@ class FlowAgent(Agent):
             await core.remind(self.call)
 
     async def close(self) -> None:
-        """Stop what this agent runs on its own: a turn still going, the silence timer, a hang-up."""
+        """Stop what this agent runs on its own (a turn still going, the silence timer, a hang-up), and end its trace."""
         self._cancel_quiet()
         tasks = [t for t in (self._turn, *self._tasks) if t is not None and not t.done()]
         for task in tasks:
@@ -768,6 +978,36 @@ class FlowAgent(Agent):
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
+        self.trace.close(outcome(self.call))
+
+    async def tts_node(
+        self, text: AsyncIterable[str], model_settings: ModelSettings
+    ) -> AsyncIterator[rtc.AudioFrame]:
+        """LiveKit's own speech synthesis, each piece of speech a `tts` span: from its first text to its first audio."""
+        span: trace.Span | None = None
+        first_text = 0.0
+        ttfb: float | None = None
+        spoken: list[str] = []
+        done = False
+
+        async def given() -> AsyncIterator[str]:
+            nonlocal span, first_text
+            async for chunk in text:
+                if span is None:
+                    first_text = time.perf_counter()
+                    span = self.trace.start_tts(self.session.tts)
+                spoken.append(chunk)
+                yield chunk
+
+        try:
+            async for frame in Agent.default.tts_node(self, given(), model_settings):
+                if ttfb is None and span is not None:
+                    ttfb = time.perf_counter() - first_text
+                yield frame
+            done = True
+        finally:
+            if span is not None:
+                self.trace.end_tts(span, ''.join(spoken), ttfb, interrupted=not done)
 
     async def on_enter(self) -> None:
         """Count every caller message already in this agent's history as served: none of it is a new turn.
@@ -794,6 +1034,12 @@ class FlowAgent(Agent):
             reply.played = True
 
     # --- session events -------------------------------------------------------------------------
+
+    def _on_item(self, event: ConversationItemAddedEvent) -> None:
+        """A line LiveKit added to the agent's history, with its timings: the open turn's (`CallTrace`)."""
+        item = event.item
+        if isinstance(item, llm.ChatMessage) and item.role == 'assistant':
+            self.trace.agent_line(item)
 
     def _on_speech_created(self, event: SpeechCreatedEvent) -> None:
         handle = event.speech_handle

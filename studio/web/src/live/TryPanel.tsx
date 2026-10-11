@@ -6,13 +6,16 @@ import { useSchemas } from '../api/useSchemas';
 import { href, go } from '../router';
 import { IntentsPanel, ModelPanel, StatePanel, statusTag, Transcript } from './panels';
 import type { RunView } from './useRun';
+import { startLiveKit, type LiveKitRoom } from './livekit';
 import { startVoice, type VoiceCall } from './voice';
 
 /**
  * The right half of an agent's page: a real run on the config as saved, by text or by voice from this
  * browser. A run is placed on a runner by the studio; its events stream back here as they happen. A
  * config saved while the run goes on makes the run stale: carry on from its last turn on the new
- * config, or keep it as it is.
+ * config, or keep it as it is. A voice call runs on Pipecat (WebRTC straight to the runner) or on
+ * LiveKit (a room on the LiveKit server that the runner joins too), where LiveKit's own playout counts
+ * as heard.
  */
 export function TryPanel({ agent, version, run, onRun, view }: {
   agent: string;
@@ -21,7 +24,7 @@ export function TryPanel({ agent, version, run, onRun, view }: {
   onRun: (run: string | undefined) => void;
   view: RunView;
 }) {
-  const [channel, setChannel] = useState<'text' | 'voice'>('text');
+  const [channel, setChannel] = useState<'text' | 'voice' | 'livekit'>('text');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -37,23 +40,33 @@ export function TryPanel({ agent, version, run, onRun, view }: {
 
   useEffect(() => () => void voice.call?.hangUp(), [voice.call]);
 
+  const events = {
+    onStatus: (status: string) => setVoice((v) => ({ ...v, status })),
+    onReport: (reports: number) => setVoice((v) => ({ ...v, reports })),
+    onEnded: () => setVoice((v) => ({ ...v, call: undefined })),
+  };
+
   const join = async (id: string) => {
     if (!audio.current) return;
-    const call = await startVoice(id, audio.current, {
-      onStatus: (status) => setVoice((v) => ({ ...v, status })),
-      onReport: (reports) => setVoice((v) => ({ ...v, reports })),
-      onEnded: () => setVoice((v) => ({ ...v, call: undefined })),
-    });
+    const call = await startVoice(id, audio.current, events);
     setVoice({ status: 'connected', reports: 0, call, capable: call.reports });
+  };
+
+  const joinRoom = async (room: LiveKitRoom) => {
+    if (!audio.current) return;
+    const call = await startLiveKit(room, audio.current, events);
+    setVoice({ status: 'waiting for the agent', reports: 0, call, capable: call.reports });
   };
 
   const start = async (from?: { run: string; turn: number }) => {
     setBusy(true);
     setError('');
     try {
-      const started = await api.start({ agent, channel, ...(from ? { resume_from: from } : {}) });
+      const ask = channel === 'livekit' ? { channel: 'voice' as const, framework: 'livekit' as const, delivery: 'simulated' as const } : { channel };
+      const started = await api.start({ agent, ...ask, ...(from ? { resume_from: from } : {}) });
       onRun(started.run);
-      if (started.channel === 'voice') await join(started.run);
+      if (started.livekit) await joinRoom(started.livekit);
+      else if (started.channel === 'voice') await join(started.run);
     } catch (failure) {
       setError(failure instanceof ApiError ? failure.message : String(failure));
     } finally {
@@ -88,9 +101,9 @@ export function TryPanel({ agent, version, run, onRun, view }: {
         <span className="lbl">Try it</span>
         <span style={{ flex: '1 1 auto' }} />
         <div className="segs" role="tablist" aria-label="Talk by">
-          {(['text', 'voice'] as const).map((c) => (
+          {(['text', 'voice', 'livekit'] as const).map((c) => (
             <button key={c} type="button" role="tab" aria-selected={channel === c} className={`seg ${channel === c ? 'seg-on' : ''}`} onClick={() => setChannel(c)} disabled={live}>
-              {c === 'voice' ? 'Voice · browser' : 'Text'}
+              {c === 'voice' ? 'Voice · Pipecat' : c === 'livekit' ? 'Voice · LiveKit' : 'Text'}
             </button>
           ))}
         </div>
@@ -99,12 +112,14 @@ export function TryPanel({ agent, version, run, onRun, view }: {
         {!run || !live ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button type="button" className="btn btn-y" onClick={() => void start()} disabled={busy} style={{ alignSelf: 'flex-start' }}>
-              {busy ? 'Starting…' : channel === 'voice' ? 'Start a call' : 'Start a text run'}
+              {busy ? 'Starting…' : channel === 'text' ? 'Start a text run' : 'Start a call'}
             </button>
             <span className="hint">
               {channel === 'voice'
                 ? 'Your mic goes straight to the runner over WebRTC. A line counts as heard only when this page reports it played.'
-                : 'Each reply counts as read once it reaches this page.'}{' '}
+                : channel === 'livekit'
+                  ? "Your mic goes through a room on the LiveKit server. LiveKit reports only its own playout, so it counts as heard here (simulated delivery)."
+                  : 'Each reply counts as read once it reaches this page.'}{' '}
               Runs on config {version || '…'}.
             </span>
           </div>
@@ -137,6 +152,9 @@ export function TryPanel({ agent, version, run, onRun, view }: {
           <div className="hint">
             {voice.status || 'waiting for the browser'} · {voice.capable === false ? 'this browser cannot report playback: nothing can be agreed to' : `${voice.reports} lines reported played`}
           </div>
+        )}
+        {channel === 'livekit' && run && live && (
+          <div className="hint">{voice.status || 'waiting for the browser'} · on LiveKit, its own playout counts as heard</div>
         )}
         <audio ref={audio} autoPlay />
         {run && (

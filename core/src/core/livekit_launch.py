@@ -17,7 +17,8 @@ greeting unless the launcher opened it for simulated playout (`DELIVERY=simulate
 mark-less Twilio route does (`core.livekit.reports_playback`).
 
 `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` say which server; `LIVEKIT_AGENT_NAME`, when
-set, makes the worker take only rooms dispatched to that name.
+set, makes the worker take only rooms dispatched to that name; `LIVEKIT_IDLE_PROCESSES` sets how many
+call processes a worker keeps ready (LiveKit's default: none in `dev`, one per CPU in `start`).
 
 Imports LiveKit (the `livekit` extra), with `core.livekit`.
 """
@@ -32,10 +33,12 @@ import os
 import sys
 import threading
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 try:
-    from livekit import rtc
+    import aiohttp
+    from livekit import api, rtc
     from livekit.agents import (
         NOT_GIVEN,
         AgentServer,
@@ -44,6 +47,7 @@ try:
         JobProcess,
         TurnHandlingOptions,
         cli,
+        get_job_context,
     )
     from livekit.agents.voice.room_io import RoomOptions
     from livekit.plugins import silero, slng
@@ -72,6 +76,9 @@ from core.voice import (
 
 TRANSCRIPTION_TIMEOUT = 2.0
 """Seconds after speech with no words before LiveKit says so (`user_transcription_timeout`): `FlowAgent` drops its onset."""
+
+READY_SECONDS = 60.0
+"""How long a job process may take to get ready (`prewarm`): it imports the use case and compiles its flow."""
 
 SMART_TURN_CEILING = 1.6
 """The longest wait after the caller stops before the turn ends: the Pipecat launcher's smart-turn `stop_secs`."""
@@ -156,9 +163,25 @@ def session_for(entry: Entry, *, stt: Any, tts: Any, vad: Any) -> AgentSession:
     return session
 
 
-def prewarm(proc: JobProcess) -> None:
-    """Load Silero once per worker process, before it takes a call: `AgentServer.setup_fnc`."""
+def prewarm(proc: JobProcess, where: str = '') -> None:
+    """Get a job process ready before LiveKit gives it a call: `AgentServer.setup_fnc`.
+
+    LiveKit runs each call in a process of its own and calls this as the process starts, before any
+    call is assigned to it (a production worker keeps idle processes ready). Silero is loaded, and
+    the entry `where` names (`locate`) is imported with its flow compiled: otherwise the call's process
+    would read `agent.yaml`, its prompts and build every step's agent when the call arrives, before
+    the greeting. The model clients' connections stay per call (`model_clients`), opened while the
+    greeting plays: a client is bound to the event loop of the call that uses it.
+    """
     proc.userdata['vad'] = silero.VAD.load(min_silence_duration=vad_stop_seconds())
+    if where:
+        _entry(where).flow()
+
+
+def _entry(where: str) -> Entry:
+    """The entry `where` names (`module:name`), imported if it is not yet."""
+    module, _, name = where.partition(':')
+    return getattr(importlib.import_module(module), name)
 
 
 def caller_number(participant: rtc.RemoteParticipant) -> str:
@@ -187,13 +210,64 @@ async def run_call(
     simulate: bool | None = None,
     opened: Callable[[Any], None] | None = None,
 ) -> None:
-    """One call in the job's room: build the session around the entry's flow and run it until the room closes.
+    """One call in the job's room: connect, wait for the caller, and run the call there (`run_room`).
 
     The same arguments as `core.launch.run_call`, where they mean the same thing; `speech` and `vad` are a
-    test's or a launcher's own services. The room is the call's key, as a Twilio `callSid` is on Pipecat:
-    one Langfuse session per room. In `console` mode there is no room participant: the terminal is the
-    caller. `caller_id` is the SIP caller's number when there is one, else
-    `CALLER_ID`, a guess until the caller agrees.
+    test's or a launcher's own services. In `console` mode there is no room participant: the terminal is
+    the caller. The room is deleted once the call is over.
+    """
+    await ctx.connect()
+    participant = None if ctx.is_fake_job() else await ctx.wait_for_participant()
+    await run_room(
+        entry,
+        ctx.room,
+        participant,
+        flow=flow,
+        speech=speech,
+        vad=vad or ctx.proc.userdata.get('vad'),
+        warm=warm,
+        trace=trace,
+        caller_id=caller_id,
+        settle=settle,
+        listener=listener,
+        run=run,
+        config=config,
+        resume=resume,
+        facts=facts,
+        simulate=simulate,
+        opened=opened,
+        delete_room=True,
+    )
+
+
+async def run_room(
+    entry: Entry,
+    room: rtc.Room,
+    participant: rtc.RemoteParticipant | None,
+    *,
+    flow: StepFlow | None = None,
+    speech: Callable[[], tuple[Any, Any]] | None = None,
+    vad: Any = None,
+    warm: bool = True,
+    trace: bool = True,
+    caller_id: str | None = None,
+    settle: Callable[[str], bool] | None = None,
+    listener: CallListener | None = None,
+    run: str = '',
+    config: str = '',
+    resume: TurnSnapshot | None = None,
+    facts: dict[str, Any] | None = None,
+    simulate: bool | None = None,
+    opened: Callable[[Any], None] | None = None,
+    delete_room: bool = False,
+) -> None:
+    """One call in a connected room with its caller in it: build the session around the entry's flow and run it.
+
+    A LiveKit job's call (`run_call`), or one a process of its own placed in a room it joined itself (the
+    studio's runner): no job is needed. The room is the call's key, as a Twilio `callSid` is on Pipecat:
+    one Langfuse session per room. `caller_id` is the SIP caller's number when there is one, else
+    `CALLER_ID`, a guess until the caller agrees. Outside a job, the speech services get an HTTP session
+    of the call's own.
 
     Returns when the call is over: the caller left, the agent said goodbye, or the ceiling was reached.
     A turn already running when the room closes may finish its write (`CallTiming.FINISH_SECONDS`).
@@ -205,9 +279,7 @@ async def run_call(
     """
     from core.observability import setup
 
-    await ctx.connect()
-    participant = None if ctx.is_fake_job() else await ctx.wait_for_participant()
-    session_id = ctx.room.name
+    session_id = room.name
     flow = flow or entry.flow()
     if trace:
         setup(session=session_id, trace_name=entry.name, agent=entry.id, run=run)
@@ -258,23 +330,23 @@ async def run_call(
     ceiling = Ceiling(ceiling_seconds, reached)
     if participant is not None:
 
-        @ctx.room.on('participant_disconnected')
+        @room.on('participant_disconnected')
         def on_left(gone: rtc.RemoteParticipant) -> None:
             if gone.identity == participant.identity:
                 leave('the caller left the room')
 
-    @ctx.room.on('disconnected')
+    @room.on('disconnected')
     def on_room_gone(*_: Any) -> None:
         leave('the room disconnected')
 
     async with contextlib.AsyncExitStack() as stack:
         try:
-            stt, tts = (speech or (lambda: speech_services(entry)))()
-            vad = (
-                vad
-                or ctx.proc.userdata.get('vad')
-                or silero.VAD.load(min_silence_duration=vad_stop_seconds())
-            )
+            if speech is None and get_job_context(required=False) is None:
+                own = await stack.enter_async_context(aiohttp.ClientSession())
+                stt, tts = speech_services(entry, http_session=own)
+            else:
+                stt, tts = (speech or (lambda: speech_services(entry)))()
+            vad = vad or silero.VAD.load(min_silence_duration=vad_stop_seconds())
             session = session_for(entry, stt=stt, tts=tts, vad=vad)
             session.on('close', lambda _event: closed.set())
             agent = FlowAgent(
@@ -282,13 +354,15 @@ async def run_call(
             )
             playout(call, simulate=delivery() == 'simulated' if simulate is None else simulate)
             await stack.enter_async_context(model_clients(flow.nodes, warm=warm))
+            agent.trace.start()
+            stack.enter_context(agent.trace.current())
             await session.start(
                 agent,
-                room=ctx.room,
+                room=room,
                 room_options=RoomOptions(
                     participant_identity=participant.identity if participant is not None else NOT_GIVEN,
                     close_on_disconnect=True,
-                    delete_room_on_close=True,
+                    delete_room_on_close=delete_room,
                 ),
             )
             agent.attach(session)
@@ -329,6 +403,28 @@ async def run_call(
                 await events.close()
 
 
+def room_token(room: str, identity: str, *, agent: bool = False, seconds: int = 3600) -> str:
+    """A token to join `room` as `identity`, from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+
+    A caller's token (a browser the studio placed in a room) may publish and subscribe; an agent's
+    (`agent=True`, the process that runs the call in that room) is also marked as an agent, so the room
+    shows it as one. Raises `KeyError` naming the variable that is missing.
+    """
+    grants = api.VideoGrants(
+        room=room, room_join=True, can_publish=True, can_subscribe=True, can_publish_data=True, agent=agent
+    )
+    token = (
+        api.AccessToken(os.environ['LIVEKIT_API_KEY'], os.environ['LIVEKIT_API_SECRET'])
+        .with_identity(identity)
+        .with_name(identity)
+        .with_grants(grants)
+        .with_ttl(timedelta(seconds=seconds))
+    )
+    if agent:
+        token = token.with_kind('agent')
+    return token.to_jwt()
+
+
 def locate(entry: Entry) -> str:
     """Where `entry` can be imported from, as `module:name`: how a LiveKit job process finds it again.
 
@@ -346,16 +442,17 @@ def locate(entry: Entry) -> str:
 
 async def entrypoint(where: str, ctx: JobContext) -> None:
     """A job's entrypoint: the entry `where` names (`locate`), run for this job's room."""
-    module, _, name = where.partition(':')
-    entry = getattr(importlib.import_module(module), name)
-    await run_call(entry, ctx)
+    await run_call(_entry(where), ctx)
 
 
 def serve(entry: Entry) -> None:
     """`uv run bot.py livekit <dev|start|console|connect ...>`: this entry as a LiveKit agent server."""
-    server = AgentServer()
-    server.setup_fnc = prewarm
-    server.rtc_session(
-        functools.partial(entrypoint, locate(entry)), agent_name=os.getenv('LIVEKIT_AGENT_NAME', '')
+    where = locate(entry)
+    idle = os.getenv('LIVEKIT_IDLE_PROCESSES')
+    server = AgentServer(
+        initialize_process_timeout=READY_SECONDS,
+        **({'num_idle_processes': int(idle)} if idle else {}),
     )
+    server.setup_fnc = functools.partial(prewarm, where=where)
+    server.rtc_session(functools.partial(entrypoint, where), agent_name=os.getenv('LIVEKIT_AGENT_NAME', ''))
     cli.run_app(server)

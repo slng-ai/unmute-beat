@@ -5,6 +5,7 @@
     GET    /agents                 each agent it carries: id, name, app version, whether it needs a heard yes
     GET    /agents/{id}/schema     its state type as JSON schema: what the go-back page's form is built from
     POST   /calls                  admit a call or answer 429: {call_id, offer_url, ice_servers} for voice,
+                                   {call_id, livekit: {url, room, token}} for voice on LiveKit,
                                    and the greeting for text
     POST   /calls/{id}/offer       the browser's WebRTC offer, handed to Pipecat's SmallWebRTCRequestHandler
     PATCH  /calls/{id}/offer       its ICE candidates
@@ -15,7 +16,9 @@
 Voice is Pipecat's SmallWebRTC: the browser's audio comes straight to this process, and the
 connection lives in its memory, so the browser sends its offer and ICE to the `offer_url` it was given,
 which names this process. With no STUN or TURN server set (`PIPECAT_ICE_SERVERS`), calls work on this
-machine and its local network only.
+machine and its local network only. Voice on LiveKit (`framework: livekit`) needs no offer: the browser
+and this process both join a room of the call's own on the LiveKit server (`LIVEKIT_URL`), and the
+audio goes through it.
 """
 
 import asyncio
@@ -143,6 +146,8 @@ class RunnerApp:
         try:
             if ask.channel == 'voice':
                 self.runner.check_resume(ask)
+                if ask.framework == 'livekit':
+                    return found | self.runner.open_livekit(carried)
                 return found | voice
             return found | await self.runner.open_text(carried)
         except ValidationError as error:
@@ -157,8 +162,10 @@ class RunnerApp:
     async def offer(self, call_id: str, request: Request) -> dict[str, Any] | None:
         """The browser's WebRTC offer; once connected, the call runs to its end."""
         carried = self.carried(call_id)
-        if carried.channel != 'voice' or carried.status == 'ended':
-            raise HTTPException(409, f'the call is a {carried.channel} call, {carried.status}')
+        if carried.channel != 'voice' or carried.status == 'ended' or carried.request.framework != 'pipecat':
+            raise HTTPException(
+                409, f'the call is a {carried.channel} call on {carried.request.framework}, {carried.status}'
+            )
         body = await request.json()
         sdp = SmallWebRTCRequest(
             sdp=body['sdp'],

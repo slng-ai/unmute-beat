@@ -52,6 +52,9 @@ up (`tests.livekit_fakes`). Checked:
 * L23: talking over the greeting cuts it, and the words are the first turn;
 * L24: a yes whose words an STT sends only after the caller stopped still
   answers the read-back (found live).
+* L25: the call's spans are unmute-core's: one `conversation`, a `turn` per
+  caller turn (and one for the greeting) with LiveKit's own latencies, `stt`
+  and `tts` under their turn, and the step that answered under its turn.
 
 Every wait is bounded.
 """
@@ -67,12 +70,13 @@ from typing import Any
 
 from livekit.agents import AgentSession
 from livekit.agents.voice.transcription.synchronizer import TranscriptSynchronizer
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import core
 from core.livekit import FAILED_TURNS, FlowAgent, playout, reports_playback
 from tests.livekit_fakes import Caller, FakeSTT, FakeVAD, Microphone, Screen, Speaker, Voice
 from tests.script import Call, Move, Reply
-from tests.test_tickets import desk_in, opened
+from tests.test_tickets import desk_in, opened, spans
 from tests.ticket_flow.worker import TO_READ_BACK
 
 READBACK = '¿Marco el ticket T-101 como resuelto: la impresora ya imprime?'
@@ -597,6 +601,60 @@ async def a_yes_whose_words_come_late_is_still_a_yes(folder: Path):
         assert room.desk.sent() == 1 and room.desk.ticket('T-101') == (2, 'resolved'), room.said()
 
 
+EXPORTED = InMemorySpanExporter()
+"""Every span this module's calls finish, on the process's one provider (`spans`)."""
+
+
+async def the_call_is_traced_as_unmute_core_traces_it(folder: Path):
+    """L25."""
+    exported = spans(EXPORTED)
+    exported.clear()
+    async with Room(folder) as room:
+        await room.agent.greet('Hola, soporte técnico.')
+        greeting = room.segment('Hola, soporte técnico.')
+        await room.until(lambda: greeting.delivered == 'delivered', what='the greeting to play')
+        await room.settled()
+        await room.to_read_back()
+        await asyncio.sleep(0.3)
+        await room.turn('Sí.', 0.3, Call('resolve_ticket'))
+    found = exported.get_finished_spans()
+
+    def attrs(span: Any) -> dict[str, Any]:
+        return dict(span.attributes or {})
+
+    (root,) = [s for s in found if s.name == 'conversation']
+    mine = [s for s in found if s.context.trace_id == root.context.trace_id]
+    by_id = {s.context.span_id: s for s in mine}
+    assert root.parent is None and attrs(root)['unmute.call.end_reason'] == 'hangup', root.attributes
+
+    def under(span: Any) -> str:
+        return by_id[span.parent.span_id].name if span.parent and span.parent.span_id in by_id else ''
+
+    turns = sorted((s for s in mine if s.name == 'turn'), key=lambda s: attrs(s)['turn.number'])
+    assert [attrs(t)['turn.number'] for t in turns] == [1, 2, 3], [t.attributes for t in turns]
+    assert all(under(t) == 'conversation' for t in turns)
+    greeting, asked, yes = (attrs(t) for t in turns)
+    assert 'input.value' not in greeting and greeting['output.value'] == 'Hola, soporte técnico.', greeting
+    assert asked['input.value'] == FIRST_WORDS and READBACK in asked['output.value'], asked
+    assert yes['input.value'] == 'Sí.', yes
+    for turn in (asked, yes):
+        latencies = [
+            turn.get(f'turn.{name}_seconds') for name in ('e2e', 'stt_final', 'eou', 'llm_ttft', 'tts_ttfb')
+        ]
+        assert all(isinstance(v, float) and v > 0 for v in latencies), turn
+        assert 0.3 < turn['turn.e2e_seconds'] < 3, 'voice to voice: the caller stopped, the reply played'
+
+    heard = [s for s in mine if s.name == 'stt']
+    assert [attrs(s)['output.value'] for s in heard] == [FIRST_WORDS, 'Sí.'], heard
+    assert all(under(s) == 'turn' and attrs(s)['metrics.ttfb'] > 0 for s in heard)
+    voiced = [s for s in mine if s.name == 'tts']
+    assert attrs(voiced[0])['input.value'].strip() == 'Hola, soporte técnico.', voiced
+    assert all(under(s) == 'turn' and attrs(s)['metrics.ttfb'] > 0 for s in voiced)
+    steps = [s for s in mine if attrs(s).get('runtime') == 'livekit' and s.name != 'conversation']
+    assert [s.name for s in steps] == ['desk', 'desk'] and all(under(s) == 'turn' for s in steps), steps
+    assert all(under(s) == 'desk' for s in mine if s.name == 'write'), 'a write is under the step that ran it'
+
+
 async def main() -> None:
     scenarios = (
         one_call_through,
@@ -623,6 +681,7 @@ async def main() -> None:
         a_holding_line_is_its_own_segment_in_order,
         talking_over_the_greeting_cuts_it_and_is_served,
         a_yes_whose_words_come_late_is_still_a_yes,
+        the_call_is_traced_as_unmute_core_traces_it,
     )
     chosen = [s for s in scenarios if not sys.argv[1:] or s.__name__ in sys.argv[1:]]
     with tempfile.TemporaryDirectory() as root:

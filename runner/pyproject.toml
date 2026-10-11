@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "The runner service: a FastAPI app that loads every agent once and carries their calls, over WebRTC or text."
 requires-python = ">=3.14"
 dependencies = [
-    "slng-voice-core[voice,tracing]",
+    "slng-voice-core[voice,tracing,livekit]",
     # Every core use case's model is Gemini on Vertex or OpenAI-compatible: the runner carries them all.
     "pydantic-ai-slim[google,openai]>=2.46.0",
     # SmallWebRTC (the browser's calls) and the runner's request types.

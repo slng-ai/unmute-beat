@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Nosh on core: an outbound guide to restaurants and bars, on the Render place tools."
 requires-python = ">=3.14"
 dependencies = [
-    "slng-voice-core[voice,tracing]",
+    "slng-voice-core[voice,tracing,livekit]",
     # The model this application picks; core names no provider.
     "pydantic-ai-slim[google,openai]>=2.46.0",
     "pipecat-ai[google,runner,silero,webrtc]>=1.11.0",

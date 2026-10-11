@@ -51,6 +51,7 @@ MODULES = (
     'tests.test_flow_rules',
     'tests.test_outcomes',
     'tests.test_webrtc',
+    'tests.test_livekit',
 )
 
 

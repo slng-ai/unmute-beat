@@ -7,9 +7,9 @@ same for every use case; what is the salon's own is in `salon/entry.py`.
 Load .env before importing the agents: they construct clients at import time, and those clients must
 see the configured credentials. The `.env` at the repository root is found by walking up from here.
 
-    uv run bot.py
-
-Then open http://localhost:7860 and talk.
+    uv run bot.py                  # Pipecat: open http://localhost:7860 and talk
+    uv run bot.py livekit dev      # the same call as a LiveKit agent (core.livekit_launch), one per room
+    uv run bot.py livekit console  # LiveKit, in this terminal
 
 `FLOW`: The compiled flow every call of this process shares (`salon.app.FLOW`): `server.py` reads it
 here.
@@ -24,7 +24,8 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.transports.base_transport import BaseTransport
 
-from core.launch import run_call, serve, transport_params
+from core.launch import run_call, transport_params
+from core.voice import serve
 from salon.entry import DIARY, ENTRY
 
 FLOW = ENTRY.flow()
@@ -51,4 +52,4 @@ async def bot(runner_args: RunnerArguments) -> None:
 
 
 if __name__ == '__main__':
-    serve()
+    serve(ENTRY)

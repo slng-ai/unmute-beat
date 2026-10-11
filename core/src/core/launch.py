@@ -58,52 +58,18 @@ except ImportError as missing:
 from core.entry import Entry, Opening
 from core.events import CallListener
 from core.graph import model_clients
-from core.processor import Ceiling, PydanticAgentProcessor, playout, record_ending, reports_playback
+from core.processor import PydanticAgentProcessor, playout, reports_playback
 from core.snapshot import TurnSnapshot
 from core.steps import StepFlow
-
-
-class CallTiming:
-    """The two waits a call is built with.
-
-    `FINISH_SECONDS` is how long a turn already running may go on after the caller hangs up: a reading
-    and a write fit in it. ponytail: a fixed bound; take it from the turn budget's own deadline if a
-    slower model or tool ever needs longer.
-
-    `IDLE_SECONDS` is the silence after the bot's last words before the caller is asked if they are
-    still there (`core.turn.remind`). At 8 s it talked over Coval's simulated callers, who often answer
-    9 to 13 s after a read-back: the reminder said the read-back again, their yes cut into that copy,
-    so it was asked again, up to five times (gate 1, BWqBhyLj). The calls that really stalled were
-    silent for 70 to 150 s.
-    """
-
-    FINISH_SECONDS = 8.0
-    IDLE_SECONDS = 20.0
-
-
-def max_call_seconds() -> float:
-    """`MAX_CALL_SECONDS`: end a call this long after the caller connects. 0, the default, never ends one.
-
-    Coval has no per-call duration limit (its API has none, and its polling
-    timeout is not one), so a simulated call is capped here, on the transport
-    that places the audio. `coval_sim` sets it for every simulated call.
-
-    ponytail: the call is torn down the way a hang-up is, turn finished first,
-    so it may run up to `CallTiming.FINISH_SECONDS` longer.
-    """
-    return float(os.getenv('MAX_CALL_SECONDS') or 0)
-
-
-def vad_stop_seconds() -> float:
-    """`VAD_STOP_SECS`: silence the voice detector waits before smart-turn judges whether the caller is done. 0.3 s by default.
-
-    Session 4 measured both sides of it: at 0.2 s, 30% of model requests were
-    cancelled because the caller went on after a pause, and 0.58 runs per caller
-    turn answered a piece of a turn already under way; at 0.6 s (8 calls) that
-    fell to 13% and 0.29, but the median turn waited 0.55 s longer. 0.3 s is the
-    chosen middle, not yet measured on its own.
-    """
-    return float(os.getenv('VAD_STOP_SECS') or 0.3)
+from core.voice import (
+    CallTiming,
+    Ceiling,
+    delivery,
+    max_call_seconds,
+    outcome,
+    record_ending,
+    vad_stop_seconds,
+)
 
 
 def twilio_marks() -> str:
@@ -114,22 +80,6 @@ def twilio_marks() -> str:
     Twilio call returns marks: leave it `echoed`. `coval_sim` sets `absent`.
     """
     return os.getenv('TWILIO_MARKS', 'echoed')
-
-
-def delivery() -> str:
-    """`DELIVERY`: `marks` (the default), a read-back is heard only on the transport's own playback report for it.
-
-    On a phone line that is its returned Twilio mark. In the browser it is the
-    page's playout report (`core.processor.WebRTCPlayout`): core's page at
-    /voice/ (Pipecat's own web client with core's playback reports,
-    `core.processor.serve_client`); the runner's prebuilt client at /client
-    reports no playback, and a call from it is refused before the greeting
-    (`reports_playback`). `simulated` lets estimated playback count as heard
-    instead (`core.processor.playout(simulate=True)`): only for Coval's
-    simulated carrier, which returns no marks (`coval_sim` sets it with
-    `TWILIO_MARKS=absent`), or a developer who asks for it.
-    """
-    return os.getenv('DELIVERY', 'marks')
 
 
 transport_params = {
@@ -265,18 +215,6 @@ def playback(agents: PydanticAgentProcessor, assistant_aggregator) -> None:
     async def on_assistant_turn_stopped(aggregator, message):
         """Cut the agents' record down to what the caller actually heard."""
         agents.note_spoken(message.content, message.interrupted, timestamp=message.timestamp)
-
-
-def _outcome(call: Any) -> Literal['goodbye', 'hangup', 'ceiling', 'failed', 'stopped']:
-    """How a call ended, from what it recorded: the ceiling first, then a goodbye, a failure, else a hang-up."""
-    kinds = {ending.get('kind') for ending in call.endings}
-    if 'ceiling' in kinds:
-        return 'ceiling'
-    if call.ended == 'caller' or call.departed:
-        return 'goodbye'
-    if call.ended == 'error':
-        return 'failed'
-    return 'hangup'
 
 
 async def run_call(
@@ -443,7 +381,7 @@ async def run_call(
         record_ending(call)
         if events is not None:
             call.turn_snapshot()
-            events.ended(call.turn, _outcome(call))
+            events.ended(call.turn, outcome(call))
             await events.close()
 
 

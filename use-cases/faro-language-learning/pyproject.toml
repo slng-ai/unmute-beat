@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Faro: a bilingual language-learning companion on core, with a SQLite store."
 requires-python = ">=3.14"
 dependencies = [
-    "slng-voice-core[voice,tracing]",
+    "slng-voice-core[voice,tracing,livekit]",
     # The model this application picks; core names no provider.
     "pydantic-ai-slim[google]>=2.46.0",
     "pydantic-extra-types[phonenumbers]>=2.11.1",

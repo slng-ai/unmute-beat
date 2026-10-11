@@ -941,6 +941,20 @@ class CallContext(BaseModel):
                 segment.cleared, segment.lost = True, 'failed'
                 self._log_playback('failed', name, at, segment.proposal)
 
+    def note_gap(self, name: str, at: float) -> None:
+        """The transport dropped part of this segment's audio before it played: it can never count as heard in full.
+
+        LiveKit's room output discards the audio it had queued (up to 200 ms)
+        when it pauses for what may be an interruption, and plays on from past
+        it if the caller said nothing (`core.livekit.SegmentPlayout`). The
+        segment's playback report then says it finished, but a word in the
+        middle of a read-back may be gone. Recorded as cleared, so its hearing
+        is `cut` and a read-back is asked again.
+        """
+        if (segment := self._marked(name)) is not None:
+            segment.cleared, segment.lost = True, 'cleared'
+            self._log_playback('cleared', name, at, segment.proposal)
+
     def _marked(self, name: str) -> Spoken | None:
         segment_id = self._pending_marks.get(name)
         return next((s for s in self.all_spoken if s.id == segment_id), None) if segment_id else None

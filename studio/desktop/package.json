@@ -1,0 +1,37 @@
+{
+  "name": "slng-studio-desktop",
+  "productName": "SLNG Studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SLNG Studio as a desktop app: an Electron window around slng studio up.",
+  "author": "SLNG",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac --dir -c.extraMetadata.studioRoot=\"$(cd ../.. && pwd)\""
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "ai.slng.studio",
+    "productName": "SLNG Studio",
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "files": ["main.js", "package.json", "resources/icon.png"],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "resources/icon.png",
+      "identity": "-",
+      "hardenedRuntime": true,
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "SLNG Studio uses the microphone for voice calls with your agents, from the Try it panel."
+      }
+    }
+  }
+}

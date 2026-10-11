@@ -424,8 +424,13 @@ The workspace uses Python 3.14+ and uv. Put the provider keys in the root `.env`
 uv sync --all-packages
 cd use-cases/salon
 uv run bot.py              # voice in the browser, http://localhost:7860
+uv run bot.py livekit dev  # the same call on LiveKit Agents (LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
 uv run python -m tests     # the offline suite, no model requests
 ```
+
+Every use case runs on Pipecat or on LiveKit Agents from the same `bot.py`. The brain is the same on both;
+[chapter 06](docs/architecture/06-livekit.md) explains how it plugs into LiveKit and what LiveKit can and
+cannot tell it about what the caller heard.
 
 ## Read more
 

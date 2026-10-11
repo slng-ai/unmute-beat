@@ -75,18 +75,21 @@ SMART_TURN_CEILING = 1.6
 """The longest wait after the caller stops before the turn ends: the Pipecat launcher's smart-turn `stop_secs`."""
 
 
-def speech_services(entry: Entry) -> tuple[slng.STT, slng.TTS]:
+def speech_services(entry: Entry, *, http_session: Any = None) -> tuple[slng.STT, slng.TTS]:
     """STT and TTS over SLNG, LiveKit's own plugin, with the Pipecat launcher's models, voice and regions.
 
     The same environment names (`SLNG_STT_MODEL`, `SLNG_TTS_MODEL`, `SLNG_TTS_VOICE`, the base URLs and
-    languages), so one profile runs both frameworks on the same speech.
+    languages), so one profile runs both frameworks on the same speech. `http_session` is for a caller
+    outside a LiveKit job (a live check), which has no job's HTTP session to lend the plugins.
     """
     key = os.environ['SLNG_API_KEY']
+    shared = {'http_session': http_session} if http_session is not None else {}
     stt = slng.STT(
         api_key=key,
         slng_base_url=os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai'),
         model=os.getenv('SLNG_STT_MODEL', 'soniox/speech-ai:rt-v5'),
         language=os.getenv('SLNG_STT_LANGUAGE') or entry.stt_language,
+        **shared,
     )
     tts = slng.TTS(
         api_key=key,
@@ -95,6 +98,7 @@ def speech_services(entry: Entry) -> tuple[slng.STT, slng.TTS]:
         voice=os.getenv('SLNG_TTS_VOICE', '1258154bb41540c7b9dc0d10cd6704bf'),
         language=os.getenv('SLNG_TTS_LANGUAGE') or entry.tts_language,
         warm_standby_enabled=True,
+        **shared,
     )
     return stt, tts
 
@@ -128,6 +132,20 @@ def turn_handling(entry: Entry) -> TurnHandlingOptions:
         case other:
             raise ValueError(f'LIVEKIT_TURN_DETECTION={other!r}: leave it unset, or name vad or stt')
     return options
+
+
+def session_for(entry: Entry, *, stt: Any, tts: Any, vad: Any) -> AgentSession:
+    """The session one call runs in: these speech services, the entry's turn taking, no away timer.
+
+    Silence is `FlowAgent`'s to notice (`core.turn.remind`), so LiveKit's own away timer stays off. An
+    STT that can be told when the caller stops (SLNG's) is attached, so it finalises at once.
+    """
+    session = AgentSession(
+        stt=stt, tts=tts, vad=vad, turn_handling=turn_handling(entry), user_away_timeout=None
+    )
+    if callable(attach := getattr(stt, 'attach_to_session', None)):
+        attach(session)
+    return session
 
 
 def prewarm(proc: JobProcess) -> None:
@@ -203,11 +221,7 @@ async def run_call(
 
     stt, tts = (speech or (lambda: speech_services(entry)))()
     vad = vad or ctx.proc.userdata.get('vad') or silero.VAD.load(min_silence_duration=vad_stop_seconds())
-    session = AgentSession(
-        stt=stt, tts=tts, vad=vad, turn_handling=turn_handling(entry), user_away_timeout=None
-    )
-    if callable(attach := getattr(stt, 'attach_to_session', None)):
-        attach(session)
+    session = session_for(entry, stt=stt, tts=tts, vad=vad)
     agent = FlowAgent(call, flow.nodes, idle_seconds=CallTiming.IDLE_SECONDS, reminders=entry.reminders)
     playout(call, simulate=delivery() == 'simulated' if simulate is None else simulate)
 

@@ -637,12 +637,19 @@ class FlowAgent(Agent):
             self.interrupt()
 
     def _on_user_state(self, event: UserStateChangedEvent) -> None:
+        """The caller started speaking: an onset, and with nothing of ours running or waiting, a barge-in.
+
+        As Pipecat's interruption at every user turn start, so the next words are
+        known to come after the caller spoke again (`continues_turn`). A reply
+        still running or waiting to play is LiveKit's to interrupt or keep, and
+        reaches here as a clear or an interrupted speech if it does.
+        """
         if event.new_state != 'speaking':
             return
         self._cancel_quiet()
         self.call.note_onset(_perf(event.created_at) - ONSET_LEAD)
         session = self._session
-        if session is not None and session.agent_state != 'speaking' and self._idle.is_set():
+        if session is not None and self._idle.is_set() and session.current_speech is None:
             self.interrupt()
 
     def _on_transcribed(self, event: UserInputTranscribedEvent) -> None:

@@ -17,6 +17,7 @@ between nodes does not start a new conversation.
 | [03 — State, memory, records and services](03-typed-state-and-history.md) | Where does each kind of data live, who may write it, and what does each node's model see? |
 | [04 — Nodes and agent.yaml](04-typed-flows-and-node-agents.md) | How do we design the nodes, write the manifest, and what does core build from it? |
 | [05 — Operations, approval and recovery](05-tools-approval-and-recovery.md) | How does a change run safely, and what happens when we do not know whether it finished? |
+| [06 — Running on LiveKit](06-livekit.md) | How does the same brain plug into LiveKit Agents, what does LiveKit tell it about the caller, and what is still missing? |
 
 Read in order for a gradual introduction. Each chapter ends with a runnable offline check and links to the code.
 Examples marked as excerpts need the other application files around them.

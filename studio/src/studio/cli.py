@@ -1,6 +1,6 @@
 """The `slng` command. `slng studio up` is the one a person types.
 
-    slng studio up [--dev] [--no-services] [--no-runner] [--port N]
+    slng studio up [--dev] [--no-services] [--no-runner] [--app] [--port N]
                                                          containers, engine, a runner, web; ctrl+c stops them all
     slng studio runner [--port N] [--max-calls N]        one more runner, linked to the studio that is up
     slng studio down [--volumes]                         stop and remove the containers (and the data)
@@ -10,7 +10,8 @@
 
 `up` starts the engine first and lets it bring the rest up, so the browser shows the loading
 screen from the first second (`studio.boot`). Containers are stopped, not removed, on ctrl+c:
-the runs stay in the `slng-studio_pg` volume until `down --volumes`.
+the runs stay in the `slng-studio_pg` volume until `down --volumes`. `up --app` opens the studio in a
+window of its own once it is ready (`studio.window`).
 
 `up` also starts one runner (`voice_runner`): the process that carries calls, by voice from the
 browser or by text, for every agent in the repository. `runner` starts another, on the next port, to
@@ -37,6 +38,7 @@ from studio.agents.catalog import Catalog
 from studio.boot import Shell
 from studio.runs.process import RunnerProcess
 from studio.settings import STUDIO, Settings
+from studio.window import AppWindow
 
 type Run = Callable[[list[str], Path, dict[str, str]], int]
 
@@ -65,6 +67,11 @@ class Cli:
         up.add_argument(
             '--no-runner', action='store_true', help='start no runner: add one with `slng studio runner`'
         )
+        up.add_argument(
+            '--app',
+            action='store_true',
+            help='open the studio in a window of its own (Chrome or Edge) once it is ready',
+        )
         runner = commands.add_parser('runner', help='start one more runner, linked to the studio')
         runner.add_argument(
             '--port', dest='runner_port', type=int, help='its port (default: the next free from 7811)'
@@ -87,7 +94,9 @@ class Cli:
         cli = cls(replace(settings, port=args.port) if getattr(args, 'port', None) else settings)
         match args.command:
             case 'up':
-                return cli.up(dev=args.dev, services=not args.no_services, runner=not args.no_runner)
+                return cli.up(
+                    dev=args.dev, services=not args.no_services, runner=not args.no_runner, app=args.app
+                )
             case 'runner':
                 return cli.runner(args.runner_port, args.max_calls)
             case 'down':
@@ -122,7 +131,7 @@ class Cli:
             print('docker: not found. The studio needs Docker with compose v2.', file=sys.stderr)
             return 127
 
-    def up(self, *, dev: bool, services: bool, runner: bool = True) -> int:
+    def up(self, *, dev: bool, services: bool, runner: bool = True, app: bool = False) -> int:
         """Serve until ctrl+c, then stop what was started. Imports uvicorn here so `agents` stays light."""
         import uvicorn
 
@@ -130,8 +139,9 @@ class Cli:
         from studio.boot import Boot
 
         settings = self.settings
-        app = Studio(settings, Boot(settings, services=services), runner=runner).app()
+        served = Studio(settings, Boot(settings, services=services), runner=runner).app()
         web = self._vite() if dev else None
+        window = AppWindow(settings) if app else None
         print(
             f'\n  slng studio  →  http://localhost:{settings.web_dev_port if dev else settings.port}',
             flush=True,
@@ -144,9 +154,13 @@ class Cli:
             )
         if services:
             print(f'  traces in Jaeger at http://localhost:{settings.jaeger_port}\n', flush=True)
+        if window is not None:
+            window.start()
         try:
-            uvicorn.run(app, host=settings.host, port=settings.port, log_level='warning')
+            uvicorn.run(served, host=settings.host, port=settings.port, log_level='warning')
         finally:
+            if window is not None:
+                window.close()
             if web is not None:
                 web.terminate()
             if services:

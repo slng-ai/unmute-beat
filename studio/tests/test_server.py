@@ -42,6 +42,7 @@ def the_api_serves_agents_and_says_what_is_missing():
             nowhere.json()
         )
         assert client.get('/api/runners').json() == []
+        assert client.get('/api/renewal').json() == {'doing': ''}, 'nothing renewed: no words'
         assert client.get('/voice-sdk/playout.js').status_code == 200, (
             "core's voice page is served for the studio"
         )

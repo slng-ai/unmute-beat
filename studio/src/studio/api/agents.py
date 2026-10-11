@@ -109,7 +109,7 @@ class AgentRoutes:
                     fact.latest = states[-1].get(fact.name)
                 view.latest_run = row.id
                 break
-        view.runners = self.studio.renewal
+        view.runners = self.studio.renewal_now().doing
         return view
 
     def check_fact(self, agent_id: str, edit: FactEdit) -> FactChecked:

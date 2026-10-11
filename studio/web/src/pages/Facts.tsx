@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, ApiError } from '../api/client';
-import type { Fact, FactChecked, FactEdit, FactKind, FactLimits, FactsView, FactUse, FactUseKind, NewKind } from '../api/types';
+import type { Fact, FactChecked, FactEdit, FactExcerpt, FactKind, FactLimits, FactsView, FactUse, FactUseKind, NewKind } from '../api/types';
 import { useApi } from '../api/useApi';
+import { Placeholder } from '../components/Placeholder';
+import { useKey } from '../keys';
 import { ModelView } from '../model';
-import { go, href } from '../router';
+import { go, href, useUnsaved, type Route } from '../router';
+
+/** The address of the new-fact form, in the place of a fact's name: no Python name starts with `+`. */
+export const NEW_FACT = '+new';
+
+/** Operations a use names: their chips open the operation on the Operations tab. */
+const OPERATION_USES: FactUseKind[] = ['input', 'set_by', 'read_back', 'carried_out'];
+/** Steps a use names: their chips open the step on Build and try. */
+const STEP_USES: FactUseKind[] = ['fills', 'sees', 'asks', 'needed', 'offered', 'rests_on'];
 
 const GROUPS: { id: Fact['group']; title: string; about: string }[] = [
   { id: 'caller', title: 'Filled in by the caller', about: 'Steps record these from what the caller says.' },
@@ -111,30 +121,80 @@ function accepts(fact: Fact): string[] {
   return words;
 }
 
+/** How the list is drawn, kept in this browser: cards or compact rows, and the groups folded away. */
+type ListStyle = { compact: boolean; folded: Fact['group'][] };
+
+const LIST_KEY = 'studio.facts.list';
+
+/** The list style this browser last chose; the default where storage is blocked or holds something else. */
+function readListStyle(): ListStyle {
+  try {
+    const found = JSON.parse(window.localStorage.getItem(LIST_KEY) ?? '{}') as Partial<ListStyle>;
+    return { compact: found.compact === true, folded: Array.isArray(found.folded) ? found.folded : [] };
+  } catch {
+    return { compact: false, folded: [] };
+  }
+}
+
+/** The list style, read once and written back on each change. A browser that refuses storage keeps it until the page closes. */
+function useListStyle(): [ListStyle, (next: ListStyle) => void] {
+  const [style, setStyle] = useState(readListStyle);
+  const set = (next: ListStyle) => {
+    setStyle(next);
+    try {
+      window.localStorage.setItem(LIST_KEY, JSON.stringify(next));
+    } catch {
+      /* storage blocked: the choice lasts this visit */
+    }
+  };
+  return [style, set];
+}
+
 /**
- * The Facts tab: what an agent keeps track of on a call, each fact as a card, and one fact's detail, uses and
- * the changes the studio can prove. A change is checked on a copy first (the module still reads as Python and
- * changed only there, the agent still loads, the facts' schema changed by exactly that) and only then saved.
+ * The runners being renewed after a save, said live: read every second from `/api/renewal` while it goes on,
+ * then "every new run uses the new code" once it is over. `start` is how it stood when the facts were read.
+ */
+function RunnerLine({ start }: { start: string }) {
+  const [doing, setDoing] = useState(start);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    if (!doing) return;
+    const timer = window.setInterval(() => {
+      api.renewal().then(
+        (now) => {
+          setDoing(now.doing);
+          if (!now.doing) setDone(true);
+        },
+        () => undefined,
+      );
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [Boolean(doing)]);
+  if (doing) return <div className="warn" role="status">{doing}</div>;
+  if (done) return <div className="good" role="status">Every new run now uses the new code.</div>;
+  return null;
+}
+
+/**
+ * The Facts tab: what an agent keeps track of on a call, each fact as a card or a compact row, grouped by who
+ * fills it in, and one fact's detail, uses and the changes the studio can prove. A change is checked on a copy
+ * first (the module still reads as Python and changed only there, the agent still loads, the facts' schema
+ * changed by exactly that) and only then saved. An unsaved change is asked about before it is lost.
  */
 export function FactsTab({ agent, picked, onSaved }: { agent: string; picked?: string; onSaved: () => void }) {
   const [reload, setReload] = useState(0);
-  const loaded = useApi(() => api.facts(agent), `facts-${agent}-${reload}`);
-  const [adding, setAdding] = useState(false);
+  const loaded = useApi(() => api.facts(agent), `facts-${agent}-${reload}`, true);
   const [find, setFind] = useState('');
+  const [list, setList] = useListStyle();
   const [result, setResult] = useState<{ name: string; checked: FactChecked; message: string } | null>(null);
   const view = loaded.state === 'ok' ? loaded.data : undefined;
-  const fact = view?.facts.find((f) => f.name === picked) ?? (adding ? undefined : view?.facts[0]);
+  const adding = picked === NEW_FACT;
+  const fact = adding ? undefined : (view?.facts.find((f) => f.name === picked) ?? view?.facts[0]);
+  /** Whether a route shows the same fact (or the same new-fact form) as now: a move anywhere else loses its draft. */
+  const elsewhere = (shownName: string) => (next: Route) =>
+    !(next.page === 'agents' && (next.agent ?? agent) === agent && next.tab === 'facts' && (next.step ?? view?.facts[0]?.name) === shownName);
 
-  useEffect(() => {
-    if (!view?.runners) return;
-    const timer = window.setTimeout(() => setReload((n) => n + 1), 3000);
-    return () => window.clearTimeout(timer);
-  }, [view?.runners]);
-
-  const pick = (name?: string) => {
-    setAdding(false);
-    go({ page: 'agents', agent, tab: 'facts', step: name });
-  };
+  const pick = (name?: string) => go({ page: 'agents', agent, tab: 'facts', step: name });
   const saved = (name: string, checked: FactChecked, message: string) => {
     setResult({ name, checked, message });
     if (checked.saved) {
@@ -143,7 +203,7 @@ export function FactsTab({ agent, picked, onSaved }: { agent: string; picked?: s
     }
   };
 
-  if (loaded.state === 'loading' && !view) return <p className="empty" style={{ padding: 24 }}>Reading the facts…</p>;
+  if (loaded.state === 'loading' && !view) return <Placeholder what="the facts" rows={4} />;
   if (loaded.state === 'error') return <p className="error-box" style={{ margin: 24 }}>{loaded.message}</p>;
   if (!view) return null;
   if (view.problems.length) {
@@ -167,39 +227,67 @@ export function FactsTab({ agent, picked, onSaved }: { agent: string; picked?: s
           <p className="facts-lead">What the agent keeps track of on a call. Every call starts with them empty; steps fill them in from what the caller says, and tools set them from what the business answers.</p>
           <span className="hint">defined in {view.file} · {view.class_name} · {view.facts.length} facts</span>
         </div>
-        {view.runners && <div className="warn">{view.runners}</div>}
+        <RunnerLine key={view.version} start={view.runners} />
         {view.rules.length > 0 && (
           <div className="facts-rule">
             <span className="lbl">All the facts together have a rule in code</span>
             {view.rules.map((r) => <span key={r.name} className="hint">{r.name} · {r.where}</span>)}
           </div>
         )}
-        <button type="button" className="btn btn-y" style={{ justifyContent: 'center' }} onClick={() => { setAdding(true); setResult(null); }}>+ Add a fact</button>
-        <div className="field">
-          <label htmlFor="fact-find">Find a fact</label>
-          <input id="fact-find" className="input" type="search" placeholder="a name, or a word in its meaning" value={find} onChange={(e) => setFind(e.target.value)} />
+        <a className="btn btn-y" style={{ justifyContent: 'center' }} href={href({ page: 'agents', agent, tab: 'facts', step: NEW_FACT })} onClick={() => setResult(null)}>+ Add a fact</a>
+        <div className="facts-tools">
+          <div className="field" style={{ flex: '1 1 180px' }}>
+            <label htmlFor="fact-find">Find a fact</label>
+            <input id="fact-find" className="input" type="search" placeholder="a name, or a word in its meaning" value={find} onChange={(e) => setFind(e.target.value)} />
+          </div>
+          <div className="segs" role="group" aria-label="List style">
+            <button type="button" className={`seg${list.compact ? '' : ' seg-on'}`} aria-pressed={!list.compact} onClick={() => setList({ ...list, compact: false })}>Cards</button>
+            <button type="button" className={`seg${list.compact ? ' seg-on' : ''}`} aria-pressed={list.compact} onClick={() => setList({ ...list, compact: true })}>Compact</button>
+          </div>
         </div>
         {GROUPS.map((g) => {
           const own = matching.filter((f) => f.group === g.id);
+          const open = needle !== '' || !list.folded.includes(g.id);
+          const fold = () => setList({ ...list, folded: open ? [...list.folded, g.id] : list.folded.filter((x) => x !== g.id) });
           return (
             <section key={g.id} className="facts-group" aria-label={g.title}>
-              <div className="facts-group-h">
+              <button type="button" className="facts-fold" aria-expanded={open} aria-controls={`facts-${g.id}`} onClick={fold}>
+                <span className="mono dim facts-fold-mark" aria-hidden="true">{open ? '▾' : '▸'}</span>
                 <h2 className="lbl">{g.title}</h2>
                 <span className="mono dim">{own.length}</span>
-              </div>
-              <span className="hint">{g.about}</span>
-              {own.length === 0 && <span className="facts-none">{needle ? 'None match.' : 'None in this agent.'}</span>}
-              {own.map((f) => (
-                <a key={f.name} className={`fact-card${fact?.name === f.name && !adding ? ' fact-card-on' : ''}`} href={href({ page: 'agents', agent, tab: 'facts', step: f.name })} aria-current={fact?.name === f.name && !adding ? 'true' : undefined} onClick={() => setAdding(false)}>
-                  <span className="fact-card-top">
-                    <span className="fact-card-name">{f.label}</span>
-                    <span className="mono dim">{f.name}</span>
-                  </span>
-                  <span className="fact-kind">{f.kind.words}</span>
-                  {f.description ? <span className="fact-card-about">{f.description}</span> : <span className="fact-card-about dim">No meaning written for the agent.</span>}
-                  <span className="mono dim fact-card-uses">{summary(f)}</span>
-                </a>
-              ))}
+              </button>
+              {open && (
+                <div id={`facts-${g.id}`} className={list.compact ? 'facts-rows' : 'facts-cards'}>
+                  {!list.compact && <span className="hint">{g.about}</span>}
+                  {own.length === 0 && <span className="facts-none">{needle ? 'None match.' : 'None in this agent.'}</span>}
+                  {own.map((f) => {
+                    const on = fact?.name === f.name;
+                    const to = href({ page: 'agents', agent, tab: 'facts', step: f.name });
+                    return list.compact ? (
+                      <a key={f.name} className={`fact-row${on ? ' fact-row-on' : ''}`} href={to} aria-current={on ? 'true' : undefined}>
+                        <span className="fact-row-name">{f.label}</span>
+                        <span className="fact-kind fact-row-kind">{f.kind.words}</span>
+                      </a>
+                    ) : (
+                      <a key={f.name} className={`fact-card${on ? ' fact-card-on' : ''}`} href={to} aria-current={on ? 'true' : undefined}>
+                        <span className="fact-card-top">
+                          <span className="fact-card-name">{f.label}</span>
+                          <span className="mono dim">{f.name}</span>
+                        </span>
+                        <span className="fact-kind">{f.kind.words}</span>
+                        {f.description ? (
+                          <span className="fact-card-about">{f.description}</span>
+                        ) : f.kind.description ? (
+                          <span className="fact-card-about dim">From its kind: {f.kind.description}</span>
+                        ) : (
+                          <span className="fact-card-about dim">No meaning written for the agent.</span>
+                        )}
+                        <span className="mono dim fact-card-uses">{summary(f)}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           );
         })}
@@ -207,14 +295,14 @@ export function FactsTab({ agent, picked, onSaved }: { agent: string; picked?: s
       <main className="facts-main">
         <button type="button" className="facts-back mono" onClick={() => pick(undefined)}>← All facts</button>
         {adding ? (
-          <AddFact view={view} agent={agent} onCancel={() => setAdding(false)} onDone={(name, checked, message) => { saved(name, checked, message); if (checked.saved) pick(name); }} />
+          <AddFact view={view} agent={agent} elsewhere={elsewhere(NEW_FACT)} onCancel={() => pick(undefined)} onDone={(name, checked, message) => { saved(name, checked, message); if (checked.saved) pick(name); }} />
         ) : fact ? (
-          <FactDetail key={`${fact.name}-${view.version}`} fact={fact} view={view} agent={agent} result={result?.name === fact.name ? result : null} onStart={() => setResult(null)} onResult={saved} />
+          <FactDetail key={`${fact.name}-${view.version}`} fact={fact} view={view} agent={agent} elsewhere={elsewhere(fact.name)} result={result?.name === fact.name ? result : null} onStart={() => setResult(null)} onResult={saved} />
         ) : (
           <div className="facts-empty">
             <h2>No facts yet</h2>
             <p className="facts-lead">This agent keeps track of nothing between turns: every step works only from what the caller just said. Add a fact for anything a later step, a tool or a closing line needs to know.</p>
-            <button type="button" className="btn btn-y" onClick={() => setAdding(true)}>+ Add the first fact</button>
+            <a className="btn btn-y" href={href({ page: 'agents', agent, tab: 'facts', step: NEW_FACT })}>+ Add the first fact</a>
           </div>
         )}
       </main>
@@ -246,9 +334,38 @@ function KindBlock({ kind, editing = false }: { kind: FactKind; editing?: boolea
   );
 }
 
-/** Every use of a fact, by kind, each place a link to where it is when the studio can show it. */
+/** A few lines of a file around the one that names the fact, that line marked, with a way to put it away. */
+function Lines({ file, line, excerpt, onClose }: { file: string; line: number; excerpt: FactExcerpt; onClose: () => void }) {
+  return (
+    <figure className="fact-lines" aria-label={`${file}, line ${line}`}>
+      <figcaption className="fact-lines-h">
+        <span className="mono">{file} · line {line}</span>
+        <span style={{ flex: '1 1 auto' }} />
+        <button type="button" className="chip-x" aria-label={`Close ${file}`} onClick={onClose}>×</button>
+      </figcaption>
+      <pre className="fact-lines-b">
+        {excerpt.lines.map((text, i) => {
+          const number = excerpt.first + i;
+          return (
+            <span key={number} className={number === line ? 'fact-lines-on' : undefined}>
+              <span className="fact-lines-n" aria-hidden="true">{number}</span>
+              {text}
+              {'\n'}
+            </span>
+          );
+        })}
+      </pre>
+    </figure>
+  );
+}
+
+/**
+ * Every use of a fact, by kind. A step opens on Build and try, an operation on the Operations tab, and a file
+ * and line shows its lines in place: the studio does not serve the application's code.
+ */
 function UsesTable({ fact, agent, latest, latestRun }: { fact: Fact; agent: string; latest: ReactNode; latestRun: string }) {
   const rows = USES.map((u) => ({ ...u, found: fact.uses.filter((use) => use.kind === u.kind) })).filter((u) => u.found.length);
+  const [shownAt, setShownAt] = useState('');
   return (
     <section className="panel" aria-label="Where it is used">
       <div className="panel-h">
@@ -257,25 +374,38 @@ function UsesTable({ fact, agent, latest, latestRun }: { fact: Fact; agent: stri
         <span className="hint">from the engine's own reading of agent.yaml and the code</span>
       </div>
       {rows.length === 0 && <div className="fact-use"><span className="hint">Not used by any step, tool or prompt yet.</span></div>}
-      {rows.map((u) => (
-        <div key={u.kind} className="fact-use">
-          <span className="mono fact-use-k">{u.label}</span>
-          <span className="fact-use-v">
-            {[...new Map(u.found.map((use) => [place(use, fact.name), use])).values()].map((use) => {
-              const text = place(use, fact.name);
-              if (!text) return null;
-              return use.step && ['fills', 'sees', 'asks', 'needed'].includes(use.kind) ? (
-                <a key={text} className="chip" href={href({ page: 'agents', agent, tab: 'build', step: use.step })}>{text}</a>
-              ) : (
-                <span key={text} className="chip">{text}</span>
-              );
-            })}
-            {u.kind === 'asks' && u.found[0]?.detail && <span className="hint">"{u.found[0].detail}"</span>}
-            {u.kind === 'needed' && u.found[0]?.detail && <span className="hint">{u.found[0].detail} fills it in first</span>}
-            {u.note && <span className="hint">{u.note}</span>}
-          </span>
-        </div>
-      ))}
+      {rows.map((u) => {
+        const unique = [...new Map(u.found.map((use) => [place(use, fact.name), use])).values()];
+        const open = unique.find((use) => use.excerpt && place(use) === shownAt);
+        return (
+          <div key={u.kind} className="fact-use">
+            <span className="mono fact-use-k">{u.label}</span>
+            <span className="fact-use-v">
+              {unique.map((use) => {
+                const text = place(use, fact.name);
+                if (!text) return null;
+                if (OPERATION_USES.includes(use.kind) && use.operation) {
+                  return <a key={text} className="chip" href={href({ page: 'agents', agent, tab: 'operations', step: use.operation })}>{text}</a>;
+                }
+                if (STEP_USES.includes(use.kind) && use.step) {
+                  return <a key={text} className="chip" href={href({ page: 'agents', agent, tab: 'build', step: use.step })}>{text}</a>;
+                }
+                if (use.excerpt) {
+                  const at = place(use);
+                  return (
+                    <button key={text} type="button" className="chip" aria-expanded={shownAt === at} onClick={() => setShownAt(shownAt === at ? '' : at)}>{text}</button>
+                  );
+                }
+                return <span key={text} className="chip">{text}</span>;
+              })}
+              {u.kind === 'asks' && u.found[0]?.detail && <span className="hint">"{u.found[0].detail}"</span>}
+              {u.kind === 'needed' && u.found[0]?.detail && <span className="hint">{u.found[0].detail} fills it in first</span>}
+              {u.note && <span className="hint">{u.note}</span>}
+              {open?.excerpt && <Lines file={open.file} line={open.line} excerpt={open.excerpt} onClose={() => setShownAt('')} />}
+            </span>
+          </div>
+        );
+      })}
       <div className="fact-use">
         <span className="mono fact-use-k">In the latest run</span>
         <span className="fact-use-v">
@@ -324,9 +454,13 @@ async function submit(agent: string, edit: FactEdit, save: boolean): Promise<{ c
 
 type Draft = { description?: string; choices?: string[]; limits?: FactLimits; may_be_empty?: boolean; start?: unknown; fill_steps?: string[] };
 
-/** One fact: what it is, what it accepts, its rules, where it is used, and the changes the studio can prove. */
-function FactDetail({ fact, view, agent, result, onStart, onResult }: { fact: Fact; view: FactsView; agent: string; result: { checked: FactChecked; message: string } | null; onStart: () => void; onResult: (name: string, checked: FactChecked, message: string) => void }) {
+/**
+ * One fact: what it is, what it accepts, its rules, where it is used, and the changes the studio can prove.
+ * `elsewhere` says which moves leave this fact: one of them with the draft unsaved is asked about first.
+ */
+function FactDetail({ fact, view, agent, elsewhere, result, onStart, onResult }: { fact: Fact; view: FactsView; agent: string; elsewhere: (next: Route) => boolean; result: { checked: FactChecked; message: string } | null; onStart: () => void; onResult: (name: string, checked: FactChecked, message: string) => void }) {
   const [draft, setDraft] = useState<Draft>({});
+  const [source, setSource] = useState(false);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [choice, setChoice] = useState('');
@@ -354,6 +488,9 @@ function FactDetail({ fact, view, agent, result, onStart, onResult }: { fact: Fa
     if (value && !choices.includes(value)) setDraft({ ...draft, choices: [...choices, value] });
     setChoice('');
   };
+  useUnsaved(dirty ? elsewhere : null);
+  useKey('s', () => dirty && !busy && void run(true));
+  const meaning = draft.description ?? fact.description;
   const latest = fact.latest !== null && typeof fact.latest === 'object' ? <ModelView value={fact.latest} /> : <span className="mono" style={{ color: fact.latest == null ? 'var(--dim)' : 'var(--ok)' }}>{shown(fact.latest)}</span>;
 
   return (
@@ -362,17 +499,29 @@ function FactDetail({ fact, view, agent, result, onStart, onResult }: { fact: Fa
         <div style={{ flex: '1 1 320px', minWidth: 0 }}>
           <div className="lbl">{group}</div>
           <h2 className="fact-detail-name">{fact.label}</h2>
-          <div className="mono dim" style={{ fontSize: 13, marginTop: 4 }}>{fact.name}{fact.line ? ` · ${view.file} line ${fact.line}` : ''}</div>
+          <div className="fact-where">
+            <span className="mono dim">{fact.name}</span>
+            {fact.line > 0 && fact.excerpt && (
+              <button type="button" className="chip" aria-expanded={source} onClick={() => setSource(!source)}>{view.file}:{fact.line}</button>
+            )}
+          </div>
         </div>
         <span className="tag tag-y">{fact.kind.words}</span>
       </header>
+      {source && fact.excerpt && <Lines file={view.file} line={fact.line} excerpt={fact.excerpt} onClose={() => setSource(false)} />}
 
       <section className="field">
         <label htmlFor="fact-meaning">What the agent is told it means</label>
         {can.description ? (
-          <textarea id="fact-meaning" className="textarea fact-prose" rows={3} value={draft.description ?? fact.description} placeholder="Nothing yet: the agent only has the name to go on." onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+          <textarea id="fact-meaning" className="textarea fact-prose" rows={3} value={meaning} placeholder={fact.kind.description ? "Nothing of its own: the agent reads its kind's description, below." : 'Nothing yet: the agent only has the name to go on.'} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
         ) : (
           <div className="facts-ro">{fact.description || 'Nothing written.'} <br />{fact.why_not.description}</div>
+        )}
+        {!meaning && fact.kind.description && (
+          <div className="facts-kindnote">
+            <span className="lbl">From its kind · {fact.kind.model || fact.kind.words}</span>
+            <span>{fact.kind.description}</span>
+          </div>
         )}
         <div className="warn">The model reads this to decide what to record. Changing it changes how the agent behaves, like a prompt: try a real run after saving.</div>
         {fact.note && <span className="hint">Note in code, for developers (the model never reads it): {fact.note}</span>}
@@ -499,7 +648,7 @@ function FactDetail({ fact, view, agent, result, onStart, onResult }: { fact: Fa
 }
 
 /** A new fact: its name, its kind from a small palette, what it means, and the steps that fill it in. */
-function AddFact({ view, agent, onCancel, onDone }: { view: FactsView; agent: string; onCancel: () => void; onDone: (name: string, checked: FactChecked, message: string) => void }) {
+function AddFact({ view, agent, elsewhere, onCancel, onDone }: { view: FactsView; agent: string; elsewhere: (next: Route) => boolean; onCancel: () => void; onDone: (name: string, checked: FactChecked, message: string) => void }) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<NewKind>('text');
   const [choices, setChoices] = useState<string[]>([]);
@@ -525,6 +674,9 @@ function AddFact({ view, agent, onCancel, onDone }: { view: FactsView; agent: st
     setResult(done);
     if (done.checked.saved) onDone(name, done.checked, done.message);
   };
+  const started = Boolean(name || description || choices.length || steps.length);
+  useUnsaved(started && !result?.checked.saved ? elsewhere : null);
+  useKey('s', () => ready && !busy && void send(true));
   return (
     <div className="fact-detail">
       <header>

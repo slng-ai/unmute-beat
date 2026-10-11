@@ -29,6 +29,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+import core
 from studio.agents.configs import AgentConfig
 from studio.agents.facts_editor import FactsEditor
 from studio.agents.models import Fact, FactEdit, FactLimits
@@ -105,6 +106,14 @@ def each_fact_is_read_from_its_type():
         'an argument taken from inside a fact (AliasPath) uses that fact'
     )
     assert 'Service, defined in salon/receipts.py' in salon['service'].why_not['choices']
+    assert phone.kind.description == core.Phone.DESCRIPTION, 'the kind says what the model reads of it'
+    assert salon['complaint'].kind.description == '', 'plain text has no description of its own'
+    assert day.excerpt is not None and any('booking_day' in line for line in day.excerpt.lines)
+    assert day.excerpt.lines[day.line - day.excerpt.first].lstrip().startswith('booking_day'), day.excerpt
+    code = [u for u in salon['customer_phone'].uses if u.kind == 'code']
+    assert code and all(
+        u.excerpt and 'customer_phone' in u.excerpt.lines[u.line - u.excerpt.first] for u in code
+    ), code
 
     wasla = facts(editor(copied(WASLA), 'wasla').read())
     promise = wasla['promise_day']

@@ -143,7 +143,7 @@ class Cli:
         web = self._vite() if dev else None
         window = AppWindow(settings) if app else None
         print(
-            f'\n  slng studio  →  http://localhost:{settings.web_dev_port if dev else settings.port}',
+            f'\n  slng studio  →  http://{settings.host}:{settings.web_dev_port if dev else settings.port}',
             flush=True,
         )
         print('  ctrl+c stops everything\n', flush=True)

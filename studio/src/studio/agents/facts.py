@@ -39,7 +39,7 @@ from pathlib import Path
 from types import UnionType
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PydanticUserError, TypeAdapter
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
@@ -64,6 +64,8 @@ class Kind:
 
     `code` names the kind (`text`, `whole_number`, `number`, `yes_no`, `date`, `not_past`, `time`,
     `date_time`, `choice`, `phone`, `quoted`, `group`, `list`, `union`, `other`); `words` says it.
+    `description` is the kind's own, from its JSON schema: what the model reads about a fact that has no
+    description of its own (`core.Phone.DESCRIPTION`, a group's docstring).
     """
 
     WORDS: typing.ClassVar[dict[str, tuple[str, str]]] = {
@@ -227,7 +229,17 @@ class Kind:
             'fields': [],
             'item': None,
             'defined_in': '',
+            'description': self._about(),
         } | more
+
+    def _about(self) -> str:
+        """The kind's own description in its JSON schema, as Pydantic builds it for the model; '' when it has none."""
+        if not isinstance(self.annotation, type):
+            return ''
+        try:
+            return TypeAdapter(self.annotation).json_schema().get('description', '')
+        except PydanticUserError:
+            return ''
 
     def _where(self, kind: type) -> str:
         """The file a type is defined in, relative to the agent's package folder when it is inside it."""
@@ -235,11 +247,8 @@ class Kind:
             path = Path(inspect.getfile(kind)).resolve()
         except TypeError:
             return ''
-        return (
-            str(path.relative_to(self.folder.parent))
-            if path.is_relative_to(self.folder.parent)
-            else path.name
-        )
+        root = self.folder.parent.resolve()
+        return str(path.relative_to(root)) if path.is_relative_to(root) else path.name
 
 
 class Limits:
@@ -349,6 +358,18 @@ class Fact:
         return False, info.default.isoformat() if hasattr(info.default, 'isoformat') else info.default
 
 
+class Excerpt:
+    """The lines around one line of a file, so the page shows a use where it is without serving the file."""
+
+    REACH = 2
+
+    @classmethod
+    def of(cls, lines: list[str], line: int) -> dict[str, Any]:
+        """Line `line` (counted from 1) with `REACH` lines either side: the first one's number, and the text."""
+        first = max(1, line - cls.REACH)
+        return {'first': first, 'lines': lines[first - 1 : line + cls.REACH]}
+
+
 class Usage:
     """Where every fact is used, from the manifest and the compiled flow, by fact name."""
 
@@ -435,9 +456,16 @@ class Usage:
         folder = self.manifest.parent
         for path in sorted(folder.rglob('*')):
             if path.is_file() and path.suffix in self.TEXT and '__pycache__' not in path.parts:
-                for line, text in enumerate(path.read_text(errors='replace').splitlines(), 1):
+                lines = path.read_text(errors='replace').splitlines()
+                for line, text in enumerate(lines, 1):
                     for name in self.PLACEHOLDER.findall(text):
-                        self.add(name, 'prompt', file=str(path.relative_to(folder)), line=line)
+                        self.add(
+                            name,
+                            'prompt',
+                            file=str(path.relative_to(folder)),
+                            line=line,
+                            excerpt=Excerpt.of(lines, line),
+                        )
 
     def _code(self) -> None:
         """Every other module of the package that names a fact: an attribute, a keyword, or a string."""
@@ -448,9 +476,11 @@ class Usage:
             ):
                 continue
             try:
-                tree = ast.parse(path.read_text())
+                text = path.read_text()
+                tree = ast.parse(text)
             except SyntaxError, UnicodeDecodeError:
                 continue
+            lines = text.splitlines()
             for node in ast.walk(tree):
                 named = (
                     node.attr
@@ -462,8 +492,13 @@ class Usage:
                     else None
                 )
                 if isinstance(named, str) and named in self.found:
+                    line = getattr(node, 'lineno', 0)
                     self.add(
-                        named, 'code', file=str(path.relative_to(folder)), line=getattr(node, 'lineno', 0)
+                        named,
+                        'code',
+                        file=str(path.relative_to(folder)),
+                        line=line,
+                        excerpt=Excerpt.of(lines, line),
                     )
 
 
@@ -554,6 +589,9 @@ class FactsReport:
             'description': info.description or '',
             'note': field.note_text if field is not None else '',
             'line': field.start if field is not None else 0,
+            'excerpt': Excerpt.of(self.source.text.splitlines(), field.start)
+            if field is not None and self.source is not None
+            else None,
             'kind': report,
             'starts_empty': empty,
             'start': start,

@@ -5,6 +5,7 @@ import { useApi } from '../api/useApi';
 import { Shell } from '../components/Shell';
 import { LEVEL_COLOR, ms } from '../graph/timing';
 import { href, go, type Route } from '../router';
+import { Placeholder } from '../components/Placeholder';
 
 const RULES: { key: keyof Limits; what: string; count?: boolean }[] = [
   { key: 'voice_to_voice', what: 'Voice to voice' },
@@ -106,7 +107,7 @@ export function MetricsBody({ agent = '', run = '', fixed = false }: { agent?: s
           </div>
         </div>
       )}
-      {metrics.state === 'loading' && <p className="empty" style={{ padding: 24 }}>Reading traces…</p>}
+      {metrics.state === 'loading' && <Placeholder what="the timings" kind="rows" rows={5} />}
       {metrics.state === 'error' && (
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 18, fontWeight: 600 }}>{metrics.status === 503 ? 'No traces to read yet.' : metrics.status === 404 ? 'No trace for this run yet.' : 'Traces could not be read.'}</div>

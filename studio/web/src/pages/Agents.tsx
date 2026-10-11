@@ -1,35 +1,28 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { Agent, ConfigEdit, EditorConfig, EditorStep, Problem } from '../api/types';
 import { useApi } from '../api/useApi';
 import { ClosingEditor } from '../closing/ClosingEditor';
 import { FocusView } from '../components/FocusView';
 import { MovesTable } from '../components/MovesTable';
+import { Placeholder } from '../components/Placeholder';
 import { Shell } from '../components/Shell';
 import { TryPanel } from '../live/TryPanel';
 import { useRun } from '../live/useRun';
-import { href, go, type AgentTab, type Route } from '../router';
+import { useKey } from '../keys';
+import { AGENT_TABS, href, go, useUnsaved, type Route } from '../router';
 import { FactsTab } from './Facts';
 import { MetricsBody } from './Metrics';
 import { RunsTable } from './Runs';
 
 const MapView = lazy(() => import('../components/MapView').then((m) => ({ default: m.MapView })));
 
-const TABS: { tab: AgentTab; label: string }[] = [
-  { tab: 'build', label: 'Build and try' },
-  { tab: 'operations', label: 'Operations' },
-  { tab: 'facts', label: 'Facts' },
-  { tab: 'graph', label: 'Graph' },
-  { tab: 'runs', label: 'Its runs' },
-  { tab: 'metrics', label: 'Its metrics' },
-  { tab: 'config', label: 'Full config' },
-];
-
 /**
  * One agent: its config on the left, a real run on the right. Change a prompt, a closing line or an
  * action step's routes; save, and the studio checks the change on a copy first (the loader, then each
  * closing line against its receipt) and writes only what passed. Tabs open the same agent's facts, graph,
- * runs, metrics and whole manifest. Nothing here is shared with another agent's page.
+ * runs, metrics and whole manifest. Nothing here is shared with another agent's page. The draft lives across
+ * the tabs; leaving the agent with it unsaved is asked about first, and Cmd/Ctrl+S saves it.
  */
 export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }> }) {
   const agents = useApi(api.agents, 'agents');
@@ -38,8 +31,8 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
   const agent = list.find((a) => a.id === id);
   const tab = route.tab ?? 'build';
   const [reload, setReload] = useState(0);
-  const config = useApi(() => (id ? api.config(id) : Promise.reject(new Error('no agent'))), `${id}-${reload}`);
-  const graph = useApi(() => (id ? api.agent(id) : Promise.reject(new Error('no agent'))), `graph-${id}-${reload}`);
+  const config = useApi(() => (id ? api.config(id) : Promise.reject(new Error('no agent'))), `${id}-${reload}`, true);
+  const graph = useApi(() => (id ? api.agent(id) : Promise.reject(new Error('no agent'))), `graph-${id}-${reload}`, true);
   const [draft, setDraft] = useState<ConfigEdit>({});
   const [result, setResult] = useState<{ problems: Problem[]; message: string; ok: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,11 +41,7 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
   const data = config.state === 'ok' ? config.data : undefined;
 
   const setRun = (run: string | undefined) => go({ page: 'agents', agent: id, tab, step: route.step, run });
-  const pickAgent = (next: string) => {
-    setDraft({});
-    setResult(null);
-    go({ page: 'agents', agent: next, tab });
-  };
+  useUnsaved(dirty ? (next) => next.page !== 'agents' || (next.agent ?? id) !== id : null);
 
   const save = async (check = false) => {
     if (!id || !data) return;
@@ -77,21 +66,16 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
     }
   };
 
+  useKey('s', tab === 'facts' ? null : () => dirty && !saving && void save());
+
   return (
     <Shell
       route={route}
       agent={id}
+      switcher
       who={view.status === 'live' ? (view.thinking ? 'engine' : null) : undefined}
       children={
-        <>
-          <label className="lbl" htmlFor="agent-pick">Agent</label>
-          <select id="agent-pick" className="select" style={{ width: 'auto', minWidth: 200 }} value={id ?? ''} onChange={(e) => pickAgent(e.target.value)}>
-            {list.map((a) => (
-              <option key={a.id} value={a.id}>{a.id}{a.status === 'error' ? ' (does not compile)' : ''}</option>
-            ))}
-          </select>
-          {data && <span className="mono dim" style={{ fontSize: 12 }}>config {data.version} · {data.path}</span>}
-        </>
+        data && <span className="mono dim bar-note" style={{ fontSize: 12 }}>config {data.version} · {data.path}</span>
       }
       actions={
         tab === 'facts' ? undefined : <>
@@ -104,7 +88,7 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
       body={
         <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <nav className="tabs" aria-label="Agent">
-            {TABS.map((t) => (
+            {AGENT_TABS.map((t) => (
               <a key={t.tab} href={href({ page: 'agents', agent: id, tab: t.tab, run: route.run })} aria-current={tab === t.tab ? 'page' : undefined}>{t.label}</a>
             ))}
           </nav>
@@ -119,7 +103,7 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
           {agents.state === 'error' && <p className="error-box" style={{ margin: 24 }}>{agents.message}</p>}
           {agent?.status === 'error' && <div className="error-box" style={{ margin: 24 }}>{agent.id} does not compile: {agent.error}</div>}
           {config.state === 'error' && <p className="error-box" style={{ margin: 24 }}>{config.message}</p>}
-          {!data && config.state === 'loading' && <p className="empty" style={{ padding: 24 }}>Reading the config…</p>}
+          {!data && config.state === 'loading' && <Placeholder what="the config" />}
           {data && id && tab === 'build' && (
             <div className="cols">
               <Steps config={data} selected={route.step} now={view.status === 'live' ? view.step : ''} agent={id} run={route.run} />
@@ -129,7 +113,7 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
               <TryPanel agent={id} version={data.version} run={route.run} onRun={setRun} view={view} />
             </div>
           )}
-          {data && id && tab === 'operations' && <Operations config={data} draft={draft} setDraft={setDraft} agent={id} />}
+          {data && id && tab === 'operations' && <Operations config={data} draft={draft} setDraft={setDraft} agent={id} focus={route.step} />}
           {id && tab === 'facts' && <FactsTab agent={id} picked={route.step} onSaved={() => setReload((n) => n + 1)} />}
           {id && tab === 'graph' && <GraphTab agent={graph.state === 'ok' ? graph.data : undefined} now={view.status === 'live' ? view.step : ''} step={route.step} />}
           {id && tab === 'runs' && (
@@ -155,7 +139,7 @@ function Steps({ config, selected, now, agent, run }: { config: EditorConfig; se
         <span className="mono dim" style={{ fontSize: 11 }}>{config.steps.length}</span>
       </div>
       {config.steps.map((s) => (
-        <a key={s.id} href={href({ page: 'agents', agent, tab: 'build', step: s.id, run })} style={{ textDecoration: 'none', color: 'inherit' }}>
+        <a key={s.id} className="side-link" href={href({ page: 'agents', agent, tab: 'build', step: s.id, run })}>
           <span className="side-item" aria-pressed={s.id === current} style={{ flexDirection: 'row', alignItems: 'center' }}>
             <span className="mono" style={{ fontSize: 13 }}>{s.id}</span>
             <span style={{ flex: '1 1 auto' }} />
@@ -262,8 +246,12 @@ function StepEditor({ config, step, draft, setDraft, agent }: { config: EditorCo
   );
 }
 
-function Operations({ config, draft, setDraft, agent }: { config: EditorConfig; draft: ConfigEdit; setDraft: (d: ConfigEdit) => void; agent: string }) {
+/** Every operation's closing lines. `focus` is an operation another page linked to: scrolled to and marked. */
+function Operations({ config, draft, setDraft, agent, focus }: { config: EditorConfig; draft: ConfigEdit; setDraft: (d: ConfigEdit) => void; agent: string; focus?: string }) {
   const actionSteps = config.steps.filter((s) => s.kind === 'action');
+  useEffect(() => {
+    if (focus) document.getElementById(`op-${focus}`)?.scrollIntoView({ block: 'start' });
+  }, [focus]);
   return (
     <main className="col-main" style={{ maxWidth: 980 }}>
       <div>
@@ -276,7 +264,9 @@ function Operations({ config, draft, setDraft, agent }: { config: EditorConfig; 
         </p>
       </div>
       {config.operations.map((op) => (
-        <ClosingEditor key={op.name} op={op} draft={draft} setDraft={setDraft} agent={agent} />
+        <section key={op.name} id={`op-${op.name}`} className={`op-anchor${focus === op.name ? ' op-focus' : ''}`} aria-label={op.name}>
+          <ClosingEditor op={op} draft={draft} setDraft={setDraft} agent={agent} />
+        </section>
       ))}
       {config.problems.length > 0 && config.problems.map((p, i) => <div key={i} className="problem">{p.where}: {p.what}</div>)}
     </main>
@@ -299,7 +289,7 @@ function GraphTab({ agent, now, step }: { agent?: Agent; now: string; step?: str
   const [view, setView] = useState<'focus' | 'map' | 'moves'>('focus');
   const graph = agent?.graph ?? undefined;
   const focus = useMemo(() => (step && graph?.nodes.some((n) => n.id === step) ? step : now || graph?.entry), [step, now, graph]);
-  if (!agent) return <p className="empty" style={{ padding: 24 }}>Loading the graph…</p>;
+  if (!agent) return <Placeholder what="the graph" />;
   if (!graph || !focus) return <p className="error-box" style={{ margin: 24 }}>{agent.error || 'No graph.'}</p>;
   const pick = (to: string) => {
     if (to !== '$end') go({ page: 'agents', agent: agent.id, tab: 'graph', step: to });
@@ -317,7 +307,7 @@ function GraphTab({ agent, now, step }: { agent?: Agent; now: string; step?: str
       <div className={`stage ${view === 'focus' ? 'dots' : ''}`}>
         {view === 'focus' && <FocusView graph={graph} step={focus} path={[]} status={now === focus ? 'live run here' : undefined} onPick={pick} />}
         {view === 'map' && (
-          <Suspense fallback={<p className="empty">Loading the map…</p>}>
+          <Suspense fallback={<Placeholder what="the map" kind="rows" />}>
             <MapView graph={graph} focus={now || focus} onPick={pick} />
           </Suspense>
         )}

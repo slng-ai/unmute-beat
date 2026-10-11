@@ -484,6 +484,8 @@ class CallContext(BaseModel):
 
     _say: SayFn | None = PrivateAttr(default=None)
     _end: EndFn | None = PrivateAttr(default=None)
+    _dispatch_gate: EndFn | None = PrivateAttr(default=None)
+    """What a change waits for before it is sent, set by a runtime adapter (`wait_to_dispatch`)."""
     _covered: bool = PrivateAttr(default=False)
     _reminders: int = PrivateAttr(default=0)
     """Silence reminders since the caller last spoke (`core.turn.remind`)."""
@@ -669,6 +671,8 @@ class CallContext(BaseModel):
     a stop takes those segments back to `playing`, so it marks them cut off.
     """
     _playback_known: bool = PrivateAttr(default=False)
+    _starts_known: bool = PrivateAttr(default=False)
+    """Whether the transport reports each segment's own start (`note_started`): a queued segment never began."""
     _leaving: bool = PrivateAttr(default=False)
     """The caller said goodbye in the same reply as the answer this turn runs (`core.readings.Acts`)."""
     _today: Today | None = PrivateAttr(default=None)
@@ -815,6 +819,19 @@ class CallContext(BaseModel):
         """Whether a business action was attempted in this caller turn. Its answer is then spent."""
         return self._acted
 
+    async def wait_to_dispatch(self) -> None:
+        """Before a change is sent: wait until the runtime says it may go. Nothing to wait for when none says.
+
+        LiveKit runs a tool only once its reply may play: first in its queue,
+        and the caller not speaking. `core.livekit.FlowAgent` holds a change
+        the same way (`_dispatch_gate`), so a caller who said yes, paused and
+        went on is heard before anything is sent: their words drop the reply,
+        the turn is cancelled here, and the intent stays prepared, never sent,
+        rather than sent while they spoke and left unknown.
+        """
+        if self._dispatch_gate is not None:
+            await self._dispatch_gate()
+
     def note_business_attempt(self) -> None:
         """A business action is about to execute. Called by `Operation.run`, whether it then succeeds or not."""
         self._acted = True
@@ -832,6 +849,22 @@ class CallContext(BaseModel):
         for segment in self.all_spoken:
             if segment.playback == 'queued' and segment.text:
                 segment.playback = 'playing'
+
+    def note_started(self, segment_id: str, at: float) -> None:
+        """This segment's audio started playing: the transport reports each segment's own start.
+
+        For a runtime that plays a reply's segments one after another and says
+        when each begins (LiveKit's room output, `core.livekit.SegmentPlayout`).
+        Only this segment is playing: the ones queued behind it are not, so the
+        end of this one never counts them as played, and a cut-in never guesses
+        from time alone that a queued one was heard (`note_barge`).
+        """
+        self._playback_known = self._reached = self._starts_known = True
+        if self._burst == float('inf'):
+            self._burst = at
+        segment = next((s for s in self.all_spoken if s.id == segment_id), None)
+        if segment is not None and segment.playback == 'queued' and not segment.interrupted:
+            segment.playback = 'playing'
 
     def note_drained(self) -> None:
         """The runtime's audio ran out: everything that was playing, or joined the sound while it played, was heard.
@@ -937,7 +970,8 @@ class CallContext(BaseModel):
     def note_speech_failed(self, at: float) -> None:
         """Speech synthesis reported an error while marks were pending: those segments may be partial or silent."""
         for name in list(self._pending_marks):
-            if (segment := self._marked(name)) is not None:
+            segment = self._marked(name)
+            if segment is not None and not segment.interrupted and not segment.cleared:
                 segment.cleared, segment.lost = True, 'failed'
                 self._log_playback('failed', name, at, segment.proposal)
 
@@ -1134,7 +1168,9 @@ class CallContext(BaseModel):
 
         ponytail: time since queuing is a stand-in for a playout event per
         segment. A line whose audio started far later than it was queued is
-        taken as heard too early. Per-segment playout ids are the upgrade.
+        taken as heard too early. Per-segment playout ids are the upgrade, and
+        a transport that reports each segment's start (`note_started`) gets no
+        estimate at all: a segment still queued there never began.
         """
         self._interrupted = True
         if not self._playback_known:
@@ -1147,7 +1183,7 @@ class CallContext(BaseModel):
         self._stopped_early = (float('-inf'), [])
         ends = float('-inf')
         for segment in self.all_spoken:
-            if segment.playback != 'queued' or not segment.text:
+            if self._starts_known or segment.playback != 'queued' or not segment.text:
                 continue
             ends = max(ends, segment.at) + len(segment.text) / SPEECH_CHARS_PER_SECOND + PLAYOUT_SLACK
             if ends < now:

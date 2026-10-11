@@ -60,12 +60,16 @@ class Caller:
         self.spoke: list[tuple[str, float, float]] = []
         """Each utterance: its words, and when it began and ended on `time.perf_counter`."""
 
-    async def says(self, words: str, seconds: float | None = None, *, final: bool = True) -> None:
+    async def says(
+        self, words: str, seconds: float | None = None, *, final: bool = True, late: float = 0.0
+    ) -> None:
         """Speak `words` for `seconds` (by default as long as the voice would take), then stop.
 
         The VAD hears the start at once; the STT sends the first two words as
         an interim halfway through, and the whole as final `STT_DELAY` after
         the end, unless `final=False` (a sound with no words, if `words` is '').
+        `late` is an STT that sends no interim and its final that long after the
+        VAD heard the caller stop, as a slow or final-only STT does.
         """
         seconds = seconds if seconds is not None else max(0.3, len(words) * SECONDS_PER_CHAR)
         started = time.perf_counter()
@@ -79,7 +83,7 @@ class Caller:
             elapsed = time.perf_counter() - started
             for vad in self._vads:
                 vad.speaking(elapsed)
-            if words and not sent_interim and elapsed >= interim_at:
+            if words and not late and not sent_interim and elapsed >= interim_at:
                 sent_interim = True
                 for stt in self._stts:
                     stt.transcript(' '.join(words.split()[:2]), final=False)
@@ -88,16 +92,22 @@ class Caller:
         for vad in self._vads:
             vad.silence_started(seconds)
 
-        async def finish() -> None:
-            await asyncio.sleep(STT_DELAY)
+        if late:
+            await asyncio.sleep(self.min_silence)
+            for vad in self._vads:
+                vad.speech_ended(seconds, self.min_silence)
+            await asyncio.sleep(late)
             if words and final:
                 for stt in self._stts:
                     stt.transcript(words, final=True)
-            await asyncio.sleep(max(0.0, self.min_silence - STT_DELAY))
-            for vad in self._vads:
-                vad.speech_ended(seconds, self.min_silence)
-
-        await finish()
+            return
+        await asyncio.sleep(STT_DELAY)
+        if words and final:
+            for stt in self._stts:
+                stt.transcript(words, final=True)
+        await asyncio.sleep(max(0.0, self.min_silence - STT_DELAY))
+        for vad in self._vads:
+            vad.speech_ended(seconds, self.min_silence)
 
 
 class FakeVAD(VAD):
@@ -270,8 +280,10 @@ class Speaker(AudioOutput):
     """The room's audio output: plays each flushed segment on a virtual clock and reports it, as the room output does.
 
     `can_pause` gives LiveKit its false-interruption handling (pause, then resume
-    or interrupt); a pause holds the clock. `played` and `cut` keep each
-    segment's report, in order.
+    or interrupt); a pause holds the clock. `reports` keeps each segment's
+    report, in order. `gate`, when set, holds every frame until it opens, as the
+    room output holds them until the caller subscribes (`waiting` says a frame is
+    held there).
     """
 
     def __init__(self, *, can_pause: bool = False) -> None:
@@ -289,6 +301,8 @@ class Speaker(AudioOutput):
         self._held = 0.0
         self.reports: list[tuple[float, bool]] = []
         self.pauses = 0
+        self.gate: asyncio.Event | None = None
+        self.waiting = asyncio.Event()
 
     def _played(self) -> float:
         if self._started is None:
@@ -318,6 +332,9 @@ class Speaker(AudioOutput):
         self._handle = asyncio.get_event_loop().call_later(max(pushed - self._played(), 0.0), finished)
 
     async def capture_frame(self, frame: rtc.AudioFrame) -> None:
+        if self.gate is not None:
+            self.waiting.set()
+            await self.gate.wait()
         await super().capture_frame(frame)
         self._pushed += frame.duration
         if self._paused is None and self._started is None:

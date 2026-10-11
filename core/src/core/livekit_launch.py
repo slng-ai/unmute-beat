@@ -45,7 +45,6 @@ try:
         TurnHandlingOptions,
         cli,
     )
-    from livekit.agents.voice.events import CloseEvent, CloseReason
     from livekit.agents.voice.room_io import RoomOptions
     from livekit.plugins import silero, slng
 except ImportError as missing:
@@ -70,6 +69,9 @@ from core.voice import (
     record_ending,
     vad_stop_seconds,
 )
+
+TRANSCRIPTION_TIMEOUT = 2.0
+"""Seconds after speech with no words before LiveKit says so (`user_transcription_timeout`): `FlowAgent` drops its onset."""
 
 SMART_TURN_CEILING = 1.6
 """The longest wait after the caller stops before the turn ends: the Pipecat launcher's smart-turn `stop_secs`."""
@@ -138,10 +140,16 @@ def session_for(entry: Entry, *, stt: Any, tts: Any, vad: Any) -> AgentSession:
     """The session one call runs in: these speech services, the entry's turn taking, no away timer.
 
     Silence is `FlowAgent`'s to notice (`core.turn.remind`), so LiveKit's own away timer stays off. An
-    STT that can be told when the caller stops (SLNG's) is attached, so it finalises at once.
+    STT that can be told when the caller stops (SLNG's) is attached, so it finalises at once. LiveKit
+    says when speech gave no words (`TRANSCRIPTION_TIMEOUT`), so a cough is never the start of a reply.
     """
     session = AgentSession(
-        stt=stt, tts=tts, vad=vad, turn_handling=turn_handling(entry), user_away_timeout=None
+        stt=stt,
+        tts=tts,
+        vad=vad,
+        turn_handling=turn_handling(entry),
+        user_away_timeout=None,
+        transcription_timeout=TRANSCRIPTION_TIMEOUT,
     )
     if callable(attach := getattr(stt, 'attach_to_session', None)):
         attach(session)
@@ -189,6 +197,11 @@ async def run_call(
 
     Returns when the call is over: the caller left, the agent said goodbye, or the ceiling was reached.
     A turn already running when the room closes may finish its write (`CallTiming.FINISH_SECONDS`).
+
+    The caller leaving the room, or the room going, closes the session whatever LiveKit's own
+    disconnect reasons would do (`close_on_disconnect` only covers some), and is recorded as the media
+    ending. Everything after the call is opened is inside the `finally`: a setup that fails (a missing
+    key, a model warm-up) still records how the call ended, and a failing `entry.close` stops nothing.
     """
     from core.observability import setup
 
@@ -219,33 +232,56 @@ async def run_call(
     if entry.started is not None:
         threading.Thread(target=entry.started, daemon=True).start()
 
-    stt, tts = (speech or (lambda: speech_services(entry)))()
-    vad = vad or ctx.proc.userdata.get('vad') or silero.VAD.load(min_silence_duration=vad_stop_seconds())
-    session = session_for(entry, stt=stt, tts=tts, vad=vad)
-    agent = FlowAgent(call, flow.nodes, idle_seconds=CallTiming.IDLE_SECONDS, reminders=entry.reminders)
-    playout(call, simulate=delivery() == 'simulated' if simulate is None else simulate)
-
     closed = asyncio.Event()
-    reason: list[CloseReason] = []
-
-    @session.on('close')
-    def on_close(event: CloseEvent) -> None:
-        reason.append(event.reason)
-        closed.set()
-
+    left: list[str] = []
+    session: AgentSession | None = None
+    agent: FlowAgent | None = None
     ceiling_seconds = max_call_seconds()
+
+    def leave(why: str) -> None:
+        """The caller is gone (they left the room, or the room went): close the session if it is still open."""
+        left.append(why)
+        if session is not None and not closed.is_set():
+            session.shutdown(drain=False)
+        elif session is None:
+            closed.set()
 
     async def reached() -> None:
         """The call ceiling (`MAX_CALL_SECONDS`) was reached: hang up as the caller would."""
         logger.warning(f'call ceiling of {ceiling_seconds:.0f}s reached: hanging up')
         call.note_ending('ceiling', f'{ceiling_seconds:.0f}s call ceiling', observed=False)
-        await agent.finish_turn(CallTiming.FINISH_SECONDS)
-        session.shutdown(drain=False)
+        if agent is not None:
+            await agent.finish_turn(CallTiming.FINISH_SECONDS)
+        if session is not None:
+            session.shutdown(drain=False)
 
     ceiling = Ceiling(ceiling_seconds, reached)
+    if participant is not None:
+
+        @ctx.room.on('participant_disconnected')
+        def on_left(gone: rtc.RemoteParticipant) -> None:
+            if gone.identity == participant.identity:
+                leave('the caller left the room')
+
+    @ctx.room.on('disconnected')
+    def on_room_gone(*_: Any) -> None:
+        leave('the room disconnected')
+
     async with contextlib.AsyncExitStack() as stack:
-        await stack.enter_async_context(model_clients(flow.nodes, warm=warm))
         try:
+            stt, tts = (speech or (lambda: speech_services(entry)))()
+            vad = (
+                vad
+                or ctx.proc.userdata.get('vad')
+                or silero.VAD.load(min_silence_duration=vad_stop_seconds())
+            )
+            session = session_for(entry, stt=stt, tts=tts, vad=vad)
+            session.on('close', lambda _event: closed.set())
+            agent = FlowAgent(
+                call, flow.nodes, idle_seconds=CallTiming.IDLE_SECONDS, reminders=entry.reminders
+            )
+            playout(call, simulate=delivery() == 'simulated' if simulate is None else simulate)
+            await stack.enter_async_context(model_clients(flow.nodes, warm=warm))
             await session.start(
                 agent,
                 room=ctx.room,
@@ -267,16 +303,22 @@ async def run_call(
                 await agent.hang_up()
             elif resume is None:
                 await agent.greet(entry.greeting(flow, call))
-            await closed.wait()
+            if not left:
+                await closed.wait()
         finally:
             await ceiling.stop()
-            if reason and reason[0] == CloseReason.PARTICIPANT_DISCONNECTED:
-                call.note_ending('media_disconnect', 'the caller left the room', observed=True)
-            await agent.finish_turn(CallTiming.FINISH_SECONDS)
+            if left:
+                call.note_ending('media_disconnect', left[0], observed=True)
+            if agent is not None:
+                await agent.finish_turn(CallTiming.FINISH_SECONDS)
             if entry.close is not None:
-                await entry.close(call)
-            await agent.close()
-            if not closed.is_set():
+                try:
+                    await entry.close(call)
+                except Exception:
+                    logger.exception(f'{entry.id}: closing the call failed')
+            if agent is not None:
+                await agent.close()
+            if session is not None and not closed.is_set():
                 with contextlib.suppress(Exception):
                     await session.aclose()
             call.note_ending('pipeline_end', 'the session closed', observed=True)

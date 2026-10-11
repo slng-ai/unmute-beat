@@ -141,6 +141,10 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
         did. Evidence is append-only; a later turn, a new topic or a stale
         generation never erases it.
 
+        A change first waits for the runtime's go (`CallContext.wait_to_dispatch`:
+        on LiveKit, its reply first in line and the caller quiet); cancelled
+        while it waits, nothing was sent and the intent stays prepared.
+
         A cancellation after dispatch leaves the intent unknown and is
         re-raised: the cleanup is a few synchronous assignments, and nothing
         here shields the service call itself.
@@ -198,6 +202,8 @@ class Operation[C: CallContext, ArgsT: BaseModel, ReceiptT: BaseModel, OutputT](
             }
             try:
                 try:
+                    if self.changes:
+                        await call.wait_to_dispatch()
                     await self._note_intent(call, intent)
                 except asyncio.CancelledError:
                     audit.update(status='failed', outcome='prepared', error='cancelled before dispatch')

@@ -82,6 +82,7 @@ try:
         SpeechCreatedEvent,
         UserInputTranscribedEvent,
         UserStateChangedEvent,
+        UserTranscriptionTimeoutEvent,
     )
     from livekit.agents.voice.speech_handle import SpeechHandle
 except ImportError as missing:
@@ -104,6 +105,12 @@ and an inference window, and the state change is stamped when it is emitted.
 An onset taken early can only stop a reply from answering a read-back that
 was still playing, never let one through, so this errs early.
 """
+
+GATE_SECONDS = 10.0
+"""Longest a change waits for its reply to be allowed to play (`FlowAgent._authorized`) before it goes anyway."""
+
+FAILED_TURNS = 3
+"""Turns in a row the engine may report failed (a dead model provider) before the line is closed."""
 
 IDLE_SECONDS = 20.0
 """Silence after the last words played before the caller is asked if they are still there (`core.launch.CallTiming`)."""
@@ -155,23 +162,38 @@ class _Reply:
     stream: asyncio.Queue[str | FlushSentinel | None] = field(default_factory=asyncio.Queue)
     segment: str = ''
     """The call's segment being streamed now: text for another one starts a new LiveKit segment."""
+    boundary: bool = False
+    """A segment ended after some text: the next one opens with a space, as LiveKit joins them with nothing."""
+    played: bool = False
+    """The room started playing something of this reply (`SegmentPlayout.on_playback_started`)."""
 
     def put(self, text: str) -> None:
+        if self.boundary:
+            text, self.boundary = f' {text.lstrip()}', False
         self.stream.put_nowait(text)
+
+    def flush(self) -> None:
+        self.stream.put_nowait(FlushSentinel())
+        self.boundary = True
 
     def close_segment(self) -> None:
         if self.segment:
-            self.stream.put_nowait(FlushSentinel())
+            self.flush()
             self.segment = ''
 
 
 @dataclass
 class _Playing:
-    """One LiveKit segment on its way out: the call's segment it carries and what the output saw of it."""
+    """One LiveKit segment on its way out: the call's segment it carries and what the outputs saw of it."""
 
     segment: str
     mark: str
+    before: int
+    """How many segments the output below had counted when this one began: more at its flush means it reached it."""
     frames: int = 0
+    counted: bool = False
+    """This output counted it as a playback segment, so LiveKit waits for one report of it."""
+    started: bool = False
     gapped: bool = False
 
 
@@ -179,12 +201,19 @@ class SegmentPlayout(lkio.AudioOutput):
     """The top of the session's audio chain: each segment's playback, told to the call.
 
     LiveKit forwards a reply's segments one after another, each as frames and
-    one `flush`, and its room output answers each flushed segment with one
-    `playback_finished` (interrupted when a clear came first). A segment is
+    one `flush`, and its room output answers each segment that reached it with
+    one `playback_finished` (interrupted when a clear came first). A segment is
     bound to the call's segment the reply registered for it, in order
     (`FlowAgent._bind`): the k-th segment a speech forwards is the k-th it
     registered. A segment that sent no frames is silent, and one whose synthesis
     failed may be partial: neither is ever heard.
+
+    Each segment is started on its own (`CallContext.note_started`) when the
+    room begins playing it: the end of one segment never counts the next as
+    played, since LiveKit plays the next only once this one is out. A segment
+    the room never counted (its first frame held below, then cut) is answered
+    here at once, so LiveKit waits for no report that will never come and the
+    next segment's report stays its own.
 
     What the room output reports is its own playout clock: the audio was handed
     to WebRTC at real time. That is recorded as `local`, which counts as heard
@@ -203,7 +232,7 @@ class SegmentPlayout(lkio.AudioOutput):
         self._current: _Playing | None = None
         """The segment whose frames are arriving now."""
         self._flushed: deque[_Playing] = deque()
-        """Segments flushed and waiting for their `playback_finished`, oldest first."""
+        """Segments that reached the room output and wait for their `playback_finished`, oldest first."""
         self.counts = {'segments': 0, 'played': 0, 'cut': 0, 'silent': 0, 'gapped': 0}
 
     @property
@@ -211,35 +240,52 @@ class SegmentPlayout(lkio.AudioOutput):
         assert self.next_in_chain is not None
         return self.next_in_chain
 
-    def _begin(self) -> _Playing | None:
+    def _begin(self) -> _Playing:
         segment = self._agent._bind()
-        if not segment:
-            return None
-        self.counts['segments'] += 1
-        return _Playing(segment, self._call.mark_for(segment))
+        if segment:
+            self.counts['segments'] += 1
+        return _Playing(
+            segment,
+            self._call.mark_for(segment) if segment else '',
+            self._next.captured_playout_segments,
+        )
 
     async def capture_frame(self, frame: rtc.AudioFrame) -> None:
+        """Count the frame here, then hand it on; it is the segment's only once the output below took it.
+
+        The output below may hold a frame (the room until the caller subscribes,
+        the transcript synchroniser between segments), and LiveKit may cancel the
+        segment while it does: that frame never reached the room.
+        """
         if self._current is None:
-            self._current = self._begin() or _Playing('', '')
-        self._current.frames += 1
+            self._current = self._begin()
+        playing = self._current
         await super().capture_frame(frame)
+        playing.counted = True
         await self._next.capture_frame(frame)
+        playing.frames += 1
 
     def flush(self) -> None:
         super().flush()
-        playing, self._current = self._current or self._begin() or _Playing('', ''), None
+        playing, self._current = self._current or self._begin(), None
+        reached = self._next.captured_playout_segments > playing.before
         if playing.mark:
-            self._call.note_mark_sent(playing.mark, time.perf_counter(), media=playing.frames)
-        if playing.frames:
+            self._call.note_mark_sent(
+                playing.mark, time.perf_counter(), media=playing.frames if reached else 0
+            )
+        if reached:
             self._flushed.append(playing)
-        elif playing.segment:
-            self.counts['silent'] += 1
+        else:
+            if playing.segment:
+                self.counts['silent'] += 1
+            if playing.counted:
+                lkio.AudioOutput.on_playback_finished(self, playback_position=0.0, interrupted=True)
         self._next.flush()
 
     def _mark_input_truncated(self) -> None:
         """The segment's speech synthesis failed (LiveKit retried it first): it may be partial or silent."""
         if self._current is None:
-            self._current = self._begin() or _Playing('', '')
+            self._current = self._begin()
         if self._current.mark:
             self._call.note_speech_failed(time.perf_counter())
         super()._mark_input_truncated()
@@ -251,8 +297,14 @@ class SegmentPlayout(lkio.AudioOutput):
         self._next.clear_buffer()
 
     def pause(self) -> None:
-        """A possible interruption: the room output drops what it queued, so the segment playing has a gap."""
-        for playing in (self._current, *self._flushed):
+        """A possible interruption: the room output drops what it queued, so a segment in flight has a gap.
+
+        ponytail: a segment whose last frames were all in the room's 200 ms
+        queue plays on through the pause and loses nothing, but is marked too:
+        it fails safe (the read-back is asked again). Reading the room's own
+        discarded duration is the upgrade.
+        """
+        for playing in (*self._flushed, self._current):
             if playing is not None and playing.mark and not playing.gapped:
                 playing.gapped = True
                 self.counts['gapped'] += 1
@@ -260,7 +312,15 @@ class SegmentPlayout(lkio.AudioOutput):
         super().pause()
 
     def on_playback_started(self, *, created_at: float) -> None:
-        self._call.note_reached()
+        """The room began playing a segment: the oldest one in flight that had not started."""
+        now = time.perf_counter()
+        for playing in (*self._flushed, self._current):
+            if playing is not None and not playing.started:
+                playing.started = True
+                if playing.segment:
+                    self._call.note_started(playing.segment, now)
+                self._agent._note_playing()
+                break
         super().on_playback_started(created_at=created_at)
 
     def on_playback_finished(
@@ -278,8 +338,6 @@ class SegmentPlayout(lkio.AudioOutput):
                 )
             elif self._call.note_mark_returned(playing.mark, now, local=True):
                 self.counts['played'] += 1
-        if not interrupted and not self._flushed and self._current is None:
-            self._call.note_drained()
         super().on_playback_finished(
             playback_position=playback_position,
             interrupted=interrupted,
@@ -342,6 +400,7 @@ class FlowAgent(Agent):
             instructions='',
             llm=FlowLLM(),
             turn_handling={'preemptive_generation': {'enabled': False}},
+            use_tts_aligned_transcript=False,
             **kwargs,
         )
         self.call = call
@@ -364,8 +423,15 @@ class FlowAgent(Agent):
         self.playout: SegmentPlayout | None = None
         self.finished: list[core.TurnFinished] = []
         """How each turn ended, in order: for tests and the launcher's log."""
+        self._failures = 0
+        """Turns in a row the engine reported failed: past `FAILED_TURNS` the line is closed."""
+        self._held: list[float] = []
+        """When each stretch of the caller's speech began, held until one proves to be a reply (`_commit_onset`)."""
+        self._wordless: list[float] = []
+        """Starts LiveKit found no words for in time (`_on_no_words`): used only if words come later after all."""
         call._say = self.say
         call._end = self.hang_up
+        call._dispatch_gate = self._authorized
         call._playback_known = True
 
     def attach(self, session: AgentSession) -> None:
@@ -381,6 +447,7 @@ class FlowAgent(Agent):
         session.on('user_state_changed', self._on_user_state)
         session.on('agent_state_changed', self._on_agent_state)
         session.on('user_input_transcribed', self._on_transcribed)
+        session.on('user_transcription_timeout', self._on_no_words)
         session.on('close', lambda _event: self._cancel_quiet())
 
     @property
@@ -421,6 +488,8 @@ class FlowAgent(Agent):
         own LiveKit speech. The call has already recorded it (`CallContext.say`). Once
         the session is closing, a turn left to finish its write says nothing more.
         """
+        if not text.strip():
+            return
         segment = next((s for s in reversed(self.call.spoken) if s.text == text), None)
         reply = self._reply
         if reply is not None and (reply.handle is None or not reply.handle.done()):
@@ -428,7 +497,7 @@ class FlowAgent(Agent):
             if segment is not None:
                 self._register(reply.handle, segment.id)
             reply.put(text)
-            reply.stream.put_nowait(FlushSentinel())
+            reply.flush()
             return
         if self._closing():
             logger.info('the session is closing: {!r} goes nowhere', text)
@@ -463,6 +532,10 @@ class FlowAgent(Agent):
         as Pipecat cancels a turn the caller talks over; cancelled because the
         session is closing, it is left to finish (`finish_turn`).
 
+        The previous turn, if it is still unwinding, is waited for without
+        swallowing a cancel of this node; the words count as served only once
+        their turn exists, so a node cancelled before then leaves them for the next.
+
         Never speculative: this agent turns LiveKit's preemptive generation off,
         and a reply not yet scheduled (a preemptive one) waits here until it is,
         so a turn's writes run only for words LiveKit committed.
@@ -475,26 +548,38 @@ class FlowAgent(Agent):
             for item in chat_ctx.items
             if item.type == 'message' and item.role == 'user' and item.id not in self._served
         ]
-        self._served.update(item.id for item in users)
         prompt = ' '.join(text for item in users if (text := (item.text_content or '').strip())) or None
+        if prompt:
+            self._commit_onset()
         if self._turn is not None and not self._turn.done():
             self.interrupt()
             self._turn.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await self._turn
+            await asyncio.wait({self._turn})
         reply = self._reply = _Reply(handle)
         self._cancel_quiet()
         self._turn = asyncio.create_task(self.serve(prompt, reply))
+        self._served.update(item.id for item in users)
         return self._relay(reply, self._turn)
 
     async def _relay(self, reply: _Reply, task: asyncio.Task[None]) -> AsyncIterator[str | FlushSentinel]:
+        """Pass on what the turn says, until it ends; cancelled by LiveKit, decide what the cancel was.
+
+        A barge-in only when the reply was interrupted (or nothing says it was
+        not). LiveKit also cancels a node whose speech synthesis failed: then the
+        caller said nothing, so the turn is left to finish what it is doing, its
+        speech going nowhere, and the segments waiting for audio are failed.
+        """
         try:
             while (item := await reply.stream.get()) is not None:
                 yield item
         except BaseException:
             if not task.done() and not self._closing():
-                self.interrupt()
-                task.cancel()
+                if reply.handle is None or reply.handle.interrupted:
+                    self.interrupt()
+                    task.cancel()
+                else:
+                    logger.warning('LiveKit stopped this reply without an interruption: its speech failed')
+                    self.call.note_speech_failed(time.perf_counter())
             raise
         finally:
             if self._reply is reply:
@@ -556,6 +641,7 @@ class FlowAgent(Agent):
                             await self.say(text)
                         case core.TurnFinished() as done:
                             finished = done
+                            self._failures = self._failures + 1 if done.status == 'failed' else 0
                             spoken = self.call.spoken
                             if said := ' '.join(s.text for s in spoken if s.text):
                                 span.set_attribute('langfuse.observation.output', said)
@@ -597,9 +683,68 @@ class FlowAgent(Agent):
                 self.call.turn_ended(interrupted=self._interrupted)
                 if prompt and not self.call.input_retained:
                     self._carried = self.call.fresh
+                if self._failures >= FAILED_TURNS and not self.call.ended:
+                    logger.error(f'{self._failures} turns in a row failed: closing the line')
+                    self.call.end_requested('error')
+                    await self.hang_up()
 
-    def interrupt(self) -> None:
-        """The caller spoke over us: the engine's barge-in. Told to the call even with no turn running."""
+    async def _authorized(self) -> None:
+        """A change may be sent once its reply may play: first in LiveKit's queue, and the caller not speaking.
+
+        LiveKit's own rule for running a tool. Until then the caller may still go
+        on: words drop the reply (`_on_transcribed`) and cancel the turn here,
+        before anything is sent. A reply that never gets there (a speech LiveKit
+        did not schedule) is waited for at most `GATE_SECONDS`, then the change
+        goes, as it did before the gate.
+        """
+        reply, session = self._reply, self._session
+        if reply is None or reply.handle is None or session is None:
+            return
+        deadline = time.perf_counter() + GATE_SECONDS
+        while time.perf_counter() < deadline:
+            if session.current_speech is reply.handle and session.user_state != 'speaking':
+                return
+            await asyncio.sleep(0.02)
+        logger.warning(f'a change waited {GATE_SECONDS:.0f}s for its reply to be allowed to play: sending it')
+
+    def _commit_onset(self) -> None:
+        """The caller's speech is a reply (it has words, LiveKit interrupted for it, or it made a turn): note its onset.
+
+        The earliest start held since the last reply: words can come well after
+        the caller stopped (a final-only or slow STT), and a reply that paused
+        mid-way began at its first stretch. A sound LiveKit found no words in is
+        set aside before then (`_on_no_words`), so it never counts while a later
+        stretch is held. Words with only set-aside starts behind them are late
+        words for the latest of those: that start counts, so a slow STT never
+        leaves a reply with no start at all (found live: with none, no read-back
+        could ever be agreed to).
+
+        ponytail: a yes said over the end of a read-back whose words came later
+        than `TRANSCRIPTION_TIMEOUT`, then a cough after the read-back ended,
+        would start at the cough. Word timings from the STT are the upgrade.
+        """
+        if self._held:
+            self.call.note_onset(min(self._held))
+        elif self._wordless:
+            self.call.note_onset(max(self._wordless))
+        self._held.clear()
+        self._wordless.clear()
+
+    def _on_no_words(self, event: UserTranscriptionTimeoutEvent) -> None:
+        """LiveKit heard speech that gave no words (a cough, a breath): its starts are no reply."""
+        since = _perf(event.vad_speech_started_at) - ONSET_LEAD - 0.05
+        self._wordless += [t for t in self._held if t >= since]
+        self._held = [t for t in self._held if t < since]
+
+    def interrupt(self, *, reply: bool = True) -> None:
+        """The caller spoke over us: the engine's barge-in. Told to the call even with no turn running.
+
+        `reply=False` is the bookkeeping barge-in of a caller who starts speaking
+        with nothing of ours playing (`_on_user_state`): it proves nothing yet
+        about their speech being a reply, so its onset stays held.
+        """
+        if reply:
+            self._commit_onset()
         self._interrupted = True
         self.call.note_barge()
         self._barge.fire()
@@ -611,7 +756,7 @@ class FlowAgent(Agent):
 
     async def remind(self) -> None:
         """The caller has been silent since our last words played: `core.turn.remind`, unless a turn runs."""
-        if self._idle.is_set():
+        if self._idle.is_set() and self._reply is None:
             await core.remind(self.call)
 
     async def close(self) -> None:
@@ -623,6 +768,30 @@ class FlowAgent(Agent):
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
+
+    async def on_enter(self) -> None:
+        """Count every caller message already in this agent's history as served: none of it is a new turn.
+
+        A `FlowAgent` built with an earlier agent's history (`update_agent`)
+        would otherwise take every past caller message as one fresh turn.
+        """
+        self._served.update(
+            item.id for item in self.chat_ctx.items if item.type == 'message' and item.role == 'user'
+        )
+
+    async def on_user_turn_exceeded(self, ev: Any) -> None:
+        """A caller talking past LiveKit's turn limit is left to finish: no reply they cannot interrupt.
+
+        LiveKit's default cuts in with an uninterruptible reply, which here would
+        be a whole flow turn, operations and all, that the caller cannot stop.
+        """
+        logger.info('the caller passed the turn limit; letting them finish')
+
+    def _note_playing(self) -> None:
+        """The room started playing a segment: if it is the open reply's, something of it has played."""
+        reply, session = self._reply, self._session
+        if reply is not None and session is not None and session.current_speech is reply.handle:
+            reply.played = True
 
     # --- session events -------------------------------------------------------------------------
 
@@ -643,29 +812,53 @@ class FlowAgent(Agent):
         known to come after the caller spoke again (`continues_turn`). A reply
         still running or waiting to play is LiveKit's to interrupt or keep, and
         reaches here as a clear or an interrupted speech if it does.
+
+        The onset is held until the speech proves to be a reply: words for it
+        (`_on_transcribed`), LiveKit interrupting for it (`interrupt`), or a turn
+        made of it (`llm_node`). A sound LiveKit found no words in (a cough, an
+        "mm" it let pass: `user_transcription_timeout`) is dropped, so a
+        read-back that played on under it can still be answered after it.
+
+        The caller stopping with nothing of ours running or waiting (a cough, an
+        "um" that made no turn) starts the silence timer again: otherwise only the
+        agent's next words would, and a silent caller would never be reminded.
         """
+        session = self._session
+        if event.new_state == 'listening':
+            if (
+                session is not None
+                and session.agent_state == 'listening'
+                and self._idle.is_set()
+                and self._reply is None
+                and session.current_speech is None
+            ):
+                self._arm_quiet()
+            return
         if event.new_state != 'speaking':
             return
         self._cancel_quiet()
-        self.call.note_onset(_perf(event.created_at) - ONSET_LEAD)
-        session = self._session
+        self._held.append(_perf(event.created_at) - ONSET_LEAD)
         if session is not None and self._idle.is_set() and session.current_speech is None:
-            self.interrupt()
+            self.interrupt(reply=False)
 
     def _on_transcribed(self, event: UserInputTranscribedEvent) -> None:
         """Words while a turn works and nothing of it plays: drop that reply, as Pipecat does on a new user turn.
 
         LiveKit 1.8 holds a reply while the caller speaks and plays it once they
         stop, answering words they had not finished. Only words count, never a
-        sound: a cough must not cancel a turn that no new turn will replace.
+        sound: a cough must not cancel a turn that no new turn will replace. Nor
+        once anything of the reply has played: a reply LiveKit paused for a
+        possible interruption is LiveKit's to resume or cut.
         """
         session = self._session
+        if event.transcript.strip():
+            self._commit_onset()
         if session is None or not event.transcript.strip() or self._idle.is_set():
             return
-        if session.agent_state == 'speaking':
-            return
         reply = self._reply
-        handle = reply.handle if reply is not None else None
+        if reply is None or reply.played or session.agent_state == 'speaking':
+            return
+        handle = reply.handle
         if handle is not None and not handle.done() and handle.allow_interruptions:
             logger.info('the caller spoke while the turn was working: dropping its reply')
             handle.interrupt()
@@ -690,7 +883,12 @@ class FlowAgent(Agent):
     def _quiet_reached(self) -> None:
         self._quiet = None
         session = self._session
-        if session is None or session.user_state == 'speaking' or session.agent_state != 'listening':
+        if (
+            session is None
+            or session.user_state == 'speaking'
+            or session.agent_state != 'listening'
+            or session.current_speech is not None
+        ):
             return
         self._spawn(self.remind())
 

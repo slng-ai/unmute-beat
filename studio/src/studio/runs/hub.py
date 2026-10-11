@@ -6,7 +6,8 @@ only writer of the store: each event goes to Redis (and Postgres behind it) and 
 watching that run, in the order it came.
 
 Starting a run (`Hub.start`): the agent's config on disk is versioned and kept (`studio.agents.configs`),
-the run is placed on the least busy runner that is ready and carries the agent, and the runner is
+the run is placed on the least busy runner that is ready and carries the agent's code as it is on disk
+(a runner started before a fact was saved carries the old facts, and takes no new run), and the runner is
 asked for the call. A run that carries on from a turn of an earlier one takes that turn's snapshot
 from the store, with the state edited on the go-back page when it was. The browser's WebRTC offer and
 a text run's turns pass through the studio to the runner that holds the call: the audio itself goes
@@ -33,13 +34,18 @@ from studio.settings import Settings
 
 
 class RunnerInfo(BaseModel):
-    """One runner as the studio sees it: what it said in its hello, and its latest stats."""
+    """One runner as the studio sees it: what it said in its hello, and its latest stats.
+
+    `code` is each agent's code as the runner imported it (`voice_runner.runner.CodeFiles`); a runner
+    that does not say is taken to carry the code on disk.
+    """
 
     runner: str
     url: str
     pid: int = 0
     max_calls: int = 0
     agents: list[str] = []
+    code: dict[str, str] = {}
     frameworks: list[str] = ['pipecat']
     ready: bool = False
     warming: bool = True
@@ -155,10 +161,12 @@ class Hub:
         store: Store,
         agents: Callable[[], list[Agent]],
         http: httpx.AsyncClient | None = None,
+        stale: Callable[[], str] | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.agents = agents
+        self.stale = stale
         self.client = RunnerClient(http)
         self.runners: dict[str, RunnerInfo] = {}
         self.live: dict[str, Live] = {}
@@ -204,21 +212,33 @@ class Hub:
             for runner in sorted(self.runners.values(), key=lambda runner: runner.runner)
         ]
 
-    def place(self, agent: str) -> RunnerInfo:
+    def place(self, agent: str, code: str = '') -> RunnerInfo:
         """The least busy runner that is ready and carries this agent, with the call counted against it at once.
 
         Runners report their load every 2 s, so calls started faster than that would otherwise all go
         to the one that looked idle. The next report replaces the count with the runner's own.
         """
-        chosen = self.carrier(agent)
+        chosen = self.carrier(agent, code)
         chosen.active += 1
         return chosen
 
-    def carrier(self, agent: str) -> RunnerInfo:
-        """The least busy runner that is ready and carries this agent, or a 503 that says what to do."""
+    def carrier(self, agent: str, code: str = '') -> RunnerInfo:
+        """The least busy runner that is ready and carries this agent's code as it is on disk (`code`), or a 503 that says what to do.
+
+        When every ready runner carries older code (a fact saved since they started), `stale` is asked to
+        start runners that carry the new, and says what it did.
+        """
         now = time.monotonic()
         linked = [runner for runner in self.runners.values() if runner.heard_lately(now, self.GONE_SECONDS)]
         ready = [runner for runner in linked if runner.ready and agent in runner.agents]
+        fresh = [runner for runner in ready if not code or runner.code.get(agent, code) == code]
+        if ready and not fresh:
+            doing = self.stale() if self.stale is not None else ''
+            raise HTTPException(
+                503,
+                f'every runner carrying {agent!r} started before its code last changed (its facts, say): '
+                + (doing or 'restart them (`slng studio runner`) to carry the new code'),
+            )
         if not ready:
             why = (
                 f'no runner is ready for {agent!r}: '
@@ -227,7 +247,7 @@ class Hub:
                 else 'no runner is linked: `slng studio up` starts one, `slng studio runner` adds more'
             )
             raise HTTPException(503, why)
-        return min(ready, key=lambda runner: (runner.active / max(runner.max_calls, 1), runner.runner))
+        return min(fresh, key=lambda runner: (runner.active / max(runner.max_calls, 1), runner.runner))
 
     def _agent(self, agent: str) -> Agent:
         """A compiled agent by id, or the error that says why it cannot run."""
@@ -241,10 +261,11 @@ class Hub:
     async def start(self, ask: StartRequest) -> dict[str, Any]:
         """Place a new run, keep its config version, and ask its runner for the call."""
         agent = self._agent(ask.agent)
-        config = AgentConfig(self.settings.root / agent.path).row(agent.id, self.settings.root)
+        files = AgentConfig(self.settings.root / agent.path)
+        config = files.row(agent.id, self.settings.root)
         await self.store.save_config(config)
         snapshot = await self._snapshot(ask.resume_from)
-        runner = self.place(agent.id)
+        runner = self.place(agent.id, files.code())
         run = f'run_{uuid4().hex[:10]}'
         live = self.live[run] = Live(
             self._new_row(run, agent.id, config.version, ask, runner.runner), runner.url
@@ -331,7 +352,8 @@ class Hub:
 
     async def state_schema(self, agent: str) -> dict[str, Any]:
         """The agent's state type as JSON schema, from a runner that carries it (the studio imports no use case)."""
-        runner = self.carrier(agent)
+        found = self._agent(agent)
+        runner = self.carrier(agent, AgentConfig(self.settings.root / found.path).code())
         return await self.client.ask('GET', f'{runner.url}/agents/{agent}/schema')
 
     async def ingest(self, event: dict[str, Any]) -> None:

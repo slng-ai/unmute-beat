@@ -22,12 +22,23 @@ class EditRefusedError(ValueError):
 class ManifestText:
     """The text of one manifest, and the same text with an entry's keys changed."""
 
+    PLAIN = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+    RESERVED = frozenset({'true', 'false', 'null', 'yes', 'no', 'on', 'off', 'y', 'n', '~'})
+
     def __init__(self, text: str) -> None:
         self.text = text
         self.data = yaml.safe_load(text) or {}
+        self.plain = False
 
-    def with_keys(self, section: str, name: str, changes: dict[str, Any], one_line: str = '') -> str:
-        """The text with these keys of `section.name` set, or removed where the value is None; proved."""
+    def with_keys(
+        self, section: str, name: str, changes: dict[str, Any], one_line: str = '', plain: bool = False
+    ) -> str:
+        """The text with these keys of `section.name` set, or removed where the value is None; proved.
+
+        `plain` writes a list or mapping in YAML's flow style with names bare (`[service, slot]`), as a
+        person writes `fields:` and `context:`; otherwise as JSON.
+        """
+        self.plain = plain
         if not changes:
             return self.text
         current = self._entry(section, name, one_line)
@@ -98,7 +109,7 @@ class ManifestText:
         indent = self.indent(line)
         if one_line and set(wanted) == {one_line}:
             return f'{indent}{name}: {wanted[one_line]}\n'
-        pairs = ', '.join(f'{key}: {self.scalar(item)}' for key, item in wanted.items())
+        pairs = ', '.join(f'{key}: {self.render(item)}' for key, item in wanted.items())
         return f'{indent}{name}: {{{pairs}}}\n'
 
     def _block(self, lines: list[str], at: int, end: int, changes: dict[str, Any]) -> None:
@@ -140,16 +151,30 @@ class ManifestText:
                 del lines[found]
                 block_end -= 1
             elif value is not None and found is not None:
-                lines[found] = f'{child}{key}: {self.scalar(value)}\n'
+                lines[found] = f'{child}{key}: {self.render(value)}\n'
             elif value is not None:
                 last = max((n for n in range(at + 1, block_end) if lines[n].strip()), default=at)
-                lines.insert(last + 1, f'{child}{key}: {self.scalar(value)}\n')
+                lines.insert(last + 1, f'{child}{key}: {self.render(value)}\n')
                 block_end += 1
 
     @staticmethod
     def indent(line: str) -> str:
         """The spaces a line starts with."""
         return line[: len(line) - len(line.lstrip())]
+
+    def render(self, value: Any) -> str:
+        """A value on one line: in flow style with bare names when `plain`, else as `scalar` writes it."""
+        return self.flow(value) if self.plain and isinstance(value, list | dict) else self.scalar(value)
+
+    def flow(self, value: Any) -> str:
+        """A list or mapping in YAML's flow style, each name bare when YAML reads it back as the same string."""
+        if isinstance(value, list):
+            return '[' + ', '.join(self.flow(item) for item in value) + ']'
+        if isinstance(value, dict):
+            return '{' + ', '.join(f'{key}: {self.flow(item)}' for key, item in value.items()) + '}'
+        if isinstance(value, str) and self.PLAIN.fullmatch(value) and value.lower() not in self.RESERVED:
+            return value
+        return self.scalar(value)
 
     @staticmethod
     def scalar(value: Any) -> str:

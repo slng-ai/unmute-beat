@@ -13,7 +13,11 @@ receipt type's JSON schema, and for a success and for a refusal every field by i
 closing line's placeholders and each case's `when` against them; the web page draws a receipt from
 the same schema it draws the state from.
 
-    {"problems": [...], "moves": {"step": ["step", ...]}, "operations": [{"name": ..., "schema": {...}, ...}]}
+Its facts come with it (`studio.agents.facts`): each state field's kind in words, its rules, where it is
+used, and the state's JSON schema, which the Facts editor's proof compares before and after an edit.
+
+    {"problems": [...], "moves": {"step": ["step", ...]}, "operations": [{"name": ..., "schema": {...}, ...}],
+     "facts": {"file": ..., "facts": [...], "schema": {...}}}
 """
 
 import json
@@ -31,6 +35,7 @@ from pydantic_ai.models.test import TestModel
 import core
 from core.closing import Closing
 from core.flow import Flow
+from studio.agents.facts import FactsReport
 
 
 class FieldType:
@@ -189,6 +194,7 @@ class AgentCheck:
             'problems': [],
             'moves': {step: sorted(to) for step, to in Flow.of(flow.nodes).moves.items()},
             'operations': [OperationReport(operation).report() for operation in flow.operations()],
+            'facts': FactsReport(spec, flow, self.manifest).report(),
         }
 
 

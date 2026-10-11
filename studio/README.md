@@ -41,11 +41,22 @@ uv run --directory studio slng studio up        # http://localhost:7800, ctrl+c 
   goodbye line, with the fields to insert and the line filled from a real receipt. A closing line can be
   one line or a line per result (**by result**): one when the customer is found, another when they are
   new, another when the service says no. Each line offers only the fields its own result has.
+  **Facts**: what the agent keeps track of on a call (its state, in code), each fact as a card grouped by who
+  fills it in (the caller, a tool, the call's opening), with its kind in words, its limits, any rule written
+  in code and what its error says, and where it is used: the steps that fill it in and see it, the tools
+  that take it or set it, the choices that rest on it, the prompts and code that name it, and its value in
+  the latest run. A fact's description (a prompt change: the model reads it), choices, limits and whether it
+  may be empty can change here, a fact can be added from a small palette or removed when nothing uses it,
+  and the steps that fill it in can change. Each change is made to `state.py` (and `agent.yaml`) on a copy and
+  proved first: only that fact changed in the code, the agent still loads, and the facts' schema changed by
+  exactly that. A saved change is a new config version; the studio then starts a runner with the new code
+  and lets the old one finish its calls. Renaming is not done here.
   **Graph**, **Its runs**, **Its metrics**, **Full config** (the whole manifest, checked by the loader).
 - **Runs.** Every run of every agent, newest first, filterable by agent, channel and outcome. A run opens
   its full view: live while it goes on, read back from the store once it is over.
-- **Going back.** Any turn of a run: what was said up to it, the state to carry on with (edit it; the
-  agent's own types check it, and a refused edit opens nothing), what comes along, what starts fresh, and
+- **Going back.** Any turn of a run: what was said up to it, the facts to carry on with (edit them; the
+  agent's own types check them, and a refused edit opens nothing; a turn saved with a fact since removed
+  says so), what comes along, what starts fresh, and
   what the business still holds from after that turn. Carry on by text or by voice.
 - **Metrics.** The overview of recent runs, filterable by agent; one run's view, which names its agent.
   Voice to voice, LLM first token and TTS first audio at p90, errors, every turn's requests, and latency by
@@ -69,13 +80,13 @@ runners' logs and the use cases' business data (the salon's diary, Faro's learne
 | `src/studio/cli.py` | `Cli`: the `slng` command |
 | `src/studio/settings.py` | ports, paths and URLs from the environment |
 | `src/studio/boot.py` | the start-up sequence `/api/boot` reports and the loading screen draws: Docker, the services, the store, the agents, the runner |
-| `src/studio/agents/` | every `agent.yaml` (`catalog`: the loader's verdict and the engine's own moves, groups for the map); the check that runs in a process of its own (`check`: `FlowSpec.problems()`, `Flow.moves`, each operation's closing lines and its receipt the way the state is described: JSON schema, fields by path for a success and a refusal, closed values); the config's files and version (`configs`); the editor (`editor`, `manifest_text`, `closing_review`, `models`) |
+| `src/studio/agents/` | every `agent.yaml` (`catalog`: the loader's verdict and the engine's own moves, groups for the map); the check that runs in a process of its own (`check`: `FlowSpec.problems()`, `Flow.moves`, each operation's closing lines and its receipt the way the state is described: JSON schema, fields by path for a success and a refusal, closed values); the config's files and version, the state module included (`configs`); the editor (`editor`, `manifest_text`, `closing_review`, `models`); the facts (`facts`, read in the check's process; `state_source`, the state module edited and compared as code; `facts_editor`, each edit proved on a copy) |
 | `src/studio/runs/` | the hub (`hub`: runners link in, each run placed on the least busy ready runner, every event stored and streamed to the pages watching); the store (`store`: Redis for 7 days, Postgres behind, or memory); a runner the studio starts (`process`) |
 | `src/studio/metrics/` | timings from Jaeger's API v3 (`jaeger`), each turn's STT, LLM and TTS requests flagged against `Limits` and the page's report (`timings`) |
 | `src/studio/api/` | `Studio` and its routes: agents, runs, metrics, core's voice page at `/voice-sdk/`, the built page |
 | `src/studio/events.py` | the run format, which is core's (`core.events`) |
 | `src/studio/schema.sql` | the store: configs, runs, events, snapshots; applied on every start |
-| `tests/` | asserts, no pytest: the catalog, events, metrics on API v3 answers, boot, the API, the CLI, the editor on copies of the salon and Faro, the store (Redis and Postgres too when they are up) |
+| `tests/` | asserts, no pytest: the catalog, events, metrics on API v3 answers, boot, the API, the CLI, the editor on copies of the salon and Faro, the facts on copies of the salon and Wasla, the store (Redis and Postgres too when they are up) |
 | `web/` | Vite, React, TypeScript; React Flow and ELK for the map, loaded only when it opens. `src/pages/` one file per place (Agents, Runs, a run, going back, Metrics); `src/live/` the live socket (`useRun`), the try panel, browser calls on core's own client (`voice.ts`); `src/model/` a state and a receipt drawn and edited from their models' JSON schema, nested models included; `src/closing/` the closing-line editor |
 
 The runner service and the studio together are tested in `runner/tests/test_runner.py`: two runners, runs

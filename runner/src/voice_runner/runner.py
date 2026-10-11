@@ -63,13 +63,33 @@ class ConfigFiles:
         return digest.hexdigest()
 
 
+class CodeFiles:
+    """An agent's package as code, as the studio versions it (`studio.agents.configs.AgentConfig.code`).
+
+    A runner imports each agent's code once, at start. Its digest then says which code it carries, and a
+    different digest on disk later means the runner carries old code: only a new process can carry the new.
+    """
+
+    def __init__(self, folder: Path) -> None:
+        self.folder = folder
+
+    def digest(self) -> str:
+        """A digest of every module in the package, as it is on disk now."""
+        digest = hashlib.sha256()
+        for path in sorted(self.folder.rglob('*.py')):
+            if '__pycache__' not in path.parts:
+                digest.update(str(path.relative_to(self.folder)).encode() + b'\0' + path.read_bytes() + b'\0')
+        return digest.hexdigest()[:12]
+
+
 class Runner:
     """The process's calls, agents and readiness.
 
     `ADMIT_SECONDS` is how long an admitted voice call may wait for its browser's offer before its place
     is given back. `loaded` is the config version each agent's flow was last asked for, as the studio
     named it; `compiled` what each agent's config files held when its flow was compiled, so a save since
-    means compiling again.
+    means compiling again. `code` is each agent's code as this process imported it (`CodeFiles`): the
+    studio places a run only on a runner whose code is the code on disk.
     """
 
     ADMIT_SECONDS = 30.0
@@ -91,6 +111,11 @@ class Runner:
         self.loaded: dict[str, str] = {}
         self.compiled = {
             agent: ConfigFiles(entry.manifest).digest()
+            for agent, entry in self.entries.items()
+            if entry.manifest
+        }
+        self.code = {
+            agent: CodeFiles(entry.manifest.parent).digest()
             for agent, entry in self.entries.items()
             if entry.manifest
         }
@@ -117,6 +142,7 @@ class Runner:
             'pid': os.getpid(),
             'max_calls': self.settings.max_calls,
             'agents': sorted(self.entries),
+            'code': self.code,
             'frameworks': ['pipecat'],
         }
 
@@ -146,9 +172,14 @@ class Runner:
         disk; calls already running keep the flow they started on. Only config is read again, never
         the application's code.
 
+        Code is never read again: an agent whose code changed on disk since this process imported it (a
+        fact saved in the studio changes its state module) is refused, so no call runs on facts that
+        are no longer the agent's. The studio starts a new runner for it.
+
         ponytail: each recompiled flow's model clients stay open for the process's life. Close the
         old flow's clients once its last call ends if editors ever save hundreds of times a day.
         """
+        self.check_code(agent)
         entry = self.entries[agent]
         if config and self.loaded.get(agent) != config and entry.manifest is not None:
             now = ConfigFiles(entry.manifest).digest()
@@ -160,6 +191,15 @@ class Runner:
                 logger.info('agent {} compiled again for config {}', agent, config)
             self.loaded[agent] = config
         return self.flows[agent]
+
+    def check_code(self, agent: str) -> None:
+        """Refuse an agent whose code changed on disk since this process imported it."""
+        entry = self.entries[agent]
+        if entry.manifest is not None and CodeFiles(entry.manifest.parent).digest() != self.code.get(agent):
+            raise HTTPException(
+                409,
+                f"{agent}'s code changed since this runner started: a new runner carries it, this one cannot",
+            )
 
     async def warm(self, stack: AsyncExitStack) -> None:
         """Compile every flow and, when asked, open and warm its model clients once, for the process's life."""
@@ -229,7 +269,8 @@ class Runner:
         )
 
     def check_resume(self, ask: CallRequest) -> None:
-        """Open and resume a call that is then dropped: an edit the application refuses is refused now, not after the offer."""
+        """Refuse old code, then open and resume a call that is then dropped: a refused edit is refused now, not after the offer."""
+        self.check_code(ask.agent)
         entry, flow = self.entries[ask.agent], self.flows[ask.agent]
         if ask.resume is not None:
             flow.resume(entry.open(flow, core.Opening(caller_id=ask.caller_id)), ask.resume, ask.facts)

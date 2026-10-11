@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
  * run, followed live or read back, and going back to one of its turns. A hash route needs no server
  * fallback: the engine serves one index.html.
  */
-export type AgentTab = 'build' | 'operations' | 'graph' | 'runs' | 'metrics' | 'config';
+export type AgentTab = 'build' | 'operations' | 'facts' | 'graph' | 'runs' | 'metrics' | 'config';
 
 export type Route =
   | { page: 'boot' }
@@ -15,7 +15,7 @@ export type Route =
   | { page: 'back'; run: string; turn?: number }
   | { page: 'metrics'; agent?: string; run?: string };
 
-const TABS: AgentTab[] = ['build', 'operations', 'graph', 'runs', 'metrics', 'config'];
+const TABS: AgentTab[] = ['build', 'operations', 'facts', 'graph', 'runs', 'metrics', 'config'];
 
 export function parse(hash: string): Route {
   const [path = '', search = ''] = hash.replace(/^#\/?/, '').split('?');

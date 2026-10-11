@@ -1,4 +1,4 @@
-"""The agents' routes: each agent and its graph, its state schema, and its config read, checked and saved."""
+"""The agents' routes: each agent and its graph, its state schema, its config and its facts read, checked and saved."""
 
 from typing import TYPE_CHECKING, Any
 
@@ -6,7 +6,8 @@ from fastapi import APIRouter, HTTPException
 
 from studio.agents.catalog import Agent
 from studio.agents.editor import ConfigEditor
-from studio.agents.models import Checked, Config, Edit, Saved
+from studio.agents.facts_editor import FactsEditor
+from studio.agents.models import Checked, Config, Edit, FactChecked, FactEdit, FactSaved, FactsView, Saved
 from studio.runs.store import ConfigRow
 
 if TYPE_CHECKING:
@@ -17,6 +18,7 @@ class AgentRoutes:
     """Everything under `/api/agents`."""
 
     RECEIPT_RUNS = 30
+    LATEST_RUNS = 10
 
     def __init__(self, studio: Studio) -> None:
         self.studio = studio
@@ -32,6 +34,9 @@ class AgentRoutes:
         router.add_api_route('/{agent_id}/config', self.save, methods=['PUT'])
         router.add_api_route('/{agent_id}/receipts', self.receipts, methods=['GET'])
         router.add_api_route('/{agent_id}/configs', self.versions, methods=['GET'])
+        router.add_api_route('/{agent_id}/facts', self.facts, methods=['GET'])
+        router.add_api_route('/{agent_id}/facts/check', self.check_fact, methods=['POST'])
+        router.add_api_route('/{agent_id}/facts', self.save_fact, methods=['PUT'])
         return router
 
     def listed(self) -> list[Agent]:
@@ -85,3 +90,36 @@ class AgentRoutes:
     async def versions(self, agent_id: str) -> list[ConfigRow]:
         """Every saved version of the agent's config, newest first."""
         return await self.studio.store.configs(agent_id)
+
+    def facts_editor(self, agent_id: str) -> FactsEditor:
+        """The editor over one agent's facts."""
+        agent, root = self.one(agent_id), self.studio.settings.root
+        return FactsEditor(root / agent.path, agent.id, root)
+
+    async def facts(self, agent_id: str) -> FactsView:
+        """The agent's facts, each with its value in the latest run that committed any, and how the runners stand."""
+        view = self.facts_editor(agent_id).read()
+        for row in (await self.studio.hub.runs(agent_id))[: self.LATEST_RUNS]:
+            events = await self.studio.store.events(row.id)
+            states = [
+                event['state'] for event in events if event.get('type') in ('state.committed', 'run.started')
+            ]
+            if states:
+                for fact in view.facts:
+                    fact.latest = states[-1].get(fact.name)
+                view.latest_run = row.id
+                break
+        view.runners = self.studio.renewal
+        return view
+
+    def check_fact(self, agent_id: str, edit: FactEdit) -> FactChecked:
+        """A fact edit proved on a copy, as a save would prove it."""
+        return self.facts_editor(agent_id).check(edit)
+
+    async def save_fact(self, agent_id: str, edit: FactEdit) -> FactSaved:
+        """A proved fact edit written, its version kept, and the studio's runners renewed to carry it."""
+        saved = self.facts_editor(agent_id).save(edit)
+        if saved.ok and saved.config is not None:
+            await self.studio.store.save_config(saved.config)
+            saved.runners = self.studio.renew_runners()
+        return saved

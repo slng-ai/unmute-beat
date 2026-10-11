@@ -401,3 +401,114 @@ export interface ConfigVersion {
   parent: string | null;
   created_at: string | null;
 }
+
+/** A fact's kind in words, as `studio.agents.facts.Kind` reads it from the real annotation. */
+export interface FactKind {
+  code: string;
+  words: string;
+  article: string;
+  choices: unknown[];
+  nullable: boolean;
+  members: FactKind[];
+  fields: NestedFact[];
+  item: FactKind | null;
+  defined_in: string;
+  model?: string;
+}
+
+export interface NestedFact {
+  name: string;
+  label: string;
+  description: string;
+  kind: FactKind;
+}
+
+export interface FactRule {
+  name: string;
+  where: string;
+  says: string[];
+  types: string[];
+  heard: string[];
+}
+
+export type FactUseKind = 'fills' | 'sees' | 'asks' | 'needed' | 'identity' | 'offered' | 'rests_on' | 'read_back' | 'carried_out' | 'input' | 'set_by' | 'prompt' | 'code';
+
+export interface FactUse {
+  kind: FactUseKind;
+  step: string;
+  operation: string;
+  function: string;
+  choice: string;
+  argument: string;
+  path: string;
+  detail: string;
+  file: string;
+  line: number;
+}
+
+export type FactPart = 'description' | 'choices' | 'limits' | 'empty' | 'remove';
+
+export interface Fact {
+  name: string;
+  label: string;
+  group: 'caller' | 'tools' | 'open';
+  description: string;
+  note: string;
+  line: number;
+  kind: FactKind;
+  starts_empty: boolean;
+  start: unknown;
+  limits: Record<string, number>;
+  rules: FactRule[];
+  uses: FactUse[];
+  editable: Partial<Record<FactPart, boolean>>;
+  why_not: Partial<Record<FactPart, string>>;
+  spec: unknown;
+  latest: unknown;
+}
+
+export interface FactsView {
+  agent: string;
+  version: string;
+  file: string;
+  class_name: string;
+  facts: Fact[];
+  rules: FactRule[];
+  steps: string[];
+  problems: Problem[];
+  latest_run: string;
+  runners: string;
+}
+
+export type NewKind = 'text' | 'whole_number' | 'number' | 'yes_no' | 'date' | 'time' | 'not_past' | 'phone' | 'quoted' | 'choice';
+
+export interface FactLimits {
+  min_length?: number | null;
+  max_length?: number | null;
+  ge?: number | null;
+  le?: number | null;
+}
+
+export interface FactEdit {
+  base?: string;
+  action: 'add' | 'change' | 'remove' | 'rename';
+  name: string;
+  kind?: NewKind;
+  description?: string;
+  choices?: string[];
+  limits?: FactLimits;
+  may_be_empty?: boolean;
+  start?: unknown;
+  fill_steps?: string[];
+}
+
+export interface FactChecked {
+  ok: boolean;
+  version: string;
+  problems: Problem[];
+  proved: string[];
+  diff: string;
+  changed: string[];
+  saved?: boolean;
+  runners?: string;
+}

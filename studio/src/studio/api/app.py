@@ -21,6 +21,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
+from pydantic import BaseModel
 
 from studio.agents.catalog import Agent, Catalog
 from studio.api.agents import AgentRoutes
@@ -35,6 +36,12 @@ from studio.runs.store import MemoryStore, ServiceStore, Store
 from studio.settings import Settings
 
 
+class Renewal(BaseModel):
+    """The studio's runners being renewed after a saved fact, in words the page shows; '' when nothing is under way."""
+
+    doing: str
+
+
 class Studio:
     """One studio: its store, its hub of runners, its start-up, its own runner, and the FastAPI app over them.
 
@@ -43,7 +50,8 @@ class Studio:
     once the agents are read (`slng studio up`). `RUNNER_WAIT` is how long the boot waits for it to link
     and finish warming. A runner imports an agent's code once, so after a fact is saved the studio renews
     its own runners (`renew_runners`): a new one first, then the old one drains its calls for at most
-    `DRAIN_SECONDS` (the runner's own bound) and stops. `renewal` says how that stands, '' when idle.
+    `DRAIN_SECONDS` (the runner's own bound) and stops. `renewal` says how that stands, '' when idle, and
+    `renewal_now` adds the calls the old runner still carries; the page reads it from `/api/renewal`.
     """
 
     RUNNER_WAIT = 180.0
@@ -67,6 +75,7 @@ class Studio:
         self.renewing: asyncio.Task[None] | None = None
         self.renew_again = False
         self.renewal = ''
+        self.draining: RunnerProcess | None = None
         self.hub = hub or Hub(settings, self.store, self.agents, stale=self.renew_runners)
         self.metrics = MetricsReader(Jaeger(settings.jaeger_url, fetch))
         self.boot = boot or Boot(settings)
@@ -128,12 +137,12 @@ class Studio:
         """
         owned = [process for process in self.processes if process.exited is None]
         if not owned:
-            return 'no runner the studio started is running: restart yours (`slng studio runner`) to carry the new code'
+            return 'No runner the studio started is running. Restart yours (`slng studio runner`) to carry the new code.'
         if self.renewing is None or self.renewing.done():
             self.renewing = asyncio.get_running_loop().create_task(self._renew(owned))
         else:
             self.renew_again = True
-        return 'the studio is starting a runner with the new code; runs already going keep the old one until they end'
+        return 'The studio is starting a runner with the new code. Runs already going keep the old one until they end.'
 
     async def _renew(self, old: list[RunnerProcess]) -> None:
         """Each old runner replaced: the new one ready first, then the old one drained and stopped."""
@@ -144,24 +153,35 @@ class Studio:
             )
             fresh.start()
             self.processes.append(fresh)
-            self.renewal = f'starting a runner on port {port} with the new code'
+            self.renewal = f'Starting a runner on port {port} with the new code.'
             if not await self._ready(fresh):
-                self.renewal = f'the new runner did not get ready: see {fresh.log}'
+                self.renewal = f'The new runner on port {port} did not get ready, so the old one keeps every run. See {fresh.log}'
                 logger.warning('runner on port {} did not get ready; the old one keeps running', port)
                 return
             self.renewal = (
-                f'the runner on port {port} carries the new code; the old one is finishing its calls'
+                f'The runner on port {port} carries the new code and takes every new run. '
+                f'The one on port {each.port} is finishing its calls'
             )
+            self.draining = each
             logger.info(
                 'runner on port {} carries the new code; draining the one on port {}', port, each.port
             )
             await asyncio.to_thread(each.stop, self.DRAIN_SECONDS)
+            self.draining = None
             self.processes.remove(each)
         if self.renew_again:
             self.renew_again = False
             await self._renew([process for process in self.processes if process.exited is None])
             return
         self.renewal = ''
+
+    def renewal_now(self) -> Renewal:
+        """How the renewal stands, with the calls the draining runner still carries: '' when there is none."""
+        if self.draining is None or self.draining.process is None:
+            return Renewal(doing=self.renewal)
+        pid = self.draining.process.pid
+        left = sum(runner.active for runner in self.hub.listed() if runner.pid == pid)
+        return Renewal(doing=f'{self.renewal}: {left} left.' if left else f'{self.renewal}.')
 
     async def _ready(self, process: RunnerProcess) -> bool:
         """Whether a runner started here links and gets ready within `RUNNER_WAIT`."""
@@ -208,6 +228,7 @@ class Studio:
         app.state.studio = self
         app.add_api_route('/api/health', self.health, methods=['GET'])
         app.add_api_route('/api/boot', self.boot.state, methods=['GET'])
+        app.add_api_route('/api/renewal', self.renewal_now, methods=['GET'])
         app.add_api_route('/api/events/schema', self.event_schema, methods=['GET'])
         app.include_router(AgentRoutes(self).router())
         app.include_router(RunRoutes(self).router())

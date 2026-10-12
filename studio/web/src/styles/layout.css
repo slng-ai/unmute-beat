@@ -9,7 +9,9 @@
 .nav a { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-decoration: none; height: var(--bar); display: flex; align-items: center; padding: 0 16px; border-left: 1px solid var(--rule-soft); }
 .nav a:hover { color: var(--text); }
 .nav a[aria-current='page'] { background: var(--yellow); color: var(--ground); }
+.nav a:focus-visible, .tabs a:focus-visible, .side-link:focus-visible, .fact-row:focus-visible { outline-offset: -2px; }
 .bar-fill { flex: 1 1 200px; display: flex; align-items: center; gap: 12px; padding: 8px 20px; border-left: 1px solid var(--rule-soft); flex-wrap: wrap; }
+.bar-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .bar-cell { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-left: 1px solid var(--rule-soft); }
 
 .who { display: flex; border-left: 1px solid var(--rule-soft); }
@@ -17,6 +19,25 @@
 .who .on-caller { background: var(--caller); color: var(--ground); }
 .who .on-engine { background: var(--yellow); color: var(--ground); }
 .who .on-bot { background: var(--bot); color: var(--ground); }
+
+/* At phone width the bar is one row: the mark alone, the three places, the page's cells scrolling sideways, and
+   the page's actions in a bar fixed at the bottom. */
+@media (max-width: 720px) {
+  .bar { flex-wrap: nowrap; min-height: 48px; }
+  .brand { padding: 0 15px; }
+  .brand-name, .brand-sub { display: none; }
+  .brand-mark { width: 16px; height: 16px; }
+  .nav a { height: 48px; padding: 0 10px; font-size: 11px; letter-spacing: .06em; }
+  .bar-fill { flex: 1 1 0; min-width: 0; padding: 0 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .bar-fill > * { flex: 0 0 auto; }
+  .bar-note, .switch-key { display: none; }
+  .who span { height: 48px; padding: 0 10px; }
+  .who span:not([class]) { display: none; }
+  .bar-cell { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; justify-content: flex-end; flex-wrap: wrap; padding: 10px 16px; background: var(--ground); border-left: 0; border-top: 1px solid var(--rule-soft); }
+  .app[data-actions='true'] .body { padding-bottom: 64px; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 0 8px; }
+  .tabs a { white-space: nowrap; padding: 14px 10px; }
+}
 
 .body { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: stretch; min-height: 0; }
 .side { flex: 1 1 260px; max-width: 100%; border-right: 1px solid var(--rule-soft); background: var(--aside); }
@@ -27,6 +48,7 @@
 .side-item { width: 100%; text-align: left; background: transparent; border: 0; border-left: 2px solid transparent; padding: 12px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .side-item:hover { background: var(--hover); }
 .side-item[aria-pressed='true'] { background: #211f1b; border-left-color: var(--yellow); }
+.side-link { display: block; text-decoration: none; color: inherit; }
 
 .sec { border-bottom: 1px solid var(--rule-soft); }
 .sec-h { width: 100%; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; background: transparent; border: 0; cursor: pointer; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; text-align: left; }
@@ -106,9 +128,35 @@
 .col-try { flex: 1 1 400px; max-width: 100%; min-width: 0; border-left: 1px solid var(--rule-soft); background: var(--aside); display: flex; flex-direction: column; }
 @media (max-width: 720px) { .col-steps, .col-try { flex-basis: 100%; border: 0; border-bottom: 1px solid var(--rule-soft); } .col-main { padding: 16px; } }
 
-/* Facts: what an agent keeps track of on a call. A list of cards beside one fact's detail; at phone width the
-   list, or the fact picked from it, with a way back. */
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* An operation another page linked to, on the Operations tab. */
+.op-anchor { scroll-margin-top: 16px; }
+.op-focus { box-shadow: inset 2px 0 0 var(--yellow); padding-left: 10px; }
+
+/* Facts: what an agent keeps track of on a call. A list of cards or compact rows beside one fact's detail; at
+   phone width the list, or the fact picked from it, with a way back. */
+.facts-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.facts-fold { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 0; background: transparent; border: 0; color: inherit; cursor: pointer; text-align: left; }
+.facts-fold h2 { margin: 0; color: var(--soft); }
+.facts-fold:hover h2 { color: var(--text); }
+.facts-fold .mono { font-size: 11px; }
+.facts-fold-mark { width: 12px; }
+.facts-cards { display: flex; flex-direction: column; gap: 8px; }
+.facts-rows { display: flex; flex-direction: column; border-top: 1px solid #211f1b; }
+.fact-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-bottom: 1px solid #211f1b; border-left: 2px solid transparent; color: var(--text); text-decoration: none; min-width: 0; }
+.fact-row:hover { background: var(--hover); color: var(--text); }
+.fact-row-on { background: #211f1b; border-left-color: var(--yellow); }
+.fact-row-name { flex: 1 1 auto; font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fact-row-kind { font-size: 11px; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fact-where { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; font-size: 13px; }
+.facts-kindnote { display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.5; color: var(--muted); border: 1px dashed var(--rule-strong); padding: 10px 12px; }
+.fact-lines { margin: 0; flex-basis: 100%; border: 1px solid var(--rule-soft); background: var(--sunk); min-width: 0; }
+.fact-lines-h { display: flex; align-items: center; gap: 10px; padding: 4px 10px; border-bottom: 1px solid var(--rule-soft); font-size: 12px; color: var(--soft); }
+.fact-lines-b { margin: 0; padding: 6px 0; font-family: var(--mono); font-size: 12px; line-height: 1.7; color: var(--dim); overflow-x: auto; }
+.fact-lines-b > span { display: block; padding-right: 12px; }
+.fact-lines-n { display: inline-block; width: 44px; padding-right: 12px; text-align: right; color: var(--faint); user-select: none; }
+.fact-lines-on { background: #221f14; color: var(--text); box-shadow: inset 2px 0 0 var(--yellow); }
+button.chip { cursor: pointer; font-family: var(--mono); background: transparent; min-height: 28px; display: inline-flex; align-items: center; border-radius: 0; }
+button.chip:hover, button.chip[aria-expanded='true'] { border-color: var(--yellow); color: var(--yellow); }
 .facts { display: flex; flex-wrap: wrap; align-items: stretch; flex: 1 1 auto; min-height: 0; }
 .facts-list { flex: 1 1 340px; max-width: 100%; min-width: 0; border-right: 1px solid var(--rule-soft); background: var(--aside); padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; }
 .facts-main { flex: 999 1 560px; min-width: 0; padding: 24px; }

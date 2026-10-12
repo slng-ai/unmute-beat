@@ -437,15 +437,29 @@ class Hub:
 
     @staticmethod
     async def _follow(run: str, socket: WebSocket, queue: asyncio.Queue[dict[str, Any]], sent: int) -> None:
-        """Each new event, skipping what the replay already sent, until the page goes."""
-        while True:
-            event = await queue.get()
-            if int(event.get('seq', -1)) <= sent and event.get('type') != 'turn.snapshot':
-                continue
-            await socket.send_json(event)
-            sent = max(sent, int(event.get('seq', -1)))
-            if event.get('type') == 'run.ended':
-                await socket.send_json({'type': 'studio.replayed', 'run': run})
+        """Each new event, skipping what the replay already sent, until the page goes.
+
+        The page only listens, so whatever it sends is its going: a close, or the server closing the socket
+        on shutdown. Waiting on the queue alone would miss that until the next event, which a quiet run never
+        sends, and the server would wait on this handler for ever when it stops.
+        """
+        gone = asyncio.ensure_future(socket.receive())
+        try:
+            while True:
+                arrived = asyncio.ensure_future(queue.get())
+                await asyncio.wait({arrived, gone}, return_when=asyncio.FIRST_COMPLETED)
+                if gone.done():
+                    arrived.cancel()
+                    return
+                event = arrived.result()
+                if int(event.get('seq', -1)) <= sent and event.get('type') != 'turn.snapshot':
+                    continue
+                await socket.send_json(event)
+                sent = max(sent, int(event.get('seq', -1)))
+                if event.get('type') == 'run.ended':
+                    await socket.send_json({'type': 'studio.replayed', 'run': run})
+        finally:
+            gone.cancel()
 
     async def runs(self, agent: str = '') -> list[RunRow]:
         """Every run, live ones as they stand now, newest first, for one agent or all."""

@@ -416,6 +416,14 @@ export interface FactKind {
   item: FactKind | null;
   defined_in: string;
   model?: string;
+  /** The kind's own description in its JSON schema: what the model reads when a fact has none of its own. */
+  description: string;
+}
+
+/** A few lines of a file around the one that matters: the first line's number, and the text. */
+export interface FactExcerpt {
+  first: number;
+  lines: string[];
 }
 
 export interface NestedFact {
@@ -446,6 +454,7 @@ export interface FactUse {
   detail: string;
   file: string;
   line: number;
+  excerpt: FactExcerpt | null;
 }
 
 export type FactPart = 'description' | 'choices' | 'limits' | 'empty' | 'remove';
@@ -457,6 +466,7 @@ export interface Fact {
   description: string;
   note: string;
   line: number;
+  excerpt: FactExcerpt | null;
   kind: FactKind;
   starts_empty: boolean;
   start: unknown;

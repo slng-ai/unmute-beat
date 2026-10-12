@@ -4,6 +4,7 @@ import type { RunRow } from '../api/types';
 import { useApi } from '../api/useApi';
 import { Shell } from '../components/Shell';
 import { href, go, type Route } from '../router';
+import { Placeholder } from '../components/Placeholder';
 
 function when(iso: string): string {
   const at = new Date(iso);
@@ -13,8 +14,8 @@ function when(iso: string): string {
 /** Runs, newest first: every agent's, or one agent's when `agent` is given (an agent's own page passes it). */
 export function RunsTable({ agent = '', channel = '', outcome = '' }: { agent?: string; channel?: string; outcome?: string }) {
   const [tick, setTick] = useState(0);
-  const runs = useApi(() => api.runs(agent), `runs-${agent}-${tick}`);
-  if (runs.state === 'loading') return <p className="empty">Loading runs…</p>;
+  const runs = useApi(() => api.runs(agent), `runs-${agent}-${tick}`, true);
+  if (runs.state === 'loading') return <Placeholder what="runs" kind="rows" rows={5} />;
   if (runs.state === 'error') return <p className="error-box">{runs.message}</p>;
   const rows = runs.data.filter((r) => (!channel || r.channel === channel) && (!outcome || (outcome === 'live' ? r.outcome === null : r.outcome === outcome)));
   return (

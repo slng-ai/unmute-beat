@@ -6,6 +6,7 @@ import { useSchemas } from '../api/useSchemas';
 import { Shell } from '../components/Shell';
 import { ModelForm, ModelView, pathKey, type Schema } from '../model';
 import { href, go, type Route } from '../router';
+import { Placeholder } from '../components/Placeholder';
 
 /**
  * Going back to the end of a turn and carrying on from there, with the facts edited first if you like.
@@ -76,9 +77,10 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
         <div className="cols">
           <nav className="col-steps" aria-label="Turns">
             <div className="side-head"><span className="lbl">Saved turns</span></div>
-            {turns.length === 0 && <p className="empty" style={{ padding: 16 }}>No saved turn: a snapshot is kept at the end of each turn.</p>}
+            {run.state === 'loading' && <Placeholder what="the saved turns" kind="rows" />}
+            {run.state !== 'loading' && turns.length === 0 && <p className="empty" style={{ padding: 16 }}>No saved turn: a snapshot is kept at the end of each turn.</p>}
             {turns.map((t) => (
-              <a key={t} href={href({ page: 'back', run: route.run, turn: t })} style={{ textDecoration: 'none', color: 'inherit' }}>
+              <a key={t} className="side-link" href={href({ page: 'back', run: route.run, turn: t })}>
                 <span className="side-item" aria-pressed={t === turn} style={{ flexDirection: 'row' }}>
                   <span className="mono">T{t}</span>
                   <span style={{ flex: '1 1 auto' }} />
@@ -89,6 +91,7 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
           </nav>
           <main className="col-main">
             {found.state === 'error' && <p className="error-box">{found.message}</p>}
+            {found.state === 'loading' && run.state !== 'error' && <Placeholder what="the saved turn" />}
             {data && (
               <>
                 <header>

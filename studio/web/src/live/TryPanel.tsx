@@ -8,6 +8,7 @@ import { IntentsPanel, ModelPanel, StatePanel, statusTag, Transcript } from './p
 import type { RunView } from './useRun';
 import { startLiveKit, type LiveKitRoom } from './livekit';
 import { startVoice, type VoiceCall } from './voice';
+import { Placeholder } from '../components/Placeholder';
 
 /**
  * The right half of an agent's page: a real run on the config as saved, by text or by voice from this
@@ -31,7 +32,7 @@ export function TryPanel({ agent, version, run, onRun, view }: {
   const [voice, setVoice] = useState<{ status: string; reports: number; call?: VoiceCall; capable?: boolean }>({ status: '', reports: 0 });
   const audio = useRef<HTMLAudioElement>(null);
   const schemas = useSchemas(agent);
-  const recent = useApi(() => api.runs(agent), `try-runs-${agent}-${run ?? ''}-${view.status}-${view.turns.length}`);
+  const recent = useApi(() => api.runs(agent), `try-runs-${agent}-${run ?? ''}-${view.status}-${view.turns.length}`, true);
   const row = useApi(() => (run ? api.run(run) : Promise.reject(new Error('no run'))), `try-row-${run ?? ''}-${view.status}`);
   const waitingForVoice = row.state === 'ok' && row.data.run.channel === 'voice' && row.data.run.outcome === null && view.status !== 'live' && !voice.call;
   const live = view.status === 'live' || waitingForVoice;
@@ -195,6 +196,7 @@ export function TryPanel({ agent, version, run, onRun, view }: {
         )}
         <div style={{ borderTop: '1px solid var(--rule-soft)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span className="lbl">Its last runs · start from a saved turn</span>
+          {recent.state === 'loading' && <Placeholder what="its last runs" kind="rows" />}
           {recent.state === 'ok' && recent.data.length === 0 && <span className="hint">None yet.</span>}
           {recent.state === 'ok' &&
             recent.data.slice(0, 5).map((r: RunRow) => (

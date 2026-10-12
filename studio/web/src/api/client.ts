@@ -53,6 +53,7 @@ const enc = encodeURIComponent;
 
 export const api = {
   boot: () => get<BootState>('/api/boot'),
+  renewal: () => get<{ doing: string }>('/api/renewal'),
   agents: () => get<Agent[]>('/api/agents'),
   agent: (id: string) => get<Agent>(`/api/agents/${enc(id)}`),
   schema: (id: string) => get<StateSchema>(`/api/agents/${enc(id)}/schema`),

@@ -11,7 +11,10 @@ The studio and two runners, all in this process on real sockets, the salon's flo
 * a runner told to stop takes no new calls (the studio places them on the other one) and finishes the
   call it has;
 * a runner whose agent's code changed on disk since it started (a fact saved) refuses that agent's calls,
-  and says which code it carries when it links.
+  and says which code it carries when it links;
+* a voice call on LiveKit gets a room of its own named after the run and a caller's token for it (no
+  WebRTC offer is taken for it), the runner joins that room itself, and a room it cannot reach ends the
+  run as failed; a runner with no LiveKit server opens nothing.
 
 Scripted models prove runtime properties, never language understanding.
 """
@@ -44,6 +47,9 @@ from voice_runner.agents import Found  # noqa: E402
 from voice_runner.app import RunnerApp  # noqa: E402
 from voice_runner.runner import Runner  # noqa: E402
 from voice_runner.settings import Settings as RunnerSettings  # noqa: E402
+
+LIVEKIT = {'LIVEKIT_API_KEY': 'devkey', 'LIVEKIT_API_SECRET': 'offline-secret-' + 'x' * 32}
+"""A LiveKit server's credentials, for tokens only: no LiveKit server answers in these tests."""
 
 MOVES: list[dict[str, Any]] = []
 """What the scripted model answers next, one reply each; 'Sure.' once they run out."""
@@ -96,6 +102,8 @@ async def main() -> None:
     servers = [await serve(studio, studio_port)]
     entry = salon_entry()
     runners = []
+    os.environ.update(LIVEKIT)
+    nowhere = f'ws://127.0.0.1:{free_port()}'
     for name in ('runner-a', 'runner-b'):
         port = free_port()
         found = [Found(ROOT / 'use-cases' / 'salon', 'salon', entry)]
@@ -105,6 +113,7 @@ async def main() -> None:
             max_calls=2,
             warm=False,
             runner_id=name,
+            livekit_url=nowhere,
         )
         app = RunnerApp(rs, found, signals=False).app()
         runners.append(app.state.runner)
@@ -247,6 +256,52 @@ async def scenario(api: httpx.AsyncClient, runners: list[Any], studio: Studio) -
         return found['run']['outcome'] == 'hangup' and found
 
     await until(ended, 'the run ended as a hang-up')
+    await a_livekit_call_gets_a_room_of_its_own(api, runners)
+
+
+async def a_livekit_call_gets_a_room_of_its_own(api: httpx.AsyncClient, runners: list[Any]) -> None:
+    """A LiveKit voice run: its room and the caller's token come back through the studio; unreachable, it fails."""
+    from livekit import api as livekit
+
+    ask = {'agent': 'sage-and-stone', 'channel': 'voice', 'framework': 'livekit', 'delivery': 'simulated'}
+    placed = (await api.post('/api/runs', json=ask)).json()
+    run, room = placed['run'], placed['livekit']
+    assert room['room'] == run and room['url'] == runners[0].settings.livekit_url and 'offer' not in placed, (
+        placed
+    )
+    claims = livekit.TokenVerifier(LIVEKIT['LIVEKIT_API_KEY'], LIVEKIT['LIVEKIT_API_SECRET']).verify(
+        room['token']
+    )
+    grants = claims.video
+    assert claims.identity == f'caller-{run}' and grants is not None, claims
+    assert grants.room == run and grants.room_join and grants.can_publish and not grants.agent, grants
+    offered = await api.post(f'/api/runs/{run}/offer', json={'sdp': 'v=0', 'type': 'offer'})
+    assert offered.status_code == 409, ('a LiveKit call took a WebRTC offer', offered.status_code)
+
+    async def failed():
+        row = (await api.get(f'/api/runs/{run}')).json()['run']
+        return row['outcome'] == 'failed' and row
+
+    await until(failed, 'a LiveKit call whose room cannot be reached ended as failed', seconds=60)
+
+
+def a_runner_with_no_livekit_server_opens_nothing():
+    """No `LIVEKIT_URL`: a LiveKit call is a 503 that names it, and no task is started."""
+    from fastapi import HTTPException
+
+    from voice_runner.calls import Carried
+    from voice_runner.settings import CallRequest
+
+    runner = Runner(RunnerSettings(warm=False), [])
+    ask = CallRequest(agent='sage-and-stone', channel='voice', framework='livekit')
+    carried = Carried(id='run_x', agent=ask.agent, channel='voice', request=ask)
+    try:
+        runner.open_livekit(carried)
+    except HTTPException as error:
+        assert error.status_code == 503 and 'LIVEKIT_URL' in str(error.detail), error.detail
+    else:
+        raise AssertionError('a runner with no LiveKit server opened a LiveKit call')
+    assert carried.task is None
 
 
 async def a_saved_config_reaches_the_next_call():
@@ -332,7 +387,8 @@ if __name__ == '__main__':
     asyncio.run(main())
     asyncio.run(a_saved_config_reaches_the_next_call())
     asyncio.run(old_code_is_refused())
+    a_runner_with_no_livekit_server_opens_nothing()
     print(
         'runner ok: two runners linked, runs placed and stored, gone back with an edit, a runner stopping, '
-        'a saved config, old code refused'
+        'a saved config, old code refused, a LiveKit call in a room of its own'
     )

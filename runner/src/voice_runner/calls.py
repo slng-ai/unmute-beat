@@ -17,7 +17,8 @@ class Carried:
     """One call this process carries, from admission to its end.
 
     `conversation` is a text call's root span, so its turns hang from it and one run is one trace. `flow`
-    is the flow it runs on, kept for its whole life even if the agent is compiled again.
+    is the flow it runs on, kept for its whole life even if the agent is compiled again. `connection` is
+    a Pipecat voice call's WebRTC connection, `room` a LiveKit voice call's room.
     """
 
     id: str
@@ -29,6 +30,7 @@ class Carried:
     call: Any = None
     task: asyncio.Task[None] | None = None
     connection: SmallWebRTCConnection | None = None
+    room: Any = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     conversation: Any = None
     flow: Any = None

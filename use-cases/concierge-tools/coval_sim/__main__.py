@@ -11,6 +11,20 @@
     uv run python -m coval_sim serve --agency salon --phone-number +447427919928 --campaign c-1 --profile ...
         # a campaign on a real phone line: the salon's runner (`server.py`), and the number owned until
         # every call is over; each `run --host` job on it leaves the number alone
+    uv run python -m coval_sim add salon --livekit   # create voice-harness-salon-livekit, a Coval LiveKit agent
+    uv run python -m coval_sim run --agency salon --agent <its ID> ...   # the same job arguments, on LiveKit
+
+A Coval agent named voice-harness-<agency>-livekit calls the same use case
+running as a LiveKit worker (`bot.py livekit start`), for a use case on core
+only. `run` starts the worker under a name of its own for the job, waits until
+it has registered with `LIVEKIT_URL`, starts a token endpoint behind a
+cloudflared tunnel, and points the Coval agent at both. Coval asks the
+endpoint for a room token, joins the room, and the token dispatches the
+worker into it. Every token request is recorded with the simulation ID Coval
+sends, so after the run each simulation is printed with its room, which is the
+call's Langfuse session (`load_report.py --call SIMULATION=ROOM`). It needs
+`LIVEKIT_URL` (wss://), `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the
+environment or `.env`; `serve` and `run --host` are for Pipecat bots only.
 
 A real phone line is owned by one campaign at a time (`runtime.Campaign`):
 pointed once when it starts, given back once after every call has ended,
@@ -38,6 +52,7 @@ import argparse
 import contextlib
 import json
 import os
+import secrets
 import signal
 import sys
 import tempfile
@@ -50,6 +65,7 @@ from typing import Any
 
 from dotenv import dotenv_values
 
+from coval_sim import livekit
 from coval_sim.coval import CovalClient, CovalError
 from coval_sim.models import Agent, Persona, SpeechProfile
 from coval_sim.runtime import (
@@ -96,6 +112,12 @@ carries the call and returns marks (`echoed`).
 
 `bot.py` loads `.env` with `override=True`, so do not put any of these names in `.env`.
 """
+LIVEKIT_SERVER = ('LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET')
+"""The LiveKit server a LiveKit job runs on: the worker registers with it, and the token endpoint signs for it."""
+LIVEKIT_JOB = ('DELIVERY', 'LIVEKIT_AGENT_NAME', 'LIVEKIT_IDLE_PROCESSES', 'LIVEKIT_HTTP_PORT')
+"""What a LiveKit job sets for its worker, which `.env` must not set: `bot.py` would load it over the job's."""
+WORKER_READY_S = 600
+"""How long a LiveKit worker may take to register: `uv run` may sync first, as for the Pipecat bot."""
 GRAPH = 'graph'
 """The agency name of the baseline: the unmute graph build of the same salon, on Pipecat Flows.
 
@@ -168,6 +190,8 @@ class Job:
     """The speech settings the bot gets (`--profile`)."""
     call_seconds: int = MAX_CALL_SECONDS
     """The longest a call may run before the bot hangs up (`--call-seconds`)."""
+    server: str = ''
+    """The LiveKit server a LiveKit job's calls run on (`LIVEKIT_URL`). Empty for a Pipecat job."""
 
     @property
     def simulations(self) -> int:
@@ -188,6 +212,9 @@ class Job:
             + (
                 f'real Twilio: Coval dials {self.agent.phone_number}, owned by one campaign (serve, or this run); marks echoed'
                 if self.agent.phone_line
+                else f'LiveKit: Coval joins a room on {self.server}, the job\'s own worker dispatched by name '
+                '(bot.py livekit start); LiveKit\'s own playout counts as heard (DELIVERY=simulated)'
+                if self.agent.livekit
                 else "Coval's simulated Twilio websocket: no marks returned (TWILIO_MARKS=absent)"
             ),
             f'test set     {self.test_set_id}: {len(self.case_ids)} case(s) {", ".join(self.case_ids)}',
@@ -284,10 +311,28 @@ class Repository:
                 return cls(directory)
         raise FileNotFoundError(f'no voice harness checkout at or above {start}')
 
+    def dotenv(self) -> dict[str, str]:
+        """The checkout's .env alone."""
+        return {k: v for k, v in dotenv_values(self.root / '.env').items() if v is not None}
+
     def env(self) -> dict[str, str]:
         """The checkout's .env, with the real environment on top."""
-        values = {k: v for k, v in dotenv_values(self.root / '.env').items() if v is not None}
-        return {**values, **os.environ}
+        return {**self.dotenv(), **os.environ}
+
+    def livekit_server(self) -> dict[str, str]:
+        """`LIVEKIT_SERVER` as the worker will read it: `bot.py` loads `.env` over its environment.
+
+        The token endpoint signs with the same key and secret the worker registered with.
+        """
+        seen = {**self.env(), **self.dotenv()}
+        return {name: seen.get(name, '') for name in LIVEKIT_SERVER}
+
+    def on_core(self, agency: str) -> bool:
+        """Whether the agency's `bot.py` runs through `core.voice.serve`, so it can run as a LiveKit worker.
+
+        salon-prompt, salon-pipecat-flows and the graph build are Pipecat only.
+        """
+        return agency != GRAPH and 'core.voice' in (self.use_case(agency) / 'bot.py').read_text()
 
     def use_case(self, agency: str) -> Path:
         """The folder whose `bot.py` answers an agency's calls: the graph build's own for `graph`.
@@ -343,6 +388,65 @@ class Repository:
         if not self.limits_itself(agency):
             ceiling(bot, call_seconds + FINISH_SECONDS)
         return bot
+
+    @staticmethod
+    def worker_env(
+        env: dict[str, str],
+        agent_name: str,
+        idle: int,
+        profile: SpeechProfile | None,
+        call_seconds: int,
+    ) -> dict[str, str]:
+        """A LiveKit worker's environment: `.env` and `BOT_ENV` less the Twilio placeholders, and the job's own.
+
+        `DELIVERY=simulated`, because LiveKit reports its own playout and never
+        the caller's: without it a flow that confirms writes refuses the call
+        before its greeting. `LIVEKIT_AGENT_NAME`, so the worker takes only the
+        rooms this job's tokens dispatch to it. `LIVEKIT_IDLE_PROCESSES`, one
+        process kept ready per call Coval places at once. `LIVEKIT_HTTP_PORT=0`,
+        so its health check takes any free port and jobs can run side by side.
+        """
+        return {
+            **env,
+            **{k: v for k, v in BOT_ENV.items() if not k.startswith('TWILIO_')},
+            'DELIVERY': 'simulated',
+            'LIVEKIT_AGENT_NAME': agent_name,
+            'LIVEKIT_IDLE_PROCESSES': str(max(1, idle)),
+            'LIVEKIT_HTTP_PORT': '0',
+            'MAX_CALL_SECONDS': str(call_seconds),
+            **(profile.model_dump() if profile else {}),
+        }
+
+    def livekit_worker(
+        self,
+        agency: str,
+        env: dict[str, str],
+        log: Path,
+        agent_name: str,
+        idle: int,
+        profile: SpeechProfile | None,
+        call_seconds: int,
+    ) -> Process:
+        """Start the agency's `bot.py livekit start` from its own folder; return once it has registered.
+
+        Registered means LiveKit's log line for it names this job's agent name
+        (`livekit.registered`), so a worker under another name, or one that
+        never reached the server, is not taken for ready.
+        """
+        worker = Process(
+            f'LiveKit worker {agent_name}',
+            ['uv', 'run', 'python', 'bot.py', 'livekit', 'start'],
+            self.use_case(agency),
+            self.worker_env(env, agent_name, idle, profile, call_seconds),
+            log,
+        )
+        try:
+            worker.wait_until(lambda: livekit.registered(worker.output(), agent_name), WORKER_READY_S)
+        except NotReadyError as error:
+            raise NotReadyError(
+                f"{error}: it never logged LiveKit's 'registered worker' line as {agent_name}"
+            ) from error
+        return worker
 
     def serves_many(self, agency: str) -> bool:
         """Whether the agency has a multi-worker runner (`server.py`), which a real phone line uses."""
@@ -500,6 +604,13 @@ class ReleaseCheck:
             problems.append(
                 f'{len(namesakes)} agents are named {agent.display_name!r}: {", ".join(namesakes)}'
             )
+        if agent.livekit:
+            problems += self._livekit_problems(agency, agent)
+        elif 'livekit' in agent.model_type.lower():
+            problems.append(
+                f'agent {agent_id} is a Coval LiveKit agent ({agent.model_type}), but its name does not end '
+                f'-livekit: name it {Agent.name_for(agency, "livekit")}'
+            )
         if test_set_id not in agent.test_set_ids:
             problems.append(f'test set {test_set_id} is not attached to agent {agent_id}')
         case_ids = tuple(self.coval.test_case_ids(test_set_id))
@@ -524,7 +635,8 @@ class ReleaseCheck:
             else f'this runner: the bot has none, and is stopped {call_seconds + FINISH_SECONDS:.0f}s after the call connects'
         )
         job = Job(
-            agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency, speech, call_seconds
+            agency, agent, test_set_id, case_ids, people[0], iterations, label, limit, concurrency, speech, call_seconds,
+            self.repo.livekit_server()['LIVEKIT_URL'] if agent.livekit else '',
         )  # fmt: skip
         if job.simulations > max_simulations:
             problems.append(f'{job.simulations} simulations planned, allowance is {max_simulations}')
@@ -541,6 +653,34 @@ class ReleaseCheck:
         if problems:
             raise PlanError(problems)
         return job
+
+    def _livekit_problems(self, agency: str, agent: Agent) -> list[str]:
+        """Why a LiveKit job cannot run here: a bot not on core, no LiveKit server, or `.env` overriding the job."""
+        problems = []
+        if agent.model_type and 'livekit' not in agent.model_type.lower():
+            problems.append(
+                f'agent {agent.id} is named for LiveKit, but Coval says its type is {agent.model_type}'
+            )
+        try:
+            if not self.repo.on_core(agency):
+                problems.append(
+                    f'{agency} cannot run on LiveKit: its bot.py does not run through core.voice.serve, '
+                    'which only a use case on core does'
+                )
+        except ValueError as error:
+            problems.append(str(error))
+        server = self.repo.livekit_server()
+        missing = [name for name, value in server.items() if not value]
+        if missing:
+            problems.append(f'a LiveKit job needs {", ".join(missing)} in the environment or .env')
+        elif not server['LIVEKIT_URL'].startswith('wss://'):
+            problems.append(f'LIVEKIT_URL is {server["LIVEKIT_URL"]!r}: Coval joins only a wss:// server')
+        overriding = sorted(set(self.repo.dotenv()) & set(LIVEKIT_JOB))
+        if overriding:
+            problems.append(
+                f".env sets {', '.join(overriding)}, which bot.py would load over the job's own: remove them"
+            )
+        return problems
 
     def _duplicate(self, job: Job, previous: dict[str, Any]) -> str:
         """Why a job already in the log is refused. A launch that never recorded its outcome is looked up first."""
@@ -566,14 +706,28 @@ class ReleaseCheck:
         points the agent at it, launches and waits. Two jobs on one Coval agent
         must share one host: each points the agent's connection at its own
         host, so a second tunnel would take the first job's later calls.
+
+        A LiveKit agent gets its own worker, token endpoint and tunnel instead
+        (`_livekit`), and never a `host`.
         """
         env = self.repo.env()
         log = self.workdir / f'{job.agency}-bot.log'
         name = f'{job.label} {job.agency} {job.test_set_id} {uuid.uuid4().hex[:8]}'
         record: dict[str, Any] = {}
+        if job.agent.livekit and host is not None:
+            return Row(
+                job.agency,
+                job.test_set_id,
+                problems=[
+                    '--host is a Pipecat bot that `serve` holds; a LiveKit job starts its own worker and '
+                    'token endpoint, so run it without --host'
+                ],
+            )
         try:
             with contextlib.ExitStack() as stack:
-                if host is None:
+                if job.agent.livekit:
+                    record = self._livekit(stack, job, env, log)
+                elif host is None:
                     tunnel = stack.enter_context(Tunnel(self.port, self.workdir))
                     if job.agent.phone_line and self.repo.serves_many(job.agency):
                         stack.enter_context(
@@ -610,7 +764,7 @@ class ReleaseCheck:
                 elif job.agent.phone_line:
                     record = Campaign.owning(job.agent.phone_number, host, self.records)
                     print(f'{job.agent.phone_number} is owned by campaign {record["label"]!r}: left as it is')
-                if not job.agent.phone_line:
+                if host is not None and not (job.agent.phone_line or job.agent.livekit):
                     self.coval.update_connection(job.agent, connection(host))
                 launched_at = datetime.now(UTC).timestamp()
                 self.runs.write(job.key, name=name, status='intent')
@@ -630,6 +784,49 @@ class ReleaseCheck:
                 return self._result(job, run_id, name, log, record, launched_at)
         except (NotReadyError, RuntimeError, ValueError) as error:
             return Row(job.agency, job.test_set_id, problems=[str(error)], log=log)
+
+    def _livekit(
+        self, stack: contextlib.ExitStack, job: Job, env: dict[str, str], log: Path
+    ) -> dict[str, Any]:
+        """Start the job's LiveKit worker, its token endpoint and a tunnel to it, and point the agent at them.
+
+        The worker's name is the job's own, so only this job's tokens
+        dispatch it, and a worker left over from another job is never
+        called. The endpoint requires a key made for this job, which the
+        agent's token headers carry. Everything is stopped when `stack` closes.
+
+        Returns:
+            The job's record: the token log, read after the run to bind each simulation to its room.
+        """
+        server = self.repo.livekit_server()
+        worker_name = f'voice-harness-{job.agency}-{uuid.uuid4().hex[:8]}'
+        key = secrets.token_urlsafe(32)
+        tokens = self.workdir / f'{job.agency}-tokens.jsonl'
+        stack.enter_context(
+            self.repo.livekit_worker(
+                job.agency, env, log, worker_name, job.concurrency, job.profile, job.call_seconds
+            )
+        )
+        issuer = stack.enter_context(
+            livekit.TokenServer(
+                server['LIVEKIT_API_KEY'],
+                server['LIVEKIT_API_SECRET'],
+                server['LIVEKIT_URL'],
+                worker_name,
+                tokens,
+                key=key,
+            )
+        )
+        tunnel = stack.enter_context(Tunnel(issuer.port, self.workdir))
+        self.coval.update_connection(
+            job.agent, livekit.connection(tunnel.host, server['LIVEKIT_URL'], worker_name, key)
+        )
+        print(
+            f'LiveKit worker {worker_name} registered with {server["LIVEKIT_URL"]}; tokens from '
+            f'https://{tunnel.host}/token, each request recorded in {tokens}',
+            flush=True,
+        )
+        return {'tokens': str(tokens), 'worker': worker_name}
 
     def _campaign(self, number: str, host: str, label: str) -> Campaign:
         return Campaign(
@@ -698,16 +895,38 @@ class ReleaseCheck:
             job.key, name=name, status='finished', run_id=run_id, remote=run.status, calls=calls, bound=bound
         )
         for sim, call in bound.items():
-            print(
-                f'simulation {sim} = call {call}' + (' (for load_report --call)' if call != 'unknown' else '')
-            )
+            if job.agent.livekit:
+                print(
+                    f'simulation {sim} = room {call} (load_report --call {sim}={call})'
+                    if call != 'unknown'
+                    else f'simulation {sim} = room unknown: no token request bound it to one room of its own'
+                )
+            else:
+                print(
+                    f'simulation {sim} = call {call}'
+                    + (' (for load_report --call)' if call != 'unknown' else '')
+                )
         problems = run.problems(simulations, self.coval.composite_ids(job.agent.metric_ids))
         return Row(job.agency, job.test_set_id, run_id, problems, log)
 
     def _calls(
         self, job: Job, log: Path, record: dict[str, Any], since: float, simulations: list[Any]
     ) -> tuple[list[str], dict[str, str]]:
-        """This job's calls and which simulation each was: the runner's record when there is one."""
+        """This job's calls and which simulation each was: the runner's record when there is one.
+
+        On LiveKit the calls are the rooms the token endpoint answered for, and
+        each simulation is bound by the ID Coval sent with its request
+        (`livekit.bind_rooms`).
+        """
+        if job.agent.livekit:
+            requests = livekit.token_requests(Path(record.get('tokens') or '-'))
+            anonymous = sum(not request.get('simulation_id') for request in requests)
+            if anonymous:
+                print(
+                    f'{anonymous} token request(s) carried no simulation ID: their rooms are bound to nothing'
+                )
+            rooms = list(dict.fromkeys(str(request['room']) for request in requests))
+            return rooms, livekit.bind_rooms([s.simulation_id for s in simulations], requests)
         if not job.agent.phone_line:
             return [], {}
         runner_db, diary = Path(record.get('runner_db') or '-'), Path(record.get('diary') or '-')
@@ -762,6 +981,9 @@ class ReleaseCheck:
         runner, when it has one (`server.py`), and the number owned for the
         whole of it (`Campaign`). Jobs sent at it (`run --host`) never touch
         the number; it is given back once, after every call is over.
+
+        Pipecat only: a LiveKit job starts its own worker and token endpoint
+        (`run`), and cannot share one.
 
         `processes` above one, on a campaign only, is the worker-failure
         pair's arrangement (session 4f): that many runners, each on its own
@@ -826,16 +1048,29 @@ class ReleaseCheck:
                 print(f'runners on ports {ports}, media hosts {[t.host for t in tunnels]}', flush=True)
             threading.Event().wait()
 
-    def add(self, agency: str) -> str:
+    def add(self, agency: str, *, on_livekit: bool = False) -> str:
         """Create the Coval agent for a flow, with a placeholder connection.
 
         The connection is replaced on every run, because each run gets a new
-        tunnel host, so the placeholder never reaches a call.
+        tunnel host, so the placeholder never reaches a call. With
+        `on_livekit`, a Coval LiveKit agent (voice-harness-<agency>-livekit),
+        only for a use case on core.
+
+        Raises:
+            ValueError: If a LiveKit agent is asked for a use case not on core.
         """
-        name = Agent.name_for(agency)
+        if on_livekit and not self.repo.on_core(agency):
+            raise ValueError(
+                f'{agency} cannot run on LiveKit: its bot.py does not run through core.voice.serve'
+            )
+        name = Agent.name_for(agency, 'livekit' if on_livekit else 'pipecat')
         if name in {agent.display_name for agent in self.coval.agents()}:
             return f'exists  {name}'
-        self.coval.create_agent(name, 'websocket', connection('example.invalid'))
+        if on_livekit:
+            placeholder = livekit.connection('example.invalid', 'wss://example.invalid', name, 'placeholder')
+            self.coval.create_agent(name, 'livekit', placeholder)
+        else:
+            self.coval.create_agent(name, 'websocket', connection('example.invalid'))
         return f'created {name}'
 
 
@@ -900,7 +1135,9 @@ def _parser() -> argparse.ArgumentParser:
         job.add_argument(
             '--fixtures', type=Path, help='JSON: test case id to the caller phone it gives, to bind calls'
         )
-    serve = commands.add_parser('serve', help='one bot and tunnel for several jobs, until stopped')
+    serve = commands.add_parser(
+        'serve', help='one Pipecat bot and tunnel for several jobs, until stopped (not LiveKit)'
+    )
     serve.add_argument('--agency', required=True, help='the use case to serve, a folder under use-cases/')
     serve.add_argument('--port', type=int, default=PORT, help='the local port for the bot and tunnel')
     serve.add_argument(
@@ -924,6 +1161,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     add = commands.add_parser('add', help="create a flow's Coval agent")
     add.add_argument('agency', help='a use case folder under use-cases/, or graph')
+    add.add_argument(
+        '--livekit',
+        action='store_true',
+        help='a Coval LiveKit agent (voice-harness-<agency>-livekit), for a use case on core',
+    )
     return parser
 
 
@@ -967,7 +1209,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             return 0
         if args.command == 'add':
-            line = check.add(args.agency)
+            line = check.add(args.agency, on_livekit=args.livekit)
             print(line)
             if line.startswith('created'):
                 print('next: attach a test set and metrics to this agent in Coval, then run it')

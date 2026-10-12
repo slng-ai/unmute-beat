@@ -26,6 +26,11 @@ dependencies = [
 # Only `core.processor` (the frames it reads and writes) and `core.launch` (one call's whole pipeline:
 # Silero VAD, smart-turn, SLNG's STT and TTS) import Pipecat.
 voice = ["pipecat-ai[silero]>=1.11.0", "pipecat-slng>=0.5.2"]
+# Only `core.livekit` imports LiveKit Agents: the second runtime adapter, the same engine behind an AgentSession.
+livekit = [
+    "livekit-agents[silero,turn-detector]>=1.8.5,<1.9",
+    "livekit-plugins-slng>=1.8.5",
+]
 # Only `core.observability` imports Langfuse, the OpenTelemetry SDK and its OTLP exporter (a local collector).
 tracing = ["langfuse>=4.15.4", "opentelemetry-sdk>=1.44.0", "opentelemetry-exporter-otlp-proto-http>=1.44.0"]
 

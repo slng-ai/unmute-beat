@@ -28,7 +28,6 @@ import contextlib
 import json
 import sys
 import time
-from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -69,6 +68,7 @@ from core.graph import Node
 from core.policies import TurnBudget
 from core.state import CallContext, Question
 from core.turn import EXHAUSTED, STUMBLE  # noqa: F401  -- re-exported for tests
+from core.voice import Ceiling, record_ending  # noqa: F401  -- moved to core.voice, kept importable here
 
 _tracer = trace.get_tracer('slng-voice-harness')
 
@@ -187,64 +187,6 @@ class TwilioMarks(FrameSerializer):
                     self._call.note_ending('media_stop', 'twilio stop event', observed=True)
                     logger.info('media stream stopped: marks {}', self._counts)
         return await self._inner.deserialize(data)
-
-
-class Ceiling:
-    """One call's ceiling (`MAX_CALL_SECONDS`): started when the caller connects, stopped by its owner, always.
-
-    The owner is the launcher (the salon's `run_bot`), which stops it in a
-    `finally` around the pipeline, so a call that ends any way at all (the agent's goodbye, the
-    caller hanging up, a cancellation, an error) takes its timer with it. On a
-    shared bot (`coval_sim serve`) the old timer was cancelled only on a
-    client disconnect: calls the agent ended left theirs running, and every
-    "ceiling reached" line fired together at a deadline long after those calls
-    were over. One call's ceiling knows nothing of any other call.
-
-    `sleep` is injectable so a test can control time.
-    """
-
-    def __init__(
-        self,
-        seconds: float,
-        reached: Callable[[], Awaitable[None]],
-        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-    ) -> None:
-        self.seconds, self._reached, self._sleep = seconds, reached, sleep
-        self._task: asyncio.Task | None = None
-
-    def start(self) -> None:
-        """Start counting, once. A ceiling of 0 never ends a call."""
-        if self.seconds and self._task is None:
-            self._task = asyncio.create_task(self._run())
-
-    async def _run(self) -> None:
-        await self._sleep(self.seconds)
-        await self._reached()
-
-    async def stop(self) -> None:
-        """Cancel the timer if it is still running, and wait for it to be gone. Safe to call more than once."""
-        task, self._task = self._task, None
-        if task is not None and task is not asyncio.current_task() and not task.done():
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-
-def record_ending(call: CallContext, *, carrier: str = '') -> None:
-    """One `call.ending` span for the call: every ending fact as it arrived, and what is still unknown.
-
-    `endings` holds the application's intent to close (the goodbye, a
-    ceiling), the pipeline stopping, the media stream stopping or its socket
-    closing, each with whether it was observed. `carrier` is the carrier's
-    own report of the call completing, when the launcher has one (Twilio's
-    status callback); without it, carrier closure is `unknown`, whatever else
-    ended. An `EndFrame` or a failed hang-up request is not a carrier report.
-    """
-    with _tracer.start_as_current_span('call.ending') as span:
-        span.set_attribute('call', call.id)
-        span.set_attribute('ended', call.ended or 'unknown')
-        span.set_attribute('endings', json.dumps(call.endings))
-        span.set_attribute('carrier', carrier or 'unknown')
 
 
 def playout(

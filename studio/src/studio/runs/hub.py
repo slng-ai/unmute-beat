@@ -78,7 +78,11 @@ class ResumeFrom(BaseModel):
 
 
 class StartRequest(BaseModel):
-    """What the Agents page asks for: an agent, a channel, where to start from, and the state edited on going back."""
+    """What the Agents page asks for: an agent, a channel, where to start from, and the state edited on going back.
+
+    `framework` is what a voice call runs on: Pipecat (the browser's WebRTC straight to the runner) or
+    LiveKit (the browser and the runner both in a room on the LiveKit server).
+    """
 
     agent: str
     channel: Literal['voice', 'text'] = 'text'
@@ -86,6 +90,7 @@ class StartRequest(BaseModel):
     resume_from: ResumeFrom | None = None
     facts: dict[str, Any] | None = None
     delivery: Literal['marks', 'simulated'] = 'marks'
+    framework: Literal['pipecat', 'livekit'] = 'pipecat'
 
 
 class Live:
@@ -279,6 +284,7 @@ class Hub:
             'resume': snapshot,
             'facts': ask.facts,
             'delivery': ask.delivery,
+            'framework': ask.framework,
         }
         try:
             found = await self.client.ask('POST', f'{runner.url}/calls', body)
@@ -300,8 +306,11 @@ class Hub:
             'step': found.get('step', ''),
             'turn': found.get('turn', 0),
         }
-        voice = {'offer': f'/api/runs/{run}/offer', 'ice_servers': found.get('ice_servers', [])}
-        return reply | voice if ask.channel == 'voice' else reply
+        if ask.channel != 'voice':
+            return reply
+        if ask.framework == 'livekit':
+            return reply | {'livekit': found['livekit']}
+        return reply | {'offer': f'/api/runs/{run}/offer', 'ice_servers': found.get('ice_servers', [])}
 
     async def _snapshot(self, resume: ResumeFrom | None) -> dict[str, Any] | None:
         """The snapshot a run carries on from, or a 404 when the store has none for that turn."""

@@ -1,4 +1,8 @@
-"""Importing core and checking a flow touches nothing outside it: no `.env`, no Pipecat, no Langfuse, no client.
+"""Importing core and checking a flow touches nothing outside it: no `.env`, no Pipecat, no LiveKit, no Langfuse, no client.
+
+Each framework stays behind its own adapter: only `core.processor` and `core.launch` import Pipecat, only
+`core.livekit` and `core.livekit_launch` import LiveKit, and `core.voice` (the one entrypoint) imports
+neither until a framework is asked for.
 
 Each check runs in a fresh interpreter with the model and tracing keys
 removed, so what it sees is what an application importing `core` gets.
@@ -7,6 +11,7 @@ removed, so what it sees is what an application importing `core` gets.
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 KEYS = (
     'GOOGLE_API_KEY',
@@ -34,7 +39,7 @@ def importing_and_checking_loads_nothing_else():
         'import core\n'
         "assert core.load('tests/clinic_flow/agent.yaml').problems() == []\n"
         'from opentelemetry import trace\n'
-        "outside = ('pipecat', 'langfuse', 'google.genai', 'openai', 'opentelemetry.sdk')\n"
+        "outside = ('pipecat', 'livekit', 'langfuse', 'google.genai', 'openai', 'opentelemetry.sdk')\n"
         'found = sorted(m for m in sys.modules if m.split(".")[0] in outside or m.startswith(outside))\n'
         'print(reads, found, type(trace.get_tracer_provider()).__name__)\n'
     )
@@ -63,6 +68,8 @@ def a_missing_extra_says_which_to_install():
         ('core.processor', 'voice', 'pipecat'),
         ('core.launch', 'voice', 'pipecat'),
         ('core.observability', 'tracing', 'langfuse'),
+        ('core.livekit', 'livekit', 'livekit'),
+        ('core.livekit_launch', 'livekit', 'livekit'),
     ):
         said = fresh(
             'import sys\n'
@@ -75,12 +82,45 @@ def a_missing_extra_says_which_to_install():
         assert f'slng-voice-core[{extra}]' in said, said
 
 
+def each_framework_stays_behind_its_adapter():
+    """Which modules import which framework, read from the source; and what importing each one loads."""
+    source = Path(__file__).resolve().parents[1] / 'src' / 'core'
+    importers = {
+        framework: sorted(
+            f.stem
+            for f in source.glob('*.py')
+            if any(
+                line.strip().startswith((f'from {framework}', f'import {framework}'))
+                for line in f.read_text().splitlines()
+            )
+        )
+        for framework in ('pipecat', 'livekit')
+    }
+    assert importers == {'pipecat': ['launch', 'processor'], 'livekit': ['livekit', 'livekit_launch']}, (
+        importers
+    )
+    for module, absent in (
+        ('core.voice', ('pipecat', 'livekit')),
+        ('core.livekit', ('pipecat',)),
+        ('core.livekit_launch', ('pipecat',)),
+        ('core.processor', ('livekit',)),
+    ):
+        found = fresh(
+            'import sys\n'
+            f'import {module}\n'
+            f'print(sorted({{m.split(".")[0] for m in sys.modules}} & set({absent!r})))\n'
+        )
+        assert found == '[]', (module, found)
+
+
 def main() -> None:
     importing_and_checking_loads_nothing_else()
+    each_framework_stays_behind_its_adapter()
     a_missing_extra_says_which_to_install()
     a_local_collector_gets_the_spans_without_langfuse()
     print(
-        'package ok: importing and checking loads no env, no voice, no tracing, no provider; a local collector gets spans'
+        'package ok: importing and checking loads no env, no voice, no tracing, no provider; each framework stays'
+        ' behind its adapter; a local collector gets spans'
     )
 
 

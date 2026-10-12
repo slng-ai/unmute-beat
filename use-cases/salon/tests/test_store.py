@@ -19,7 +19,10 @@ same file, and judges the outcome from the file itself, read with plain
 * B8: a stale worker's write, fenced by reconciliation first, does nothing;
   a move of a revision that changed since it was shown is refused;
 * B9: booking ids are unique in the file and every booking belongs to the
-  caller that made it.
+  caller that made it;
+* B10: a LiveKit job process (its own process per call) opens the diary its
+  worker named, never a file of its own, and has the salon's flow compiled
+  before its call arrives (`core.livekit_launch.prewarm`).
 
 Synthetic callers only: +44 7700 900xxx is Ofcom's drama range.
 """
@@ -93,6 +96,41 @@ def _workers():
     import tests.test_store
 
     return tests.test_store
+
+
+def _job_process() -> dict:
+    """What a LiveKit job process has once `prewarm` ran: the diary it opened, and whether its call would wait."""
+    import time
+    from types import SimpleNamespace
+
+    from core.livekit_launch import prewarm
+
+    proc = SimpleNamespace(userdata={})
+    prewarm(proc, 'salon.entry:ENTRY')  # ty: ignore[invalid-argument-type]
+    from salon import entry
+
+    started = time.perf_counter()
+    flow = entry.ENTRY.flow()
+    return {
+        'path': entry.DIARY.path,
+        'vad': 'vad' in proc.userdata,
+        'steps': sorted(flow.nodes),
+        'flow_seconds': time.perf_counter() - started,
+    }
+
+
+def a_job_process_shares_the_diary_and_is_ready(folder: Path):
+    """B10."""
+    from salon import entry
+
+    assert entry.DIARY.path == os.environ['DIARY_PATH'], (
+        'the diary is named for the processes this one starts'
+    )
+    with multiprocessing.get_context('spawn').Pool(1) as pool:
+        ready = pool.apply(_workers()._job_process)
+    assert ready['path'] == entry.DIARY.path, ('a job process opened a diary of its own', ready)
+    assert ready['vad'] and 'concierge' in ready['steps'], ready
+    assert ready['flow_seconds'] < 0.05, ('the flow was compiled when the call arrived', ready)
 
 
 def fresh(folder: Path, name: str) -> str:
@@ -291,7 +329,8 @@ def main() -> None:
         a_lost_answer_survives_a_restart(folder)
         stale_work_is_fenced(folder)
         ids_are_unique_and_owned(folder)
-    print('store ok: B1-B9, several processes on one SQLite file, judged from the file')
+        a_job_process_shares_the_diary_and_is_ready(folder)
+    print('store ok: B1-B10, several processes on one SQLite file, judged from the file')
 
 
 if __name__ == '__main__':

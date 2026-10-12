@@ -1,7 +1,7 @@
 """Timings per turn and per model request, read back from the traces in the local Jaeger, with what is slow.
 
 A bot that runs with `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at the studio (`core.observability`)
-sends its spans to Jaeger. This module reads them back (`studio.metrics.jaeger`) and turns them into
+sends its spans to Jaeger, on Pipecat or on LiveKit. This module reads them back (`studio.metrics.jaeger`) and turns them into
 the numbers a person testing an agent needs to find what is slow: per caller turn, the voice-to-voice
 time and each STT, LLM and TTS request inside it; per model, its p90s and how often it was over its
 limit. Every number comes from a span; nothing is estimated. The overview can be narrowed to one
@@ -11,8 +11,11 @@ own trace, which names its agent. The tiles are p90s; a model swapped between ru
 Where each number comes from:
 
     turn             Pipecat's `turn` span: `turn.number`, `turn.user_bot_latency_seconds`
-                     (voice to voice: the caller stopped, the bot's first audio), `turn.was_interrupted`
-    stt, tts         Pipecat's `stt` and `tts` spans: `metrics.ttfb` (seconds), the model and provider
+                     (voice to voice: the caller stopped, the bot's first audio), `turn.was_interrupted`;
+                     or on LiveKit, unmute-core's `turn` span (`core.livekit.CallTrace`), the same
+                     numbers as `turn.e2e_seconds` and `turn.interrupted`
+    stt, tts         `stt` and `tts` spans, Pipecat's or unmute-core's: `metrics.ttfb` (seconds), the
+                     model and provider
     llm              Pipecat's `llm` spans with `metrics.ttfb`, or Pydantic AI's model requests
                      (`gen_ai.operation.name` = `chat`) with their duration and, when they streamed, the
                      time to first chunk Pydantic AI writes on them (`gen_ai.client.operation.time_to_first_chunk`)
@@ -171,6 +174,8 @@ class TraceTimings:
         """One turn span, its requests and its flags."""
         tags = SpanTags(span)
         v2v = tags.milliseconds('turn.user_bot_latency_seconds')
+        if v2v is None:
+            v2v = tags.milliseconds('turn.e2e_seconds')
         flags = self._flags(v2v, requests)
         levels = {flag.level for flag in flags}
         return TurnTiming(
@@ -179,7 +184,7 @@ class TraceTimings:
             agent=self.agent,
             turn=int(tags.tags.get('turn.number') or 0),
             voice_to_voice_ms=v2v,
-            interrupted=bool(tags.tags.get('turn.was_interrupted')),
+            interrupted=bool(tags.tags.get('turn.was_interrupted') or tags.tags.get('turn.interrupted')),
             requests=requests,
             flags=flags,
             level='bad' if 'bad' in levels else 'slow' if 'slow' in levels else 'ok',

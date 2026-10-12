@@ -4,10 +4,18 @@ The Coval release check, with no Coval: which one job a set of arguments names
 or why it is refused, what the run log remembers between invocations, and
 which call results fail a run. The CLI, the tunnel and the bot are not run,
 and nothing here starts the coval binary: every method that would is replaced.
+A LiveKit job's token endpoint runs for real on 127.0.0.1; no LiveKit server
+and no worker do.
 
 Asserts, no pytest, no fixtures, same as the rest.
 """
 
+import base64
+import contextlib
+import hashlib
+import hmac
+import http.client
+import io
 import json
 import os
 import sqlite3
@@ -15,6 +23,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -28,8 +38,17 @@ from coval_sim.__main__ import (
     Repository,
     RunLog,
     _parser,
+    load_profile,
 )
 from coval_sim.coval import CovalClient, CovalError
+from coval_sim.livekit import (
+    SIMULATION_HEADER,
+    TokenServer,
+    bind_rooms,
+    connection,
+    registered,
+    token_requests,
+)
 from coval_sim.models import (
     FALLBACKS,
     Agent,
@@ -161,7 +180,7 @@ def test_plan() -> None:
         "2 agents are named 'voice-harness-salon-pipecat': S, S2"
     ], 'an ambiguous agent name'
 
-    assert Agent(id='x', display_name='voice-harness-salon-livekit').agency is None
+    assert Agent(id='x', display_name='voice-harness-salon-livekit-twilio').agency is None
     assert Agent.name_for('salon') == 'voice-harness-salon-pipecat'
     assert Agent(id='x', display_name='voice-harness-salon-prompt-pipecat').agency == 'salon-prompt'
 
@@ -622,6 +641,357 @@ def test_correlation() -> None:
     )
 
 
+LIVEKIT = {
+    'LIVEKIT_URL': 'wss://voice.example',
+    'LIVEKIT_API_KEY': 'APIcoval',
+    'LIVEKIT_API_SECRET': 'secret-' + 'x' * 32,
+}
+LIVEKIT_AGENTS = [
+    *AGENTS,
+    Agent(id='L', display_name='voice-harness-salon-livekit', model_type='livekit', test_set_ids=['ONE', 'THREE']),
+    Agent(id='LP', display_name='voice-harness-salon-prompt-livekit', test_set_ids=['ONE']),
+    Agent(id='LK', display_name='voice-harness-kestrel-livekit', model_type='MODEL_TYPE_WEBSOCKET',
+          test_set_ids=['ONE']),
+    Agent(id='LW', display_name='voice-harness-wasla-pipecat', model_type='MODEL_TYPE_LIVEKIT', test_set_ids=['ONE']),
+]  # fmt: skip
+
+
+class Settled(Repository):
+    """The checkout, with its `.env` and environment replaced: a test never reads the real ones."""
+
+    def __init__(self, env: dict[str, str], dotenv: dict[str, str] | None = None) -> None:
+        super().__init__(Repository.find(Path.cwd()).root)
+        self._env, self._dotenv = env, dotenv or {}
+
+    def dotenv(self) -> dict[str, str]:
+        return dict(self._dotenv)
+
+    def env(self) -> dict[str, str]:
+        return {**self._dotenv, **self._env}
+
+
+def on_livekit(
+    env: dict[str, str] = LIVEKIT, dotenv: dict[str, str] | None = None, coval: FakeCoval | None = None
+) -> ReleaseCheck:
+    folder = Path(tempfile.mkdtemp())
+    return ReleaseCheck(
+        Settled(env, dotenv), coval or FakeCoval(LIVEKIT_AGENTS), folder, RunLog(folder / 'runs.jsonl')
+    )
+
+
+def livekit_refusals(check: ReleaseCheck, agency: str = 'salon', agent_id: str = 'L') -> list[str]:
+    """The problems `plan` gives for a one-call LiveKit job; fails the test if it accepts it."""
+    try:
+        check.plan(agency, agent_id, 'ONE', 'calm', iterations=1, max_simulations=1, label='lk')
+    except PlanError as error:
+        return error.problems
+    raise AssertionError(f'accepted: {agency} {agent_id}')
+
+
+def test_livekit_names() -> None:
+    """A `-livekit` agent calls the same folder as a LiveKit worker; never a phone line; the old names unchanged."""
+    salon = Agent(id='x', display_name='voice-harness-salon-livekit', phone_number='+447427919928')
+    assert salon.agency == 'salon' and salon.livekit and not salon.phone_line
+    flows = Agent(id='x', display_name='voice-harness-salon-pipecat-flows-livekit')
+    assert flows.agency == 'salon-pipecat-flows' and flows.livekit
+    assert not Agent(id='x', display_name='voice-harness-salon-pipecat').livekit
+    assert not Agent(id='x', display_name='voice-harness-salon-pipecat-twilio', phone_number='+44').livekit
+    assert Agent(id='x', display_name='voice-harness-salon-livekit-twilio').agency is None
+    assert Agent(id='x', display_name='voice-harness-salon-livekit-pipecat').agency == 'salon-livekit'
+    assert Agent.name_for('salon', 'livekit') == 'voice-harness-salon-livekit'
+    assert Agent.name_for('salon') == 'voice-harness-salon-pipecat'
+
+
+def test_livekit_plan() -> None:
+    """A LiveKit job: a use case on core, a wss:// server with its key and secret, and nothing in `.env` over the job."""
+    check = on_livekit()
+    job = check.plan(
+        'salon', 'L', 'THREE', 'calm', iterations=1, max_simulations=3, label='lk', concurrency=3
+    )
+    assert job.server == 'wss://voice.example' and job.agent.livekit, job
+    assert 'line         LiveKit: Coval joins a room on wss://voice.example' in job.describe(), job.describe()
+    assert 'concurrency  3' in job.describe()
+
+    assert livekit_refusals(on_livekit({})) == [
+        'a LiveKit job needs LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET in the environment or .env'
+    ]
+    assert livekit_refusals(on_livekit({**LIVEKIT, 'LIVEKIT_API_SECRET': ''})) == [
+        'a LiveKit job needs LIVEKIT_API_SECRET in the environment or .env'
+    ]
+    from_dotenv = on_livekit(
+        {**LIVEKIT, 'LIVEKIT_URL': 'wss://shell.example'}, dotenv={'LIVEKIT_URL': 'wss://file.example'}
+    )
+    assert from_dotenv.plan(
+        'salon', 'L', 'ONE', 'calm', iterations=1, max_simulations=1, label='lk'
+    ).server == ('wss://file.example'), 'the server the worker reads: bot.py loads .env over its environment'
+    assert livekit_refusals(on_livekit({**LIVEKIT, 'LIVEKIT_URL': 'ws://localhost:7880'})) == [
+        "LIVEKIT_URL is 'ws://localhost:7880': Coval joins only a wss:// server"
+    ]
+    assert livekit_refusals(on_livekit(dotenv={'DELIVERY': 'marks', 'LIVEKIT_AGENT_NAME': 'mine'})) == [
+        ".env sets DELIVERY, LIVEKIT_AGENT_NAME, which bot.py would load over the job's own: remove them"
+    ]
+    assert livekit_refusals(on_livekit(), 'salon-prompt', 'LP') == [
+        'salon-prompt cannot run on LiveKit: its bot.py does not run through core.voice.serve, '
+        'which only a use case on core does'
+    ], 'the one-prompt baseline is Pipecat only'
+    assert livekit_refusals(on_livekit(), 'kestrel', 'LK') == [
+        'agent LK is named for LiveKit, but Coval says its type is MODEL_TYPE_WEBSOCKET'
+    ]
+    assert livekit_refusals(on_livekit(), 'wasla', 'LW') == [
+        'agent LW is a Coval LiveKit agent (MODEL_TYPE_LIVEKIT), but its name does not end -livekit: '
+        'name it voice-harness-wasla-livekit'
+    ]
+    assert livekit_refusals(on_livekit({}), 'salon-prompt', 'LP')[0].startswith('salon-prompt cannot run'), (
+        'every reason at once'
+    )
+
+    coval = FakeCoval(LIVEKIT_AGENTS)
+    shared = on_livekit(coval=coval)
+    job = shared.plan('salon', 'L', 'ONE', 'calm', iterations=1, max_simulations=1, label='lk')
+    row = shared.run(job, 'already-up.trycloudflare.com')
+    assert coval.launches == 0 and '--host' in row.problems[0], row.render()
+
+
+def test_livekit_worker_env() -> None:
+    """The worker gets `.env`, the job's settings, and no Twilio placeholder: LiveKit carries no Twilio."""
+    env = Repository.worker_env(
+        {'TWILIO_AUTH_TOKEN': 'real', 'KEEP': '1'}, 'voice-harness-salon-ab12', 0, None, 120
+    )
+    assert env['DELIVERY'] == 'simulated' and env['LIVEKIT_AGENT_NAME'] == 'voice-harness-salon-ab12'
+    assert env['LIVEKIT_IDLE_PROCESSES'] == '1' and env['MAX_CALL_SECONDS'] == '120', (
+        'at least one process ready'
+    )
+    assert env['CALLER_ID'] == '' and env['DIARY_PER_CALL'] == '1' and env['KEEP'] == '1'
+    assert env['LIVEKIT_HTTP_PORT'] == '0', 'two jobs on one machine would collide on LiveKit 8081'
+    assert 'TWILIO_ACCOUNT_SID' not in env and env['TWILIO_AUTH_TOKEN'] == 'real', 'only the placeholders go'
+    profiled = Repository.worker_env({}, 'n', 3, load_profile(PROFILE), MAX_CALL_SECONDS)
+    assert profiled['LIVEKIT_IDLE_PROCESSES'] == '3' and profiled['SLNG_STT_MODEL'] == 'deepgram/nova:3'
+
+
+def test_livekit_registered() -> None:
+    """Ready is LiveKit's own `registered worker` line, naming this job's worker; never another's."""
+    line = json.dumps({
+        'message': 'registered worker', 'level': 'INFO', 'name': 'livekit.agents',
+        'agent_name': 'voice-harness-salon-ab12', 'id': 'AW_x', 'url': 'wss://voice.example', 'pid': 1,
+    })  # fmt: skip
+    assert registered(f'{{"message": "starting worker"}}\n{line}\n', 'voice-harness-salon-ab12')
+    assert not registered(line, 'voice-harness-salon-cd34'), 'a worker under another name'
+    assert not registered('unregistered worker voice-harness-salon-ab12', 'voice-harness-salon-ab12')
+    coloured = '12:00:01 - INFO livekit.agents - registered worker {"agent_name": "voice-harness-salon-ab12"}'
+    assert registered(coloured, 'voice-harness-salon-ab12'), 'the dev format too'
+
+
+def _post(
+    url: str, body: bytes, headers: dict[str, str], method: str = 'POST'
+) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        url, data=body if method == 'POST' else None, headers=headers, method=method
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as reply:
+            return reply.status, json.loads(reply.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
+def _unpadded(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + '=' * (-len(text) % 4))
+
+
+def test_token_server() -> None:
+    """A real POST gets a LiveKit token that dispatches the job's own worker; anything else is refused, unrecorded."""
+    key, secret, worker = 'APIcoval', LIVEKIT['LIVEKIT_API_SECRET'], 'voice-harness-salon-ab12'
+    asked = {
+        'room_name': 'b1c4e0de-0000-4000-8000-000000000001',
+        'participant_name': 'simulated_user',
+        'room_config': {'agents': [{'agent_name': 'somebody-else'}]},
+    }
+    auth = {'Authorization': 'Bearer job-key', 'Content-Type': 'application/json'}
+    with tempfile.TemporaryDirectory() as tmp:
+        records = Path(tmp) / 'tokens.jsonl'
+        with TokenServer(key, secret, 'wss://voice.example', worker, records, key='job-key') as server:
+            url = f'http://127.0.0.1:{server.port}/token'
+            status, body = _post(url, json.dumps(asked).encode(), {**auth, SIMULATION_HEADER: 'sim-1'})
+            assert status == 200, body
+            assert body['serverUrl'] == 'wss://voice.example' and body['room_name'] == asked['room_name'], (
+                body
+            )
+            token = str(body['token'])
+            head, payload, signature = token.split('.')
+            assert json.loads(_unpadded(head)) == {'alg': 'HS256', 'typ': 'JWT'}
+            expected = hmac.new(secret.encode(), f'{head}.{payload}'.encode(), hashlib.sha256).digest()
+            assert hmac.compare_digest(_unpadded(signature), expected), 'signed with the API secret'
+            claims = json.loads(_unpadded(payload))
+            assert claims['exp'] - claims['nbf'] == 3600 and abs(claims['nbf'] - time.time()) < 60, claims
+            assert {k: v for k, v in claims.items() if k not in ('nbf', 'exp')} == {
+                'iss': key,
+                'sub': 'simulated_user',
+                'name': 'simulated_user',
+                'video': {
+                    'room': asked['room_name'],
+                    'roomJoin': True,
+                    'canPublish': True,
+                    'canSubscribe': True,
+                    'canPublishData': True,
+                },
+                'roomConfig': {'agents': [{'agentName': worker}]},
+            }, 'the job worker is dispatched, never the name the request asked for'
+            _check_with_livekit(token, key, secret, worker, asked['room_name'])
+
+            again = json.dumps({'room_name': 'room-2'}).encode()
+            assert _post(url, again, {**auth, SIMULATION_HEADER: '{{simulation_id}}'})[0] == 200
+            assert _post(url, json.dumps({'room_name': 'room-3'}).encode(), auth)[0] == 200
+
+            good = json.dumps(asked).encode()
+            for why, status, body_, headers, address in (
+                ('no key', 401, good, {'Content-Type': 'application/json'}, url),
+                ('a wrong key', 401, good, {'Authorization': 'Bearer guess'}, url),
+                ('not JSON', 400, b'{', auth, url),
+                ('a list', 400, b'[]', auth, url),
+                ('no room', 400, b'{"participant_name": "simulated_user"}', auth, url),
+                ('a room with a space', 400, b'{"room_name": "a b"}', auth, url),
+                ('a room too long', 400, json.dumps({'room_name': 'r' * 200}).encode(), auth, url),
+                ('a participant not a string', 400, b'{"room_name": "r", "participant_name": 7}', auth, url),
+                ('another path', 404, good, auth, url + 's'),
+            ):
+                got = _post(address, body_, headers)
+                assert got[0] == status, (why, got)
+            assert _post(url, b'', auth, method='GET')[0] == 405
+            raw = http.client.HTTPConnection('127.0.0.1', server.port, timeout=10)
+            raw.putrequest('POST', '/token')
+            raw.putheader('Content-Length', '999999')
+            raw.endheaders()
+            assert raw.getresponse().status == 413, 'a body too large is not read'
+            raw.close()
+        assert [(r['room'], r['simulation_id'], r['agent_name']) for r in token_requests(records)] == [
+            (asked['room_name'], 'sim-1', worker),
+            ('room-2', None, worker),
+            ('room-3', None, worker),
+        ], 'answered requests only; an unfilled placeholder is no simulation ID'
+    assert token_requests(Path(tmp) / 'gone.jsonl') == []
+    try:
+        TokenServer(key, secret, 'wss://voice.example', worker, Path(tmp) / 'x.jsonl', key='')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('a token server with no key would answer anybody')
+
+
+def _check_with_livekit(token: str, key: str, secret: str, worker: str, room: str) -> None:
+    """LiveKit's own verifier reads the token, and its own minter writes the same claims. Skipped without livekit-api."""
+    try:
+        from livekit import api
+        from livekit.protocol.agent_dispatch import RoomAgentDispatch
+        from livekit.protocol.room import RoomConfiguration
+    except ImportError:
+        return
+    claims = api.TokenVerifier(key, secret).verify(token)
+    assert claims.identity == 'simulated_user' and claims.video is not None, claims
+    assert claims.video.room == room and claims.video.room_join and claims.video.can_publish
+    assert claims.room_config is not None and [a.agent_name for a in claims.room_config.agents] == [worker]
+    theirs = (
+        api.AccessToken(key, secret)
+        .with_identity('simulated_user')
+        .with_name('simulated_user')
+        .with_grants(api.VideoGrants(room_join=True, room=room))
+        .with_room_config(RoomConfiguration(agents=[RoomAgentDispatch(agent_name=worker)]))
+        .to_jwt()
+    )
+    ours, written = (json.loads(_unpadded(t.split('.')[1])) for t in (token, theirs))
+    assert {k: v for k, v in ours.items() if k not in ('nbf', 'exp')} == {
+        k: v for k, v in written.items() if k not in ('nbf', 'exp')
+    }, (ours, written)
+
+
+def test_bind_rooms() -> None:
+    """A simulation is bound to the one room its own ID asked for; never by order, never shared."""
+    requests: list[dict[str, object]] = [
+        {'room': 'R1', 'simulation_id': 'A'},
+        {'room': 'R1', 'simulation_id': 'A'},
+        {'room': 'R2', 'simulation_id': 'B'},
+        {'room': 'R3', 'simulation_id': 'B'},
+        {'room': 'R4', 'simulation_id': 'C'},
+        {'room': 'R4', 'simulation_id': 'D'},
+        {'room': 'R5', 'simulation_id': None},
+    ]
+    assert bind_rooms(['A', 'B', 'C', 'D', 'E'], requests) == {
+        'A': 'R1',
+        'B': 'unknown',
+        'C': 'unknown',
+        'D': 'unknown',
+        'E': 'unknown',
+    }, 'a retry is one room; two rooms, a shared room, or no ID is unknown'
+
+
+def test_livekit_result() -> None:
+    """After a LiveKit run each simulation is printed with its room, from the token log, ready for load_report."""
+
+    class Finished(FakeCoval):
+        def simulations(self, run_id: str) -> list[Simulation]:
+            return [spoke('A'), spoke('E')]
+
+    check = on_livekit(coval=Finished(LIVEKIT_AGENTS))
+    job = check.plan('salon', 'L', 'ONE', 'calm', iterations=1, max_simulations=1, label='lk')
+    tokens = check.workdir / 'salon-tokens.jsonl'
+    tokens.write_text(
+        '\n'.join(
+            json.dumps(r)
+            for r in ({'room': 'R1', 'simulation_id': 'A'}, {'room': 'R5', 'simulation_id': None})
+        )
+        + '\n{"torn'
+    )
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        row = check._result(job, 'R', 'n', check.workdir / 'bot.log', {'tokens': str(tokens)})
+    assert row.problems == [], row.render()
+    printed = out.getvalue()
+    assert 'simulation A = room R1 (load_report --call A=R1)' in printed, printed
+    assert 'simulation E = room unknown' in printed, 'no request carried its ID: not guessed by order'
+    assert '1 token request(s) carried no simulation ID' in printed, printed
+    assert latest(check, job.key)['bound'] == {'A': 'R1', 'E': 'unknown'}
+    assert latest(check, job.key)['calls'] == ['R1', 'R5']
+
+
+def test_livekit_add() -> None:
+    """`add --livekit` creates a Coval LiveKit agent with a placeholder connection, for a use case on core only."""
+
+    class Creates(FakeCoval):
+        def create_agent(self, name: str, kind: str, metadata: dict[str, Any]) -> Agent:
+            self.created = (name, kind, metadata)
+            return Agent(id='new', display_name=name)
+
+    coval = Creates(AGENTS)
+    check = on_livekit(coval=coval)
+    assert check.add('salon', on_livekit=True) == 'created voice-harness-salon-livekit'
+    name, kind, metadata = coval.created
+    assert kind == 'livekit' and metadata['livekit_agent_name'] == name, coval.created
+    assert set(metadata) == {
+        'generate_token_endpoint',
+        'livekit_url',
+        'livekit_agent_name',
+        'generate_token_headers',
+    }
+    assert check.add('salon') == 'exists  voice-harness-salon-pipecat'
+    try:
+        check.add('salon-prompt', on_livekit=True)
+    except ValueError as error:
+        assert 'cannot run on LiveKit' in str(error), error
+    else:
+        raise AssertionError('a LiveKit agent for a bot that cannot run on LiveKit')
+    assert _parser().parse_args(['add', 'salon', '--livekit']).livekit
+
+    pointed = connection('up.trycloudflare.com', 'wss://voice.example', 'voice-harness-salon-ab12', 'job-key')
+    assert pointed['generate_token_endpoint'] == 'https://up.trycloudflare.com/token'
+    assert (pointed['livekit_url'], pointed['livekit_agent_name']) == (
+        'wss://voice.example',
+        'voice-harness-salon-ab12',
+    )
+    assert json.loads(pointed['generate_token_headers']) == {
+        SIMULATION_HEADER: '{{simulation_id}}',
+        'Authorization': 'Bearer job-key',
+    }, 'a JSON string, as Coval takes it'
+
+
 if __name__ == '__main__':
     test_call_ceiling()
     test_plan()
@@ -638,4 +1008,12 @@ if __name__ == '__main__':
     test_campaign()
     test_correlation()
     test_speech_profile()
+    test_livekit_names()
+    test_livekit_plan()
+    test_livekit_worker_env()
+    test_livekit_registered()
+    test_token_server()
+    test_bind_rooms()
+    test_livekit_result()
+    test_livekit_add()
     print('ok')

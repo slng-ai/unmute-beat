@@ -3,6 +3,12 @@
 [tool.uv.workspace]
 members = ["core", "studio", "runner", "use-cases/*"]
 
+[tool.uv]
+# livekit-agents 1.8 declares `openai<3` for its own OpenAI-format helpers, while Pydantic AI's OpenAI
+# provider needs openai 3. core's LiveKit adapter never calls LiveKit's LLM plugins (the flow owns the
+# model), and `core/tests/test_livekit.py` imports every LiveKit module it uses under openai 3.
+override-dependencies = ["openai>=3.8"]
+
 [dependency-groups]
 # No pytest: every `tests/` folder holds assert scripts run as modules.
 dev = [

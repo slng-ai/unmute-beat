@@ -55,7 +55,7 @@ A conversation needs more than a language model. It also needs to hear the calle
 | TTS — text to speech | Turns the reply's words into audio |
 | Transport | Carries audio, such as a WebRTC browser connection or a Twilio phone call |
 
-Pipecat is the media framework used by the implemented integration. It connects those components. The harness fits where the application would otherwise put its LLM service and conversation logic; it does not replace Pipecat's audio system.
+Pipecat is the media framework used by the first integration, and LiveKit Agents the second ([chapter 06](06-livekit.md)). Each connects those components. The harness fits where the application would otherwise put its LLM service and conversation logic; it does not replace the framework's audio system.
 
 ```mermaid
 flowchart LR

@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> None:
         max_calls=args.max_calls,
         warm=not args.no_warm,
         ice_servers=ice,
+        livekit_url=os.getenv('LIVEKIT_URL', ''),
     )
     uvicorn.run(RunnerApp(settings, found).app(), host=args.host, port=args.port, log_level='info')
 

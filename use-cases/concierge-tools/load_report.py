@@ -818,7 +818,7 @@ class CallReport:
     pieces: int = 0
     """Runs that answered a second or later piece of one caller turn (`turn_pieces` over 1)."""
     interrupted: int = 0
-    """Runtime turns the caller cut into (`turn.was_interrupted`)."""
+    """Runtime turns the caller cut into (Pipecat's `turn.was_interrupted`, unmute-core's `turn.interrupted` on LiveKit)."""
     booked_after: float | None = None
     """Seconds from the call's start to its first booking write: how long the task took."""
     problems: list[str] = field(default_factory=list)
@@ -913,12 +913,17 @@ def judge(
                 chains[f'collect > {"+".join(sorted(after & OPERATIONS))}'] += 1
     report.holding, report.chains, report.statuses = dict(holding), dict(chains), dict(statuses)
     report.latency = [
-        float(o.attrs['turn.user_bot_latency_seconds'])
+        float(latency)
         for o in obs
-        if o.name == 'turn' and o.attrs.get('turn.user_bot_latency_seconds') is not None
+        if o.name == 'turn'
+        and (latency := o.attrs.get('turn.user_bot_latency_seconds', o.attrs.get('turn.e2e_seconds')))
+        is not None
     ]
     report.interrupted = sum(
-        1 for o in obs if o.name == 'turn' and str(o.attrs.get('turn.was_interrupted')).lower() == 'true'
+        1
+        for o in obs
+        if o.name == 'turn'
+        and str(o.attrs.get('turn.was_interrupted', o.attrs.get('turn.interrupted'))).lower() == 'true'
     )
     booking_writes = sorted(
         (

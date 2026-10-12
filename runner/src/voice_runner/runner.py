@@ -7,7 +7,8 @@ the runner's one link (`voice_runner.link`).
 
 Text is `core.text_turn`: each reply's segments are acknowledged once the response carrying them is
 sent, which is the text runtime's simulated delivery. Voice is Pipecat's SmallWebRTC, run to its end
-by `core.launch.run_call`. Stopping is the runner's own: it stops admitting, lets its calls run to
+by `core.launch.run_call`, or a LiveKit room the runner joins itself, run by
+`core.livekit_launch.run_room` (`Runner.livekit`). Stopping is the runner's own: it stops admitting, lets its calls run to
 their end for at most `drain_seconds`, and only then lets uvicorn stop. A second SIGTERM stops at once.
 """
 
@@ -389,12 +390,102 @@ class Runner:
         finally:
             carried.status = 'ended'
 
+    def open_livekit(self, carried: Carried) -> dict[str, Any]:
+        """Start a voice call on LiveKit: the runner joins a room of the call's own, and the browser gets its way in.
+
+        The room is named after the run. The browser gets a caller's token for it; the runner joins it
+        as the call's agent (`livekit`) and waits for that caller. A runner with no LiveKit server
+        (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`) answers 503 and opens nothing.
+        """
+        missing = [
+            name
+            for name, value in (
+                ('LIVEKIT_URL', self.settings.livekit_url),
+                ('LIVEKIT_API_KEY', os.getenv('LIVEKIT_API_KEY')),
+                ('LIVEKIT_API_SECRET', os.getenv('LIVEKIT_API_SECRET')),
+            )
+            if not value
+        ]
+        if missing:
+            raise HTTPException(503, f'this runner has no LiveKit server: set {", ".join(missing)}')
+        from core.livekit_launch import room_token
+
+        token = room_token(carried.id, self.caller_identity(carried))
+        carried.task = asyncio.create_task(self.livekit(carried))
+        return {'livekit': {'url': self.settings.livekit_url, 'room': carried.id, 'token': token}}
+
+    @staticmethod
+    def caller_identity(carried: Carried) -> str:
+        """Who the browser is in a LiveKit call's room."""
+        return f'caller-{carried.id}'
+
+    async def livekit(self, carried: Carried) -> None:
+        """Run a LiveKit voice call to its end on this process (`core.livekit_launch.run_room`).
+
+        The runner joins the call's room as its agent and waits for the browser it gave a token to, as
+        long as a Pipecat call waits for its offer (`ADMIT_SECONDS`). No LiveKit worker or dispatch is
+        involved, so the call's events reach the studio on this runner's link as a Pipecat call's do.
+        """
+        from livekit import rtc
+
+        from core.livekit_launch import room_token, run_room
+
+        ask = carried.request
+        room = carried.room = rtc.Room()
+
+        def opened(call: Any) -> None:
+            """Keep the call once it is open."""
+            carried.call, carried.step = call, call.state.agent
+
+        try:
+            await room.connect(
+                self.settings.livekit_url, room_token(carried.id, f'agent-{carried.id}', agent=True)
+            )
+            caller = await self.caller_in(room, carried)
+            if caller is None:
+                return
+            carried.status = 'active'
+            carried.flow = await self.flow_for(carried.agent, ask.config)
+            await run_room(
+                self.entries[carried.agent],
+                room,
+                caller,
+                flow=carried.flow,
+                warm=False,
+                caller_id=ask.caller_id,
+                listener=Forward(self.link, carried),
+                run=carried.id,
+                config=ask.config,
+                resume=ask.resume,
+                facts=ask.facts,
+                simulate=ask.delivery == 'simulated',
+                opened=opened,
+            )
+        except Exception as error:
+            logger.exception('call {} failed; the runner goes on', carried.id)
+            carried.outcome = carried.outcome or 'failed'
+            self.ended(carried, 'failed', f'{type(error).__name__}: {error}')
+        finally:
+            carried.status = 'ended'
+            await room.disconnect()
+
+    async def caller_in(self, room: Any, carried: Carried) -> Any:
+        """The browser in the call's room once it joins; None if it never did (`reap` ends the call then)."""
+        identity = self.caller_identity(carried)
+        while carried.status == 'waiting':
+            if (found := room.remote_participants.get(identity)) is not None:
+                return found
+            await asyncio.sleep(0.05)
+        return None
+
     async def hang_up(self, carried: Carried) -> None:
         """End a call as the line dropping would."""
         if carried.channel == 'text':
             await self.end_text(carried, 'hangup')
         elif carried.connection is not None:
             await carried.connection.disconnect()
+        elif carried.room is not None and carried.status == 'active':
+            await carried.room.disconnect()
         else:
             carried.status, carried.outcome = 'ended', 'stopped'
 

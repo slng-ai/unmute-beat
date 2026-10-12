@@ -17,6 +17,8 @@ class Settings:
     `public_url` defaults to `http://{host}:{port}`. `studio` is the studio's link
     (`ws://127.0.0.1:7800/api/runners/link`); '' runs with no studio. `warm` sends one warm-up request
     per model client at start; `drain_seconds` bounds how long a stop waits for calls to end.
+    `livekit_url` is the LiveKit server a voice call on LiveKit joins (`LIVEKIT_URL`; its key and
+    secret are read from the environment when a token is made); '' takes no LiveKit call.
     """
 
     port: int = 7810
@@ -28,6 +30,7 @@ class Settings:
     drain_seconds: float = 300.0
     runner_id: str = field(default_factory=lambda: f'runner-{os.getpid()}')
     ice_servers: tuple[dict[str, Any], ...] = ()
+    livekit_url: str = ''
 
     @property
     def url(self) -> str:
@@ -41,7 +44,8 @@ class CallRequest(BaseModel):
     `run` is the studio's run id (the runner makes one when it is not given) and `config` the config
     version the studio names the run by. `facts` is the state to carry on with, edited on the go-back
     page, over the snapshot's own. `simulated` delivery lets estimated playback count as heard on a voice
-    call (a developer's choice).
+    call (a developer's choice). `framework` says which one a voice call runs on: Pipecat's SmallWebRTC,
+    or a LiveKit room the browser and this runner both join (`Runner.livekit`).
     """
 
     agent: str
@@ -52,6 +56,7 @@ class CallRequest(BaseModel):
     resume: TurnSnapshot | None = None
     facts: dict[str, Any] | None = None
     delivery: Literal['marks', 'simulated'] = 'marks'
+    framework: Literal['pipecat', 'livekit'] = 'pipecat'
 
 
 class TurnRequest(BaseModel):

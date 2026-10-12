@@ -6,9 +6,11 @@ Each group is a label and its calls. A call is `session:<id>` (a Twilio call
 sid is the harness's session), `trace:<id>`, or a bare id, read as a session.
 Nothing is billed: it only reads traces.
 
-It knows three shapes of trace, and reads them with one set of rules:
+It knows four shapes of trace, and reads them with one set of rules:
 
 * the harness: Pydantic AI `chat ...` generations under Pipecat's `turn` span;
+* the harness on LiveKit: the same generations under unmute-core's `turn` span
+  (`core.livekit.CallTrace`), which carries LiveKit's own measures;
 * Pipecat's own LLM service (the graph build, the one-prompt baseline): `llm`
   generations under `turn`;
 * LiveKit: `llm_request` generations, whose `llm_node` wrapper is skipped,
@@ -28,9 +30,14 @@ The rules, each one a mistake made once by hand:
 * Requests that overlap in time are one step of the caller's wait: the
   harness's readings run side by side. "Calls in a row" counts the steps.
 * Latency is Pipecat's `turn.user_bot_latency_seconds`, the caller's silence
-  before the bot speaks. LiveKit records no such figure; its latency is
+  before the bot speaks, or unmute-core's `turn.e2e_seconds`, the same figure
+  as LiveKit measured it. A LiveKit trace with neither has its latency
   estimated as the gap from the end of the user turn to the next
   `agent_speaking`, plus LiveKit's own `lk.end_of_turn_delay`, and marked so.
+* A caller turn is a `turn` span, except on unmute's own LiveKit build, which
+  counts LiveKit's `user_turn`s; on the harness on LiveKit (`runtime` is
+  `livekit`) only a turn with the caller's words is one, since the greeting
+  opens a turn of its own.
 * Latency is split in two. The answer time runs from the work that answered
   (the harness's agent span for the last piece of the turn, or the graph
   build's first model request) to the first speech sent to TTS: what the
@@ -308,13 +315,17 @@ def read_call(ref: str, observations: list[Obs]) -> Call:
         if (turn := turn_of(o)) is not None:
             per_turn.setdefault(turn.id, []).append(o)
 
-    livekit = any(o.name == 'user_turn' for o in obs)
+    harness_on_livekit = any(o.attrs.get('runtime') == 'livekit' for o in obs)
+    livekit = not harness_on_livekit and any(o.name == 'user_turn' for o in obs)
     turns = [o for o in obs if o.name == 'turn']
-    call.caller_turns = sum(1 for o in obs if o.name == 'user_turn') if livekit else len(turns)
+    if harness_on_livekit:
+        call.caller_turns = sum(1 for o in turns if o.input)
+    else:
+        call.caller_turns = sum(1 for o in obs if o.name == 'user_turn') if livekit else len(turns)
     for turn in turns:
         requests = per_turn.get(turn.id, [])
         shape = ''.join('C' if kind(o) == 'classifier' else 'S' for o in requests) or '-'
-        latency = turn.attrs.get('turn.user_bot_latency_seconds')
+        latency = turn.attrs.get('turn.user_bot_latency_seconds', turn.attrs.get('turn.e2e_seconds'))
         answer = _answer(pieces.get(turn.id, []), first_request.get(turn.id), speech.get(turn.id, []))
         call.turns.append(
             Turn(shape, steps_in_a_row(requests), None if latency is None else float(latency), answer=answer)

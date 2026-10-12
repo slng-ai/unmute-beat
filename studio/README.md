@@ -21,6 +21,7 @@ uv run --directory studio slng studio up        # http://localhost:7800, ctrl+c 
 | Command | Does |
 |---|---|
 | `slng studio up` | Starts the engine, which serves the page at once and brings up Postgres, Redis and Jaeger behind it, opens the store, reads every agent and starts one runner (the loading screen follows along). Ctrl+c stops the runner after its calls, then the containers; the data stays. |
+| `slng studio up --app` | The same, then opens the studio in a window of its own once it is ready: Chrome or Edge with `--app`, no tabs, no address bar, its own profile in `data/studio/app-window` (so its own Dock or taskbar entry). Closing the window leaves the studio running; ctrl+c stops both. With no Chrome or Edge it prints the URL. `STUDIO_APP_FLAGS` adds browser flags (a debugging port, a fake microphone). |
 | `slng studio up --dev` | Also runs Vite with hot reload on :7802, sending `/api` to the engine. |
 | `slng studio up --no-services` | Leaves Docker alone. Runs are kept in memory until the studio stops, and no timings are collected. |
 | `slng studio up --no-runner` | Starts no runner; start them yourself with `slng studio runner`. |
@@ -29,6 +30,28 @@ uv run --directory studio slng studio up        # http://localhost:7800, ctrl+c 
 | `slng studio status` | The containers and the engine. |
 | `slng studio agents` | Every `agent.yaml` and whether the loader accepts it, offline. Exit 1 if any does not. |
 | `slng studio bot <use case>` | Runs that use case's `bot.py` with its traces sent to the studio: for a transport the page does not own (`-t twilio`). |
+
+## As an app
+
+Two ways, both on Chromium, the only browser the voice calls' playback reports are tested on:
+
+1. **An app window**, no extra install: `slng studio up --app`. The page is also installable: Chrome offers
+   "Install SLNG Studio" from `http://127.0.0.1:7800` (a local origin is secure; no service worker needed).
+   Install from 127.0.0.1, not localhost: they are two origins.
+2. **The desktop app** in `desktop/`: an Electron window that starts `slng studio up` from this repository
+   (or uses one already running), shows the start-up screen, and stops the studio on quit, as ctrl+c does.
+   It asks macOS for the microphone and gives it only to the studio's own page; links elsewhere open in
+   the browser; a run that ends posts a notification; Go has ⌘1 to ⌘3.
+
+```bash
+npm --prefix studio/desktop ci
+npm --prefix studio/desktop start          # run it from the repository
+npm --prefix studio/desktop run dist       # studio/desktop/dist/mac-arm64/SLNG Studio.app, for this Mac
+```
+
+The built app is ad-hoc signed, for this machine only, and remembers this repository's path. Opened from
+the Finder, macOS asks once whether it may read the Documents folder when the repository is there: say yes,
+or the studio cannot start. The icons come from `npm --prefix studio/web run icons`.
 
 ## What it does
 
@@ -78,6 +101,7 @@ runners' logs and the use cases' business data (the salon's diary, Faro's learne
 |---|---|
 | `compose.yaml` | Postgres 16 and Redis 7 (health-checked) and Jaeger 2.21 (OTLP in, traces in memory, query API v3), local ports only, the `slng-studio_pg` volume |
 | `src/studio/cli.py` | `Cli`: the `slng` command |
+| `src/studio/window.py` | `AppWindow`: Chrome or Edge found per OS, opened with `--app` once the boot is ready, closed when the studio stops |
 | `src/studio/settings.py` | ports, paths and URLs from the environment |
 | `src/studio/boot.py` | the start-up sequence `/api/boot` reports and the loading screen draws: Docker, the services, the store, the agents, the runner |
 | `src/studio/agents/` | every `agent.yaml` (`catalog`: the loader's verdict and the engine's own moves, groups for the map); the check that runs in a process of its own (`check`: `FlowSpec.problems()`, `Flow.moves`, each operation's closing lines and its receipt the way the state is described: JSON schema, fields by path for a success and a refusal, closed values); the config's files and version, the state module included (`configs`); the editor (`editor`, `manifest_text`, `closing_review`, `models`); the facts (`facts`, read in the check's process; `state_source`, the state module edited and compared as code; `facts_editor`, each edit proved on a copy) |
@@ -87,6 +111,7 @@ runners' logs and the use cases' business data (the salon's diary, Faro's learne
 | `src/studio/events.py` | the run format, which is core's (`core.events`) |
 | `src/studio/schema.sql` | the store: configs, runs, events, snapshots; applied on every start |
 | `tests/` | asserts, no pytest: the catalog, events, metrics on API v3 answers, boot, the API, the CLI, the editor on copies of the salon and Faro, the facts on copies of the salon and Wasla, the store (Redis and Postgres too when they are up) |
+| `desktop/` | the Electron app: `main.js` (`Studio`, `RunWatch`, `Guard`, `AppMenu`), `resources/` (the icon, the macOS entitlements) |
 | `web/` | Vite, React, TypeScript; React Flow and ELK for the map, loaded only when it opens. `src/pages/` one file per place (Agents, Runs, a run, going back, Metrics); `src/live/` the live socket (`useRun`), the try panel, browser calls on core's own client (`voice.ts`); `src/model/` a state and a receipt drawn and edited from their models' JSON schema, nested models included; `src/closing/` the closing-line editor |
 
 The runner service and the studio together are tested in `runner/tests/test_runner.py`: two runners, runs

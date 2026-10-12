@@ -1,16 +1,22 @@
 import type { ReactNode } from 'react';
 import { href, type Route } from '../router';
+import { AgentSwitcher } from './AgentSwitcher';
 
 type Who = 'caller' | 'engine' | 'bot' | null;
 
-/** The top bar every page shares: the mark, the three places (Agents, Runs, Metrics), the page's own cells, and who is active. */
-export function Shell({ route, agent, who, children, actions, body }: {
+/**
+ * The top bar every page shares: the mark, the three places (Agents, Runs, Metrics), the agent switch
+ * (`switcher`; Cmd/Ctrl+K opens it on every page), the page's own cells, and who is active. At phone width
+ * it is one row: the page's cells scroll sideways and its actions sit in a bar at the bottom.
+ */
+export function Shell({ route, agent, who, children, actions, body, switcher = false }: {
   route: Route;
   agent?: string;
   who?: Who;
   children?: ReactNode;
   actions?: ReactNode;
   body: ReactNode;
+  switcher?: boolean;
 }) {
   const pages = [
     { page: 'agents', label: 'Agents', to: href({ page: 'agents', agent }) },
@@ -19,12 +25,12 @@ export function Shell({ route, agent, who, children, actions, body }: {
   ] as const;
   const here = route.page === 'run' || route.page === 'back' ? 'runs' : route.page;
   return (
-    <div className="app">
+    <div className="app" data-actions={actions ? 'true' : undefined}>
       <header className="bar">
-        <a className="brand" href={href({ page: 'agents', agent })}>
+        <a className="brand" href={href({ page: 'agents', agent })} aria-label="SLNG studio">
           <span className="brand-mark" aria-hidden="true" />
-          <span className="brand-name">SLNG</span>
-          <span className="mono dim" style={{ fontSize: 13 }}>/ studio</span>
+          <span className="brand-name" aria-hidden="true">SLNG</span>
+          <span className="brand-sub mono dim" aria-hidden="true">/ studio</span>
         </a>
         <nav className="nav" aria-label="Studio">
           {pages.map((p) => (
@@ -33,7 +39,10 @@ export function Shell({ route, agent, who, children, actions, body }: {
             </a>
           ))}
         </nav>
-        <div className="bar-fill">{children}</div>
+        <div className="bar-fill">
+          <AgentSwitcher route={route} agent={agent} button={switcher} />
+          {children}
+        </div>
         {who !== undefined && <WhoIsActive who={who} />}
         {actions && <div className="bar-cell">{actions}</div>}
       </header>

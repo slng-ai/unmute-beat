@@ -7,6 +7,7 @@ import { Shell } from '../components/Shell';
 import { IntentsPanel, ModelPanel, StatePanel, statusTag, Transcript } from '../live/panels';
 import { useRun } from '../live/useRun';
 import { href, go, type Route } from '../router';
+import { Placeholder } from '../components/Placeholder';
 
 /**
  * One run, whole: what was said and heard, each model request as it streamed and what it decided,
@@ -50,6 +51,7 @@ export function RunView({ route }: { route: Extract<Route, { page: 'run' }> }) {
           <div className="live-body">
             <main className="main" style={{ padding: 20, gap: 16 }}>
               {view.status === 'missing' && <p className="error-box">No run {route.run} in the store.</p>}
+              {view.status === 'connecting' && <Placeholder what="the run" kind="rows" rows={6} />}
               <div className="lbl">Conversation</div>
               <Transcript lines={view.lines} thinking={view.thinking} />
               <div className="lbl" style={{ marginTop: 12 }}>What the model did, request by request</div>

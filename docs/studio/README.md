@@ -7,7 +7,8 @@ prompts, closing lines and action routes from the page, and read its timings per
 
 - **Design:** [SLNG Voice Studio canvas](https://claude.ai/artifact/RcRy8iV6yEFohokqe2GUzp): the screens on
   its first page, and five ways to draw a graph compared on its "Graph options" page. It is private until
-  someone shares it from the canvas's Share menu.
+  someone shares it from the canvas's Share menu. Boards 11 to 13 were drawn first on
+  [SLNG Studio · App and polish](https://claude.ai/artifact/8iUvYTU1t8apbyVB5Bf5ZC) and copied into it.
 - **Code:** [`studio/`](../../studio/README.md).
 - **Plan:** [the decisions behind the second phase, how each piece works, and what was built](plan.md).
 
@@ -38,6 +39,9 @@ pages are what was built from them.
 | 05 Tokens and parts | none | Colours, type, controls, step nodes in each state, edge styles. |
 | 06 Trace and metrics | `#/metrics` | Where to find what is slow. The overview, filterable by agent, or one run, which names its agent: voice to voice, LLM first token and TTS first audio at p90, errors, every turn's requests with anything over its limit flagged, and latency by model (a model swapped between runs is two rows). Section 5. |
 | 09 How a call runs | section 6 | Browser, studio, runners, Redis then Postgres, Jaeger. |
+| 11 The studio as an app | `slng studio up --app`, `studio/desktop` | The icon (yellow mark on ink, and its maskable and favicon sizes), a title per page, the window with no tabs, what the terminal says. |
+| 12 Facts, polished (and 12b at phone width) | the Facts tab | Groups that fold, cards or a compact list, the question before an unsaved edit is lost, a kind's own description, tool chips that open the operation, file:line chips that show the lines, the runner line live; at phone width a one-row top bar. |
+| 13 Controls, focus, loading, shortcuts | every page | Disabled buttons with no colour, focus rings (white on yellow), loading placeholders, ⌘K to switch agent, ⌘S to save, the page titles. |
 | 10 Agent facts (and 10b at phone width) | `#/agents/<agent>/facts/<fact>` | What the agent keeps track of on a call: its state, which the studio calls its **facts** everywhere. Each fact a card, grouped by who fills it in (the caller, a tool, the call's opening): its name in plain words, its kind in words, what it means to the model, where it is used. A fact's detail, adding one, and the empty, error and "edit in code" states. Section 2, "Editing the facts". |
 
 The inspector starts with the conversation and the state open, and expands to the model and the step. Each

@@ -138,6 +138,7 @@ class FactKind(BaseModel):
     item: FactKind | None = None
     defined_in: str = ''
     model: str = ''
+    description: str = ''
 
 
 class NestedFact(BaseModel):
@@ -159,6 +160,13 @@ class FactRule(BaseModel):
     heard: list[str] = []
 
 
+class FactExcerpt(BaseModel):
+    """A few lines of a file around the one that matters (`studio.agents.facts.Excerpt`): the first line's number, and the text."""
+
+    first: int
+    lines: list[str]
+
+
 class FactUse(BaseModel):
     """One place a fact is used (`studio.agents.facts.Usage`): what kind of use, and the step, operation, file it is in."""
 
@@ -172,6 +180,7 @@ class FactUse(BaseModel):
     detail: str = ''
     file: str = ''
     line: int = 0
+    excerpt: FactExcerpt | None = None
 
 
 class FactSpec(BaseModel):
@@ -199,6 +208,7 @@ class Fact(BaseModel):
     description: str = ''
     note: str = ''
     line: int = 0
+    excerpt: FactExcerpt | None = None
     kind: FactKind
     starts_empty: bool = True
     start: Any = None

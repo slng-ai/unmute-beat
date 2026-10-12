@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * The studio's places. Three at the top (Agents, Runs, Metrics), and two that open from them: one
@@ -15,7 +15,18 @@ export type Route =
   | { page: 'back'; run: string; turn?: number }
   | { page: 'metrics'; agent?: string; run?: string };
 
-const TABS: AgentTab[] = ['build', 'operations', 'facts', 'graph', 'runs', 'metrics', 'config'];
+/** An agent's tabs, in the order the page shows them, with their names. */
+export const AGENT_TABS: { tab: AgentTab; label: string }[] = [
+  { tab: 'build', label: 'Build and try' },
+  { tab: 'operations', label: 'Operations' },
+  { tab: 'facts', label: 'Facts' },
+  { tab: 'graph', label: 'Graph' },
+  { tab: 'runs', label: 'Its runs' },
+  { tab: 'metrics', label: 'Its metrics' },
+  { tab: 'config', label: 'Full config' },
+];
+
+const TABS = AGENT_TABS.map((t) => t.tab);
 
 export function parse(hash: string): Route {
   const [path = '', search = ''] = hash.replace(/^#\/?/, '').split('?');
@@ -74,12 +85,90 @@ export function go(route: Route): void {
   window.location.hash = href(route);
 }
 
-export function useRoute(): Route {
-  const [route, setRoute] = useState(() => parse(window.location.hash));
+/** A page's name for the window, the tab and the Dock: the place first, the studio last. */
+export function title(route: Route): string {
+  const short = (run: string) => `Run ${run.slice(0, 8)}`;
+  const parts = (() => {
+    switch (route.page) {
+      case 'boot':
+        return ['Starting'];
+      case 'agents':
+        return route.agent ? [route.agent, AGENT_TABS.find((t) => t.tab === (route.tab ?? 'build'))?.label ?? ''] : ['Agents'];
+      case 'runs':
+        return ['Runs'];
+      case 'run':
+        return [short(route.run)];
+      case 'back':
+        return [route.turn !== undefined ? `Go back to T${route.turn}` : 'Go back', short(route.run)];
+      case 'metrics':
+        return route.agent ? [route.agent, 'Metrics'] : ['Metrics'];
+    }
+  })();
+  return [...parts, 'SLNG Studio'].join(' · ');
+}
+
+/** Whether going to a route would lose an edit that is not saved; null when nothing is unsaved. */
+type Loses = ((next: Route) => boolean) | null;
+
+const guards = new Set<{ current: Loses }>();
+
+/**
+ * An editor's unsaved edit, kept from being lost by accident: the router asks before a move that would lose
+ * it (`useRoute`'s `leaving`), and the browser before the window closes or reloads. `loses` says which moves
+ * lose it: a tab switch keeps the Agents page's draft, but not a fact's.
+ */
+export function useUnsaved(loses: Loses): void {
+  const ref = useRef<Loses>(loses);
   useEffect(() => {
-    const onChange = () => setRoute(parse(window.location.hash));
+    ref.current = loses;
+  });
+  useEffect(() => {
+    guards.add(ref);
+    return () => {
+      guards.delete(ref);
+    };
+  }, []);
+  const unsaved = loses !== null;
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsaved]);
+}
+
+/**
+ * The route the address shows. A move that would lose an unsaved edit is held: the address goes back, and
+ * `leaving` is the route asked for until the person stays (`stay`) or lets the edit go (`leave`).
+ */
+export function useRoute(): { route: Route; leaving: Route | null; stay: () => void; leave: () => void } {
+  const [route, setRoute] = useState(() => parse(window.location.hash));
+  const [held, setHeld] = useState<string | null>(null);
+  const shown = useRef(window.location.hash);
+  useEffect(() => {
+    const onChange = () => {
+      const hash = window.location.hash;
+      const next = parse(hash);
+      if (hash !== shown.current && [...guards].some((guard) => guard.current?.(next))) {
+        window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${shown.current}`);
+        setHeld(hash);
+        return;
+      }
+      shown.current = hash;
+      setRoute(next);
+    };
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
-  return route;
+  return {
+    route,
+    leaving: held === null ? null : parse(held),
+    stay: () => setHeld(null),
+    leave: () => {
+      if (held === null) return;
+      shown.current = held;
+      setHeld(null);
+      window.location.hash = held;
+    },
+  };
 }

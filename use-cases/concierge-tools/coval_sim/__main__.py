@@ -301,8 +301,11 @@ class Repository:
         return folder
 
     def limits_itself(self, agency: str) -> bool:
-        """Whether the agency's `bot.py` ends its own calls at `MAX_CALL_SECONDS`."""
-        return 'MAX_CALL_SECONDS' in (self.use_case(agency) / 'bot.py').read_text()
+        """Whether the agency's `bot.py` ends its own calls at `MAX_CALL_SECONDS`: itself, or through core's
+        one call (`core.launch.run_call`, which every use case on core runs).
+        """
+        text = (self.use_case(agency) / 'bot.py').read_text()
+        return 'MAX_CALL_SECONDS' in text or 'core.launch' in text
 
     def bot(
         self,

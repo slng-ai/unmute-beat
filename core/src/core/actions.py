@@ -46,7 +46,7 @@ evidence and reconciliation are the same as for a declared function.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -66,9 +66,12 @@ class Action[S](BaseModel):
     """Whether it changes a business resource."""
     approval: ClassVar[Literal['readback', 'none'] | None] = None
     """`readback`: only after a heard read-back and a yes. None: `Write` always, `Lookup` when it has a readback."""
-    say: ClassVar[str] = ''
-    """The receipt's speech, formatted from its fields: `You're all set for {spoken}.`"""
-    recap: ClassVar[str] = ''
+    say: ClassVar[str | Sequence[Mapping[str, Any]]] = ''
+    """The receipt's speech, formatted from its fields: `You're all set for {spoken}.`
+
+    Or lines by result, as `core.closing` reads them: `[{'when': {'verified': True}, 'line': ...}, ...]`.
+    """
+    recap: ClassVar[str | Sequence[Mapping[str, Any]]] = ''
     """What a goodbye may say about it later, formatted from the receipt. Only a change has one."""
     route: ClassVar[str] = ''
     """The receipt field naming the step a success moves the caller to."""

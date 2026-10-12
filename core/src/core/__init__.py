@@ -18,12 +18,15 @@ the question waiting for an answer, the budget, and the evidence of every
 receipt. Importing this module loads no `.env`, builds no client and imports
 no Pipecat or Langfuse.
 
-Voice is `core.processor.PydanticAgentProcessor` (the `voice` extra), and
-tracing is `core.observability.setup` (the `tracing` extra). Launchers and
+Voice is `core.processor.PydanticAgentProcessor` and, around it, one call's whole
+pipeline, `core.launch.run_call` (the `voice` extra); a use case says what a launcher
+needs to know about it as a `core.Entry`. Tracing is `core.observability.setup`
+(the `tracing` extra). Launchers and
 tests still import those adapters, and a few engine helpers, by their module.
 """
 
 from core.actions import Lookup, Write
+from core.entry import Entry, Opening
 from core.flowspec import FlowSpec, FlowSpecError
 from core.flowspec import load_file as load
 from core.operations import Operation, OutcomeUnknownError, Refused
@@ -37,12 +40,14 @@ from core.values import NotPast, Phone, Quoted, Receipt, Rejection, Subject, Ver
 __all__ = [
     'BaseProposal',
     'ConfirmedOperation',
+    'Entry',
     'FlowCall',
     'FlowSpec',
     'FlowSpecError',
     'Intent',
     'Lookup',
     'NotPast',
+    'Opening',
     'Operation',
     'OutcomeUnknownError',
     'Phone',

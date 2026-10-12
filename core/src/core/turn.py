@@ -22,6 +22,7 @@ ordering that awaiting the callback already has.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -41,13 +42,21 @@ from pydantic_ai import (
     TextPartDelta,
     ToolCallEvent,
     ToolCallPart,
+    ToolCallPartDelta,
     ToolResultEvent,
     UserError,
 )
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.messages import InstructionPart, ModelRequest, ModelResponse, UserPromptPart
+from pydantic_ai.messages import (
+    InstructionPart,
+    ModelRequest,
+    ModelResponse,
+    RetryPromptPart,
+    UserPromptPart,
+)
 from pydantic_ai.usage import UsageLimitExceeded
 
+from core import events as ev
 from core.flow import Answered, Flow, Moved
 from core.graph import LocalAction, Node, Restated, route
 from core.history import History, paired, project
@@ -335,6 +344,16 @@ class Turn:
             status = 'interrupted'
         elif spent:
             status = 'exhausted'
+        if call.events is not None:
+            call.emit(
+                ev.TurnFinished,
+                status=status,
+                step=call.state.agent,
+                handoffs=list(self.handoffs),
+                requests=self.usage.requests,
+                detail=failure or spent,
+            )
+            call.turn_snapshot()
         yield TurnFinished(
             status=status,
             agent=call.state.agent,
@@ -563,6 +582,7 @@ class Turn:
             logger.info('consultation {} -> {} done', call.state.agent, going_to)
             self.handoffs.append(going_to)
             specialist = call.state.agent
+            call._via = 'handback'
             call.commit(agent=going_to, consulting=None)
             call._return_status, call._entered = '', ''
             if not output.ends_turn and not barge.hit:
@@ -620,6 +640,9 @@ class Turn:
             )
         logger.info('handoff {} -> {} ({})', call.state.agent, going_to, output.because or '-')
         self.handoffs.append(going_to)
+        call._via = (
+            'consult' if consulting == call.state.agent else 'exit' if output.status == 'handoff' else ''
+        )
         call.commit(agent=going_to, pending=waiting, consulting=consulting)
         if output.status == 'handoff':
             prompt = None
@@ -704,9 +727,19 @@ class Turn:
                 stall.cancel()
                 stall = None
 
+        asked_at = 0.0
+        first_at: float | None = None
+
         async def prepare(ctx, request):
-            nonlocal requested, stall
+            nonlocal requested, stall, asked_at, first_at
             requested += 1
+            asked_at, first_at = time.perf_counter(), None
+            call.emit(
+                ev.ModelRequest,
+                step=step,
+                request=self.usage.requests + 1,
+                budget=self.limits.request_limit or 0,
+            )
             call._response = f'{run_id}:{requested}'
             disarm()
             stall = asyncio.get_running_loop().call_later(self.budget.first_part, give_up)
@@ -742,6 +775,17 @@ class Turn:
         async def tag(ctx, *, request_context, response):
             disarm()
             response.metadata = (response.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
+            if call.events is not None:
+                now = time.perf_counter()
+                call.emit(
+                    ev.ModelEnded,
+                    step=step,
+                    model=response.model_name or '',
+                    tokens_in=response.usage.input_tokens,
+                    tokens_out=response.usage.output_tokens,
+                    ms=round((now - asked_at) * 1000, 1),
+                    first_ms=None if first_at is None else round((first_at - asked_at) * 1000, 1),
+                )
             return response
 
         retained_run = False
@@ -787,6 +831,8 @@ class Turn:
                     message.metadata = (message.metadata or {}) | {'voice_response': f'{run_id}:{requested}'}
             call._protocol.extend(deepcopy(retained))
             call.messages.extend(retained)
+            if call.events is not None:
+                _decisions(call, step, retained)
 
         yield RunStarted(step)
         try:
@@ -801,6 +847,10 @@ class Turn:
             ) as events:
                 barge.attach(events)
                 async for event in events:
+                    if call.events is not None:
+                        if first_at is None and isinstance(event, PartStartEvent):
+                            first_at = time.perf_counter()
+                        _stream(call, step, event)
                     if isinstance(event, PartStartEvent):
                         disarm()
                         if event.index == 0:
@@ -886,6 +936,51 @@ def run_turn(
 ) -> AsyncIterator[TurnEvent]:
     """Run agents until one answers the caller, and say what happened. The function form of `Turn`."""
     return Turn(call, agents, budget, barge).events(prompt)
+
+
+def _stream(call: CallContext, step: str, event: object) -> None:
+    """A streamed piece, for the listener: speech, or a tool call's arguments as the model writes them."""
+    match event:
+        case (
+            PartStartEvent(part=TextPart(content=text))
+            | PartDeltaEvent(delta=TextPartDelta(content_delta=text))
+        ):
+            if text:
+                call.emit(ev.ModelDelta, step=step, kind='text', text=text)
+        case PartStartEvent(part=ToolCallPart(tool_name=name, args=args)):
+            if args:
+                call.emit(
+                    ev.ModelDelta,
+                    step=step,
+                    kind='args',
+                    name=name,
+                    text=args if isinstance(args, str) else json.dumps(args),
+                )
+            else:
+                call.emit(ev.ModelDelta, step=step, kind='args', name=name, text='')
+        case PartDeltaEvent(delta=ToolCallPartDelta(args_delta=delta, tool_name_delta=name)):
+            if delta:
+                call.emit(
+                    ev.ModelDelta,
+                    step=step,
+                    kind='args',
+                    name=name or '',
+                    text=delta if isinstance(delta, str) else json.dumps(delta),
+                )
+
+
+def _decisions(call: CallContext, step: str, messages: list) -> None:
+    """Every tool or output the model called in these messages, and every one core sent back, for the listener."""
+    for message in messages:
+        for part in message.parts:
+            if isinstance(part, ToolCallPart):
+                args = part.args_as_dict() if part.args else {}
+                call.emit(ev.ModelDecision, step=step, name=part.tool_name, args=args)
+            elif isinstance(part, RetryPromptPart) and part.tool_name:
+                said = (
+                    part.content if isinstance(part.content, str) else json.dumps(part.content, default=str)
+                )
+                call.emit(ev.ModelDecision, step=step, name=part.tool_name, refused=said)
 
 
 def _speech(event) -> str:

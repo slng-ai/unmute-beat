@@ -41,7 +41,10 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from core import events as ev
+from core import snapshot as snapshot_module
 from core.clock import CallClock
+from core.closing import Closing, Template, Words
 from core.completion import ReceiptMatched
 from core.flow import Nodes
 from core.graph import Exit, Node, Opening, Restated, holds
@@ -50,6 +53,7 @@ from core.locale import Locale
 from core.operations import Operation, OutcomeUnknownError, _tracer
 from core.policies import claim_or_refuse, one_action_per_reply, request_clock, speak_by
 from core.proposals import BaseProposal, Proposal
+from core.snapshot import TurnSnapshot
 from core.state import CallContext, Handoff, Intent, VoiceState, present
 from core.values import Phone, Rejection, words
 
@@ -189,6 +193,8 @@ class FlowCall[S: BaseModel](CallContext):
     """The identities whose owed intents the services were already asked for (`take_owed`)."""
     _scopes: Mapping[str, Scope] = PrivateAttr(default_factory=dict)
     """Each conversation step's view (`core.history.Scope`), by step id, from the flow."""
+    _app_version: str = PrivateAttr(default='')
+    """The flow's `app_version`, for a snapshot to name."""
     _reads: dict[tuple[str, str], tuple[int, int]] = PrivateAttr(default_factory=dict)
     """Each read a structured step ran, by operation and arguments: the caller turn and state version it answered for.
 
@@ -199,6 +205,15 @@ class FlowCall[S: BaseModel](CallContext):
     def scope(self) -> Scope | None:
         """The view of the conversation step the caller is with, or None at an action or end step."""
         return self._scopes.get(self.state.agent)
+
+    def snapshot(self) -> TurnSnapshot:
+        """What going back to this point needs, as validated data (`core.snapshot`). Core writes it nowhere."""
+        return snapshot_module.take(self)
+
+    def turn_snapshot(self) -> None:
+        """The listener gets a snapshot at the end of every turn (`turn.snapshot`); with no listener, nothing is built."""
+        if self._events is not None:
+            self.emit(ev.TurnSnapshotted, snapshot=self.snapshot().model_dump(mode='json'))
 
     def reissue_waiting(self) -> str:
         """The read-back waiting when the consultation began, put again while its intent is only prepared.
@@ -244,7 +259,14 @@ class FlowCall[S: BaseModel](CallContext):
         )
 
     def turn_started(self, heard: str = '') -> None:
-        """A piece of a caller turn starts: nothing is recorded by this reply yet."""
+        """A piece of a caller turn starts: nothing is recorded by this reply yet.
+
+        With a listener, the turn just over is saved again first: what the caller heard of its
+        speech is known only now (a playback report, a reader's acknowledgement), and a snapshot
+        that kept a heard line as unheard would make a resumed call think the caller missed it.
+        """
+        if self._events is not None and self._turn > 0:
+            self.turn_snapshot()
         super().turn_started(heard)
         self._recorded = frozenset()
 
@@ -632,7 +654,8 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
     readback: ClassVar[Callable[[Any], str] | None] = None
     reconcile: ClassVar[Callable[..., Any] | None] = None
     """`(services, args) -> receipt | None`: what the service did with an attempt whose outcome was unknown."""
-    say: ClassVar[str] = ''
+    say: ClassVar[Words] = ''
+    """The receipt's speech: one line, or lines by result (`core.closing`), a refusal's among them."""
 
     readback_uses_services: ClassVar[bool] = False
     """The readback is `(services, args) -> str`: the words need a lookup, like a slot's spoken time."""
@@ -827,6 +850,11 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         cancelled booking is not offered back. Other choices, the
         alternatives, need a fresh search.
 
+        A refusal is said by code only when the operation's closing lines
+        name it (`core.closing`: `when: refused`, or a case on the refusal's
+        own fields, "That date of birth does not match"); the agent is told
+        the caller heard it, and still chooses what comes next.
+
         ponytail: every choice the operation binds is taken back. Per-choice
         refusal reasons belong here if a flow needs to keep the others.
         """
@@ -847,8 +875,13 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
             answered = data if scope is None else scope.public_receipt(self.name, data)
             if scope is not None and isinstance(receipt, Rejection) and receipt.reason:
                 answered |= {'reason': receipt.reason}
+            told = ''
+            if words := Closing.of(self.say).refused(data):
+                await call.speak_now(words, origin='confirmation')
+                told = f' The caller has just been told: "{words}". Do not say it again; say only what comes next.'
             raise ModelRetry(
-                f'Nothing was done: the {self.name} service answered {answered}. Do not say it was done.{again}'
+                f'Nothing was done: the {self.name} service answered {answered}. Do not say it was done.'
+                f'{told}{again}'
             )
         if self.assign:
             call.update(
@@ -858,7 +891,7 @@ class FunctionOperation(ConfirmedOperation[Any, Any]):
         call._offers.take(*self.binds.values())
         if self.changes and (named := call._resource_choices.get(self.resource or self.subject)):
             await _offer(call, named)
-        if words := self.say.format_map(_Facts(data)).strip():
+        if words := Closing.of(self.say).said(data):
             given = args.model_dump(mode='json')
             filed = next(
                 (e for e in reversed(call.evidence) if e.operation == self.name and e.args == given), None
@@ -1385,7 +1418,7 @@ async def _carry_out(
     if not isinstance(receipt, BaseModel):
         return None, None
     say = getattr(operation, 'say', '')
-    return (say.format_map(_Facts(receipt.model_dump())) if say else None), receipt
+    return (Closing.of(say).said(receipt.model_dump()) if say else None), receipt
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1894,7 +1927,7 @@ class End(Step):
         return (self.take_back,) if self.take_back else ()
 
     def said(self, call: FlowCall[Any]) -> str:
-        return self.say.format_map(_Facts(call.state.facts.model_dump()))
+        return Template(self.say).fill(call.state.facts.model_dump())
 
     def node(self, flow: StepFlow) -> Node[Any]:
         async def close(call: FlowCall[Any]) -> str:
@@ -1915,13 +1948,6 @@ class End(Step):
             flow, self, 'The request is finished. Answer briefly; do not start a new one.', outputs
         )
         return _node(flow, self, agent, openings=(Opening('close', _entered, close),))
-
-
-class _Facts(dict):
-    """Facts for `str.format_map`, with nested receipts reachable as `{step[field]}` and a blank for anything missing."""
-
-    def __missing__(self, key: str) -> str:
-        return ''
 
 
 class StepFlow:
@@ -2049,6 +2075,8 @@ class StepFlow:
         clock: Callable[[], datetime] | None = None,
         intents: Sequence[Intent] = (),
         caller_id: str = '',
+        resume: TurnSnapshot | None = None,
+        facts: Mapping[str, Any] | None = None,
     ) -> FlowCall[Any]:
         """A new session on this flow, standing on its first step: the application's state, its services, its clock.
 
@@ -2073,14 +2101,17 @@ class StepFlow:
         `now` (a diary with a settable clock), else the wall clock in the
         manifest's timezone. It is read once, now, so the whole call agrees
         on today.
+
+        `resume` carries on from the end of a turn of an earlier call (`core.snapshot`), with `facts`
+        in place of the snapshot's when given: see `resume`.
         """
         if caller_id:
             kind = self.state_type.model_fields[self.identity].annotation if self.identity else None
             if kind is not Phone and Phone not in get_args(kind):
                 raise ValueError('caller_id fills the identity field, which is not a core.Phone in this flow')
             state = state.model_copy(update={self.identity: Phone.from_carrier(caller_id)})
-        facts = self.state_type.model_validate(deepcopy(state.model_dump()), extra='forbid')
-        call = self.call_type(state=FlowState[self.state_type](agent=self.start, facts=facts))  # ty: ignore[invalid-type-form]
+        checked = self.state_type.model_validate(deepcopy(state.model_dump()), extra='forbid')
+        call = self.call_type(state=FlowState[self.state_type](agent=self.start, facts=checked))  # ty: ignore[invalid-type-form]
         call._identity_field, call._collectible, call._derived = self.identity, self.collectible, self.derived
         call._choices = frozenset(name for step in self.steps for name in getattr(step, 'choices', {}))
         call._scopes = {
@@ -2102,11 +2133,29 @@ class StepFlow:
             call._today_shown = self.clock.shown
             call.today  # noqa: B018
         call._locales, call._language = self.locales, self.language
-        call.state = call.state.model_copy(update={'facts': call.validated(facts.model_dump())})
+        call.state = call.state.model_copy(update={'facts': call.validated(checked.model_dump())})
         call._reconcile_with = {op.name: (op, op.args_type) for op in self.operations()}
+        call._app_version = self.version
         if intents:
             call.restore(list(intents), call._reconcile_with)
         call.take_owed()
+        if resume is not None:
+            self.resume(call, resume, facts)
+        return call
+
+    def resume(
+        self, call: FlowCall[Any], snapshot: TurnSnapshot, facts: Mapping[str, Any] | None = None
+    ) -> FlowCall[Any]:
+        """Carry on from the end of a turn of an earlier call, in a call just opened on this flow.
+
+        For an application whose own opener builds the call (services, caller): open it as for any
+        call, then resume it before its first turn. The history and speech go back first, then the
+        facts (`facts` when given, edited by a tester, else the snapshot's) are validated whole: an
+        edit the application's types refuse raises `pydantic.ValidationError`, and the call is not to
+        be used. What is restored and what starts fresh is `core.snapshot`'s to say.
+        """
+        snapshot_module.restore(self, call, snapshot, facts)
+        call.emit(ev.StepEntered, step=call.state.agent, source=None, via='resume')
         return call
 
     def operations(self) -> list[Operation]:
@@ -2133,7 +2182,7 @@ class StepFlow:
         """
         known = {op.name: op for op in self.operations()}
         return {
-            filed.intent[:RECAP_REF]: template.format_map(_Facts(filed.receipt))
+            filed.intent[:RECAP_REF]: Closing.of(template).said(filed.receipt)
             for filed in call.effective()
             if (only is None or filed.operation in only)
             and filed.intent
@@ -2152,7 +2201,7 @@ class StepFlow:
         standing = call.effective()
         return next(
             (
-                template.format_map(_Facts(filed.receipt))
+                Closing.of(template).said(filed.receipt)
                 for filed in reversed(call.evidence)
                 if (template := getattr(known.get(filed.operation), 'say', ''))
                 and any(filed is s for s in standing)

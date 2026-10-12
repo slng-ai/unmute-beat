@@ -1,4 +1,4 @@
-"""Langfuse over OpenTelemetry. Call `setup()` once, before any agent is built.
+"""Langfuse over OpenTelemetry, and any local OTLP collector. Call `setup()` once, before any agent is built.
 
 Pydantic AI emits OTel spans and Langfuse collects them. Four things have to be
 true for a call to read as one call: Langfuse must export the non-GenAI spans
@@ -7,7 +7,9 @@ attribute keys Langfuse renders, the session and trace name must be on every
 span rather than the root alone, and what each agent run and model request
 produced must be readable at a glance rather than a dump of parts. Credentials
 come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`,
-which the application's launcher loads (each `bot.py` reads `.env` first). Importing
+which the application's launcher loads (each `bot.py` reads `.env` first). The same spans also
+go to any OTLP collector named by OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` (the studio's
+local Jaeger, `http://127.0.0.1:4318`), with or without Langfuse. Importing
 this module reads no file and sets nothing up: every offline run that imported core
 used to pick up the checkout's `.env` and export its spans.
 
@@ -25,8 +27,10 @@ from pydantic_ai import Agent
 
 try:
     from langfuse import Langfuse
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
 except ImportError as missing:
     raise ImportError(
         f'core.observability needs the tracing extra: install slng-voice-core[tracing] ({missing})'
@@ -36,7 +40,10 @@ _SPEECH = {'stt': ('output', 'user'), 'tts': ('input', 'assistant')}
 """STT turns audio into text and TTS the reverse, so the one string each span carries belongs on the opposite side, and to the opposite speaker in the transcript."""
 
 _CALL: ContextVar[dict[str, str] | None] = ContextVar('langfuse_call', default=None)
-"""The call the code running now belongs to, in Langfuse's own keys minus the prefix.
+"""The call the code running now belongs to, as the attributes stamped on each of its spans.
+
+`langfuse.session.id` and `langfuse.trace.name` for Langfuse; `slng.agent.id` and `slng.run.id` for
+the studio, which asks Jaeger for one agent's traces, or one run's, by them (`studio.metrics`).
 
 Langfuse v4 queries observations, not traces, so anything needed to filter or
 aggregate has to be on every span rather than only the root. Left on the root
@@ -328,8 +335,7 @@ class _Speech(SpanProcessor):
 
     def on_end(self, span) -> None:
         trace_id = span.context.trace_id
-        call = self._calls.get(trace_id) or _CALL.get() or {}
-        words = {f'langfuse.{key}': value for key, value in call.items()}
+        words = dict(self._calls.get(trace_id) or _CALL.get() or {})
         scope = span.instrumentation_scope
         if scope is not None and scope.name.startswith('pipecat'):
             words |= _langfuse_words(span) | self._transcript(span, trace_id)
@@ -386,17 +392,22 @@ class _Speech(SpanProcessor):
         return {}
 
 
-def setup(session: str = '', trace_name: str = '') -> None:
+def setup(session: str = '', trace_name: str = '', *, agent: str = '', run: str = '') -> None:
     """Name the call this task is running, and on first use point the process's tracer at Langfuse.
 
     `session` groups the call's observations and `trace_name` is what its trace
     is listed by; both are stamped on every span rather than the root alone, for
-    the reason `_CALL` gives. Call it at the top of each call's own task, before
+    the reason `_CALL` gives. `agent` (the agent's id, its folder's name) and
+    `run` (the studio's run id) are stamped the same way, as `slng.agent.id`
+    and `slng.run.id`: one runner process carries every agent, so the agent is
+    a span's attribute, never the process's `service.name`. Call it at the top of each call's own task, before
     anything that call traces starts: the provider is built once, the call's
     names are set every time.
 
     Langfuse drops spans silently when unconfigured, so the absence of a key
-    is said once on stderr rather than pretended away. Its default filter keeps
+    is said once on stderr rather than pretended away, unless a local collector
+    (`OTEL_EXPORTER_OTLP_ENDPOINT`) takes the spans instead: then the provider is
+    built for it alone, and every span goes there in batches, off the turn's path. Its default filter keeps
     only GenAI spans, which would throw away the conversation span everything
     else hangs from, so everything is exported. The environment goes on the
     resource under OpenTelemetry's own key, which is what Langfuse reads off a
@@ -408,15 +419,18 @@ def setup(session: str = '', trace_name: str = '') -> None:
     gets instrumented. No atexit flush of our own: Langfuse registers one.
     """
     Agent.instrument_all()
-    call = {}
-    if session:
-        call['session.id'] = session
-    if trace_name:
-        call['trace.name'] = trace_name
-    _CALL.set(call)
+    names = {
+        'langfuse.session.id': session,
+        'langfuse.trace.name': trace_name,
+        'slng.agent.id': agent,
+        'slng.run.id': run,
+    }
+    _CALL.set({key: value for key, value in names.items() if value})
     if _PROVIDER:
         return
-    if not os.getenv('LANGFUSE_PUBLIC_KEY'):
+    langfuse = bool(os.getenv('LANGFUSE_PUBLIC_KEY'))
+    collector = bool(os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT'))
+    if not langfuse and not collector:
         print('warning: LANGFUSE_PUBLIC_KEY unset, traces are going nowhere', file=sys.stderr)
         return
 
@@ -425,6 +439,9 @@ def setup(session: str = '', trace_name: str = '') -> None:
         attributes['deployment.environment'] = environment
     provider = TracerProvider(resource=Resource.create(attributes))
     provider.add_span_processor(_Speech())
+    if collector:
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(provider)
     _PROVIDER.append(provider)
-    Langfuse(should_export_span=lambda _span: True)
+    if langfuse:
+        Langfuse(should_export_span=lambda _span: True)

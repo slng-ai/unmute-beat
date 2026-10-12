@@ -1,0 +1,50 @@
+# The studio's local services. `uv run slng studio up` starts them as the project `slng-studio`.
+#
+# Every port binds to 127.0.0.1 only: the studio is a local tool and these hold call transcripts.
+# Postgres keeps runs, turns, events, state snapshots and config versions (schema.sql runs on first start).
+# Redis carries each live run's event stream from the engine to the web page.
+# Jaeger collects every span a bot or the engine sends over OTLP (core.observability, with
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318): Pipecat's turn, stt and tts spans with their
+# timings, and Pydantic AI's model requests. The studio reads them back to flag slow turns and requests.
+# It keeps traces in memory: they last until the container stops, which a local tool can live with.
+
+name: slng-studio
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: studio
+      POSTGRES_PASSWORD: studio
+      POSTGRES_DB: studio
+    ports:
+      - "127.0.0.1:${STUDIO_PG_PORT:-5432}:5432"
+    volumes:
+      - pg:/var/lib/postgresql/data
+      - ./src/studio/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studio -d studio"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${STUDIO_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    ports:
+      - "127.0.0.1:${STUDIO_OTLP_PORT:-4318}:4318"
+      - "127.0.0.1:${STUDIO_JAEGER_PORT:-16686}:16686"
+    # No health check here: the image has no shell. `studio.boot` asks its UI port from the host instead.
+
+volumes:
+  pg:

@@ -14,6 +14,7 @@ MODULES = (
     'tests.test_server',
     'tests.test_cli',
     'tests.test_editor',
+    'tests.test_facts',
     'tests.test_store',
 )
 

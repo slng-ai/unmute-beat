@@ -8,11 +8,13 @@ import { ModelForm, ModelView, pathKey, type Schema } from '../model';
 import { href, go, type Route } from '../router';
 
 /**
- * Going back to the end of a turn and carrying on from there, with the state edited first if you like.
- * The page says what comes along (the history, what was said and heard, the state, every receipt),
+ * Going back to the end of a turn and carrying on from there, with the facts edited first if you like.
+ * The page says what comes along (the history, what was said and heard, the facts, every receipt),
  * what starts fresh (offers, a waiting read-back: a yes never carries across) and what stays done in
  * the business after that turn (a booking made later is still in the diary). An edit the agent's own
- * types refuse is shown here, and nothing opens.
+ * types refuse is shown here, and nothing opens. A turn saved with facts the agent no longer has (one
+ * removed since, or a list of choices that no longer holds its value) is said so before anything is sent:
+ * the agent's types check it against the facts as they are now.
  */
 export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
   const run = useApi(() => api.run(route.run), `back-run-${route.run}`);
@@ -33,6 +35,8 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
     setError('');
   }, [data]);
 
+  const gone = schemas.state ? Object.keys(draft).filter((key) => !schemas.state?.field(key)) : [];
+
   const carryOn = async (channel: 'text' | 'voice') => {
     if (!data || turn === undefined) return;
     setBusy(true);
@@ -47,7 +51,8 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
         const detail = failure.detail as { refused?: Refusal[] } | undefined;
         const by = Object.fromEntries((detail?.refused ?? []).map((r) => [pathKey(r.loc), r.msg]));
         setRefused(by);
-        setError('The agent refused this state: nothing was opened. Fix the marked fields.');
+        const lost = Object.keys(by).filter((key) => !schemas.state?.field(key.split('.')[0] ?? key));
+        setError(`The agent refused these facts: nothing was opened. ${lost.length ? `No longer facts: ${lost.join(', ')}. ` : ''}Fix the marked ones.`);
       } else {
         setError(failure instanceof ApiError ? failure.message : String(failure));
       }
@@ -103,10 +108,18 @@ export function GoBack({ route }: { route: Extract<Route, { page: 'back' }> }) {
                 </div>
                 <div className="panel">
                   <div className="panel-h">
-                    <span className="lbl">The state to carry on with</span>
-                    <span className="hint">drawn from the agent's state model; checked whole by its own types before anything opens</span>
+                    <span className="lbl">The facts to carry on with</span>
+                    <span className="hint">drawn from what the agent keeps track of now; checked whole by its own types before anything opens</span>
                   </div>
                   <div className="panel-b">
+                    {gone.length > 0 && (
+                      <div className="warn" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                        <span style={{ flex: '1 1 280px' }}>
+                          This turn was saved on config {run.state === 'ok' ? run.data.run.config : ''}, with facts the agent no longer has: {gone.join(', ')}. Carrying on with them is refused; leave them out to carry on.
+                        </span>
+                        <button type="button" className="btn btn-q" onClick={() => setDraft(Object.fromEntries(Object.entries(draft).filter(([key]) => !gone.includes(key))))}>Leave them out</button>
+                      </div>
+                    )}
                     <ModelForm schema={schemas.state} value={draft} onChange={setDraft} errors={refused} />
                   </div>
                 </div>
@@ -136,7 +149,7 @@ function Consequences({ data, receipts }: { data: GoBackData; receipts: Record<s
           <span className="lbl" style={{ color: 'var(--ok)' }}>Comes along</span>
           <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--soft)', fontSize: 14, lineHeight: 1.6 }}>
             <li>The history the model sees, and what was said and heard</li>
-            <li>The state above, with your edits</li>
+            <li>The facts above, with your edits</li>
             <li>The call's clock: "Thursday" means the same day</li>
             <li>{data.receipts.length} receipt(s), and every action that was settled</li>
           </ul>
@@ -144,7 +157,7 @@ function Consequences({ data, receipts }: { data: GoBackData; receipts: Record<s
         <div className="field">
           <span className="lbl" style={{ color: 'var(--yellow)' }}>Starts fresh</span>
           <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--soft)', fontSize: 14, lineHeight: 1.6 }}>
-            <li>Offers: the step offers again for the state as it is now</li>
+            <li>Offers: the step offers again for the facts as they are now</li>
             <li>A waiting read-back: asked again; a yes never carries across</li>
             <li>An action only read back, never sent: dropped, so its step asks again</li>
           </ul>

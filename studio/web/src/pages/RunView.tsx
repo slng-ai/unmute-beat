@@ -10,7 +10,7 @@ import { href, go, type Route } from '../router';
 
 /**
  * One run, whole: what was said and heard, each model request as it streamed and what it decided,
- * the state after every change, each business action and its receipt, and the path over turns to go
+ * the facts after every change, each business action and its receipt, and the path over turns to go
  * back from. Live while the run goes on, read back from the store once it is over: the same events.
  */
 export function RunView({ route }: { route: Extract<Route, { page: 'run' }> }) {
@@ -63,7 +63,7 @@ export function RunView({ route }: { route: Extract<Route, { page: 'run' }> }) {
                   ))}
                 </div>
               </Section>
-              <Section title="State" note={view.changed.length ? <span className="tag tag-y">changed {view.changed.join(', ')}</span> : undefined}>
+              <Section title="Facts" note={view.changed.length ? <span className="tag tag-y">changed {view.changed.join(', ')}</span> : undefined}>
                 <StatePanel state={view.state} changed={view.changed} schema={schemas.state} />
               </Section>
               <Section title="Business actions" note={<span className="tag">{view.intents.length}</span>}>

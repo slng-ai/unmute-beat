@@ -11,8 +11,8 @@ const TOP = 34;
 
 /**
  * Option E: the call's path over turns. One row per step it has been in, one column per turn,
- * so a move back is the line climbing. Picking a turn shows the state after it; `onFork` starts
- * a new run from that turn's saved state, so the person testing can keep talking from there.
+ * so a move back is the line climbing. Picking a turn shows the facts after it; `onFork` starts
+ * a new run from that turn's saved facts, so the person testing can keep talking from there.
  */
 export function PathStrip({ turns, selected, onPick, onFork }: {
   turns: TurnMark[];
@@ -49,7 +49,7 @@ export function PathStrip({ turns, selected, onPick, onFork }: {
     <section className="path" aria-label="Path over turns">
       <div className="path-head">
         <span className="lbl">Path over turns</span>
-        <span className="empty">Pick a turn to look at it. Every turn's state is saved, so you can go back to it.</span>
+        <span className="empty">Pick a turn to look at it. Every turn is saved, so you can go back to it.</span>
         <span style={{ flex: '1 1 auto' }} />
         {picked && !picked.live && (
           <button type="button" className="btn btn-y" onClick={() => onFork(picked.turn)}>

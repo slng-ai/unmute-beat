@@ -11,6 +11,7 @@ reports), served at `/voice-sdk/`, so a call from the studio reports playback li
 """
 
 import asyncio
+import socket
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -40,10 +41,13 @@ class Studio:
     A `store` given (a test's `MemoryStore`) is used as is; otherwise the boot opens Redis and Postgres,
     or keeps runs in memory when they do not answer. `runner=True` starts a runner of the studio's own
     once the agents are read (`slng studio up`). `RUNNER_WAIT` is how long the boot waits for it to link
-    and finish warming.
+    and finish warming. A runner imports an agent's code once, so after a fact is saved the studio renews
+    its own runners (`renew_runners`): a new one first, then the old one drains its calls for at most
+    `DRAIN_SECONDS` (the runner's own bound) and stops. `renewal` says how that stands, '' when idle.
     """
 
     RUNNER_WAIT = 180.0
+    DRAIN_SECONDS = 300.0
 
     def __init__(
         self,
@@ -59,9 +63,12 @@ class Studio:
         self.given_store = store
         self.store: Store = store or MemoryStore()
         self.catalog = Catalog(settings.root, settings.agents)
-        self.hub = hub or Hub(settings, self.store, self.agents)
-        self.metrics = MetricsReader(Jaeger(settings.jaeger_url, fetch))
         self.processes: list[RunnerProcess] = []
+        self.renewing: asyncio.Task[None] | None = None
+        self.renew_again = False
+        self.renewal = ''
+        self.hub = hub or Hub(settings, self.store, self.agents, stale=self.renew_runners)
+        self.metrics = MetricsReader(Jaeger(settings.jaeger_url, fetch))
         self.boot = boot or Boot(settings)
         if self.boot.store is None and store is None:
             self.boot.store = self.open_store
@@ -110,6 +117,75 @@ class Studio:
                 )
             await asyncio.sleep(0.5)
         return 'failed', f'the runner did not get ready in {self.RUNNER_WAIT:.0f} s: see {started.log}'
+
+    def renew_runners(self) -> str:
+        """Start runners that carry the code on disk now, then let the old ones finish their calls and stop.
+
+        Only the runners this studio started can be renewed; for one started by hand it says what to do. A
+        save while a renewal is under way renews once more after it, since the new runner may have imported
+        the code before that save.
+        Returns what it is doing, in words the page shows.
+        """
+        owned = [process for process in self.processes if process.exited is None]
+        if not owned:
+            return 'no runner the studio started is running: restart yours (`slng studio runner`) to carry the new code'
+        if self.renewing is None or self.renewing.done():
+            self.renewing = asyncio.get_running_loop().create_task(self._renew(owned))
+        else:
+            self.renew_again = True
+        return 'the studio is starting a runner with the new code; runs already going keep the old one until they end'
+
+    async def _renew(self, old: list[RunnerProcess]) -> None:
+        """Each old runner replaced: the new one ready first, then the old one drained and stopped."""
+        for each in old:
+            port = self._free_port()
+            fresh = RunnerProcess(
+                self.settings, port, self.settings.data / f'runner-{port}.log', max_calls=each.max_calls
+            )
+            fresh.start()
+            self.processes.append(fresh)
+            self.renewal = f'starting a runner on port {port} with the new code'
+            if not await self._ready(fresh):
+                self.renewal = f'the new runner did not get ready: see {fresh.log}'
+                logger.warning('runner on port {} did not get ready; the old one keeps running', port)
+                return
+            self.renewal = (
+                f'the runner on port {port} carries the new code; the old one is finishing its calls'
+            )
+            logger.info(
+                'runner on port {} carries the new code; draining the one on port {}', port, each.port
+            )
+            await asyncio.to_thread(each.stop, self.DRAIN_SECONDS)
+            self.processes.remove(each)
+        if self.renew_again:
+            self.renew_again = False
+            await self._renew([process for process in self.processes if process.exited is None])
+            return
+        self.renewal = ''
+
+    async def _ready(self, process: RunnerProcess) -> bool:
+        """Whether a runner started here links and gets ready within `RUNNER_WAIT`."""
+        deadline = time.monotonic() + self.RUNNER_WAIT
+        while time.monotonic() < deadline and process.exited is None:
+            pid = process.process.pid if process.process is not None else -1
+            if any(r.pid == pid and r.connected and r.ready for r in self.hub.listed()):
+                return True
+            await asyncio.sleep(0.5)
+        return False
+
+    def _free_port(self) -> int:
+        """The first port from the runner port up that no runner of this studio holds and nothing else listens on."""
+        held = {process.port for process in self.processes if process.exited is None}
+        port = self.settings.runner_port
+        while True:
+            if port not in held:
+                with socket.socket() as probe:
+                    try:
+                        probe.bind((self.settings.host, port))
+                        return port
+                    except OSError:
+                        pass
+            port += 1
 
     @asynccontextmanager
     async def lifespan(self, _: FastAPI) -> AsyncIterator[None]:

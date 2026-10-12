@@ -190,7 +190,7 @@ function ListField({ schema, value, onChange, errors, path }: FieldProps & { sch
 }
 
 /**
- * A model's value edited through its JSON schema, nested models and lists included: the go-back page's state. What the
+ * A model's value edited through its JSON schema, nested models and lists included: the go-back page's facts. What the
  * agent's own types refused shows under the field it names, by its whole path (`customer.customer_phone`).
  */
 export function ModelForm({ schema, value, onChange, errors = {} }: { schema?: Schema; value: Record<string, unknown>; onChange: (value: Record<string, unknown>) => void; errors?: Record<string, string> }) {

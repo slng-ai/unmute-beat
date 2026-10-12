@@ -166,7 +166,7 @@ export function TryPanel({ agent, version, run, onRun, view }: {
               <div style={{ marginTop: 8 }}><ModelPanel requests={view.requests} last={4} /></div>
             </details>
             <details>
-              <summary className="lbl" style={{ cursor: 'pointer' }}>State</summary>
+              <summary className="lbl" style={{ cursor: 'pointer' }}>Facts</summary>
               <div style={{ marginTop: 8 }}><StatePanel state={view.state} changed={view.changed} schema={schemas.state} /></div>
             </details>
             <details>

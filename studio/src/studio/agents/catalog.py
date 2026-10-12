@@ -119,11 +119,12 @@ class Agent(BaseModel):
 
 
 class CheckResult(BaseModel):
-    """What `studio.agents.check` found: the loader's problems, the engine's moves, and each operation."""
+    """What `studio.agents.check` found: the loader's problems, the engine's moves, each operation, and the facts."""
 
     problems: list[str]
     moves: dict[str, list[str]] = {}
     operations: list[dict[str, Any]] = []
+    facts: dict[str, Any] = {}
 
 
 class AgentCheckProcess:

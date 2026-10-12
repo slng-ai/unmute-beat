@@ -123,3 +123,163 @@ class Saved(Checked):
 
     saved: bool = False
     config: ConfigRow | None = None
+
+
+class FactKind(BaseModel):
+    """A fact's kind in words (`studio.agents.facts.Kind`): its code, its choices, and what is inside a group or a list."""
+
+    code: str
+    words: str
+    article: str = ''
+    choices: list[Any] = []
+    nullable: bool = False
+    members: list[FactKind] = []
+    fields: list[NestedFact] = []
+    item: FactKind | None = None
+    defined_in: str = ''
+    model: str = ''
+
+
+class NestedFact(BaseModel):
+    """A field inside a group of details: shown, edited only in code."""
+
+    name: str
+    label: str
+    description: str = ''
+    kind: FactKind
+
+
+class FactRule(BaseModel):
+    """A validator the application wrote, read-only: where it is, what its errors say, and what the caller hears."""
+
+    name: str
+    where: str = ''
+    says: list[str] = []
+    types: list[str] = []
+    heard: list[str] = []
+
+
+class FactUse(BaseModel):
+    """One place a fact is used (`studio.agents.facts.Usage`): what kind of use, and the step, operation, file it is in."""
+
+    kind: str
+    step: str = ''
+    operation: str = ''
+    function: str = ''
+    choice: str = ''
+    argument: str = ''
+    path: str = ''
+    detail: str = ''
+    file: str = ''
+    line: int = 0
+
+
+class FactSpec(BaseModel):
+    """A fact as the studio could write it from scratch: what a proof rebuilds its expected schema from."""
+
+    kind: str
+    choices: list[Any] = []
+    may_be_empty: bool = True
+    start: Any = None
+    description: str = ''
+    limits: dict[str, int | float] = {}
+
+
+class Fact(BaseModel):
+    """One fact as the Facts page shows it: what it is, who fills it in, its rules, its uses, and what can change here.
+
+    `editable` says, for `description`, `choices`, `limits`, `empty` and `remove`, whether the studio can make
+    and prove that change; `why_not` says why not where it cannot. `latest` is its value in the agent's
+    latest run, `latest_run` that run.
+    """
+
+    name: str
+    label: str
+    group: Literal['caller', 'tools', 'open']
+    description: str = ''
+    note: str = ''
+    line: int = 0
+    kind: FactKind
+    starts_empty: bool = True
+    start: Any = None
+    limits: dict[str, Any] = {}
+    rules: list[FactRule] = []
+    uses: list[FactUse] = []
+    editable: dict[str, bool] = {}
+    why_not: dict[str, str] = {}
+    spec: FactSpec | None = None
+    latest: Any = None
+
+
+class FactsView(BaseModel):
+    """An agent's facts as the page opens them.
+
+    `file` is the state module, relative to the use case's folder, and `class_name` its class. `rules` are
+    the state's own whole-state validators. `steps` are the conversation steps that could fill a fact in.
+    `latest_run` is the run the latest values come from; `runners` says how the runners stand after a save.
+    """
+
+    agent: str
+    version: str
+    file: str = ''
+    class_name: str = ''
+    facts: list[Fact] = []
+    rules: list[FactRule] = []
+    steps: list[str] = []
+    problems: list[Problem] = []
+    latest_run: str = ''
+    runners: str = ''
+
+
+class FactLimits(BaseModel):
+    """Limits to set on a fact; None removes one. Text takes `min_length`/`max_length`, a number `ge`/`le`."""
+
+    min_length: int | None = None
+    max_length: int | None = None
+    ge: int | float | None = None
+    le: int | float | None = None
+
+
+type NewKind = Literal[
+    'text', 'whole_number', 'number', 'yes_no', 'date', 'time', 'not_past', 'phone', 'quoted', 'choice'
+]
+
+
+class FactEdit(BaseModel):
+    """One change to one fact, against the version the page opened.
+
+    `add` takes `kind`, `description`, `choices` for one of a list, and `fill_steps`. `change` takes any of
+    `description`, `choices`, `limits` (only the keys given), `may_be_empty` with `start`, and `fill_steps`
+    (the steps that fill it in, all of them). `remove` takes nothing else. `rename` is always refused.
+    """
+
+    base: str = ''
+    action: Literal['add', 'change', 'remove', 'rename']
+    name: str
+    new_name: str = ''
+    kind: NewKind | None = None
+    description: str | None = None
+    choices: list[str] | None = None
+    limits: FactLimits | None = None
+    may_be_empty: bool | None = None
+    start: Any = None
+    fill_steps: list[str] | None = None
+
+
+class FactChecked(BaseModel):
+    """What proving a fact edit found: whether it may be saved, what was proved, the version, and the change itself."""
+
+    ok: bool
+    version: str = ''
+    problems: list[Problem] = []
+    proved: list[str] = []
+    diff: str = ''
+    changed: list[str] = []
+
+
+class FactSaved(FactChecked):
+    """A fact save: what the proof found, the config row it wrote, and how the runners take it up."""
+
+    saved: bool = False
+    config: ConfigRow | None = None
+    runners: str = ''

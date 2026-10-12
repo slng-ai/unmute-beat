@@ -9,6 +9,7 @@ import { Shell } from '../components/Shell';
 import { TryPanel } from '../live/TryPanel';
 import { useRun } from '../live/useRun';
 import { href, go, type AgentTab, type Route } from '../router';
+import { FactsTab } from './Facts';
 import { MetricsBody } from './Metrics';
 import { RunsTable } from './Runs';
 
@@ -17,6 +18,7 @@ const MapView = lazy(() => import('../components/MapView').then((m) => ({ defaul
 const TABS: { tab: AgentTab; label: string }[] = [
   { tab: 'build', label: 'Build and try' },
   { tab: 'operations', label: 'Operations' },
+  { tab: 'facts', label: 'Facts' },
   { tab: 'graph', label: 'Graph' },
   { tab: 'runs', label: 'Its runs' },
   { tab: 'metrics', label: 'Its metrics' },
@@ -26,7 +28,7 @@ const TABS: { tab: AgentTab; label: string }[] = [
 /**
  * One agent: its config on the left, a real run on the right. Change a prompt, a closing line or an
  * action step's routes; save, and the studio checks the change on a copy first (the loader, then each
- * closing line against its receipt) and writes only what passed. Tabs open the same agent's graph,
+ * closing line against its receipt) and writes only what passed. Tabs open the same agent's facts, graph,
  * runs, metrics and whole manifest. Nothing here is shared with another agent's page.
  */
 export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }> }) {
@@ -92,7 +94,7 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
         </>
       }
       actions={
-        <>
+        tab === 'facts' ? undefined : <>
           {dirty && <span className="tag tag-y">unsaved</span>}
           <button type="button" className="btn btn-q" disabled={!dirty || saving} onClick={() => { setDraft({}); setResult(null); }}>Discard</button>
           <button type="button" className="btn btn-q" disabled={!dirty || saving} onClick={() => void save(true)}>Check</button>
@@ -128,6 +130,7 @@ export function AgentsPage({ route }: { route: Extract<Route, { page: 'agents' }
             </div>
           )}
           {data && id && tab === 'operations' && <Operations config={data} draft={draft} setDraft={setDraft} agent={id} />}
+          {id && tab === 'facts' && <FactsTab agent={id} picked={route.step} onSaved={() => setReload((n) => n + 1)} />}
           {id && tab === 'graph' && <GraphTab agent={graph.state === 'ok' ? graph.data : undefined} now={view.status === 'live' ? view.step : ''} step={route.step} />}
           {id && tab === 'runs' && (
             <div style={{ padding: 16 }}>
@@ -185,7 +188,7 @@ function StepEditor({ config, step, draft, setDraft, agent }: { config: EditorCo
           <h1 className="mono" style={{ margin: '6px 0 0', fontSize: 28, fontWeight: 500 }}>{step.id}</h1>
         </header>
         <p style={{ margin: 0, color: 'var(--soft)', fontSize: 14, lineHeight: 1.5 }}>
-          Runs <span className="mono">{step.operation}</span> with its arguments from the state, says its closing line filled from the receipt, and moves on.
+          Runs <span className="mono">{step.operation}</span> with its arguments from the facts, says its closing line filled from the receipt, and moves on.
           A refusal says nothing unless a line by result names it; an unknown outcome says the locale's unsettled line.
         </p>
         {op && <ClosingEditor op={op} draft={draft} setDraft={setDraft} agent={agent} />}
@@ -236,12 +239,12 @@ function StepEditor({ config, step, draft, setDraft, agent }: { config: EditorCo
             value={fileOf(config, draft, prompt)}
             onChange={(e) => setDraft({ ...draft, files: { ...draft.files, [prompt]: e.target.value } })}
           />
-          <span className="hint">Prompts are compiled against the call's state when the agent loads: a placeholder that names no field is caught on save.</span>
+          <span className="hint">Prompts are compiled against the agent's facts when it loads: a placeholder that names no fact is caught on save.</span>
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
         <div className="field">
-          <span className="lbl">Fields it may record</span>
+          <span className="lbl">Facts it may fill in</span>
           <div className="chips">{step.fields.length ? step.fields.map((f) => <span key={f} className="chip">{f}</span>) : <span className="hint">none</span>}</div>
         </div>
       </div>

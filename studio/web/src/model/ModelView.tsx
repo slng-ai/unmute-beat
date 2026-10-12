@@ -8,7 +8,7 @@ function Scalar({ value, tone }: { value: unknown; tone?: string }) {
 }
 
 /**
- * A state or a receipt drawn from its model's JSON schema, the same way for both: each field by name, a nested model
+ * A state (the facts) or a receipt drawn from its model's JSON schema, the same way for both: each field by name, a nested model
  * as its own fields under it, a list as its numbered items. With no schema the value's own keys are drawn. `changed`
  * marks top-level fields the last change touched.
  */

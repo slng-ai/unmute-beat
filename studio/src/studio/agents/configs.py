@@ -7,13 +7,19 @@ and any edit gives a new one. Every run names the version it ran on (`run.starte
 and the store keeps each version's files (`agent_configs`), so a run can always be read against
 the config it actually had.
 
-ponytail: code (`*.py`) is not part of a version: an operation's behaviour changed in Python is the
-application's release, named by `app_version`. Hash the package's code too if runs ever need to
-tell two builds of the same manifest apart.
+The state module (the file `state:` names) is part of a version too: its fields are the agent's facts,
+which the Facts tab edits, so a run can always be read against the facts it had. Other code (`*.py`) is
+not: an operation's behaviour changed in Python is the application's release, named by `app_version`.
+
+A runner imports an agent's code once and never again, so the studio also needs to know whether a runner
+carries the code on disk now: `AgentConfig.code()` is a digest of every module in the package, the same one
+a runner reports for each agent when it links (`voice_runner.runner.CodeFiles`).
 """
 
 import hashlib
 from pathlib import Path
+
+import yaml
 
 from studio.runs.store import ConfigRow
 
@@ -27,7 +33,7 @@ class AgentConfig:
         self.manifest = manifest
 
     def files(self) -> dict[str, str]:
-        """The config's files, by path relative to the manifest's folder: the manifest first, then the rest in order."""
+        """The config's files, by path relative to the manifest's folder: the manifest first, the text files, the state module."""
         folder = self.manifest.parent
         others = {
             str(path.relative_to(folder)): path.read_text()
@@ -37,7 +43,31 @@ class AgentConfig:
             and '__pycache__' not in path.parts
             and path != self.manifest
         }
-        return {self.manifest.name: self.manifest.read_text()} | others
+        state = self.state_file()
+        code = {str(state.relative_to(folder.resolve())): state.read_text()} if state is not None else {}
+        return {self.manifest.name: self.manifest.read_text()} | others | code
+
+    def state_file(self) -> Path | None:
+        """The module that defines the state (`state: state.py:SalonState`), when it is inside the agent's folder."""
+        try:
+            data = yaml.safe_load(self.manifest.read_text()) or {}
+        except yaml.YAMLError, OSError:
+            return None
+        named = data.get('state') if isinstance(data, dict) else None
+        if not isinstance(named, str) or ':' not in named:
+            return None
+        path = (self.manifest.parent / named.partition(':')[0]).resolve()
+        folder = self.manifest.parent.resolve()
+        return path if path.is_file() and path.is_relative_to(folder) and path.suffix == '.py' else None
+
+    def code(self) -> str:
+        """A digest of every module in the agent's package, as a runner that imported it reports it."""
+        folder = self.manifest.parent
+        digest = hashlib.sha256()
+        for path in sorted(folder.rglob('*.py')):
+            if '__pycache__' not in path.parts:
+                digest.update(str(path.relative_to(folder)).encode() + b'\0' + path.read_bytes() + b'\0')
+        return digest.hexdigest()[:12]
 
     @staticmethod
     def version_of(files: dict[str, str]) -> str:

@@ -38,6 +38,7 @@ pages are what was built from them.
 | 05 Tokens and parts | none | Colours, type, controls, step nodes in each state, edge styles. |
 | 06 Trace and metrics | `#/metrics` | Where to find what is slow. The overview, filterable by agent, or one run, which names its agent: voice to voice, LLM first token and TTS first audio at p90, errors, every turn's requests with anything over its limit flagged, and latency by model (a model swapped between runs is two rows). Section 5. |
 | 09 How a call runs | section 6 | Browser, studio, runners, Redis then Postgres, Jaeger. |
+| 10 Agent facts (and 10b at phone width) | `#/agents/<agent>/facts/<fact>` | What the agent keeps track of on a call: its state, which the studio calls its **facts** everywhere. Each fact a card, grouped by who fills it in (the caller, a tool, the call's opening): its name in plain words, its kind in words, what it means to the model, where it is used. A fact's detail, adding one, and the empty, error and "edit in code" states. Section 2, "Editing the facts". |
 
 The inspector starts with the conversation and the state open, and expands to the model and the step. Each
 section opens and closes on its own.
@@ -121,6 +122,45 @@ The file on disk is the source of truth; every form on the config page edits it.
    `agent_configs`.
 
 Every run records the version it ran on, so a run can always be shown with the config it used.
+
+### Editing the facts (built)
+
+The facts are the fields of the state model `state:` names, in Python, so the studio edits code here, and
+proves every edit the way it proves a YAML one:
+
+1. **Read.** `studio.agents.facts`, inside the check's own process, reads each field's real annotation:
+   `core.Phone` is a phone number, `core.Quoted` the caller's own words, `Annotated[date, core.NotPast]` a
+   date not in the past, a nested model a group of details, a union "a time, or one of: morning,
+   afternoon, evening". A validator the application wrote is shown read-only, with what its error says
+   and, from the locale's `refusals`, what the caller hears. Where a fact is used comes from the manifest
+   and the compiled operations (`binds`, `paths`, `assign`), the prompts that name `state.facts.<it>` and
+   any other module that names it.
+2. **Edit.** `studio.agents.state_source` finds the class with `ast` and replaces the text span of one
+   field's statement, adds one at the end of the class (and a name to an import when a new kind needs
+   it), or removes one with its note. What can change: a description (a prompt change: the model reads
+   it, and the page says a live check is wise), the choices of an inline `Literal`, limits on plain text
+   and numbers, whether a plain fact may be empty (with a starting value when it may not), the steps
+   that fill it in (`fields:` and that step's `context.facts`, line by line), a new fact from ten kinds,
+   and removing one that nothing uses. Everything else says "edit in code" and why: choices defined in
+   another module, a kind made of two kinds, a rule written in code.
+3. **Prove**, on a copy, before anything is written: the new module differs from the old in that fact and
+   its imports only (compared as `ast`); `FlowSpec.problems()` on the copy is empty; the state's JSON
+   schema is the old one with exactly that change, the fact's own schema rebuilt by Pydantic from the
+   edit itself, never from the edited code; and the steps that fill it in are the ones asked for.
+4. **Version and carry.** The config version includes the state module, so a saved fact is a new version.
+   A runner imports code once: it says which code it carries for each agent when it links, refuses a call
+   once the code on disk changed, and the studio places runs only on runners with the code on disk. After
+   a save the studio starts a new runner of its own, waits until it is ready, then lets the old one finish
+   its calls (at most its drain limit) and stop: a run started before the change keeps the facts it began
+   with. A runner started by hand (`slng studio runner`) is not restarted; runs of that agent are refused
+   with words until it is.
+5. **Going back** to a turn saved with facts the agent no longer has is checked against the facts as they
+   are now: the page says which facts are gone and offers to leave them out, and the agent's types refuse
+   anything that no longer fits, by its name.
+
+A rename is not offered: past runs saved under the old name could no longer go back, and code that reads a
+fact by name (a choice function, an operation's alias) cannot all be found and proved. Adding the new fact,
+moving its uses and removing the old one does it, each step proved.
 
 One rule from this repository applies: **prompts are moved, not edited, without a live check**
 (`CLAUDE.md`). The studio makes editing a prompt easy, so it must also make the rule visible: a version

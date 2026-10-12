@@ -5,10 +5,13 @@ The studio and two runners, all in this process on real sockets, the salon's flo
 * both runners link to the studio and say they are ready; calls are spread over them;
 * a text run from the studio greets, takes turns, and every event reaches the studio's store in order,
   with a snapshot per turn; the Runs list filters by agent;
-* going back to a turn carries on from its state, with an edit the salon's types accept; an edit they
-  refuse opens nothing, and no run is listed for it;
+* going back to a turn carries on from its facts, with an edit the salon's types accept; an edit they
+  refuse opens nothing, and no run is listed for it; a turn saved with a fact the agent no longer has is
+  refused by that fact's name;
 * a runner told to stop takes no new calls (the studio places them on the other one) and finishes the
-  call it has.
+  call it has;
+* a runner whose agent's code changed on disk since it started (a fact saved) refuses that agent's calls,
+  and says which code it carries when it links.
 
 Scripted models prove runtime properties, never language understanding.
 """
@@ -108,7 +111,7 @@ async def main() -> None:
         servers.append(await serve(app, port))
     api = httpx.AsyncClient(base_url=f'http://127.0.0.1:{studio_port}', timeout=30)
     try:
-        await scenario(api, runners)
+        await scenario(api, runners, studio.state.studio)
     finally:
         await api.aclose()
         for server, task in reversed(servers):
@@ -117,7 +120,7 @@ async def main() -> None:
                 await task
 
 
-async def scenario(api: httpx.AsyncClient, runners: list[Any]) -> None:
+async def scenario(api: httpx.AsyncClient, runners: list[Any], studio: Studio) -> None:
     async def both_ready():
         listed = (await api.get('/api/runners')).json()
         return len([r for r in listed if r['ready']]) == 2 and listed
@@ -209,6 +212,17 @@ async def scenario(api: httpx.AsyncClient, runners: list[Any]) -> None:
     assert len((await api.get('/api/runs?agent=sage-and-stone')).json()) == 2, (
         'nothing opened for a refused edit'
     )
+    older = await studio.store.snapshot(run, 1)
+    assert older is not None
+    older['facts'] = older['facts'] | {'hair_length': 'long'}
+    await studio.store.save_snapshot(run, 99, older)
+    gone = await api.post(
+        '/api/runs',
+        json={'agent': 'sage-and-stone', 'channel': 'text', 'resume_from': {'run': run, 'turn': 99}},
+    )
+    assert gone.status_code == 422, gone.text
+    assert gone.json()['detail']['refused'][0]['loc'] == ['hair_length'], gone.json()
+    assert gone.json()['detail']['refused'][0]['type'] == 'extra_forbidden', 'a fact the agent no longer has'
 
     holder = next(r for r in runners if run in r.calls)
     other = next(r for r in runners if r is not holder)
@@ -279,9 +293,46 @@ async def a_saved_config_reaches_the_next_call():
     )
 
 
+async def old_code_is_refused():
+    """A runner carries the code it imported: once an agent's module changes on disk, its calls are refused with words."""
+    import shutil
+    import tempfile
+
+    from fastapi import HTTPException
+
+    from studio.agents.configs import AgentConfig
+    from voice_runner.runner import CodeFiles
+
+    folder = Path(tempfile.mkdtemp()) / 'salon'
+    shutil.copytree(
+        ROOT / 'use-cases' / 'salon' / 'salon', folder, ignore=shutil.ignore_patterns('__pycache__')
+    )
+    model = FunctionModel(stream_function=scripted)
+    entry = replace(
+        salon_entry(), manifest=folder / 'agent.yaml', compile=lambda spec: spec.compile(model=model)
+    )
+    runner = Runner(RunnerSettings(warm=False), [Found(folder.parent, 'salon', entry)])
+    runner.flows[entry.id] = entry.recompile()
+    said = runner.hello()['code'][entry.id]
+    assert said == AgentConfig(folder / 'agent.yaml').code() == CodeFiles(folder).digest(), (
+        'the runner and the studio name the same code the same way'
+    )
+    await runner.flow_for(entry.id, 'v1')
+    state = folder / 'state.py'
+    state.write_text(state.read_text() + '\n# a fact saved\n')
+    try:
+        await runner.flow_for(entry.id, 'v2')
+    except HTTPException as error:
+        assert error.status_code == 409 and 'code changed' in str(error.detail), error.detail
+    else:
+        raise AssertionError('a runner with old code took the call')
+
+
 if __name__ == '__main__':
     asyncio.run(main())
     asyncio.run(a_saved_config_reaches_the_next_call())
+    asyncio.run(old_code_is_refused())
     print(
-        'runner ok: two runners linked, runs placed and stored, gone back with an edit, a runner stopping, a saved config'
+        'runner ok: two runners linked, runs placed and stored, gone back with an edit, a runner stopping, '
+        'a saved config, old code refused'
     )

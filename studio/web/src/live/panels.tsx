@@ -76,9 +76,9 @@ export function ModelPanel({ requests, last = 6 }: { requests: Request[]; last?:
   );
 }
 
-/** The application's state as it stands, drawn from its model's schema, with what the last change touched marked. */
+/** The facts as they stand (the application's state), drawn from its model's schema, with what the last change touched marked. */
 export function StatePanel({ state, changed, schema }: { state: Record<string, unknown>; changed: string[]; schema?: Schema }) {
-  if (!Object.keys(state).length) return <p className="empty">No state yet.</p>;
+  if (!Object.keys(state).length) return <p className="empty">No facts yet.</p>;
   return <ModelView value={state} schema={schema} changed={changed} />;
 }
 

@@ -43,7 +43,7 @@ def gen(
     return Obs(id_, parent, 'GENERATION', name, at(start), at(end), model, input, None, usage)
 
 
-def harness_call() -> list[Obs]:
+def core_call() -> list[Obs]:
     """Three caller turns, one of them with no model request at all."""
     return [
         Obs('conv', None, 'SPAN', 'conversation', at(0), at(30)),
@@ -114,7 +114,7 @@ def livekit_call() -> list[Obs]:
 
 
 def counts_every_request_once():
-    call = read_call('harness', harness_call())
+    call = read_call('core', core_call())
     assert call.caller_turns == 3
     assert dict(call.completed) == {'classifier': 2, 'step': 2}, call.completed
     assert call.cancelled == 1, 'a request with no usage is cancelled or unreported, not zero tokens'
@@ -125,14 +125,14 @@ def counts_every_request_once():
 
 
 def reads_the_audit_of_a_write():
-    call = read_call('harness', harness_call())
+    call = read_call('core', core_call())
     (write,) = call.writes
     assert (write.name, write.status, write.heard_before) == ('save_booking', 'ok', 'Yes.'), write
     assert call.tasks == 1 and call.unmatched() == []
-    lines = summary('harness', [call])
+    lines = summary('core', [call])
     assert any('1 of 1 writes that needed a yes answered a question' in line for line in lines), lines
 
-    unasked = [o for o in harness_call() if o.id != 'w1']
+    unasked = [o for o in core_call() if o.id != 'w1']
     unasked.append(
         Obs(
             'w2',
@@ -156,20 +156,18 @@ def reads_the_audit_of_a_write():
             },
         )
     )
-    assert len(read_call('harness', unasked).unmatched()) == 1, (
-        'a question put this same turn answers nothing'
-    )
+    assert len(read_call('core', unasked).unmatched()) == 1, 'a question put this same turn answers nothing'
 
     def operation(about: str) -> list[Obs]:
         """Session 4's audit: the operation is asked about under its own name."""
         audit: dict[str, object] = {'action': 'book_appointment', 'about': about, 'question': 'Shall I book?'}
         audit |= {'asked_turn': 8, 'turn': 9, 'heard': 'yes please', 'status': 'ok'}
         write = Obs('w3', 't3', 'SPAN', 'write', at(20.1), at(20.2), attrs={'write.audit': json.dumps(audit)})
-        return [o for o in harness_call() if o.id != 'w1'] + [write]
+        return [o for o in core_call() if o.id != 'w1'] + [write]
 
-    booked = read_call('harness', operation('book_appointment'))
+    booked = read_call('core', operation('book_appointment'))
     assert booked.tasks == 1 and booked.unmatched() == [], booked.writes
-    assert len(read_call('harness', operation('lookup_customer')).unmatched()) == 1, (
+    assert len(read_call('core', operation('lookup_customer')).unmatched()) == 1, (
         'a yes to the number read-back never books'
     )
 
@@ -181,7 +179,7 @@ def an_unmapped_write_is_consent_unknown_not_consent_free():
         audit = {'action': action, 'about': about, 'question': 'Is that your number?', 'asked_turn': 5,
                  'turn': 6, 'heard': "that's", 'status': 'ok'} | extra  # fmt: skip
         obs = Obs('w', 't3', 'SPAN', 'write', at(20.1), at(20.2), attrs={'write.audit': json.dumps(audit)})
-        return read_call('x', [o for o in harness_call() if o.id != 'w1'] + [obs])
+        return read_call('x', [o for o in core_call() if o.id != 'w1'] + [obs])
 
     native = write('confirm_customer', 'phone')
     assert (
@@ -214,7 +212,7 @@ def pages_every_trace_of_a_session():
 
 
 def a_saved_observation_reads_back_the_same():
-    for o in harness_call():
+    for o in core_call():
         assert from_json(json.loads(json.dumps(to_json(o)))) == o, o
 
 
@@ -228,10 +226,10 @@ def reads_livekit_the_same_way():
     assert write.status == 'unknown' and write.said_before == 'Shall I book it?' and call.tasks == 1
 
 
-def reads_the_harness_on_livekit_the_same_way():
-    """The harness on LiveKit: unmute-core's `turn` with LiveKit's own latency, the greeting a turn of its own."""
+def reads_core_on_livekit_the_same_way():
+    """Core on LiveKit: unmute-core's `turn` with LiveKit's own latency, the greeting a turn of its own."""
     call = read_call(
-        'harness-livekit',
+        'core-livekit',
         [
             Obs('conv', None, 'SPAN', 'conversation', at(0), at(30), attrs={'runtime': 'livekit'}),
             Obs('t1', 'conv', 'SPAN', 'turn', at(0), at(2), output='Hola, ¿en qué te ayudo?'),
@@ -281,10 +279,10 @@ def reads_the_harness_on_livekit_the_same_way():
 def splits_latency_into_turn_taking_and_answer():
     """The same split for both builds: from the work that answered to the first speech.
 
-    The harness's first piece started a run the caller then talked over; the
+    Core's first piece started a run the caller then talked over; the
     answer is timed from the piece that answered, not from that one.
     """
-    harness = [
+    built = [
         Obs('t', None, 'SPAN', 'turn', at(0), at(9), attrs={'turn.user_bot_latency_seconds': 4.4}),
         Obs('p', 't', 'AGENT', 'booking', at(1.0), at(1.4), attrs={'turn_pieces': '1'}),
         gen('x', 'p', 1.01, 1.4, {}),
@@ -297,11 +295,11 @@ def splits_latency_into_turn_taking_and_answer():
         gen('g', 't', 0.1, 0.9, {'input': 4000, 'output': 30}, name='llm', model='gemini-3.1-flash-lite'),
         Obs('s', 't', 'GENERATION', 'tts', at(0.8), at(1.2), 'sonic', 'Let me have a look.'),
     ]
-    (slow,) = read_call('harness', harness).turns
+    (slow,) = read_call('core', built).turns
     (fast,) = read_call('graph', graph).turns
     assert slow.answer is not None and abs(slow.answer - 1.0) < 1e-6, slow
     assert fast.answer is not None and abs(fast.answer - 0.7) < 1e-6, fast
-    lines = summary('both', [read_call('harness', harness), read_call('graph', graph)])
+    lines = summary('both', [read_call('core', built), read_call('graph', graph)])
     assert any('answer time (answering work to first speech): p50' in line for line in lines), lines
     assert any('turn taking): 1 of 2 turns' in line for line in lines), lines
 
@@ -311,11 +309,11 @@ def reports_what_it_cannot_measure():
     assert any('undefined, no task completed' in line for line in lines), lines
     assert any('latency: missing' in line for line in lines), lines
     assert quantile([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], 0.9) == 9.0
-    assert groups(['harness', 'CA1', 'CA2', '--', 'graph', 'trace:x']) == [
-        ('harness', ['CA1', 'CA2']),
+    assert groups(['core', 'CA1', 'CA2', '--', 'graph', 'trace:x']) == [
+        ('core', ['CA1', 'CA2']),
         ('graph', ['trace:x']),
     ]
-    for bad in ([], ['harness'], ['harness', 'CA1', '--']):
+    for bad in ([], ['core'], ['core', 'CA1', '--']):
         try:
             groups(bad)
         except SystemExit:
@@ -333,7 +331,7 @@ def a_tool_call_is_dropped_only_for_its_own_audit():
              'asked_turn': 2, 'turn': 3, 'heard': 'Yes.', 'status': 'ok'}  # fmt: skip
     own = Obs('w9', 'tb', 'SPAN', 'write', at(20.1), at(20.2), attrs={'write.audit': json.dumps(audit)})
     readback = json.dumps({'about': 'book_appointment', 'spoken': 'Shall I book a haircut, Friday at 9?'})
-    base = [o for o in harness_call() if o.id != 'w1']
+    base = [o for o in core_call() if o.id != 'w1']
     pair = read_call('x', [*base, tool('tb', 'book_appointment', 'booked'), own])
     assert [(w.name, bool(w.audit)) for w in pair.writes] == [('book_appointment', True)], (
         'a tool call and the write below it are one write'
@@ -360,10 +358,10 @@ def a_tool_call_is_dropped_only_for_its_own_audit():
     )
 
 
-HARNESS_USAGE = [
+CORE_USAGE = [
     (3235, 23), (3230, 10), (3118, 31), (3079, 8), (2628, 8), (1493, 31), (1449, 29), (1433, 10), (1340, 27),
 ]  # fmt: skip
-"""The nine requests of harness trace 3771f9b3 as Langfuse stored them: each input and output, which Gemini's
+"""The nine requests of core trace 3771f9b3 as Langfuse stored them: each input and output, which Gemini's
 `text_prompt_tokens` and `text_candidates_tokens` repeated."""
 NATIVE_USAGE = [
     (554, 3681, 57), (528, 3687, 16), (4169, 0, 40), (4011, 0, 32), (3537, 0, 7),
@@ -382,11 +380,11 @@ def usage_is_counted_once():
     before = [
         gen(f'h{i}', 't', i, i + 0.5, {'input': i_, 'output': o, 'text_prompt_tokens': i_,
             'text_candidates_tokens': o, 'total': 2 * (i_ + o)})
-        for i, (i_, o) in enumerate(HARNESS_USAGE)
+        for i, (i_, o) in enumerate(CORE_USAGE)
     ]  # fmt: skip
-    harness = read_call('harness', [Obs('t', None, 'SPAN', 'turn', at(0), at(60)), *before])
-    assert (harness.input_tokens, harness.output_tokens, harness.cancelled) == (21005, 177, 0), harness
-    assert harness.input_tokens + harness.output_tokens == 21182
+    counted = read_call('core', [Obs('t', None, 'SPAN', 'turn', at(0), at(60)), *before])
+    assert (counted.input_tokens, counted.output_tokens, counted.cancelled) == (21005, 177, 0), counted
+    assert counted.input_tokens + counted.output_tokens == 21182
     assert sum(o.usage['total'] for o in before) == 42364, "Langfuse's own total for the same requests"
 
     stored = [
@@ -441,7 +439,7 @@ def main():
     pages_every_trace_of_a_session()
     a_saved_observation_reads_back_the_same()
     reads_livekit_the_same_way()
-    reads_the_harness_on_livekit_the_same_way()
+    reads_core_on_livekit_the_same_way()
     splits_latency_into_turn_taking_and_answer()
     reports_what_it_cannot_measure()
     print('ledger ok')

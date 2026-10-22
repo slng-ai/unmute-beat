@@ -166,9 +166,9 @@ def collect_reads_jaegers_query_api():
         return otlp(call(), call('tr2', agent='faro'))
 
     found = MetricsReader(Jaeger('http://127.0.0.1:16686', fetch)).collect()
-    assert asked[0].startswith(
-        'http://127.0.0.1:16686/api/v3/traces?query.service_name=slng-voice-harness&'
-    ), asked
+    assert asked[0].startswith('http://127.0.0.1:16686/api/v3/traces?query.service_name=slng-voice-core&'), (
+        asked
+    )
     assert 'query.num_traces=50' in asked[0] and 'query.attributes' not in asked[0], asked
     assert found.scope == 'overview' and found.summary.runs == 2 and found.summary.turns == 4
     assert {r.agent for r in found.runs} == {'sage-and-stone', 'faro'}

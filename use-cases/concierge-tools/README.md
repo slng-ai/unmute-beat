@@ -17,7 +17,7 @@ traces.
 uv run python -m coval_sim plan --agency salon --agent JxGgSPA55DcFcDcvbKAUQM \
     --test-set kQ8b6nMZ --persona MUFJdYAHdBHU6UbRRu4ykM --max-simulations 1 --label session-2
 uv run python -m coval_sim run  ...the same arguments...    # launches it, billable
-uv run ledger.py harness CA... -- graph trace:...          # cost of calls, from traces
+uv run ledger.py core CA... -- graph trace:...          # cost of calls, from traces
 uv run python audio_timing.py call.wav                     # who spoke when, from a Coval recording
 ```
 
@@ -32,20 +32,20 @@ launched again until its lines are removed by hand. A local timeout exits 3:
 still running, not failed, not cancelled. Each simulated call is capped at 180 s
 by `bot.py` (`MAX_CALL_SECONDS`), because Coval has no call-length limit.
 
-A Coval agent named `voice-harness-<agency>-pipecat` calls the folder
-`use-cases/<agency>`, so `voice-harness-salon-pipecat` calls `use-cases/salon`.
+A Coval agent named `voice-core-<agency>-pipecat` calls the folder
+`use-cases/<agency>`, so `voice-core-salon-pipecat` calls `use-cases/salon`.
 Create the baseline's agent with
 `uv run python -m coval_sim add salon-prompt`.
 
 ### On LiveKit
 
-A Coval agent named `voice-harness-<agency>-livekit` calls the same use case
+A Coval agent named `voice-core-<agency>-livekit` calls the same use case
 running as a LiveKit worker. Only a use case on core can (salon,
 faro-language-learning, nosh, wasla, kestrel); salon-prompt,
 salon-pipecat-flows and graph are Pipecat only.
 
 ```bash
-uv run python -m coval_sim add salon --livekit     # creates voice-harness-salon-livekit (type livekit)
+uv run python -m coval_sim add salon --livekit     # creates voice-core-salon-livekit (type livekit)
 uv run python -m coval_sim plan --agency salon --agent <its ID> --test-set <ID> --persona <ID> \
     --max-simulations 1 --label session-1 --profile <speech-profile.env>
 uv run python -m coval_sim run  ...the same arguments...    # billable

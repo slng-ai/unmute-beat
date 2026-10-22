@@ -1,4 +1,4 @@
-"""slng-voice-core: a conversation runtime for voice agents, on Pydantic AI and Pydantic Graph.
+"""Unmute Beat (slng-voice-core): structured conversations for voice agents, on Pydantic AI and Pydantic Graph.
 
 The public boundary, in the order an application uses it:
 

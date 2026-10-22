@@ -195,7 +195,7 @@ class _Usage:
     it (Pydantic AI 2.46.0 folds tool-use prompts into `input_tokens` and
     thoughts into `output_tokens`). Langfuse's OTel ingestion keeps every
     `gen_ai.usage.details.X` as a usage type `X` of its own and makes the total
-    the sum of all usage types, so a harness request of 1,449 in and 29 out was
+    the sum of all usage types, so a core request of 1,449 in and 29 out was
     stored as 2,956 tokens. `langfuse.observation.usage_details`, when present,
     replaces that mapping entirely, so the request's usage is said once there.
 
@@ -352,7 +352,7 @@ class _Speech(SpanProcessor):
         """The conversation, read back off the spans already carrying it.
 
         Pipecat's `conversation` and `turn` spans have no input or output of
-        their own: the LLM service that would fill them is the one this harness
+        their own: the LLM service that would fill them is the one core
         replaced, so Langfuse rendered the root of every call empty, and v4 asks
         for the whole request and response exactly there.
 
@@ -434,7 +434,7 @@ def setup(session: str = '', trace_name: str = '', *, agent: str = '', run: str 
         print('warning: LANGFUSE_PUBLIC_KEY unset, traces are going nowhere', file=sys.stderr)
         return
 
-    attributes = {'service.name': 'slng-voice-harness'}
+    attributes = {'service.name': 'slng-voice-core'}
     if environment := os.getenv('LANGFUSE_TRACING_ENVIRONMENT'):
         attributes['deployment.environment'] = environment
     provider = TracerProvider(resource=Resource.create(attributes))

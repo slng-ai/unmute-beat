@@ -2,7 +2,7 @@
 
 This folder is the salon built on Pipecat's own flows: a `FlowConfig` in
 `flow.yaml`, joined to direct functions in `graph_salon/handlers.py`, run by
-`FlowManager`. It keeps the harness's guarantees, written as plain
+`FlowManager`. It keeps core's guarantees, written as plain
 application code. It imports no `core` and no Pydantic AI.
 
 The diary, receipts, phone shape, voice rules and knowledge in `salon/` are
@@ -12,12 +12,12 @@ as the salon's `bot.py` (`use-cases/salon`). So a Coval run or a comparison with
 differ:
 
 - The model is `gemini-3.1-flash-lite`, because Pipecat's Gemini service has
-  problems with the harness's 3.5 flash lite.
+  problems with core's 3.5 flash lite.
 - Smart-turn's silence fallback is 1.5 s, not Pipecat's 3 s
   (`TURN_STOP_SECS` in `bot.py`).
 
 It answers one question from `UNMUTE_V1.md`: can native Pipecat do what the
-typed-flow harness does? The research said "yes, with application code". This
+typed agentic node in core does? The research said "yes, with application code". This
 is that application code.
 
 ## How to run it
@@ -102,27 +102,27 @@ flowchart LR
 |---|---|
 | Consent is owned by code | `SalonCall.approve`: a proposal exists, the yes came in a later caller turn, from the same verified number. The proposal is taken off the table, so it authorises once. |
 | One action per reply | `SalonCall.claim`: a second action on the node the last one ran on, with no move in between, is the same reply. Pipecat moves only after every call in a reply has finished. |
-| Turn budget | `SalonCall.over_budget`: eight tool calls per caller turn, like the harness's `TurnBudget`. Past that, the node's `_listen` twin speaks a fixed line. |
+| Turn budget | `SalonCall.over_budget`: eight tool calls per caller turn, like core's `TurnBudget`. Past that, the node's `_listen` twin speaks a fixed line. |
 | Prerequisite and resume | `handlers.entering`. A carrier number is read back by code, and with none, code asks for the number. A diary read asked for before verification is run by code after it. |
 | Tool arguments validated | Each tool's arguments are a Pydantic model. Its JSON schema is what the model sees. `model_validate` runs before anything else. |
 | Service answers validated | Every diary answer is validated into `salon/models/receipts.py` before a field is read. |
 | Done only on evidence | `CallState.appointment` and `CallState.complaint` hold receipts, never flags. |
 | State replaced whole | `SalonCall.commit`: one validated, frozen `CallState`, or nothing. |
-| Speech from receipts | `speech.py` words every read-back and receipt, in the harness's words. The tests check they stay the same. |
+| Speech from receipts | `speech.py` words every read-back and receipt, in core's words. The tests check they stay the same. |
 | No unbacked claims | `ClaimFilter` drops a first-person claim unless a receipt landed this turn, and always drops a model copy of a line only code says (`SCRIPTED`), with the rest of that reply. |
 | No silent turn | `EmptyReplyGuard`: an empty reply, or one the filter emptied, is run again once, then a fixed line. A reply the caller cut short by talking on is not empty: their turn brings the next one. |
 | Each answer spoken once | A second `answer` to a question another reply already settled returns `NO_RESPONSE`: no move, no model run. |
 | No frozen node change | The `say` action. The tests enter every node on a pipeline that never runs, where `tts_say` would hang. |
 | A write survives a barge-in | Pipecat's default `cancel_on_interruption=False`, and each write carries the proposal's token, so a retry writes once. |
-| Trace parity | `Write.run` leaves the harness's `write` span, so the ledger matches each write to its question. |
+| Trace parity | `Write.run` leaves core's `write` span, so the ledger matches each write to its question. |
 
 ## What is left out, on purpose
 
 - Held approval across a detour. A detour drops the proposal, and the caller is asked again.
 - Joining a caller's paused speech into one turn. Pipecat's own endpointing decides.
 - Zero-model approvals. Each approval costs one `confirm` request. The ledger shows the price.
-- The complaint excerpt check. The harness refuses a summary that does not quote the caller. Here the prompt asks for it.
-- Rotating receipt lines. Each receipt has one wording, the first of the harness's.
+- The complaint excerpt check. Core refuses a summary that does not quote the caller. Here the prompt asks for it.
+- Rotating receipt lines. Each receipt has one wording, the first of core's.
 
 ## What came from the generated example
 

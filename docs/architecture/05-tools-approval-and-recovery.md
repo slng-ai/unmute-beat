@@ -1,6 +1,6 @@
 # 05 — Operations, approval and recovery
 
-“Please do it,” “I sent the request,” and “It is done” are three different things. This chapter explains how the harness keeps them separate when an agent uses a tool.
+“Please do it,” “I sent the request,” and “It is done” are three different things. This chapter explains how core keeps them separate when an agent uses a tool.
 
 There are three records to remember:
 

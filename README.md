@@ -1,13 +1,126 @@
-# SLNG Voice Harness
+# Unmute Beat
 
-A runtime for voice agents that keeps the conversation correct. Pipecat still does the audio: transport, turn
-taking, speech-to-text (STT) and text-to-speech (TTS). The harness sits where Pipecat's LLM service would, and runs
-the conversation between what the caller said and what the bot says back.
+**Structured conversations for voice agents: an agentic LLM node for Pipecat and LiveKit Agents.**
 
-The package is [`slng-voice-core`](core/pyproject.toml), imported as `core`. It has no business logic of its own.
-An application brings five things: a state model, operations, choice functions, prompts and a manifest
-(`agent.yaml`). The first part of this README explains how to build any application this way. The second part shows
-the reference application, a hair salon that books, moves and cancels appointments.
+Most voice agents are one long prompt and a list of tools. The model is asked to remember every rule on every turn:
+who the caller is, what was offered, what is waiting for a yes, what already happened. When it forgets one, the
+caller gets a double booking, a change they never agreed to, or a confident "done" for something that never ran.
+
+Unmute Beat gives the conversation a structure instead. The call is a graph of small jobs, each with its own focused
+agent. The rules live in code, so they hold on every turn, whatever the model says.
+
+The package is `slng-voice-core`, imported as `core`. Put it in the slot where your voice framework would call an
+LLM. In Pipecat that is the LLM service in the pipeline. In LiveKit Agents it is the agent's `llm_node`. The
+framework keeps doing the audio: transport, voice activity detection, turn taking, speech-to-text (STT) and
+text-to-speech (TTS). Unmute Beat runs the conversation: between what the caller said and what the bot says back.
+
+```mermaid
+flowchart LR
+    subgraph Pipecat
+        PIn["transport · STT · turn taking"] --> PNode["core.processor.PydanticAgentProcessor"] --> POut["TTS · transport"]
+    end
+    subgraph LiveKit["LiveKit Agents"]
+        LIn["room · VAD · STT · end of turn"] --> LNode["core.livekit.FlowAgent.llm_node"] --> LOut["TTS · room"]
+    end
+    PNode --> Engine["Unmute Beat: a Pydantic Graph of Pydantic AI agents"]
+    LNode --> Engine
+```
+
+## One prompt, or a structured conversation
+
+| | One prompt with tools | A structured conversation (Unmute Beat) |
+|---|---|---|
+| **Where the rules live** | In the prompt, as instructions the model may skip | In code, checked on every turn |
+| **What the model sees** | Every rule, tool and fact, on every request | Only the current job's prompt, facts and outputs |
+| **What the model returns** | Free text and tool calls, parsed after the fact | One typed, validated decision |
+| **Moving between topics** | Wherever the model drifts | Only along the edges the graph declares |
+| **Making a change** | When the model decides to call the tool | Only after a read-back the caller heard in full, and a yes to that exact question |
+| **A lost answer from the backend** | Often retried, sometimes done twice | Tracked as an intent and reconciled, never sent twice |
+| **Words the bot already knows** | A model request each time | Said by code: offers, questions, read-backs, receipts, goodbyes |
+
+## What it is
+
+A plain LLM node takes the conversation so far and returns text. Unmute Beat's node is **agentic**, and it is
+**a graph**:
+
+- **A graph of small agents.** A call is a [Pydantic Graph](https://ai.pydantic.dev/graph/). Each node of the graph
+  does one job the caller wants done, such as "book", "move" or "cancel", and has its own
+  [Pydantic AI](https://ai.pydantic.dev/) agent, prompt, tools and visible facts. The graph declares the legal moves
+  between nodes, and refuses any other.
+- **Typed from end to end.** The call's state is your own Pydantic model. Every model answer is one typed decision,
+  validated before anything happens.
+- **The same brain on both frameworks.** One turn engine (`core.turn`) runs every caller turn. Pipecat and LiveKit
+  each get a thin adapter around it, and one `bot.py` runs on either.
+
+You describe the graph in one file, `agent.yaml`: the nodes, what each may see and change, and how they connect.
+It is checked when it loads, before any call or model request.
+
+## What you get from it
+
+| Benefit | How the structure gives it |
+|---|---|
+| **Nothing changes without consent** | A change is read back first. It runs only on a yes to that exact read-back, and only after playback evidence (Twilio marks, the browser's report) shows the caller heard it in full. |
+| **Correct state** | The state is validated as one whole model on every change, or nothing changes. A pick must be one that was offered. |
+| **Safe writes** | Every business action is an intent with an id. A lost answer is reconciled with the backend, and an action whose outcome is unknown is never sent again unless the backend deduplicates it. |
+| **Fewer, cheaper requests** | Code says every line it already knows: offers, questions, read-backs, receipts and goodbyes. The target is one model request per caller turn, with a small prompt and schema. |
+| **Mistakes stay contained** | Each node sees only its own facts, history and outputs. A wrong reading in the moving node cannot book. |
+| **Real voice behaviour** | A caller who talks over the bot, pauses mid-sentence or answers before a question finished playing is handled by the turn engine, the same way on both frameworks. |
+| **Testable offline** | Drive the real graph with a scripted model, with no provider request, and check the backend's end state. |
+| **Observable** | Every turn, request, intent and receipt is traced through OpenTelemetry (Langfuse or a local collector). |
+
+## Use it
+
+Install the package with the extra for your framework: `slng-voice-core[voice]` for Pipecat,
+`slng-voice-core[livekit]` for LiveKit Agents. Importing `core` alone loads no framework, so the same application
+code serves both.
+
+Load and compile the graph once per process, and open one call per caller:
+
+```python
+import core
+
+FLOW = core.load('shop/agent.yaml').compile()            # checks the graph and builds its agents
+call = FLOW.open(ShopState(), services=Shop(backend))    # one call: its own state, history and pending work
+```
+
+**In Pipecat**, the processor stands where the LLM service would:
+
+```python
+from core.processor import PydanticAgentProcessor, playout
+
+node = PydanticAgentProcessor(call, FLOW.nodes)
+pipeline = Pipeline([
+    transport.input(), stt, user_aggregator,
+    node,                                                 # instead of the LLM service
+    tts, transport.output(),
+    *playout(transport, call, echoes_marks=True, simulate=False),
+    assistant_aggregator,
+])
+```
+
+**In LiveKit Agents**, `FlowAgent` is an `Agent` whose `llm_node` runs the graph:
+
+```python
+from core.livekit import FlowAgent, playout
+
+agent = FlowAgent(call, FLOW.nodes)
+playout(call, simulate=False)
+await session.start(agent, room=ctx.room)
+agent.attach(session)                                     # wires playback evidence and the session's events
+```
+
+You rarely write either by hand. `core.launch.run_call` (Pipecat) and `core.livekit_launch.run_call` (LiveKit) build
+the whole call around your use case: speech services, VAD, playback evidence, the greeting and a call ceiling.
+A use case's `bot.py` is a few lines, and `core.voice.serve` picks the framework:
+
+```bash
+uv run bot.py              # Pipecat
+uv run bot.py livekit dev  # LiveKit Agents
+```
+
+Core has no business logic of its own. An application brings five things: a state model, operations, choice
+functions, prompts and a manifest (`agent.yaml`). The rest of this README explains how to build any application
+this way, then shows the reference application, a hair salon that books, moves and cancels appointments.
 
 ## How a turn works
 
@@ -60,7 +173,7 @@ other by the package name, such as `from shop.state import ShopState`. Each file
 | `prompts/*.md` | one prompt per node, plus shared prompts for the voice and the business rules |
 | `agent.yaml` | the nodes, what each may see and change, and how they connect |
 | `app.py` | loads the manifest once, and opens one call per caller |
-| `bot.py` | the Pipecat pipeline: copy it from the salon and change the import |
+| `bot.py` | the launcher for Pipecat and LiveKit: copy it from the salon and change the import |
 
 The steps below build a small example: a shop that takes an order. Every code block is a skeleton. The salon has
 the full, working version of each.
@@ -253,8 +366,8 @@ def open_call(flow: core.StepFlow, from_number: str, backend: Backend) -> core.F
 2. `open()` gives each caller a separate call, with its own state, history and pending work.
 3. `caller_id` fills the identity field from the carrier's number, when it is a real one.
 
-`bot.py` wires the call to Pipecat with `core.processor.PydanticAgentProcessor`. It also wires the playback
-evidence (Twilio marks, or the browser page's report), without which no read-back can be approved.
+`bot.py` wires the call to Pipecat with `core.processor.PydanticAgentProcessor`, or to LiveKit with
+`core.livekit.FlowAgent`. It also wires the playback evidence (Twilio marks, or the browser page's report), without which no read-back can be approved.
 
 ## Design the nodes
 

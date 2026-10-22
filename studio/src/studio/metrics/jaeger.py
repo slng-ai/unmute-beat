@@ -111,7 +111,7 @@ class Jaeger:
 
     UNITS: ClassVar[dict[str, int]] = {'m': 60, 'h': 3600, 'd': 86400}
 
-    def __init__(self, url: str, fetch: Fetch | None = None, service: str = 'slng-voice-harness') -> None:
+    def __init__(self, url: str, fetch: Fetch | None = None, service: str = 'slng-voice-core') -> None:
         self.url = url
         self.fetch = fetch or self.fetch_json
         self.service = service

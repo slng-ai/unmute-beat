@@ -1,6 +1,6 @@
 # 06 — Running on LiveKit
 
-The harness is the brain of a call. Pipecat and LiveKit Agents are two ways to give it ears and a mouth. This chapter explains how the brain plugs into LiveKit, what LiveKit tells it, and what is still missing.
+Core is the brain of a call. Pipecat and LiveKit Agents are two ways to give it ears and a mouth. This chapter explains how the brain plugs into LiveKit, what LiveKit tells it, and what is still missing.
 
 Read [chapter 01](01-stack-and-boundaries.md) first: everything there stays true. Only the media framework changes.
 
@@ -151,9 +151,9 @@ Readers: the studio's Metrics page (`studio.metrics.timings`), the ledger and `l
 
 ## 8. Plugging into unmute-core
 
-[unmute-core](https://github.com/slng-ai/unmute-core) is the shared runtime for Unmute's agents on LiveKit and Pipecat. It owns its own adapters (`unmute_core.livekit.UnmuteAgent`, `unmute_core.pipecat`) and one plug point for the model call (`ModelCall`). The harness can plug in at the same place on each side:
+[unmute-core](https://github.com/slng-ai/unmute-core) is the shared runtime for Unmute's agents on LiveKit and Pipecat. It owns its own adapters (`unmute_core.livekit.UnmuteAgent`, `unmute_core.pipecat`) and one plug point for the model call (`ModelCall`). Core can plug in at the same place on each side:
 
-| unmute-core | The harness |
+| unmute-core | Core |
 |---|---|
 | `UnmuteAgent.llm_node` sends one model request | `FlowAgent.llm_node` runs a whole caller turn |
 | `yield_to_caller` drops a reply the caller spoke over | `FlowAgent` drops it on words, never on a sound |
@@ -161,7 +161,7 @@ Readers: the studio's Metrics page (`studio.metrics.timings`), the ledger and `l
 | `interruption(backchannels)` | `livekit_launch.turn_handling` (interruption on, adaptive where LiveKit has it) |
 | Telemetry spans (`conversation`, `turn`, `stt`, `tts`) | the same spans on LiveKit (section 6); on Pipecat, Pipecat's own `turn` and the step spans |
 
-The proposal: unmute-core gets a second plug point beside `ModelCall`, a "brain" that owns a whole turn (`async def turn(words) -> segments`) plus the playback reports this chapter describes. `FlowAgent` already has that shape on LiveKit and `PydanticAgentProcessor` on Pipecat, so the harness would implement it twice with no change to `core.turn`. The pieces that must cross the seam are small: the words of a turn, a barge-in, a speech onset, and one playback report per segment.
+The proposal: unmute-core gets a second plug point beside `ModelCall`, a "brain" that owns a whole turn (`async def turn(words) -> segments`) plus the playback reports this chapter describes. `FlowAgent` already has that shape on LiveKit and `PydanticAgentProcessor` on Pipecat, so core would implement it twice with no change to `core.turn`. The pieces that must cross the seam are small: the words of a turn, a barge-in, a speech onset, and one playback report per segment.
 
 ## 9. Limits
 

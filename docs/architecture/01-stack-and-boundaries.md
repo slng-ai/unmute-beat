@@ -2,7 +2,7 @@
 
 Suppose someone calls a hair salon and says, “I need to move my appointment.” A voice application needs to understand the request, check who is calling, find the booking, offer new times, make the change only once the caller agrees, and say what happened.
 
-The **harness** is the reusable code that manages that conversation. The package is called `slng-voice-core`, and Python applications import it as `core`.
+**Unmute Beat** is the reusable code that gives that conversation a structure: an agentic LLM node, built on Pydantic AI and Pydantic Graph, that plugs into Pipecat or LiveKit Agents where their LLM would go. The package is called `slng-voice-core`, and Python applications import it as `core`; the rest of this guide calls it core.
 
 ## Start with four words
 
@@ -19,15 +19,15 @@ A **tool call** is the model asking for something to run. It is not the model re
 
 It is still an agent with tools. You could give an ordinary agent a prompt saying “find the booking, ask for approval, then move it.” You would also need code that remembers which change is awaiting approval, handles corrections and decides what to do if a tool's answer is lost.
 
-The harness provides those recurring rules so each application does not have to write them again:
+Core provides those recurring rules so each application does not have to write them again:
 
 | Part | Its job |
 |---|---|
 | Agent | Interpret the caller and choose a permitted next action |
 | Application functions | Look up information or make changes in the application's database or API |
-| Harness | Keep the call's state, check the action's requirements, track its outcome and continue the conversation |
+| Core | Keep the call's state, check the action's requirements, track its outcome and continue the conversation |
 
-For example, the agent can interpret “yes” as agreement. Core checks which question that reply answers and whether its read-back finished playing. The application's function moves the booking only after its declared requirements pass. A wrong interpretation of “yes” is still possible; the harness does not make language understanding perfect.
+For example, the agent can interpret “yes” as agreement. Core checks which question that reply answers and whether its read-back finished playing. The application's function moves the booking only after its declared requirements pass. A wrong interpretation of “yes” is still possible; core does not make language understanding perfect.
 
 A well-built ordinary agent can implement these rules too. The purpose of this package is to reuse their implementation across applications. It is not a claim that adding a graph automatically makes an agent faster or more accurate.
 
@@ -55,12 +55,12 @@ A conversation needs more than a language model. It also needs to hear the calle
 | TTS — text to speech | Turns the reply's words into audio |
 | Transport | Carries audio, such as a WebRTC browser connection or a Twilio phone call |
 
-Pipecat is the media framework used by the first integration, and LiveKit Agents the second ([chapter 06](06-livekit.md)). Each connects those components. The harness fits where the application would otherwise put its LLM service and conversation logic; it does not replace the framework's audio system.
+Pipecat is the media framework used by the first integration, and LiveKit Agents the second ([chapter 06](06-livekit.md)). Each connects those components. Core fits where the application would otherwise put its LLM service and conversation logic; it does not replace the framework's audio system.
 
 ```mermaid
 flowchart LR
     Caller["Caller audio"] --> Hear["Pipecat: hear words and detect turns"]
-    Hear --> Core["Harness: agent, state and flow"]
+    Hear --> Core["Core: agent, state and flow"]
     Core <--> Backend["Application functions and database"]
     Core --> Speak["Pipecat: turn reply into audio"]
     Speak --> Out["Caller hears the reply"]
@@ -78,7 +78,7 @@ This division helps explain faults. A pause being treated as finished speech is 
 
 An **application**, also called a use case, defines the actual job: what a support case or a lesson is, which changes are allowed and how to store them. Its **backend** is the database or external service that performs that work.
 
-| Application supplies | Harness does with it |
+| Application supplies | Core does with it |
 |---|---|
 | Named facts and their valid types | Remembers a separate, checked state for each call |
 | Prompts — written instructions for each agent | Runs the right agent for the current node |

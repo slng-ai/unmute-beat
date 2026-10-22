@@ -1,15 +1,15 @@
 """One ledger of model work, latency and writes, read the same way from every voice build's Langfuse traces.
 
-    uv run --env-file .env python -m ledger harness CA... CA... -- graph trace:a8b9... -- livekit trace:4808...
+    uv run --env-file .env python -m ledger core CA... CA... -- graph trace:a8b9... -- livekit trace:4808...
 
 Each group is a label and its calls. A call is `session:<id>` (a Twilio call
-sid is the harness's session), `trace:<id>`, or a bare id, read as a session.
+sid is core's session), `trace:<id>`, or a bare id, read as a session.
 Nothing is billed: it only reads traces.
 
 It knows four shapes of trace, and reads them with one set of rules:
 
-* the harness: Pydantic AI `chat ...` generations under Pipecat's `turn` span;
-* the harness on LiveKit: the same generations under unmute-core's `turn` span
+* core on Pipecat: Pydantic AI `chat ...` generations under Pipecat's `turn` span;
+* core on LiveKit: the same generations under unmute-core's `turn` span
   (`core.livekit.CallTrace`), which carries LiveKit's own measures;
 * Pipecat's own LLM service (the graph build, the one-prompt baseline): `llm`
   generations under `turn`;
@@ -22,35 +22,35 @@ The rules, each one a mistake made once by hand:
   `input_cached_tokens` and `input_cache_creation`, and its output `output`
   plus `output_reasoning_tokens`, counted once: Pydantic AI also reports the
   same tokens as `text_prompt_tokens`, and adding every key with "input" or
-  "prompt" in it counted every harness token twice (24 September). Harness
+  "prompt" in it counted every core token twice (24 September). Core
   traces before `core.observability._Usage` still carry those keys, and
   Langfuse's own total for them is doubled; this count is not.
 * A request with no usage at all was cancelled, or its usage never arrived.
   It is counted apart and never as zero tokens.
 * Requests that overlap in time are one step of the caller's wait: the
-  harness's readings run side by side. "Calls in a row" counts the steps.
+  core's readings run side by side. "Calls in a row" counts the steps.
 * Latency is Pipecat's `turn.user_bot_latency_seconds`, the caller's silence
   before the bot speaks, or unmute-core's `turn.e2e_seconds`, the same figure
   as LiveKit measured it. A LiveKit trace with neither has its latency
   estimated as the gap from the end of the user turn to the next
   `agent_speaking`, plus LiveKit's own `lk.end_of_turn_delay`, and marked so.
 * A caller turn is a `turn` span, except on unmute's own LiveKit build, which
-  counts LiveKit's `user_turn`s; on the harness on LiveKit (`runtime` is
+  counts LiveKit's `user_turn`s; on core on LiveKit (`runtime` is
   `livekit`) only a turn with the caller's words is one, since the greeting
   opens a turn of its own.
 * Latency is split in two. The answer time runs from the work that answered
-  (the harness's agent span for the last piece of the turn, or the graph
+  (core's agent span for the last piece of the turn, or the graph
   build's first model request) to the first speech sent to TTS: what the
   build itself took. The rest of the latency came before any
   work started, which is turn taking (smart-turn waiting out its ceiling on
   a caller it thought was still going). Every build is split the same way,
   so a slow build and a slow end-of-turn are told apart.
 * A write is a `save_booking` or `record_complaint` tool call, or a `write`
-  span: the harness leaves one per attempt (`core.operations`) with the
+  span: core leaves one per attempt (`core.operations`) with the
   question it answered, the one-prompt baseline one per diary write
   (`salon.baseline.written`) without. A task is a write that succeeded, or
   whose result the trace does not show (LiveKit records no output for its
-  tools). Only the harness's audit can be checked here; every other write
+  tools). Only core's audit can be checked here; every other write
   is listed with the lines before it, for a person to read.
 """
 
@@ -67,7 +67,7 @@ from typing import Any
 MODELS = ('gemini', 'gpt', 'claude')
 """A generation from one of these is a model request. STT and TTS generations are not."""
 CLASSIFIER = 'You classify the answer to a question'
-"""The first words of every harness classifier's instructions (`core.classifiers.TASK`)."""
+"""The first words of every core classifier's instructions (`core.classifiers.TASK`)."""
 TASKS = frozenset({
     'save_booking', 'record_complaint', 'save_name', 'activate_plan', 'record_answer',
     'book_appointment', 'move_appointment', 'cancel_appointment', 'create_learner', 'record_attempt',
@@ -265,7 +265,7 @@ def _text(value: Any) -> str:
 def _answer(pieces: list[datetime], first_request: datetime | None, speech: list[datetime]) -> float | None:
     """Seconds from the work that answered to the first speech after it, or None when either is missing.
 
-    The harness opens one agent span per piece of a caller turn; an earlier
+    Core opens one agent span per piece of a caller turn; an earlier
     piece's run is cancelled when the caller goes on, so the answer is timed
     from the last piece that started before the speech. A build with no such
     span (the graph build) is timed from its first model request.
@@ -315,10 +315,10 @@ def read_call(ref: str, observations: list[Obs]) -> Call:
         if (turn := turn_of(o)) is not None:
             per_turn.setdefault(turn.id, []).append(o)
 
-    harness_on_livekit = any(o.attrs.get('runtime') == 'livekit' for o in obs)
-    livekit = not harness_on_livekit and any(o.name == 'user_turn' for o in obs)
+    core_on_livekit = any(o.attrs.get('runtime') == 'livekit' for o in obs)
+    livekit = not core_on_livekit and any(o.name == 'user_turn' for o in obs)
     turns = [o for o in obs if o.name == 'turn']
-    if harness_on_livekit:
+    if core_on_livekit:
         call.caller_turns = sum(1 for o in turns if o.input)
     else:
         call.caller_turns = sum(1 for o in obs if o.name == 'user_turn') if livekit else len(turns)

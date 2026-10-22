@@ -3,7 +3,7 @@
 The salon on declarative Pipecat flows, with no model and no running
 pipeline: each node's tools are called the way `FlowManager` calls them,
 through the real `Flow` built from `flow.yaml`, so Pipecat's own branch
-tables decide every move. The guarantees the harness makes are checked here
+tables decide every move. The guarantees core makes are checked here
 too, the two processors between the LLM and TTS get real frames through
 Pipecat's `run_test`, and a real `FlowManager` enters every node.
 `python -m tests` runs it too.
@@ -517,7 +517,7 @@ def every_node_offers_at_most_one_write():
         assert len([n for n in names if n.startswith('ask_') or n == 'answer']) <= 1, names
 
 
-def it_stands_on_pipecat_not_on_the_harness():
+def it_stands_on_pipecat_not_on_core():
     for path in [*HERE.glob('graph_salon/*.py'), *HERE.glob('salon/**/*.py'), HERE / 'bot.py']:
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.ImportFrom) and node.module:
@@ -551,7 +551,7 @@ def main():
     every_placeholder_is_in_the_seeded_state()
     every_tool_can_speak_a_fixed_line_from_its_node()
     every_node_offers_at_most_one_write()
-    it_stands_on_pipecat_not_on_the_harness()
+    it_stands_on_pipecat_not_on_core()
     print('graph salon ok')
 
 

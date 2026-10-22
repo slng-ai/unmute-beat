@@ -39,9 +39,7 @@ def the_prompt_is_the_salons_own_words():
     prompt = baseline.system_prompt()
     assert 'Robin' in prompt and '## Opening hours' in prompt, 'voice rules and services are in the prompt'
     assert 'ask_booking' not in prompt, 'the baseline names only its own tools'
-    assert '## Actions' in prompt and 'runtime supplies' not in prompt, (
-        "the harness's Actions section is replaced"
-    )
+    assert '## Actions' in prompt and 'runtime supplies' not in prompt, "core's Actions section is replaced"
 
 
 def nothing_is_read_or_written_before_the_number_is_confirmed():

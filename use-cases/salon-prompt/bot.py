@@ -3,7 +3,7 @@
 The same pipeline as the salon's `bot.py`: STT, VAD, smart-turn, TTS and
 the transport. What stands between the aggregators and TTS is Pipecat's
 `GoogleLLMService` with one system prompt and the diary's tools
-(`salon/baseline.py`), not the harness.
+(`salon/baseline.py`), not core.
 
 Load .env before importing the services: they construct clients at import
 time, and those clients must see the configured credentials. The `.env` at

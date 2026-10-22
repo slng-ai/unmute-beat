@@ -11,10 +11,10 @@
     uv run python -m coval_sim serve --agency salon --phone-number +447427919928 --campaign c-1 --profile ...
         # a campaign on a real phone line: the salon's runner (`server.py`), and the number owned until
         # every call is over; each `run --host` job on it leaves the number alone
-    uv run python -m coval_sim add salon --livekit   # create voice-harness-salon-livekit, a Coval LiveKit agent
+    uv run python -m coval_sim add salon --livekit   # create voice-core-salon-livekit, a Coval LiveKit agent
     uv run python -m coval_sim run --agency salon --agent <its ID> ...   # the same job arguments, on LiveKit
 
-A Coval agent named voice-harness-<agency>-livekit calls the same use case
+A Coval agent named voice-core-<agency>-livekit calls the same use case
 running as a LiveKit worker (`bot.py livekit start`), for a use case on core
 only. `run` starts the worker under a name of its own for the job, waits until
 it has registered with `LIVEKIT_URL`, starts a token endpoint behind a
@@ -37,7 +37,7 @@ Coval and prints what `run` would launch, and how many calls that is; it
 launches nothing. `run` refuses anything `plan` refuses. Nothing is chosen for
 you: no test set means no job, not every job.
 
-A Coval agent named voice-harness-<agency>-pipecat calls the use case folder
+A Coval agent named voice-core-<agency>-pipecat calls the use case folder
 of that agency: the folder of that name. The agent is named by its ID and must be the agency's, so a test set
 shared with the baseline's agent can never launch against the baseline by
 accident.
@@ -121,7 +121,7 @@ WORKER_READY_S = 600
 GRAPH = 'graph'
 """The agency name of the baseline: the unmute graph build of the same salon, on Pipecat Flows.
 
-Coval calls it through its own agent, voice-harness-graph-pipecat, on the same
+Coval calls it through its own agent, voice-core-graph-pipecat, on the same
 test sets, so both builds answer the same cases.
 """
 GRAPH_BUILD = Path(
@@ -309,7 +309,7 @@ class Repository:
         for directory in (start, *start.parents):
             if (directory / 'use-cases').is_dir() and (directory / 'pyproject.toml').exists():
                 return cls(directory)
-        raise FileNotFoundError(f'no voice harness checkout at or above {start}')
+        raise FileNotFoundError(f'no voice core checkout at or above {start}')
 
     def dotenv(self) -> dict[str, str]:
         """The checkout's .env alone."""
@@ -799,7 +799,7 @@ class ReleaseCheck:
             The job's record: the token log, read after the run to bind each simulation to its room.
         """
         server = self.repo.livekit_server()
-        worker_name = f'voice-harness-{job.agency}-{uuid.uuid4().hex[:8]}'
+        worker_name = f'voice-core-{job.agency}-{uuid.uuid4().hex[:8]}'
         key = secrets.token_urlsafe(32)
         tokens = self.workdir / f'{job.agency}-tokens.jsonl'
         stack.enter_context(
@@ -1053,7 +1053,7 @@ class ReleaseCheck:
 
         The connection is replaced on every run, because each run gets a new
         tunnel host, so the placeholder never reaches a call. With
-        `on_livekit`, a Coval LiveKit agent (voice-harness-<agency>-livekit),
+        `on_livekit`, a Coval LiveKit agent (voice-core-<agency>-livekit),
         only for a use case on core.
 
         Raises:
@@ -1164,7 +1164,7 @@ def _parser() -> argparse.ArgumentParser:
     add.add_argument(
         '--livekit',
         action='store_true',
-        help='a Coval LiveKit agent (voice-harness-<agency>-livekit), for a use case on core',
+        help='a Coval LiveKit agent (voice-core-<agency>-livekit), for a use case on core',
     )
     return parser
 

@@ -11,9 +11,9 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 AGENT_NAME = re.compile(
-    r'^voice-harness-(?P<agency>[a-z][a-z-]*?)-(?:pipecat(?P<line>-twilio)?|(?P<livekit>livekit))$'
+    r'^voice-core-(?P<agency>[a-z][a-z-]*?)-(?:pipecat(?P<line>-twilio)?|(?P<livekit>livekit))$'
 )
-"""A Coval agent this tool drives is named after the flow it calls: voice-harness-salon-pipecat.
+"""A Coval agent this tool drives is named after the flow it calls: voice-core-salon-pipecat.
 The name is the whole link between the repository and Coval, so nothing here holds a Coval ID.
 The agency names the folder under `use-cases/` whose `bot.py` answers. A `-twilio`
 suffix names a Coval voice agent that dials a real Twilio number (`Agent.phone_line`).
@@ -69,7 +69,7 @@ class Agent(BaseModel):
     @staticmethod
     def name_for(agency: str, framework: str = 'pipecat') -> str:
         """The Coval agent name for a flow, on `pipecat` (Coval plays Twilio) or `livekit` (Coval joins a room)."""
-        return f'voice-harness-{agency}-{framework}'
+        return f'voice-core-{agency}-{framework}'
 
 
 class Persona(BaseModel):
@@ -128,7 +128,7 @@ class Simulation(BaseModel):
 
     @property
     def fallbacks(self) -> list[str]:
-        """The harness's own recovery lines the agent said: each one is a turn that went wrong.
+        """Core's own recovery lines the agent said: each one is a turn that went wrong.
 
         Matched on a fragment of each fixed line in `core/turn.py` (`STUMBLE`,
         `EXHAUSTED`), because Coval's transcript is its
@@ -207,9 +207,7 @@ class Run(BaseModel):
                 )
             elif not sim.agent_spoke:
                 problems.append(f'call {sim.simulation_id}: the agent never spoke')
-            problems += [
-                f'call {sim.simulation_id}: the harness said its {line} line' for line in sim.fallbacks
-            ]
+            problems += [f'call {sim.simulation_id}: core said its {line} line' for line in sim.fallbacks]
         metrics = self.results.metrics.items() if self.results else ()
         for metric_id, metric in metrics:
             for answer in metric.values:

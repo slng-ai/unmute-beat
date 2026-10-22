@@ -2,7 +2,7 @@
 
 Run: uv run python -m tests.defects
 
-Each check states the behaviour the harness should have. It prints
+Each check states the behaviour core should have. It prints
 `KNOWN DEFECT` and the session that owns the repair while the defect is still
 there, and `fixed` once it is gone. The exit code is the number of defects
 still present, so a repair can be seen landing, and then the check moves into

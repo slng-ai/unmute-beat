@@ -265,8 +265,8 @@ async def run_room(
 ) -> None:
     """One call in a connected room with its caller in it: build the session around the entry's flow and run it.
 
-    A LiveKit job's call (`run_call`), or one a process of its own placed in a room it joined itself (the
-    studio's runner): no job is needed. The room is the call's key, as a Twilio `callSid` is on Pipecat:
+    A LiveKit job's call (`run_call`), or one a process of its own placed in a room it joined itself:
+    no job is needed. The room is the call's key, as a Twilio `callSid` is on Pipecat:
     one Langfuse session per room. `caller_id` is the SIP caller's number when there is one, else
     `CALLER_ID`, a guess until the caller agrees. Outside a job, the speech services get an HTTP session
     of the call's own.
@@ -408,7 +408,7 @@ async def run_room(
 def room_token(room: str, identity: str, *, agent: bool = False, seconds: int = 3600) -> str:
     """A token to join `room` as `identity`, from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
 
-    A caller's token (a browser the studio placed in a room) may publish and subscribe; an agent's
+    A caller's token (a browser placed in a room) may publish and subscribe; an agent's
     (`agent=True`, the process that runs the call in that room) is also marked as an agent, so the room
     shows it as one. Raises `KeyError` naming the variable that is missing.
     """

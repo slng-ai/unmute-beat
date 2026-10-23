@@ -405,7 +405,7 @@ class CallTrace:
     `turn.eou_seconds` (how long end of turn waited), `turn.llm_ttft_seconds` (the node's first words,
     every model request before them included) and `turn.tts_ttfb_seconds`; an `stt` span's
     `metrics.ttfb` (the caller stopped, the final transcript) and a `tts` span's (its first text, its
-    first audio). A missing one is left out, never sent as 0. The studio's Metrics page and the
+    first audio). A missing one is left out, never sent as 0. The
     ledger read these as they read Pipecat's own `turn`, `stt` and `tts` spans.
     """
 

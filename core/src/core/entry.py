@@ -1,11 +1,11 @@
 """What a use case tells a launcher about itself: its flow, how to open a call, what to say first.
 
-Every launcher (a use case's `bot.py`, the studio's runner, a test) runs the same call
+Every launcher (a use case's `bot.py`, a runner, a test) runs the same call
 (`core.launch.run_call` for voice, `core.text_turn` for text) and needs the same five or six facts
 about the application. Each use case says them once, in its package's `entry.py`:
 
     ENTRY = core.Entry(
-        id=SPEC.id,                                   # the agent's id: on every span, in the studio
+        id=SPEC.id,                                   # the agent's id: on every span
         name='salon call',                            # what its traces are listed by
         flow=lambda: app.FLOW,                        # compiled on first use
         open=lambda flow, opening: app.open_call(flow, opening.caller_id, diary=DIARY, key=opening.key),
@@ -35,7 +35,7 @@ class Opening:
     Attributes:
         caller_id: The number the carrier (or the tester) gives: core fills a `core.Phone` identity
             with it.
-        key: The call's own key: its session, a carrier's CallSid, or the studio's run id.
+        key: The call's own key: its session, a carrier's CallSid, or a run id.
         settle: Which earlier calls are over (by key), for an application that settles what they
             still owe.
     """
@@ -50,8 +50,7 @@ class Entry:
     """One use case, as a launcher needs it. Nothing here runs at import: `flow` compiles when first asked.
 
     Attributes:
-        id: The agent's id, the manifest's own `id`: stamped on every span (`slng.agent.id`), named
-            in the studio.
+        id: The agent's id, the manifest's own `id`: stamped on every span (`slng.agent.id`).
         name: What its calls' traces are listed by: `salon call`.
         greeting: The opening line for this call, said by code: a string, or a question its first
             reply answers.

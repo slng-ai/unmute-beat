@@ -3,7 +3,7 @@
 Every use case's `bot.py` used to repeat this body and differ in five places: the greeting, the
 services, a hook when a call opens and one when it ends, the speech languages. Those five are now
 the use case's `entry.py` (`core.Entry`); this module is the rest, and `run_call` is the one function
-a `bot.py`, the salon's bounded `server.py` and the studio's runner all call.
+a `bot.py` and the salon's bounded `server.py` both call.
 
     transport.input() -> STT -> user aggregator -> PydanticAgentProcessor -> TTS -> transport.output()
 
@@ -239,13 +239,13 @@ async def run_call(
     """One call: build the pipeline around the entry's flow and run it until the line drops.
 
     A `bot.py` runs it once per call and warms the model clients for that call.
-    A runner that owns them for a process's life (the salon's `server.py`, the
-    studio's runner) passes `warm=False` and its own `flow`; a test passes
+    A runner that owns them for a process's life (the salon's `server.py`)
+    passes `warm=False` and its own `flow`; a test passes
     `speech` (offline doubles) and `trace=False`. `caller_id` is the carrier's
     number on a phone route, else `CALLER_ID`, a guess until the caller agrees.
 
     `listener` gets the call's events (`core.events`) under `run`, from the run's
-    start (`config` is the config version the studio names) to its end. `resume`
+    start (`config` names the config version it runs on) to its end. `resume`
     carries on from a turn of an earlier call (`core.snapshot`), with `facts` in
     place of its own when a tester edited them: the call then opens with no
     greeting, since the conversation is already under way, and the caller speaks

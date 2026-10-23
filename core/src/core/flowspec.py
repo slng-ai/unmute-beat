@@ -1320,7 +1320,7 @@ class ClassOperationSpec(BaseModel):
 
         book_appointment: {class: operations.py:BookAppointment, say: "You're all set for {spoken}."}
 
-    `say` and `recap` replace the class's own when given, so a studio can change what is said after an
+    `say` and `recap` replace the class's own when given, so an editor can change what is said after an
     operation works without touching its code; everything else is still read from the class.
     """
 

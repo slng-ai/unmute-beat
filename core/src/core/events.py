@@ -1,6 +1,6 @@
 """What a call says about itself, in order: the events a listener gets, and the queue that carries them.
 
-One optional listener per call (`CallContext.listen`), set by whoever opens it: the studio's runner,
+One optional listener per call (`CallContext.listen`), set by whoever opens it: a runner,
 a test, a log. Core calls it without waiting on it: every event goes on a bounded queue a background
 task drains (`Events`), so a slow listener can never slow a turn, and a full queue drops the event and
 counts it (`Events.dropped`). With no listener, nothing is built and nothing is queued: each place
@@ -8,7 +8,7 @@ that would emit checks `CallContext._events` first.
 
 Every event is numbered per call (`seq`, from 0, no gaps among those delivered), stamped with the
 caller turn it belongs to (0 is the greeting, before the caller first speaks) and with milliseconds
-since the listener was attached, on the process's monotonic clock. They are what the studio's live
+since the listener was attached, on the process's monotonic clock. They are what a live
 view, its store and a replay read; nothing in them changes what the call does.
 
 Where each comes from:
@@ -63,7 +63,7 @@ class RunStarted(_Event):
     """RunStarted.
 
     Attributes:
-        config: The config version it runs on: the studio's hash of the manifest and its files.
+        config: The config version it runs on: a hash of the manifest and its files.
         forked_from: The run this one carries on from, when it went back to a turn of it
             (`core.snapshot`).
     """
@@ -98,7 +98,7 @@ class StepEntered(_Event):
     Attributes:
         source: The step the caller came from; None on entry.
         via: Why, where core knows it on the spot (`exit`, `consult`, `handback`, `resume`); ''
-            otherwise. The studio labels the rest from the engine's own moves (`studio.agents.catalog`),
+            otherwise. A reader labels the rest from the engine's own moves,
             by source and step.
     """
 

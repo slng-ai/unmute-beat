@@ -1,7 +1,7 @@
-# The workspace: `core`, the `studio`, the `runner` and every folder under `use-cases/`, one lock, one `.venv` at the root.
+# The workspace: `core` and every folder under `use-cases/`, one lock, one `.venv` at the root.
 # Each member has its own pyproject; run a use case from its folder with `uv run bot.py`.
 [tool.uv.workspace]
-members = ["core", "studio", "runner", "use-cases/*"]
+members = ["core", "use-cases/*"]
 
 [tool.uv]
 # livekit-agents 1.8 declares `openai<3` for its own OpenAI-format helpers, while Pydantic AI's OpenAI
@@ -20,7 +20,7 @@ dev = [
 line-length = 110
 target-version = "py314"
 # Each use case is its own import root, so isort sees `salon`, `faro` and `evals` as first-party.
-src = ["core/src", "studio/src", "runner/src", "use-cases/*"]
+src = ["core/src", "use-cases/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "B", "C4", "UP", "SIM", "RUF", "D", "PERF", "FURB"]

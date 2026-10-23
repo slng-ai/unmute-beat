@@ -104,8 +104,6 @@ To close the gap, the far end has to report playout, as core's browser page does
 |---|---|---|
 | `core/tests/test_livekit.py` (L1-L25) | Every behaviour in sections 3 and 4, on LiveKit's real `AgentSession`, offline, with a made-up caller, voice and speaker; L25 the spans of section 6 | `cd core && uv run python -m tests.test_livekit` |
 | `use-cases/salon/tests/test_store.py` (B10) | A LiveKit job process opens the diary its worker named and has its flow compiled before its call (section 7) | `cd use-cases/salon && uv run python -m tests.test_store` |
-| `runner/tests/test_runner.py` | A LiveKit voice run from the studio gets a room of its own and a caller's token; a room it cannot reach ends the run as failed | `cd runner && uv run python -m tests.test_runner` |
-| `studio/tests/test_metrics.py` | The Metrics page reads a LiveKit call's turns as it reads a Pipecat call's | `cd studio && uv run python -m tests.test_metrics` |
 | `core/tests/test_package.py` | Only `core.livekit` and `core.livekit_launch` import LiveKit; `core.voice` imports no framework | `cd core && uv run python -m tests.test_package` |
 | `use-cases/salon/livekit_check.py text` | The salon through LiveKit's own text mode, real Gemini | billable |
 | `use-cases/salon/livekit_check.py voice` | The salon with real SLNG speech both ways and Silero, a synthetic caller who also talks over the agent | billable |
@@ -139,13 +137,11 @@ flowchart TD
 - **A turn is core's turn.** A caller who goes on before any answer played continues the same `turn` (section 3). The greeting opens a turn with no caller words.
 - **Every number is LiveKit's own**, from the timings it puts on each message, never estimated here: `turn.e2e_seconds` (the caller stopped, the agent's first audio played), `turn.stt_final_seconds`, `turn.eou_seconds` (how long end of turn waited), `turn.llm_ttft_seconds` (the flow's first words: every model request before them) and `turn.tts_ttfb_seconds`; an `stt` span's `metrics.ttfb` and a `tts` span's (its first text to its first audio). A missing one is left out, never sent as 0.
 
-Readers: the studio's Metrics page (`studio.metrics.timings`), the ledger and `load_report` (`use-cases/concierge-tools`) read `turn.e2e_seconds` and `turn.interrupted` wherever they read Pipecat's `turn.user_bot_latency_seconds` and `turn.was_interrupted`.
+Readers: the ledger and `load_report` (`use-cases/concierge-tools`) read `turn.e2e_seconds` and `turn.interrupted` wherever they read Pipecat's `turn.user_bot_latency_seconds` and `turn.was_interrupted`.
 
-## 7. Trying it: workers, the studio and Coval
+## 7. Trying it: workers and Coval
 
 **A worker.** `uv run bot.py livekit start` keeps call processes ready (`LIVEKIT_IDLE_PROCESSES`, LiveKit's default: one per CPU in `start`, none in `dev`). Each one loads Silero and imports the use case with its flow compiled before any call is given to it (`livekit_launch.prewarm`), so a call does not wait for `agent.yaml` to be read. The model clients still open their connections per call, while the greeting plays: a client belongs to the event loop of the call using it. LiveKit runs each call in a process of its own, so anything a use case keeps in memory is per call. The salon's diary is a file: with no `DIARY_PATH`, the worker names a fresh one in its environment and every call process opens that same file.
-
-**The studio.** The Try panel has a third choice, *Voice · LiveKit*. The runner makes a room named after the run, joins it itself as the call's agent (`livekit_launch.run_room`: no worker, no dispatch, so the call's events reach the studio like any other run's), and the page joins with a caller's token (`room_token`), using LiveKit's own web client served by core (`core/client`, `livekit.js`). It needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` on the runner. Such a call runs with simulated delivery: LiveKit's playout counts as heard (section 4).
 
 **Coval.** `coval_sim` drives a LiveKit agent too: Coval asks a small token endpoint for a room pass, joins the room, and LiveKit sends the worker in. See `use-cases/concierge-tools/README.md`.
 
@@ -168,8 +164,7 @@ The proposal: unmute-core gets a second plug point beside `ModelCall`, a "brain"
 - Playback evidence is LiveKit's own clock (section 4). A client report is the fix.
 - `FlowAgent` reads two private LiveKit internals, pinned to livekit-agents 1.8: the reply's speech handle (to bind a segment to the reply that plays it) and whether the session is closing. If either goes, nothing is heard, or a closing session is taken as a barge-in. Both fail closed.
 - livekit-agents 1.8 declares `openai<3`, Pydantic AI needs openai 3. The workspace overrides it (`pyproject.toml`); every LiveKit module core uses imports and runs under openai 3.
-- A real LiveKit room is untested from the cloud sandbox (no UDP): the studio's LiveKit calls and Coval's LiveKit jobs are tested offline up to the room, not through it.
-- A LiveKit run the studio placed cannot be joined again from another page: its token goes only to the page that started it.
+- A real LiveKit room is untested from the cloud sandbox (no UDP): Coval's LiveKit jobs are tested offline up to the room, not through it.
 - A model provider that keeps failing closes the line after three failed turns in a row (`FAILED_TURNS`, L19). Retries and a fallback model belong in Pydantic AI (`FallbackModel`).
 - A "yes" that overlaps the last moments of a read-back is not an answer to it, and the read-back is asked again. That is core's rule on both frameworks, and safe; whether a small overlap may count is a product decision.
 - Speaking over the goodbye still ends the call; the words after it are not served.

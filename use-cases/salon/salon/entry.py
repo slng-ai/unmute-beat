@@ -1,6 +1,6 @@
 """The salon, as every launcher needs it (`core.Entry`): its flow, its diary, how a call opens, what it says first.
 
-`bot.py`, the bounded `server.py` and the studio's runner all run a call from this one entry.
+`bot.py` and the bounded `server.py` both run a call from this one entry.
 
 `DIARY`: The salon: one SQLite file (`DIARY_PATH`) every worker process shares, so calls on two workers
 contend for one chair. Unset: a fresh file, named in this process's environment as `DIARY_PATH`, so the

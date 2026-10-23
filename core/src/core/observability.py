@@ -8,7 +8,7 @@ span rather than the root alone, and what each agent run and model request
 produced must be readable at a glance rather than a dump of parts. Credentials
 come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`,
 which the application's launcher loads (each `bot.py` reads `.env` first). The same spans also
-go to any OTLP collector named by OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` (the studio's
+go to any OTLP collector named by OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` (a
 local Jaeger, `http://127.0.0.1:4318`), with or without Langfuse. Importing
 this module reads no file and sets nothing up: every offline run that imported core
 used to pick up the checkout's `.env` and export its spans.
@@ -43,7 +43,7 @@ _CALL: ContextVar[dict[str, str] | None] = ContextVar('langfuse_call', default=N
 """The call the code running now belongs to, as the attributes stamped on each of its spans.
 
 `langfuse.session.id` and `langfuse.trace.name` for Langfuse; `slng.agent.id` and `slng.run.id` for
-the studio, which asks Jaeger for one agent's traces, or one run's, by them (`studio.metrics`).
+any reader that asks Jaeger for one agent's traces, or one run's, by them.
 
 Langfuse v4 queries observations, not traces, so anything needed to filter or
 aggregate has to be on every span rather than only the root. Left on the root
@@ -398,7 +398,7 @@ def setup(session: str = '', trace_name: str = '', *, agent: str = '', run: str 
     `session` groups the call's observations and `trace_name` is what its trace
     is listed by; both are stamped on every span rather than the root alone, for
     the reason `_CALL` gives. `agent` (the agent's id, its folder's name) and
-    `run` (the studio's run id) are stamped the same way, as `slng.agent.id`
+    `run` (the launcher's run id) are stamped the same way, as `slng.agent.id`
     and `slng.run.id`: one runner process carries every agent, so the agent is
     a span's attribute, never the process's `service.name`. Call it at the top of each call's own task, before
     anything that call traces starts: the provider is built once, the call's

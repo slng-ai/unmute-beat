@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from core.entry import Entry
     from core.state import CallContext
 
-_tracer = trace.get_tracer('slng-voice-harness')
+_tracer = trace.get_tracer('slng-voice-core')
 
 
 class CallTiming:

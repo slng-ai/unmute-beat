@@ -1199,7 +1199,7 @@ class CallContext(BaseModel):
         """Whether the caller's next words continue this turn: they cut in before any answer to it had played to its end.
 
         When the caller stops is the runtime's call (its endpointing), and it
-        stops on every pause. What the harness owns is what happens when they
+        stops on every pause. What core owns is what happens when they
         go on: the pieces accumulate into one utterance, so "+34" and "611 111
         111" are one number and "Yes, please." and "That sounds perfect." are
         one reply to the question before them. A caller who talks over the

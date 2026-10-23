@@ -1,6 +1,6 @@
 """The salon: customers, the diary, and the complaint book.
 
-`Diary` is the business, in memory and seeded, so the harness runs offline and a
+`Diary` is the business, in memory and seeded, so the build runs offline and a
 run is repeatable. Swap its dictionaries for a database and nothing above this
 file changes. One instance per process is the salon; one per test is a fixture.
 

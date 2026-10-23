@@ -3,7 +3,7 @@
 `Write.run` is the only path to the diary's write methods: take the approved
 proposal off the table, call the diary once under the proposal's token,
 validate what comes back into its receipt, and only then commit it to the
-call. Each attempt leaves a `write` span shaped like the harness's
+call. Each attempt leaves a `write` span shaped like core's
 (`core/operations.py`), so the ledger (`concierge-tools/ledger.py`) matches every write to the
 question it answered.
 """

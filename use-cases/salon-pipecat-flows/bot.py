@@ -2,7 +2,7 @@
 
 The same pipeline as the salon's `bot.py` (SLNG STT and TTS, Silero VAD
 with smart turn, the same transports and tracing), with Pipecat's LLM
-service and `FlowManager` where the harness stands:
+service and `FlowManager` where core stands:
 
     transport.input() -> STT -> user aggregator -> Gemini -> ClaimFilter -> EmptyReplyGuard -> TTS -> transport.output()
 
@@ -51,19 +51,19 @@ from salon.diary import Diary
 from utils.observability import setup
 
 MODEL = 'gemini-3.1-flash-lite'
-"""Not the harness's 3.5 flash lite: Pipecat's Gemini service has problems with it."""
+"""Not core's 3.5 flash lite: Pipecat's Gemini service has problems with it."""
 SLNG_HOST = os.getenv('SLNG_BASE_URL', 'eu-north.api.slng.ai')
 TTS_HOST = os.getenv('SLNG_TTS_BASE_URL', 'eu-west.api.slng.ai')
 """Fish Audio is served from eu-west, in Germany. STT stays on `SLNG_HOST`."""
 TRACE_NAME = 'salon call'
-"""The harness's trace name, so the ledger (`concierge-tools/ledger.py`) and Langfuse filters find these calls the same way."""
+"""Core's trace name, so the ledger (`concierge-tools/ledger.py`) and Langfuse filters find these calls the same way."""
 TURN_STOP_SECS = 1.5
 """How long a silence ends a turn the smart-turn model judged unfinished. Pipecat's default is 3.
 
 In Langfuse traces 1e5494cc and ad8db194, a hesitant sentence ("I. Said
 haircut.") waited the full 3 s before the model ran. Lower is quicker, but a
 caller who pauses longer mid-sentence is cut off, and this build does not
-join the two pieces into one turn the way the harness does.
+join the two pieces into one turn the way core does.
 
 ponytail: one fixed value; raise it if calls show callers cut off mid-sentence.
 """
@@ -76,7 +76,7 @@ transport_params = {
 
 
 class VertexExpress(GoogleLLMService):
-    """Pipecat's Gemini service on the Vertex AI Express-Mode key the harness uses.
+    """Pipecat's Gemini service on the Vertex AI Express-Mode key core uses.
 
     ponytail: Pipecat builds a Gemini API client from the key; this key is
     Vertex's, so the client is built for Vertex instead. Nothing else changes.

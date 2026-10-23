@@ -12,7 +12,7 @@ between nodes does not start a new conversation.
 
 | Chapter | The question it answers |
 |---|---|
-| [01 — Stack and boundaries](01-stack-and-boundaries.md) | What are an agent, a tool and a node? What does the harness add to Pipecat? |
+| [01 — Stack and boundaries](01-stack-and-boundaries.md) | What are an agent, a tool and a node? What does core add to Pipecat? |
 | [02 — A conversation from start to finish](02-a-conversation-from-start-to-finish.md) | In one real call, what does the model choose, what does code say, and how many requests does it cost? |
 | [03 — State, memory, records and services](03-typed-state-and-history.md) | Where does each kind of data live, who may write it, and what does each node's model see? |
 | [04 — Nodes and agent.yaml](04-typed-flows-and-node-agents.md) | How do we design the nodes, write the manifest, and what does core build from it? |

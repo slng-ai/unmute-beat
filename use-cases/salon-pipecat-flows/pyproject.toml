@@ -1,7 +1,7 @@
 [project]
 name = "salon-pipecat-flows"
 version = "0.1.0"
-description = "Sage and Stone, the salon, on declarative Pipecat flows: the harness's guarantees as plain application code, no core."
+description = "Sage and Stone, the salon, on declarative Pipecat flows: core's guarantees as plain application code, without importing core."
 requires-python = ">=3.14"
 dependencies = [
     "langfuse>=4.15.4",

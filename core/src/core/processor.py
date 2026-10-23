@@ -70,7 +70,7 @@ from core.state import CallContext, Question
 from core.turn import EXHAUSTED, STUMBLE  # noqa: F401  -- re-exported for tests
 from core.voice import Ceiling, record_ending  # noqa: F401  -- moved to core.voice, kept importable here
 
-_tracer = trace.get_tracer('slng-voice-harness')
+_tracer = trace.get_tracer('slng-voice-core')
 
 
 @dataclass(kw_only=True)

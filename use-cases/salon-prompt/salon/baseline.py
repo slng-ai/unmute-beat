@@ -1,4 +1,4 @@
-"""The salon as one prompt on Pipecat's own Gemini service: the baseline the harness is measured against.
+"""The salon as one prompt on Pipecat's own Gemini service: the baseline core is measured against.
 
 `bot.py` puts this where the salon's `bot.py` has `PydanticAgentProcessor`.
 Everything else in the pipeline stays the same: STT, VAD, smart-turn, TTS,
@@ -7,9 +7,9 @@ Here it is the usual Pipecat agent: one system prompt holding every rule, the
 whole history sent on every request, and tools the model calls when it
 decides to.
 
-The prompt is the harness's own words, moved: the shared voice and diary
+The prompt is core's own words, moved: the shared voice and diary
 rules, the salon's documents, and one section per step
-(`prompts/baseline.md`) with the rules the harness enforces in code written
+(`prompts/baseline.md`) with the rules core enforces in code written
 as instructions instead. The tools reach the same `Diary` with the same
 arguments, so a difference in a Coval run is the conversation layer and
 nothing else.
@@ -43,19 +43,19 @@ PROMPTS = Path(__file__).resolve().parent / 'prompts'
 GREETING = "Hi, you've reached Sage and Stone. Robin speaking, what can I do for you?"
 """The graph build's opening line (`greeting:` in the unmute graph build's `flow.yaml`), word for word."""
 MODEL = 'gemini-3.1-flash-lite'
-"""The baseline's model, thinking pinned as the harness pins it.
+"""The baseline's model, thinking pinned as core pins it.
 
-Not the harness's own (`salon.classification.MODEL`, gemini-3.5-flash-lite):
+Not core's own (`salon.classification.MODEL`, gemini-3.5-flash-lite):
 Pipecat's Gemini service has problems with 3.5 flash lite, so the Pipecat
-builds (this one and salon-pipecat-flows) run 3.1. A comparison against the
-harness is across models too.
+builds (this one and salon-pipecat-flows) run 3.1. A comparison against
+core is across models too.
 """
 
 _tracer = trace.get_tracer('voice.baseline')
 
 
 def written(action: str, args: dict[str, Any], result: Any) -> None:
-    """One `write` span per diary write, as the harness leaves (`core.operations`), so concierge-tools' `ledger.py` counts both.
+    """One `write` span per diary write, as core leaves (`core.operations`), so concierge-tools' `ledger.py` counts both.
 
     It has no question in it: here the model decides the caller agreed, so
     whether it did is for a person or a judge to read from the transcript.
@@ -101,7 +101,7 @@ def system_prompt() -> str:
 
 
 class VertexExpress(GoogleLLMService):
-    """Pipecat's Gemini service on the Vertex AI Express-Mode key the harness uses.
+    """Pipecat's Gemini service on the Vertex AI Express-Mode key core uses.
 
     ponytail: Pipecat builds a Gemini API client from the key; this key is
     Vertex's, so the client is built for Vertex instead. Nothing else changes.
@@ -213,7 +213,7 @@ class Desk:
 
 
 def node(diary: Diary, call_id: str) -> tuple[LLMContext, GoogleLLMService]:
-    """The context and the LLM service that stand where the harness does."""
+    """The context and the LLM service that stand where core does."""
     llm = VertexExpress(
         api_key=os.environ['GOOGLE_API_KEY'],
         settings=GoogleLLMService.Settings(

@@ -256,7 +256,7 @@ class _Speech(SpanProcessor):
         """The conversation, read back off the spans already carrying it.
 
         Pipecat's `conversation` and `turn` spans have no input or output of
-        their own: the LLM service that would fill them is the one this harness
+        their own: the LLM service that would fill them is the one core
         replaced, so Langfuse rendered the root of every call empty, and v4 asks
         for the whole request and response exactly there.
 
@@ -329,7 +329,7 @@ def setup(session: str = '', trace_name: str = '') -> None:
         print('warning: LANGFUSE_PUBLIC_KEY unset, traces are going nowhere', file=sys.stderr)
         return
 
-    attributes = {'service.name': 'slng-voice-harness'}
+    attributes = {'service.name': 'slng-voice-core'}
     if environment := os.getenv('LANGFUSE_TRACING_ENVIRONMENT'):
         attributes['deployment.environment'] = environment
     provider = TracerProvider(resource=Resource.create(attributes))

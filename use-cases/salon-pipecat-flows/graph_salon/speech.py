@@ -2,7 +2,7 @@
 
 Every read-back and every receipt is worded here and spoken by the `say` action.
 The model never words a question a write depends on, and never announces a
-write: the diary's receipt does. The wording is the harness's own
+write: the diary's receipt does. The wording is core's own
 (`salon/tools`), so a difference in a Coval run is not a difference in words.
 `test_graph_salon.py` holds the two together.
 
@@ -42,7 +42,7 @@ SAVED = {
     'moved': "That's moved to {spoken}. Anything else I can help with?",
     'cancelled': "That's cancelled for you. Anything else I can help with?",
 }
-"""The first of the harness's alternatives for each. ponytail: no rotation; add it if callers who book twice notice."""
+"""The first of core's alternatives for each. ponytail: no rotation; add it if callers who book twice notice."""
 
 NOTED = "That's on record, reference {reference}. {next_step}"
 REPLY_SOON = 'The salon will get back to you within two working days.'
@@ -98,9 +98,9 @@ CLAIMED = re.compile(
     r"|\b(?:that|it|your complaint)(?:'s| is| has been)\s+(?:on record|recorded|logged)\b",
     re.IGNORECASE,
 )
-"""A first-person claim that a write was done: the harness's `_CLAIMED` and `_RECORDED`, joined.
+"""A first-person claim that a write was done: core's `_CLAIMED` and `_RECORDED`, joined.
 
-A language-specific heuristic, like the harness's. It is a second line: the
+A language-specific heuristic, like core's. It is a second line: the
 first is that writes are announced by their receipts, never by the model.
 """
 SCRIPTED = re.compile(

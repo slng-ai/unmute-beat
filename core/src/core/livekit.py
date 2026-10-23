@@ -99,7 +99,7 @@ from core.policies import TurnBudget
 from core.state import CallContext, Question
 from core.voice import outcome
 
-_tracer = trace.get_tracer('slng-voice-harness')
+_tracer = trace.get_tracer('slng-voice-core')
 
 ONSET_LEAD = 0.25
 """Seconds before LiveKit says the caller is speaking that their speech is taken to have begun.

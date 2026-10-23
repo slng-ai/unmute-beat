@@ -15,7 +15,7 @@ from salon.diary import Diary
 from salon.models.shapes import SubmittedPhone
 
 TOOL_CALLS_PER_TURN = 8
-"""The harness's `TurnBudget.tool_calls`: past it, the turn ends with a fixed line instead of another request."""
+"""Core's `TurnBudget.tool_calls`: past it, the turn ends with a fixed line instead of another request."""
 
 _PHONE = TypeAdapter(SubmittedPhone)
 

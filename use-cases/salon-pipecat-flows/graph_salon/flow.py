@@ -37,8 +37,8 @@ def role_message() -> str:
     """Who Robin is and what the salon knows: `{{ role }}`, the system instruction, which holds across nodes.
 
     The salon's own voice rules, up to their "Actions" section, which speaks
-    of the harness's runtime; this build's own replaces it. Then the salon's
-    documents and complaint answers, as the harness and the baseline send them.
+    of core's runtime; this build's own replaces it. Then the salon's
+    documents and complaint answers, as core and the baseline send them.
     """
     guidance = json.loads(_read(SALON_PROMPTS / 'knowledge' / 'complaint-guidance.json'))
     return '\n\n'.join(

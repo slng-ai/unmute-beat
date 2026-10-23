@@ -8,7 +8,7 @@ The keys come from `--env-file`: importing core reads no `.env`.
 
 Makes billable model requests. There is no audio: each caller line goes
 through the real turn engine (`core.turn.run_turn`) with Faro's real step
-agents, so what is measured is the harness and the model, not STT or TTS.
+agents, so what is measured is core and the model, not STT or TTS.
 
 Each case starts from a new fixture database. Every call in a case runs in a
 process of its own, on the same file, so a resume after a call is a resume

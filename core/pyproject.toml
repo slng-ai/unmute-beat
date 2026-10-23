@@ -1,7 +1,7 @@
 [project]
 name = "slng-voice-core"
 version = "0.1.0"
-description = "A Pydantic AI agency standing where Pipecat's LLM service would: the agents own the conversation, Pipecat owns the audio."
+description = "Unmute Beat: an agentic LLM node for Pipecat and LiveKit Agents, a Pydantic Graph of Pydantic AI agents that owns the conversation while the framework owns the audio."
 requires-python = ">=3.14"
 dependencies = [
     # Imported directly by core: `interpreters` catches `httpx.HTTPError`.

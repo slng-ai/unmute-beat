@@ -101,12 +101,10 @@ class FakeCoval(CovalClient):
 
 
 AGENTS = [
-    Agent(
-        id='S', display_name='voice-harness-salon-pipecat', test_set_ids=['SALON', 'ONE', 'THREE', 'EMPTY']
-    ),
-    Agent(id='G', display_name='voice-harness-graph-pipecat', test_set_ids=['SALON', 'ONE']),
-    Agent(id='P', display_name='voice-harness-salon-prompt-pipecat', test_set_ids=['ONE']),
-    Agent(id='F', display_name='voice-harness-faro-language-learning-pipecat', test_set_ids=['ONE']),
+    Agent(id='S', display_name='voice-core-salon-pipecat', test_set_ids=['SALON', 'ONE', 'THREE', 'EMPTY']),
+    Agent(id='G', display_name='voice-core-graph-pipecat', test_set_ids=['SALON', 'ONE']),
+    Agent(id='P', display_name='voice-core-salon-prompt-pipecat', test_set_ids=['ONE']),
+    Agent(id='F', display_name='voice-core-faro-language-learning-pipecat', test_set_ids=['ONE']),
     Agent(id='U', display_name='unmute-salon-concierge-pipecat', test_set_ids=['SALON']),
 ]
 
@@ -156,7 +154,7 @@ def test_plan() -> None:
     assert f'{MAX_CALL_SECONDS}s' in job.describe()
 
     assert refused(check, agent_id='G') == [
-        "agent G is 'voice-harness-graph-pipecat', which calls graph, not salon"
+        "agent G is 'voice-core-graph-pipecat', which calls graph, not salon"
     ], 'the test set is shared with the graph baseline, which must not be called by accident'
     assert refused(check, agent_id='P')[0].endswith('calls salon-prompt, not salon'), (
         'the one-prompt baseline'
@@ -175,14 +173,14 @@ def test_plan() -> None:
         'one iteration is not one call'
     )
 
-    twins = [*AGENTS, Agent(id='S2', display_name='voice-harness-salon-pipecat', test_set_ids=['ONE'])]
-    assert refused(checker(FakeCoval(twins))) == [
-        "2 agents are named 'voice-harness-salon-pipecat': S, S2"
-    ], 'an ambiguous agent name'
+    twins = [*AGENTS, Agent(id='S2', display_name='voice-core-salon-pipecat', test_set_ids=['ONE'])]
+    assert refused(checker(FakeCoval(twins))) == ["2 agents are named 'voice-core-salon-pipecat': S, S2"], (
+        'an ambiguous agent name'
+    )
 
-    assert Agent(id='x', display_name='voice-harness-salon-livekit-twilio').agency is None
-    assert Agent.name_for('salon') == 'voice-harness-salon-pipecat'
-    assert Agent(id='x', display_name='voice-harness-salon-prompt-pipecat').agency == 'salon-prompt'
+    assert Agent(id='x', display_name='voice-core-salon-livekit-twilio').agency is None
+    assert Agent.name_for('salon') == 'voice-core-salon-pipecat'
+    assert Agent(id='x', display_name='voice-core-salon-prompt-pipecat').agency == 'salon-prompt'
 
 
 def test_run_log() -> None:
@@ -246,7 +244,7 @@ def test_use_case_folders() -> None:
 
 def test_graph_build() -> None:
     """`graph` is the unmute graph build's own folder, run with its placeholders; nothing else gets them."""
-    assert Agent(id='g', display_name='voice-harness-graph-pipecat').agency == 'graph'
+    assert Agent(id='g', display_name='voice-core-graph-pipecat').agency == 'graph'
     assert GRAPH_ENV['MANAGER_PHONE_NUMBER'] and not set(GRAPH_ENV) & set(BOT_ENV), GRAPH_ENV
     if (GRAPH_BUILD / 'bot.py').exists():
         assert Repository.find(Path(__file__).resolve().parent).use_case('graph') == GRAPH_BUILD
@@ -307,8 +305,8 @@ def test_fallbacks() -> None:
         transcript=[Message(role='assistant', content=c) for c in heard],
     )
     assert run().problems([sim]) == [
-        'call c: the harness said its STUMBLE (a turn failed) line',
-        'call c: the harness said its EXHAUSTED (a turn ran out of budget) line',
+        'call c: core said its STUMBLE (a turn failed) line',
+        'call c: core said its EXHAUSTED (a turn ran out of budget) line',
     ]
     assert spoke('a').fallbacks == []
 
@@ -334,7 +332,7 @@ def test_call_ceiling() -> None:
 
 def test_concurrency() -> None:
     """Calls at once, the one speed-up on this side: planned, passed to Coval, and refused where it would cut calls."""
-    native = Agent(id='N', display_name='voice-harness-salon-pipecat-flows-pipecat', test_set_ids=['THREE'])
+    native = Agent(id='N', display_name='voice-core-salon-pipecat-flows-pipecat', test_set_ids=['THREE'])
     check = checker(FakeCoval([*AGENTS, native]))
 
     def plan(agency: str = 'salon', agent: str = 'S', concurrency: int = 3) -> list[str]:
@@ -378,7 +376,7 @@ def test_concurrency() -> None:
 
 def test_named_metrics() -> None:
     """`--metrics`: the launch names these instead of the agent's own; the lookup of a lost launch parses."""
-    scored = Agent(id='S', display_name='voice-harness-salon-pipecat', test_set_ids=['ONE'], metric_ids=['m'])
+    scored = Agent(id='S', display_name='voice-core-salon-pipecat', test_set_ids=['ONE'], metric_ids=['m'])
     check = checker(FakeCoval([scored]))
     job = check.plan(
         'salon', 'S', 'ONE', 'calm', iterations=1, max_simulations=1, label='l', metrics=['count']
@@ -482,16 +480,13 @@ elif args[0] == 'api:core:calls:list':
 
 def test_phone_line() -> None:
     """A `-twilio` voice agent is a real Twilio line: its number points at the bot for the job, then back."""
-    line = Agent(id='T', display_name='voice-harness-salon-pipecat-twilio', model_type='MODEL_TYPE_VOICE',
+    line = Agent(id='T', display_name='voice-core-salon-pipecat-twilio', model_type='MODEL_TYPE_VOICE',
                  phone_number='+447427919928')  # fmt: skip
     assert line.agency == 'salon' and line.phone_line
-    assert not Agent(id='W', display_name='voice-harness-salon-pipecat').phone_line
-    assert not Agent(id='X', display_name='voice-harness-salon-pipecat-twilio').phone_line, (
-        'no number, no line'
-    )
+    assert not Agent(id='W', display_name='voice-core-salon-pipecat').phone_line
+    assert not Agent(id='X', display_name='voice-core-salon-pipecat-twilio').phone_line, 'no number, no line'
     assert (
-        Agent(id='F', display_name='voice-harness-salon-pipecat-flows-pipecat').agency
-        == 'salon-pipecat-flows'
+        Agent(id='F', display_name='voice-core-salon-pipecat-flows-pipecat').agency == 'salon-pipecat-flows'
     )
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / 'bot.log'
@@ -648,11 +643,11 @@ LIVEKIT = {
 }
 LIVEKIT_AGENTS = [
     *AGENTS,
-    Agent(id='L', display_name='voice-harness-salon-livekit', model_type='livekit', test_set_ids=['ONE', 'THREE']),
-    Agent(id='LP', display_name='voice-harness-salon-prompt-livekit', test_set_ids=['ONE']),
-    Agent(id='LK', display_name='voice-harness-kestrel-livekit', model_type='MODEL_TYPE_WEBSOCKET',
+    Agent(id='L', display_name='voice-core-salon-livekit', model_type='livekit', test_set_ids=['ONE', 'THREE']),
+    Agent(id='LP', display_name='voice-core-salon-prompt-livekit', test_set_ids=['ONE']),
+    Agent(id='LK', display_name='voice-core-kestrel-livekit', model_type='MODEL_TYPE_WEBSOCKET',
           test_set_ids=['ONE']),
-    Agent(id='LW', display_name='voice-harness-wasla-pipecat', model_type='MODEL_TYPE_LIVEKIT', test_set_ids=['ONE']),
+    Agent(id='LW', display_name='voice-core-wasla-pipecat', model_type='MODEL_TYPE_LIVEKIT', test_set_ids=['ONE']),
 ]  # fmt: skip
 
 
@@ -690,16 +685,16 @@ def livekit_refusals(check: ReleaseCheck, agency: str = 'salon', agent_id: str =
 
 def test_livekit_names() -> None:
     """A `-livekit` agent calls the same folder as a LiveKit worker; never a phone line; the old names unchanged."""
-    salon = Agent(id='x', display_name='voice-harness-salon-livekit', phone_number='+447427919928')
+    salon = Agent(id='x', display_name='voice-core-salon-livekit', phone_number='+447427919928')
     assert salon.agency == 'salon' and salon.livekit and not salon.phone_line
-    flows = Agent(id='x', display_name='voice-harness-salon-pipecat-flows-livekit')
+    flows = Agent(id='x', display_name='voice-core-salon-pipecat-flows-livekit')
     assert flows.agency == 'salon-pipecat-flows' and flows.livekit
-    assert not Agent(id='x', display_name='voice-harness-salon-pipecat').livekit
-    assert not Agent(id='x', display_name='voice-harness-salon-pipecat-twilio', phone_number='+44').livekit
-    assert Agent(id='x', display_name='voice-harness-salon-livekit-twilio').agency is None
-    assert Agent(id='x', display_name='voice-harness-salon-livekit-pipecat').agency == 'salon-livekit'
-    assert Agent.name_for('salon', 'livekit') == 'voice-harness-salon-livekit'
-    assert Agent.name_for('salon') == 'voice-harness-salon-pipecat'
+    assert not Agent(id='x', display_name='voice-core-salon-pipecat').livekit
+    assert not Agent(id='x', display_name='voice-core-salon-pipecat-twilio', phone_number='+44').livekit
+    assert Agent(id='x', display_name='voice-core-salon-livekit-twilio').agency is None
+    assert Agent(id='x', display_name='voice-core-salon-livekit-pipecat').agency == 'salon-livekit'
+    assert Agent.name_for('salon', 'livekit') == 'voice-core-salon-livekit'
+    assert Agent.name_for('salon') == 'voice-core-salon-pipecat'
 
 
 def test_livekit_plan() -> None:
@@ -739,7 +734,7 @@ def test_livekit_plan() -> None:
     ]
     assert livekit_refusals(on_livekit(), 'wasla', 'LW') == [
         'agent LW is a Coval LiveKit agent (MODEL_TYPE_LIVEKIT), but its name does not end -livekit: '
-        'name it voice-harness-wasla-livekit'
+        'name it voice-core-wasla-livekit'
     ]
     assert livekit_refusals(on_livekit({}), 'salon-prompt', 'LP')[0].startswith('salon-prompt cannot run'), (
         'every reason at once'
@@ -755,9 +750,9 @@ def test_livekit_plan() -> None:
 def test_livekit_worker_env() -> None:
     """The worker gets `.env`, the job's settings, and no Twilio placeholder: LiveKit carries no Twilio."""
     env = Repository.worker_env(
-        {'TWILIO_AUTH_TOKEN': 'real', 'KEEP': '1'}, 'voice-harness-salon-ab12', 0, None, 120
+        {'TWILIO_AUTH_TOKEN': 'real', 'KEEP': '1'}, 'voice-core-salon-ab12', 0, None, 120
     )
-    assert env['DELIVERY'] == 'simulated' and env['LIVEKIT_AGENT_NAME'] == 'voice-harness-salon-ab12'
+    assert env['DELIVERY'] == 'simulated' and env['LIVEKIT_AGENT_NAME'] == 'voice-core-salon-ab12'
     assert env['LIVEKIT_IDLE_PROCESSES'] == '1' and env['MAX_CALL_SECONDS'] == '120', (
         'at least one process ready'
     )
@@ -772,13 +767,13 @@ def test_livekit_registered() -> None:
     """Ready is LiveKit's own `registered worker` line, naming this job's worker; never another's."""
     line = json.dumps({
         'message': 'registered worker', 'level': 'INFO', 'name': 'livekit.agents',
-        'agent_name': 'voice-harness-salon-ab12', 'id': 'AW_x', 'url': 'wss://voice.example', 'pid': 1,
+        'agent_name': 'voice-core-salon-ab12', 'id': 'AW_x', 'url': 'wss://voice.example', 'pid': 1,
     })  # fmt: skip
-    assert registered(f'{{"message": "starting worker"}}\n{line}\n', 'voice-harness-salon-ab12')
-    assert not registered(line, 'voice-harness-salon-cd34'), 'a worker under another name'
-    assert not registered('unregistered worker voice-harness-salon-ab12', 'voice-harness-salon-ab12')
-    coloured = '12:00:01 - INFO livekit.agents - registered worker {"agent_name": "voice-harness-salon-ab12"}'
-    assert registered(coloured, 'voice-harness-salon-ab12'), 'the dev format too'
+    assert registered(f'{{"message": "starting worker"}}\n{line}\n', 'voice-core-salon-ab12')
+    assert not registered(line, 'voice-core-salon-cd34'), 'a worker under another name'
+    assert not registered('unregistered worker voice-core-salon-ab12', 'voice-core-salon-ab12')
+    coloured = '12:00:01 - INFO livekit.agents - registered worker {"agent_name": "voice-core-salon-ab12"}'
+    assert registered(coloured, 'voice-core-salon-ab12'), 'the dev format too'
 
 
 def _post(
@@ -800,7 +795,7 @@ def _unpadded(text: str) -> bytes:
 
 def test_token_server() -> None:
     """A real POST gets a LiveKit token that dispatches the job's own worker; anything else is refused, unrecorded."""
-    key, secret, worker = 'APIcoval', LIVEKIT['LIVEKIT_API_SECRET'], 'voice-harness-salon-ab12'
+    key, secret, worker = 'APIcoval', LIVEKIT['LIVEKIT_API_SECRET'], 'voice-core-salon-ab12'
     asked = {
         'room_name': 'b1c4e0de-0000-4000-8000-000000000001',
         'participant_name': 'simulated_user',
@@ -962,7 +957,7 @@ def test_livekit_add() -> None:
 
     coval = Creates(AGENTS)
     check = on_livekit(coval=coval)
-    assert check.add('salon', on_livekit=True) == 'created voice-harness-salon-livekit'
+    assert check.add('salon', on_livekit=True) == 'created voice-core-salon-livekit'
     name, kind, metadata = coval.created
     assert kind == 'livekit' and metadata['livekit_agent_name'] == name, coval.created
     assert set(metadata) == {
@@ -971,7 +966,7 @@ def test_livekit_add() -> None:
         'livekit_agent_name',
         'generate_token_headers',
     }
-    assert check.add('salon') == 'exists  voice-harness-salon-pipecat'
+    assert check.add('salon') == 'exists  voice-core-salon-pipecat'
     try:
         check.add('salon-prompt', on_livekit=True)
     except ValueError as error:
@@ -980,11 +975,11 @@ def test_livekit_add() -> None:
         raise AssertionError('a LiveKit agent for a bot that cannot run on LiveKit')
     assert _parser().parse_args(['add', 'salon', '--livekit']).livekit
 
-    pointed = connection('up.trycloudflare.com', 'wss://voice.example', 'voice-harness-salon-ab12', 'job-key')
+    pointed = connection('up.trycloudflare.com', 'wss://voice.example', 'voice-core-salon-ab12', 'job-key')
     assert pointed['generate_token_endpoint'] == 'https://up.trycloudflare.com/token'
     assert (pointed['livekit_url'], pointed['livekit_agent_name']) == (
         'wss://voice.example',
-        'voice-harness-salon-ab12',
+        'voice-core-salon-ab12',
     )
     assert json.loads(pointed['generate_token_headers']) == {
         SIMULATION_HEADER: '{{simulation_id}}',

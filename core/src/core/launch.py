@@ -130,11 +130,11 @@ def aggregators(
     the builds and not their end-of-turn timing. The ceiling is how long a pause
     may last once smart-turn has judged the caller not finished. Left at its 3 s
     default, it was the whole tail: in Coval run 4bLgLR4t, 29 turns ended on it,
-    each one about 3 s before the harness even started.
+    each one about 3 s before core even started.
 
     `pipecat`: Pipecat's recommended turn taking, unchanged: Silero VAD and its
     default strategies (Faro's choice). Either way, when the caller goes on after
-    a turn ended, the harness joins the pieces (`CallContext.continues_turn`).
+    a turn ended, core joins the pieces (`CallContext.continues_turn`).
     """
     if turn_taking == 'pipecat':
         return LLMContextAggregatorPair(
@@ -194,7 +194,7 @@ def latency_log() -> UserBotLatencyObserver:
 
 
 def playback(agents: PydanticAgentProcessor, assistant_aggregator) -> None:
-    """Tell the harness what the caller actually heard: which run each response came from, and where it was cut."""
+    """Tell core what the caller actually heard: which run each response came from, and where it was cut."""
     playback_run: tuple[int, int] | None = None
 
     @assistant_aggregator.event_handler('on_before_process_frame')
@@ -317,7 +317,7 @@ async def run_call(
     async def greet() -> None:
         """The opening line, or, on a line that can never confirm anything, the refusal and the end of the call.
 
-        The harness records the line as said, Pipecat adds it to the context.
+        Core records the line as said, Pipecat adds it to the context.
         A line with no playback evidence (a browser client that reports none,
         a Twilio far end that returns no marks, outside simulation) could
         never confirm a read-back: saying so first means nobody gives details

@@ -1,6 +1,6 @@
 # Faro: a language-learning companion
 
-Faro is a use case on core, built to show the harness is not only for short
+Faro is a use case on core, built to show core is not only for short
 bookings. One bilingual voice companion helps adults practise English or
 Spanish. It knows learners by phone number, signs up new ones, runs a short
 placement, agrees a plan, teaches lessons, and carries on where the learner

@@ -86,7 +86,7 @@ OPERATIONS = frozenset(
 )
 """The salon's operations (`use-cases/salon/salon/agent.yaml`): the tool calls that speak their own words."""
 BOOKINGS = frozenset({'book_appointment', 'move_appointment', 'cancel_appointment', 'save_booking'})
-"""Booking writes: the harness's operations, and the native build's one tool (`use-cases/salon-pipecat-flows`).
+"""Booking writes: core's operations, and the native build's one tool (`use-cases/salon-pipecat-flows`).
 Only `booked_after` reads it; effects are replayed from the receipts' shape, whatever the action's name."""
 HOLDING = ('Let me have a look.', 'One moment.')
 """English `Locale.holding` (`core/src/core/locale.py`), as text: this tool imports no build."""
@@ -384,7 +384,7 @@ def effects(writes: list[Write]) -> Effects:
 
 
 def _slot(args: dict[str, Any]) -> dict[str, str]:
-    """The day, time and service a write's slot argument names (`slot` in the harness, `slot_id` native)."""
+    """The day, time and service a write's slot argument names (`slot` in core, `slot_id` native)."""
     if hit := SLOT.match(str(args.get('slot') or args.get('slot_id') or '')):
         return {'date': hit[1], 'time': f'{hit[2]}:{hit[3]}:00', 'service': hit[4]}
     return {}
@@ -427,7 +427,7 @@ def _contradicts(receipt: dict[str, Any], args: dict[str, Any], booking: str) ->
 def _when(receipt: dict[str, Any], args: dict[str, Any]) -> dict[str, str | None]:
     """The day and time an appointment is on: the receipt's own fields, else the slot the write named, else None.
 
-    The native receipt carries `date` and `time`; the harness's carries only
+    The native receipt carries `date` and `time`; core's carries only
     words (`spoken`), so its slot argument is read instead: the salon's slot
     ID is `YYYY-MM-DDTHHMM|service` (`salon/diary.py`). Neither: unknown, never
     a guess from the spoken words.
